@@ -31,6 +31,17 @@ pub enum Error {
     #[cfg(feature = "networking")]
     #[error("Networking error: {0}")]
     Networking(#[from] gadget_networking::error::Error),
+
+    #[cfg(any(feature = "local-store"))]
+    #[error("Database error: {0}")]
+    Stores(#[from] gadget_stores::Error),
+}
+
+#[cfg(feature = "local-store")]
+impl From<gadget_stores::local_database::Error> for Error {
+    fn from(value: gadget_stores::local_database::Error) -> Self {
+        Error::Stores(value.into())
+    }
 }
 
 #[cfg(any(feature = "evm", feature = "eigenlayer"))]
