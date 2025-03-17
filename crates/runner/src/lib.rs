@@ -353,6 +353,7 @@ where
 
         let mut router = router.as_service();
 
+        let has_background_services = !background_services.is_empty();
         let mut background_receivers = Vec::with_capacity(background_services.len());
         for service in background_services {
             let receiver = service.start().await?;
@@ -448,7 +449,9 @@ where
                     let (result, _, remaining_background_services) = result;
                     match result {
                         Ok(()) => {
-                            blueprint_core::warn!("A background service has finished running");
+                            if has_background_services {
+                                blueprint_core::warn!("A background service has finished running");
+                            }
                         },
                         Err(e) => {
                             blueprint_core::error!("A background service failed: {:?}", e);
@@ -458,7 +461,9 @@ where
                     }
 
                     if remaining_background_services.is_empty() {
-                        blueprint_core::warn!("All background services have ended");
+                        if has_background_services {
+                            blueprint_core::warn!("All background services have ended");
+                        }
                         continue;
                     }
 
