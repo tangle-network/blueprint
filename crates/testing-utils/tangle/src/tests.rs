@@ -1,8 +1,7 @@
 use crate::Error;
 use crate::TangleTestHarness;
 use gadget_client_tangle::EventsClient;
-use gadget_core_testing_utils::harness::TestHarness;
-use gadget_logging::setup_log;
+use gadget_core_testing_utils::setup_log;
 use tangle_subxt::subxt::tx::Signer;
 
 #[tokio::test]
@@ -10,7 +9,7 @@ async fn test_client_initialization() -> Result<(), Error> {
     setup_log();
 
     let temp_dir = tempfile::TempDir::new()?;
-    let harness = TangleTestHarness::setup(temp_dir, ()).await?;
+    let harness = TangleTestHarness::<()>::setup(temp_dir).await?;
 
     assert!(
         harness
@@ -31,7 +30,7 @@ async fn test_operator_metadata() -> Result<(), Error> {
     setup_log();
 
     let temp_dir = tempfile::TempDir::new()?;
-    let harness = TangleTestHarness::setup(temp_dir, ()).await?;
+    let harness = TangleTestHarness::<()>::setup(temp_dir).await?;
 
     // Get operator metadata for the test account
     let metadata = harness
@@ -52,7 +51,7 @@ async fn test_services_client() -> Result<(), Error> {
     setup_log();
 
     let temp_dir = tempfile::TempDir::new()?;
-    let harness = TangleTestHarness::setup(temp_dir, ()).await?;
+    let harness = TangleTestHarness::<()>::setup(temp_dir).await?;
     let services = harness.client().services_client();
 
     // Test blueprint queries
@@ -64,7 +63,7 @@ async fn test_services_client() -> Result<(), Error> {
 
     // Query non-existent blueprint
     let blueprint = services
-        .get_blueprint_by_id(block_hash, 999999)
+        .get_blueprint_by_id(block_hash, 999_999)
         .await
         .unwrap();
     assert!(
@@ -90,7 +89,7 @@ async fn test_events_client() -> Result<(), Error> {
     setup_log();
 
     let temp_dir = tempfile::TempDir::new()?;
-    let harness = TangleTestHarness::setup(temp_dir, ()).await?;
+    let harness = TangleTestHarness::<()>::setup(temp_dir).await?;
 
     // Test event subscription
     let latest = harness.client().latest_event().await;
@@ -113,7 +112,7 @@ async fn test_service_operators() -> Result<(), Error> {
     setup_log();
 
     let temp_dir = tempfile::TempDir::new()?;
-    let harness = TangleTestHarness::setup(temp_dir, ()).await?;
+    let harness = TangleTestHarness::<()>::setup(temp_dir).await?;
     let services = harness.client().services_client();
 
     // Get current block hash
@@ -125,7 +124,7 @@ async fn test_service_operators() -> Result<(), Error> {
 
     // Query service operators for a non-existent service
     let operators = services
-        .current_service_operators(block_hash, 999999)
+        .current_service_operators(block_hash, 999_999)
         .await
         .unwrap();
     assert!(

@@ -8,6 +8,9 @@ license.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 # Core CLI dependencies - always included
 anyhow = { workspace = true }
@@ -15,11 +18,10 @@ clap = { workspace = true, features = ["derive", "wrap_help"] }
 clap-cargo = { workspace = true, features = ["clap"] }
 cargo-generate = { workspace = true, features = ["vendored-libgit2"] }
 cargo_metadata = { workspace = true }
-escargot = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "ansi"] }
 color-eyre = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
+serde_json = { workspace = true, features = ["alloc"] }
 tokio = { workspace = true, features = ["full"] }
 hex = { workspace = true }
 tracing = { workspace = true, features = ["log"] }
@@ -30,12 +32,11 @@ reqwest = { workspace = true }
 toml = { workspace = true }
 indicatif = { workspace = true }
 
-# Gadget dependencies
+# Blueprint dependencies
+blueprint-core = { workspace = true, features = ["tracing"] }
 blueprint-runner = { workspace = true, features = ["networking"] }
-gadget-blueprint-proc-macro-core = { workspace = true, default-features = true }
 gadget-std = { workspace = true, features = ["std"] }
-gadget-logging = { workspace = true, default-features = true }
-gadget-utils-tangle = { workspace = true, default-features = true }
+blueprint-tangle-extra = { workspace = true, default-features = true }
 dialoguer = { workspace = true, default-features = true }
 
 # Optional client dependencies
@@ -60,7 +61,7 @@ tnt-bls = { workspace = true, optional = true }
 tangle-subxt = { workspace = true, optional = true }
 sp-core = { workspace = true, optional = true }
 eigensdk = { workspace = true, optional = true }
-gadget-utils-evm = { workspace = true, optional = true }
+blueprint-evm-extra = { workspace = true, optional = true }
 
 # Anvil dependencies
 testcontainers = { workspace = true, optional = true }
@@ -80,19 +81,16 @@ alloy-rpc-types-eth = { workspace = true, optional = true }
 gadget-keystore = { workspace = true, features = ["bn254"] }
 tempfile = { workspace = true }
 gadget-testing-utils = { workspace = true, features = ["anvil", "eigenlayer"] }
-gadget-utils = { workspace = true, features = ["std", "evm", "eigenlayer"] }
 alloy-contract = { workspace = true }
 alloy-dyn-abi = { workspace = true }
 
 [features]
 default = ["std", "tangle", "eigenlayer"]
 std = [
-    "gadget-blueprint-proc-macro-core/std",
     "gadget-clients/std",
     "gadget-keystore/std",
-    "gadget-logging/std",
     "gadget-std/std",
-    "gadget-utils-tangle/std",
+    "blueprint-tangle-extra/std",
     "tangle-subxt/std",
 ]
 
@@ -115,20 +113,16 @@ eigenlayer = [
 
 # Core functionality features
 evm = [
-    "alloy-json-abi",
-    "alloy-primitives",
-    "alloy-contract",
-    "alloy-network",
-    "alloy-signer-local",
-    "alloy-provider",
-    "alloy-transport",
-    "alloy-rpc-types-eth",
-    "testcontainers",
-    "gadget-utils-evm",
+    "dep:alloy-json-abi",
+    "dep:alloy-primitives",
+    "dep:alloy-contract",
+    "dep:alloy-network",
+    "dep:alloy-signer-local",
+    "dep:alloy-provider",
+    "dep:alloy-transport",
+    "dep:alloy-rpc-types-eth",
+    "dep:testcontainers",
+    "dep:blueprint-evm-extra",
     "gadget-keystore/evm",
     "gadget-clients/evm",
 ]
-
-[lints.clippy]
-large_enum_variant = "allow" # TODO
-result_large_err = "allow"

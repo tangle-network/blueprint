@@ -1,13 +1,13 @@
 use alloy_primitives::Uint;
 use alloy_primitives::{Address, address};
 use alloy_provider::Provider;
+use blueprint_core::info;
+use blueprint_evm_extra::util::get_provider_http;
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use eigensdk::utils::slashing::middleware::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
 use eigensdk::utils::slashing::middleware::registrycoordinator::IStakeRegistryTypes::StrategyParams;
 use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordinator;
 use gadget_anvil_testing_utils::get_receipt;
-use gadget_logging::info;
-use gadget_utils::evm::get_provider_http;
 
 /// The default Allocation Manager address on our testnet
 pub const ALLOCATION_MANAGER_ADDR: Address = address!("8A791620dd6260079BF849Dc5567aDC3F2FDC318");
@@ -43,6 +43,7 @@ pub struct EigenlayerTestEnvironment {
 /// # Description
 /// - Sets all the necessary environment variables for the necessary EigenLayer Contract Addresses.
 /// - Returns a [`EigenlayerTestEnvironment`] struct containing the test environment state.
+#[allow(clippy::missing_panics_doc)]
 pub async fn setup_eigenlayer_test_environment(
     http_endpoint: &str,
     ws_endpoint: &str,
@@ -92,7 +93,7 @@ pub async fn setup_eigenlayer_test_environment(
     };
 
     info!("Creating Quorum...");
-    let _receipt = get_receipt(registry_coordinator.createTotalDelegatedStakeQuorum(
+    let receipt = get_receipt(registry_coordinator.createTotalDelegatedStakeQuorum(
         operator_set_params,
         Uint::from(0),
         vec![strategy_params],
@@ -116,8 +117,8 @@ pub async fn setup_eigenlayer_test_environment(
             service_manager_address: SERVICE_MANAGER_ADDR,
             stake_registry_address: STAKE_REGISTRY_ADDR,
             strategy_manager_address: STRATEGY_MANAGER_ADDR,
-            avs_directory_address: Default::default(),
-            rewards_coordinator_address: Default::default(),
+            avs_directory_address: Address::default(),
+            rewards_coordinator_address: Address::default(),
             permission_controller_address: PERMISSION_CONTROLLER_ADDR,
         },
     }

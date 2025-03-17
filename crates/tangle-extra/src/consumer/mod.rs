@@ -78,6 +78,7 @@ where
     fn start_send(self: Pin<&mut Self>, item: JobResult) -> Result<(), Self::Error> {
         let JobResult::Ok { head, body } = &item else {
             // We don't care about errors here
+            blueprint_core::trace!("Discarding job result with error");
             return Ok(());
         };
 
@@ -86,8 +87,11 @@ where
             head.metadata.get(extract::ServiceId::METADATA_KEY),
         ) else {
             // Not a tangle job result
+            blueprint_core::trace!("Discarding job result with missing metadata");
             return Ok(());
         };
+
+        blueprint_core::debug!(result = ?item, "Received job result, handling...");
 
         let call_id: CallId = call_id_raw.try_into().map_err(|_| InvalidCallId)?;
         let service_id: ServiceId = service_id_raw.try_into().map_err(|_| InvalidServiceId)?;
@@ -112,28 +116,26 @@ where
         loop {
             match &mut *state {
                 State::WaitingForResult => {
-                    if let Some(DerivedJobResult {
+                    let Some(DerivedJobResult {
                         call_id,
                         service_id,
                         result,
                     }) = consumer.buffer.pop_front()
-                    {
-                        let tx = api::tx()
-                            .services()
-                            .submit_result(service_id, call_id, result);
-                        let fut =
-                            crate::util::send(consumer.client.clone(), consumer.signer.clone(), tx);
-                        // Store the new future in state.
-                        *state = State::ProcessingBlock(Box::pin(fut));
-                        continue;
-                    } else {
+                    else {
                         return Poll::Ready(Ok(()));
-                    }
+                    };
+
+                    let tx = api::tx()
+                        .services()
+                        .submit_result(service_id, call_id, result);
+                    let fut =
+                        crate::util::send(consumer.client.clone(), consumer.signer.clone(), tx);
+
+                    *state = State::ProcessingBlock(Box::pin(fut));
                 }
                 State::ProcessingBlock(future) => match future.as_mut().poll(cx) {
                     Poll::Ready(Ok(_extrinsic_events)) => {
                         *state = State::WaitingForResult;
-                        continue;
                     }
                     Poll::Ready(Err(e)) => return Poll::Ready(Err(e.into())),
                     Poll::Pending => return Poll::Pending,

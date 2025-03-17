@@ -8,9 +8,11 @@ license.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 # Internal deps
-gadget-logging = { workspace = true }
 gadget-std = { workspace = true }
 
 # Core dependencies
@@ -24,7 +26,6 @@ tokio-stream = { workspace = true, features = ["time"] }
 futures = { workspace = true }
 tracing = { workspace = true }
 bincode = { workspace = true }
-async-trait = { workspace = true }
 lru-mem = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["alloc"] }
@@ -79,15 +80,10 @@ fastrand = "2.0"
 default = ["std"]
 std = [
 	"gadget-crypto/std",
-	"gadget-logging/std",
 	"gadget-std/std",
-	"gadget-std/tokio",
 	"k256/std",
 	"tokio/full",
 	"serde/std",
 	"serde_json/std",
 	"libsecp256k1/std",
 ]
-
-[lints]
-workspace = true

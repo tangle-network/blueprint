@@ -3,15 +3,13 @@ use alloy_primitives::{Uint, address};
 use alloy_provider::Provider;
 use alloy_provider::network::Ethereum;
 use alloy_rpc_types_eth::TransactionReceipt;
+use blueprint_core::info;
 use dialoguer::console::style;
 use eigensdk::utils::rewardsv2::middleware::ecdsastakeregistry::ECDSAStakeRegistry;
 use eigensdk::utils::rewardsv2::middleware::ecdsastakeregistry::ECDSAStakeRegistry::Quorum;
 use eigensdk::utils::slashing::middleware::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
 use eigensdk::utils::slashing::middleware::registrycoordinator::IStakeRegistryTypes::StrategyParams;
 use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordinator;
-use gadget_logging::{error, info};
-use gadget_std::sync::{Arc, Mutex};
-use gadget_std::time::Duration;
 use std::fs::{self};
 use tempfile::TempDir;
 use testcontainers::{
@@ -24,8 +22,8 @@ use tokio::io::AsyncBufReadExt;
 mod error;
 mod state;
 
+use blueprint_evm_extra::util::get_provider_http;
 pub use error::Error;
-use gadget_utils_evm::get_provider_http;
 pub use state::{AnvilState, get_default_state, get_default_state_json};
 
 pub type Container = ContainerAsync<GenericImage>;
@@ -83,6 +81,8 @@ fn write_and_display_settings(
 }
 
 /// Start an Anvil container for testing with contract state loaded.
+#[allow(clippy::missing_panics_doc)] // TODO(serial): Return an error, no panics
+#[allow(clippy::too_many_lines)]
 pub async fn start_anvil_container(
     state_json: &str,
     include_logs: bool,
@@ -344,7 +344,7 @@ pub async fn start_anvil_container(
         &ws_endpoint,
         &ecdsa_stake_registry_address.to_string(),
     ) {
-        error!("Failed to write settings: {}", e);
+        blueprint_core::error!("Failed to write settings: {}", e);
     }
 
     print_section_header("Setup Complete");
@@ -359,6 +359,7 @@ pub async fn start_anvil_container(
 }
 
 /// Mine Anvil blocks.
+#[allow(clippy::missing_panics_doc)] // TODO(serial): Return errors, not panics
 pub async fn mine_anvil_blocks(container: &Container, n: u32) {
     let _output = container
         .exec(ExecCommand::new([
@@ -398,6 +399,7 @@ pub async fn start_default_anvil_testnet(include_logs: bool) -> (Container, Stri
 ///    - `container` as a [`ContainerAsync`] - The Anvil container.
 ///    - `http_endpoint` as a `String` - The Anvil HTTP endpoint.
 ///    - `ws_endpoint` as a `String` - The Anvil WS endpoint.
+#[allow(clippy::missing_panics_doc)] // TODO(serial): Return errors, not panics
 pub async fn start_anvil_testnet_with_state(
     state: &AnvilState,
     include_logs: bool,
@@ -407,7 +409,7 @@ pub async fn start_anvil_testnet_with_state(
     (container, http, ws)
 }
 
-pub async fn get_receipt<T, P, D>(
+async fn get_receipt<T, P, D>(
     call: CallBuilder<T, P, D, Ethereum>,
 ) -> Result<TransactionReceipt, Error>
 where
@@ -417,7 +419,7 @@ where
     let pending_tx = match call.send().await {
         Ok(tx) => tx,
         Err(e) => {
-            error!("Failed to send transaction: {:?}", e);
+            blueprint_core::error!("Failed to send transaction: {:?}", e);
             return Err(e.into());
         }
     };
@@ -425,34 +427,10 @@ where
     let receipt = match pending_tx.get_receipt().await {
         Ok(receipt) => receipt,
         Err(e) => {
-            error!("Failed to get transaction receipt: {:?}", e);
+            blueprint_core::error!("Failed to get transaction receipt: {:?}", e);
             return Err(e.into());
         }
     };
 
     Ok(receipt)
-}
-
-/// Waits for the given `successful_responses` Mutex to be greater than or equal to `task_response_count`.
-pub async fn wait_for_responses(
-    successful_responses: Arc<Mutex<usize>>,
-    task_response_count: usize,
-    timeout_duration: Duration,
-) -> Result<Result<(), Error>, tokio::time::error::Elapsed> {
-    tokio::time::timeout(timeout_duration, async move {
-        loop {
-            let count = match successful_responses.lock() {
-                Ok(guard) => *guard,
-                Err(e) => {
-                    return Err(Error::WaitResponse(e.to_string()));
-                }
-            };
-            if count >= task_response_count {
-                info!("Successfully received {} task responses", count);
-                return Ok(());
-            }
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-    })
-    .await
 }

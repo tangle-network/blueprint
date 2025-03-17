@@ -2,24 +2,26 @@ pub use crate::create::error::Error;
 pub use crate::create::source::Source;
 pub use crate::create::types::BlueprintType;
 use crate::foundry::FoundryToolchain;
-use types::*;
+use types::{BlueprintVariant, EigenlayerVariant};
 
 pub mod error;
 pub mod source;
 pub mod types;
 
+/// Generate a new blueprint from a template
+///
+/// # Errors
+///
+/// See [`cargo_generate::generate()`]
 pub fn new_blueprint(
-    name: String,
+    name: &str,
     source: Option<Source>,
     blueprint_type: Option<BlueprintType>,
 ) -> Result<(), Error> {
     println!("Generating blueprint with name: {}", name);
 
     let source = source.unwrap_or_default();
-    let blueprint_variant = blueprint_type
-        .clone()
-        .map(|t| t.get_type())
-        .unwrap_or_default();
+    let blueprint_variant = blueprint_type.map(|t| t.get_type()).unwrap_or_default();
     let template_path_opt: Option<cargo_generate::TemplatePath> = source.into();
 
     let template_path = template_path_opt.unwrap_or_else(|| {
@@ -57,14 +59,14 @@ pub fn new_blueprint(
         bin: true,
         ssh_identity: None,
         gitconfig: None,
-        define: Default::default(),
+        define: Vec::new(),
         init: false,
         destination: None,
         force_git_init: false,
         allow_commands: false,
         overwrite: false,
         skip_submodules: false,
-        other_args: Default::default(),
+        other_args: Option::default(),
     })
     .map_err(Error::GenerationFailed)?;
 
@@ -72,9 +74,9 @@ pub fn new_blueprint(
 
     let foundry = FoundryToolchain::new();
     if !foundry.forge.is_installed() {
-        gadget_logging::warn!("Forge not installed, skipping dependencies");
-        gadget_logging::warn!("NOTE: See <https://getfoundry.sh>");
-        gadget_logging::warn!(
+        blueprint_core::warn!("Forge not installed, skipping dependencies");
+        blueprint_core::warn!("NOTE: See <https://getfoundry.sh>");
+        blueprint_core::warn!(
             "NOTE: After installing Forge, you can run `forge soldeer update -d` to install dependencies"
         );
         return Ok(());
@@ -82,7 +84,7 @@ pub fn new_blueprint(
 
     std::env::set_current_dir(path)?;
     if let Err(e) = foundry.forge.install_dependencies() {
-        gadget_logging::error!("{e}");
+        blueprint_core::error!("{e}");
     }
 
     Ok(())

@@ -6,6 +6,7 @@ use crate::{
     keys::inject_tangle_key,
     node::{NodeConfig, run, transactions},
 };
+use blueprint_core::debug;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::ContextConfig;
 use blueprint_runner::config::SupportedChains;
@@ -13,11 +14,11 @@ use blueprint_runner::error::RunnerError;
 use blueprint_runner::tangle::config::PriceTargets;
 use gadget_client_tangle::client::TangleClient;
 use gadget_contexts::tangle::TangleClientContext;
-use gadget_core_testing_utils::harness::TestHarness;
 use gadget_crypto_tangle_pair_signer::TanglePairSigner;
 use gadget_keystore::backends::Backend;
 use gadget_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
-use gadget_logging::debug;
+use std::io;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use tangle_subxt::tangle_testnet_runtime::api::services::events::JobCalled;
 use tangle_subxt::tangle_testnet_runtime::api::services::{
@@ -49,7 +50,7 @@ pub struct TangleTestConfig {
 }
 
 /// Test harness for Tangle network tests
-pub struct TangleTestHarness<Ctx> {
+pub struct TangleTestHarness<Ctx = ()> {
     pub http_endpoint: Url,
     pub ws_endpoint: Url,
     client: TangleClient,
@@ -57,12 +58,12 @@ pub struct TangleTestHarness<Ctx> {
     pub ecdsa_signer: TanglePairSigner<sp_core::ecdsa::Pair>,
     pub alloy_key: alloy_signer_local::PrivateKeySigner,
     config: TangleTestConfig,
-    context: Ctx,
     temp_dir: tempfile::TempDir,
     _node: crate::node::testnet::SubstrateNode,
+    _phantom: PhantomData<Ctx>,
 }
 
-pub async fn generate_env_from_node_id(
+pub(crate) async fn generate_env_from_node_id(
     identity: &str,
     http_endpoint: Url,
     ws_endpoint: Url,
@@ -95,16 +96,37 @@ pub async fn generate_env_from_node_id(
     Ok(env)
 }
 
-#[async_trait::async_trait]
-impl<Ctx> TestHarness for TangleTestHarness<Ctx>
+impl<Ctx> TangleTestHarness<Ctx>
 where
     Ctx: Clone + Send + Sync + 'static,
 {
-    type Config = TangleTestConfig;
-    type Context = Ctx;
-    type Error = Error;
-
-    async fn setup(test_dir: TempDir, context: Self::Context) -> Result<Self, Self::Error> {
+    /// Create a new `TangleTestHarness`
+    ///
+    /// NOTE: The resulting harness will have a context of `()`. This is not valid for jobs that require
+    ///       a context. See [`Self::setup_with_context()`] and [`Self::set_context()`].
+    ///
+    /// This is useful for cases where:
+    ///
+    /// * None of the jobs require a context
+    /// * The context creation depends on [`Self::env()`]
+    ///
+    /// # Errors
+    ///
+    /// * See [`Self::setup_with_context()`]
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use gadget_tangle_testing_utils::TangleTestHarness;
+    /// use tempfile::TempDir;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let tmp_dir = TempDir::new()?;
+    /// let harness = TangleTestHarness::setup(tmp_dir).await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
         // Start Local Tangle Node
         let node = run(NodeConfig::new(false))
             .await
@@ -142,7 +164,7 @@ where
             .map_err(|e| Error::Setup(e.to_string()))?;
 
         let client = alice_env.tangle_client().await?;
-        let harness = Self {
+        let harness = TangleTestHarness {
             http_endpoint,
             ws_endpoint,
             client,
@@ -152,7 +174,7 @@ where
             temp_dir: test_dir,
             config,
             _node: node,
-            context,
+            _phantom: PhantomData,
         };
 
         // Deploy MBSM if needed
@@ -164,7 +186,8 @@ where
         Ok(harness)
     }
 
-    fn env(&self) -> &BlueprintEnvironment {
+    #[must_use]
+    pub fn env(&self) -> &BlueprintEnvironment {
         &self.client.config
     }
 }
@@ -211,13 +234,14 @@ where
                 env,
                 client,
                 preferences,
-            })
+            });
         }
 
         Ok(nodes)
     }
 
     /// Gets a reference to the Tangle client
+    #[must_use]
     pub fn client(&self) -> &TangleClient {
         &self.client
     }
@@ -251,30 +275,42 @@ where
     }
 
     /// Creates deploy options for a blueprint
+    ///
+    /// # Errors
+    ///
+    /// See [`read_cargo_toml_file()`]
+    ///
+    /// [`read_cargo_toml_file()`]: gadget_core_testing_utils::read_cargo_toml_file
     pub fn create_deploy_opts(
         &self,
         manifest_path: std::path::PathBuf,
-    ) -> cargo_tangle::deploy::tangle::Opts {
-        cargo_tangle::deploy::tangle::Opts {
-            pkg_name: Some(self.get_blueprint_name(&manifest_path)),
+    ) -> io::Result<cargo_tangle::deploy::tangle::Opts> {
+        Ok(cargo_tangle::deploy::tangle::Opts {
+            pkg_name: Some(self.get_blueprint_name(&manifest_path)?),
             http_rpc_url: self.http_endpoint.to_string(),
             ws_rpc_url: self.ws_endpoint.to_string(),
             manifest_path,
             signer: Some(self.sr25519_signer.clone()),
             signer_evm: Some(self.alloy_key.clone()),
-        }
+        })
     }
 
-    pub fn get_blueprint_name(&self, manifest_path: &std::path::Path) -> String {
-        let manifest = gadget_core_testing_utils::read_cargo_toml_file(manifest_path)
-            .expect("Failed to read blueprint's Cargo.toml");
-        manifest.package.unwrap().name
+    #[allow(clippy::unused_self)]
+    fn get_blueprint_name(&self, manifest_path: &std::path::Path) -> io::Result<String> {
+        let manifest = gadget_core_testing_utils::read_cargo_toml_file(manifest_path)?;
+        Ok(manifest.package.unwrap().name)
     }
 
     /// Deploys a blueprint from the current directory and returns its ID
+    ///
+    /// # Errors
+    ///
+    /// See [`deploy_to_tangle()`]
+    ///
+    /// [`deploy_to_tangle()`]: cargo_tangle::deploy::tangle::deploy_to_tangle
     pub async fn deploy_blueprint(&self) -> Result<u64, Error> {
         let manifest_path = std::env::current_dir()?.join("Cargo.toml");
-        let opts = self.create_deploy_opts(manifest_path);
+        let opts = self.create_deploy_opts(manifest_path)?;
         let blueprint_id = cargo_tangle::deploy::tangle::deploy_to_tangle(opts)
             .await
             .map_err(|e| Error::Setup(e.to_string()))?;
@@ -284,10 +320,14 @@ where
     /// Sets up a complete service environment with initialized event handlers
     ///
     /// # Returns
-    /// A tuple of the test environment, the service ID, and the blueprint ID i.e., (test_env, service_id, blueprint_id)
+    /// A tuple of the test environment, the service ID, and the blueprint ID i.e., (`test_env`, `service_id`, `blueprint_id`)
     ///
     /// # Note
     /// The Service ID will always be 0 if automatic registration is disabled, as there is not yet a service to have an ID
+    ///
+    /// # Errors
+    ///
+    /// * See [`Self::deploy_blueprint()`] and [`MultiNodeTestEnv::new()`]
     pub async fn setup_services<const N: usize>(
         &self,
         exit_after_registration: bool,
@@ -300,7 +340,9 @@ where
         let nodes = self.get_all_node_info::<N>().await?;
 
         // Setup operator and get service
-        let service_id = if !exit_after_registration {
+        let service_id = if exit_after_registration {
+            0
+        } else {
             let mut all_clients = Vec::new();
             let mut all_signers = Vec::new();
             let mut all_preferences = Vec::new();
@@ -328,13 +370,10 @@ where
             )
             .await
             .map_err(|e| Error::Setup(e.to_string()))?
-        } else {
-            0
         };
 
         // Create and initialize the new multi-node environment
-        let executor =
-            MultiNodeTestEnv::new::<N>(self.config.clone(), self.context.clone()).await?;
+        let executor = MultiNodeTestEnv::new::<N>(self.config.clone());
 
         Ok((executor, service_id, blueprint_id))
     }
@@ -348,6 +387,10 @@ where
     ///
     /// # Returns
     /// The submitted job if successful
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the transaction fails
     pub async fn submit_job(
         &self,
         service_id: u64,
@@ -376,6 +419,10 @@ where
     ///
     /// # Returns
     /// The job results if execution was successful
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no job result is found.
     pub async fn wait_for_job_execution(
         &self,
         service_id: u64,
@@ -401,22 +448,20 @@ where
     ///
     /// # Returns
     /// The verified results if they match expectations
-    pub fn verify_job(
-        &self,
-        results: JobResultSubmitted,
-        expected: Vec<OutputValue>,
-    ) -> Result<JobResultSubmitted, Error> {
+    ///
+    /// # Panics
+    ///
+    /// If the results don't match the expected outputs
+    pub fn verify_job(&self, results: &JobResultSubmitted, expected: impl AsRef<[OutputValue]>) {
         assert_eq!(
             results.result.len(),
-            expected.len(),
+            expected.as_ref().len(),
             "Number of outputs doesn't match expected"
         );
 
-        for (result, expected) in results.result.iter().zip(expected.iter()) {
+        for (result, expected) in results.result.iter().zip(expected.as_ref().iter()) {
             assert_eq!(result, expected);
         }
-
-        Ok(results)
     }
 }
 
@@ -427,7 +472,7 @@ mod tests {
     #[tokio::test]
     async fn test_harness_setup() {
         let test_dir = TempDir::new().unwrap();
-        let harness = TangleTestHarness::setup(test_dir, ()).await;
+        let harness = TangleTestHarness::<()>::setup(test_dir).await;
         assert!(harness.is_ok(), "Harness setup should succeed");
 
         let harness = harness.unwrap();
@@ -440,7 +485,7 @@ mod tests {
     #[tokio::test]
     async fn test_deploy_mbsm() {
         let test_dir = TempDir::new().unwrap();
-        let harness = TangleTestHarness::setup(test_dir, ()).await.unwrap();
+        let harness = TangleTestHarness::<()>::setup(test_dir).await.unwrap();
 
         // MBSM should be deployed during setup
         let latest_revision = transactions::get_latest_mbsm_revision(harness.client())

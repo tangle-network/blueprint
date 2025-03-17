@@ -45,6 +45,12 @@ pub struct GcpRemoteSigner {
 }
 
 impl GcpRemoteSigner {
+    /// Create a new `GcpRemoteSigner`
+    ///
+    /// # Errors
+    ///
+    /// Will fail if any of the keys specified in the [`GcpRemoteSignerConfig`] cannot be loaded, for
+    /// any reason.
     pub async fn new(config: GcpRemoteSignerConfig) -> Result<Self> {
         let mut signers = BTreeMap::new();
 
@@ -80,7 +86,6 @@ impl GcpRemoteSigner {
     }
 }
 
-#[async_trait::async_trait]
 impl EcdsaRemoteSigner<K256Ecdsa> for GcpRemoteSigner {
     type Public = K256VerifyingKey;
     type Signature = K256Signature;

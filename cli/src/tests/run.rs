@@ -5,14 +5,15 @@ use blueprint_runner::config::SupportedChains;
 use blueprint_runner::config::{ContextConfig, Protocol, ProtocolSettings};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use color_eyre::eyre::Result;
-use gadget_logging::setup_log;
 use gadget_std::collections::HashMap;
 use gadget_std::fs;
 use gadget_std::process::Command;
 use gadget_testing_utils::anvil::start_default_anvil_testnet;
+use gadget_testing_utils::setup_log;
 use tempfile::TempDir;
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn test_run_eigenlayer_avs() -> Result<()> {
     setup_log();
 
@@ -27,7 +28,7 @@ async fn test_run_eigenlayer_avs() -> Result<()> {
     let keystore_path = temp_dir.path().join("./keystore");
 
     // Write the test contract
-    let contract_content = r#"// SPDX-License-Identifier: MIT
+    let contract_content = r"// SPDX-License-Identifier: MIT
 pragma solidity >=0.8.13;
 
 contract TestContract {
@@ -47,16 +48,16 @@ contract TestContract {
         return value;
     }
 }
-"#;
+";
     fs::write(contract_src_dir.join("TestContract.sol"), contract_content)?;
 
     // Create foundry.toml
     let foundry_content = format!(
-        r#"[profile.default]
+        r"[profile.default]
 src = 'src'
 out = '{}'
 libs = ['lib']
-evm_version = 'shanghai'"#,
+evm_version = 'shanghai'",
         contract_out_dir
             .strip_prefix(temp_dir.path())
             .unwrap()
@@ -97,7 +98,7 @@ evm_version = 'shanghai'"#,
         .expect("Failed to build contracts");
 
     // Deploy contracts
-    let contract_addresses = deploy_avs_contracts(&opts).await?;
+    let contract_addresses = deploy_avs_contracts(&opts)?;
     let test_contract_address = contract_addresses
         .iter()
         .find(|(key, _value)| key.contains("TestContract"))
@@ -131,7 +132,6 @@ alloy-json-abi = {{ version = "0.8" }}
 alloy-dyn-abi = {{ version = "0.8" }}
 alloy-contract = {{ version = "0.9" }}
 alloy-network = {{ version = "0.9" }}
-async-trait = {{ version = "0.1.86" }}
 serde = {{ version = "1.0", features = ["derive"] }}
 serde_json = "1.0"
 "#
@@ -148,7 +148,7 @@ serde_json = "1.0"
     // Create the binary that will interact with the contract
     let main_rs = format!(
         r#"use blueprint_sdk::alloy::primitives::Address;
-use blueprint_sdk::logging::info;
+use blueprint_sdk::info;
 use blueprint_sdk::std::{{string::ToString, fs, path::PathBuf}};
 use alloy_sol_types::sol;
 use alloy_transport::BoxTransport;
@@ -231,7 +231,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
         .output()
         .expect("Failed to build binary");
     if !build_output.status.success() {
-        gadget_logging::debug!("Cargo build output: {:?}", build_output);
+        blueprint_core::debug!("Cargo build output: {:?}", build_output);
         panic!("Failed to build binary")
     }
 
@@ -268,21 +268,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     const MAX_ATTEMPTS: u32 = 30; // 60 seconds total timeout
 
     loop {
-        gadget_logging::info!(
+        blueprint_core::info!(
             "Waiting for run to succeed (attempt {}/{})",
             attempts + 1,
             MAX_ATTEMPTS
         );
 
         if success_file.exists() {
-            gadget_logging::info!("Run succeeded!");
+            blueprint_core::info!("Run succeeded!");
             break;
         }
 
         attempts += 1;
-        if attempts >= MAX_ATTEMPTS {
-            panic!("Test timed out waiting for success file");
-        }
+        assert!(
+            attempts < MAX_ATTEMPTS,
+            "Test timed out waiting for success file"
+        );
 
         interval.tick().await;
     }

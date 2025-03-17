@@ -1,13 +1,11 @@
-//! Re-exported from https://github.com/Layr-Labs/eigensdk-rs/blob/main/crates/chainio/clients/eth/src/client.rs
+//! Re-exported from <https://github.com/Layr-Labs/eigensdk-rs/blob/main/crates/chainio/clients/eth/src/client.rs>
 
 use alloy_primitives::BlockNumber;
 use alloy_rpc_types::{Block, BlockNumberOrTag};
-use gadget_std::boxed::Box;
 
 #[derive(Debug)]
 pub struct Client {}
 
-#[async_trait::async_trait]
 pub trait BackendClient {
     type Error;
 

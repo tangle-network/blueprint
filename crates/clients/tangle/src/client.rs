@@ -3,7 +3,6 @@ use crate::error::{Result, Error};
 use crate::EventsClient;
 use gadget_std::sync::Arc;
 use gadget_std::time::Duration;
-use gadget_std::tokio_ext::TokioMutexExt;
 use subxt::blocks::{Block, BlockRef};
 use subxt::events::Events;
 use subxt::utils::AccountId32;
@@ -20,7 +19,7 @@ use crate::services::TangleServicesClient;
 
 /// The [Config](subxt::Config) providing the runtime types.
 pub type TangleConfig = PolkadotConfig;
-/// The client used to perform API calls, using the [TangleConfig].
+/// The client used to perform API calls, using the [`TangleConfig`].
 pub type OnlineClient = subxt::OnlineClient<TangleConfig>;
 type TangleBlock = Block<TangleConfig, OnlineClient>;
 type TangleBlockStream = subxt::backend::StreamOfResults<TangleBlock>;
@@ -47,6 +46,10 @@ pub struct TangleClient {
 
 impl TangleClient {
     /// Create a new Tangle runtime client from an existing [`BlueprintEnvironment`].
+    ///
+    /// # Errors
+    ///
+    /// See [`Keystore::new()`]
     pub async fn new(config: BlueprintEnvironment) -> std::result::Result<Self, Error> {
         let keystore_config =
             KeystoreConfig::new().fs_root(config.keystore_uri.replace("file://", ""));
@@ -75,15 +78,18 @@ impl TangleClient {
     }
 
     /// Get the associated [`TangleServicesClient`]
+    #[must_use]
     pub fn services_client(&self) -> &TangleServicesClient<subxt::PolkadotConfig> {
         &self.services_client
     }
 
+    #[must_use]
     pub fn subxt_client(&self) -> &OnlineClient {
         &self.services_client().rpc_client
     }
 
-    /// Initialize the TangleRuntime instance by listening for finality notifications.
+    /// Initialize the `TangleRuntime` instance by listening for finality notifications.
+    ///
     /// This method must be called before using the instance.
     async fn initialize(&self) -> Result<()> {
         let finality_notification_stream = self
@@ -96,6 +102,7 @@ impl TangleClient {
         Ok(())
     }
 
+    #[must_use]
     pub fn runtime_api(
         &self,
         at: [u8; 32],
@@ -104,11 +111,13 @@ impl TangleClient {
         self.services_client.rpc_client.runtime_api().at(block_ref)
     }
 
+    #[must_use]
     pub fn account_id(&self) -> &AccountId32 {
         &self.account_id
     }
 
     /// Get [`metadata`](OperatorMetadata) for an operator by [`Account ID`](AccountId32)
+    #[allow(clippy::missing_errors_doc)]
     pub async fn operator_metadata(
         &self,
         operator: AccountId32,
@@ -157,7 +166,7 @@ impl TangleClient {
             .first_local::<SpSr25519>()
             .map_err(Error::Keystore)?;
 
-        gadget_logging::trace!(
+        blueprint_core::trace!(
             "Looking for {my_id} in parties: {:?}",
             parties.keys().collect::<Vec<_>>()
         );
@@ -183,15 +192,15 @@ impl gadget_std::ops::Deref for TangleClient {
     }
 }
 
-#[async_trait::async_trait]
 impl EventsClient<TangleEvent> for TangleClient {
     async fn next_event(&self) -> Option<TangleEvent> {
-        let mut lock = self
-            .finality_notification_stream
-            .try_lock_timeout(Duration::from_millis(500))
-            .await
-            .ok()?;
-        match lock.as_mut() {
+        let mut finality_stream = tokio::time::timeout(
+            Duration::from_millis(500),
+            self.finality_notification_stream.lock(),
+        )
+        .await
+        .ok()?;
+        match finality_stream.as_mut() {
             Some(stream) => {
                 let block = stream.next().await?.ok()?;
                 let events = block.events().await.ok()?;
@@ -200,32 +209,35 @@ impl EventsClient<TangleEvent> for TangleClient {
                     hash: block.hash().into(),
                     events,
                 };
-                let mut lock2 = self
-                    .latest_finality_notification
-                    .lock_timeout(Duration::from_millis(500))
-                    .await;
-                *lock2 = Some(notification.clone());
+                let mut latest_finality = tokio::time::timeout(
+                    Duration::from_millis(500),
+                    self.latest_finality_notification.lock(),
+                )
+                .await
+                .ok()?;
+                *latest_finality = Some(notification.clone());
                 Some(notification)
             }
             None => {
-                drop(lock);
+                drop(finality_stream);
                 self.initialize().await.ok()?;
                 // Next time, the stream should be initialized.
-                self.next_event().await
+                Box::pin(async { self.next_event().await }).await
             }
         }
     }
 
     async fn latest_event(&self) -> Option<TangleEvent> {
-        let lock = self
-            .latest_finality_notification
-            .try_lock_timeout(Duration::from_millis(500))
-            .await
-            .ok()?;
-        match &*lock {
+        let latest_finality = tokio::time::timeout(
+            Duration::from_millis(500),
+            self.latest_finality_notification.lock(),
+        )
+        .await
+        .ok()?;
+        match &*latest_finality {
             Some(notification) => Some(notification.clone()),
             None => {
-                drop(lock);
+                drop(latest_finality);
                 self.next_event().await
             }
         }
@@ -234,7 +246,6 @@ impl EventsClient<TangleEvent> for TangleClient {
 
 pub type BlueprintId = u64;
 
-#[async_trait::async_trait]
 impl GadgetServicesClient for TangleClient {
     type PublicApplicationIdentity = ecdsa::Public;
     type PublicAccountIdentity = AccountId32;
@@ -286,7 +297,7 @@ impl GadgetServicesClient for TangleClient {
             })?;
 
             if let Some(pref) = maybe_pref {
-                let public = ecdsa::Public::from_full(pref.key.as_slice()).map_err(|_| {
+                let public = ecdsa::Public::from_full(pref.key.as_slice()).map_err(|()| {
                     Error::Other(format!(
                         "Failed to convert the ECDSA public key for operator: {operator}"
                     ))

@@ -1,5 +1,5 @@
 // Original: https://github.com/paritytech/subxt/blob/3219659f12a36fe6b7408bf4ac1db184414c6c0c/testing/substrate-runner/src/lib.rs
-#![allow(unused)]
+#![allow(unused, clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -58,10 +58,11 @@ impl Default for SubstrateNodeBuilder {
 
 impl SubstrateNodeBuilder {
     /// Configure a new Substrate node.
+    #[must_use]
     pub fn new() -> Self {
         SubstrateNodeBuilder {
             binary_paths: vec![],
-            custom_flags: Default::default(),
+            custom_flags: HashMap::default(),
         }
     }
 
@@ -104,10 +105,7 @@ impl SubstrateNodeBuilder {
     pub fn spawn(mut self) -> Result<SubstrateNode, Error> {
         // Try to spawn the binary at each path, returning the
         // first "ok" or last error that we encountered.
-        let mut res = Err(io::Error::new(
-            io::ErrorKind::Other,
-            "No binary path provided",
-        ));
+        let mut res = Err(io::Error::other("No binary path provided"));
 
         let path = Command::new("mktemp")
             .arg("-d")
@@ -119,7 +117,7 @@ impl SubstrateNodeBuilder {
             let binary_path = &std::path::absolute(binary_path)
                 .expect("bad path")
                 .into_os_string();
-            gadget_logging::info!("Trying to spawn Tangle node binary at {:?}", binary_path);
+            blueprint_core::info!("Trying to spawn Tangle node binary at {:?}", binary_path);
             self.custom_flags
                 .insert("base-path".into(), Some(path.clone().into()));
 
@@ -168,7 +166,7 @@ impl SubstrateNodeBuilder {
         });
 
         // Process initialization logs with timeout
-        let running_node = try_find_substrate_port_from_output(init_rx);
+        let running_node = try_find_substrate_port_from_output(&init_rx);
 
         let ws_port = running_node.ws_port()?;
         let p2p_address = running_node.p2p_address()?;
@@ -209,7 +207,7 @@ impl SubstrateNodeBuilder {
             cmd.arg(arg);
         }
 
-        gadget_logging::trace!("Spawning Tangle node with command: {cmd:?}");
+        blueprint_core::trace!("Spawning Tangle node with command: {cmd:?}");
         cmd.spawn()
     }
 }
@@ -229,26 +227,31 @@ pub struct SubstrateNode {
 
 impl SubstrateNode {
     /// Configure and spawn a new [`SubstrateNode`].
+    #[must_use]
     pub fn builder() -> SubstrateNodeBuilder {
         SubstrateNodeBuilder::new()
     }
 
     /// Return the ID of the running process.
+    #[must_use]
     pub fn id(&self) -> u32 {
         self.proc.id()
     }
 
     /// Return the port that WS connections are accepted on.
+    #[must_use]
     pub fn ws_port(&self) -> u16 {
         self.ws_port
     }
 
     /// Return the libp2p address of the running node.
+    #[must_use]
     pub fn p2p_address(&self) -> String {
         self.p2p_address.clone()
     }
 
     /// Return the libp2p port of the running node.
+    #[must_use]
     pub fn p2p_port(&self) -> u32 {
         self.p2p_port
     }
@@ -330,7 +333,7 @@ impl SubstrateNode {
         cmd.arg(format!("--rpc-port={}", self.ws_port));
         cmd.arg(format!("--port={}", self.p2p_port));
 
-        gadget_logging::debug!("Restarting Tangle node with command: {:?}", cmd);
+        blueprint_core::debug!("Restarting Tangle node with command: {:?}", cmd);
         cmd.spawn()
     }
 
@@ -386,13 +389,13 @@ impl Drop for SubstrateNode {
             let _ = handle.join();
         }
 
-        self.cleanup()
+        self.cleanup();
     }
 }
 
 // Consume a stderr reader from a spawned substrate command and
 // locate the port number that is logged out to it.
-fn try_find_substrate_port_from_output(rx: mpsc::Receiver<String>) -> SubstrateNodeInfo {
+fn try_find_substrate_port_from_output(rx: &mpsc::Receiver<String>) -> SubstrateNodeInfo {
     let mut port = None;
     let mut p2p_address = None;
     let mut p2p_port = None;
@@ -511,6 +514,7 @@ pub struct NodeConfig {
 }
 
 impl NodeConfig {
+    #[must_use]
     pub fn new(use_local_tangle: bool) -> Self {
         Self {
             use_local_tangle,
@@ -519,16 +523,19 @@ impl NodeConfig {
         }
     }
 
+    #[must_use]
     pub fn with_log_level(mut self, level: impl Into<String>) -> Self {
         self.log_level = Some(level.into());
         self
     }
 
+    #[must_use]
     pub fn with_log_target(mut self, target: impl Into<String>, level: impl Into<String>) -> Self {
         self.log_targets.push((target.into(), level.into()));
         self
     }
 
+    #[must_use]
     pub fn to_log_string(&self) -> String {
         let mut parts = Vec::new();
 
