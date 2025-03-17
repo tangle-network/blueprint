@@ -7203,22 +7203,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-executor"
-version = "0.1.0"
-dependencies = [
- "blueprint-core",
- "futures",
- "log",
- "nix 0.29.0",
- "serde",
- "serde_json",
- "serde_with",
- "sysinfo",
- "thiserror 2.0.12",
- "tokio",
-]
-
-[[package]]
 name = "gadget-keystore"
 version = "0.1.0"
 dependencies = [
