@@ -2,6 +2,7 @@ use blueprint_sdk::Job;
 use blueprint_sdk::Router;
 use blueprint_sdk::contexts::tangle::TangleClientContext;
 use blueprint_sdk::crypto::sp_core::SpSr25519;
+use blueprint_sdk::crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_sdk::keystore::backends::Backend;
 use blueprint_sdk::runner::BlueprintRunner;
 use blueprint_sdk::runner::config::BlueprintEnvironment;
@@ -14,7 +15,6 @@ use incredible_squaring_blueprint_lib::{FooBackgroundService, XSQUARE_JOB_ID, sq
 use tower::filter::FilterLayer;
 use tracing::error;
 use tracing::level_filters::LevelFilter;
-use blueprint_sdk::crypto::tangle_pair_signer::TanglePairSigner;
 
 #[tokio::main]
 async fn main() -> Result<(), blueprint_sdk::Error> {
@@ -26,7 +26,8 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     let st25519_signer = TanglePairSigner::new(sr25519_pair.0);
 
     let tangle_client = env.tangle_client().await?;
-    let tangle_producer = TangleProducer::finalized_blocks(tangle_client.rpc_client.clone()).await?;
+    let tangle_producer =
+        TangleProducer::finalized_blocks(tangle_client.rpc_client.clone()).await?;
     let tangle_consumer = TangleConsumer::new(tangle_client.rpc_client.clone(), st25519_signer);
 
     let tangle_config = TangleConfig::default();
