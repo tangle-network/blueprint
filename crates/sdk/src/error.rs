@@ -32,6 +32,10 @@ pub enum Error {
     #[error("Networking error: {0}")]
     Networking(#[from] gadget_networking::error::Error),
 
+    #[expect(
+        clippy::non_minimal_cfg,
+        reason = "More store types may be added in the future"
+    )]
     #[cfg(any(feature = "local-store"))]
     #[error("Database error: {0}")]
     Stores(#[from] gadget_stores::Error),
