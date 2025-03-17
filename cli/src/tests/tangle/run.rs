@@ -143,7 +143,7 @@ async fn test_run_blueprint() -> Result<()> {
 
     // We wait for the Binary to start up, otherwise it won't see the job
     // TODO: This is a hack, we should have a way to wait for the Binary to start up
-    tokio::time::sleep(Duration::from_secs(80)).await;
+    tokio::time::sleep(Duration::from_secs(120)).await;
 
     let job_called = submit_job(
         env.ws_rpc_endpoint.clone(),

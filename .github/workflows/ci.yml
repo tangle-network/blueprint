@@ -13,7 +13,7 @@ concurrency:
 
 env:
   RUST_BACKTRACE: full
-  RUST_LOG: "gadget=trace"
+  RUST_LOG: "trace"
   CARGO_TERM_COLOR: always
   IN_CI: "true"
 
