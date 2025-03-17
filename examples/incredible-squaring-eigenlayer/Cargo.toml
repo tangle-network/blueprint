@@ -1,62 +1,24 @@
-[package]
-name = "incredible-squaring-eigenlayer"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+resolver = "2"
+members = ["incredible-squaring-eigenlayer-lib", "incredible-squaring-eigenlayer-bin"]
 
-[package.metadata.blueprint]
-manager = { Evm = "ExperimentalBlueprint" }
-master_revision = "Latest"
+[workspace.package]
+version = "0.1.1"
+description = "An experimental blueprint"
+edition = "2024"
 
-[[bin]]
-name = "incredible-squaring"
-path = "src/main.rs"
+[workspace.dependencies]
+incredible-squaring-eigenlayer-lib = { path = "incredible-squaring-eigenlayer-lib" }
 
+blueprint-sdk = { path = "../../crates/sdk", default-features = false }
+blueprint-eigenlayer-extra = { path = "../../crates/eigenlayer-extra", default-features = false }
+tokio = { version = "1.43.0", default-features = false }
+color-eyre = "0.6.3"
+tower = { version = "0.5.2", default-features = false }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing = "0.1.41"
 
-[dependencies]
-# Blueprint dependencies
-blueprint-sdk = { workspace = true, features = ["eigenlayer", "macros", "testing"] }
-serde = { workspace = true }
-serde_json = { workspace = true, features = ["alloc"] }
-
-# Alloy dependencies
-alloy-contract = { workspace = true }
-alloy-network = { workspace = true }
-alloy-primitives = { workspace = true }
-alloy-provider = { workspace = true }
-alloy-rpc-client = { workspace = true }
-alloy-rpc-types = { workspace = true }
-alloy-signer = { workspace = true }
-alloy-signer-local = { workspace = true }
-alloy-sol-types = { workspace = true, features = ["json"] }
-alloy-transport = { workspace = true }
-alloy-transport-http = { workspace = true }
-
-# Async dependencies
-futures = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
-tower = { workspace = true }
-reqwest = { workspace = true }
-num-bigint = { workspace = true }
-
-# Eigenlayer dependencies
-eigensdk = { workspace = true, features = [
-    "client-elcontracts",
-    "types",
-    "utils",
-    "logging",
-    "client-avsregistry",
-    "crypto-bls",
-    "services-blsaggregation",
-    "services-operatorsinfo",
-    "services-avsregistry",
-] }
-
-# Misc
-thiserror = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
-
-[dev-dependencies]
-blueprint-sdk = { workspace = true, features = ["eigenlayer", "testing"] }
-testcontainers = { workspace = true }
-tokio-util = { workspace = true }
+futures = { version = "0.3.30", default-features = false }
+reqwest = { version = "0.12.7", default-features = false }
+num-bigint = { version = "0.4.6", default-features = false }
+num-traits = { version = "0.2.19", default-features = false }

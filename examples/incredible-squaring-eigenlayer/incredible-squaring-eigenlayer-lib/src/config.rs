@@ -23,9 +23,9 @@ pub type BlsAggServiceInMemory = BlsAggregatorService<
 
 pub fn get_wallet_provider_http(
     http_endpoint: &str,
-    signer: alloy_signer_local::PrivateKeySigner,
+    signer: blueprint_sdk::alloy::signer_local::PrivateKeySigner,
 ) -> RootProvider {
-    let wallet = alloy_network::EthereumWallet::new(signer);
+    let wallet = blueprint_sdk::alloy::network::EthereumWallet::new(signer);
     let provider = ProviderBuilder::new()
         .wallet(wallet)
         .on_http(http_endpoint.parse().unwrap())

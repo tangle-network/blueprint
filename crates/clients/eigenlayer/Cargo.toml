@@ -12,8 +12,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-blueprint-runner = { workspace = true }
-
+blueprint-runner = { workspace = true, features = ["eigenlayer"] }
 gadget-client-core = { workspace = true }
 gadget-std = { workspace = true }
 blueprint-evm-extra = { workspace = true }

@@ -1,0 +1,24 @@
+[package]
+name = "incredible-squaring-eigenlayer-lib"
+version = "0.1.0"
+edition = "2021"
+
+[package.metadata.blueprint]
+manager = { Evm = "ExperimentalBlueprint" }
+master_revision = "Latest"
+
+[[bin]]
+name = "incredible-squaring"
+path = "src/main.rs"
+
+[dependencies]
+# Blueprint dependencies
+blueprint-sdk = { workspace = true, features = ["evm", "eigenlayer", "macros", "testing"] }
+blueprint-eigenlayer-extra = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing = { workspace = true }
+tower.workspace = true
+futures = { workspace = true }
+reqwest = { workspace = true }
+num-bigint = { workspace = true }

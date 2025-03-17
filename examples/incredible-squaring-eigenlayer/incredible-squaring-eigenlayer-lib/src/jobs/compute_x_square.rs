@@ -2,7 +2,7 @@
 use crate::contexts::client::SignedTaskResponse;
 use crate::contexts::x_square::EigenSquareContext;
 use crate::IIncredibleSquaringTaskManager::TaskResponse;
-use crate::{IncredibleSquaringTaskManager, INCREDIBLE_SQUARING_TASK_MANAGER_ABI_STRING};
+use crate::{ContractAddress, FirstEvent, BlockNumber, Context, IncredibleSquaringTaskManager, INCREDIBLE_SQUARING_TASK_MANAGER_ABI_STRING};
 use alloy_primitives::{keccak256, Bytes, U256};
 use alloy_sol_types::SolType;
 use blueprint_sdk::contexts::keystore::KeystoreContext;
@@ -20,25 +20,13 @@ use std::convert::Infallible;
 /// The job calculates the square of the number to be squared and sends the signed task response to the BLS Aggregator.
 /// The job returns 1 if the task response was sent successfully.
 /// The job returns 0 if the task response failed to send or failed to get the BLS key.
-// TODO(serial): migrate
-// #[job(
-//     id = 0,
-//     params(number_to_be_squared, task_created_block, quorum_numbers, quorum_threshold_percentage, task_index),
-//     event_listener(
-//         listener = EvmContractEventListener<EigenSquareContext, IncredibleSquaringTaskManager::NewTaskCreated>,
-//         instance = IncredibleSquaringTaskManager,
-//         abi = INCREDIBLE_SQUARING_TASK_MANAGER_ABI_STRING,
-//         pre_processor = convert_event_to_inputs,
-//     ),
-// )]
+#[blueprint_sdk::macros::debug_job]
 pub async fn xsquare_eigen(
-    ctx: EigenSquareContext,
-    number_to_be_squared: U256,
-    task_created_block: u32,
-    quorum_numbers: Bytes,
-    quorum_threshold_percentage: u8,
-    task_index: u32,
-) -> std::result::Result<u32, Infallible> {
+    Context(ctx): Context<EigenSquareContext>,
+    BlockNumber(block_number): BlockNumber,
+    ContractAddress(addr): ContractAddress,
+    FirstEvent(ev): FirstEvent<NewTaskCreated>,
+) -> Result<u32, Infallible> {
     let client = ctx.client.clone();
 
     // Calculate our response to job
@@ -103,7 +91,7 @@ pub fn operator_id_from_key(key: BlsKeyPair) -> OperatorId {
 pub async fn convert_event_to_inputs(
     (event, _log): (
         IncredibleSquaringTaskManager::NewTaskCreated,
-        alloy_rpc_types::Log,
+        blueprint_sdk::alloy::rpc::types::Log,
     ),
 ) -> Result<Option<(U256, u32, Bytes, u8, u32)>, ProcessorError> {
     let task_index = event.taskIndex;

@@ -1,0 +1,17 @@
+[package]
+name = "incredible-squaring-eigenlayer-bin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+incredible-squaring-eigenlayer-lib.workspace = true
+
+blueprint-sdk = { workspace = true, features = ["evm", "eigenlayer", "std"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing = { workspace = true }
+tower.workspace = true
+
+[build-dependencies]
+incredible-squaring-eigenlayer-lib.workspace = true
+blueprint-sdk = { workspace = true, features = ["macros", "build"] }

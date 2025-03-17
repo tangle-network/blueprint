@@ -12,18 +12,24 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+blueprint-core = { workspace = true }
 blueprint-evm-extra = { workspace = true }
 alloy-contract = { workspace = true, default-features = false }
 alloy-network = { workspace = true, default-features = false }
 alloy-primitives = { workspace = true, default-features = false }
 alloy-provider = { workspace = true, default-features = false }
+alloy-sol-types = { workspace = true, default-features = false }
 alloy-transport = { workspace = true, default-features = false }
 eigensdk = { workspace = true, default-features = false, features = ["utils"] }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
+# RPC server dependencies
+jsonrpc-core = { workspace = true }
+jsonrpc-http-server = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
 
 [features]
 default = ["std"]
-std = [
-    "blueprint-evm-extra/std",
-    "alloy-primitives/std",
-]
+std = ["blueprint-evm-extra/std", "alloy-primitives/std"]

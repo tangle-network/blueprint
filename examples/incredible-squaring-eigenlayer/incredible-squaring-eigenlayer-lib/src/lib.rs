@@ -10,9 +10,10 @@ use crate::contracts::SquaringTask::{self, NewTaskCreated};
 use crate::contracts::TaskManager::TaskResponse;
 use crate::contracts::BN254::{G1Point, G2Point};
 use crate::error::TaskError;
-use alloy_primitives::{keccak256, U256};
-use alloy_provider::RootProvider;
-use alloy_sol_types::{SolEvent, SolType, SolValue};
+use blueprint_sdk::alloy::primitives::Address;
+use blueprint_sdk::alloy::primitives::{keccak256, U256};
+use blueprint_sdk::alloy::provider::RootProvider;
+use blueprint_sdk::alloy::sol_types::{SolEvent, SolType, SolValue};
 use blueprint_sdk::evm::extract::{BlockNumber, ContractAddress, FirstEvent, Tx};
 use blueprint_sdk::evm::filters::{contract::MatchesContract, event::MatchesEvent};
 use blueprint_sdk::extract::Context;
@@ -22,17 +23,29 @@ use eigensdk::crypto_bls::{
 };
 use eigensdk::services_blsaggregation::bls_agg;
 use eigensdk::services_blsaggregation::bls_agg::{TaskMetadata, TaskSignature};
+use eigensdk::services_blsaggregation::bls_aggregation_service_error::BlsAggregationServiceError;
 use eigensdk::types::operator::OperatorId;
 use tokio::sync::Mutex;
 use tower::filter::FilterLayer;
 
+
 pub mod config;
 pub mod contexts;
 pub mod contracts;
-pub mod error;
 pub mod jobs;
 #[cfg(test)]
 mod tests;
+
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum TaskError {
+    #[error(transparent)]
+    SolType(#[from] blueprint_sdk::alloy::sol_types::Error),
+    #[error(transparent)]
+    BlsAggregationService(#[from] BlsAggregationServiceError),
+    #[error("Aggregated response receiver closed")]
+    AggregatedResponseReceiverClosed,
+}
+
 
 /// Service context shared between jobs
 #[derive(Debug, Clone)]
@@ -124,7 +137,7 @@ pub async fn handle_task(
 /// Creates a router with task event filters
 pub fn create_contract_router(
     ctx: ExampleContext,
-    contract_address: alloy_primitives::Address,
+    contract_address: Address,
 ) -> Router {
     let sig = NewTaskCreated::SIGNATURE_HASH;
     Router::new()
@@ -187,7 +200,7 @@ fn to_g2_point(pk: BlsG2Point) -> G2Point {
 //     /// Submits squaring tasks periodically
 //     async fn submit_tasks<P: Provider>(
 //         provider: P,
-//         contract_address: alloy_primitives::Address,
+//         contract_address: Address,
 //     ) -> Result<(), BoxError> {
 //         let mut interval = tokio::time::interval(Duration::from_secs(3));
 //         let mut number: u64 = 1;

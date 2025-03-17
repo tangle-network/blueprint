@@ -1,5 +1,6 @@
 use crate::IIncredibleSquaringTaskManager::Task;
 use crate::{
+    TaskError, FirstEvent, Context,
     contexts::aggregator::AggregatorContext, IncredibleSquaringTaskManager,
     INCREDIBLE_SQUARING_TASK_MANAGER_ABI_STRING,
 };
@@ -11,23 +12,10 @@ use std::convert::Infallible;
 const TASK_CHALLENGE_WINDOW_BLOCK: u32 = 100;
 const BLOCK_TIME_SECONDS: u32 = 12;
 
-/// Initializes the task for the aggregator server
-// TODO(serial): migrate
-// #[blueprint_sdk::job(
-//     id = 1,
-//     params(task, task_index),
-//     event_listener(
-//         listener = EvmContractEventListener<AggregatorContext, IncredibleSquaringTaskManager::NewTaskCreated>,
-//         instance = IncredibleSquaringTaskManager,
-//         abi = INCREDIBLE_SQUARING_TASK_MANAGER_ABI_STRING,
-//         pre_processor = convert_event_to_inputs,
-//     ),
-// )]
 pub async fn initialize_bls_task(
-    ctx: AggregatorContext,
-    task: Task,
-    task_index: u32,
-) -> Result<u32, Infallible> {
+    Context(ctx): Context<AggregatorContext>,
+    FirstEvent(ev): FirstEvent<NewTaskCreated>,
+) -> Result<Tx, TaskError> {
     info!("Initializing task for BLS aggregation");
 
     let mut tasks = ctx.tasks.lock().await;
@@ -66,7 +54,7 @@ pub async fn initialize_bls_task(
 pub async fn convert_event_to_inputs(
     event: (
         IncredibleSquaringTaskManager::NewTaskCreated,
-        alloy_rpc_types::Log,
+        blueprint_sdk::alloy::rpc::types::Log,
     ),
 ) -> Result<Option<(Task, u32)>, ProcessorError> {
     let task_index = event.0.taskIndex;

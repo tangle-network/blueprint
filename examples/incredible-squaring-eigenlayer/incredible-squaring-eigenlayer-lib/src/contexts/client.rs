@@ -1,5 +1,6 @@
 use alloy_rpc_client::ReqwestClient;
 use color_eyre::Result;
+use eigenlayer_extra::generic_task_aggregation::SignedTaskResponse as GenericSignedTaskResponse;
 use eigensdk::crypto_bls::{OperatorId, Signature};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
@@ -7,16 +8,30 @@ use serde_json::json;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info};
 
-use crate::IIncredibleSquaringTaskManager::TaskResponse;
+use crate::contexts::incredible_task::IncredibleTaskResponse;
+use crate::contracts::IIncredibleSquaringTaskManager::TaskResponse as ContractTaskResponse;
 
 const MAX_RETRIES: u32 = 5;
 const INITIAL_RETRY_DELAY: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedTaskResponse {
-    pub task_response: TaskResponse,
+    pub task_response: ContractTaskResponse,
     pub signature: Signature,
     pub operator_id: OperatorId,
+}
+
+impl SignedTaskResponse {
+    /// Convert the client SignedTaskResponse to the generic one used by TaskAggregator
+    pub fn to_generic(&self) -> GenericSignedTaskResponse<IncredibleTaskResponse> {
+        GenericSignedTaskResponse::new(
+            IncredibleTaskResponse {
+                contract_response: self.task_response.clone(),
+            },
+            self.signature.clone(),
+            self.operator_id,
+        )
+    }
 }
 
 /// Client for interacting with the Aggregator RPC server
