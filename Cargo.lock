@@ -7347,6 +7347,7 @@ name = "gadget-stores"
 version = "0.1.0"
 dependencies = [
  "gadget-store-local-database",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
