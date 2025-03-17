@@ -16,6 +16,7 @@ use gadget_crypto_tangle_pair_signer::TanglePairSigner;
 use gadget_keystore::backends::Backend;
 use gadget_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
 use gadget_std::io;
+use std::marker::PhantomData;
 use gadget_std::path::{Path, PathBuf};
 use tangle_subxt::tangle_testnet_runtime::api::services::events::JobCalled;
 use tangle_subxt::tangle_testnet_runtime::api::services::{
@@ -55,9 +56,9 @@ pub struct TangleTestHarness<Ctx = ()> {
     pub ecdsa_signer: TanglePairSigner<sp_core::ecdsa::Pair>,
     pub alloy_key: alloy_signer_local::PrivateKeySigner,
     config: TangleTestConfig,
-    context: Ctx,
     temp_dir: tempfile::TempDir,
     _node: SubstrateNode,
+    _phantom: PhantomData<Ctx>,
 }
 
 /// Create a new Tangle test harness
@@ -102,7 +103,10 @@ pub async fn generate_env_from_node_id(
     Ok(env)
 }
 
-impl TangleTestHarness<()> {
+impl<Ctx> TangleTestHarness<Ctx>
+where
+    Ctx: Clone + Send + Sync + 'static,
+{
     /// Create a new `TangleTestHarness`
     ///
     /// NOTE: The resulting harness will have a context of `()`. This is not valid for jobs that require
@@ -127,51 +131,9 @@ impl TangleTestHarness<()> {
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let tmp_dir = TempDir::new()?;
     /// let harness = TangleTestHarness::setup(tmp_dir).await?;
-    ///
-    /// assert_eq!(harness.context(), &());
     /// # Ok(()) }
     /// ```
     pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
-        Self::setup_with_context(test_dir, ()).await
-    }
-}
-
-impl<Ctx> TangleTestHarness<Ctx>
-where
-    Ctx: Clone + Send + Sync + 'static,
-{
-    /// Create a new `TangleTestHarness` with a predefined context
-    ///
-    /// NOTE: If your context type depends on [`Self::env()`], see [`Self::setup()`]
-    ///
-    /// # Errors
-    ///
-    /// * TODO
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use gadget_tangle_testing_utils::TangleTestHarness;
-    /// use tempfile::TempDir;
-    ///
-    /// #[derive(Clone)]
-    /// struct MyContext {
-    ///     foo: u64,
-    /// }
-    ///
-    /// # #[tokio::main]
-    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// // `MyContext` can be constructed beforehand, as it has no reliance on the environment
-    /// let context = MyContext { foo: 0 };
-    ///
-    /// let tmp_dir = TempDir::new()?;
-    /// let harness = TangleTestHarness::setup_with_context(tmp_dir, context).await?;
-    /// # Ok(()) }
-    /// ```
-    pub async fn setup_with_context(test_dir: TempDir, context: Ctx) -> Result<Self, Error>
-    where
-        Self: Sized,
-    {
         // Start Local Tangle Node
         let node = gadget_chain_setup::tangle::run(
             gadget_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
@@ -221,7 +183,7 @@ where
             temp_dir: test_dir,
             config,
             _node: node,
-            context,
+            _phantom: PhantomData,
         };
 
         // Deploy MBSM if needed
@@ -233,12 +195,9 @@ where
         Ok(harness)
     }
 
+    #[must_use]
     pub fn env(&self) -> &BlueprintEnvironment {
         &self.client.config
-    }
-
-    pub fn context(&self) -> &Ctx {
-        &self.context
     }
 }
 
@@ -290,65 +249,8 @@ where
         Ok(nodes)
     }
 
-    /// Add a context to the harness
-    ///
-    /// This **must** be called before [`Self::setup_services()`]
-    ///
-    /// See also: [`Self::setup_with_context()`]
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use blueprint_core::extract::Context;
-    /// use gadget_tangle_testing_utils::TangleTestHarness;
-    /// use tempfile::TempDir;
-    ///
-    /// #[derive(Clone)]
-    /// struct MyContext {
-    ///     foo: u64,
-    /// }
-    ///
-    /// // `some_job` relies on our `MyContext` type
-    /// async fn some_job(Context(_context): Context<MyContext>) {}
-    ///
-    /// # #[tokio::main]
-    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let temp_dir = TempDir::new()?;
-    ///
-    /// // Harness currently has a context of `()`. This is not valid for `some_job()`.
-    /// let harness = TangleTestHarness::setup(temp_dir).await?;
-    ///
-    /// let context = MyContext { foo: 0 };
-    ///
-    /// // The harness now has a context of `MyContext`
-    /// let harness_with_context = harness.set_context(context);
-    ///
-    /// // Now add the job as normal
-    /// let (test_env, _service_id, _blueprint_id) =
-    ///     harness_with_context.setup_services::<1>(false).await?;
-    /// test_env.add_job(some_job).await;
-    /// # Ok(()) }
-    /// ```
-    #[allow(clippy::used_underscore_binding)]
-    pub fn set_context<Ctx2: Clone + Send + Sync + 'static>(
-        self,
-        context: Ctx2,
-    ) -> TangleTestHarness<Ctx2> {
-        TangleTestHarness {
-            http_endpoint: self.http_endpoint,
-            ws_endpoint: self.ws_endpoint,
-            client: self.client,
-            sr25519_signer: self.sr25519_signer,
-            ecdsa_signer: self.ecdsa_signer,
-            alloy_key: self.alloy_key,
-            config: self.config,
-            context,
-            temp_dir: self.temp_dir,
-            _node: self._node,
-        }
-    }
-
     /// Gets a reference to the Tangle client
+    #[must_use]
     pub fn client(&self) -> &TangleClient {
         &self.client
     }
@@ -480,7 +382,7 @@ where
         };
 
         // Create and initialize the new multi-node environment
-        let executor = MultiNodeTestEnv::new::<N>(self.config.clone(), self.context.clone());
+        let executor = MultiNodeTestEnv::new::<N>(self.config.clone());
 
         Ok((executor, service_id, blueprint_id))
     }
@@ -579,7 +481,7 @@ mod tests {
     #[tokio::test]
     async fn test_harness_setup() {
         let test_dir = TempDir::new().unwrap();
-        let harness = TangleTestHarness::setup(test_dir).await;
+        let harness = TangleTestHarness::<()>::setup(test_dir).await;
         assert!(harness.is_ok(), "Harness setup should succeed");
 
         let harness = harness.unwrap();
@@ -592,7 +494,7 @@ mod tests {
     #[tokio::test]
     async fn test_deploy_mbsm() {
         let test_dir = TempDir::new().unwrap();
-        let harness = TangleTestHarness::setup(test_dir).await.unwrap();
+        let harness = TangleTestHarness::<()>::setup(test_dir).await.unwrap();
 
         // MBSM should be deployed during setup
         let latest_revision = transactions::get_latest_mbsm_revision(harness.client())

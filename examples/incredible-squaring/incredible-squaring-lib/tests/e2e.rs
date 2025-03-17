@@ -21,7 +21,7 @@ async fn test_incredible_squaring() -> Result<()> {
 
     // Add the job to the node, and start it
     test_env.add_job(square.layer(TangleLayer)).await;
-    test_env.start().await?;
+    test_env.start(()).await?;
 
     // Submit job and wait for execution
     let job = harness
