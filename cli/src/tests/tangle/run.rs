@@ -51,7 +51,7 @@ async fn test_run_blueprint() -> Result<()> {
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(&blueprint_dir)?;
 
-    let harness = TangleTestHarness::setup(temp_dir).await?;
+    let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await?;
     let deployment_env = generate_env_from_node_id(
         "Bob",
         harness.http_endpoint.clone(),
