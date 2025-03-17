@@ -1,7 +1,7 @@
 use blueprint_sdk::Job;
-use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::tangle::layers::TangleLayer;
 use blueprint_sdk::testing::tempfile;
+use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::testing::utils::tangle::{InputValue, OutputValue, TangleTestHarness};
 use color_eyre::Result;
 use incredible_squaring_blueprint_lib::square;

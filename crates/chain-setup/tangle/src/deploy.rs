@@ -353,6 +353,14 @@ fn load_blueprint_metadata(
         do_cargo_build(&workspace_root.join("Cargo.toml"))?;
     }
 
+    // Check for the blueprint.json file again
+    blueprint_json_path = workspace_root.join("blueprint.json");
+
+    // If not found in workspace root, check in the binary's directory
+    if !blueprint_json_path.exists() {
+        blueprint_json_path = package_dir.join("blueprint.json");
+    }
+
     tracing::debug!("Found blueprint.json at: {:?}", blueprint_json_path);
 
     // should have the blueprint.json
