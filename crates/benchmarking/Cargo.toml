@@ -1,5 +1,5 @@
 [package]
-name = "gadget-benchmarking"
+name = "blueprint-benchmarking"
 version = "0.1.0"
 description = "Utilities for benchmarking Tangle Blueprints"
 authors.workspace = true

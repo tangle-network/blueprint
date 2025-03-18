@@ -27,7 +27,7 @@ The following components make up the SDK, providing everything from job creation
 tools for networking and testing.
 
 * [`blueprint-sdk`] - Main crate for the Tangle Blueprint SDK, re-exporting all of the following
-* [`gadget-benchmarking`] - Utilities for benchmarking blueprints
+* [`blueprint-benchmarking`] - Utilities for benchmarking blueprints
 * [`blueprint-build-utils`] - Utilities for simplifying build-time tasks (e.g., building contracts, installing dependencies)
 * [`blueprint-chain-setup`] - (**Meta-crate**) Utilities for setting local testnets
     * [`blueprint-chain-setup-common`] - Common utilities for setting up testnets
@@ -72,8 +72,12 @@ tools for networking and testing.
     * [`blueprint-eigenlayer-testing-utils`] - Utilities for creating end-to-end tests for Eigenlayer blueprints
 
 [`blueprint-sdk`]: https://docs.rs/blueprint-sdk
-[`gadget-benchmarking`]: https://docs.rs/gadget-benchmarking
+[`blueprint-benchmarking`]: https://docs.rs/blueprint-benchmarking
 [`blueprint-build-utils`]: https://docs.rs/blueprint-build-utils
+[`blueprint-chain-setup`]: https://docs.rs/blueprint-chain-setup
+[`blueprint-chain-setup-common`]: https://docs.rs/blueprint-chain-setup-common
+[`blueprint-chain-setup-anvil`]: https://docs.rs/blueprint-chain-setup-anvil
+[`blueprint-chain-setup-tangle`]: https://docs.rs/blueprint-chain-setup-tangle
 [`blueprint-clients`]: https://docs.rs/blueprint-clients
 [`blueprint-client-tangle`]: https://docs.rs/blueprint-client-tangle
 [`blueprint-client-eigenlayer`]: https://docs.rs/blueprint-client-eigenlayer
