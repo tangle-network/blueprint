@@ -7,7 +7,7 @@ pub enum RunnerError {
     InvalidProtocol(String),
 
     #[error("Keystore error: {0}")]
-    Keystore(#[from] gadget_keystore::Error),
+    Keystore(#[from] blueprint_keystore::Error),
 
     #[cfg(feature = "networking")]
     #[error("Networking error: {0}")]

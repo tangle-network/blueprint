@@ -43,11 +43,11 @@ impl Keystore {
     /// # Examples
     ///
     /// ```rust
-    /// use gadget_keystore::backends::Backend;
-    /// use gadget_keystore::crypto::ed25519::Ed25519Zebra;
-    /// use gadget_keystore::{Keystore, KeystoreConfig};
+    /// use blueprint_keystore::backends::Backend;
+    /// use blueprint_keystore::crypto::ed25519::Ed25519Zebra;
+    /// use blueprint_keystore::{Keystore, KeystoreConfig};
     ///
-    /// # fn main() -> gadget_keystore::Result<()> {
+    /// # fn main() -> blueprint_keystore::Result<()> {
     /// // Create a simple in-memory keystore
     /// let config = KeystoreConfig::new().in_memory(true);
     /// let keystore = Keystore::new(config)?;

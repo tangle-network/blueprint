@@ -15,7 +15,7 @@ pub enum TangleError {
     Network(String),
 
     #[error("Keystore error: {0}")]
-    Keystore(#[from] gadget_keystore::Error),
+    Keystore(#[from] blueprint_keystore::Error),
 
     #[error("Validation error: {0}")]
     Validation(String),

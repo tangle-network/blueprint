@@ -16,7 +16,7 @@ blueprint-runner = { workspace = true, features = ["tangle"] }
 blueprint-core = { workspace = true }
 gadget-std = { workspace = true }
 blueprint-client-core = { workspace = true }
-gadget-keystore = { workspace = true }
+blueprint-keystore = { workspace = true }
 blueprint-crypto-sp-core = { workspace = true }
 
 auto_impl = { workspace = true }
@@ -32,7 +32,7 @@ default = ["std", "tracing"]
 std = [
 	"blueprint-runner/std",
 	"blueprint-client-core/std",
-	"gadget-keystore/std",
+	"blueprint-keystore/std",
 	"gadget-std/std",
 	"serde/std",
 	"serde_json/std",

@@ -10,7 +10,7 @@ repository.workspace = true
 
 [dependencies]
 gadget-std = { workspace = true }
-gadget-keystore = { workspace = true, features = ["eigenlayer", "evm"] }
+blueprint-keystore = { workspace = true, features = ["eigenlayer", "evm"] }
 gadget-core-testing-utils = { workspace = true }
 blueprint-core = { workspace = true }
 alloy-contract = { workspace = true }
@@ -29,6 +29,6 @@ tempfile = { workspace = true}
 default = ["std"]
 std = [
     "gadget-std/std",
-    "gadget-keystore/std",
+    "blueprint-keystore/std",
     "tokio/full",
 ]

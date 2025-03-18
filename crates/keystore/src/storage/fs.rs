@@ -24,13 +24,13 @@ impl FileStorage {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use gadget_keystore::Keystore;
-    /// use gadget_keystore::backends::{Backend, BackendConfig};
-    /// use gadget_keystore::crypto::KeyType;
-    /// use gadget_keystore::crypto::k256::K256Ecdsa;
-    /// use gadget_keystore::storage::{FileStorage, TypedStorage};
+    /// use blueprint_keystore::Keystore;
+    /// use blueprint_keystore::backends::{Backend, BackendConfig};
+    /// use blueprint_keystore::crypto::KeyType;
+    /// use blueprint_keystore::crypto::k256::K256Ecdsa;
+    /// use blueprint_keystore::storage::{FileStorage, TypedStorage};
     ///
-    /// # fn main() -> gadget_keystore::Result<()> {
+    /// # fn main() -> blueprint_keystore::Result<()> {
     /// // Create storage at the specified path
     /// let storage = FileStorage::new("/path/to/keystore")?;
     /// let storage = TypedStorage::new(storage);

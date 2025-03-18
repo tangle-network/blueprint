@@ -12,7 +12,7 @@ pub enum TestRunnerError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    Keystore(#[from] gadget_keystore::Error),
+    Keystore(#[from] blueprint_keystore::Error),
     #[error(transparent)]
     Parse(#[from] url::ParseError),
     #[error(transparent)]

@@ -20,7 +20,7 @@ pub enum Error {
     Other(String),
 
     #[error(transparent)]
-    Keystore(#[from] gadget_keystore::Error),
+    Keystore(#[from] blueprint_keystore::Error),
     #[error(transparent)]
     Core(#[from] blueprint_client_core::error::Error),
     #[error("IO error: {0}")]

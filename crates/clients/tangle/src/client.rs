@@ -13,8 +13,8 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::pallet_multi_asset
 use blueprint_client_core::{GadgetServicesClient, OperatorSet};
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_crypto_sp_core::{SpEcdsa, SpSr25519};
-use gadget_keystore::{Keystore, KeystoreConfig};
-use gadget_keystore::backends::Backend;
+use blueprint_keystore::{Keystore, KeystoreConfig};
+use blueprint_keystore::backends::Backend;
 use crate::services::TangleServicesClient;
 
 /// The [Config](subxt::Config) providing the runtime types.

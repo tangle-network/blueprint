@@ -1,7 +1,7 @@
+use blueprint_keystore::backends::bn254::Bn254Backend;
+use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
+use blueprint_keystore::{Keystore, KeystoreConfig};
 use gadget_core_testing_utils::TestRunnerError;
-use gadget_keystore::backends::bn254::Bn254Backend;
-use gadget_keystore::backends::eigenlayer::EigenlayerBackend;
-use gadget_keystore::{Keystore, KeystoreConfig};
 use gadget_std::path::Path;
 
 pub const ANVIL_PRIVATE_KEYS: [&str; 10] = [

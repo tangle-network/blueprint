@@ -4,11 +4,11 @@ use std::path::PathBuf;
 
 use crate::error::ConfigError;
 use alloc::string::{String, ToString};
+#[cfg(feature = "std")]
+use blueprint_keystore::{Keystore, KeystoreConfig};
 use clap::Parser;
 use core::fmt::{Debug, Display};
 use core::str::FromStr;
-#[cfg(feature = "std")]
-use gadget_keystore::{Keystore, KeystoreConfig};
 #[cfg(feature = "networking")]
 pub use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
@@ -356,11 +356,11 @@ impl BlueprintEnvironment {
         network_name: impl Into<String>,
         using_evm_address_for_handshake_verification: bool,
     ) -> Result<blueprint_networking::NetworkConfig<K>, crate::error::RunnerError> {
-        use gadget_keystore::backends::Backend;
-        use gadget_keystore::crypto::sp_core::SpEd25519 as LibP2PKeyType;
+        use blueprint_keystore::backends::Backend;
+        use blueprint_keystore::crypto::sp_core::SpEd25519 as LibP2PKeyType;
 
-        let keystore_config = gadget_keystore::KeystoreConfig::new().fs_root(&self.keystore_uri);
-        let keystore = gadget_keystore::Keystore::new(keystore_config)?;
+        let keystore_config = blueprint_keystore::KeystoreConfig::new().fs_root(&self.keystore_uri);
+        let keystore = blueprint_keystore::Keystore::new(keystore_config)?;
         let ed25519_pub_key = keystore.first_local::<LibP2PKeyType>()?;
         let ed25519_pair = keystore.get_secret::<LibP2PKeyType>(&ed25519_pub_key)?;
         let network_identity = libp2p::identity::Keypair::ed25519_from_bytes(ed25519_pair.seed())

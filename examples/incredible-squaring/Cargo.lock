@@ -2444,7 +2444,7 @@ dependencies = [
  "alloy-rpc-types-eth",
  "blueprint-core",
  "gadget-core-testing-utils",
- "gadget-keystore",
+ "blueprint-keystore",
  "gadget-std",
  "serde",
  "serde_json",
@@ -2465,7 +2465,7 @@ dependencies = [
  "color-eyre",
  "blueprint-clients",
  "blueprint-contexts",
- "gadget-keystore",
+ "blueprint-keystore",
  "blueprint-networking",
  "gadget-std",
  "sp-core",
@@ -2497,7 +2497,7 @@ dependencies = [
  "dirs 6.0.0",
  "blueprint-clients",
  "blueprint-contexts",
- "gadget-keystore",
+ "blueprint-keystore",
  "blueprint-networking",
  "gadget-std",
  "indicatif",
@@ -2741,7 +2741,7 @@ dependencies = [
  "futures",
  "futures-core",
  "futures-util",
- "gadget-keystore",
+ "blueprint-keystore",
  "blueprint-networking",
  "gadget-std",
  "k256",
@@ -2774,7 +2774,7 @@ dependencies = [
  "blueprint-clients",
  "blueprint-context-derive",
  "blueprint-contexts",
- "gadget-keystore",
+ "blueprint-keystore",
  "gadget-std",
  "gadget-testing-utils",
  "serde",
@@ -6380,7 +6380,7 @@ dependencies = [
  "blueprint-crypto-sp-core",
  "blueprint-runner",
  "blueprint-client-core",
- "gadget-keystore",
+ "blueprint-keystore",
  "gadget-std",
  "serde",
  "serde_json",
@@ -6417,7 +6417,7 @@ version = "0.1.0"
 dependencies = [
  "blueprint-runner",
  "blueprint-clients",
- "gadget-keystore",
+ "blueprint-keystore",
  "blueprint-networking",
  "gadget-std",
  "tangle-subxt",
@@ -6432,7 +6432,7 @@ dependencies = [
  "blueprint-runner",
  "cargo_toml",
  "blueprint-clients",
- "gadget-keystore",
+ "blueprint-keystore",
  "thiserror 2.0.12",
  "tracing",
  "tracing-subscriber 0.3.19",
@@ -6440,7 +6440,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-keystore"
+name = "blueprint-keystore"
 version = "0.1.0"
 dependencies = [
  "alloy-network",
@@ -6537,7 +6537,7 @@ dependencies = [
  "blueprint-client-tangle",
  "blueprint-contexts",
  "gadget-core-testing-utils",
- "gadget-keystore",
+ "blueprint-keystore",
  "gadget-std",
  "sp-core",
  "tangle-subxt",

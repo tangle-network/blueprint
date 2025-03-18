@@ -17,7 +17,7 @@ blueprint-core = { workspace = true }
 blueprint-router = { workspace = true }
 blueprint-runner = { workspace = true }
 blueprint-producers-extra = { workspace = true }
-gadget-keystore = { workspace = true }
+blueprint-keystore = { workspace = true }
 blueprint-clients = { workspace = true }
 blueprint-crypto = { workspace = true }
 gadget-std = { workspace = true }
@@ -76,7 +76,7 @@ std = [
     # Core
     "blueprint-core/std",
     "blueprint-runner/std",
-    "gadget-keystore/std",
+    "blueprint-keystore/std",
     "blueprint-contexts/std",
     "blueprint-clients/std",
     "blueprint-crypto/std",
@@ -110,7 +110,7 @@ tracing = [
 networking = [
     "dep:blueprint-networking",
     "blueprint-contexts/networking",
-    "gadget-keystore/std",
+    "blueprint-keystore/std",
     "blueprint-context-derive?/networking",
     "blueprint-runner/networking"
 ]

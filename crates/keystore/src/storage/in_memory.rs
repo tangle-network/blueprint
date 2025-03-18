@@ -17,14 +17,14 @@ impl InMemoryStorage {
     /// # Examples
     ///
     /// ```rust
-    /// use gadget_keystore::Keystore;
-    /// use gadget_keystore::backends::{Backend, BackendConfig};
-    /// use gadget_keystore::crypto::IntoCryptoError;
-    /// use gadget_keystore::crypto::KeyType;
-    /// use gadget_keystore::crypto::k256::K256Ecdsa;
-    /// use gadget_keystore::storage::{InMemoryStorage, TypedStorage};
+    /// use blueprint_keystore::Keystore;
+    /// use blueprint_keystore::backends::{Backend, BackendConfig};
+    /// use blueprint_keystore::crypto::IntoCryptoError;
+    /// use blueprint_keystore::crypto::KeyType;
+    /// use blueprint_keystore::crypto::k256::K256Ecdsa;
+    /// use blueprint_keystore::storage::{InMemoryStorage, TypedStorage};
     ///
-    /// # fn main() -> gadget_keystore::Result<()> {
+    /// # fn main() -> blueprint_keystore::Result<()> {
     /// // Create the storage
     /// let storage = InMemoryStorage::new();
     /// let storage = TypedStorage::new(storage);

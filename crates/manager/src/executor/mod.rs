@@ -9,11 +9,11 @@ use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServic
 use blueprint_core::info;
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+use blueprint_keystore::backends::Backend;
+use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_sdk::runner::config::BlueprintEnvironment;
 use color_eyre::Report;
 use color_eyre::eyre::OptionExt;
-use gadget_keystore::backends::Backend;
-use gadget_keystore::{Keystore, KeystoreConfig};
 use sp_core::{ecdsa, sr25519};
 use std::collections::HashMap;
 use std::future::Future;

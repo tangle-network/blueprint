@@ -8,10 +8,10 @@ use blueprint_crypto::sp_core::{
 };
 use blueprint_crypto::{KeyTypeId, bn254::ArkBlsBn254};
 use blueprint_crypto_core::{BytesEncoding, KeyType};
+use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_runner::config::Protocol;
 use color_eyre::eyre::Result;
 use dialoguer::{Input, Select};
-use gadget_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use gadget_std::path::Path;
 
 #[derive(thiserror::Error, Debug)]
@@ -19,7 +19,7 @@ pub enum Error {
     #[error("Unknown key type: {0}")]
     UnknownKeyType(String),
     #[error("Keystore error: {0}")]
-    KeystoreError(#[from] gadget_keystore::error::Error),
+    KeystoreError(#[from] blueprint_keystore::error::Error),
     #[error("Invalid key format: {0}")]
     InvalidKeyFormat(String),
     #[error("Invalid mnemonic word count: {0}. Must be 12, 15, 18, 21, or 24")]

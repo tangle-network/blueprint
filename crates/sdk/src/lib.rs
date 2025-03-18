@@ -19,7 +19,7 @@ pub use blueprint_crypto as crypto;
 pub use blueprint_clients as clients;
 pub use blueprint_contexts as contexts;
 
-pub use gadget_keystore as keystore;
+pub use blueprint_keystore as keystore;
 pub use gadget_std as std;
 pub use tokio;
 

@@ -17,7 +17,7 @@ blueprint-networking = { workspace = true }
 blueprint-contexts = { workspace = true, features = ["tangle"] }
 blueprint-crypto-tangle-pair-signer = { workspace = true, features = ["evm"] }
 blueprint-clients = { workspace = true, features = ["tangle"] }
-gadget-keystore = { workspace = true }
+blueprint-keystore = { workspace = true }
 blueprint-crypto = { workspace = true, features = [
     "k256",
     "sr25519-schnorrkel",
@@ -44,6 +44,6 @@ std = [
     "blueprint-crypto-tangle-pair-signer/std",
     "blueprint-crypto/std",
     "blueprint-clients/std",
-    "gadget-keystore/std",
+    "blueprint-keystore/std",
     "thiserror/std",
 ]

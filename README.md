@@ -49,7 +49,7 @@ tools for networking and testing.
     * [`blueprint-crypto-sp-core`] - Blueprint-compatible crypto wrappers around [sp-core] primitives
     * [`blueprint-crypto-sr25519`] - Utilities for working with sr25519 signatures and keys
     * [`blueprint-crypto-tangle-pair-signer`] - Pair signer type for Tangle
-* [`gadget-keystore`] - Flexible keystore implementation, supporting local and remote signers
+* [`blueprint-keystore`] - Flexible keystore implementation, supporting local and remote signers
 * [`gadget-macros`] - Utility macros for simplifying blueprint development
 * [`blueprint-manager`] - A program executor that connects to the Tangle network and runs protocols dynamically on the fly
 * [`blueprint-metrics`] (**Meta-crate**) Utilities for collecting metrics
@@ -90,7 +90,7 @@ tools for networking and testing.
 [`blueprint-crypto-sp-core`]: https://docs.rs/blueprint-crypto-sp-core
 [`blueprint-crypto-sr25519`]: https://docs.rs/blueprint-crypto-sr25519
 [`blueprint-crypto-tangle-pair-signer`]: https://docs.rs/blueprint-crypto-tangle-pair-signer
-[`gadget-keystore`]: https://docs.rs/gadget-keystore
+[`blueprint-keystore`]: https://docs.rs/blueprint-keystore
 [`gadget-macros`]: https://docs.rs/gadget-macros
 [`blueprint-manager`]: https://docs.rs/blueprint-manager
 [`blueprint-metrics`]: https://docs.rs/blueprint-metrics

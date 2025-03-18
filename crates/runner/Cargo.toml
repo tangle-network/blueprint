@@ -10,7 +10,7 @@ workspace = true
 blueprint-core.workspace = true
 blueprint-router.workspace = true
 gadget-std.workspace = true
-gadget-keystore = { workspace = true }
+blueprint-keystore = { workspace = true }
 blueprint-crypto = { workspace = true }
 futures-core.workspace = true
 futures-util.workspace = true
@@ -55,7 +55,7 @@ default = ["std", "networking"]
 std = [
     "blueprint-tangle-extra?/std",
     "blueprint-evm-extra?/std",
-    "gadget-keystore/std",
+    "blueprint-keystore/std",
     "gadget-std/std",
 ]
 

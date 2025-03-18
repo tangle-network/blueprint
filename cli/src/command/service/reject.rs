@@ -2,10 +2,10 @@ use crate::wait_for_in_block_success;
 use blueprint_clients::tangle::client::OnlineClient;
 use blueprint_crypto::sp_core::SpSr25519;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+use blueprint_keystore::backends::Backend;
+use blueprint_keystore::{Keystore, KeystoreConfig};
 use color_eyre::Result;
 use dialoguer::console::style;
-use gadget_keystore::backends::Backend;
-use gadget_keystore::{Keystore, KeystoreConfig};
 
 /// Rejects a service request.
 ///

@@ -51,7 +51,7 @@ blueprint-crypto = { workspace = true, features = [
     "tangle-pair-signer",
 ] }
 blueprint-crypto-core = { workspace = true, features = ["clap"] }
-gadget-keystore = { workspace = true, features = ["tangle-full", "eigenlayer-full", "evm", "std"] }
+blueprint-keystore = { workspace = true, features = ["tangle-full", "eigenlayer-full", "evm", "std"] }
 tangle-subxt = { workspace = true }
 sp-core = { workspace = true }
 eigensdk = { workspace = true }
@@ -68,7 +68,7 @@ alloy-transport = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
 
 [dev-dependencies]
-gadget-keystore = { workspace = true, features = ["bn254"] }
+blueprint-keystore = { workspace = true, features = ["bn254"] }
 tempfile = { workspace = true }
 gadget-testing-utils = { workspace = true, features = ["anvil", "eigenlayer", "tangle"] }
 alloy-contract = { workspace = true }
