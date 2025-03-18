@@ -14,7 +14,7 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn msg<T: gadget_std::fmt::Debug>(msg: T) -> Self {
+    pub fn msg<T: blueprint_std::fmt::Debug>(msg: T) -> Self {
         let err = blueprint_client_core::error::Error::msg(msg);
         Error::Core(err)
     }

@@ -1,7 +1,7 @@
 use super::RawStorage;
 use crate::error::Result;
 use blueprint_crypto::KeyTypeId;
-use gadget_std::{boxed::Box, collections::BTreeMap, vec::Vec};
+use blueprint_std::{boxed::Box, collections::BTreeMap, vec::Vec};
 use parking_lot::RwLock;
 
 type StorageMap = BTreeMap<KeyTypeId, BTreeMap<Vec<u8>, Vec<u8>>>;

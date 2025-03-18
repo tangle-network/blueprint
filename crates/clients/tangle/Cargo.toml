@@ -14,7 +14,7 @@ workspace = true
 [dependencies]
 blueprint-runner = { workspace = true, features = ["tangle"] }
 blueprint-core = { workspace = true }
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 blueprint-client-core = { workspace = true }
 blueprint-keystore = { workspace = true }
 blueprint-crypto-sp-core = { workspace = true }
@@ -33,7 +33,7 @@ std = [
 	"blueprint-runner/std",
 	"blueprint-client-core/std",
 	"blueprint-keystore/std",
-	"gadget-std/std",
+	"blueprint-std/std",
 	"serde/std",
 	"serde_json/std",
 	"sp-core/std",

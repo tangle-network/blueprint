@@ -93,7 +93,7 @@ blueprint-store-local-database = { version = "0.1.0", path = "./crates/stores/lo
 
 # SDK
 blueprint-keystore = { version = "0.1.0", path = "./crates/keystore", default-features = false }
-gadget-std = { version = "0.1.0", path = "./crates/std", default-features = false }
+blueprint-std = { version = "0.1.0", path = "./crates/std", default-features = false }
 
 # P2P
 blueprint-networking = { version = "0.1.0", path = "./crates/networking", default-features = false }

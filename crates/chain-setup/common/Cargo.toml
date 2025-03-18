@@ -9,7 +9,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 color-eyre = { workspace = true }
 
 blueprint-tangle-extra = { workspace = true }
@@ -38,7 +38,7 @@ default = ["std"]
 std = [
     "sp-core/std",
     "tangle-subxt/std",
-    "gadget-std/std",
+    "blueprint-std/std",
     "blueprint-networking/std",
     "blueprint-contexts/std",
     "blueprint-crypto-tangle-pair-signer/std",

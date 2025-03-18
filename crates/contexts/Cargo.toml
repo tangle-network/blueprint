@@ -13,7 +13,7 @@ workspace = true
 
 [dependencies]
 blueprint-runner = { workspace = true }
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 blueprint-clients = { workspace = true }
 blueprint-networking = { workspace = true, optional = true }
 blueprint-keystore = { workspace = true, optional = true }
@@ -24,7 +24,7 @@ tangle-subxt = { workspace = true, optional = true }
 
 [features]
 default = ["std", "keystore"]
-std = ["blueprint-runner/std", "gadget-std/std", "blueprint-clients/std", "blueprint-keystore?/std", "blueprint-networking?/std", "tangle-subxt?/std"]
+std = ["blueprint-runner/std", "blueprint-std/std", "blueprint-clients/std", "blueprint-keystore?/std", "blueprint-networking?/std", "tangle-subxt?/std"]
 web = ["tangle-subxt?/web"]
 
 evm = ["blueprint-clients/evm"]

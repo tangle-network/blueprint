@@ -2,13 +2,13 @@
 #![allow(unused, clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 use crate::error::Error;
-use gadget_std::borrow::Cow;
-use gadget_std::collections::HashMap;
-use gadget_std::ffi::OsString;
-use gadget_std::io::{self, BufRead, BufReader, Read};
-use gadget_std::process::{self, Child, Command};
-use gadget_std::sync::mpsc;
-use gadget_std::thread;
+use blueprint_std::borrow::Cow;
+use blueprint_std::collections::HashMap;
+use blueprint_std::ffi::OsString;
+use blueprint_std::io::{self, BufRead, BufReader, Read};
+use blueprint_std::process::{self, Child, Command};
+use blueprint_std::sync::mpsc;
+use blueprint_std::thread;
 
 /// Environment variable to set the path to the binary.
 pub const TANGLE_NODE_ENV: &str = "TANGLE_NODE";

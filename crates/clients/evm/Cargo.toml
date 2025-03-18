@@ -13,7 +13,7 @@ workspace = true
 
 [dependencies]
 blueprint-core = { workspace = true }
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 blueprint-client-core = { workspace = true }
 
 hex = { workspace = true }
@@ -51,7 +51,7 @@ std = [
     "blueprint-metrics-rpc-calls/std",
     "blueprint-client-core/std",
     "blueprint-client-core/std",
-    "gadget-std/std",
+    "blueprint-std/std",
     "hex/std",
     "serde/std",
     "serde_json/std",

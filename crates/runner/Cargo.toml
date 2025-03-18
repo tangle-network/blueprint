@@ -9,7 +9,7 @@ workspace = true
 [dependencies]
 blueprint-core.workspace = true
 blueprint-router.workspace = true
-gadget-std.workspace = true
+blueprint-std.workspace = true
 blueprint-keystore = { workspace = true }
 blueprint-crypto = { workspace = true }
 futures-core.workspace = true
@@ -56,7 +56,7 @@ std = [
     "blueprint-tangle-extra?/std",
     "blueprint-evm-extra?/std",
     "blueprint-keystore/std",
-    "gadget-std/std",
+    "blueprint-std/std",
 ]
 
 ## Enable networking support for [`BlueprintEnvironment`](crate::config::BlueprintEnvironment)

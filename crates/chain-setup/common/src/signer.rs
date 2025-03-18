@@ -1,7 +1,7 @@
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+use blueprint_std::str::FromStr;
 use color_eyre::{Result, Section, eyre::Context};
-use gadget_std::str::FromStr;
 use sp_core::Pair;
 use tangle_subxt::subxt_signer::ExposeSecret;
 use tangle_subxt::subxt_signer::SecretUri;

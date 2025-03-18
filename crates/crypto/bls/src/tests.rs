@@ -4,7 +4,7 @@ use crate::{
     bls381::{W3fBls381, W3fBls381Public, W3fBls381Secret},
 };
 use blueprint_crypto_core::KeyType;
-use gadget_std::string::ToString;
+use blueprint_std::string::ToString;
 
 // Helper function to generate test message
 fn test_message() -> Vec<u8> {

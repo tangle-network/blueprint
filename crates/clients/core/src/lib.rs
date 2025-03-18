@@ -1,7 +1,7 @@
 pub mod error;
 use error::Error;
 
-use gadget_std::hash::Hash;
+use blueprint_std::hash::Hash;
 
 pub type OperatorSet<K, V> = std::collections::BTreeMap<K, V>;
 

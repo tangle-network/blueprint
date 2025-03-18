@@ -2422,7 +2422,7 @@ dependencies = [
 name = "blueprint-build-utils"
 version = "0.1.0"
 dependencies = [
- "gadget-std",
+ "blueprint-std",
 ]
 
 [[package]]
@@ -2445,7 +2445,7 @@ dependencies = [
  "blueprint-core",
  "gadget-core-testing-utils",
  "blueprint-keystore",
- "gadget-std",
+ "blueprint-std",
  "serde",
  "serde_json",
  "tempfile",
@@ -2467,7 +2467,7 @@ dependencies = [
  "blueprint-contexts",
  "blueprint-keystore",
  "blueprint-networking",
- "gadget-std",
+ "blueprint-std",
  "sp-core",
  "tangle-subxt",
  "thiserror 2.0.12",
@@ -2499,7 +2499,7 @@ dependencies = [
  "blueprint-contexts",
  "blueprint-keystore",
  "blueprint-networking",
- "gadget-std",
+ "blueprint-std",
  "indicatif",
  "reqwest 0.12.14",
  "serde_json",
@@ -2544,7 +2544,7 @@ version = "0.1.0"
 dependencies = [
  "ark-serialize 0.5.0",
  "blueprint-crypto-core",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "paste",
  "serde",
@@ -2562,7 +2562,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
  "blueprint-crypto-core",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "num-bigint",
  "num-traits",
@@ -2577,7 +2577,7 @@ name = "blueprint-crypto-core"
 version = "0.1.0"
 dependencies = [
  "clap",
- "gadget-std",
+ "blueprint-std",
  "serde",
  "thiserror 2.0.12",
 ]
@@ -2588,7 +2588,7 @@ version = "0.1.0"
 dependencies = [
  "blueprint-crypto-core",
  "ed25519-zebra",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "serde",
  "serde_bytes",
@@ -2600,7 +2600,7 @@ name = "blueprint-crypto-hashing"
 version = "0.1.0"
 dependencies = [
  "blake3",
- "gadget-std",
+ "blueprint-std",
  "sha2 0.10.8",
  "sha3",
 ]
@@ -2612,7 +2612,7 @@ dependencies = [
  "alloy-primitives 0.8.23",
  "alloy-signer-local",
  "blueprint-crypto-core",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "k256",
  "serde",
@@ -2625,7 +2625,7 @@ name = "blueprint-crypto-sp-core"
 version = "0.1.0"
 dependencies = [
  "blueprint-crypto-core",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "paste",
  "serde",
@@ -2639,7 +2639,7 @@ name = "blueprint-crypto-sr25519"
 version = "0.1.0"
 dependencies = [
  "blueprint-crypto-core",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "schnorrkel",
  "serde",
@@ -2655,7 +2655,7 @@ dependencies = [
  "alloy-signer-local",
  "blueprint-crypto-core",
  "blueprint-crypto-sp-core",
- "gadget-std",
+ "blueprint-std",
  "k256",
  "serde",
  "sp-core",
@@ -2685,7 +2685,7 @@ dependencies = [
  "document-features",
  "futures",
  "futures-util",
- "gadget-std",
+ "blueprint-std",
  "pin-project-lite",
  "serde_json",
  "thiserror 2.0.12",
@@ -2743,7 +2743,7 @@ dependencies = [
  "futures-util",
  "blueprint-keystore",
  "blueprint-networking",
- "gadget-std",
+ "blueprint-std",
  "k256",
  "libp2p",
  "serde",
@@ -2775,7 +2775,7 @@ dependencies = [
  "blueprint-context-derive",
  "blueprint-contexts",
  "blueprint-keystore",
- "gadget-std",
+ "blueprint-std",
  "gadget-testing-utils",
  "serde",
  "tangle-subxt",
@@ -6320,7 +6320,7 @@ name = "blueprint-client-core"
 version = "0.1.0"
 dependencies = [
  "auto_impl",
- "gadget-std",
+ "blueprint-std",
  "thiserror 2.0.12",
 ]
 
@@ -6337,7 +6337,7 @@ dependencies = [
  "blueprint-runner",
  "eigensdk",
  "blueprint-client-core",
- "gadget-std",
+ "blueprint-std",
  "num-bigint",
  "thiserror 2.0.12",
  "tokio",
@@ -6362,7 +6362,7 @@ dependencies = [
  "blueprint-core",
  "blueprint-client-core",
  "blueprint-metrics-rpc-calls",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "serde",
  "serde_json",
@@ -6381,7 +6381,7 @@ dependencies = [
  "blueprint-runner",
  "blueprint-client-core",
  "blueprint-keystore",
- "gadget-std",
+ "blueprint-std",
  "serde",
  "serde_json",
  "sp-core",
@@ -6398,7 +6398,7 @@ dependencies = [
  "blueprint-client-eigenlayer",
  "blueprint-client-evm",
  "blueprint-client-tangle",
- "gadget-std",
+ "blueprint-std",
  "thiserror 2.0.12",
 ]
 
@@ -6419,7 +6419,7 @@ dependencies = [
  "blueprint-clients",
  "blueprint-keystore",
  "blueprint-networking",
- "gadget-std",
+ "blueprint-std",
  "tangle-subxt",
 ]
 
@@ -6455,7 +6455,7 @@ dependencies = [
  "blueprint-crypto",
  "ed25519-zebra",
  "eigensdk",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "k256",
  "parking_lot",
@@ -6489,7 +6489,7 @@ dependencies = [
  "crossbeam-channel",
  "dashmap",
  "futures",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "itertools 0.14.0",
  "k256",
@@ -6513,7 +6513,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-std"
+name = "blueprint-std"
 version = "0.1.0"
 dependencies = [
  "colored",
@@ -6538,7 +6538,7 @@ dependencies = [
  "blueprint-contexts",
  "gadget-core-testing-utils",
  "blueprint-keystore",
- "gadget-std",
+ "blueprint-std",
  "sp-core",
  "tangle-subxt",
  "tempfile",

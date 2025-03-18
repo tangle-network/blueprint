@@ -15,7 +15,7 @@ use crate::error::{Error, Result};
 #[cfg(feature = "std")]
 use crate::storage::FileStorage;
 use crate::storage::{InMemoryStorage, RawStorage};
-use gadget_std::{boxed::Box, cmp, collections::BTreeMap, vec::Vec};
+use blueprint_std::{boxed::Box, cmp, collections::BTreeMap, vec::Vec};
 use serde::de::DeserializeOwned;
 
 /// Represents a storage backend with its priority

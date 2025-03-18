@@ -15,8 +15,8 @@ use blueprint_runner::config::ContextConfig;
 use blueprint_runner::config::SupportedChains;
 use blueprint_runner::error::RunnerError;
 use blueprint_runner::tangle::config::PriceTargets;
-use gadget_std::io;
-use gadget_std::path::{Path, PathBuf};
+use blueprint_std::io;
+use blueprint_std::path::{Path, PathBuf};
 use std::marker::PhantomData;
 use tangle_subxt::tangle_testnet_runtime::api::services::events::JobCalled;
 use tangle_subxt::tangle_testnet_runtime::api::services::{

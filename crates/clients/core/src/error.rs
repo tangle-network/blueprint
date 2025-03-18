@@ -23,7 +23,7 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn msg<T: gadget_std::fmt::Debug>(msg: T) -> Self {
+    pub fn msg<T: blueprint_std::fmt::Debug>(msg: T) -> Self {
         Error::Other(format!("{msg:?}"))
     }
 }

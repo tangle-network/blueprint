@@ -3,7 +3,7 @@ use crate::error::{Error, Result};
 use alloy_primitives::keccak256;
 use alloy_signer_gcp::{GcpKeyRingRef, GcpSigner, KeySpecifier};
 use blueprint_crypto::k256::{K256Ecdsa, K256Signature, K256VerifyingKey};
-use gadget_std::collections::BTreeMap;
+use blueprint_std::collections::BTreeMap;
 use gcloud_sdk::{
     google::cloud::kms::v1::key_management_service_client::KeyManagementServiceClient, GoogleApi,
 };
@@ -197,11 +197,11 @@ mod tests {
     async fn test_gcp_signer() {
         let config = GcpRemoteSignerConfig {
             keys: vec![GcpKeyConfig {
-                project_id: gadget_std::env::var("GOOGLE_PROJECT_ID")
+                project_id: blueprint_std::env::var("GOOGLE_PROJECT_ID")
                     .expect("GOOGLE_PROJECT_ID not set"),
-                location: gadget_std::env::var("GOOGLE_LOCATION").expect("GOOGLE_LOCATION not set"),
-                keyring: gadget_std::env::var("GOOGLE_KEYRING").expect("GOOGLE_KEYRING not set"),
-                key_name: gadget_std::env::var("GOOGLE_KEY_NAME").expect("GOOGLE_KEY_NAME not set"),
+                location: blueprint_std::env::var("GOOGLE_LOCATION").expect("GOOGLE_LOCATION not set"),
+                keyring: blueprint_std::env::var("GOOGLE_KEYRING").expect("GOOGLE_KEYRING not set"),
+                key_name: blueprint_std::env::var("GOOGLE_KEY_NAME").expect("GOOGLE_KEY_NAME not set"),
                 key_version: 1,
                 chain_id: Some(1),
             }],

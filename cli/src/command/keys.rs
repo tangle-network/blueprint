@@ -10,9 +10,9 @@ use blueprint_crypto::{KeyTypeId, bn254::ArkBlsBn254};
 use blueprint_crypto_core::{BytesEncoding, KeyType};
 use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_runner::config::Protocol;
+use blueprint_std::path::Path;
 use color_eyre::eyre::Result;
 use dialoguer::{Input, Select};
-use gadget_std::path::Path;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

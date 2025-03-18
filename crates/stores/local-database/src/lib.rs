@@ -3,10 +3,10 @@ mod error;
 pub use error::Error;
 use std::io::ErrorKind;
 
-use gadget_std::collections::HashMap;
-use gadget_std::fs;
-use gadget_std::path::{Path, PathBuf};
-use gadget_std::sync::Mutex;
+use blueprint_std::collections::HashMap;
+use blueprint_std::fs;
+use blueprint_std::path::{Path, PathBuf};
+use blueprint_std::sync::Mutex;
 use serde::{de::DeserializeOwned, Serialize};
 
 /// A local database for storing key-value pairs.
@@ -177,7 +177,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gadget_std::fs;
+    use blueprint_std::fs;
     use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 
@@ -279,8 +279,8 @@ mod tests {
 
     #[test]
     fn test_concurrent_access() {
-        use gadget_std::sync::Arc;
-        use gadget_std::thread;
+        use blueprint_std::sync::Arc;
+        use blueprint_std::thread;
 
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.json");

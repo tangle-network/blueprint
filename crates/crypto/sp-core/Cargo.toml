@@ -9,7 +9,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 blueprint-crypto-core = { workspace = true, features = ["tangle"] }
 sp-core = { workspace = true, features = ["serde", "full_crypto"] }
 hex = { workspace = true, features = ["alloc"] }
@@ -26,7 +26,7 @@ serde_json = { workspace = true, features = ["alloc"] }
 default = ["std"]
 std = [
 	"blueprint-crypto-core/std",
-	"gadget-std/std",
+	"blueprint-std/std",
 	"serde/std",
 	"serde_bytes/std",
 	"sp-core/std",

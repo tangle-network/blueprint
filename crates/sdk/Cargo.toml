@@ -20,7 +20,7 @@ blueprint-producers-extra = { workspace = true }
 blueprint-keystore = { workspace = true }
 blueprint-clients = { workspace = true }
 blueprint-crypto = { workspace = true }
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 # The keystore context is the only one that doesn't bring in extra dependencies, so we can always include it
 blueprint-contexts = { workspace = true, features = ["keystore"] }
 document-features = { workspace = true }

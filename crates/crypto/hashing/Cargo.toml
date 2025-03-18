@@ -9,7 +9,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 sha2 = { workspace = true, optional = true }
 sha3 = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
@@ -17,7 +17,7 @@ blake3 = { workspace = true, optional = true }
 [features]
 default = ["std", "sha2-hasher", "sha3-hasher", "blake3-hasher"]
 std = [
-    "gadget-std/std",
+    "blueprint-std/std",
     "sha2?/std",
     "sha3?/std",
     "blake3?/std",

@@ -2,7 +2,7 @@ use alloy_network::EthereumWallet;
 use alloy_primitives::U256;
 use alloy_provider::{Provider, ProviderBuilder, RootProvider, WsConnect};
 use alloy_signer_local::PrivateKeySigner;
-use gadget_std::str::FromStr;
+use blueprint_std::str::FromStr;
 use url::Url;
 
 /// 1 day

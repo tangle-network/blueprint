@@ -10,4 +10,4 @@ pub enum TanglePairSignerError {
     EcdsaError(#[from] k256::ecdsa::Error),
 }
 
-pub type Result<T> = gadget_std::result::Result<T, TanglePairSignerError>;
+pub type Result<T> = blueprint_std::result::Result<T, TanglePairSignerError>;

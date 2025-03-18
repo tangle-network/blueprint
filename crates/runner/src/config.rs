@@ -642,7 +642,7 @@ pub struct BlueprintSettings {
     // NETWORKING
     // ========
     #[cfg(feature = "networking")]
-    #[arg(long, value_parser = <Multiaddr as gadget_std::str::FromStr>::from_str, action = clap::ArgAction::Append, env)]
+    #[arg(long, value_parser = <Multiaddr as blueprint_std::str::FromStr>::from_str, action = clap::ArgAction::Append, env)]
     #[serde(default)]
     bootnodes: Option<Vec<Multiaddr>>,
     #[cfg(feature = "networking")]

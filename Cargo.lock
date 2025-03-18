@@ -2646,7 +2646,7 @@ dependencies = [
 name = "blueprint-build-utils"
 version = "0.1.0"
 dependencies = [
- "gadget-std",
+ "blueprint-std",
 ]
 
 [[package]]
@@ -2668,8 +2668,8 @@ dependencies = [
  "alloy-rpc-types-eth",
  "blueprint-core",
  "blueprint-keystore",
+ "blueprint-std",
  "gadget-core-testing-utils",
- "gadget-std",
  "serde",
  "serde_json",
  "tempfile",
@@ -2689,9 +2689,9 @@ dependencies = [
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-keystore",
  "blueprint-networking",
+ "blueprint-std",
  "blueprint-tangle-extra",
  "color-eyre",
- "gadget-std",
  "sp-core",
  "tangle-subxt",
  "thiserror 2.0.12",
@@ -2718,12 +2718,12 @@ dependencies = [
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-keystore",
  "blueprint-networking",
+ "blueprint-std",
  "blueprint-tangle-extra",
  "cargo_metadata 0.18.1",
  "color-eyre",
  "dialoguer",
  "dirs 6.0.0",
- "gadget-std",
  "indicatif",
  "reqwest 0.12.14",
  "serde_json",
@@ -2738,7 +2738,7 @@ name = "blueprint-client-core"
 version = "0.1.0"
 dependencies = [
  "auto_impl",
- "gadget-std",
+ "blueprint-std",
  "thiserror 2.0.12",
 ]
 
@@ -2755,9 +2755,9 @@ dependencies = [
  "blueprint-client-core",
  "blueprint-evm-extra",
  "blueprint-runner",
+ "blueprint-std",
  "eigensdk",
  "gadget-eigenlayer-testing-utils",
- "gadget-std",
  "num-bigint 0.4.6",
  "thiserror 2.0.12",
  "tokio",
@@ -2786,8 +2786,8 @@ dependencies = [
  "blueprint-core",
  "blueprint-evm-extra",
  "blueprint-metrics-rpc-calls",
+ "blueprint-std",
  "gadget-anvil-testing-utils",
- "gadget-std",
  "hex",
  "serde",
  "serde_json",
@@ -2807,7 +2807,7 @@ dependencies = [
  "blueprint-crypto-sp-core",
  "blueprint-keystore",
  "blueprint-runner",
- "gadget-std",
+ "blueprint-std",
  "serde",
  "serde_json",
  "sp-core",
@@ -2824,7 +2824,7 @@ dependencies = [
  "blueprint-client-eigenlayer",
  "blueprint-client-evm",
  "blueprint-client-tangle",
- "gadget-std",
+ "blueprint-std",
  "thiserror 2.0.12",
 ]
 
@@ -2854,7 +2854,7 @@ dependencies = [
  "blueprint-keystore",
  "blueprint-networking",
  "blueprint-runner",
- "gadget-std",
+ "blueprint-std",
  "proc-macro2",
  "tangle-subxt",
 ]
@@ -2898,7 +2898,7 @@ dependencies = [
  "ark-serialize 0.5.0",
  "blueprint-crypto-core",
  "blueprint-crypto-hashing",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "paste",
  "serde",
@@ -2918,7 +2918,7 @@ dependencies = [
  "ark-serialize 0.5.0",
  "blueprint-crypto-core",
  "blueprint-crypto-hashing",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "num-bigint 0.4.6",
  "num-traits",
@@ -2933,8 +2933,8 @@ dependencies = [
 name = "blueprint-crypto-core"
 version = "0.1.0"
 dependencies = [
+ "blueprint-std",
  "clap",
- "gadget-std",
  "serde",
  "thiserror 2.0.12",
 ]
@@ -2944,8 +2944,8 @@ name = "blueprint-crypto-ed25519"
 version = "0.1.0"
 dependencies = [
  "blueprint-crypto-core",
+ "blueprint-std",
  "ed25519-zebra",
- "gadget-std",
  "hex",
  "serde",
  "serde_bytes",
@@ -2958,7 +2958,7 @@ name = "blueprint-crypto-hashing"
 version = "0.1.0"
 dependencies = [
  "blake3",
- "gadget-std",
+ "blueprint-std",
  "sha2 0.10.8",
  "sha3",
 ]
@@ -2970,7 +2970,7 @@ dependencies = [
  "alloy-primitives 0.8.23",
  "alloy-signer-local",
  "blueprint-crypto-core",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "k256",
  "serde",
@@ -2985,7 +2985,7 @@ version = "0.1.0"
 dependencies = [
  "blueprint-crypto-core",
  "blueprint-crypto-sp-core",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "paste",
  "serde",
@@ -3000,7 +3000,7 @@ name = "blueprint-crypto-sr25519"
 version = "0.1.0"
 dependencies = [
  "blueprint-crypto-core",
- "gadget-std",
+ "blueprint-std",
  "hex",
  "schnorrkel",
  "serde",
@@ -3017,7 +3017,7 @@ dependencies = [
  "alloy-signer-local",
  "blueprint-crypto-core",
  "blueprint-crypto-sp-core",
- "gadget-std",
+ "blueprint-std",
  "k256",
  "serde",
  "sp-core",
@@ -3057,11 +3057,11 @@ dependencies = [
  "alloy-transport-http",
  "async-stream",
  "blueprint-core",
+ "blueprint-std",
  "bytes",
  "document-features",
  "futures",
  "futures-util",
- "gadget-std",
  "pin-project-lite",
  "serde_json",
  "thiserror 2.0.12",
@@ -3090,9 +3090,9 @@ dependencies = [
  "aws-sdk-kms",
  "blake3",
  "blueprint-crypto",
+ "blueprint-std",
  "ed25519-zebra",
  "eigensdk",
- "gadget-std",
  "gcloud-sdk",
  "hex",
  "k256",
@@ -3140,11 +3140,11 @@ dependencies = [
  "blueprint-keystore",
  "blueprint-networking",
  "blueprint-sdk",
+ "blueprint-std",
  "clap",
  "color-eyre",
  "dynosaur",
  "futures",
- "gadget-std",
  "hex",
  "itertools 0.14.0",
  "libp2p",
@@ -3187,11 +3187,11 @@ dependencies = [
  "blueprint-crypto",
  "blueprint-crypto-core",
  "blueprint-networking",
+ "blueprint-std",
  "crossbeam-channel",
  "dashmap",
  "fastrand",
  "futures",
- "gadget-std",
  "hex",
  "itertools 0.14.0",
  "k256",
@@ -3278,6 +3278,7 @@ dependencies = [
  "blueprint-networking",
  "blueprint-router",
  "blueprint-sdk",
+ "blueprint-std",
  "blueprint-tangle-extra",
  "clap",
  "crossbeam-channel",
@@ -3287,7 +3288,6 @@ dependencies = [
  "futures",
  "futures-core",
  "futures-util",
- "gadget-std",
  "k256",
  "libp2p",
  "serde",
@@ -3321,11 +3321,11 @@ dependencies = [
  "blueprint-producers-extra",
  "blueprint-router",
  "blueprint-runner",
+ "blueprint-std",
  "blueprint-stores",
  "blueprint-tangle-extra",
  "document-features",
  "eigensdk",
- "gadget-std",
  "gadget-testing-utils",
  "serde",
  "tangle-subxt",
@@ -3335,10 +3335,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "blueprint-std"
+version = "0.1.0"
+dependencies = [
+ "colored",
+ "num-traits",
+ "rand 0.8.5",
+ "rayon",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "blueprint-store-local-database"
 version = "0.1.0"
 dependencies = [
- "gadget-std",
+ "blueprint-std",
  "serde",
  "serde_json",
  "tempfile",
@@ -3909,6 +3920,7 @@ dependencies = [
  "blueprint-keystore",
  "blueprint-manager",
  "blueprint-runner",
+ "blueprint-std",
  "blueprint-tangle-extra",
  "cargo-generate",
  "clap",
@@ -3917,7 +3929,6 @@ dependencies = [
  "dialoguer",
  "dotenv",
  "eigensdk",
- "gadget-std",
  "gadget-testing-utils",
  "hex",
  "indicatif",
@@ -7328,7 +7339,7 @@ dependencies = [
 name = "gadget-benchmarking"
 version = "0.1.0"
 dependencies = [
- "gadget-std",
+ "blueprint-std",
  "sysinfo",
  "tokio",
 ]
@@ -7368,17 +7379,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-std"
-version = "0.1.0"
-dependencies = [
- "colored",
- "num-traits",
- "rand 0.8.5",
- "rayon",
- "thiserror 2.0.12",
-]
-
-[[package]]
 name = "gadget-tangle-testing-utils"
 version = "0.1.0"
 dependencies = [
@@ -7391,10 +7391,10 @@ dependencies = [
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-keystore",
  "blueprint-runner",
+ "blueprint-std",
  "blueprint-tangle-extra",
  "futures",
  "gadget-core-testing-utils",
- "gadget-std",
  "sp-core",
  "tangle-subxt",
  "tempfile",

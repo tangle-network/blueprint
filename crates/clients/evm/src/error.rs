@@ -1,4 +1,4 @@
-use gadget_std::string::String;
+use blueprint_std::string::String;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -21,4 +21,4 @@ impl From<Error> for blueprint_client_core::error::Error {
     }
 }
 
-pub type Result<T> = gadget_std::result::Result<T, Error>;
+pub type Result<T> = blueprint_std::result::Result<T, Error>;

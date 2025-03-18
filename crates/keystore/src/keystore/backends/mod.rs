@@ -17,7 +17,7 @@ use crate::error::Result;
 use crate::storage::RawStorage;
 use blueprint_crypto::IntoCryptoError;
 use blueprint_crypto::KeyType;
-use gadget_std::{boxed::Box, vec::Vec};
+use blueprint_std::{boxed::Box, vec::Vec};
 use serde::de::DeserializeOwned;
 
 /// Backend configuration for different storage types

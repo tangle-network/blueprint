@@ -14,7 +14,7 @@ workspace = true
 [dependencies]
 # Core dependencies (always included)
 blueprint-crypto.workspace = true
-gadget-std.workspace = true
+blueprint-std.workspace = true
 parking_lot.workspace = true
 thiserror.workspace = true
 zeroize.workspace = true
@@ -77,7 +77,7 @@ std = [
 	"hex/std",
 	"zeroize/std",
 	"blueprint-crypto/std",
-	"gadget-std/std",
+	"blueprint-std/std",
 	"thiserror/std",
 	"dep:tokio",
 	# Conditional std enables for misc

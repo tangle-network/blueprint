@@ -164,8 +164,8 @@ fn test_invalid_key_deserialization() {
 
 #[test]
 fn test_concurrent_key_usage() {
-    use gadget_std::sync::Arc;
-    use gadget_std::thread;
+    use blueprint_std::sync::Arc;
+    use blueprint_std::thread;
 
     let seed = b"concurrent_test";
     let secret = Arc::new(K256Ecdsa::generate_with_seed(Some(seed)).unwrap());

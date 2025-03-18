@@ -1,9 +1,9 @@
 use super::RawStorage;
 use crate::error::{Error, Result};
 use blueprint_crypto::KeyTypeId;
-use gadget_std::fs;
-use gadget_std::io;
-use gadget_std::path::{Path, PathBuf};
+use blueprint_std::fs;
+use blueprint_std::io;
+use blueprint_std::path::{Path, PathBuf};
 
 /// A filesystem-backed local storage
 #[derive(Clone)]

@@ -1,10 +1,10 @@
-use gadget_std::string::ParseError;
+use blueprint_std::string::ParseError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("IO error: {0}")]
-    Io(#[from] gadget_std::io::Error),
+    Io(#[from] blueprint_std::io::Error),
     #[error("Parse error {0}")]
     ParseError(#[from] ParseError),
     #[error("Url parse error {0}")]
@@ -39,4 +39,4 @@ impl From<Error> for blueprint_client_core::error::Error {
     }
 }
 
-pub type Result<T> = gadget_std::result::Result<T, Error>;
+pub type Result<T> = blueprint_std::result::Result<T, Error>;

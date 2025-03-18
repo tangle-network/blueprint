@@ -80,7 +80,7 @@ pub struct DiscoveryBehaviour<K: KeyType> {
     /// Options to configure dials to known peers.
     pub pending_dial_opts: VecDeque<DialOpts>,
     /// Phantom key type
-    pub _marker: gadget_std::marker::PhantomData<K>,
+    pub _marker: blueprint_std::marker::PhantomData<K>,
 }
 
 impl<K: KeyType> DiscoveryBehaviour<K> {

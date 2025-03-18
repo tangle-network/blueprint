@@ -10,7 +10,7 @@ repository.workspace = true
 
 [dependencies]
 blueprint-crypto-core = { workspace = true, features = ["bn254"] }
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 ark-bn254 = { workspace = true, features = ["scalar_field", "curve"] }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
@@ -31,7 +31,7 @@ serde_json = { workspace = true, features = ["alloc"] }
 default = ["std"]
 std = [
 	"blueprint-crypto-core/std",
-	"gadget-std/std",
+	"blueprint-std/std",
 	"serde/std",
 	"serde_json/std",
 	"serde_bytes/std",

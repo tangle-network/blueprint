@@ -9,7 +9,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 clap = { workspace = true, optional = true }
@@ -18,7 +18,7 @@ clap = { workspace = true, optional = true }
 default = ["std"]
 std = [
     "serde/std",
-    "gadget-std/std",
+    "blueprint-std/std",
     "clap?/std",
 ]
 

@@ -22,7 +22,7 @@ blueprint-clients = { workspace = true, features = ["std", "tangle"] }
 blueprint-crypto = { workspace = true, features = ["std", "tangle-pair-signer"] }
 blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-networking = { workspace = true, features = ["std"] }
-gadget-std = { workspace = true, features = ["std"] }
+blueprint-std = { workspace = true, features = ["std"] }
 
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace", "issue-url"] }

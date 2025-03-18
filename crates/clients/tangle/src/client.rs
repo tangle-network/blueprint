@@ -1,8 +1,8 @@
 use sp_core::ecdsa;
 use crate::error::{Result, Error};
 use crate::EventsClient;
-use gadget_std::sync::Arc;
-use gadget_std::time::Duration;
+use blueprint_std::sync::Arc;
+use blueprint_std::time::Duration;
 use subxt::blocks::{Block, BlockRef};
 use subxt::events::Events;
 use subxt::utils::AccountId32;
@@ -184,7 +184,7 @@ impl TangleClient {
     }
 }
 
-impl gadget_std::ops::Deref for TangleClient {
+impl blueprint_std::ops::Deref for TangleClient {
     type Target = TangleServicesClient<TangleConfig>;
 
     fn deref(&self) -> &Self::Target {

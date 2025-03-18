@@ -8,14 +8,14 @@ use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_runner::config::{Protocol, SupportedChains};
+use blueprint_std::fs;
+use blueprint_std::path::Path;
+use blueprint_std::process::Command;
+use blueprint_std::str::FromStr;
 use color_eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use dialoguer::console::style;
 use dialoguer::{Confirm, Input, Select};
-use gadget_std::fs;
-use gadget_std::path::Path;
-use gadget_std::process::Command;
-use gadget_std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -719,7 +719,7 @@ pub async fn deploy_eigenlayer(
     devnet: bool,
     keystore_path: Option<std::path::PathBuf>,
 ) -> Result<()> {
-    let build_status = gadget_std::process::Command::new("cargo")
+    let build_status = blueprint_std::process::Command::new("cargo")
         .args(["build", "--release"])
         .status()?;
 

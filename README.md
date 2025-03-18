@@ -59,7 +59,7 @@ tools for networking and testing.
 * [`blueprint-producers-extra`] - Additional protocol-independent event producers
 * [`blueprint-router`] - A job router for dynamically scheduling jobs
 * [`blueprint-runner`] - The blueprint job runner, executing jobs in a protocol-specific manner
-* [`gadget-std`] - Standard library extensions, for use within the SDK
+* [`blueprint-std`] - Standard library extensions, for use within the SDK
 * [`blueprint-stores`] - (**Meta-crate**) Storage providers for blueprints
     * [`blueprint-store-local-database`] - A local JSON key-value database
 * [`blueprint-tangle-extra`] - Tangle specific extensions for blueprints
@@ -101,7 +101,7 @@ tools for networking and testing.
 [`blueprint-router`]: https://docs.rs/blueprint-router
 [`blueprint-runner`]: https://docs.rs/blueprint-runner
 [`gadget-blueprint-serde`]: https://docs.rs/gadget-blueprint-serde
-[`gadget-std`]: https://docs.rs/gadget-std
+[`blueprint-std`]: https://docs.rs/blueprint-std
 [`blueprint-stores`]: https://docs.rs/blueprint-stores
 [`blueprint-store-local-database`]: https://docs.rs/blueprint-store-local-database
 [`blueprint-tangle-extra`]: https://docs.rs/blueprint-tangle-extra

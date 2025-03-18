@@ -1,6 +1,6 @@
-use gadget_std::boxed::Box;
+use blueprint_std::boxed::Box;
 /// Keystore Errors
-use gadget_std::string::String;
+use blueprint_std::string::String;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -16,7 +16,7 @@ pub enum Error {
     StorageNotSupported,
     /// An I/O error occurred
     #[error(transparent)]
-    Io(#[from] gadget_std::io::Error),
+    Io(#[from] blueprint_std::io::Error),
     /// Invalid remote config
     #[error("Invalid remote config")]
     InvalidConfig,
@@ -119,7 +119,7 @@ macro_rules! impl_from_for_boxed_error {
     };
 }
 
-impl_from_for_boxed_error!(gadget_std::io::Error, Io);
+impl_from_for_boxed_error!(blueprint_std::io::Error, Io);
 impl_from_for_boxed_error!(serde::de::value::Error, KeyDeserialization);
 impl_from_for_boxed_error!(blueprint_crypto::CryptoCoreError, Crypto);
 #[cfg(feature = "aws-signer")]

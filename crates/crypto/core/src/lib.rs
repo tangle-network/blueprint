@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use gadget_std::fmt::Debug;
-use gadget_std::hash::Hash;
-use gadget_std::string::String;
-use gadget_std::vec::Vec;
+use blueprint_std::fmt::Debug;
+use blueprint_std::hash::Hash;
+use blueprint_std::string::String;
+use blueprint_std::vec::Vec;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -124,18 +124,18 @@ pub trait KeyType:
 
     /// Get a cryptographically secure random number generator
     #[cfg(feature = "std")]
-    fn get_rng() -> impl gadget_std::CryptoRng + gadget_std::Rng {
-        gadget_std::rand::thread_rng()
+    fn get_rng() -> impl blueprint_std::CryptoRng + blueprint_std::Rng {
+        blueprint_std::rand::thread_rng()
     }
 
     #[cfg(not(feature = "std"))]
-    fn get_rng() -> impl gadget_std::CryptoRng + gadget_std::Rng {
-        gadget_std::test_rng()
+    fn get_rng() -> impl blueprint_std::CryptoRng + blueprint_std::Rng {
+        blueprint_std::test_rng()
     }
 
     /// Get a deterministic random number generator for testing
-    fn get_test_rng() -> impl gadget_std::CryptoRng + gadget_std::Rng {
-        gadget_std::test_rng()
+    fn get_test_rng() -> impl blueprint_std::CryptoRng + blueprint_std::Rng {
+        blueprint_std::test_rng()
     }
 
     fn generate_with_seed(seed: Option<&[u8]>) -> Result<Self::Secret, Self::Error>;
@@ -268,7 +268,7 @@ macro_rules! impl_crypto_tests {
 
             // Test Ord implementation
             assert!(public1 != public2, "Different keys should not be equal");
-            assert_eq!(public1.cmp(&public1), gadget_std::cmp::Ordering::Equal);
+            assert_eq!(public1.cmp(&public1), blueprint_std::cmp::Ordering::Equal);
 
             // Verify consistency between PartialOrd and Ord
             assert_eq!(public1.partial_cmp(&public2), Some(public1.cmp(&public2)));

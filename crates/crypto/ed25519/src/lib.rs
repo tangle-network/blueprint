@@ -8,7 +8,7 @@ mod tests;
 
 use blueprint_crypto_core::BytesEncoding;
 use blueprint_crypto_core::{KeyType, KeyTypeId};
-use gadget_std::{
+use blueprint_std::{
     hash::Hash,
     string::{String, ToString},
     vec::Vec,
@@ -33,25 +33,25 @@ macro_rules! impl_zebra_serde {
         impl Eq for $name {}
 
         impl PartialOrd for $name {
-            fn partial_cmp(&self, other: &Self) -> Option<gadget_std::cmp::Ordering> {
+            fn partial_cmp(&self, other: &Self) -> Option<blueprint_std::cmp::Ordering> {
                 Some(self.cmp(other))
             }
         }
 
         impl Hash for $name {
-            fn hash<H: gadget_std::hash::Hasher>(&self, state: &mut H) {
+            fn hash<H: blueprint_std::hash::Hasher>(&self, state: &mut H) {
                 self.to_bytes().hash(state);
             }
         }
 
         impl Ord for $name {
-            fn cmp(&self, other: &Self) -> gadget_std::cmp::Ordering {
+            fn cmp(&self, other: &Self) -> blueprint_std::cmp::Ordering {
                 self.to_bytes().cmp(&other.to_bytes())
             }
         }
 
-        impl gadget_std::fmt::Debug for $name {
-            fn fmt(&self, f: &mut gadget_std::fmt::Formatter<'_>) -> gadget_std::fmt::Result {
+        impl blueprint_std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
                 write!(f, "{:?}", self.to_bytes())
             }
         }

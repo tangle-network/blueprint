@@ -47,7 +47,7 @@ impl<K: KeyType> VerificationIdentifierKey<K> {
         &self,
         msg: &[u8],
         signature: &[u8],
-    ) -> Result<bool, Box<dyn gadget_std::error::Error>> {
+    ) -> Result<bool, Box<dyn blueprint_std::error::Error>> {
         match self {
             VerificationIdentifierKey::EvmAddress(address) => {
                 let msg = keccak_256(msg);

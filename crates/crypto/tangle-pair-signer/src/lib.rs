@@ -2,7 +2,7 @@
 
 pub mod error;
 
-use gadget_std::vec::Vec;
+use blueprint_std::vec::Vec;
 pub use sp_core;
 use sp_core::DeriveJunction;
 use sp_core::crypto::DeriveError;

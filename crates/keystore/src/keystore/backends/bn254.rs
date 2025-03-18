@@ -4,7 +4,7 @@ use blueprint_crypto::bn254::{
     ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Secret, ArkBlsBn254Signature,
 };
 use blueprint_crypto::{BytesEncoding, KeyType, KeyTypeId};
-use gadget_std::boxed::Box;
+use blueprint_std::boxed::Box;
 
 pub trait Bn254Backend: Send + Sync {
     /// Generate a new BN254 key pair from seed

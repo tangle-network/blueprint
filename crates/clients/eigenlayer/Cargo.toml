@@ -15,7 +15,7 @@ workspace = true
 blueprint-runner = { workspace = true }
 
 blueprint-client-core = { workspace = true }
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 blueprint-evm-extra = { workspace = true }
 alloy-contract = { workspace = true }
 alloy-network = { workspace = true }
@@ -50,7 +50,7 @@ tokio = { workspace = true, features = ["full"] }
 [features]
 default = ["std"]
 std = [
-	"gadget-std/std",
+	"blueprint-std/std",
 	"blueprint-evm-extra/std",
 	"tokio/full",
 	"blueprint-client-core/std",

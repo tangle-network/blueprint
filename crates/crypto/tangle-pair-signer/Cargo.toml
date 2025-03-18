@@ -9,7 +9,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 blueprint-crypto-core = { workspace = true, features = ["tangle"] }
 blueprint-crypto-sp-core = { workspace = true }
 
@@ -28,7 +28,7 @@ default = ["std", "evm"]
 std = [
 	"blueprint-crypto-core/std",
 	"blueprint-crypto-sp-core/std",
-	"gadget-std/std",
+	"blueprint-std/std",
 	"serde/std",
 	"tangle-subxt/std",
 	"sp-runtime/std",

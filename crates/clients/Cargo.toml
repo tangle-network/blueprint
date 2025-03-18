@@ -16,7 +16,7 @@ blueprint-client-eigenlayer = { workspace = true, optional = true }
 blueprint-client-evm = { workspace = true, optional = true }
 blueprint-client-tangle = { workspace = true, optional = true }
 blueprint-client-core = { workspace = true }
-gadget-std.workspace = true
+blueprint-std.workspace = true
 
 thiserror.workspace = true
 
@@ -26,7 +26,7 @@ std = [
 	"blueprint-client-eigenlayer?/std",
 	"blueprint-client-evm?/std",
 	"blueprint-client-tangle?/std",
-	"gadget-std/std",
+	"blueprint-std/std",
 	"thiserror/std",
 ]
 web = ["blueprint-client-tangle?/web"]

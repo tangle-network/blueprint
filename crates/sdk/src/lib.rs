@@ -20,7 +20,7 @@ pub use blueprint_clients as clients;
 pub use blueprint_contexts as contexts;
 
 pub use blueprint_keystore as keystore;
-pub use gadget_std as std;
+pub use blueprint_std as std;
 pub use tokio;
 
 pub mod error;
