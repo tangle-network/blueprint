@@ -1,7 +1,7 @@
 use crate::service::AllowedKeys;
 use crate::tests::TestNode;
 use crate::tests::create_whitelisted_nodes;
-use gadget_crypto::sp_core::SpEcdsa;
+use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 use tracing::info;

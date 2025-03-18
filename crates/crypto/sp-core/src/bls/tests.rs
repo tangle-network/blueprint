@@ -1,5 +1,5 @@
 use super::*;
-use gadget_crypto_core::KeyType;
+use blueprint_crypto_core::KeyType;
 
 mod bls381_tests {
     use super::*;

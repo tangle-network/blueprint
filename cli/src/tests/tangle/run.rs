@@ -1,15 +1,15 @@
 use std::time::Duration;
 
+use blueprint_chain_setup::tangle::OutputValue;
 use blueprint_core::info;
+use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
+use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+use blueprint_keystore::backends::Backend;
+use blueprint_keystore::{Keystore, KeystoreConfig};
+use blueprint_testing_utils::setup_log;
+use blueprint_testing_utils::tangle::TangleTestHarness;
+use blueprint_testing_utils::tangle::harness::generate_env_from_node_id;
 use color_eyre::eyre::Result;
-use gadget_chain_setup::tangle::OutputValue;
-use gadget_crypto::sp_core::{SpEcdsa, SpSr25519};
-use gadget_crypto::tangle_pair_signer::TanglePairSigner;
-use gadget_keystore::backends::Backend;
-use gadget_keystore::{Keystore, KeystoreConfig};
-use gadget_testing_utils::setup_log;
-use gadget_testing_utils::tangle::TangleTestHarness;
-use gadget_testing_utils::tangle::harness::generate_env_from_node_id;
 use tangle_subxt::subxt::tx::Signer;
 use tokio::fs;
 
@@ -20,7 +20,7 @@ use crate::command::run::tangle::{RunOpts, run_blueprint};
 use crate::command::service::accept::accept_request;
 use crate::command::service::request::request_service;
 use crate::tests::tangle::blueprint::create_test_blueprint;
-use gadget_chain_setup::tangle::deploy::{Opts as DeployOpts, deploy_to_tangle};
+use blueprint_chain_setup::tangle::deploy::{Opts as DeployOpts, deploy_to_tangle};
 
 #[tokio::test]
 #[allow(clippy::too_many_lines)]

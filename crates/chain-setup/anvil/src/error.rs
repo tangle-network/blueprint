@@ -11,7 +11,7 @@ pub enum Error {
     #[error("Transaction Error: {0}")]
     Transaction(#[from] alloy_provider::PendingTransactionError),
     #[error("Keystore error: {0}")]
-    Keystore(#[from] Box<gadget_keystore::Error>),
+    Keystore(#[from] Box<blueprint_keystore::Error>),
 }
 
 impl From<tokio::time::error::Elapsed> for Error {
@@ -20,8 +20,8 @@ impl From<tokio::time::error::Elapsed> for Error {
     }
 }
 
-impl From<gadget_keystore::Error> for Error {
-    fn from(e: gadget_keystore::Error) -> Self {
+impl From<blueprint_keystore::Error> for Error {
+    fn from(e: blueprint_keystore::Error) -> Self {
         Box::new(e).into()
     }
 }

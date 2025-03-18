@@ -9,9 +9,9 @@
 /// This means that:
 ///
 /// ```rust
-/// use gadget_keystore::{Keystore, KeystoreConfig};
+/// use blueprint_keystore::{Keystore, KeystoreConfig};
 ///
-/// # fn main() -> gadget_keystore::Result<()> {
+/// # fn main() -> blueprint_keystore::Result<()> {
 /// let config = KeystoreConfig::new().in_memory(true);
 /// let keystore = Keystore::new(config)?;
 /// # Ok(()) }
@@ -20,9 +20,9 @@
 /// is equivalent to:
 ///
 /// ```rust
-/// use gadget_keystore::{Keystore, KeystoreConfig};
+/// use blueprint_keystore::{Keystore, KeystoreConfig};
 ///
-/// # fn main() -> gadget_keystore::Result<()> {
+/// # fn main() -> blueprint_keystore::Result<()> {
 /// let keystore = Keystore::new(KeystoreConfig::new())?;
 /// # Ok(()) }
 /// ```
@@ -52,9 +52,9 @@ impl KeystoreConfig {
     /// # Examples
     ///
     /// ```rust
-    /// use gadget_keystore::{Keystore, KeystoreConfig};
+    /// use blueprint_keystore::{Keystore, KeystoreConfig};
     ///
-    /// # fn main() -> gadget_keystore::Result<()> {
+    /// # fn main() -> blueprint_keystore::Result<()> {
     /// let config = KeystoreConfig::new();
     /// let keystore = Keystore::new(config)?;
     /// # Ok(()) }
@@ -71,9 +71,9 @@ impl KeystoreConfig {
     /// # Examples
     ///
     /// ```rust
-    /// use gadget_keystore::{Keystore, KeystoreConfig};
+    /// use blueprint_keystore::{Keystore, KeystoreConfig};
     ///
-    /// # fn main() -> gadget_keystore::Result<()> {
+    /// # fn main() -> blueprint_keystore::Result<()> {
     /// let config = KeystoreConfig::new().in_memory(true);
     /// let keystore = Keystore::new(config)?;
     /// # Ok(()) }
@@ -93,9 +93,9 @@ impl KeystoreConfig {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use gadget_keystore::{Keystore, KeystoreConfig};
+    /// use blueprint_keystore::{Keystore, KeystoreConfig};
     ///
-    /// # fn main() -> gadget_keystore::Result<()> {
+    /// # fn main() -> blueprint_keystore::Result<()> {
     /// let config = KeystoreConfig::new().fs_root("path/to/keystore");
     /// let keystore = Keystore::new(config)?;
     /// # Ok(()) }
@@ -118,10 +118,10 @@ impl KeystoreConfig {
         /// # Examples
         ///
         /// ```rust,no_run
-        /// use gadget_keystore::{Keystore, KeystoreConfig};
-        /// use gadget_keystore::remote::RemoteConfig;
+        /// use blueprint_keystore::{Keystore, KeystoreConfig};
+        /// use blueprint_keystore::remote::RemoteConfig;
         ///
-        /// # fn main() -> gadget_keystore::Result<()> {
+        /// # fn main() -> blueprint_keystore::Result<()> {
         /// let remote = RemoteConfig::Aws {
         ///     keys: vec![]
         /// };

@@ -14,13 +14,13 @@ pub use blueprint_core as core;
 pub use core::*;
 
 /// Core cryptographic primitives and utilities
-pub use gadget_crypto as crypto;
+pub use blueprint_crypto as crypto;
 
-pub use gadget_clients as clients;
-pub use gadget_contexts as contexts;
+pub use blueprint_clients as clients;
+pub use blueprint_contexts as contexts;
 
-pub use gadget_keystore as keystore;
-pub use gadget_std as std;
+pub use blueprint_keystore as keystore;
+pub use blueprint_std as std;
 pub use tokio;
 
 pub mod error;
@@ -47,8 +47,8 @@ pub use blueprint_router::Router;
 
 #[cfg(feature = "macros")]
 pub mod macros {
+    pub use blueprint_context_derive as context;
     pub use blueprint_macros::*;
-    pub use gadget_context_derive as context;
 }
 
 // == Protocol-specific utilities ==
@@ -78,7 +78,7 @@ pub use eigensdk;
 /// Testing utilities and helpers
 pub mod testing {
     /// General testing utilities for blueprints
-    pub use gadget_testing_utils as utils;
+    pub use blueprint_testing_utils as utils;
     /// Temporary file and directory management for tests
     pub use tempfile;
 }
@@ -95,10 +95,10 @@ pub mod build {
 /// Networking utilities for blueprints
 pub mod networking {
     /// Networking utilities for blueprints
-    pub use gadget_networking::*;
+    pub use blueprint_networking::*;
     #[cfg(feature = "round-based-compat")]
-    pub use gadget_networking_round_based_extension as round_based_compat;
+    pub use blueprint_networking_round_based_extension as round_based_compat;
 }
 
 #[cfg(feature = "local-store")]
-pub use gadget_stores as stores;
+pub use blueprint_stores as stores;

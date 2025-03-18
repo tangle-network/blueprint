@@ -7,8 +7,8 @@ use alloy_provider::{
 use alloy_rpc_types::serde_helpers::WithOtherFields;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::{SolConstructor, sol};
+use blueprint_clients::tangle::client::{TangleClient as TestClient, TangleConfig};
 use blueprint_core::{error, info};
-use gadget_clients::tangle::client::{TangleClient as TestClient, TangleConfig};
 use sp_core::H160;
 use tangle_subxt::subxt::{
     Config,

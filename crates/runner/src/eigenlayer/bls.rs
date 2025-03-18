@@ -9,10 +9,10 @@ use super::error::EigenlayerError;
 use crate::BlueprintConfig;
 use crate::config::BlueprintEnvironment;
 use crate::error::RunnerError;
-use gadget_keystore::backends::Backend;
-use gadget_keystore::backends::bn254::Bn254Backend;
-use gadget_keystore::backends::eigenlayer::EigenlayerBackend;
-use gadget_keystore::crypto::k256::K256Ecdsa;
+use blueprint_keystore::backends::Backend;
+use blueprint_keystore::backends::bn254::Bn254Backend;
+use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
+use blueprint_keystore::crypto::k256::K256Ecdsa;
 
 #[derive(Clone, Copy)]
 pub struct EigenlayerBLSConfig {

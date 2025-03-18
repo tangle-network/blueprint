@@ -1,4 +1,4 @@
-pub use gadget_core_testing_utils::Error;
+pub use blueprint_core_testing_utils::Error;
 use tangle_subxt::subxt_core::utils::AccountId32;
 
 #[cfg(test)]

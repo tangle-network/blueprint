@@ -19,7 +19,7 @@ pub mod prelude {
 /// a single method.
 ///
 /// Readers are intended to be composable with one another. Many implementors
-/// throughout [`gadget_std::io`] take and provide types which implement the `Read`
+/// throughout [`blueprint_std::io`] take and provide types which implement the `Read`
 /// trait.
 ///
 /// Please note that each call to [`read()`] may involve a system call, and
@@ -30,8 +30,8 @@ pub mod prelude {
 /// Read from [`&str`] because [`&[u8]`][slice] implements `Read`:
 ///
 /// ```no_run
-/// # use gadget_std::io;
-/// use gadget_std::io::prelude::*;
+/// # use blueprint_std::io;
+/// use blueprint_std::io::prelude::*;
 ///
 /// fn main() -> Result<()> {
 ///     let mut b = "This string will be read".as_bytes();
@@ -45,7 +45,7 @@ pub mod prelude {
 /// ```
 ///
 /// [`read()`]: trait.Read.html#tymethod.read
-/// [`gadget_std::io`]: ../../std/io/index.html
+/// [`blueprint_std::io`]: ../../std/io/index.html
 /// [`BufRead`]: trait.BufRead.html
 /// [`BufReader`]: struct.BufReader.html
 /// [`&str`]: ../../std/primitive.str.html
@@ -362,7 +362,7 @@ impl<T> Cursor<T> {
     /// # Examples
     ///
     /// ```
-    /// use gadget_std::io::Cursor;
+    /// use blueprint_std::io::Cursor;
     ///
     /// let buff = Cursor::new(Vec::new());
     /// # fn force_inference(_: &Cursor<Vec<u8>>) {}
@@ -377,7 +377,7 @@ impl<T> Cursor<T> {
     /// # Examples
     ///
     /// ```
-    /// use gadget_std::io::Cursor;
+    /// use blueprint_std::io::Cursor;
     ///
     /// let buff = Cursor::new(Vec::new());
     /// # fn force_inference(_: &Cursor<Vec<u8>>) {}
@@ -394,7 +394,7 @@ impl<T> Cursor<T> {
     /// # Examples
     ///
     /// ```
-    /// use gadget_std::io::Cursor;
+    /// use blueprint_std::io::Cursor;
     ///
     /// let buff = Cursor::new(Vec::new());
     /// # fn force_inference(_: &Cursor<Vec<u8>>) {}
@@ -414,7 +414,7 @@ impl<T> Cursor<T> {
     /// # Examples
     ///
     /// ```
-    /// use gadget_std::io::Cursor;
+    /// use blueprint_std::io::Cursor;
     ///
     /// let mut buff = Cursor::new(Vec::new());
     /// # fn force_inference(_: &Cursor<Vec<u8>>) {}
@@ -436,7 +436,7 @@ impl<T> Cursor<T> {
     /// # Examples
     ///
     /// ```
-    /// use gadget_std::io::Cursor;
+    /// use blueprint_std::io::Cursor;
     ///
     /// let mut buff = Cursor::new(vec![1, 2, 3, 4, 5]);
     ///

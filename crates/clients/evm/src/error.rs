@@ -1,4 +1,4 @@
-use gadget_std::string::String;
+use blueprint_std::string::String;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -15,10 +15,10 @@ pub enum Error {
     Abi(String),
 }
 
-impl From<Error> for gadget_client_core::error::Error {
+impl From<Error> for blueprint_client_core::error::Error {
     fn from(value: Error) -> Self {
-        gadget_client_core::error::Error::Evm(value.to_string())
+        blueprint_client_core::error::Error::Evm(value.to_string())
     }
 }
 
-pub type Result<T> = gadget_std::result::Result<T, Error>;
+pub type Result<T> = blueprint_std::result::Result<T, Error>;

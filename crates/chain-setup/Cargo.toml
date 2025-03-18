@@ -1,5 +1,5 @@
 [package]
-name = "gadget-chain-setup"
+name = "blueprint-chain-setup"
 version = "0.1.0"
 description = "Chain setup utilities for use with Blueprint SDK"
 authors.workspace = true
@@ -10,16 +10,16 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-gadget-chain-setup-tangle = { workspace = true, optional = true }
-gadget-chain-setup-anvil = { workspace = true, optional = true }
-gadget-chain-setup-common = { workspace = true }
+blueprint-chain-setup-tangle = { workspace = true, optional = true }
+blueprint-chain-setup-anvil = { workspace = true, optional = true }
+blueprint-chain-setup-common = { workspace = true }
 
 [features]
 default = ["std"]
 std = [
-    "gadget-chain-setup-common/std",
-    "gadget-chain-setup-tangle?/std",
-    "gadget-chain-setup-anvil?/std",
+    "blueprint-chain-setup-common/std",
+    "blueprint-chain-setup-tangle?/std",
+    "blueprint-chain-setup-anvil?/std",
 ]
-tangle = ["gadget-chain-setup-tangle"]
-anvil = ["gadget-chain-setup-anvil"]
+tangle = ["blueprint-chain-setup-tangle"]
+anvil = ["blueprint-chain-setup-anvil"]

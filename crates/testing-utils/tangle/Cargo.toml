@@ -1,5 +1,5 @@
 [package]
-name = "gadget-tangle-testing-utils"
+name = "blueprint-tangle-testing-utils"
 version = "0.1.0"
 description = "Tangle-specific testing utilities for Tangle Blueprints"
 authors.workspace = true
@@ -15,12 +15,12 @@ workspace = true
 blueprint-core = { workspace = true }
 blueprint-runner = { workspace = true, features = ["std", "tangle", "networking"] }
 blueprint-tangle-extra = { workspace = true, features = ["std", "metadata-types"] }
-gadget-std = { workspace = true, features = ["std"] }
-gadget-contexts = { workspace = true, features = ["tangle", "std"] }
-gadget-crypto-tangle-pair-signer = { workspace = true, features = ["std", "evm"] }
-gadget-core-testing-utils = { workspace = true }
-gadget-chain-setup = { workspace = true, features = ["std", "tangle"] }
-gadget-keystore = { workspace = true, features = ["std", "tangle-full"] }
+blueprint-std = { workspace = true, features = ["std"] }
+blueprint-contexts = { workspace = true, features = ["tangle", "std"] }
+blueprint-crypto-tangle-pair-signer = { workspace = true, features = ["std", "evm"] }
+blueprint-core-testing-utils = { workspace = true }
+blueprint-chain-setup = { workspace = true, features = ["std", "tangle"] }
+blueprint-keystore = { workspace = true, features = ["std", "tangle-full"] }
 tnt-core-bytecode = { workspace = true }
 
 alloy-signer-local = { workspace = true }
@@ -32,7 +32,7 @@ futures = { workspace = true }
 tracing = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-gadget-client-tangle = { workspace = true }
+blueprint-client-tangle = { workspace = true }
 url = { workspace = true }
 
 [features]

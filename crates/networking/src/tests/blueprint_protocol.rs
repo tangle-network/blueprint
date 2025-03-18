@@ -9,7 +9,7 @@ use crate::{
     },
     types::{MessageRouting, ParticipantId, ParticipantInfo, ProtocolMessage},
 };
-use gadget_crypto::{KeyType, sp_core::SpEcdsa};
+use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;

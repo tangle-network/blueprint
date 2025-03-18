@@ -4,12 +4,12 @@ pub mod error;
 pub use error::*;
 
 #[cfg(feature = "eigenlayer")]
-pub use gadget_client_eigenlayer as eigenlayer;
+pub use blueprint_client_eigenlayer as eigenlayer;
 
 #[cfg(feature = "evm")]
-pub use gadget_client_evm as evm;
+pub use blueprint_client_evm as evm;
 
 #[cfg(feature = "tangle")]
-pub use gadget_client_tangle as tangle;
+pub use blueprint_client_tangle as tangle;
 
-pub use gadget_client_core::*;
+pub use blueprint_client_core::*;

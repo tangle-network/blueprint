@@ -11,7 +11,7 @@ pub enum Error {
     #[error("Transaction Error: {0}")]
     Transaction(#[from] alloy_provider::PendingTransactionError),
     #[error("Keystore error: {0}")]
-    Keystore(#[from] gadget_keystore::Error),
+    Keystore(#[from] blueprint_keystore::Error),
 }
 
 impl From<tokio::time::error::Elapsed> for Error {

@@ -1,5 +1,5 @@
 [package]
-name = "gadget-std"
+name = "blueprint-std"
 version = "0.1.0"
 description = "Re-exports of core/std for Tangle Blueprints"
 authors.workspace = true

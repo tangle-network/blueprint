@@ -3,8 +3,8 @@ use crate::error::{Error, Result};
 use alloy_primitives::{Address, PrimitiveSignature};
 use alloy_signer::Signer;
 use alloy_signer_ledger::{HDPath, LedgerSigner};
-use gadget_crypto::k256::{K256Ecdsa, K256VerifyingKey};
-use gadget_std::collections::BTreeMap;
+use blueprint_crypto::k256::{K256Ecdsa, K256VerifyingKey};
+use blueprint_std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]

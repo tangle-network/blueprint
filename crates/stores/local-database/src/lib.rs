@@ -3,10 +3,10 @@ mod error;
 pub use error::Error;
 use std::io::ErrorKind;
 
-use gadget_std::collections::HashMap;
-use gadget_std::fs;
-use gadget_std::path::{Path, PathBuf};
-use gadget_std::sync::Mutex;
+use blueprint_std::collections::HashMap;
+use blueprint_std::fs;
+use blueprint_std::path::{Path, PathBuf};
+use blueprint_std::sync::Mutex;
 use serde::{de::DeserializeOwned, Serialize};
 
 /// A local database for storing key-value pairs.
@@ -16,9 +16,9 @@ use serde::{de::DeserializeOwned, Serialize};
 /// # Example
 ///
 /// ```no_run
-/// use gadget_store_local_database::LocalDatabase;
+/// use blueprint_store_local_database::LocalDatabase;
 ///
-/// # fn main() -> Result<(), gadget_store_local_database::Error> {
+/// # fn main() -> Result<(), blueprint_store_local_database::Error> {
 /// let db = LocalDatabase::<u64>::open("data.json")?;
 ///
 /// db.set("key", 42)?;
@@ -42,9 +42,9 @@ where
     /// # Examples
     ///
     /// ```no_run
-    /// use gadget_store_local_database::LocalDatabase;
+    /// use blueprint_store_local_database::LocalDatabase;
     ///
-    /// # fn main() -> Result<(), gadget_store_local_database::Error> {
+    /// # fn main() -> Result<(), blueprint_store_local_database::Error> {
     /// let db = LocalDatabase::<u64>::open("data.json")?;
     /// assert!(db.is_empty());
     /// # Ok(()) }
@@ -86,9 +86,9 @@ where
     /// # Example
     ///
     /// ```no_run
-    /// use gadget_store_local_database::LocalDatabase;
+    /// use blueprint_store_local_database::LocalDatabase;
     ///
-    /// # fn main() -> Result<(), gadget_store_local_database::Error> {
+    /// # fn main() -> Result<(), blueprint_store_local_database::Error> {
     /// let db = LocalDatabase::<u64>::open("data.json")?;
     /// assert_eq!(db.len(), 0);
     ///
@@ -107,9 +107,9 @@ where
     /// # Example
     ///
     /// ```no_run
-    /// use gadget_store_local_database::LocalDatabase;
+    /// use blueprint_store_local_database::LocalDatabase;
     ///
-    /// # fn main() -> Result<(), gadget_store_local_database::Error> {
+    /// # fn main() -> Result<(), blueprint_store_local_database::Error> {
     /// let db = LocalDatabase::<u64>::open("data.json")?;
     /// assert!(db.is_empty());
     ///
@@ -128,9 +128,9 @@ where
     /// # Examples
     ///
     /// ```no_run
-    /// use gadget_store_local_database::LocalDatabase;
+    /// use blueprint_store_local_database::LocalDatabase;
     ///
-    /// # fn main() -> Result<(), gadget_store_local_database::Error> {
+    /// # fn main() -> Result<(), blueprint_store_local_database::Error> {
     /// let db = LocalDatabase::<u64>::open("data.json")?;
     ///
     /// db.set("key", 42)?;
@@ -158,9 +158,9 @@ where
     /// # Example
     ///
     /// ```no_run
-    /// use gadget_store_local_database::LocalDatabase;
+    /// use blueprint_store_local_database::LocalDatabase;
     ///
-    /// # fn main() -> Result<(), gadget_store_local_database::Error> {
+    /// # fn main() -> Result<(), blueprint_store_local_database::Error> {
     /// let db = LocalDatabase::<u64>::open("data.json")?;
     ///
     /// db.set("key", 42);
@@ -177,7 +177,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gadget_std::fs;
+    use blueprint_std::fs;
     use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 
@@ -279,8 +279,8 @@ mod tests {
 
     #[test]
     fn test_concurrent_access() {
-        use gadget_std::sync::Arc;
-        use gadget_std::thread;
+        use blueprint_std::sync::Arc;
+        use blueprint_std::thread;
 
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.json");

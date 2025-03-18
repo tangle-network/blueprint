@@ -1,5 +1,5 @@
 [package]
-name = "gadget-chain-setup-tangle"
+name = "blueprint-chain-setup-tangle"
 version = "0.1.0"
 description = "Tangle-specific chain setup utilities"
 authors.workspace = true
@@ -9,7 +9,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 tracing = { workspace = true }
 dirs = { workspace = true }
 reqwest = { workspace = true, features = ["json", "default-tls"] }
@@ -18,15 +18,15 @@ color-eyre = { workspace = true }
 indicatif = { workspace = true }
 dialoguer = { workspace = true }
 
-gadget-networking = { workspace = true }
-gadget-contexts = { workspace = true, features = ["tangle"] }
-gadget-crypto-tangle-pair-signer = { workspace = true, features = ["evm"] }
+blueprint-networking = { workspace = true }
+blueprint-contexts = { workspace = true, features = ["tangle"] }
+blueprint-crypto-tangle-pair-signer = { workspace = true, features = ["evm"] }
 blueprint-tangle-extra = { workspace = true, features = ["metadata-types"] }
 blueprint-core = { workspace = true }
-gadget-clients = { workspace = true, features = ["tangle"] }
-gadget-keystore = { workspace = true }
-gadget-chain-setup-common = { workspace = true }
-gadget-crypto = { workspace = true, features = [
+blueprint-clients = { workspace = true, features = ["tangle"] }
+blueprint-keystore = { workspace = true }
+blueprint-chain-setup-common = { workspace = true }
+blueprint-crypto = { workspace = true, features = [
     "k256",
     "sr25519-schnorrkel",
     "ed25519",
@@ -58,11 +58,11 @@ std = [
     "blueprint-tangle-extra/std",
     "sp-core/std",
     "tangle-subxt/std",
-    "gadget-std/std",
-    "gadget-networking/std",
-    "gadget-contexts/std",
-    "gadget-crypto-tangle-pair-signer/std",
-    "gadget-clients/std",
-    "gadget-keystore/std",
+    "blueprint-std/std",
+    "blueprint-networking/std",
+    "blueprint-contexts/std",
+    "blueprint-crypto-tangle-pair-signer/std",
+    "blueprint-clients/std",
+    "blueprint-keystore/std",
     "thiserror/std",
 ]

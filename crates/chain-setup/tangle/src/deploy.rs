@@ -1,24 +1,24 @@
 use dialoguer::console::style;
-use gadget_std::{env, thread, rand};
-use gadget_std::io::{BufRead, BufReader};
-use gadget_std::path::Path;
-use gadget_std::process::{Command, Stdio};
+use blueprint_std::{env, thread, rand};
+use blueprint_std::io::{BufRead, BufReader};
+use blueprint_std::path::Path;
+use blueprint_std::process::{Command, Stdio};
 use alloy_provider::network::TransactionBuilder;
 use alloy_provider::{Provider, WsConnect};
 use alloy_rpc_types_eth::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::{self, eyre, Context, ContextCompat, Result};
 use blueprint_tangle_extra::metadata::types::blueprint::BlueprintServiceManager;
-use gadget_crypto::tangle_pair_signer::TanglePairSigner;
-use gadget_std::fmt::Debug;
-use gadget_std::path::PathBuf;
+use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+use blueprint_std::fmt::Debug;
+use blueprint_std::path::PathBuf;
 use serde_json::Value;
 use subxt::tx::Signer;
 use tangle_subxt::subxt;
 use tangle_subxt::tangle_testnet_runtime::api as TangleApi;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::ServiceBlueprint;
-use gadget_chain_setup_common::signer::{load_evm_signer_from_env, load_signer_from_env};
+use blueprint_chain_setup_common::signer::{load_evm_signer_from_env, load_signer_from_env};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
@@ -31,7 +31,7 @@ pub struct Opts {
     /// The WS RPC URL of the Tangle Network
     pub ws_rpc_url: String,
     /// The path to the manifest file
-    pub manifest_path: gadget_std::path::PathBuf,
+    pub manifest_path: blueprint_std::path::PathBuf,
     /// The signer for deploying the blueprint
     pub signer: Option<TanglePairSigner<sp_core::sr25519::Pair>>,
     /// The signer for deploying the smart contract
@@ -39,7 +39,7 @@ pub struct Opts {
 }
 
 impl Debug for Opts {
-    fn fmt(&self, f: &mut gadget_std::fmt::Formatter<'_>) -> gadget_std::fmt::Result {
+    fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
         f.debug_struct("Opts")
             .field("pkg_name", &self.pkg_name)
             .field("http_rpc_url", &self.http_rpc_url)

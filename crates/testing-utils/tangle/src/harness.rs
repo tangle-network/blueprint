@@ -1,22 +1,22 @@
 use crate::Error;
 use crate::multi_node::MultiNodeTestEnv;
 use crate::{InputValue, OutputValue, keys::inject_tangle_key};
+use blueprint_chain_setup::tangle::testnet::SubstrateNode;
+use blueprint_chain_setup::tangle::transactions;
+use blueprint_chain_setup::tangle::transactions::setup_operator_and_service_multiple;
+use blueprint_client_tangle::client::TangleClient;
+use blueprint_contexts::tangle::TangleClientContext;
 use blueprint_core::debug;
+use blueprint_crypto_tangle_pair_signer::TanglePairSigner;
+use blueprint_keystore::backends::Backend;
+use blueprint_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::ContextConfig;
 use blueprint_runner::config::SupportedChains;
 use blueprint_runner::error::RunnerError;
 use blueprint_runner::tangle::config::PriceTargets;
-use gadget_chain_setup::tangle::testnet::SubstrateNode;
-use gadget_chain_setup::tangle::transactions;
-use gadget_chain_setup::tangle::transactions::setup_operator_and_service_multiple;
-use gadget_client_tangle::client::TangleClient;
-use gadget_contexts::tangle::TangleClientContext;
-use gadget_crypto_tangle_pair_signer::TanglePairSigner;
-use gadget_keystore::backends::Backend;
-use gadget_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
-use gadget_std::io;
-use gadget_std::path::{Path, PathBuf};
+use blueprint_std::io;
+use blueprint_std::path::{Path, PathBuf};
 use std::marker::PhantomData;
 use tangle_subxt::tangle_testnet_runtime::api::services::events::JobCalled;
 use tangle_subxt::tangle_testnet_runtime::api::services::{
@@ -109,34 +109,27 @@ where
 {
     /// Create a new `TangleTestHarness`
     ///
-    /// NOTE: The resulting harness will have a context of `()`. This is not valid for jobs that require
-    ///       a context. See [`Self::setup_with_context()`] and [`Self::set_context()`].
-    ///
-    /// This is useful for cases where:
-    ///
-    /// * None of the jobs require a context
-    /// * The context creation depends on [`Self::env()`]
-    ///
     /// # Errors
     ///
-    /// * See [`Self::setup_with_context()`]
+    /// TODO
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use gadget_tangle_testing_utils::TangleTestHarness;
+    /// use blueprint_tangle_testing_utils::TangleTestHarness;
     /// use tempfile::TempDir;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let tmp_dir = TempDir::new()?;
     /// let harness = TangleTestHarness::setup(tmp_dir).await?;
+    /// # let _: TangleTestHarness<()> = harness;
     /// # Ok(()) }
     /// ```
     pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
         // Start Local Tangle Node
-        let node = gadget_chain_setup::tangle::run(
-            gadget_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
+        let node = blueprint_chain_setup::tangle::run(
+            blueprint_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
         )
         .await
         .map_err(|e| Error::Setup(e.to_string()))?;
@@ -289,12 +282,12 @@ where
     ///
     /// See [`read_cargo_toml_file()`]
     ///
-    /// [`read_cargo_toml_file()`]: gadget_core_testing_utils::read_cargo_toml_file
+    /// [`read_cargo_toml_file()`]: blueprint_core_testing_utils::read_cargo_toml_file
     pub fn create_deploy_opts(
         &self,
         manifest_path: PathBuf,
-    ) -> io::Result<gadget_chain_setup::tangle::deploy::Opts> {
-        Ok(gadget_chain_setup::tangle::deploy::Opts {
+    ) -> io::Result<blueprint_chain_setup::tangle::deploy::Opts> {
+        Ok(blueprint_chain_setup::tangle::deploy::Opts {
             pkg_name: Some(self.get_blueprint_name(&manifest_path)?),
             http_rpc_url: self.http_endpoint.to_string(),
             ws_rpc_url: self.ws_endpoint.to_string(),
@@ -306,7 +299,7 @@ where
 
     #[allow(clippy::unused_self)]
     fn get_blueprint_name(&self, manifest_path: &std::path::Path) -> io::Result<String> {
-        let manifest = gadget_core_testing_utils::read_cargo_toml_file(manifest_path)?;
+        let manifest = blueprint_core_testing_utils::read_cargo_toml_file(manifest_path)?;
         Ok(manifest.package.unwrap().name)
     }
 
@@ -320,7 +313,7 @@ where
     pub async fn deploy_blueprint(&self) -> Result<u64, Error> {
         let manifest_path = std::env::current_dir()?.join("Cargo.toml");
         let opts = self.create_deploy_opts(manifest_path)?;
-        let blueprint_id = gadget_chain_setup::tangle::deploy::deploy_to_tangle(opts)
+        let blueprint_id = blueprint_chain_setup::tangle::deploy::deploy_to_tangle(opts)
             .await
             .map_err(|e| Error::Setup(e.to_string()))?;
         Ok(blueprint_id)

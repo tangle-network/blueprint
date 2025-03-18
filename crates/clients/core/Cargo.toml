@@ -1,5 +1,5 @@
 [package]
-name = "gadget-client-core"
+name = "blueprint-client-core"
 version = "0.1.0"
 description = "Core primitives for Tangle Blueprint clients"
 authors.workspace = true
@@ -12,12 +12,12 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 auto_impl = { workspace = true }
 thiserror = { workspace = true }
 
 [features]
 default = ["std"]
 std = [
-    "gadget-std/std",
+    "blueprint-std/std",
 ]

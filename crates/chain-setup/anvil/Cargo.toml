@@ -1,5 +1,5 @@
 [package]
-name = "gadget-chain-setup-anvil"
+name = "blueprint-chain-setup-anvil"
 version = "0.1.0"
 description = "Anvil-specific chain setup utilities"
 authors.workspace = true
@@ -9,9 +9,9 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
-gadget-keystore = { workspace = true, features = ["eigenlayer", "evm"] }
-gadget-core-testing-utils = { workspace = true }
+blueprint-std = { workspace = true }
+blueprint-keystore = { workspace = true, features = ["eigenlayer", "evm"] }
+blueprint-core-testing-utils = { workspace = true }
 blueprint-core = { workspace = true }
 alloy-contract = { workspace = true }
 alloy-provider = { workspace = true }
@@ -28,7 +28,7 @@ tempfile = { workspace = true}
 [features]
 default = ["std"]
 std = [
-    "gadget-std/std",
-    "gadget-keystore/std",
+    "blueprint-std/std",
+    "blueprint-keystore/std",
     "tokio/full",
 ]

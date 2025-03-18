@@ -1,5 +1,5 @@
 [package]
-name = "gadget-crypto"
+name = "blueprint-crypto"
 version = "0.1.0"
 description = "Crypto metapackage for Tangle Blueprints"
 authors.workspace = true
@@ -9,15 +9,15 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-crypto-core = { path = "core" }
-gadget-crypto-k256 = { path = "k256", optional = true }
-gadget-crypto-sr25519 = { path = "sr25519", optional = true }
-gadget-crypto-ed25519 = { path = "ed25519", optional = true }
-gadget-crypto-hashing = { path = "hashing", optional = true }
-gadget-crypto-bls = { path = "bls", optional = true }
-gadget-crypto-bn254 = { path = "bn254", optional = true }
-gadget-crypto-sp-core = { path = "sp-core", optional = true }
-gadget-crypto-tangle-pair-signer = { workspace = true, optional = true }
+blueprint-crypto-core = { path = "core" }
+blueprint-crypto-k256 = { path = "k256", optional = true }
+blueprint-crypto-sr25519 = { path = "sr25519", optional = true }
+blueprint-crypto-ed25519 = { path = "ed25519", optional = true }
+blueprint-crypto-hashing = { path = "hashing", optional = true }
+blueprint-crypto-bls = { path = "bls", optional = true }
+blueprint-crypto-bn254 = { path = "bn254", optional = true }
+blueprint-crypto-sp-core = { path = "sp-core", optional = true }
+blueprint-crypto-tangle-pair-signer = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [features]
@@ -34,33 +34,33 @@ default = [
 	"hashing"
 ]
 std = [
-	"gadget-crypto-core/std",
-	"gadget-crypto-k256?/std",
-	"gadget-crypto-sr25519?/std",
-	"gadget-crypto-ed25519?/std",
-	"gadget-crypto-bls?/std",
-	"gadget-crypto-bn254?/std",
-	"gadget-crypto-sp-core?/std",
-	"gadget-crypto-tangle-pair-signer?/std",
+	"blueprint-crypto-core/std",
+	"blueprint-crypto-k256?/std",
+	"blueprint-crypto-sr25519?/std",
+	"blueprint-crypto-ed25519?/std",
+	"blueprint-crypto-bls?/std",
+	"blueprint-crypto-bn254?/std",
+	"blueprint-crypto-sp-core?/std",
+	"blueprint-crypto-tangle-pair-signer?/std",
 ]
 web = [
-	"gadget-crypto-tangle-pair-signer?/web"
+	"blueprint-crypto-tangle-pair-signer?/web"
 ]
 
-k256 = ["dep:gadget-crypto-k256", "gadget-crypto-core/k256"]
-sr25519-schnorrkel = ["dep:gadget-crypto-sr25519", "gadget-crypto-core/sr25519-schnorrkel"]
-ed25519 = ["dep:gadget-crypto-ed25519", "gadget-crypto-core/zebra"]
-bls = ["dep:gadget-crypto-bls", "gadget-crypto-core/bls"]
-bn254 = ["dep:gadget-crypto-bn254", "gadget-crypto-core/bn254"]
-sp-core = ["dep:gadget-crypto-sp-core", "gadget-crypto-core/tangle"]
-sp-core-bls = ["gadget-crypto-sp-core/bls", "gadget-crypto-core/tangle"]
-tangle-pair-signer = ["dep:gadget-crypto-tangle-pair-signer"]
+k256 = ["dep:blueprint-crypto-k256", "blueprint-crypto-core/k256"]
+sr25519-schnorrkel = ["dep:blueprint-crypto-sr25519", "blueprint-crypto-core/sr25519-schnorrkel"]
+ed25519 = ["dep:blueprint-crypto-ed25519", "blueprint-crypto-core/zebra"]
+bls = ["dep:blueprint-crypto-bls", "blueprint-crypto-core/bls"]
+bn254 = ["dep:blueprint-crypto-bn254", "blueprint-crypto-core/bn254"]
+sp-core = ["dep:blueprint-crypto-sp-core", "blueprint-crypto-core/tangle"]
+sp-core-bls = ["blueprint-crypto-sp-core/bls", "blueprint-crypto-core/tangle"]
+tangle-pair-signer = ["dep:blueprint-crypto-tangle-pair-signer"]
 evm = [
-	"gadget-crypto-tangle-pair-signer?/evm"
+	"blueprint-crypto-tangle-pair-signer?/evm"
 ]
 
 hashing = [
-	"gadget-crypto-hashing/sha2-hasher",
-	"gadget-crypto-hashing/sha3-hasher",
-	"gadget-crypto-hashing/blake3-hasher"
+	"blueprint-crypto-hashing/sha2-hasher",
+	"blueprint-crypto-hashing/sha3-hasher",
+	"blueprint-crypto-hashing/blake3-hasher"
 ]

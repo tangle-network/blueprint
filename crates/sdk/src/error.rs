@@ -4,7 +4,7 @@ use super::keystore;
 pub enum Error {
     // General Errors
     #[error("Client error: {0}")]
-    Client(#[from] gadget_clients::Error),
+    Client(#[from] blueprint_clients::Error),
     #[error("Keystore error: {0}")]
     Keystore(#[from] keystore::Error),
     #[error("Runner error: {0}")]
@@ -30,7 +30,7 @@ pub enum Error {
     // Specific to Networking
     #[cfg(feature = "networking")]
     #[error("Networking error: {0}")]
-    Networking(#[from] gadget_networking::error::Error),
+    Networking(#[from] blueprint_networking::error::Error),
 
     #[expect(
         clippy::non_minimal_cfg,
@@ -38,12 +38,12 @@ pub enum Error {
     )]
     #[cfg(any(feature = "local-store"))]
     #[error("Database error: {0}")]
-    Stores(#[from] gadget_stores::Error),
+    Stores(#[from] blueprint_stores::Error),
 }
 
 #[cfg(feature = "local-store")]
-impl From<gadget_stores::local_database::Error> for Error {
-    fn from(value: gadget_stores::local_database::Error) -> Self {
+impl From<blueprint_stores::local_database::Error> for Error {
+    fn from(value: blueprint_stores::local_database::Error) -> Self {
         Error::Stores(value.into())
     }
 }
@@ -72,9 +72,9 @@ macro_rules! implement_client_error {
         }
     };
 }
-implement_client_error!("eigenlayer", gadget_clients::eigenlayer::error::Error);
-implement_client_error!("evm", gadget_clients::evm::error::Error);
-implement_client_error!("tangle", gadget_clients::tangle::error::Error);
+implement_client_error!("eigenlayer", blueprint_clients::eigenlayer::error::Error);
+implement_client_error!("evm", blueprint_clients::evm::error::Error);
+implement_client_error!("tangle", blueprint_clients::tangle::error::Error);
 
 #[cfg(any(feature = "evm", feature = "eigenlayer"))]
 macro_rules! implement_from_alloy_error {

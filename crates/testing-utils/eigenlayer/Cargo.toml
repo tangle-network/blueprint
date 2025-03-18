@@ -1,5 +1,5 @@
 [package]
-name = "gadget-eigenlayer-testing-utils"
+name = "blueprint-eigenlayer-testing-utils"
 version = "0.1.0"
 description = "EigenLayer-specific testing utilities for Tangle Blueprints"
 authors.workspace = true
@@ -17,8 +17,8 @@ blueprint-evm-extra.workspace = true
 blueprint-core = { workspace = true }
 
 futures = { workspace = true }
-gadget-core-testing-utils = { workspace = true }
-gadget-chain-setup = { workspace = true, features = ["std", "anvil"] }
+blueprint-core-testing-utils = { workspace = true }
+blueprint-chain-setup = { workspace = true, features = ["std", "anvil"] }
 tempfile = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-provider = { workspace = true }

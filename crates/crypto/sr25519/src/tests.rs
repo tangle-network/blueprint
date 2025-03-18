@@ -1,9 +1,9 @@
 use super::*;
-use gadget_crypto_core::KeyType;
+use blueprint_crypto_core::KeyType;
 
 mod sr25519_crypto_tests {
     use super::*;
-    gadget_crypto_core::impl_crypto_tests!(
+    blueprint_crypto_core::impl_crypto_tests!(
         SchnorrkelSr25519,
         SchnorrkelSecret,
         SchnorrkelSignature
@@ -94,8 +94,8 @@ fn test_cross_key_verification() {
 
 #[test]
 fn test_concurrent_key_usage() {
-    use gadget_std::sync::Arc;
-    use gadget_std::thread;
+    use blueprint_std::sync::Arc;
+    use blueprint_std::thread;
 
     let seed = b"concurrent_test";
     let secret = Arc::new(SchnorrkelSr25519::generate_with_seed(Some(seed)).unwrap());

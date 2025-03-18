@@ -18,7 +18,7 @@ pub trait EventsClient<Event>: Clone + Send + Sync {
     async fn latest_event(&self) -> Option<Event>;
 }
 
-// NOTE: Actual client tests are in gadget-tangle-testing-utils
+// NOTE: Actual client tests are in blueprint-tangle-testing-utils
 #[test]
 fn it_works() {
     assert_eq!(2 + 2, 4);

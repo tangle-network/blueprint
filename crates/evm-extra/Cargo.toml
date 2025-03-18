@@ -13,7 +13,7 @@ workspace = true
 [dependencies]
 # Blueprint dependencies
 blueprint-core.workspace = true
-gadget-std.workspace = true
+blueprint-std.workspace = true
 
 # Alloy dependencies
 alloy-primitives = { workspace = true }
@@ -53,7 +53,7 @@ default = ["std", "tracing"]
 #! ### Core
 
 ## Enable standard library support. Currently unused
-std = ["serde_json/std", "gadget-std/std"]
+std = ["serde_json/std", "blueprint-std/std"]
 
 ## Enable [tracing] support
 ##

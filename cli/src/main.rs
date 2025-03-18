@@ -27,8 +27,8 @@ use tangle_subxt::subxt_core::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::sp_arithmetic::per_things::Percent;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{Asset, AssetSecurityCommitment};
-use gadget_crypto::KeyTypeId;
-use gadget_std::env;
+use blueprint_crypto::KeyTypeId;
+use blueprint_std::env;
 
 /// Tangle CLI tool
 #[derive(Parser, Debug)]

@@ -12,4 +12,4 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-gadget-std = { workspace = true, features = ["std"] }
+blueprint-std = { workspace = true, features = ["std"] }

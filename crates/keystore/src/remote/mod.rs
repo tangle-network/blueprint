@@ -8,8 +8,8 @@ pub mod gcp;
 pub mod ledger;
 
 use crate::error::Result;
-use gadget_crypto::KeyType;
-use gadget_std::future::Future;
+use blueprint_crypto::KeyType;
+use blueprint_std::future::Future;
 use serde::{de::DeserializeOwned, Serialize};
 
 // Configuration for different remote systems
@@ -59,12 +59,12 @@ pub trait EcdsaRemoteSigner<T: KeyType>: Send + Sync {
         + Ord
         + Serialize
         + DeserializeOwned
-        + gadget_std::fmt::Debug
+        + blueprint_std::fmt::Debug
         + From<T::Public>
         + Send;
-    type Signature: Clone + Serialize + DeserializeOwned + gadget_std::fmt::Debug;
-    type KeyId: Clone + Serialize + DeserializeOwned + gadget_std::fmt::Debug + Send;
-    type Config: Clone + Serialize + DeserializeOwned + gadget_std::fmt::Debug;
+    type Signature: Clone + Serialize + DeserializeOwned + blueprint_std::fmt::Debug;
+    type KeyId: Clone + Serialize + DeserializeOwned + blueprint_std::fmt::Debug + Send;
+    type Config: Clone + Serialize + DeserializeOwned + blueprint_std::fmt::Debug;
 
     async fn build(config: RemoteConfig) -> Result<Self>
     where

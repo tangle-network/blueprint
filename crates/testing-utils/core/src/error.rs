@@ -4,7 +4,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum TestRunnerError {
     #[error(transparent)]
-    Client(#[from] gadget_clients::Error),
+    Client(#[from] blueprint_clients::Error),
     #[error("Runner setup failed: {0}")]
     Setup(String),
     #[error("Runner execution failed: {0}")]
@@ -12,7 +12,7 @@ pub enum TestRunnerError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    Keystore(#[from] gadget_keystore::Error),
+    Keystore(#[from] blueprint_keystore::Error),
     #[error(transparent)]
     Parse(#[from] url::ParseError),
     #[error(transparent)]

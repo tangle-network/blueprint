@@ -1,10 +1,10 @@
 use alloy_signer_local::PrivateKeySigner;
+use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_manager::config::BlueprintManagerConfig;
 use blueprint_manager::executor::run_blueprint_manager;
 use blueprint_runner::config::BlueprintEnvironment;
 use color_eyre::eyre::{Result, eyre};
 use dialoguer::console::style;
-use gadget_crypto::tangle_pair_signer::TanglePairSigner;
 use indicatif::{ProgressBar, ProgressStyle};
 use sp_core::sr25519;
 use std::path::PathBuf;

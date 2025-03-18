@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
 use blueprint_core::Job;
+use blueprint_core_testing_utils::runner::{TestEnv, TestRunner};
 use blueprint_runner::BackgroundService;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::eigenlayer::bls::EigenlayerBLSConfig;
 use blueprint_runner::error::RunnerError as Error;
-use gadget_core_testing_utils::runner::{TestEnv, TestRunner};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 

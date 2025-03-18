@@ -1,8 +1,8 @@
 use sp_core::ecdsa;
 use crate::error::{Result, Error};
 use crate::EventsClient;
-use gadget_std::sync::Arc;
-use gadget_std::time::Duration;
+use blueprint_std::sync::Arc;
+use blueprint_std::time::Duration;
 use subxt::blocks::{Block, BlockRef};
 use subxt::events::Events;
 use subxt::utils::AccountId32;
@@ -10,11 +10,11 @@ use subxt::PolkadotConfig;
 use tangle_subxt::subxt;
 use tangle_subxt::tangle_testnet_runtime::api;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::pallet_multi_asset_delegation::types::operator::OperatorMetadata;
-use gadget_client_core::{GadgetServicesClient, OperatorSet};
+use blueprint_client_core::{GadgetServicesClient, OperatorSet};
 use blueprint_runner::config::BlueprintEnvironment;
-use gadget_crypto_sp_core::{SpEcdsa, SpSr25519};
-use gadget_keystore::{Keystore, KeystoreConfig};
-use gadget_keystore::backends::Backend;
+use blueprint_crypto_sp_core::{SpEcdsa, SpSr25519};
+use blueprint_keystore::{Keystore, KeystoreConfig};
+use blueprint_keystore::backends::Backend;
 use crate::services::TangleServicesClient;
 
 /// The [Config](subxt::Config) providing the runtime types.
@@ -184,7 +184,7 @@ impl TangleClient {
     }
 }
 
-impl gadget_std::ops::Deref for TangleClient {
+impl blueprint_std::ops::Deref for TangleClient {
     type Target = TangleServicesClient<TangleConfig>;
 
     fn deref(&self) -> &Self::Target {

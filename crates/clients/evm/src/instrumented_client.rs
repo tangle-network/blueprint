@@ -12,11 +12,11 @@ use alloy_rpc_types_eth::{
     TransactionReceipt, TransactionRequest,
 };
 use alloy_transport::{TransportError, TransportResult};
-use gadget_rpc_calls::RpcCallsMetrics as RpcCallsCollector;
-use gadget_std::string::String;
-use gadget_std::string::ToString;
-use gadget_std::time::Instant;
-use gadget_std::vec::Vec;
+use blueprint_metrics_rpc_calls::RpcCallsMetrics as RpcCallsCollector;
+use blueprint_std::string::String;
+use blueprint_std::string::ToString;
+use blueprint_std::time::Instant;
+use blueprint_std::vec::Vec;
 use hex;
 use thiserror::Error;
 use url::Url;
@@ -831,9 +831,9 @@ mod tests {
     use alloy_primitives::{TxKind::Call, U256, bytes};
     use alloy_rpc_types::eth::{BlockId, BlockNumberOrTag, pubsub::SubscriptionResult};
     use alloy_signer_local::PrivateKeySigner;
+    use blueprint_anvil_testing_utils::wait_transaction;
+    use blueprint_chain_setup_anvil::start_default_anvil_testnet;
     use blueprint_evm_extra::util::get_provider_http;
-    use gadget_anvil_testing_utils::wait_transaction;
-    use gadget_chain_setup_anvil::start_default_anvil_testnet;
     use tokio;
 
     #[tokio::test]
@@ -1177,7 +1177,7 @@ mod tests {
             ]))
             .await
             .expect("Failed to mine anvil blocks");
-        tokio::time::sleep(gadget_std::time::Duration::from_secs(5)).await;
+        tokio::time::sleep(blueprint_std::time::Duration::from_secs(5)).await;
 
         let expected_block_number = provider.clone().get_block_number().await.unwrap();
         let block_number = instrumented_client.block_number().await.unwrap();
@@ -1219,7 +1219,7 @@ mod tests {
             ]))
             .await
             .expect("Failed to mine anvil blocks");
-        tokio::time::sleep(gadget_std::time::Duration::from_secs(5)).await;
+        tokio::time::sleep(blueprint_std::time::Duration::from_secs(5)).await;
 
         let block_count = 4;
         let last_block = BlockNumberOrTag::Latest;

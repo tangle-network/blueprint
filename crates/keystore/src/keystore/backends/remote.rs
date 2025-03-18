@@ -1,4 +1,4 @@
-use gadget_crypto::KeyType;
+use blueprint_crypto::KeyType;
 use serde::de::DeserializeOwned;
 
 use super::Backend;

@@ -1,6 +1,6 @@
+use blueprint_clients::tangle::client::OnlineClient;
 use color_eyre::Result;
 use dialoguer::console::style;
-use gadget_clients::tangle::client::OnlineClient;
 use std::time::Duration;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
 use tangle_subxt::tangle_testnet_runtime::api::services::events::JobResultSubmitted;

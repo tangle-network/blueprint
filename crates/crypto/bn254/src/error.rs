@@ -1,4 +1,4 @@
-use gadget_std::string::String;
+use blueprint_std::string::String;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -11,4 +11,4 @@ pub enum Bn254Error {
     SignatureNotInSubgroup,
 }
 
-pub type Result<T> = gadget_std::result::Result<T, Bn254Error>;
+pub type Result<T> = blueprint_std::result::Result<T, Bn254Error>;

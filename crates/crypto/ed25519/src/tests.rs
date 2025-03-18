@@ -1,9 +1,9 @@
 use super::*;
-use gadget_crypto_core::{BytesEncoding, KeyType};
+use blueprint_crypto_core::{BytesEncoding, KeyType};
 
 mod ed25519_crypto_tests {
     use super::*;
-    gadget_crypto_core::impl_crypto_tests!(Ed25519Zebra, Ed25519SigningKey, Ed25519Signature);
+    blueprint_crypto_core::impl_crypto_tests!(Ed25519Zebra, Ed25519SigningKey, Ed25519Signature);
 }
 
 #[test]
@@ -152,8 +152,8 @@ fn test_invalid_key_deserialization() {
 
 #[test]
 fn test_concurrent_key_usage() {
-    use gadget_std::sync::Arc;
-    use gadget_std::thread;
+    use blueprint_std::sync::Arc;
+    use blueprint_std::thread;
 
     let seed = b"concurrent_test";
     let secret = Arc::new(Ed25519Zebra::generate_with_seed(Some(seed)).unwrap());

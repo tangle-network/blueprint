@@ -2,7 +2,7 @@ use color_eyre::Result;
 use dialoguer::console::style;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::ServiceBlueprint;
 use tangle_subxt::subxt::utils::AccountId32;
-use gadget_clients::tangle::client::OnlineClient;
+use blueprint_clients::tangle::client::OnlineClient;
 use crate::decode_bounded_string;
 
 /// Lists all blueprints from the Tangle Network.

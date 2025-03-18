@@ -1,5 +1,5 @@
-use gadget_std::io;
-use gadget_std::string::String;
+use blueprint_std::io;
+use blueprint_std::string::String;
 use tangle_subxt::subxt;
 use tangle_subxt::subxt_core::utils::AccountId32;
 use thiserror::Error;
@@ -20,22 +20,22 @@ pub enum Error {
     Other(String),
 
     #[error(transparent)]
-    Keystore(#[from] gadget_keystore::Error),
+    Keystore(#[from] blueprint_keystore::Error),
     #[error(transparent)]
-    Core(#[from] gadget_client_core::error::Error),
+    Core(#[from] blueprint_client_core::error::Error),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
     #[error("Subxt error: {0}")]
     Subxt(#[from] subxt::Error),
 }
 
-impl From<Error> for gadget_client_core::error::Error {
+impl From<Error> for blueprint_client_core::error::Error {
     fn from(value: Error) -> Self {
-        gadget_client_core::error::Error::Tangle(value.to_string())
+        blueprint_client_core::error::Error::Tangle(value.to_string())
     }
 }
 
-pub type Result<T> = gadget_std::result::Result<T, Error>;
+pub type Result<T> = blueprint_std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct TangleDispatchError(
@@ -58,8 +58,8 @@ impl From<TangleDispatchError> for Error {
     }
 }
 
-impl gadget_std::fmt::Display for TangleDispatchError {
-    fn fmt(&self, f: &mut gadget_std::fmt::Formatter<'_>) -> gadget_std::fmt::Result {
+impl blueprint_std::fmt::Display for TangleDispatchError {
+    fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
         write!(f, "{:?}", self.0)
     }
 }
