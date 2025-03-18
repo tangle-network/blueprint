@@ -109,17 +109,9 @@ where
 {
     /// Create a new `TangleTestHarness`
     ///
-    /// NOTE: The resulting harness will have a context of `()`. This is not valid for jobs that require
-    ///       a context. See [`Self::setup_with_context()`] and [`Self::set_context()`].
-    ///
-    /// This is useful for cases where:
-    ///
-    /// * None of the jobs require a context
-    /// * The context creation depends on [`Self::env()`]
-    ///
     /// # Errors
     ///
-    /// * See [`Self::setup_with_context()`]
+    /// TODO
     ///
     /// # Examples
     ///
@@ -131,6 +123,7 @@ where
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let tmp_dir = TempDir::new()?;
     /// let harness = TangleTestHarness::setup(tmp_dir).await?;
+    /// # let _: TangleTestHarness<()> = harness;
     /// # Ok(()) }
     /// ```
     pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
