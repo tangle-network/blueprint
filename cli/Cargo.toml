@@ -34,7 +34,7 @@ blueprint-runner = { workspace = true, features = ["networking", "tangle", "eige
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-tangle-extra = { workspace = true, features = ["std"] }
 blueprint-chain-setup = { workspace = true, features = ["tangle", "anvil", "std"] }
-gadget-testing-utils = { workspace = true, features = ["tangle", "anvil", "eigenlayer"] }
+blueprint-testing-utils = { workspace = true, features = ["tangle", "anvil", "eigenlayer"] }
 blueprint-contexts = { workspace = true }
 tnt-core-bytecode = { workspace = true }
 blueprint-manager = { workspace = true }
@@ -70,6 +70,6 @@ alloy-rpc-types-eth = { workspace = true }
 [dev-dependencies]
 blueprint-keystore = { workspace = true, features = ["bn254"] }
 tempfile = { workspace = true }
-gadget-testing-utils = { workspace = true, features = ["anvil", "eigenlayer", "tangle"] }
+blueprint-testing-utils = { workspace = true, features = ["anvil", "eigenlayer", "tangle"] }
 alloy-contract = { workspace = true }
 alloy-dyn-abi = { workspace = true }

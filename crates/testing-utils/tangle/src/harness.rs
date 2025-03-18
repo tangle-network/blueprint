@@ -124,7 +124,7 @@ where
     /// # Examples
     ///
     /// ```rust
-    /// use gadget_tangle_testing_utils::TangleTestHarness;
+    /// use blueprint_tangle_testing_utils::TangleTestHarness;
     /// use tempfile::TempDir;
     ///
     /// # #[tokio::main]
@@ -289,7 +289,7 @@ where
     ///
     /// See [`read_cargo_toml_file()`]
     ///
-    /// [`read_cargo_toml_file()`]: gadget_core_testing_utils::read_cargo_toml_file
+    /// [`read_cargo_toml_file()`]: blueprint_core_testing_utils::read_cargo_toml_file
     pub fn create_deploy_opts(
         &self,
         manifest_path: PathBuf,
@@ -306,7 +306,7 @@ where
 
     #[allow(clippy::unused_self)]
     fn get_blueprint_name(&self, manifest_path: &std::path::Path) -> io::Result<String> {
-        let manifest = gadget_core_testing_utils::read_cargo_toml_file(manifest_path)?;
+        let manifest = blueprint_core_testing_utils::read_cargo_toml_file(manifest_path)?;
         Ok(manifest.package.unwrap().name)
     }
 

@@ -100,11 +100,11 @@ blueprint-networking = { version = "0.1.0", path = "./crates/networking", defaul
 blueprint-networking-round-based-extension = { version = "0.1.0", path = "./crates/networking/extensions/round-based", default-features = false }
 
 # Testing utilities
-gadget-testing-utils = { version = "0.1.0", path = "./crates/testing-utils", default-features = false }
-gadget-core-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/core", default-features = false }
-gadget-anvil-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/anvil", default-features = false }
-gadget-tangle-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/tangle", default-features = false }
-gadget-eigenlayer-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/eigenlayer", default-features = false }
+blueprint-testing-utils = { version = "0.1.0", path = "./crates/testing-utils", default-features = false }
+blueprint-core-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/core", default-features = false }
+blueprint-anvil-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/anvil", default-features = false }
+blueprint-tangle-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/tangle", default-features = false }
+blueprint-eigenlayer-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/eigenlayer", default-features = false }
 
 # Metrics
 blueprint-metrics = { version = "0.1.0", path = "./crates/metrics", default-features = false }

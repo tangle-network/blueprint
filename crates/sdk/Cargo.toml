@@ -60,7 +60,7 @@ blueprint-networking = { workspace = true, optional = true }
 blueprint-networking-round-based-extension = { workspace = true, optional = true }
 
 # Optional dependencies for testing
-gadget-testing-utils = { workspace = true, optional = true }
+blueprint-testing-utils = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 
 # Optional dependencies for build
@@ -140,7 +140,7 @@ tangle = [
     "blueprint-clients/tangle",
     "blueprint-contexts/tangle",
     "blueprint-context-derive?/tangle",
-    "gadget-testing-utils?/tangle",
+    "blueprint-testing-utils?/tangle",
     "blueprint-runner/tangle",
     "blueprint-chain-setup/tangle",
 ]
@@ -155,7 +155,7 @@ evm = [
     "blueprint-context-derive/evm",
     "blueprint-crypto-tangle-pair-signer?/evm",
     "blueprint-macros?/evm",
-    "gadget-testing-utils?/anvil",
+    "blueprint-testing-utils?/anvil",
     "blueprint-chain-setup/anvil",
 ]
 
@@ -173,7 +173,7 @@ eigenlayer = [
 build = ["dep:blueprint-build-utils", "macros"]
 
 ## Enable testing utilities
-testing = ["dep:gadget-testing-utils", "dep:tempfile", "std"]
+testing = ["dep:blueprint-testing-utils", "dep:tempfile", "std"]
 
 #! ### Extra producers
 

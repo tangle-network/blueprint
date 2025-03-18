@@ -1,7 +1,7 @@
 use crate::Error;
 use crate::TangleTestHarness;
 use blueprint_client_tangle::EventsClient;
-use gadget_core_testing_utils::setup_log;
+use blueprint_core_testing_utils::setup_log;
 use tangle_subxt::subxt::tx::Signer;
 
 #[tokio::test]

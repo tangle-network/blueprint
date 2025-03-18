@@ -7,6 +7,7 @@ use crate::{
 use blueprint_contexts::tangle::TangleClient;
 use blueprint_contexts::tangle::TangleClientContext;
 use blueprint_core::Job;
+use blueprint_core_testing_utils::runner::TestEnv;
 use blueprint_crypto_tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::crypto::sp_core::SpSr25519;
@@ -16,7 +17,6 @@ use blueprint_runner::config::Multiaddr;
 use blueprint_runner::error::RunnerError;
 use blueprint_runner::tangle::config::TangleConfig;
 use futures::future::join_all;
-use gadget_core_testing_utils::runner::TestEnv;
 use std::fmt::{Debug, Formatter};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -185,7 +185,7 @@ where
     ///
     /// ```rust
     /// use blueprint_core::extract::Context;
-    /// use gadget_tangle_testing_utils::TangleTestHarness;
+    /// use blueprint_tangle_testing_utils::TangleTestHarness;
     /// use tempfile::TempDir;
     ///
     /// // This context isn't node specific, it can safely be cloned to all nodes.
@@ -237,7 +237,7 @@ where
     ///
     /// ```rust
     /// use blueprint_core::extract::Context;
-    /// use gadget_tangle_testing_utils::TangleTestHarness;
+    /// use blueprint_tangle_testing_utils::TangleTestHarness;
     /// use tempfile::TempDir;
     ///
     /// // This context is node specific. Each node needs its own copy.

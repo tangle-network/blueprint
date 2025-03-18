@@ -2443,7 +2443,7 @@ dependencies = [
  "alloy-rpc-types",
  "alloy-rpc-types-eth",
  "blueprint-core",
- "gadget-core-testing-utils",
+ "blueprint-core-testing-utils",
  "blueprint-keystore",
  "blueprint-std",
  "serde",
@@ -2776,7 +2776,7 @@ dependencies = [
  "blueprint-contexts",
  "blueprint-keystore",
  "blueprint-std",
- "gadget-testing-utils",
+ "blueprint-testing-utils",
  "serde",
  "tangle-subxt",
  "tempfile",
@@ -6424,7 +6424,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-core-testing-utils"
+name = "blueprint-core-testing-utils"
 version = "0.1.0"
 dependencies = [
  "blueprint-core",
@@ -6523,7 +6523,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-tangle-testing-utils"
+name = "blueprint-tangle-testing-utils"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives 0.8.23",
@@ -6536,7 +6536,7 @@ dependencies = [
  "futures",
  "blueprint-client-tangle",
  "blueprint-contexts",
- "gadget-core-testing-utils",
+ "blueprint-core-testing-utils",
  "blueprint-keystore",
  "blueprint-std",
  "sp-core",
@@ -6549,11 +6549,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-testing-utils"
+name = "blueprint-testing-utils"
 version = "0.1.0"
 dependencies = [
- "gadget-core-testing-utils",
- "gadget-tangle-testing-utils",
+ "blueprint-core-testing-utils",
+ "blueprint-tangle-testing-utils",
 ]
 
 [[package]]

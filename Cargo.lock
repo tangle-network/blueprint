@@ -2643,6 +2643,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "blueprint-anvil-testing-utils"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives 0.8.23",
+ "alloy-provider",
+ "alloy-rpc-types",
+ "alloy-rpc-types-eth",
+ "alloy-transport",
+ "blueprint-core",
+ "url",
+]
+
+[[package]]
 name = "blueprint-build-utils"
 version = "0.1.0"
 dependencies = [
@@ -2667,9 +2680,9 @@ dependencies = [
  "alloy-rpc-types",
  "alloy-rpc-types-eth",
  "blueprint-core",
+ "blueprint-core-testing-utils",
  "blueprint-keystore",
  "blueprint-std",
- "gadget-core-testing-utils",
  "serde",
  "serde_json",
  "tempfile",
@@ -2753,11 +2766,11 @@ dependencies = [
  "alloy-transport",
  "blueprint-chain-setup-anvil",
  "blueprint-client-core",
+ "blueprint-eigenlayer-testing-utils",
  "blueprint-evm-extra",
  "blueprint-runner",
  "blueprint-std",
  "eigensdk",
- "gadget-eigenlayer-testing-utils",
  "num-bigint 0.4.6",
  "thiserror 2.0.12",
  "tokio",
@@ -2781,13 +2794,13 @@ dependencies = [
  "alloy-rpc-types-eth",
  "alloy-signer-local",
  "alloy-transport",
+ "blueprint-anvil-testing-utils",
  "blueprint-chain-setup-anvil",
  "blueprint-client-core",
  "blueprint-core",
  "blueprint-evm-extra",
  "blueprint-metrics-rpc-calls",
  "blueprint-std",
- "gadget-anvil-testing-utils",
  "hex",
  "serde",
  "serde_json",
@@ -2873,6 +2886,22 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "tracing",
+]
+
+[[package]]
+name = "blueprint-core-testing-utils"
+version = "0.1.0"
+dependencies = [
+ "blueprint-clients",
+ "blueprint-core",
+ "blueprint-keystore",
+ "blueprint-router",
+ "blueprint-runner",
+ "cargo_toml",
+ "thiserror 2.0.12",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+ "url",
 ]
 
 [[package]]
@@ -3038,6 +3067,24 @@ dependencies = [
  "blueprint-evm-extra",
  "eigensdk",
  "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-eigenlayer-testing-utils"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives 0.8.23",
+ "alloy-provider",
+ "blueprint-chain-setup",
+ "blueprint-core",
+ "blueprint-core-testing-utils",
+ "blueprint-evm-extra",
+ "blueprint-runner",
+ "eigensdk",
+ "futures",
+ "tempfile",
+ "tokio",
+ "url",
 ]
 
 [[package]]
@@ -3324,9 +3371,9 @@ dependencies = [
  "blueprint-std",
  "blueprint-stores",
  "blueprint-tangle-extra",
+ "blueprint-testing-utils",
  "document-features",
  "eigensdk",
- "gadget-testing-utils",
  "serde",
  "tangle-subxt",
  "tempfile",
@@ -3369,6 +3416,7 @@ name = "blueprint-tangle-extra"
 version = "0.1.0"
 dependencies = [
  "blueprint-core",
+ "blueprint-testing-utils",
  "bytes",
  "cargo_metadata 0.18.1",
  "cid",
@@ -3376,7 +3424,6 @@ dependencies = [
  "document-features",
  "futures-core",
  "futures-util",
- "gadget-testing-utils",
  "paste",
  "pin-project-lite",
  "serde",
@@ -3388,6 +3435,42 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tower 0.5.2",
+]
+
+[[package]]
+name = "blueprint-tangle-testing-utils"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives 0.8.23",
+ "alloy-signer-local",
+ "blueprint-chain-setup",
+ "blueprint-client-tangle",
+ "blueprint-contexts",
+ "blueprint-core",
+ "blueprint-core-testing-utils",
+ "blueprint-crypto-tangle-pair-signer",
+ "blueprint-keystore",
+ "blueprint-runner",
+ "blueprint-std",
+ "blueprint-tangle-extra",
+ "futures",
+ "sp-core",
+ "tangle-subxt",
+ "tempfile",
+ "tnt-core-bytecode",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "blueprint-testing-utils"
+version = "0.1.0"
+dependencies = [
+ "blueprint-anvil-testing-utils",
+ "blueprint-core-testing-utils",
+ "blueprint-eigenlayer-testing-utils",
+ "blueprint-tangle-testing-utils",
 ]
 
 [[package]]
@@ -3922,6 +4005,7 @@ dependencies = [
  "blueprint-runner",
  "blueprint-std",
  "blueprint-tangle-extra",
+ "blueprint-testing-utils",
  "cargo-generate",
  "clap",
  "clap-cargo",
@@ -3929,7 +4013,6 @@ dependencies = [
  "dialoguer",
  "dotenv",
  "eigensdk",
- "gadget-testing-utils",
  "hex",
  "indicatif",
  "serde",
@@ -7323,95 +7406,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-anvil-testing-utils"
-version = "0.1.0"
-dependencies = [
- "alloy-primitives 0.8.23",
- "alloy-provider",
- "alloy-rpc-types",
- "alloy-rpc-types-eth",
- "alloy-transport",
- "blueprint-core",
- "url",
-]
-
-[[package]]
 name = "gadget-benchmarking"
 version = "0.1.0"
 dependencies = [
  "blueprint-std",
  "sysinfo",
  "tokio",
-]
-
-[[package]]
-name = "gadget-core-testing-utils"
-version = "0.1.0"
-dependencies = [
- "blueprint-clients",
- "blueprint-core",
- "blueprint-keystore",
- "blueprint-router",
- "blueprint-runner",
- "cargo_toml",
- "thiserror 2.0.12",
- "tracing",
- "tracing-subscriber 0.3.19",
- "url",
-]
-
-[[package]]
-name = "gadget-eigenlayer-testing-utils"
-version = "0.1.0"
-dependencies = [
- "alloy-primitives 0.8.23",
- "alloy-provider",
- "blueprint-chain-setup",
- "blueprint-core",
- "blueprint-evm-extra",
- "blueprint-runner",
- "eigensdk",
- "futures",
- "gadget-core-testing-utils",
- "tempfile",
- "tokio",
- "url",
-]
-
-[[package]]
-name = "gadget-tangle-testing-utils"
-version = "0.1.0"
-dependencies = [
- "alloy-primitives 0.8.23",
- "alloy-signer-local",
- "blueprint-chain-setup",
- "blueprint-client-tangle",
- "blueprint-contexts",
- "blueprint-core",
- "blueprint-crypto-tangle-pair-signer",
- "blueprint-keystore",
- "blueprint-runner",
- "blueprint-std",
- "blueprint-tangle-extra",
- "futures",
- "gadget-core-testing-utils",
- "sp-core",
- "tangle-subxt",
- "tempfile",
- "tnt-core-bytecode",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "gadget-testing-utils"
-version = "0.1.0"
-dependencies = [
- "gadget-anvil-testing-utils",
- "gadget-core-testing-utils",
- "gadget-eigenlayer-testing-utils",
- "gadget-tangle-testing-utils",
 ]
 
 [[package]]

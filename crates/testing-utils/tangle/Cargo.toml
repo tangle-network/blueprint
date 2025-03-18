@@ -1,5 +1,5 @@
 [package]
-name = "gadget-tangle-testing-utils"
+name = "blueprint-tangle-testing-utils"
 version = "0.1.0"
 description = "Tangle-specific testing utilities for Tangle Blueprints"
 authors.workspace = true
@@ -18,7 +18,7 @@ blueprint-tangle-extra = { workspace = true, features = ["std", "metadata-types"
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-contexts = { workspace = true, features = ["tangle", "std"] }
 blueprint-crypto-tangle-pair-signer = { workspace = true, features = ["std", "evm"] }
-gadget-core-testing-utils = { workspace = true }
+blueprint-core-testing-utils = { workspace = true }
 blueprint-chain-setup = { workspace = true, features = ["std", "tangle"] }
 blueprint-keystore = { workspace = true, features = ["std", "tangle-full"] }
 tnt-core-bytecode = { workspace = true }

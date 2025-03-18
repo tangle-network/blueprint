@@ -6,10 +6,10 @@ use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
+use blueprint_testing_utils::setup_log;
+use blueprint_testing_utils::tangle::TangleTestHarness;
+use blueprint_testing_utils::tangle::harness::generate_env_from_node_id;
 use color_eyre::eyre::Result;
-use gadget_testing_utils::setup_log;
-use gadget_testing_utils::tangle::TangleTestHarness;
-use gadget_testing_utils::tangle::harness::generate_env_from_node_id;
 use tangle_subxt::subxt::tx::Signer;
 use tokio::fs;
 

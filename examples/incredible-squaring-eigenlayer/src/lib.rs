@@ -173,8 +173,8 @@ fn to_g2_point(pk: BlsG2Point) -> G2Point {
 //     use blueprint_runner::BlueprintRunner;
 //     use blueprint_runner::eigenlayer::bls::EigenlayerBLSConfig;
 //     use blueprint_sdk::error::BoxError;
-//     use gadget_anvil_testing_utils::keys::ANVIL_PRIVATE_KEYS;
-//     use gadget_anvil_testing_utils::start_default_anvil_testnet;
+//     use blueprint_anvil_testing_utils::keys::ANVIL_PRIVATE_KEYS;
+//     use blueprint_anvil_testing_utils::start_default_anvil_testnet;
 //     use blueprint_core::setup_log;
 //     use std::{sync::Arc, time::Duration};
 //

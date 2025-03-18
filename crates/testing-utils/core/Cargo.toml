@@ -1,5 +1,5 @@
 [package]
-name = "gadget-core-testing-utils"
+name = "blueprint-core-testing-utils"
 version = "0.1.0"
 description = "Core primitives for testing Tangle Blueprints"
 authors.workspace = true

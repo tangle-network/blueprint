@@ -78,7 +78,7 @@ pub use eigensdk;
 /// Testing utilities and helpers
 pub mod testing {
     /// General testing utilities for blueprints
-    pub use gadget_testing_utils as utils;
+    pub use blueprint_testing_utils as utils;
     /// Temporary file and directory management for tests
     pub use tempfile;
 }

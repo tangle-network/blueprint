@@ -831,9 +831,9 @@ mod tests {
     use alloy_primitives::{TxKind::Call, U256, bytes};
     use alloy_rpc_types::eth::{BlockId, BlockNumberOrTag, pubsub::SubscriptionResult};
     use alloy_signer_local::PrivateKeySigner;
+    use blueprint_anvil_testing_utils::wait_transaction;
     use blueprint_chain_setup_anvil::start_default_anvil_testnet;
     use blueprint_evm_extra::util::get_provider_http;
-    use gadget_anvil_testing_utils::wait_transaction;
     use tokio;
 
     #[tokio::test]

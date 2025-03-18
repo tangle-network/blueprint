@@ -65,11 +65,11 @@ tools for networking and testing.
 * [`blueprint-tangle-extra`] - Tangle specific extensions for blueprints
 * [`blueprint-evm-extra`] - EVM specific extensions for blueprints
 * [`blueprint-eigenlayer-extra`] - Eigenlayer specific extensions for blueprints
-* [`gadget-testing-utils`] - (**Meta-crate**) Utilities for testing blueprints
-    * [`gadget-core-testing-utils`] - Core testing utility primitives
-    * [`gadget-anvil-testing-utils`] - Utilities for creating and interacting with Anvil testnets
-    * [`gadget-tangle-testing-utils`] - Utilities for creating end-to-end tests for Tangle blueprints
-    * [`gadget-eigenlayer-testing-utils`] - Utilities for creating end-to-end tests for Eigenlayer blueprints
+* [`blueprint-testing-utils`] - (**Meta-crate**) Utilities for testing blueprints
+    * [`blueprint-core-testing-utils`] - Core testing utility primitives
+    * [`blueprint-anvil-testing-utils`] - Utilities for creating and interacting with Anvil testnets
+    * [`blueprint-tangle-testing-utils`] - Utilities for creating end-to-end tests for Tangle blueprints
+    * [`blueprint-eigenlayer-testing-utils`] - Utilities for creating end-to-end tests for Eigenlayer blueprints
 
 [`blueprint-sdk`]: https://docs.rs/blueprint-sdk
 [`gadget-benchmarking`]: https://docs.rs/gadget-benchmarking
@@ -107,11 +107,11 @@ tools for networking and testing.
 [`blueprint-tangle-extra`]: https://docs.rs/blueprint-tangle-extra
 [`blueprint-evm-extra`]: https://docs.rs/blueprint-evm-extra
 [`blueprint-eigenlayer-extra`]: https://docs.rs/blueprint-eigenlayer-extra
-[`gadget-testing-utils`]: https://docs.rs/gadget-testing-utils
-[`gadget-core-testing-utils`]: https://docs.rs/gadget-core-testing-utils
-[`gadget-anvil-testing-utils`]: https://docs.rs/gadget-anvil-testing-utils
-[`gadget-tangle-testing-utils`]: https://docs.rs/gadget-tangle-testing-utils
-[`gadget-eigenlayer-testing-utils`]: https://docs.rs/gadget-eigenlayer-testing-utils
+[`blueprint-testing-utils`]: https://docs.rs/blueprint-testing-utils
+[`blueprint-core-testing-utils`]: https://docs.rs/blueprint-core-testing-utils
+[`blueprint-anvil-testing-utils`]: https://docs.rs/blueprint-anvil-testing-utils
+[`blueprint-tangle-testing-utils`]: https://docs.rs/blueprint-tangle-testing-utils
+[`blueprint-eigenlayer-testing-utils`]: https://docs.rs/blueprint-eigenlayer-testing-utils
 
 
 ## 🚀 Getting Started

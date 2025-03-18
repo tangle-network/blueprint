@@ -11,7 +11,7 @@ repository.workspace = true
 [dependencies]
 blueprint-std = { workspace = true }
 blueprint-keystore = { workspace = true, features = ["eigenlayer", "evm"] }
-gadget-core-testing-utils = { workspace = true }
+blueprint-core-testing-utils = { workspace = true }
 blueprint-core = { workspace = true }
 alloy-contract = { workspace = true }
 alloy-provider = { workspace = true }

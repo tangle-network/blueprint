@@ -40,7 +40,7 @@ blueprint-metrics-rpc-calls = { workspace = true }
 
 [dev-dependencies]
 blueprint-evm-extra = { workspace = true }
-gadget-anvil-testing-utils = { workspace = true }
+blueprint-anvil-testing-utils = { workspace = true }
 blueprint-chain-setup-anvil = { workspace = true }
 alloy-signer-local = { workspace = true }
 testcontainers = { workspace = true }
