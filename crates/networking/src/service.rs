@@ -10,9 +10,9 @@ use crate::{
     types::ProtocolMessage,
 };
 use alloy_primitives::Address;
+use blueprint_crypto::KeyType;
 use crossbeam_channel::{self, Receiver, SendError, Sender};
 use futures::StreamExt;
-use gadget_crypto::KeyType;
 use libp2p::{
     Multiaddr, PeerId, Swarm, SwarmBuilder, identify,
     identity::Keypair,

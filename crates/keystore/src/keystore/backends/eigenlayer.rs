@@ -1,8 +1,8 @@
 use super::bn254::Bn254Backend;
 use crate::{Error, Keystore, Result};
-use gadget_crypto::k256::K256Ecdsa;
-use gadget_crypto::k256::{K256Signature, K256SigningKey, K256VerifyingKey};
-use gadget_crypto::{BytesEncoding, KeyType, KeyTypeId};
+use blueprint_crypto::k256::K256Ecdsa;
+use blueprint_crypto::k256::{K256Signature, K256SigningKey, K256VerifyingKey};
+use blueprint_crypto::{BytesEncoding, KeyType, KeyTypeId};
 use gadget_std::boxed::Box;
 
 pub trait EigenlayerBackend: Bn254Backend {

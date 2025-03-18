@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use gadget_crypto::KeyType;
+use blueprint_crypto::KeyType;
 use gadget_networking::{
     NetworkConfig, NetworkService, service::AllowedKeys, service_handle::NetworkServiceHandle,
 };

@@ -11,8 +11,8 @@ use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
 use ark_ff::UniformRand;
 use ark_ff::{BigInteger256, Field, One, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use gadget_crypto_core::BytesEncoding;
-use gadget_crypto_core::{KeyType, KeyTypeId};
+use blueprint_crypto_core::BytesEncoding;
+use blueprint_crypto_core::{KeyType, KeyTypeId};
 use gadget_std::hash::Hash;
 use gadget_std::vec::Vec;
 use gadget_std::{

@@ -1,5 +1,5 @@
 [package]
-name = "gadget-crypto-bn254"
+name = "blueprint-crypto-bn254"
 version = "0.1.0"
 description = "Ark BN254 crypto primitives for Tangle Blueprints"
 authors.workspace = true
@@ -9,7 +9,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-crypto-core = { workspace = true, features = ["bn254"] }
+blueprint-crypto-core = { workspace = true, features = ["bn254"] }
 gadget-std = { workspace = true }
 ark-bn254 = { workspace = true, features = ["scalar_field", "curve"] }
 ark-ec = { workspace = true }
@@ -24,13 +24,13 @@ sha2 = { workspace = true }
 hex = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
-gadget-crypto-hashing = { workspace = true, features = ["sha3"] }
+blueprint-crypto-hashing = { workspace = true, features = ["sha3"] }
 serde_json = { workspace = true, features = ["alloc"] }
 
 [features]
 default = ["std"]
 std = [
-	"gadget-crypto-core/std",
+	"blueprint-crypto-core/std",
 	"gadget-std/std",
 	"serde/std",
 	"serde_json/std",
@@ -42,4 +42,4 @@ std = [
 	"num-bigint/std",
 	"num-traits/std",
 	"sha2/std",
-] 
+]

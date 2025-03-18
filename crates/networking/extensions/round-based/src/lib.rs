@@ -1,6 +1,6 @@
+use blueprint_crypto::KeyType;
 use dashmap::DashMap;
 use futures::{Sink, Stream};
-use gadget_crypto::KeyType;
 use gadget_networking::{
     discovery::peers::VerificationIdentifierKey,
     service_handle::NetworkServiceHandle,

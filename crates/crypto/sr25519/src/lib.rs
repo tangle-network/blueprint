@@ -6,8 +6,8 @@ use error::{Result, Sr25519Error};
 #[cfg(test)]
 mod tests;
 
-use gadget_crypto_core::BytesEncoding;
-use gadget_crypto_core::{KeyType, KeyTypeId};
+use blueprint_crypto_core::BytesEncoding;
+use blueprint_crypto_core::{KeyType, KeyTypeId};
 use gadget_std::{
     hash::Hash,
     string::{String, ToString},

@@ -5,8 +5,8 @@ pub mod utils;
 #[cfg(test)]
 mod tests;
 
-use blueprint_tangle_extra::util::TxProgressExt;
 pub use blueprint_chain_setup::anvil;
+use blueprint_tangle_extra::util::TxProgressExt;
 use tangle_subxt::subxt::{Config, blocks::ExtrinsicEvents, client::OnlineClientT, tx::TxProgress};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::BoundedString;
 

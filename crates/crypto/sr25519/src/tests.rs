@@ -1,9 +1,9 @@
 use super::*;
-use gadget_crypto_core::KeyType;
+use blueprint_crypto_core::KeyType;
 
 mod sr25519_crypto_tests {
     use super::*;
-    gadget_crypto_core::impl_crypto_tests!(
+    blueprint_crypto_core::impl_crypto_tests!(
         SchnorrkelSr25519,
         SchnorrkelSecret,
         SchnorrkelSignature

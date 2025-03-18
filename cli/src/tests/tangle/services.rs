@@ -1,8 +1,8 @@
-use blueprint_core::info;
-use color_eyre::eyre::Result;
 use blueprint_chain_setup::tangle::deploy::{Opts as DeployOpts, deploy_to_tangle};
-use gadget_crypto::sp_core::{SpEcdsa, SpSr25519};
-use gadget_crypto::tangle_pair_signer::TanglePairSigner;
+use blueprint_core::info;
+use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
+use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+use color_eyre::eyre::Result;
 use gadget_keystore::backends::Backend;
 use gadget_keystore::{Keystore, KeystoreConfig};
 use gadget_std::time::Duration;

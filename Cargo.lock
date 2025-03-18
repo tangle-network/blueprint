@@ -2683,12 +2683,12 @@ name = "blueprint-chain-setup-common"
 version = "0.1.0"
 dependencies = [
  "alloy-signer-local",
+ "blueprint-crypto",
+ "blueprint-crypto-tangle-pair-signer",
  "blueprint-tangle-extra",
  "color-eyre",
  "gadget-clients",
  "gadget-contexts",
- "gadget-crypto",
- "gadget-crypto-tangle-pair-signer",
  "gadget-keystore",
  "gadget-networking",
  "gadget-std",
@@ -2712,6 +2712,8 @@ dependencies = [
  "alloy-transport",
  "blueprint-chain-setup-common",
  "blueprint-core",
+ "blueprint-crypto",
+ "blueprint-crypto-tangle-pair-signer",
  "blueprint-tangle-extra",
  "cargo_metadata 0.18.1",
  "color-eyre",
@@ -2719,8 +2721,6 @@ dependencies = [
  "dirs 6.0.0",
  "gadget-clients",
  "gadget-contexts",
- "gadget-crypto",
- "gadget-crypto-tangle-pair-signer",
  "gadget-keystore",
  "gadget-networking",
  "gadget-std",
@@ -2747,6 +2747,157 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "tracing",
+]
+
+[[package]]
+name = "blueprint-crypto"
+version = "0.1.0"
+dependencies = [
+ "blueprint-crypto-bls",
+ "blueprint-crypto-bn254",
+ "blueprint-crypto-core",
+ "blueprint-crypto-ed25519",
+ "blueprint-crypto-hashing",
+ "blueprint-crypto-k256",
+ "blueprint-crypto-sp-core",
+ "blueprint-crypto-sr25519",
+ "blueprint-crypto-tangle-pair-signer",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-crypto-bls"
+version = "0.1.0"
+dependencies = [
+ "ark-serialize 0.5.0",
+ "blueprint-crypto-core",
+ "blueprint-crypto-hashing",
+ "gadget-std",
+ "hex",
+ "paste",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tnt-bls",
+]
+
+[[package]]
+name = "blueprint-crypto-bn254"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "blueprint-crypto-core",
+ "blueprint-crypto-hashing",
+ "gadget-std",
+ "hex",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "sha2 0.10.8",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-crypto-core"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "gadget-std",
+ "serde",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-crypto-ed25519"
+version = "0.1.0"
+dependencies = [
+ "blueprint-crypto-core",
+ "ed25519-zebra",
+ "gadget-std",
+ "hex",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-crypto-hashing"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "gadget-std",
+ "sha2 0.10.8",
+ "sha3",
+]
+
+[[package]]
+name = "blueprint-crypto-k256"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives 0.8.23",
+ "alloy-signer-local",
+ "blueprint-crypto-core",
+ "gadget-std",
+ "hex",
+ "k256",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-crypto-sp-core"
+version = "0.1.0"
+dependencies = [
+ "blueprint-crypto-core",
+ "blueprint-crypto-sp-core",
+ "gadget-std",
+ "hex",
+ "paste",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "sp-core",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-crypto-sr25519"
+version = "0.1.0"
+dependencies = [
+ "blueprint-crypto-core",
+ "gadget-std",
+ "hex",
+ "schnorrkel",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-crypto-tangle-pair-signer"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives 0.8.23",
+ "alloy-signer-local",
+ "blueprint-crypto-core",
+ "blueprint-crypto-sp-core",
+ "gadget-std",
+ "k256",
+ "serde",
+ "sp-core",
+ "sp-runtime",
+ "tangle-subxt",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -2815,13 +2966,13 @@ version = "0.2.2"
 dependencies = [
  "auto_impl",
  "blueprint-core",
+ "blueprint-crypto",
  "blueprint-sdk",
  "clap",
  "color-eyre",
  "dynosaur",
  "futures",
  "gadget-clients",
- "gadget-crypto",
  "gadget-keystore",
  "gadget-networking",
  "gadget-std",
@@ -2878,6 +3029,7 @@ dependencies = [
  "alloy-signer",
  "alloy-signer-local",
  "blueprint-core",
+ "blueprint-crypto",
  "blueprint-evm-extra",
  "blueprint-router",
  "blueprint-sdk",
@@ -2890,7 +3042,6 @@ dependencies = [
  "futures",
  "futures-core",
  "futures-util",
- "gadget-crypto",
  "gadget-keystore",
  "gadget-networking",
  "gadget-std",
@@ -2914,6 +3065,8 @@ dependencies = [
  "blueprint-build-utils",
  "blueprint-chain-setup",
  "blueprint-core",
+ "blueprint-crypto",
+ "blueprint-crypto-tangle-pair-signer",
  "blueprint-evm-extra",
  "blueprint-macros",
  "blueprint-producers-extra",
@@ -2925,8 +3078,6 @@ dependencies = [
  "gadget-clients",
  "gadget-context-derive",
  "gadget-contexts",
- "gadget-crypto",
- "gadget-crypto-tangle-pair-signer",
  "gadget-keystore",
  "gadget-networking",
  "gadget-networking-round-based-extension",
@@ -3488,6 +3639,8 @@ dependencies = [
  "bip39",
  "blueprint-chain-setup",
  "blueprint-core",
+ "blueprint-crypto",
+ "blueprint-crypto-core",
  "blueprint-evm-extra",
  "blueprint-manager",
  "blueprint-runner",
@@ -3501,8 +3654,6 @@ dependencies = [
  "eigensdk",
  "gadget-clients",
  "gadget-contexts",
- "gadget-crypto",
- "gadget-crypto-core",
  "gadget-keystore",
  "gadget-std",
  "gadget-testing-utils",
@@ -6990,9 +7141,9 @@ version = "0.1.0"
 dependencies = [
  "auto_impl",
  "blueprint-core",
+ "blueprint-crypto-sp-core",
  "blueprint-runner",
  "gadget-client-core",
- "gadget-crypto-sp-core",
  "gadget-keystore",
  "gadget-std",
  "serde",
@@ -7063,157 +7214,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-crypto"
-version = "0.1.0"
-dependencies = [
- "gadget-crypto-bls",
- "gadget-crypto-bn254",
- "gadget-crypto-core",
- "gadget-crypto-ed25519",
- "gadget-crypto-hashing",
- "gadget-crypto-k256",
- "gadget-crypto-sp-core",
- "gadget-crypto-sr25519",
- "gadget-crypto-tangle-pair-signer",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "gadget-crypto-bls"
-version = "0.1.0"
-dependencies = [
- "ark-serialize 0.5.0",
- "gadget-crypto-core",
- "gadget-crypto-hashing",
- "gadget-std",
- "hex",
- "paste",
- "serde",
- "serde_bytes",
- "serde_json",
- "thiserror 2.0.12",
- "tnt-bls",
-]
-
-[[package]]
-name = "gadget-crypto-bn254"
-version = "0.1.0"
-dependencies = [
- "ark-bn254",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-serialize 0.5.0",
- "gadget-crypto-core",
- "gadget-crypto-hashing",
- "gadget-std",
- "hex",
- "num-bigint 0.4.6",
- "num-traits",
- "serde",
- "serde_bytes",
- "serde_json",
- "sha2 0.10.8",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "gadget-crypto-core"
-version = "0.1.0"
-dependencies = [
- "clap",
- "gadget-std",
- "serde",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "gadget-crypto-ed25519"
-version = "0.1.0"
-dependencies = [
- "ed25519-zebra",
- "gadget-crypto-core",
- "gadget-std",
- "hex",
- "serde",
- "serde_bytes",
- "serde_json",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "gadget-crypto-hashing"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "gadget-std",
- "sha2 0.10.8",
- "sha3",
-]
-
-[[package]]
-name = "gadget-crypto-k256"
-version = "0.1.0"
-dependencies = [
- "alloy-primitives 0.8.23",
- "alloy-signer-local",
- "gadget-crypto-core",
- "gadget-std",
- "hex",
- "k256",
- "serde",
- "serde_bytes",
- "serde_json",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "gadget-crypto-sp-core"
-version = "0.1.0"
-dependencies = [
- "gadget-crypto-core",
- "gadget-crypto-sp-core",
- "gadget-std",
- "hex",
- "paste",
- "serde",
- "serde_bytes",
- "serde_json",
- "sp-core",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "gadget-crypto-sr25519"
-version = "0.1.0"
-dependencies = [
- "gadget-crypto-core",
- "gadget-std",
- "hex",
- "schnorrkel",
- "serde",
- "serde_bytes",
- "serde_json",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "gadget-crypto-tangle-pair-signer"
-version = "0.1.0"
-dependencies = [
- "alloy-primitives 0.8.23",
- "alloy-signer-local",
- "gadget-crypto-core",
- "gadget-crypto-sp-core",
- "gadget-std",
- "k256",
- "serde",
- "sp-core",
- "sp-runtime",
- "tangle-subxt",
- "thiserror 2.0.12",
-]
-
-[[package]]
 name = "gadget-eigenlayer-testing-utils"
 version = "0.1.0"
 dependencies = [
@@ -7249,9 +7249,9 @@ dependencies = [
  "aws-config",
  "aws-sdk-kms",
  "blake3",
+ "blueprint-crypto",
  "ed25519-zebra",
  "eigensdk",
- "gadget-crypto",
  "gadget-std",
  "gcloud-sdk",
  "hex",
@@ -7290,12 +7290,12 @@ dependencies = [
  "auto_impl",
  "bincode",
  "blake3",
+ "blueprint-crypto",
+ "blueprint-crypto-core",
  "crossbeam-channel",
  "dashmap",
  "fastrand",
  "futures",
- "gadget-crypto",
- "gadget-crypto-core",
  "gadget-networking",
  "gadget-std",
  "hex",
@@ -7319,12 +7319,12 @@ dependencies = [
 name = "gadget-networking-round-based-extension"
 version = "0.1.0"
 dependencies = [
+ "blueprint-crypto",
+ "blueprint-crypto-core",
  "crossbeam",
  "crossbeam-channel",
  "dashmap",
  "futures",
- "gadget-crypto",
- "gadget-crypto-core",
  "gadget-networking",
  "generic-array",
  "hex",
@@ -7386,13 +7386,13 @@ dependencies = [
  "alloy-signer-local",
  "blueprint-chain-setup",
  "blueprint-core",
+ "blueprint-crypto-tangle-pair-signer",
  "blueprint-runner",
  "blueprint-tangle-extra",
  "futures",
  "gadget-client-tangle",
  "gadget-contexts",
  "gadget-core-testing-utils",
- "gadget-crypto-tangle-pair-signer",
  "gadget-keystore",
  "gadget-std",
  "sp-core",

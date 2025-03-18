@@ -6,10 +6,10 @@ cfg_remote! {
 }
 
 mod config;
+use blueprint_crypto::KeyType;
+use blueprint_crypto::KeyTypeId;
+use blueprint_crypto::{BytesEncoding, IntoCryptoError};
 pub use config::KeystoreConfig;
-use gadget_crypto::KeyType;
-use gadget_crypto::KeyTypeId;
-use gadget_crypto::{BytesEncoding, IntoCryptoError};
 
 use crate::error::{Error, Result};
 #[cfg(feature = "std")]
@@ -350,12 +350,12 @@ impl Backend for Keystore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gadget_crypto::bls::bls377::W3fBls377;
-    use gadget_crypto::bls::bls381::W3fBls381;
-    use gadget_crypto::ed25519::Ed25519Zebra;
-    use gadget_crypto::k256::K256Ecdsa;
-    use gadget_crypto::sp_core::{SpBls377, SpBls381, SpEcdsa, SpSr25519};
-    use gadget_crypto::sr25519::SchnorrkelSr25519;
+    use blueprint_crypto::bls::bls377::W3fBls377;
+    use blueprint_crypto::bls::bls381::W3fBls381;
+    use blueprint_crypto::ed25519::Ed25519Zebra;
+    use blueprint_crypto::k256::K256Ecdsa;
+    use blueprint_crypto::sp_core::{SpBls377, SpBls381, SpEcdsa, SpSr25519};
+    use blueprint_crypto::sr25519::SchnorrkelSr25519;
 
     #[test]
     fn test_generate_from_string() -> Result<()> {
@@ -401,7 +401,7 @@ mod tests {
 
     fn test_local_operations_inner<T: KeyType>() -> Result<()>
     where
-        <T as gadget_crypto::KeyType>::Error: IntoCryptoError,
+        <T as blueprint_crypto::KeyType>::Error: IntoCryptoError,
     {
         let keystore = Keystore::new(KeystoreConfig::new())?;
 

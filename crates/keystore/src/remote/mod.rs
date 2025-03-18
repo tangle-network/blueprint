@@ -8,7 +8,7 @@ pub mod gcp;
 pub mod ledger;
 
 use crate::error::Result;
-use gadget_crypto::KeyType;
+use blueprint_crypto::KeyType;
 use gadget_std::future::Future;
 use serde::{de::DeserializeOwned, Serialize};
 

@@ -5,7 +5,7 @@ use alloy_network::EthereumWallet;
 use alloy_primitives::{Address, B256};
 use alloy_signer_local::PrivateKeySigner;
 use alloy_signer_local::{MnemonicBuilder, coins_bip39::English};
-use gadget_crypto::{BytesEncoding, KeyType};
+use blueprint_crypto::{BytesEncoding, KeyType};
 use gadget_std::string::ToString;
 use serde::de::DeserializeOwned;
 

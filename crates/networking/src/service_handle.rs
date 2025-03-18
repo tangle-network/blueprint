@@ -5,8 +5,8 @@ use crate::{
     service::NetworkMessage,
     types::ProtocolMessage,
 };
+use blueprint_crypto::KeyType;
 use crossbeam_channel::{self, Receiver, Sender};
-use gadget_crypto::KeyType;
 use libp2p::{Multiaddr, PeerId};
 use std::sync::Arc;
 use tokio::task::JoinHandle;

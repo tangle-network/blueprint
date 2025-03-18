@@ -1,10 +1,10 @@
 use blueprint_core::info;
+use blueprint_crypto::sp_core::SpSr25519;
+use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_runner::tangle::config::{PriceTargets, decompress_pubkey};
 use color_eyre::Result;
 use dialoguer::console::style;
 use gadget_clients::tangle::client::OnlineClient;
-use gadget_crypto::sp_core::SpSr25519;
-use gadget_crypto::tangle_pair_signer::TanglePairSigner;
 use gadget_keystore::backends::Backend;
 use gadget_keystore::{Keystore, KeystoreConfig};
 use tangle_subxt::subxt::tx::Signer;
@@ -57,7 +57,7 @@ pub async fn register(
     );
 
     let ecdsa_public = keystore
-        .first_local::<gadget_crypto::sp_core::SpEcdsa>()
+        .first_local::<blueprint_crypto::sp_core::SpEcdsa>()
         .map_err(|e| color_eyre::eyre::eyre!("Missing ECDSA key: {}", e))?;
 
     let preferences =

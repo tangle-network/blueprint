@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
-use dialoguer::console::style;
 use blueprint_chain_setup::tangle::deploy::{Opts, deploy_to_tangle};
 use blueprint_chain_setup::tangle::transactions;
+use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
+use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+use dialoguer::console::style;
 use gadget_contexts::tangle::TangleClientContext;
-use gadget_crypto::sp_core::{SpEcdsa, SpSr25519};
-use gadget_crypto::tangle_pair_signer::TanglePairSigner;
 use gadget_keystore::backends::Backend;
 use gadget_keystore::{Keystore, KeystoreConfig};
 use gadget_testing_utils::tangle::harness::{ENDOWED_TEST_NAMES, generate_env_from_node_id};

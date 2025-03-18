@@ -3,7 +3,7 @@ use crate::error::{Error, Result};
 use alloy_primitives::keccak256;
 use alloy_signer_aws::AwsSigner;
 use aws_config::{BehaviorVersion, Region};
-use gadget_crypto::k256::{K256Ecdsa, K256Signature, K256VerifyingKey};
+use blueprint_crypto::k256::{K256Ecdsa, K256Signature, K256VerifyingKey};
 use gadget_std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 

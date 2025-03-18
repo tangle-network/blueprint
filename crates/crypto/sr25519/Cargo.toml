@@ -1,5 +1,5 @@
 [package]
-name = "gadget-crypto-sr25519"
+name = "blueprint-crypto-sr25519"
 version = "0.1.0"
 description = "Schnorrkel sr25519 crypto primitives for Tangle Blueprints"
 authors.workspace = true
@@ -9,7 +9,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-crypto-core = { workspace = true, features = ["sr25519-schnorrkel"] }
+blueprint-crypto-core = { workspace = true, features = ["sr25519-schnorrkel"] }
 gadget-std = { workspace = true }
 schnorrkel = { workspace = true }
 serde = { workspace = true }
@@ -23,10 +23,10 @@ serde_json = { workspace = true, features = ["alloc"] }
 [features]
 default = ["std"]
 std = [
-	"gadget-crypto-core/std",
+	"blueprint-crypto-core/std",
 	"gadget-std/std",
 	"serde/std",
 	"serde_json/std",
 	"serde_bytes/std",
 	"schnorrkel/std",
-] 
+]

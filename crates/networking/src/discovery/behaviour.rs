@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::error::Error;
-use gadget_crypto::KeyType;
+use blueprint_crypto::KeyType;
 use libp2p::{
     autonat,
     core::Multiaddr,

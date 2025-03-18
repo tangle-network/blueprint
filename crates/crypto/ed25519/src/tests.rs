@@ -1,9 +1,9 @@
 use super::*;
-use gadget_crypto_core::{BytesEncoding, KeyType};
+use blueprint_crypto_core::{BytesEncoding, KeyType};
 
 mod ed25519_crypto_tests {
     use super::*;
-    gadget_crypto_core::impl_crypto_tests!(Ed25519Zebra, Ed25519SigningKey, Ed25519Signature);
+    blueprint_crypto_core::impl_crypto_tests!(Ed25519Zebra, Ed25519SigningKey, Ed25519Signature);
 }
 
 #[test]

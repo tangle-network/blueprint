@@ -15,8 +15,8 @@ pub mod tangle;
 use super::LocalStorageEntry;
 use crate::error::Result;
 use crate::storage::RawStorage;
-use gadget_crypto::IntoCryptoError;
-use gadget_crypto::KeyType;
+use blueprint_crypto::IntoCryptoError;
+use blueprint_crypto::KeyType;
 use gadget_std::{boxed::Box, vec::Vec};
 use serde::de::DeserializeOwned;
 

@@ -3,7 +3,7 @@ use super::{
     new_kademlia,
 };
 use crate::error::Error;
-use gadget_crypto::KeyType;
+use blueprint_crypto::KeyType;
 use libp2p::{
     Multiaddr, PeerId, StreamProtocol, autonat, identify, identity::PublicKey, mdns, relay, upnp,
 };

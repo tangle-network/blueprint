@@ -175,7 +175,7 @@ mod tests {
     use std::time::Duration;
 
     use super::common::*;
-    use gadget_crypto::{KeyType, sp_core::SpEcdsa};
+    use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
     use gadget_networking::discovery::peers::VerificationIdentifierKey;
     use gadget_networking::service::AllowedKeys;
     use gadget_networking_round_based_extension::RoundBasedNetworkAdapter;

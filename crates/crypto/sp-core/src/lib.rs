@@ -10,7 +10,7 @@ pub mod error;
 #[cfg(test)]
 mod tests;
 
-use gadget_crypto_core::BytesEncoding;
+use blueprint_crypto_core::BytesEncoding;
 use gadget_std::{string::String, vec::Vec};
 use sp_core::{ByteArray, Pair};
 
@@ -182,14 +182,14 @@ macro_rules! impl_sp_core_key_type {
             #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
             pub struct [<Sp $key_type>];
 
-            impl gadget_crypto_core::KeyType for [<Sp $key_type>] {
+            impl blueprint_crypto_core::KeyType for [<Sp $key_type>] {
                 type Public = [<Sp $key_type Public>];
                 type Secret = [<Sp $key_type Pair>];
                 type Signature = [<Sp $key_type Signature>];
                 type Error = $crate::error::SpCoreError;
 
-                fn key_type_id() -> gadget_crypto_core::KeyTypeId {
-                    gadget_crypto_core::KeyTypeId::$key_type
+                fn key_type_id() -> blueprint_crypto_core::KeyTypeId {
+                    blueprint_crypto_core::KeyTypeId::$key_type
                 }
 
                 fn generate_with_seed(seed: Option<&[u8]>) -> $crate::error::Result<Self::Secret> {

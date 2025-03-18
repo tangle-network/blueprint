@@ -2,7 +2,7 @@ use super::{EcdsaRemoteSigner, RemoteConfig};
 use crate::error::{Error, Result};
 use alloy_primitives::keccak256;
 use alloy_signer_gcp::{GcpKeyRingRef, GcpSigner, KeySpecifier};
-use gadget_crypto::k256::{K256Ecdsa, K256Signature, K256VerifyingKey};
+use blueprint_crypto::k256::{K256Ecdsa, K256Signature, K256VerifyingKey};
 use gadget_std::collections::BTreeMap;
 use gcloud_sdk::{
     google::cloud::kms::v1::key_management_service_client::KeyManagementServiceClient, GoogleApi,

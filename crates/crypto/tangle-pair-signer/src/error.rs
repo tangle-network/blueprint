@@ -1,4 +1,4 @@
-use gadget_crypto_sp_core::error::SecretStringErrorWrapper;
+use blueprint_crypto_sp_core::error::SecretStringErrorWrapper;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

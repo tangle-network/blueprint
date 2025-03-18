@@ -64,16 +64,16 @@ blueprint-chain-setup-tangle = { version = "0.1.0", path = "./crates/chain-setup
 blueprint-chain-setup-anvil = { version = "0.1.0", path = "./crates/chain-setup/anvil", default-features = false }
 
 # Crypto
-gadget-crypto-core = { version = "0.1.0", path = "./crates/crypto/core", default-features = false }
-gadget-crypto-k256 = { version = "0.1.0", path = "./crates/crypto/k256", default-features = false }
-gadget-crypto-sr25519 = { version = "0.1.0", path = "./crates/crypto/sr25519", default-features = false }
-gadget-crypto-ed25519 = { version = "0.1.0", path = "./crates/crypto/ed25519", default-features = false }
-gadget-crypto-hashing = { version = "0.1.0", path = "./crates/crypto/hashing", default-features = false }
-gadget-crypto-bls = { version = "0.1.0", path = "./crates/crypto/bls", default-features = false }
-gadget-crypto-bn254 = { version = "0.1.0", path = "./crates/crypto/bn254", default-features = false }
-gadget-crypto-sp-core = { version = "0.1.0", path = "./crates/crypto/sp-core", default-features = false }
-gadget-crypto = { version = "0.1.0", path = "./crates/crypto", default-features = false }
-gadget-crypto-tangle-pair-signer = { version = "0.1.0", path = "./crates/crypto/tangle-pair-signer", default-features = false }
+blueprint-crypto-core = { version = "0.1.0", path = "./crates/crypto/core", default-features = false }
+blueprint-crypto-k256 = { version = "0.1.0", path = "./crates/crypto/k256", default-features = false }
+blueprint-crypto-sr25519 = { version = "0.1.0", path = "./crates/crypto/sr25519", default-features = false }
+blueprint-crypto-ed25519 = { version = "0.1.0", path = "./crates/crypto/ed25519", default-features = false }
+blueprint-crypto-hashing = { version = "0.1.0", path = "./crates/crypto/hashing", default-features = false }
+blueprint-crypto-bls = { version = "0.1.0", path = "./crates/crypto/bls", default-features = false }
+blueprint-crypto-bn254 = { version = "0.1.0", path = "./crates/crypto/bn254", default-features = false }
+blueprint-crypto-sp-core = { version = "0.1.0", path = "./crates/crypto/sp-core", default-features = false }
+blueprint-crypto = { version = "0.1.0", path = "./crates/crypto", default-features = false }
+blueprint-crypto-tangle-pair-signer = { version = "0.1.0", path = "./crates/crypto/tangle-pair-signer", default-features = false }
 
 # Clients
 gadget-clients = { version = "0.1.0", path = "./crates/clients", default-features = false }

@@ -13,7 +13,7 @@ workspace = true
 
 [dependencies]
 # Core dependencies (always included)
-gadget-crypto.workspace = true
+blueprint-crypto.workspace = true
 gadget-std.workspace = true
 parking_lot.workspace = true
 thiserror.workspace = true
@@ -76,7 +76,7 @@ std = [
 	"serde_bytes/std",
 	"hex/std",
 	"zeroize/std",
-	"gadget-crypto/std",
+	"blueprint-crypto/std",
 	"gadget-std/std",
 	"thiserror/std",
 	"dep:tokio",
@@ -102,15 +102,15 @@ web = [
 ]
 
 # Crypto primitive features
-ecdsa = ["dep:k256", "dep:ripemd", "dep:hex", "gadget-crypto/k256"]
-sr25519-schnorrkel = ["dep:schnorrkel", "dep:hex", "gadget-crypto/sr25519-schnorrkel"]
-zebra = ["dep:ed25519-zebra", "dep:hex", "gadget-crypto/ed25519"]
-bls = ["dep:tnt-bls", "dep:hex", "gadget-crypto/bls"]
-bn254 = ["dep:ark-bn254", "dep:ark-ec", "dep:ark-ff", "dep:ark-serialize", "gadget-crypto/bn254"]
-sp-core = ["dep:sp-core", "gadget-crypto/sp-core"]
+ecdsa = ["dep:k256", "dep:ripemd", "dep:hex", "blueprint-crypto/k256"]
+sr25519-schnorrkel = ["dep:schnorrkel", "dep:hex", "blueprint-crypto/sr25519-schnorrkel"]
+zebra = ["dep:ed25519-zebra", "dep:hex", "blueprint-crypto/ed25519"]
+bls = ["dep:tnt-bls", "dep:hex", "blueprint-crypto/bls"]
+bn254 = ["dep:ark-bn254", "dep:ark-ec", "dep:ark-ff", "dep:ark-serialize", "blueprint-crypto/bn254"]
+sp-core = ["dep:sp-core", "blueprint-crypto/sp-core"]
 
 # Meant to be used in conjunction with `tangle` feature (for `sp-core`)
-substrate = ["dep:paste", "dep:sp-core", "dep:sp-io", "dep:tangle-subxt", "gadget-crypto/sp-core"]
+substrate = ["dep:paste", "dep:sp-core", "dep:sp-io", "dep:tangle-subxt", "blueprint-crypto/sp-core"]
 
 # Protocol features
 evm = [
@@ -126,13 +126,13 @@ tangle = [
 	"ecdsa",
 	"sr25519-schnorrkel",
 	"zebra",
-	"gadget-crypto/tangle-pair-signer",
+	"blueprint-crypto/tangle-pair-signer",
 ]
 
 tangle-bls = [
 	"tangle",
 	"sp-core/bls-experimental",
-	"gadget-crypto/sp-core-bls",
+	"blueprint-crypto/sp-core-bls",
 ]
 
 eigenlayer = [

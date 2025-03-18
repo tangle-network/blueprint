@@ -40,15 +40,15 @@ tools for networking and testing.
 * [`gadget-contexts`] - Extensions for adding functionality to custom blueprint context types
 * [`gadget-context-derive`] - Derive macros for implementing context extension traits
 * [`blueprint-core`] - Core components for building blueprints, primarily job system primitives
-* [`gadget-crypto`] - (**Meta-crate**) Cryptographic utilities
-    * [`gadget-crypto-core`] - Core cryptographic utilities (traits, types)
-    * [`gadget-crypto-bls`] - Utilities for working with BLS signatures and keys
-    * [`gadget-crypto-bn254`] - Utilities for working with BN254 signatures and keys
-    * [`gadget-crypto-ed25519`] - Utilities for working with Ed25519 signatures and keys
-    * [`gadget-crypto-k256`] - Utilities for working with [secp256k1] signatures and keys
-    * [`gadget-crypto-sp-core`] - Blueprint-compatible crypto wrappers around [sp-core] primitives
-    * [`gadget-crypto-sr25519`] - Utilities for working with sr25519 signatures and keys
-    * [`gadget-crypto-tangle-pair-signer`] - Pair signer type for Tangle
+* [`blueprint-crypto`] - (**Meta-crate**) Cryptographic utilities
+    * [`blueprint-crypto-core`] - Core cryptographic utilities (traits, types)
+    * [`blueprint-crypto-bls`] - Utilities for working with BLS signatures and keys
+    * [`blueprint-crypto-bn254`] - Utilities for working with BN254 signatures and keys
+    * [`blueprint-crypto-ed25519`] - Utilities for working with Ed25519 signatures and keys
+    * [`blueprint-crypto-k256`] - Utilities for working with [secp256k1] signatures and keys
+    * [`blueprint-crypto-sp-core`] - Blueprint-compatible crypto wrappers around [sp-core] primitives
+    * [`blueprint-crypto-sr25519`] - Utilities for working with sr25519 signatures and keys
+    * [`blueprint-crypto-tangle-pair-signer`] - Pair signer type for Tangle
 * [`gadget-keystore`] - Flexible keystore implementation, supporting local and remote signers
 * [`gadget-macros`] - Utility macros for simplifying blueprint development
 * [`blueprint-manager`] - A program executor that connects to the Tangle network and runs protocols dynamically on the fly
@@ -81,15 +81,15 @@ tools for networking and testing.
 [`gadget-contexts`]: https://docs.rs/gadget-contexts
 [`gadget-context-derive`]: https://docs.rs/gadget-context-derive
 [`blueprint-core`]: https://docs.rs/blueprint-core
-[`gadget-crypto`]: https://docs.rs/gadget-crypto
-[`gadget-crypto-core`]: https://docs.rs/gadget-crypto-core
-[`gadget-crypto-bls`]: https://docs.rs/gadget-crypto-bls
-[`gadget-crypto-bn254`]: https://docs.rs/gadget-crypto-bn254
-[`gadget-crypto-ed25519`]: https://docs.rs/gadget-crypto-ed25519
-[`gadget-crypto-k256`]: https://docs.rs/gadget-crypto-k256
-[`gadget-crypto-sp-core`]: https://docs.rs/gadget-crypto-sp-core
-[`gadget-crypto-sr25519`]: https://docs.rs/gadget-crypto-sr25519
-[`gadget-crypto-tangle-pair-signer`]: https://docs.rs/gadget-crypto-tangle-pair-signer
+[`blueprint-crypto`]: https://docs.rs/blueprint-crypto
+[`blueprint-crypto-core`]: https://docs.rs/blueprint-crypto-core
+[`blueprint-crypto-bls`]: https://docs.rs/blueprint-crypto-bls
+[`blueprint-crypto-bn254`]: https://docs.rs/blueprint-crypto-bn254
+[`blueprint-crypto-ed25519`]: https://docs.rs/blueprint-crypto-ed25519
+[`blueprint-crypto-k256`]: https://docs.rs/blueprint-crypto-k256
+[`blueprint-crypto-sp-core`]: https://docs.rs/blueprint-crypto-sp-core
+[`blueprint-crypto-sr25519`]: https://docs.rs/blueprint-crypto-sr25519
+[`blueprint-crypto-tangle-pair-signer`]: https://docs.rs/blueprint-crypto-tangle-pair-signer
 [`gadget-keystore`]: https://docs.rs/gadget-keystore
 [`gadget-macros`]: https://docs.rs/gadget-macros
 [`blueprint-manager`]: https://docs.rs/blueprint-manager

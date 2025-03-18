@@ -5,6 +5,7 @@ use crate::{
     runner::TangleTestEnv,
 };
 use blueprint_core::Job;
+use blueprint_crypto_tangle_pair_signer::TanglePairSigner;
 use blueprint_runner::BackgroundService;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::Multiaddr;
@@ -14,7 +15,6 @@ use futures::future::join_all;
 use gadget_contexts::tangle::TangleClient;
 use gadget_contexts::tangle::TangleClientContext;
 use gadget_core_testing_utils::runner::TestEnv;
-use gadget_crypto_tangle_pair_signer::TanglePairSigner;
 use gadget_keystore::backends::Backend;
 use gadget_keystore::crypto::sp_core::SpSr25519;
 use std::fmt::{Debug, Formatter};

@@ -22,7 +22,7 @@ pub use error::*;
 mod keystore;
 pub use keystore::*;
 
-pub use gadget_crypto as crypto;
+pub use blueprint_crypto as crypto;
 
 cfg_remote! {
     pub mod remote;

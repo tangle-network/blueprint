@@ -7,8 +7,8 @@ mod tests;
 
 use crate::error::{K256Error, Result};
 use alloy_signer_local::LocalSigner;
-use gadget_crypto_core::BytesEncoding;
-use gadget_crypto_core::{KeyType, KeyTypeId};
+use blueprint_crypto_core::BytesEncoding;
+use blueprint_crypto_core::{KeyType, KeyTypeId};
 use gadget_std::UniformRand;
 use gadget_std::hash::{Hash, Hasher};
 use gadget_std::string::{String, ToString};

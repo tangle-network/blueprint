@@ -1,8 +1,8 @@
 use super::*;
 use crate::{ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Secret, ArkBlsBn254Signature};
 use ark_ff::UniformRand;
-use gadget_crypto_core::KeyType;
-use gadget_crypto_hashing::keccak_256;
+use blueprint_crypto_core::KeyType;
+use blueprint_crypto_hashing::keccak_256;
 use gadget_std::string::ToString;
 
 // Helper function to generate test message
@@ -12,7 +12,7 @@ fn test_message() -> Vec<u8> {
 
 mod ark_bn254_crypto_tests {
     use super::*;
-    gadget_crypto_core::impl_crypto_tests!(ArkBlsBn254, ArkBlsBn254Secret, ArkBlsBn254Signature);
+    blueprint_crypto_core::impl_crypto_tests!(ArkBlsBn254, ArkBlsBn254Secret, ArkBlsBn254Signature);
 }
 
 #[test]

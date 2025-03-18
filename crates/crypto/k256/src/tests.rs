@@ -1,10 +1,10 @@
 use super::*;
+use blueprint_crypto_core::{BytesEncoding, KeyType};
 use error::K256Error;
-use gadget_crypto_core::{BytesEncoding, KeyType};
 
 mod k256_crypto_tests {
     use super::*;
-    gadget_crypto_core::impl_crypto_tests!(K256Ecdsa, K256SigningKey, K256Signature);
+    blueprint_crypto_core::impl_crypto_tests!(K256Ecdsa, K256SigningKey, K256Signature);
 }
 
 #[test]

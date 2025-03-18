@@ -11,7 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-gadget-crypto = { workspace = true }
+blueprint-crypto = { workspace = true }
 gadget-networking = { workspace = true }
 round-based = { workspace = true }
 tokio = { workspace = true }
@@ -46,8 +46,8 @@ libp2p = { workspace = true, features = [
   "autonat",
   "upnp",
 ] }
-gadget-crypto = { workspace = true, features = ["sp-core"] }
-gadget-crypto-core = { workspace = true, features = ["tangle"] }
+blueprint-crypto = { workspace = true, features = ["sp-core"] }
+blueprint-crypto-core = { workspace = true, features = ["tangle"] }
 
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
@@ -61,6 +61,6 @@ generic-array = { version = "0.14", features = ["serde"] }
 [features]
 default = ["std"]
 std = [
-  "gadget-crypto/std",
+  "blueprint-crypto/std",
 	"gadget-networking/std",
 ]

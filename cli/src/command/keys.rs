@@ -1,16 +1,16 @@
 use bip39::{Language, Mnemonic};
-use blueprint_runner::config::Protocol;
-use color_eyre::eyre::Result;
-use dialoguer::{Input, Select};
-use gadget_crypto::bn254::{ArkBlsBn254Public, ArkBlsBn254Secret};
-use gadget_crypto::k256::{K256Ecdsa, K256SigningKey};
-use gadget_crypto::sp_core::{
+use blueprint_crypto::bn254::{ArkBlsBn254Public, ArkBlsBn254Secret};
+use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
+use blueprint_crypto::sp_core::{
     SpBls377, SpBls377Pair, SpBls377Public, SpBls381, SpBls381Pair, SpBls381Public, SpEcdsa,
     SpEcdsaPair, SpEcdsaPublic, SpEd25519, SpEd25519Pair, SpEd25519Public, SpSr25519,
     SpSr25519Pair, SpSr25519Public,
 };
-use gadget_crypto::{KeyTypeId, bn254::ArkBlsBn254};
-use gadget_crypto_core::{BytesEncoding, KeyType};
+use blueprint_crypto::{KeyTypeId, bn254::ArkBlsBn254};
+use blueprint_crypto_core::{BytesEncoding, KeyType};
+use blueprint_runner::config::Protocol;
+use color_eyre::eyre::Result;
+use dialoguer::{Input, Select};
 use gadget_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use gadget_std::path::Path;
 

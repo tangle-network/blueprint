@@ -1,7 +1,7 @@
+use blueprint_chain_setup::tangle::InputValue;
 use blueprint_tangle_extra::serde::{BoundedVec, Field, from_field, new_bounded_string};
 use color_eyre::Result;
 use dialoguer::console::style;
-use blueprint_chain_setup::tangle::InputValue;
 use serde_json;
 use std::str::FromStr;
 use tangle_subxt::subxt::utils::AccountId32;

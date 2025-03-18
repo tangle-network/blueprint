@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use alloy_primitives::Address;
-use gadget_crypto::{BytesEncoding, KeyType, hashing::keccak_256};
+use blueprint_crypto::{BytesEncoding, KeyType, hashing::keccak_256};
 use libp2p::{PeerId, request_response};
 use tracing::{debug, warn};
 

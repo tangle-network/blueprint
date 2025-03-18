@@ -11,7 +11,7 @@ blueprint-core.workspace = true
 blueprint-router.workspace = true
 gadget-std.workspace = true
 gadget-keystore = { workspace = true }
-gadget-crypto = { workspace = true }
+blueprint-crypto = { workspace = true }
 futures-core.workspace = true
 futures-util.workspace = true
 tower.workspace = true
@@ -75,8 +75,8 @@ tangle = [
     "dep:tangle-subxt",
     "dep:blueprint-tangle-extra",
     "dep:k256",
-    "gadget-crypto/sp-core",
-    "gadget-crypto/tangle-pair-signer"
+    "blueprint-crypto/sp-core",
+    "blueprint-crypto/tangle-pair-signer"
 ]
 
 ## Enable [Eigenlayer] support

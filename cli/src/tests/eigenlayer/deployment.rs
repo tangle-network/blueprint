@@ -1,8 +1,8 @@
 use alloy_provider::RootProvider;
+use blueprint_chain_setup::anvil::start_default_anvil_testnet;
 use blueprint_evm_extra::util::get_provider_http;
 use blueprint_runner::config::SupportedChains;
 use color_eyre::eyre::Result;
-use blueprint_chain_setup::anvil::start_default_anvil_testnet;
 use gadget_std::collections::HashMap;
 use gadget_std::fs;
 use gadget_std::process::Command;

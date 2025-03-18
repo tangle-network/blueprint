@@ -1,4 +1,4 @@
-use gadget_crypto::sp_core::SpEcdsa;
+use blueprint_crypto::sp_core::SpEcdsa;
 use gadget_keystore::Result;
 use gadget_keystore::backends::Backend;
 use gadget_keystore::backends::tangle::TangleBackend;

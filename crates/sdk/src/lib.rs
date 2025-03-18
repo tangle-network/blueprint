@@ -14,7 +14,7 @@ pub use blueprint_core as core;
 pub use core::*;
 
 /// Core cryptographic primitives and utilities
-pub use gadget_crypto as crypto;
+pub use blueprint_crypto as crypto;
 
 pub use gadget_clients as clients;
 pub use gadget_contexts as contexts;

@@ -1,9 +1,9 @@
 use crate::Keystore;
 use crate::error::{Error, Result};
-use gadget_crypto::bn254::{
+use blueprint_crypto::bn254::{
     ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Secret, ArkBlsBn254Signature,
 };
-use gadget_crypto::{BytesEncoding, KeyType, KeyTypeId};
+use blueprint_crypto::{BytesEncoding, KeyType, KeyTypeId};
 use gadget_std::boxed::Box;
 
 pub trait Bn254Backend: Send + Sync {

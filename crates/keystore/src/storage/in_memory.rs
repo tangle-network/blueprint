@@ -1,6 +1,6 @@
 use super::RawStorage;
 use crate::error::Result;
-use gadget_crypto::KeyTypeId;
+use blueprint_crypto::KeyTypeId;
 use gadget_std::{boxed::Box, collections::BTreeMap, vec::Vec};
 use parking_lot::RwLock;
 
@@ -107,7 +107,7 @@ impl RawStorage for InMemoryStorage {
 
 #[cfg(test)]
 mod tests {
-    use gadget_crypto::{IntoCryptoError, KeyType, k256::K256Ecdsa};
+    use blueprint_crypto::{IntoCryptoError, KeyType, k256::K256Ecdsa};
 
     use super::*;
     use crate::storage::TypedStorage;

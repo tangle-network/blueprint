@@ -1,5 +1,5 @@
 [package]
-name = "gadget-crypto-k256"
+name = "blueprint-crypto-k256"
 version = "0.1.0"
 description = "k256 crypto primitives for Tangle Blueprints"
 authors.workspace = true
@@ -9,7 +9,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-crypto-core = { workspace = true, features = ["k256"] }
+blueprint-crypto-core = { workspace = true, features = ["k256"] }
 gadget-std = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "alloc", "serde", "pem"] }
 serde = { workspace = true }
@@ -25,10 +25,10 @@ serde_json = { workspace = true, features = ["alloc"] }
 [features]
 default = ["std"]
 std = [
-	"gadget-crypto-core/std",
+	"blueprint-crypto-core/std",
 	"gadget-std/std",
 	"serde/std",
 	"serde_json/std",
 	"serde_bytes/std",
 	"k256/std",
-] 
+]

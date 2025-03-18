@@ -1,6 +1,6 @@
 use super::RawStorage;
 use crate::error::{Error, Result};
-use gadget_crypto::KeyTypeId;
+use blueprint_crypto::KeyTypeId;
 use gadget_std::fs;
 use gadget_std::io;
 use gadget_std::path::{Path, PathBuf};
@@ -141,7 +141,7 @@ mod tests {
     use crate::storage::TypedStorage;
 
     use super::*;
-    use gadget_crypto::{IntoCryptoError, KeyType, k256::K256Ecdsa};
+    use blueprint_crypto::{IntoCryptoError, KeyType, k256::K256Ecdsa};
     use tempfile::tempdir;
 
     #[test]

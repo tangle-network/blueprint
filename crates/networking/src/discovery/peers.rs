@@ -1,10 +1,10 @@
 use crate::service::AllowedKeys;
 use alloy_primitives::Address;
+use blueprint_crypto::BytesEncoding;
+use blueprint_crypto::KeyType;
+use blueprint_crypto::hashing::keccak_256;
 use crossbeam_channel::Receiver;
 use dashmap::{DashMap, DashSet};
-use gadget_crypto::BytesEncoding;
-use gadget_crypto::KeyType;
-use gadget_crypto::hashing::keccak_256;
 use libp2p::{PeerId, core::Multiaddr, identify};
 use serde::{Deserialize, Serialize};
 use std::{

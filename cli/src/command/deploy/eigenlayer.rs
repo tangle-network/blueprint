@@ -1,15 +1,15 @@
 use crate::command::keys::{generate_key, import_key};
 use crate::utils::{print_info, print_section_header, print_success};
 use alloy_primitives::Address;
+use blueprint_chain_setup::anvil::start_default_anvil_testnet;
 use blueprint_core::debug;
+use blueprint_crypto::KeyTypeId;
+use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_runner::config::{Protocol, SupportedChains};
 use color_eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use dialoguer::console::style;
 use dialoguer::{Confirm, Input, Select};
-use blueprint_chain_setup::anvil::start_default_anvil_testnet;
-use gadget_crypto::KeyTypeId;
-use gadget_crypto::k256::K256Ecdsa;
 use gadget_keystore::backends::Backend;
 use gadget_keystore::{Keystore, KeystoreConfig};
 use gadget_std::fs;

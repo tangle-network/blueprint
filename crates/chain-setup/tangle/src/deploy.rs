@@ -9,7 +9,7 @@ use alloy_rpc_types_eth::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::{self, eyre, Context, ContextCompat, Result};
 use blueprint_tangle_extra::metadata::types::blueprint::BlueprintServiceManager;
-use gadget_crypto::tangle_pair_signer::TanglePairSigner;
+use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use gadget_std::fmt::Debug;
 use gadget_std::path::PathBuf;
 use serde_json::Value;

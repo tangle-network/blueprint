@@ -50,7 +50,7 @@ pub enum Error {
 
     /* Crypto errors */
     #[error(transparent)]
-    Crypto(#[from] gadget_crypto::CryptoCoreError),
+    Crypto(#[from] blueprint_crypto::CryptoCoreError),
 
     /* Feature-specific errors */
 
@@ -121,7 +121,7 @@ macro_rules! impl_from_for_boxed_error {
 
 impl_from_for_boxed_error!(gadget_std::io::Error, Io);
 impl_from_for_boxed_error!(serde::de::value::Error, KeyDeserialization);
-impl_from_for_boxed_error!(gadget_crypto::CryptoCoreError, Crypto);
+impl_from_for_boxed_error!(blueprint_crypto::CryptoCoreError, Crypto);
 #[cfg(feature = "aws-signer")]
 impl_from_for_boxed_error!(alloy_signer_aws::AwsSignerError, AwsSigner);
 #[cfg(feature = "gcp-signer")]

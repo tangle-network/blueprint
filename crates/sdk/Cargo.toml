@@ -19,7 +19,7 @@ blueprint-runner = { workspace = true }
 blueprint-producers-extra = { workspace = true }
 gadget-keystore = { workspace = true }
 gadget-clients = { workspace = true }
-gadget-crypto = { workspace = true }
+blueprint-crypto = { workspace = true }
 gadget-std = { workspace = true }
 # The keystore context is the only one that doesn't bring in extra dependencies, so we can always include it
 gadget-contexts = { workspace = true, features = ["keystore"] }
@@ -33,7 +33,7 @@ gadget-context-derive = { workspace = true, optional = true }
 # Tangle-specific extras
 blueprint-tangle-extra = { workspace = true, optional = true }
 tangle-subxt = { workspace = true, optional = true }
-gadget-crypto-tangle-pair-signer = { workspace = true, optional = true }
+blueprint-crypto-tangle-pair-signer = { workspace = true, optional = true }
 
 # Eigenlayer and EVM-specific extras
 blueprint-evm-extra = { workspace = true, optional = true }
@@ -79,7 +79,7 @@ std = [
     "gadget-keystore/std",
     "gadget-contexts/std",
     "gadget-clients/std",
-    "gadget-crypto/std",
+    "blueprint-crypto/std",
     "dep:blueprint-chain-setup",
     "blueprint-chain-setup/std",
     # Tangle
@@ -136,7 +136,7 @@ macros = [
 tangle = [
     "dep:blueprint-tangle-extra",
     "dep:tangle-subxt",
-    "dep:gadget-crypto-tangle-pair-signer",
+    "dep:blueprint-crypto-tangle-pair-signer",
     "gadget-clients/tangle",
     "gadget-contexts/tangle",
     "gadget-context-derive?/tangle",
@@ -153,7 +153,7 @@ evm = [
     "gadget-clients/evm",
     "gadget-contexts/evm",
     "gadget-context-derive/evm",
-    "gadget-crypto-tangle-pair-signer?/evm",
+    "blueprint-crypto-tangle-pair-signer?/evm",
     "blueprint-macros?/evm",
     "gadget-testing-utils?/anvil",
     "blueprint-chain-setup/anvil",

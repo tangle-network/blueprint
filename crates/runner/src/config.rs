@@ -321,7 +321,7 @@ impl BlueprintEnvironment {
     ///
     /// [`NetworkService::new()`]: gadget_networking::NetworkService::new
     #[cfg(feature = "networking")]
-    pub fn libp2p_start_network<K: gadget_crypto::KeyType>(
+    pub fn libp2p_start_network<K: blueprint_crypto::KeyType>(
         &self,
         network_config: gadget_networking::NetworkConfig<K>,
         allowed_keys: gadget_networking::service::AllowedKeys<K>,
@@ -346,7 +346,7 @@ impl BlueprintEnvironment {
     /// * `ECDSA`
     #[cfg(feature = "networking")]
     #[allow(clippy::missing_panics_doc)] // Known good Multiaddr
-    pub fn libp2p_network_config<K: gadget_crypto::KeyType>(
+    pub fn libp2p_network_config<K: blueprint_crypto::KeyType>(
         &self,
         network_name: impl Into<String>,
         using_evm_address_for_handshake_verification: bool,

@@ -104,7 +104,7 @@ macro_rules! define_bls_key {
             pub mod [<$ty:lower>] {
                 use crate::error::{BlsError, Result};
                 use crate::from_bytes;
-                use gadget_crypto_core::{KeyType, KeyTypeId, BytesEncoding};
+                use blueprint_crypto_core::{KeyType, KeyTypeId, BytesEncoding};
                 use gadget_std::{UniformRand, string::{String, ToString}};
                 use tnt_bls::{Message, PublicKey, SecretKey, SerializableToBytes, Signature, [<Tiny $ty:upper>]};
 

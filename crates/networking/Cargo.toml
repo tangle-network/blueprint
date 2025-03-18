@@ -40,8 +40,8 @@ crossbeam-channel = { workspace = true }
 libsecp256k1 = { workspace = true }
 
 # Crypto dependencies
-gadget-crypto = { workspace = true, features = ["k256", "hashing"] }
-gadget-crypto-core = { workspace = true, features = ["k256"] }
+blueprint-crypto = { workspace = true, features = ["k256", "hashing"] }
+blueprint-crypto-core = { workspace = true, features = ["k256"] }
 k256 = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies.libp2p]
@@ -70,8 +70,8 @@ features = [
 
 [dev-dependencies]
 gadget-networking = { workspace = true }
-gadget-crypto = { workspace = true, features = ["sp-core"] }
-gadget-crypto-core = { workspace = true, features = ["tangle"] }
+blueprint-crypto = { workspace = true, features = ["sp-core"] }
+blueprint-crypto-core = { workspace = true, features = ["tangle"] }
 tracing-subscriber = { workspace = true }
 lazy_static = { workspace = true }
 fastrand = "2.0"
@@ -79,7 +79,7 @@ fastrand = "2.0"
 [features]
 default = ["std"]
 std = [
-	"gadget-crypto/std",
+	"blueprint-crypto/std",
 	"gadget-std/std",
 	"k256/std",
 	"tokio/full",

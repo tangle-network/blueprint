@@ -12,7 +12,7 @@ use tangle_subxt::tangle_testnet_runtime::api;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::pallet_multi_asset_delegation::types::operator::OperatorMetadata;
 use gadget_client_core::{GadgetServicesClient, OperatorSet};
 use blueprint_runner::config::BlueprintEnvironment;
-use gadget_crypto_sp_core::{SpEcdsa, SpSr25519};
+use blueprint_crypto_sp_core::{SpEcdsa, SpSr25519};
 use gadget_keystore::{Keystore, KeystoreConfig};
 use gadget_keystore::backends::Backend;
 use crate::services::TangleServicesClient;

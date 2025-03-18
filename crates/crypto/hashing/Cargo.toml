@@ -1,5 +1,5 @@
 [package]
-name = "gadget-crypto-hashing"
+name = "blueprint-crypto-hashing"
 version = "0.1.0"
 description = "Hashing primitives for Tangle Blueprints"
 authors.workspace = true
