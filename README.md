@@ -144,7 +144,7 @@ Install the latest stable version of `cargo-tangle` using the installation scrip
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/tangle-network/gadget/releases/download/cargo-tangle/v0.1.1-beta.7/cargo-tangle-installer.sh | sh
 ```
 
-#### 🚩 **Option 1: Install from source**
+#### 🚩 **Option 2: Install from source**
 
 Install the latest git version of `cargo-tangle` using the following command:
 
