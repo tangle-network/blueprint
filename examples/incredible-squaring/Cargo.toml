@@ -11,7 +11,7 @@ edition = "2024"
 incredible-squaring-blueprint-lib = { path = "incredible-squaring-lib" }
 
 blueprint-sdk = { path = "../../crates/sdk", default-features = false }
-tokio = { version = "1.43.0", default-features = false }
+tokio = { version = "1.44", default-features = false }
 color-eyre = "0.6.3"
 tower = { version = "0.5.2", default-features = false }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
