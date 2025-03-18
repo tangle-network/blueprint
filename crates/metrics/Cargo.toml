@@ -1,5 +1,5 @@
 [package]
-name = "gadget-metrics"
+name = "blueprint-metrics"
 version = "0.1.0"
 description = "Metrics metapackage for Tangle Blueprints"
 authors.workspace = true
@@ -12,8 +12,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-gadget-rpc-calls = { workspace = true, optional = true }
+blueprint-metrics-rpc-calls = { workspace = true, optional = true }
 
 [features]
 default = ["rpc-calls"]
-rpc-calls = ["dep:gadget-rpc-calls"]
+rpc-calls = ["dep:blueprint-metrics-rpc-calls"]

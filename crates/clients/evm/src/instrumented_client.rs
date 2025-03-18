@@ -12,7 +12,7 @@ use alloy_rpc_types_eth::{
     TransactionReceipt, TransactionRequest,
 };
 use alloy_transport::{TransportError, TransportResult};
-use gadget_rpc_calls::RpcCallsMetrics as RpcCallsCollector;
+use blueprint_metrics_rpc_calls::RpcCallsMetrics as RpcCallsCollector;
 use gadget_std::string::String;
 use gadget_std::string::ToString;
 use gadget_std::time::Instant;

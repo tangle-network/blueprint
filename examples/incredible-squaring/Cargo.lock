@@ -6361,7 +6361,7 @@ dependencies = [
  "alloy-transport",
  "blueprint-core",
  "blueprint-client-core",
- "gadget-rpc-calls",
+ "blueprint-metrics-rpc-calls",
  "gadget-std",
  "hex",
  "serde",
@@ -6506,7 +6506,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-rpc-calls"
+name = "blueprint-metrics-rpc-calls"
 version = "0.1.0"
 dependencies = [
  "metrics",

@@ -2785,8 +2785,8 @@ dependencies = [
  "blueprint-client-core",
  "blueprint-core",
  "blueprint-evm-extra",
+ "blueprint-metrics-rpc-calls",
  "gadget-anvil-testing-utils",
- "gadget-rpc-calls",
  "gadget-std",
  "hex",
  "serde",
@@ -2826,6 +2826,24 @@ dependencies = [
  "blueprint-client-tangle",
  "gadget-std",
  "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-context-derive"
+version = "0.3.1"
+dependencies = [
+ "alloy-network",
+ "alloy-provider",
+ "alloy-transport",
+ "blueprint-context-derive",
+ "blueprint-sdk",
+ "proc-macro2",
+ "quote",
+ "round-based",
+ "serde",
+ "syn 2.0.100",
+ "tangle-subxt",
+ "trybuild",
 ]
 
 [[package]]
@@ -3101,6 +3119,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "blueprint-metrics"
+version = "0.1.0"
+dependencies = [
+ "blueprint-metrics-rpc-calls",
+]
+
+[[package]]
+name = "blueprint-metrics-rpc-calls"
+version = "0.1.0"
+dependencies = [
+ "metrics",
+]
+
+[[package]]
 name = "blueprint-producers-extra"
 version = "0.1.0"
 dependencies = [
@@ -3173,6 +3205,7 @@ dependencies = [
  "blueprint-build-utils",
  "blueprint-chain-setup",
  "blueprint-clients",
+ "blueprint-context-derive",
  "blueprint-contexts",
  "blueprint-core",
  "blueprint-crypto",
@@ -3185,7 +3218,6 @@ dependencies = [
  "blueprint-tangle-extra",
  "document-features",
  "eigensdk",
- "blueprint-context-derive",
  "gadget-keystore",
  "gadget-networking",
  "gadget-networking-round-based-extension",
@@ -7180,24 +7212,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-context-derive"
-version = "0.3.1"
-dependencies = [
- "alloy-network",
- "alloy-provider",
- "alloy-transport",
- "blueprint-sdk",
- "blueprint-context-derive",
- "proc-macro2",
- "quote",
- "round-based",
- "serde",
- "syn 2.0.100",
- "tangle-subxt",
- "trybuild",
-]
-
-[[package]]
 name = "gadget-core-testing-utils"
 version = "0.1.0"
 dependencies = [
@@ -7275,13 +7289,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-metrics"
-version = "0.1.0"
-dependencies = [
- "gadget-rpc-calls",
-]
-
-[[package]]
 name = "gadget-networking"
 version = "0.1.0"
 dependencies = [
@@ -7339,13 +7346,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
-]
-
-[[package]]
-name = "gadget-rpc-calls"
-version = "0.1.0"
-dependencies = [
- "metrics",
 ]
 
 [[package]]

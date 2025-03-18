@@ -36,7 +36,7 @@ alloy-pubsub = { workspace = true }
 tokio = { workspace = true }
 
 # Metrics
-gadget-rpc-calls = { workspace = true }
+blueprint-metrics-rpc-calls = { workspace = true }
 
 [dev-dependencies]
 blueprint-evm-extra = { workspace = true }
@@ -48,7 +48,7 @@ testcontainers = { workspace = true }
 [features]
 default = ["std", "tracing"]
 std = [
-    "gadget-rpc-calls/std",
+    "blueprint-metrics-rpc-calls/std",
     "blueprint-client-core/std",
     "blueprint-client-core/std",
     "gadget-std/std",

@@ -52,8 +52,8 @@ tools for networking and testing.
 * [`gadget-keystore`] - Flexible keystore implementation, supporting local and remote signers
 * [`gadget-macros`] - Utility macros for simplifying blueprint development
 * [`blueprint-manager`] - A program executor that connects to the Tangle network and runs protocols dynamically on the fly
-* [`gadget-metrics`] (**Meta-crate**) Utilities for collecting metrics
-    * [`gadget-metrics-rpc-calls`] - Utilities for collecting metrics from RPC calls
+* [`blueprint-metrics`] (**Meta-crate**) Utilities for collecting metrics
+    * [`blueprint-metrics-rpc-calls`] - Utilities for collecting metrics from RPC calls
 * [`gadget-networking`] - P2P networking support for blueprints
     * [`gadget-networking-round-based-extension`] - A networking compatibility layer for [round-based] MPC protocols
 * [`blueprint-producers-extra`] - Additional protocol-independent event producers
@@ -93,8 +93,8 @@ tools for networking and testing.
 [`gadget-keystore`]: https://docs.rs/gadget-keystore
 [`gadget-macros`]: https://docs.rs/gadget-macros
 [`blueprint-manager`]: https://docs.rs/blueprint-manager
-[`gadget-metrics`]: https://docs.rs/gadget-metrics
-[`gadget-metrics-rpc-calls`]: https://docs.rs/gadget-metrics-rpc-calls
+[`blueprint-metrics`]: https://docs.rs/blueprint-metrics
+[`blueprint-metrics-rpc-calls`]: https://docs.rs/blueprint-metrics-rpc-calls
 [`gadget-networking`]: https://docs.rs/gadget-networking
 [`gadget-networking-round-based-extension`]: https://docs.rs/gadget-networking-round-based-extension
 [`blueprint-producers-extra`]: https://docs.rs/blueprint-producers-extra
