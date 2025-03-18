@@ -1,8 +1,8 @@
-use crate::{error::Bn254Error, ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Signature};
+use crate::{ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Signature, error::Bn254Error};
 use ark_bn254::{G1Affine, G2Affine};
 use ark_ec::AffineRepr;
 use ark_ff::AdditiveGroup;
-use gadget_crypto_core::{aggregation::AggregatableSignature, KeyType};
+use gadget_crypto_core::{KeyType, aggregation::AggregatableSignature};
 
 impl AggregatableSignature for ArkBlsBn254 {
     fn verify_single(

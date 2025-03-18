@@ -23,24 +23,20 @@ where
     type Config = EigenlayerBLSConfig;
     type Context = Ctx;
 
-    fn new(
-        config: Self::Config,
-        env: BlueprintEnvironment,
-        context: Self::Context,
-    ) -> Result<Self, Error> {
-        let runner = TestRunner::new(config, env.clone(), context);
+    fn new(config: Self::Config, env: BlueprintEnvironment) -> Result<Self, Error> {
+        let runner = TestRunner::new(config, env.clone());
 
         Ok(Self {
             runner: Some(runner),
             config,
-            env: env,
+            env,
             runner_handle: Mutex::new(None),
         })
     }
 
     fn add_job<J, T>(&mut self, job: J)
     where
-        J: Job<T, ()> + Send + Sync + 'static,
+        J: Job<T, Self::Context> + Send + Sync + 'static,
         T: 'static,
     {
         self.runner
@@ -63,41 +59,41 @@ where
         self.env.clone()
     }
 
-    async fn run_runner(&mut self) -> Result<(), Error> {
+    async fn run_runner(&mut self, context: Self::Context) -> Result<(), Error> {
         // Spawn the runner in a background task
         let runner = self.runner.take().expect("Runner already running");
-        let handle = tokio::spawn(async move { runner.run().await });
+        let handle = tokio::spawn(async move { runner.run(context).await });
 
-        let mut _guard = self.runner_handle.lock().await;
-        *_guard = Some(handle);
+        let mut guard = self.runner_handle.lock().await;
+        *guard = Some(handle);
 
         // Brief delay to allow for startup
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // Just check if it failed immediately
-        let Some(handle) = _guard.take() else {
+        let Some(handle) = guard.take() else {
             return Err(Error::Eigenlayer("Failed to spawn runner task".to_string()));
         };
 
         if !handle.is_finished() {
             // Put the handle back since the runner is still running
-            *_guard = Some(handle);
-            gadget_logging::info!("Runner started successfully");
+            *guard = Some(handle);
+            blueprint_core::info!("Runner started successfully");
             return Ok(());
         }
 
-        gadget_logging::info!("Runner task finished OK");
+        blueprint_core::info!("Runner task finished OK");
         match handle.await {
             Ok(Ok(())) => Ok(()),
             Ok(Err(e)) => {
-                gadget_logging::error!("Runner failed during startup: {}", e);
+                blueprint_core::error!("Runner failed during startup: {}", e);
                 Err(Error::Eigenlayer(format!(
                     "Runner failed during startup: {}",
                     e
                 )))
             }
             Err(e) => {
-                gadget_logging::error!("Runner task panicked: {}", e);
+                blueprint_core::error!("Runner task panicked: {}", e);
                 Err(Error::Eigenlayer(format!("Runner task panicked: {}", e)))
             }
         }
@@ -107,10 +103,10 @@ where
 impl<Ctx> Drop for EigenlayerBLSTestEnv<Ctx> {
     fn drop(&mut self) {
         futures::executor::block_on(async {
-            let mut _guard = self.runner_handle.lock().await;
-            if let Some(handle) = _guard.take() {
+            let mut guard = self.runner_handle.lock().await;
+            if let Some(handle) = guard.take() {
                 handle.abort();
             }
-        })
+        });
     }
 }

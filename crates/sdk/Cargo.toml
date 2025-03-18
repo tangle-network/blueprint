@@ -8,6 +8,9 @@ license.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 # Required dependencies
 blueprint-core = { workspace = true }
@@ -17,11 +20,10 @@ blueprint-producers-extra = { workspace = true }
 gadget-keystore = { workspace = true }
 gadget-clients = { workspace = true }
 gadget-crypto = { workspace = true }
-gadget-logging = { workspace = true }
-gadget-utils = { workspace = true }
 gadget-std = { workspace = true }
+# The keystore context is the only one that doesn't bring in extra dependencies, so we can always include it
+gadget-contexts = { workspace = true, features = ["keystore"] }
 document-features = { workspace = true }
-async-trait = { workspace = true }
 
 # Macros
 blueprint-macros = { workspace = true, optional = true }
@@ -31,6 +33,7 @@ gadget-context-derive = { workspace = true, optional = true }
 blueprint-tangle-extra = { workspace = true, optional = true }
 tangle-subxt = { workspace = true, optional = true }
 gadget-crypto-tangle-pair-signer = { workspace = true, optional = true }
+gadget-blueprint-serde = { workspace = true, optional = true }
 
 # Eigenlayer and EVM-specific extras
 blueprint-evm-extra = { workspace = true, optional = true }
@@ -52,7 +55,6 @@ tokio = { workspace = true, default-features = false }
 
 # Networking-related dependencies
 gadget-networking = { workspace = true, optional = true }
-gadget-contexts = { workspace = true }
 
 # Round-based protocol support
 gadget-networking-round-based-extension = { workspace = true, optional = true }
@@ -75,9 +77,9 @@ std = [
     "blueprint-core/std",
     "blueprint-runner/std",
     "gadget-keystore/std",
+    "gadget-contexts/std",
     "gadget-clients/std",
     "gadget-crypto/std",
-    "gadget-logging/std",
     # Tangle
     "tangle-subxt/std",
     # Extras
@@ -107,6 +109,7 @@ networking = [
     "gadget-contexts/networking",
     "gadget-keystore/std",
     "gadget-context-derive?/networking",
+    "blueprint-runner/networking"
 ]
 
 ## Enable local KV stores
@@ -131,11 +134,11 @@ tangle = [
     "dep:blueprint-tangle-extra",
     "dep:tangle-subxt",
     "dep:gadget-crypto-tangle-pair-signer",
+    "dep:gadget-blueprint-serde",
     "gadget-clients/tangle",
     "gadget-contexts/tangle",
     "gadget-context-derive?/tangle",
     "gadget-testing-utils?/tangle",
-    "gadget-utils/tangle",
     "blueprint-runner/tangle",
 ]
 
@@ -146,8 +149,8 @@ evm = [
     "dep:alloy-json-abi",
     "gadget-clients/evm",
     "gadget-contexts/evm",
+    "gadget-context-derive/evm",
     "gadget-crypto-tangle-pair-signer?/evm",
-    "gadget-utils/evm",
     "blueprint-macros?/evm",
     "gadget-testing-utils?/anvil",
 ]

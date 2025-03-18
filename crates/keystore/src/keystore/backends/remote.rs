@@ -15,6 +15,7 @@ pub struct RemoteEntry {
 
 impl RemoteEntry {
     /// Create a new remote signer entry
+    #[must_use]
     pub fn new(config: RemoteConfig, capabilities: RemoteCapabilities) -> Self {
         Self {
             config,
@@ -23,17 +24,18 @@ impl RemoteEntry {
     }
 
     /// Get the remote signer configuration
+    #[must_use]
     pub fn config(&self) -> &RemoteConfig {
         &self.config
     }
 
     /// Get the remote signer capabilities
+    #[must_use]
     pub fn capabilities(&self) -> &RemoteCapabilities {
         &self.capabilities
     }
 }
 
-#[async_trait::async_trait]
 pub trait RemoteBackend: Backend {
     /// Sign a message using a remote signer
     async fn sign_with_remote<T, R>(
@@ -59,7 +61,6 @@ pub trait RemoteBackend: Backend {
         R::KeyId: Send;
 }
 
-#[async_trait::async_trait]
 impl RemoteBackend for Keystore {
     /// Sign a message using a remote signer
     async fn sign_with_remote<T, R>(

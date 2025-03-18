@@ -3,7 +3,7 @@ use crate::{
     bls381::{W3fBls381, W3fBls381Public, W3fBls381Signature},
     error::BlsError,
 };
-use gadget_crypto_core::{aggregation::AggregatableSignature, BytesEncoding, KeyType};
+use gadget_crypto_core::{BytesEncoding, KeyType, aggregation::AggregatableSignature};
 use gadget_std::Zero;
 use tnt_bls::{single_pop_aggregator::SignatureAggregatorAssumingPoP, *};
 

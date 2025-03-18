@@ -1,11 +1,10 @@
 use crate::{
-    service::AllowedKeys, service_handle::NetworkServiceHandle, NetworkConfig, NetworkService,
+    NetworkConfig, NetworkService, service::AllowedKeys, service_handle::NetworkServiceHandle,
 };
 use gadget_crypto::KeyType;
-use gadget_logging::tracing_subscriber;
 use libp2p::{
-    identity::{self, Keypair},
     Multiaddr, PeerId,
+    identity::{self, Keypair},
 };
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;

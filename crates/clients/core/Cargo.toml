@@ -8,9 +8,11 @@ license.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 gadget-std = { workspace = true }
-async-trait = { workspace = true }
 auto_impl = { workspace = true }
 thiserror = { workspace = true }
 

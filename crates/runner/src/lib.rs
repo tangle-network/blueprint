@@ -37,15 +37,17 @@ use tower::Service;
 pub trait BlueprintConfig: Send + Sync {
     fn register(
         &self,
-        _env: &BlueprintEnvironment,
+        env: &BlueprintEnvironment,
     ) -> impl Future<Output = Result<(), Error>> + Send {
+        let _ = env;
         async { Ok(()) }
     }
 
     fn requires_registration(
         &self,
-        _env: &BlueprintEnvironment,
+        env: &BlueprintEnvironment,
     ) -> impl Future<Output = Result<bool, Error>> + Send {
+        let _ = env;
         async { Ok(true) }
     }
 
@@ -93,6 +95,7 @@ where
     /// Set the [`Router`] for this runner
     ///
     /// A [`Router`] is the only required field in a [`BlueprintRunner`].
+    #[must_use]
     pub fn router(mut self, router: Router) -> Self {
         self.router = Some(router);
         self
@@ -101,35 +104,37 @@ where
     /// Append a [producer] to the list
     ///
     /// [producer]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/producers/index.html
+    #[must_use]
     pub fn producer<E>(
         mut self,
         producer: impl Stream<Item = Result<JobCall, E>> + Send + Sync + Unpin + 'static,
     ) -> Self
     where
-        E: Into<BoxError>,
+        E: Into<BoxError> + 'static,
     {
-        self.producers
-            .push(Box::new(producer.map_err(|e| e.into())));
+        self.producers.push(Box::new(producer.map_err(Into::into)));
         self
     }
 
     /// Append a [consumer] to the list
     ///
     /// [consumer]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/consumers/index.html
+    #[must_use]
     pub fn consumer<E>(
         mut self,
         consumer: impl Sink<JobResult, Error = E> + Send + Sync + Unpin + 'static,
     ) -> Self
     where
-        E: Into<BoxError>,
+        E: Into<BoxError> + 'static,
     {
         self.consumers
-            .push(Box::new(consumer.sink_map_err(|e| e.into())));
+            .push(Box::new(consumer.sink_map_err(Into::into)));
         self
     }
 
     /// Append a background service to the list
-    pub fn background_service(mut self, service: impl BackgroundService + Send + 'static) -> Self {
+    #[must_use]
+    pub fn background_service(mut self, service: impl BackgroundService + 'static) -> Self {
         self.background_services
             .push(DynBackgroundService::boxed(service));
         self
@@ -326,6 +331,7 @@ impl<F> FinalizedBlueprintRunner<F>
 where
     F: Future<Output = ()> + Send + 'static,
 {
+    #[allow(trivial_casts, clippy::too_many_lines)]
     async fn run(self) -> Result<(), Error> {
         if self.config.requires_registration(&self.env).await? {
             self.config.register(&self.env).await?;
@@ -347,6 +353,7 @@ where
 
         let mut router = router.as_service();
 
+        let has_background_services = !background_services.is_empty();
         let mut background_receivers = Vec::with_capacity(background_services.len());
         for service in background_services {
             let receiver = service.start().await?;
@@ -442,7 +449,9 @@ where
                     let (result, _, remaining_background_services) = result;
                     match result {
                         Ok(()) => {
-                            blueprint_core::warn!("A background service has finished running");
+                            if has_background_services {
+                                blueprint_core::warn!("A background service has finished running");
+                            }
                         },
                         Err(e) => {
                             blueprint_core::error!("A background service failed: {:?}", e);
@@ -452,13 +461,15 @@ where
                     }
 
                     if remaining_background_services.is_empty() {
-                        blueprint_core::warn!("All background services have ended");
+                        if has_background_services {
+                            blueprint_core::warn!("All background services have ended");
+                        }
                         continue;
                     }
 
                     background_services = futures::future::select_all(remaining_background_services);
                 }
-                _ = shutdown_tx.closed() => {
+                () = shutdown_tx.closed() => {
                     break
                 }
             }

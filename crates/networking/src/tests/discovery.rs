@@ -1,6 +1,6 @@
 use crate::service::AllowedKeys;
 use crate::test_utils::{
-    create_whitelisted_nodes, init_tracing, wait_for_peer_discovery, wait_for_peer_info, TestNode,
+    TestNode, create_whitelisted_nodes, init_tracing, wait_for_peer_discovery, wait_for_peer_info,
 };
 use gadget_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};

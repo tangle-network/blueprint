@@ -4,8 +4,8 @@ use crate::{
     service::AllowedKeys,
     service_handle::NetworkServiceHandle,
     test_utils::{
-        create_whitelisted_nodes, init_tracing, wait_for_all_handshakes,
-        wait_for_handshake_completion, TestNode,
+        TestNode, create_whitelisted_nodes, init_tracing, wait_for_all_handshakes,
+        wait_for_handshake_completion,
     },
     types::{MessageRouting, ParticipantId, ParticipantInfo},
 };

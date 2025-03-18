@@ -1,8 +1,7 @@
 use blueprint_sdk::Job;
-use blueprint_sdk::logging::setup_log;
 use blueprint_sdk::tangle::layers::TangleLayer;
 use blueprint_sdk::testing::tempfile;
-use blueprint_sdk::testing::utils::harness::TestHarness;
+use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::testing::utils::tangle::{InputValue, OutputValue, TangleTestHarness};
 use color_eyre::Result;
 use incredible_squaring_blueprint_lib::square;
@@ -14,7 +13,7 @@ async fn test_incredible_squaring() -> Result<()> {
 
     // Initialize test harness (node, keys, deployment)
     let temp_dir = tempfile::TempDir::new()?;
-    let harness = TangleTestHarness::setup(temp_dir, ()).await?;
+    let harness = TangleTestHarness::setup(temp_dir).await?;
 
     // Setup service
     let (mut test_env, service_id, _blueprint_id) = harness.setup_services::<1>(false).await?;
@@ -22,7 +21,7 @@ async fn test_incredible_squaring() -> Result<()> {
 
     // Add the job to the node, and start it
     test_env.add_job(square.layer(TangleLayer)).await;
-    test_env.start().await?;
+    test_env.start(()).await?;
 
     // Submit job and wait for execution
     let job = harness
@@ -31,7 +30,7 @@ async fn test_incredible_squaring() -> Result<()> {
     let results = harness.wait_for_job_execution(service_id, job).await?;
 
     // Verify results match expected output
-    let results = harness.verify_job(results, vec![OutputValue::Uint64(25)])?;
+    harness.verify_job(&results, vec![OutputValue::Uint64(25)]);
 
     assert_eq!(results.service_id, service_id);
     Ok(())

@@ -1,5 +1,5 @@
 use crate::{bls::*, error::SpCoreError};
-use gadget_crypto_core::{aggregation::AggregatableSignature, KeyType};
+use gadget_crypto_core::{KeyType, aggregation::AggregatableSignature};
 use gadget_std::Zero;
 use sp_core::ByteArray;
 use tnt_bls::{single_pop_aggregator::SignatureAggregatorAssumingPoP, *};

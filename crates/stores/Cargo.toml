@@ -8,8 +8,12 @@ license.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 gadget-store-local-database = { workspace = true, optional = true }
+thiserror.workspace = true
 
 [features]
 default = ["std", "local"]
