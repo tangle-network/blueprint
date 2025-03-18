@@ -38,12 +38,12 @@ pub enum Error {
     )]
     #[cfg(any(feature = "local-store"))]
     #[error("Database error: {0}")]
-    Stores(#[from] gadget_stores::Error),
+    Stores(#[from] blueprint_stores::Error),
 }
 
 #[cfg(feature = "local-store")]
-impl From<gadget_stores::local_database::Error> for Error {
-    fn from(value: gadget_stores::local_database::Error) -> Self {
+impl From<blueprint_stores::local_database::Error> for Error {
+    fn from(value: blueprint_stores::local_database::Error) -> Self {
         Error::Stores(value.into())
     }
 }

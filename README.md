@@ -60,8 +60,8 @@ tools for networking and testing.
 * [`blueprint-router`] - A job router for dynamically scheduling jobs
 * [`blueprint-runner`] - The blueprint job runner, executing jobs in a protocol-specific manner
 * [`gadget-std`] - Standard library extensions, for use within the SDK
-* [`gadget-stores`] - (**Meta-crate**) Storage providers for blueprints
-    * [`gadget-store-local-database`] - A local JSON key-value database
+* [`blueprint-stores`] - (**Meta-crate**) Storage providers for blueprints
+    * [`blueprint-store-local-database`] - A local JSON key-value database
 * [`blueprint-tangle-extra`] - Tangle specific extensions for blueprints
 * [`blueprint-evm-extra`] - EVM specific extensions for blueprints
 * [`blueprint-eigenlayer-extra`] - Eigenlayer specific extensions for blueprints
@@ -102,8 +102,8 @@ tools for networking and testing.
 [`blueprint-runner`]: https://docs.rs/blueprint-runner
 [`gadget-blueprint-serde`]: https://docs.rs/gadget-blueprint-serde
 [`gadget-std`]: https://docs.rs/gadget-std
-[`gadget-stores`]: https://docs.rs/gadget-stores
-[`gadget-store-local-database`]: https://docs.rs/gadget-store-local-database
+[`blueprint-stores`]: https://docs.rs/blueprint-stores
+[`blueprint-store-local-database`]: https://docs.rs/blueprint-store-local-database
 [`blueprint-tangle-extra`]: https://docs.rs/blueprint-tangle-extra
 [`blueprint-evm-extra`]: https://docs.rs/blueprint-evm-extra
 [`blueprint-eigenlayer-extra`]: https://docs.rs/blueprint-eigenlayer-extra

@@ -42,7 +42,7 @@ alloy-json-abi = { workspace = true, optional = true, features = ["serde_json"] 
 eigensdk = { workspace = true, optional = true, features = ["full"] }
 
 # K, V Stores
-gadget-stores = { workspace = true, optional = true }
+blueprint-stores = { workspace = true, optional = true }
 
 # Error Handling
 thiserror = { workspace = true }
@@ -116,7 +116,7 @@ networking = [
 ]
 
 ## Enable local KV stores
-local-store = ["gadget-stores/local"]
+local-store = ["blueprint-stores/local"]
 
 ## Enable [round-based] networking capability
 ##

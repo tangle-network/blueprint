@@ -101,4 +101,4 @@ pub mod networking {
 }
 
 #[cfg(feature = "local-store")]
-pub use gadget_stores as stores;
+pub use blueprint_stores as stores;

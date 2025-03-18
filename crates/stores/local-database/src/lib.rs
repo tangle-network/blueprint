@@ -16,9 +16,9 @@ use serde::{de::DeserializeOwned, Serialize};
 /// # Example
 ///
 /// ```no_run
-/// use gadget_store_local_database::LocalDatabase;
+/// use blueprint_store_local_database::LocalDatabase;
 ///
-/// # fn main() -> Result<(), gadget_store_local_database::Error> {
+/// # fn main() -> Result<(), blueprint_store_local_database::Error> {
 /// let db = LocalDatabase::<u64>::open("data.json")?;
 ///
 /// db.set("key", 42)?;
@@ -42,9 +42,9 @@ where
     /// # Examples
     ///
     /// ```no_run
-    /// use gadget_store_local_database::LocalDatabase;
+    /// use blueprint_store_local_database::LocalDatabase;
     ///
-    /// # fn main() -> Result<(), gadget_store_local_database::Error> {
+    /// # fn main() -> Result<(), blueprint_store_local_database::Error> {
     /// let db = LocalDatabase::<u64>::open("data.json")?;
     /// assert!(db.is_empty());
     /// # Ok(()) }
@@ -86,9 +86,9 @@ where
     /// # Example
     ///
     /// ```no_run
-    /// use gadget_store_local_database::LocalDatabase;
+    /// use blueprint_store_local_database::LocalDatabase;
     ///
-    /// # fn main() -> Result<(), gadget_store_local_database::Error> {
+    /// # fn main() -> Result<(), blueprint_store_local_database::Error> {
     /// let db = LocalDatabase::<u64>::open("data.json")?;
     /// assert_eq!(db.len(), 0);
     ///
@@ -107,9 +107,9 @@ where
     /// # Example
     ///
     /// ```no_run
-    /// use gadget_store_local_database::LocalDatabase;
+    /// use blueprint_store_local_database::LocalDatabase;
     ///
-    /// # fn main() -> Result<(), gadget_store_local_database::Error> {
+    /// # fn main() -> Result<(), blueprint_store_local_database::Error> {
     /// let db = LocalDatabase::<u64>::open("data.json")?;
     /// assert!(db.is_empty());
     ///
@@ -128,9 +128,9 @@ where
     /// # Examples
     ///
     /// ```no_run
-    /// use gadget_store_local_database::LocalDatabase;
+    /// use blueprint_store_local_database::LocalDatabase;
     ///
-    /// # fn main() -> Result<(), gadget_store_local_database::Error> {
+    /// # fn main() -> Result<(), blueprint_store_local_database::Error> {
     /// let db = LocalDatabase::<u64>::open("data.json")?;
     ///
     /// db.set("key", 42)?;
@@ -158,9 +158,9 @@ where
     /// # Example
     ///
     /// ```no_run
-    /// use gadget_store_local_database::LocalDatabase;
+    /// use blueprint_store_local_database::LocalDatabase;
     ///
-    /// # fn main() -> Result<(), gadget_store_local_database::Error> {
+    /// # fn main() -> Result<(), blueprint_store_local_database::Error> {
     /// let db = LocalDatabase::<u64>::open("data.json")?;
     ///
     /// db.set("key", 42);

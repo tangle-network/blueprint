@@ -2687,10 +2687,10 @@ dependencies = [
  "blueprint-contexts",
  "blueprint-crypto",
  "blueprint-crypto-tangle-pair-signer",
+ "blueprint-networking",
  "blueprint-tangle-extra",
  "color-eyre",
  "gadget-keystore",
- "blueprint-networking",
  "gadget-std",
  "sp-core",
  "tangle-subxt",
@@ -2716,13 +2716,13 @@ dependencies = [
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-tangle-pair-signer",
+ "blueprint-networking",
  "blueprint-tangle-extra",
  "cargo_metadata 0.18.1",
  "color-eyre",
  "dialoguer",
  "dirs 6.0.0",
  "gadget-keystore",
- "blueprint-networking",
  "gadget-std",
  "indicatif",
  "reqwest 0.12.14",
@@ -2851,9 +2851,9 @@ name = "blueprint-contexts"
 version = "0.1.0"
 dependencies = [
  "blueprint-clients",
+ "blueprint-networking",
  "blueprint-runner",
  "gadget-keystore",
- "blueprint-networking",
  "gadget-std",
  "proc-macro2",
  "tangle-subxt",
@@ -3094,13 +3094,13 @@ dependencies = [
  "blueprint-clients",
  "blueprint-core",
  "blueprint-crypto",
+ "blueprint-networking",
  "blueprint-sdk",
  "clap",
  "color-eyre",
  "dynosaur",
  "futures",
  "gadget-keystore",
- "blueprint-networking",
  "gadget-std",
  "hex",
  "itertools 0.14.0",
@@ -3130,6 +3130,66 @@ name = "blueprint-metrics-rpc-calls"
 version = "0.1.0"
 dependencies = [
  "metrics",
+]
+
+[[package]]
+name = "blueprint-networking"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives 0.8.23",
+ "anyhow",
+ "auto_impl",
+ "bincode",
+ "blake3",
+ "blueprint-crypto",
+ "blueprint-crypto-core",
+ "blueprint-networking",
+ "crossbeam-channel",
+ "dashmap",
+ "fastrand",
+ "futures",
+ "gadget-std",
+ "hex",
+ "itertools 0.14.0",
+ "k256",
+ "lazy_static",
+ "libp2p",
+ "libsecp256k1",
+ "lru-mem",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+]
+
+[[package]]
+name = "blueprint-networking-round-based-extension"
+version = "0.1.0"
+dependencies = [
+ "blueprint-crypto",
+ "blueprint-crypto-core",
+ "blueprint-networking",
+ "crossbeam",
+ "crossbeam-channel",
+ "dashmap",
+ "futures",
+ "generic-array",
+ "hex",
+ "libp2p",
+ "rand 0.8.5",
+ "rand_dev",
+ "round-based",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
 ]
 
 [[package]]
@@ -3171,6 +3231,7 @@ dependencies = [
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-evm-extra",
+ "blueprint-networking",
  "blueprint-router",
  "blueprint-sdk",
  "blueprint-tangle-extra",
@@ -3183,7 +3244,6 @@ dependencies = [
  "futures-core",
  "futures-util",
  "gadget-keystore",
- "blueprint-networking",
  "gadget-std",
  "k256",
  "libp2p",
@@ -3212,23 +3272,42 @@ dependencies = [
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-evm-extra",
  "blueprint-macros",
+ "blueprint-networking",
+ "blueprint-networking-round-based-extension",
  "blueprint-producers-extra",
  "blueprint-router",
  "blueprint-runner",
+ "blueprint-stores",
  "blueprint-tangle-extra",
  "document-features",
  "eigensdk",
  "gadget-keystore",
- "blueprint-networking",
- "blueprint-networking-round-based-extension",
  "gadget-std",
- "gadget-stores",
  "gadget-testing-utils",
  "serde",
  "tangle-subxt",
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
+]
+
+[[package]]
+name = "blueprint-store-local-database"
+version = "0.1.0"
+dependencies = [
+ "gadget-std",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-stores"
+version = "0.1.0"
+dependencies = [
+ "blueprint-store-local-database",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -7289,66 +7368,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-networking"
-version = "0.1.0"
-dependencies = [
- "alloy-primitives 0.8.23",
- "anyhow",
- "auto_impl",
- "bincode",
- "blake3",
- "blueprint-crypto",
- "blueprint-crypto-core",
- "crossbeam-channel",
- "dashmap",
- "fastrand",
- "futures",
- "blueprint-networking",
- "gadget-std",
- "hex",
- "itertools 0.14.0",
- "k256",
- "lazy_static",
- "libp2p",
- "libsecp256k1",
- "lru-mem",
- "parking_lot",
- "serde",
- "serde_json",
- "thiserror 2.0.12",
- "tokio",
- "tokio-stream",
- "tracing",
- "tracing-subscriber 0.3.19",
-]
-
-[[package]]
-name = "blueprint-networking-round-based-extension"
-version = "0.1.0"
-dependencies = [
- "blueprint-crypto",
- "blueprint-crypto-core",
- "crossbeam",
- "crossbeam-channel",
- "dashmap",
- "futures",
- "blueprint-networking",
- "generic-array",
- "hex",
- "libp2p",
- "rand 0.8.5",
- "rand_dev",
- "round-based",
- "serde",
- "serde_json",
- "sha2 0.10.8",
- "thiserror 2.0.12",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.19",
-]
-
-[[package]]
 name = "gadget-std"
 version = "0.1.0"
 dependencies = [
@@ -7356,25 +7375,6 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "rayon",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "gadget-store-local-database"
-version = "0.1.0"
-dependencies = [
- "gadget-std",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "gadget-stores"
-version = "0.1.0"
-dependencies = [
- "gadget-store-local-database",
  "thiserror 2.0.12",
 ]
 
