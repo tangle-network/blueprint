@@ -47,8 +47,8 @@ pub use blueprint_router::Router;
 
 #[cfg(feature = "macros")]
 pub mod macros {
+    pub use blueprint_context_derive as context;
     pub use blueprint_macros::*;
-    pub use gadget_context_derive as context;
 }
 
 // == Protocol-specific utilities ==

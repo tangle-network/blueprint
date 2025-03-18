@@ -28,7 +28,7 @@ blueprint-chain-setup = { workspace = true, optional = true }
 
 # Macros
 blueprint-macros = { workspace = true, optional = true }
-gadget-context-derive = { workspace = true, optional = true }
+blueprint-context-derive = { workspace = true, optional = true }
 
 # Tangle-specific extras
 blueprint-tangle-extra = { workspace = true, optional = true }
@@ -111,7 +111,7 @@ networking = [
     "dep:gadget-networking",
     "blueprint-contexts/networking",
     "gadget-keystore/std",
-    "gadget-context-derive?/networking",
+    "blueprint-context-derive?/networking",
     "blueprint-runner/networking"
 ]
 
@@ -126,7 +126,7 @@ round-based-compat = ["dep:gadget-networking-round-based-extension"]
 ## Enable all macros of subcrates
 macros = [
     "dep:blueprint-macros",
-    "dep:gadget-context-derive",
+    "dep:blueprint-context-derive",
     "blueprint-tangle-extra?/macros"
 ]
 
@@ -139,7 +139,7 @@ tangle = [
     "dep:blueprint-crypto-tangle-pair-signer",
     "blueprint-clients/tangle",
     "blueprint-contexts/tangle",
-    "gadget-context-derive?/tangle",
+    "blueprint-context-derive?/tangle",
     "gadget-testing-utils?/tangle",
     "blueprint-runner/tangle",
     "blueprint-chain-setup/tangle",
@@ -152,7 +152,7 @@ evm = [
     "dep:alloy-json-abi",
     "blueprint-clients/evm",
     "blueprint-contexts/evm",
-    "gadget-context-derive/evm",
+    "blueprint-context-derive/evm",
     "blueprint-crypto-tangle-pair-signer?/evm",
     "blueprint-macros?/evm",
     "gadget-testing-utils?/anvil",

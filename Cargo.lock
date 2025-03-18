@@ -3185,7 +3185,7 @@ dependencies = [
  "blueprint-tangle-extra",
  "document-features",
  "eigensdk",
- "gadget-context-derive",
+ "blueprint-context-derive",
  "gadget-keystore",
  "gadget-networking",
  "gadget-networking-round-based-extension",
@@ -7180,14 +7180,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-context-derive"
+name = "blueprint-context-derive"
 version = "0.3.1"
 dependencies = [
  "alloy-network",
  "alloy-provider",
  "alloy-transport",
  "blueprint-sdk",
- "gadget-context-derive",
+ "blueprint-context-derive",
  "proc-macro2",
  "quote",
  "round-based",

@@ -2772,7 +2772,7 @@ dependencies = [
  "blueprint-tangle-extra",
  "document-features",
  "blueprint-clients",
- "gadget-context-derive",
+ "blueprint-context-derive",
  "blueprint-contexts",
  "gadget-keystore",
  "gadget-std",
@@ -6403,7 +6403,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-context-derive"
+name = "blueprint-context-derive"
 version = "0.3.1"
 dependencies = [
  "proc-macro2",
