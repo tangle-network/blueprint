@@ -11,7 +11,7 @@ pub enum RunnerError {
 
     #[cfg(feature = "networking")]
     #[error("Networking error: {0}")]
-    Networking(#[from] gadget_networking::error::Error),
+    Networking(#[from] blueprint_networking::error::Error),
 
     #[error("Signature error: {0}")]
     SignatureError(String),

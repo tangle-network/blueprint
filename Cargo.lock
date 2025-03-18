@@ -2690,7 +2690,7 @@ dependencies = [
  "blueprint-tangle-extra",
  "color-eyre",
  "gadget-keystore",
- "gadget-networking",
+ "blueprint-networking",
  "gadget-std",
  "sp-core",
  "tangle-subxt",
@@ -2722,7 +2722,7 @@ dependencies = [
  "dialoguer",
  "dirs 6.0.0",
  "gadget-keystore",
- "gadget-networking",
+ "blueprint-networking",
  "gadget-std",
  "indicatif",
  "reqwest 0.12.14",
@@ -2853,7 +2853,7 @@ dependencies = [
  "blueprint-clients",
  "blueprint-runner",
  "gadget-keystore",
- "gadget-networking",
+ "blueprint-networking",
  "gadget-std",
  "proc-macro2",
  "tangle-subxt",
@@ -3100,7 +3100,7 @@ dependencies = [
  "dynosaur",
  "futures",
  "gadget-keystore",
- "gadget-networking",
+ "blueprint-networking",
  "gadget-std",
  "hex",
  "itertools 0.14.0",
@@ -3183,7 +3183,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "gadget-keystore",
- "gadget-networking",
+ "blueprint-networking",
  "gadget-std",
  "k256",
  "libp2p",
@@ -3219,8 +3219,8 @@ dependencies = [
  "document-features",
  "eigensdk",
  "gadget-keystore",
- "gadget-networking",
- "gadget-networking-round-based-extension",
+ "blueprint-networking",
+ "blueprint-networking-round-based-extension",
  "gadget-std",
  "gadget-stores",
  "gadget-testing-utils",
@@ -7289,7 +7289,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-networking"
+name = "blueprint-networking"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives 0.8.23",
@@ -7303,7 +7303,7 @@ dependencies = [
  "dashmap",
  "fastrand",
  "futures",
- "gadget-networking",
+ "blueprint-networking",
  "gadget-std",
  "hex",
  "itertools 0.14.0",
@@ -7323,7 +7323,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-networking-round-based-extension"
+name = "blueprint-networking-round-based-extension"
 version = "0.1.0"
 dependencies = [
  "blueprint-crypto",
@@ -7332,7 +7332,7 @@ dependencies = [
  "crossbeam-channel",
  "dashmap",
  "futures",
- "gadget-networking",
+ "blueprint-networking",
  "generic-array",
  "hex",
  "libp2p",

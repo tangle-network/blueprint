@@ -18,7 +18,7 @@ color-eyre = { workspace = true }
 indicatif = { workspace = true }
 dialoguer = { workspace = true }
 
-gadget-networking = { workspace = true }
+blueprint-networking = { workspace = true }
 blueprint-contexts = { workspace = true, features = ["tangle"] }
 blueprint-crypto-tangle-pair-signer = { workspace = true, features = ["evm"] }
 blueprint-tangle-extra = { workspace = true, features = ["metadata-types"] }
@@ -59,7 +59,7 @@ std = [
     "sp-core/std",
     "tangle-subxt/std",
     "gadget-std/std",
-    "gadget-networking/std",
+    "blueprint-networking/std",
     "blueprint-contexts/std",
     "blueprint-crypto-tangle-pair-signer/std",
     "blueprint-clients/std",

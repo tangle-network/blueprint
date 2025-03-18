@@ -319,17 +319,22 @@ impl BlueprintEnvironment {
     ///
     /// See [`NetworkService::new()`]
     ///
-    /// [`NetworkService::new()`]: gadget_networking::NetworkService::new
+    /// [`NetworkService::new()`]: blueprint_networking::NetworkService::new
     #[cfg(feature = "networking")]
     pub fn libp2p_start_network<K: blueprint_crypto::KeyType>(
         &self,
-        network_config: gadget_networking::NetworkConfig<K>,
-        allowed_keys: gadget_networking::service::AllowedKeys<K>,
-        allowed_keys_rx: crossbeam_channel::Receiver<gadget_networking::AllowedKeys<K>>,
-    ) -> Result<gadget_networking::service_handle::NetworkServiceHandle<K>, crate::error::RunnerError>
-    {
-        let networking_service =
-            gadget_networking::NetworkService::new(network_config, allowed_keys, allowed_keys_rx)?;
+        network_config: blueprint_networking::NetworkConfig<K>,
+        allowed_keys: blueprint_networking::service::AllowedKeys<K>,
+        allowed_keys_rx: crossbeam_channel::Receiver<blueprint_networking::AllowedKeys<K>>,
+    ) -> Result<
+        blueprint_networking::service_handle::NetworkServiceHandle<K>,
+        crate::error::RunnerError,
+    > {
+        let networking_service = blueprint_networking::NetworkService::new(
+            network_config,
+            allowed_keys,
+            allowed_keys_rx,
+        )?;
 
         let handle = networking_service.start();
 
@@ -350,7 +355,7 @@ impl BlueprintEnvironment {
         &self,
         network_name: impl Into<String>,
         using_evm_address_for_handshake_verification: bool,
-    ) -> Result<gadget_networking::NetworkConfig<K>, crate::error::RunnerError> {
+    ) -> Result<blueprint_networking::NetworkConfig<K>, crate::error::RunnerError> {
         use gadget_keystore::backends::Backend;
         use gadget_keystore::crypto::sp_core::SpEd25519 as LibP2PKeyType;
 
@@ -369,7 +374,7 @@ impl BlueprintEnvironment {
             .expect("valid multiaddr; qed");
 
         let network_name: String = network_name.into();
-        let network_config = gadget_networking::NetworkConfig {
+        let network_config = blueprint_networking::NetworkConfig {
             instance_id: network_name.clone(),
             network_name,
             instance_key_pair: ecdsa_pair,

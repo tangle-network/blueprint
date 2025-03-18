@@ -96,8 +96,8 @@ gadget-keystore = { version = "0.1.0", path = "./crates/keystore", default-featu
 gadget-std = { version = "0.1.0", path = "./crates/std", default-features = false }
 
 # P2P
-gadget-networking = { version = "0.1.0", path = "./crates/networking", default-features = false }
-gadget-networking-round-based-extension = { version = "0.1.0", path = "./crates/networking/extensions/round-based", default-features = false }
+blueprint-networking = { version = "0.1.0", path = "./crates/networking", default-features = false }
+blueprint-networking-round-based-extension = { version = "0.1.0", path = "./crates/networking/extensions/round-based", default-features = false }
 
 # Testing utilities
 gadget-testing-utils = { version = "0.1.0", path = "./crates/testing-utils", default-features = false }

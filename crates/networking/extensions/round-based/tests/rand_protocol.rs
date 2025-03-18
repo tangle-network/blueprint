@@ -176,9 +176,9 @@ mod tests {
 
     use super::common::*;
     use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
-    use gadget_networking::discovery::peers::VerificationIdentifierKey;
-    use gadget_networking::service::AllowedKeys;
-    use gadget_networking_round_based_extension::RoundBasedNetworkAdapter;
+    use blueprint_networking::discovery::peers::VerificationIdentifierKey;
+    use blueprint_networking::service::AllowedKeys;
+    use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
     use round_based::MpcParty;
     use tracing::{debug, info};
 

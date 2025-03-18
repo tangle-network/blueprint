@@ -95,9 +95,9 @@ pub mod build {
 /// Networking utilities for blueprints
 pub mod networking {
     /// Networking utilities for blueprints
-    pub use gadget_networking::*;
+    pub use blueprint_networking::*;
     #[cfg(feature = "round-based-compat")]
-    pub use gadget_networking_round_based_extension as round_based_compat;
+    pub use blueprint_networking_round_based_extension as round_based_compat;
 }
 
 #[cfg(feature = "local-store")]

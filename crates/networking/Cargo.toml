@@ -1,5 +1,5 @@
 [package]
-name = "gadget-networking"
+name = "blueprint-networking"
 version = "0.1.0"
 description = "Networking utilities for Tangle Blueprints"
 authors.workspace = true
@@ -69,7 +69,7 @@ features = [
 ]
 
 [dev-dependencies]
-gadget-networking = { workspace = true }
+blueprint-networking = { workspace = true }
 blueprint-crypto = { workspace = true, features = ["sp-core"] }
 blueprint-crypto-core = { workspace = true, features = ["tangle"] }
 tracing-subscriber = { workspace = true }

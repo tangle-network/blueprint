@@ -54,10 +54,10 @@ serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, default-features = false }
 
 # Networking-related dependencies
-gadget-networking = { workspace = true, optional = true }
+blueprint-networking = { workspace = true, optional = true }
 
 # Round-based protocol support
-gadget-networking-round-based-extension = { workspace = true, optional = true }
+blueprint-networking-round-based-extension = { workspace = true, optional = true }
 
 # Optional dependencies for testing
 gadget-testing-utils = { workspace = true, optional = true }
@@ -108,7 +108,7 @@ tracing = [
 
 ## Enable networking support
 networking = [
-    "dep:gadget-networking",
+    "dep:blueprint-networking",
     "blueprint-contexts/networking",
     "gadget-keystore/std",
     "blueprint-context-derive?/networking",
@@ -121,7 +121,7 @@ local-store = ["gadget-stores/local"]
 ## Enable [round-based] networking capability
 ##
 ## [round-based]: https://github.com/LFDT-Lockness/round-based
-round-based-compat = ["dep:gadget-networking-round-based-extension"]
+round-based-compat = ["dep:blueprint-networking-round-based-extension"]
 
 ## Enable all macros of subcrates
 macros = [

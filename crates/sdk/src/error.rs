@@ -30,7 +30,7 @@ pub enum Error {
     // Specific to Networking
     #[cfg(feature = "networking")]
     #[error("Networking error: {0}")]
-    Networking(#[from] gadget_networking::error::Error),
+    Networking(#[from] blueprint_networking::error::Error),
 
     #[expect(
         clippy::non_minimal_cfg,

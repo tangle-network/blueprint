@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use blueprint_crypto::KeyType;
-use gadget_networking::{
+use blueprint_networking::{
     NetworkConfig, NetworkService, service::AllowedKeys, service_handle::NetworkServiceHandle,
 };
 use libp2p::{

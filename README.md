@@ -54,8 +54,8 @@ tools for networking and testing.
 * [`blueprint-manager`] - A program executor that connects to the Tangle network and runs protocols dynamically on the fly
 * [`blueprint-metrics`] (**Meta-crate**) Utilities for collecting metrics
     * [`blueprint-metrics-rpc-calls`] - Utilities for collecting metrics from RPC calls
-* [`gadget-networking`] - P2P networking support for blueprints
-    * [`gadget-networking-round-based-extension`] - A networking compatibility layer for [round-based] MPC protocols
+* [`blueprint-networking`] - P2P networking support for blueprints
+    * [`blueprint-networking-round-based-extension`] - A networking compatibility layer for [round-based] MPC protocols
 * [`blueprint-producers-extra`] - Additional protocol-independent event producers
 * [`blueprint-router`] - A job router for dynamically scheduling jobs
 * [`blueprint-runner`] - The blueprint job runner, executing jobs in a protocol-specific manner
@@ -95,8 +95,8 @@ tools for networking and testing.
 [`blueprint-manager`]: https://docs.rs/blueprint-manager
 [`blueprint-metrics`]: https://docs.rs/blueprint-metrics
 [`blueprint-metrics-rpc-calls`]: https://docs.rs/blueprint-metrics-rpc-calls
-[`gadget-networking`]: https://docs.rs/gadget-networking
-[`gadget-networking-round-based-extension`]: https://docs.rs/gadget-networking-round-based-extension
+[`blueprint-networking`]: https://docs.rs/blueprint-networking
+[`blueprint-networking-round-based-extension`]: https://docs.rs/blueprint-networking-round-based-extension
 [`blueprint-producers-extra`]: https://docs.rs/blueprint-producers-extra
 [`blueprint-router`]: https://docs.rs/blueprint-router
 [`blueprint-runner`]: https://docs.rs/blueprint-runner

@@ -2466,7 +2466,7 @@ dependencies = [
  "blueprint-clients",
  "blueprint-contexts",
  "gadget-keystore",
- "gadget-networking",
+ "blueprint-networking",
  "gadget-std",
  "sp-core",
  "tangle-subxt",
@@ -2498,7 +2498,7 @@ dependencies = [
  "blueprint-clients",
  "blueprint-contexts",
  "gadget-keystore",
- "gadget-networking",
+ "blueprint-networking",
  "gadget-std",
  "indicatif",
  "reqwest 0.12.14",
@@ -2742,7 +2742,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "gadget-keystore",
- "gadget-networking",
+ "blueprint-networking",
  "gadget-std",
  "k256",
  "libp2p",
@@ -6418,7 +6418,7 @@ dependencies = [
  "blueprint-runner",
  "blueprint-clients",
  "gadget-keystore",
- "gadget-networking",
+ "blueprint-networking",
  "gadget-std",
  "tangle-subxt",
 ]
@@ -6476,7 +6476,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-networking"
+name = "blueprint-networking"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives 0.8.23",
