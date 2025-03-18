@@ -7,9 +7,6 @@ edition = "2021"
 manager = { Evm = "ExperimentalBlueprint" }
 master_revision = "Latest"
 
-[[bin]]
-name = "incredible-squaring"
-path = "src/main.rs"
 
 [dependencies]
 # Blueprint dependencies
