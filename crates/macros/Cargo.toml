@@ -1,7 +1,7 @@
 [package]
 name = "blueprint-macros"
 version = "0.1.0"
-description = "Macros for blueprint sdk"
+description = "Macros for the Tangle Blueprint SDK"
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
