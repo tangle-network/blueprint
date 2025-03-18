@@ -16,7 +16,7 @@ blueprint-core = { workspace = true }
 blueprint-runner = { workspace = true, features = ["std", "tangle", "networking"] }
 blueprint-tangle-extra = { workspace = true, features = ["std", "metadata-types"] }
 gadget-std = { workspace = true, features = ["std"] }
-gadget-contexts = { workspace = true, features = ["tangle", "std"] }
+blueprint-contexts = { workspace = true, features = ["tangle", "std"] }
 blueprint-crypto-tangle-pair-signer = { workspace = true, features = ["std", "evm"] }
 gadget-core-testing-utils = { workspace = true }
 blueprint-chain-setup = { workspace = true, features = ["std", "tangle"] }

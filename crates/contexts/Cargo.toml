@@ -1,5 +1,5 @@
 [package]
-name = "gadget-contexts"
+name = "blueprint-contexts"
 version = "0.1.0"
 description = "Context providers for Tangle Blueprints"
 authors.workspace = true

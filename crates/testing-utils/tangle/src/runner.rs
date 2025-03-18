@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use blueprint_contexts::tangle::TangleClientContext;
 use blueprint_core::Job;
 use blueprint_crypto_tangle_pair_signer::TanglePairSigner;
 use blueprint_runner::BackgroundService;
@@ -9,7 +10,6 @@ use blueprint_runner::error::RunnerError as Error;
 use blueprint_runner::tangle::config::TangleConfig;
 use blueprint_tangle_extra::consumer::TangleConsumer;
 use blueprint_tangle_extra::producer::TangleProducer;
-use gadget_contexts::tangle::TangleClientContext;
 use gadget_core_testing_utils::runner::{TestEnv, TestRunner};
 use gadget_keystore::backends::Backend;
 use gadget_keystore::crypto::sp_core::SpSr25519;

@@ -2684,11 +2684,11 @@ version = "0.1.0"
 dependencies = [
  "alloy-signer-local",
  "blueprint-clients",
+ "blueprint-contexts",
  "blueprint-crypto",
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-tangle-extra",
  "color-eyre",
- "gadget-contexts",
  "gadget-keystore",
  "gadget-networking",
  "gadget-std",
@@ -2712,6 +2712,7 @@ dependencies = [
  "alloy-transport",
  "blueprint-chain-setup-common",
  "blueprint-clients",
+ "blueprint-contexts",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-tangle-pair-signer",
@@ -2720,7 +2721,6 @@ dependencies = [
  "color-eyre",
  "dialoguer",
  "dirs 6.0.0",
- "gadget-contexts",
  "gadget-keystore",
  "gadget-networking",
  "gadget-std",
@@ -2826,6 +2826,19 @@ dependencies = [
  "blueprint-client-tangle",
  "gadget-std",
  "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-contexts"
+version = "0.1.0"
+dependencies = [
+ "blueprint-clients",
+ "blueprint-runner",
+ "gadget-keystore",
+ "gadget-networking",
+ "gadget-std",
+ "proc-macro2",
+ "tangle-subxt",
 ]
 
 [[package]]
@@ -3160,6 +3173,7 @@ dependencies = [
  "blueprint-build-utils",
  "blueprint-chain-setup",
  "blueprint-clients",
+ "blueprint-contexts",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-tangle-pair-signer",
@@ -3172,7 +3186,6 @@ dependencies = [
  "document-features",
  "eigensdk",
  "gadget-context-derive",
- "gadget-contexts",
  "gadget-keystore",
  "gadget-networking",
  "gadget-networking-round-based-extension",
@@ -3734,6 +3747,7 @@ dependencies = [
  "bip39",
  "blueprint-chain-setup",
  "blueprint-clients",
+ "blueprint-contexts",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-core",
@@ -3748,7 +3762,6 @@ dependencies = [
  "dialoguer",
  "dotenv",
  "eigensdk",
- "gadget-contexts",
  "gadget-keystore",
  "gadget-std",
  "gadget-testing-utils",
@@ -7185,19 +7198,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-contexts"
-version = "0.1.0"
-dependencies = [
- "blueprint-clients",
- "blueprint-runner",
- "gadget-keystore",
- "gadget-networking",
- "gadget-std",
- "proc-macro2",
- "tangle-subxt",
-]
-
-[[package]]
 name = "gadget-core-testing-utils"
 version = "0.1.0"
 dependencies = [
@@ -7386,12 +7386,12 @@ dependencies = [
  "alloy-signer-local",
  "blueprint-chain-setup",
  "blueprint-client-tangle",
+ "blueprint-contexts",
  "blueprint-core",
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-runner",
  "blueprint-tangle-extra",
  "futures",
- "gadget-contexts",
  "gadget-core-testing-utils",
  "gadget-keystore",
  "gadget-std",

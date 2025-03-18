@@ -4,6 +4,8 @@ use crate::{
     harness::{TangleTestConfig, generate_env_from_node_id},
     runner::TangleTestEnv,
 };
+use blueprint_contexts::tangle::TangleClient;
+use blueprint_contexts::tangle::TangleClientContext;
 use blueprint_core::Job;
 use blueprint_crypto_tangle_pair_signer::TanglePairSigner;
 use blueprint_runner::BackgroundService;
@@ -12,8 +14,6 @@ use blueprint_runner::config::Multiaddr;
 use blueprint_runner::error::RunnerError;
 use blueprint_runner::tangle::config::TangleConfig;
 use futures::future::join_all;
-use gadget_contexts::tangle::TangleClient;
-use gadget_contexts::tangle::TangleClientContext;
 use gadget_core_testing_utils::runner::TestEnv;
 use gadget_keystore::backends::Backend;
 use gadget_keystore::crypto::sp_core::SpSr25519;

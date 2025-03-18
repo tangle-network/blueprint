@@ -2464,7 +2464,7 @@ dependencies = [
  "blueprint-tangle-extra",
  "color-eyre",
  "blueprint-clients",
- "gadget-contexts",
+ "blueprint-contexts",
  "gadget-keystore",
  "gadget-networking",
  "gadget-std",
@@ -2496,7 +2496,7 @@ dependencies = [
  "dialoguer",
  "dirs 6.0.0",
  "blueprint-clients",
- "gadget-contexts",
+ "blueprint-contexts",
  "gadget-keystore",
  "gadget-networking",
  "gadget-std",
@@ -2773,7 +2773,7 @@ dependencies = [
  "document-features",
  "blueprint-clients",
  "gadget-context-derive",
- "gadget-contexts",
+ "blueprint-contexts",
  "gadget-keystore",
  "gadget-std",
  "gadget-testing-utils",
@@ -6412,7 +6412,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-contexts"
+name = "blueprint-contexts"
 version = "0.1.0"
 dependencies = [
  "blueprint-runner",
@@ -6535,7 +6535,7 @@ dependencies = [
  "blueprint-tangle-extra",
  "futures",
  "blueprint-client-tangle",
- "gadget-contexts",
+ "blueprint-contexts",
  "gadget-core-testing-utils",
  "gadget-keystore",
  "gadget-std",

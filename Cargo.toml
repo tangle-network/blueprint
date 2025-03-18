@@ -81,7 +81,7 @@ blueprint-client-core = { version = "0.1.0", path = "./crates/clients/core", def
 blueprint-client-eigenlayer = { version = "0.1.0", path = "./crates/clients/eigenlayer", default-features = false }
 blueprint-client-evm = { version = "0.1.0", path = "./crates/clients/evm", default-features = false }
 blueprint-client-tangle = { version = "0.1.0", path = "./crates/clients/tangle", default-features = false }
-gadget-contexts = { version = "0.1.0", path = "./crates/contexts", default-features = false }
+blueprint-contexts = { version = "0.1.0", path = "./crates/contexts", default-features = false }
 
 # Macros
 blueprint-macros = { version = "0.1.0", path = "./crates/macros", default-features = false }

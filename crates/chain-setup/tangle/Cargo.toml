@@ -19,7 +19,7 @@ indicatif = { workspace = true }
 dialoguer = { workspace = true }
 
 gadget-networking = { workspace = true }
-gadget-contexts = { workspace = true, features = ["tangle"] }
+blueprint-contexts = { workspace = true, features = ["tangle"] }
 blueprint-crypto-tangle-pair-signer = { workspace = true, features = ["evm"] }
 blueprint-tangle-extra = { workspace = true, features = ["metadata-types"] }
 blueprint-core = { workspace = true }
@@ -60,7 +60,7 @@ std = [
     "tangle-subxt/std",
     "gadget-std/std",
     "gadget-networking/std",
-    "gadget-contexts/std",
+    "blueprint-contexts/std",
     "blueprint-crypto-tangle-pair-signer/std",
     "blueprint-clients/std",
     "gadget-keystore/std",

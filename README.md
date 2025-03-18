@@ -37,7 +37,7 @@ tools for networking and testing.
     * [`blueprint-client-tangle`] - Client for interacting with the Tangle Network
     * [`blueprint-client-eigenlayer`] - Client for interacting with the [Eigenlayer] Network
     * [`blueprint-client-evm`] - Client for interacting with the EVM Network
-* [`gadget-contexts`] - Extensions for adding functionality to custom blueprint context types
+* [`blueprint-contexts`] - Extensions for adding functionality to custom blueprint context types
 * [`gadget-context-derive`] - Derive macros for implementing context extension traits
 * [`blueprint-core`] - Core components for building blueprints, primarily job system primitives
 * [`blueprint-crypto`] - (**Meta-crate**) Cryptographic utilities
@@ -78,7 +78,7 @@ tools for networking and testing.
 [`blueprint-client-tangle`]: https://docs.rs/blueprint-client-tangle
 [`blueprint-client-eigenlayer`]: https://docs.rs/blueprint-client-eigenlayer
 [`blueprint-client-evm`]: https://docs.rs/blueprint-client-evm
-[`gadget-contexts`]: https://docs.rs/gadget-contexts
+[`blueprint-contexts`]: https://docs.rs/blueprint-contexts
 [`gadget-context-derive`]: https://docs.rs/gadget-context-derive
 [`blueprint-core`]: https://docs.rs/blueprint-core
 [`blueprint-crypto`]: https://docs.rs/blueprint-crypto

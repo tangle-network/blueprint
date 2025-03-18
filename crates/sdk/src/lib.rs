@@ -17,7 +17,7 @@ pub use core::*;
 pub use blueprint_crypto as crypto;
 
 pub use blueprint_clients as clients;
-pub use gadget_contexts as contexts;
+pub use blueprint_contexts as contexts;
 
 pub use gadget_keystore as keystore;
 pub use gadget_std as std;
