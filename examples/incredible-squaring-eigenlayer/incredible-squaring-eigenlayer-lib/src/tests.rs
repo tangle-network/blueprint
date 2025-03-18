@@ -2,15 +2,18 @@ use blueprint_sdk::alloy::network::EthereumWallet;
 use blueprint_sdk::alloy::primitives::{Address, Bytes, U256};
 use blueprint_sdk::alloy::providers::Provider;
 use blueprint_sdk::alloy::signers::local::PrivateKeySigner;
-use blueprint_sdk::alloy::sol;
+use blueprint_sdk::evm::util::{get_provider_http, get_wallet_provider_http};
 use blueprint_sdk::testing::utils::anvil::anvil::*;
 use blueprint_sdk::testing::utils::runner::TestEnv;
+use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::{error, info};
 use futures::StreamExt;
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+
+use crate::contexts::EigenSquareContext;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_eigenlayer_incredible_squaring_blueprint() {

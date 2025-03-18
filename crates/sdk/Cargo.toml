@@ -77,6 +77,7 @@ std = [
     "blueprint-core/std",
     "blueprint-runner/std",
     "gadget-keystore/std",
+    "gadget-contexts/std",
     "gadget-clients/std",
     "gadget-crypto/std",
     # Tangle

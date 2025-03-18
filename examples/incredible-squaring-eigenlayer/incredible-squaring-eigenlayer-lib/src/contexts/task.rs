@@ -1,6 +1,6 @@
-use crate::contracts::IBLSSignatureChecker::NonSignerStakesAndSignature;
-use crate::contracts::BN254::{G1Point, G2Point};
-use crate::contracts::{SquaringTask, TaskManager};
+use crate::contracts::task_manager::IBLSSignatureChecker::NonSignerStakesAndSignature;
+use crate::contracts::task_manager::BN254::{G1Point, G2Point};
+use crate::contracts::task_manager::{SquaringTask, TaskManager};
 use blueprint_eigenlayer_extra::contract_conversions::{
     convert_aggregation_response, ContractG1Point, ContractG2Point,
     NonSignerStakesAndSignature as NSSTrait,
@@ -9,10 +9,8 @@ use blueprint_eigenlayer_extra::generic_task_aggregation::{
     AggregationError, EigenTask, ResponseSender, Result, TaskResponse,
 };
 use blueprint_sdk::alloy::hex;
-use blueprint_sdk::alloy::primitives::{keccak256, Address, FixedBytes, U256};
-use blueprint_sdk::alloy::providers::RootProvider;
+use blueprint_sdk::alloy::primitives::{Address, U256};
 use blueprint_sdk::alloy::sol_types::SolType;
-use blueprint_sdk::alloy::transports::BoxTransport;
 use blueprint_sdk::eigensdk::crypto_bls::{self, BlsG1Point, BlsG2Point};
 use blueprint_sdk::eigensdk::services_blsaggregation::bls_aggregation_service_response::BlsAggregationServiceResponse;
 use blueprint_sdk::evm::util::get_provider_http;

@@ -5,18 +5,24 @@
 use blueprint_sdk::alloy::sol;
 use serde::{Deserialize, Serialize};
 
-sol!(
-    #[allow(missing_docs)]
-    #[sol(rpc)]
-    #[derive(Debug, Serialize, Deserialize)]
-    SquaringTask,
-    "../contracts/out/SquaringTask.sol/SquaringTask.json"
-);
+pub mod task_manager {
+    use super::*;
+    sol!(
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug, Serialize, Deserialize)]
+        SquaringTask,
+        "../contracts/out/SquaringTask.sol/SquaringTask.json"
+    );
+}
 
-sol!(
-    #[allow(missing_docs, clippy::too_many_arguments)]
-    #[sol(rpc)]
-    #[derive(Debug)]
-    RegistryCoordinator,
-    "../contracts/out/RegistryCoordinator.sol/RegistryCoordinator.json"
-);
+pub mod registry_coordinator {
+    use super::*;
+    sol!(
+        #[allow(missing_docs, clippy::too_many_arguments)]
+        #[sol(rpc)]
+        #[derive(Debug)]
+        RegistryCoordinator,
+        "../contracts/out/RegistryCoordinator.sol/RegistryCoordinator.json"
+    );
+}

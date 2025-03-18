@@ -1,11 +1,12 @@
+use super::TaskError;
+use crate::contexts::aggregator::EigenSquareContext;
 use crate::contexts::task::IncredibleSquaringTask;
-use crate::contexts::EigenSquareContext;
-use crate::contracts::SquaringTask::NewTaskCreated;
-use crate::{Context, TaskError};
+use crate::contracts::task_manager::SquaringTask::NewTaskCreated;
 use blueprint_sdk::core::info;
 use blueprint_sdk::eigensdk::services_blsaggregation::bls_agg::TaskMetadata;
 use blueprint_sdk::eigensdk::types::operator::QuorumThresholdPercentage;
 use blueprint_sdk::evm::extract::Events;
+use blueprint_sdk::extract::Context;
 use blueprint_sdk::job_result::Void;
 
 const TASK_CHALLENGE_WINDOW_BLOCK: u32 = 100;

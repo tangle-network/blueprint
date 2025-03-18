@@ -2,7 +2,6 @@ use alloy_primitives::{Address, keccak256};
 use blueprint_evm_extra::util::get_provider_http;
 use eigensdk::crypto_bls::{BlsKeyPair, OperatorId, error::BlsError};
 use gadget_crypto_bn254::ArkBlsBn254Secret;
-use thiserror::Error;
 
 /// Get the allocation manager address from the `DelegationManager` contract
 ///
