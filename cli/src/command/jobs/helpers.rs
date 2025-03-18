@@ -1,6 +1,6 @@
+use blueprint_tangle_extra::serde::{BoundedVec, Field, from_field, new_bounded_string};
 use color_eyre::Result;
 use dialoguer::console::style;
-use gadget_blueprint_serde::{BoundedVec, Field, from_field, new_bounded_string};
 use gadget_chain_setup::tangle::InputValue;
 use serde_json;
 use std::str::FromStr;

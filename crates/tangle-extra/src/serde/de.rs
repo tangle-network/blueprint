@@ -1,5 +1,4 @@
-use crate::Field;
-use crate::error::{Error, Result, UnsupportedType};
+use super::error::{Error, Result, UnsupportedType};
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -7,7 +6,7 @@ use serde::de::IntoDeserializer;
 use serde::{de, forward_to_deserialize_any};
 use tangle_subxt::subxt_core::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::BoundedString;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::{BoundedString, Field};
 
 /// A deserializer for [`Field`]
 ///

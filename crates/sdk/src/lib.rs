@@ -56,7 +56,6 @@ pub mod macros {
 #[cfg(feature = "tangle")]
 mod tangle_feat {
     pub use blueprint_tangle_extra as tangle;
-    pub use gadget_blueprint_serde as serde;
     pub use tangle_subxt;
 }
 #[cfg(feature = "tangle")]

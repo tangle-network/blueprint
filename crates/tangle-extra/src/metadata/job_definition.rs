@@ -29,7 +29,7 @@
 //!
 //! [`Job`]: blueprint_core::Job
 
-use gadget_blueprint_serde::{BoundedVec, new_bounded_string};
+use crate::serde::{BoundedVec, new_bounded_string};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::{
     JobDefinition, JobMetadata,

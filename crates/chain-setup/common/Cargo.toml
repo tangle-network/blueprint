@@ -12,12 +12,12 @@ repository.workspace = true
 gadget-std = { workspace = true }
 color-eyre = { workspace = true }
 
+blueprint-tangle-extra = { workspace = true }
 gadget-networking = { workspace = true }
 gadget-contexts = { workspace = true, features = ["tangle"] }
 gadget-crypto-tangle-pair-signer = { workspace = true, features = ["evm"] }
 gadget-clients = { workspace = true, features = ["tangle"] }
 gadget-keystore = { workspace = true }
-gadget-blueprint-serde = { workspace = true }
 gadget-crypto = { workspace = true, features = [
     "k256",
     "sr25519-schnorrkel",
@@ -45,6 +45,5 @@ std = [
     "gadget-crypto/std",
     "gadget-clients/std",
     "gadget-keystore/std",
-    "gadget-blueprint-serde/std",
     "thiserror/std",
 ]
