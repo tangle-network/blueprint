@@ -1,288 +1,212 @@
-# Tangle Network: Gadget SDK
+![Tangle Network Banner](https://raw.githubusercontent.com/tangle-network/tangle/refs/heads/main/assets/Tangle%20%20Banner.png)
 
-A comprehensive toolkit for building, deploying, and managing blueprints to run on gadgets on the Tangle Network. This workspace provides a collection of Rust crates that enable developers to create and interact with blockchain-based applications.
+<h1 align="center">Blueprint SDK</h1>
 
-## Table of Contents
+<p align="center"><em>A comprehensive toolkit for building, deploying, and managing blueprints on the Tangle Network.</em></p>
 
-- [Overview](#overview)
-- [Features](#-features)
-- [Project Structure](#-project-structure)
-- [Prerequisites](#-prerequisites)
-- [Getting Started](#-getting-started)
-  - [Installation](#installation)
-  - [Creating Your First Blueprint](#creating-your-first-blueprint)
-  - [Building and Testing](#building-and-testing)
-  - [Deployment](#deployment)
-- [Key Management](#-key-management)
-  - [Key Generation](#key-generation)
-  - [Supported Key Types](#supported-key-types)
-- [Configuration](#-configuration)
-  - [Feature Flags](#feature-flags)
-  - [Environment Variables](#environment-variables)
-- [Core Components](#-core-components)
-  - [Blueprint System](#blueprint-system)
-  - [Network Clients](#network-clients)
-  - [Cryptography](#cryptography)
-  - [Event System](#event-system)
-  - [Storage](#storage)
-- [Development](#-development)
-  - [Testing](#testing)
-- [Contributing](#-contributing)
-- [Support](#-support)
+<p align="center">
+  <a href="https://github.com/tangle-network/blueprint/actions"><img src="https://img.shields.io/github/actions/workflow/status/tangle-network/blueprint/ci.yml?branch=main&logo=github" alt="Build Status"></a>
+  <a href="https://github.com/tangle-network/blueprint/releases"><img src="https://img.shields.io/github/v/release/tangle-network/blueprint?sort=semver&filter=blueprint-sdk&display_name=release" alt="Latest Release"></a>
+  <a href="https://github.com/tangle-network/blueprint/blob/main/LICENSE"><img src="https://img.shields.io/github/license/tangle-network/blueprint" alt="License"></a>
+  <a href="https://discord.com/invite/cv8EfJu3Tn"><img src="https://img.shields.io/discord/833784453251596298?label=Discord" alt="Discord"></a>
+  <a href="https://t.me/tanglenet"><img src="https://img.shields.io/endpoint?color=neon&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Ftanglenet" alt="Telegram"></a>
+</p>
 
 ## Overview
 
-Tangle Network's Gadget SDK is a modular framework designed to simplify the development and deployment of blockchain applications (blueprints) on the Tangle Network. It provides a comprehensive set of tools and libraries for blockchain interaction, cryptographic operations, and network communication.
+Blueprints are Infrastructure-as-Code templates that allow developers to quickly build crypto services. The Blueprint SDK
+comes equipped with a variety of tools, from event listeners and p2p networking to flexible keystores, allowing you to rapidly
+prototype distributed systems. With these tools, developers can get started building anything from oracles to bridge
+security systems, zk prover networks, AI agent orchestration systems. Deploy these applications on the [Tangle Network], [Eigenlayer], or natively.
 
-## 🌟 Features
+We also have a [documentation site](https://docs.tangle.tools/) on all things Tangle to help you get started.
 
-- **Blueprint System**
+### SDK Components
 
-  - Template-based blueprint creation
-  - Automated deployment workflows
-  - Metadata Management
+The following components make up the SDK, providing everything from job creation and routing utilities to specialized
+tools for networking and testing.
 
-- **Multi-Chain Support**
+* [`blueprint-sdk`] - Main crate for the Tangle Blueprint SDK, re-exporting all of the following
+* [`gadget-benchmarking`] - Utilities for benchmarking blueprints
+* [`blueprint-build-utils`] - Utilities for simplifying build-time tasks (e.g., building contracts, installing dependencies)
+* [`gadget-clients`] - (**Meta-crate**) Clients for interacting with Tangle, [Eigenlayer], and other networks
+    * [`gadget-client-tangle`] - Client for interacting with the Tangle Network
+    * [`gadget-client-eigenlayer`] - Client for interacting with the [Eigenlayer] Network
+    * [`gadget-client-evm`] - Client for interacting with the EVM Network
+* [`gadget-contexts`] - Extensions for adding functionality to custom blueprint context types
+* [`gadget-context-derive`] - Derive macros for implementing context extension traits
+* [`blueprint-core`] - Core components for building blueprints, primarily job system primitives
+* [`gadget-crypto`] - (**Meta-crate**) Cryptographic utilities
+    * [`gadget-crypto-core`] - Core cryptographic utilities (traits, types)
+    * [`gadget-crypto-bls`] - Utilities for working with BLS signatures and keys
+    * [`gadget-crypto-bn254`] - Utilities for working with BN254 signatures and keys
+    * [`gadget-crypto-ed25519`] - Utilities for working with Ed25519 signatures and keys
+    * [`gadget-crypto-k256`] - Utilities for working with [secp256k1] signatures and keys
+    * [`gadget-crypto-sp-core`] - Blueprint-compatible crypto wrappers around [sp-core] primitives
+    * [`gadget-crypto-sr25519`] - Utilities for working with sr25519 signatures and keys
+    * [`gadget-crypto-tangle-pair-signer`] - Pair signer type for Tangle
+* [`gadget-keystore`] - Flexible keystore implementation, supporting local and remote signers
+* [`gadget-macros`] - Utility macros for simplifying blueprint development
+* [`blueprint-manager`] - A program executor that connects to the Tangle network and runs protocols dynamically on the fly
+* [`gadget-metrics`] (**Meta-crate**) Utilities for collecting metrics
+    * [`gadget-metrics-rpc-calls`] - Utilities for collecting metrics from RPC calls
+* [`gadget-networking`] - P2P networking support for blueprints
+    * [`gadget-networking-round-based-extension`] - A networking compatibility layer for [round-based] MPC protocols
+* [`blueprint-producers-extra`] - Additional protocol-independent event producers
+* [`blueprint-router`] - A job router for dynamically scheduling jobs
+* [`blueprint-runner`] - The blueprint job runner, executing jobs in a protocol-specific manner
+* [`gadget-blueprint-serde`] - [serde]-compatible de/serialization for Tangle types
+* [`gadget-std`] - Standard library extensions, for use within the SDK
+* [`gadget-stores`] - (**Meta-crate**) Storage providers for blueprints
+    * [`gadget-store-local-database`] - A local JSON key-value database
+* [`blueprint-tangle-extra`] - Tangle specific extensions for blueprints
+* [`blueprint-evm-extra`] - EVM specific extensions for blueprints
+* [`blueprint-eigenlayer-extra`] - Eigenlayer specific extensions for blueprints
+* [`gadget-testing-utils`] - (**Meta-crate**) Utilities for testing blueprints
+    * [`gadget-core-testing-utils`] - Core testing utility primitives
+    * [`gadget-anvil-testing-utils`] - Utilities for creating and interacting with Anvil testnets
+    * [`gadget-tangle-testing-utils`] - Utilities for creating end-to-end tests for Tangle blueprints
+    * [`gadget-eigenlayer-testing-utils`] - Utilities for creating end-to-end tests for Eigenlayer blueprints
 
-  - Native Tangle Network integration
-  - EigenLayer compatibility
-  - EVM chain support
-  - Cross-chain communication
+[`blueprint-sdk`]: https://docs.rs/blueprint-sdk
+[`gadget-benchmarking`]: https://docs.rs/gadget-benchmarking
+[`blueprint-build-utils`]: https://docs.rs/blueprint-build-utils
+[`gadget-clients`]: https://docs.rs/gadget-clients
+[`gadget-client-tangle`]: https://docs.rs/gadget-client-tangle
+[`gadget-client-eigenlayer`]: https://docs.rs/gadget-client-eigenlayer
+[`gadget-client-evm`]: https://docs.rs/gadget-client-evm
+[`gadget-contexts`]: https://docs.rs/gadget-contexts
+[`gadget-context-derive`]: https://docs.rs/gadget-context-derive
+[`blueprint-core`]: https://docs.rs/blueprint-core
+[`gadget-crypto`]: https://docs.rs/gadget-crypto
+[`gadget-crypto-core`]: https://docs.rs/gadget-crypto-core
+[`gadget-crypto-bls`]: https://docs.rs/gadget-crypto-bls
+[`gadget-crypto-bn254`]: https://docs.rs/gadget-crypto-bn254
+[`gadget-crypto-ed25519`]: https://docs.rs/gadget-crypto-ed25519
+[`gadget-crypto-k256`]: https://docs.rs/gadget-crypto-k256
+[`gadget-crypto-sp-core`]: https://docs.rs/gadget-crypto-sp-core
+[`gadget-crypto-sr25519`]: https://docs.rs/gadget-crypto-sr25519
+[`gadget-crypto-tangle-pair-signer`]: https://docs.rs/gadget-crypto-tangle-pair-signer
+[`gadget-keystore`]: https://docs.rs/gadget-keystore
+[`gadget-macros`]: https://docs.rs/gadget-macros
+[`blueprint-manager`]: https://docs.rs/blueprint-manager
+[`gadget-metrics`]: https://docs.rs/gadget-metrics
+[`gadget-metrics-rpc-calls`]: https://docs.rs/gadget-metrics-rpc-calls
+[`gadget-networking`]: https://docs.rs/gadget-networking
+[`gadget-networking-round-based-extension`]: https://docs.rs/gadget-networking-round-based-extension
+[`blueprint-producers-extra`]: https://docs.rs/blueprint-producers-extra
+[`blueprint-router`]: https://docs.rs/blueprint-router
+[`blueprint-runner`]: https://docs.rs/blueprint-runner
+[`gadget-blueprint-serde`]: https://docs.rs/gadget-blueprint-serde
+[`gadget-std`]: https://docs.rs/gadget-std
+[`gadget-stores`]: https://docs.rs/gadget-stores
+[`gadget-store-local-database`]: https://docs.rs/gadget-store-local-database
+[`blueprint-tangle-extra`]: https://docs.rs/blueprint-tangle-extra
+[`blueprint-evm-extra`]: https://docs.rs/blueprint-evm-extra
+[`blueprint-eigenlayer-extra`]: https://docs.rs/blueprint-eigenlayer-extra
+[`gadget-testing-utils`]: https://docs.rs/gadget-testing-utils
+[`gadget-core-testing-utils`]: https://docs.rs/gadget-core-testing-utils
+[`gadget-anvil-testing-utils`]: https://docs.rs/gadget-anvil-testing-utils
+[`gadget-tangle-testing-utils`]: https://docs.rs/gadget-tangle-testing-utils
+[`gadget-eigenlayer-testing-utils`]: https://docs.rs/gadget-eigenlayer-testing-utils
 
-- **Advanced Cryptography**
 
-  - Multiple signature schemes (BLS, Ed25519, SR25519)
-  - Secure key management
+## 🚀 Getting Started
 
-- **Networking**
+### 📋 Prerequisites
 
-  - P2P communication via libp2p
-  - Custom protocol implementations
-  - NAT traversal
-  - Peer discovery and management
+Ensure you have the following installed:
 
-- **Development Tools**
-  - CLI for common operations
-  - Comprehensive testing framework
-  - Performance benchmarking
-  - Debugging utilities
+- [Rust]
+- **OpenSSL Development Packages**
 
-## 🛠 Project Structure
-
-```
-tangle-network-gadget-workspace
-├── blueprints               # Blueprint examples and templates
-├── cli                      # Cargo-tangle Command-line interface tool
-├── crates                   # Core functionality crates
-│   ├── benchmarking         # Performance testing tools
-│   ├── blueprint            # Blueprint core system and utilities
-│   ├── clients              # Network clients (Tangle, EVM, EigenLayer)
-│   ├── config               # Configuration management
-│   ├── contexts             # Execution contexts
-│   ├── crypto               # Cryptographic implementations
-│   ├── eigenlayer-bindings  # EigenLayer smart contract bindings
-│   ├── executor             # Task execution system
-│   ├── keystore             # Key management and storage
-│   ├── logging              # Logging infrastructure
-│   ├── macros               # Procedural and derive macros
-│   ├── metrics              # Performance and monitoring metrics
-│   ├── networking           # P2P networking and communication
-│   ├── sdk                  # Software Development Kit
-│   ├── std                  # Standard library extensions
-│   ├── stores               # Storage implementations
-│   ├── testing-utils        # Testing utilities and helpers
-│   └── utils                # Common utilities and helpers
-├── .config                  # Configuration files
-└── rust-toolchain.toml      # Rust version and components
-```
-
-## 📋 Prerequisites
-
-- Rust (nightly-2024-10-13)
-- Cargo
-- OpenSSL development packages
-- CMake (for certain dependencies)
-
-For Ubuntu/Debian:
+#### For Ubuntu/Debian:
 
 ```bash
-apt install build-essential cmake libssl-dev pkg-config
+sudo apt update && sudo apt install build-essential cmake libssl-dev pkg-config
 ```
 
-For macOS:
+#### For macOS:
 
 ```bash
 brew install openssl cmake
 ```
 
-## 🚀 Getting Started
+### 🔧 CLI Installation
 
-### Installation
+You can install the Tangle CLI in two ways:
 
-1. Install the Tangle CLI:
+#### 🚩 **Option 1: Install Script (recommended)**
+
+Install the latest stable version of `cargo-tangle` using the installation script:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/tangle-network/gadget/releases/download/cargo-tangle/v0.1.1-beta.7/cargo-tangle-installer.sh | sh
 ```
 
-Or install from source:
+#### 🚩 **Option 2: Install from source**
+
+Install the latest git version of `cargo-tangle` using the following command:
 
 ```bash
 cargo install cargo-tangle --git https://github.com/tangle-network/gadget --force
 ```
 
-### Creating Your First Blueprint
+### ✨ Creating Your First Blueprint
 
-1. Create a new blueprint:
+After installation, you can create, build, and deploy your first blueprint using the following commands:
 
 ```bash
+# Create a new blueprint named "my_blueprint"
 cargo tangle blueprint create --name my_blueprint
-```
 
-2. Build your blueprint:
-
-```bash
+# Navigate into the blueprint directory and build
+cd my_blueprint
 cargo build
-```
 
-3. Deploy to Tangle Network:
-
-```bash
+# Deploy your blueprint to the Tangle Network
 cargo tangle blueprint deploy --rpc-url wss://rpc.tangle.tools --package my_blueprint
 ```
 
-## 🔑 Key Management
+And your blueprint is ready to go!
 
-### Key Generation
-
-Generate cryptographic keys using the CLI:
-
-```bash
-cargo tangle blueprint generate-keys -k <KEY_TYPE> -p <PATH> -s <SURI/SEED> --show-secret
-```
-
-### Supported Key Types
-
-| Key Type  | Description                                | Use Case                          |
-| --------- | ------------------------------------------ | --------------------------------- |
-| sr25519   | Schnorrkel/Ristretto x25519                | Tangle Network account keys       |
-| ecdsa     | Elliptic Curve Digital Signature Algorithm | EVM compatible chains             |
-| bls_bn254 | BLS signatures on BN254 curve              | EigenLayer validators             |
-| ed25519   | Edwards-curve Digital Signature Algorithm  | General purpose signatures        |
-| bls381    | BLS signatures on BLS12-381 curve          | Advanced cryptographic operations |
-
-## 🔧 Configuration
-
-### Feature Flags
-
-The CLI and core libraries support various feature flags for customizing functionality when building blueprints:
-
-| Feature Flag | Description               | Components Included                                      |
-| ------------ | ------------------------- | -------------------------------------------------------- |
-| default      | Standard installation     | Tangle + EVM support with standard library features      |
-| std          | Standard library features | Core functionality with std support                      |
-| tangle       | Tangle Network support    | Tangle Network client, keystore, and EVM integration     |
-| eigenlayer   | EigenLayer integration    | EigenLayer clients, keystore, and EVM support            |
-| evm          | EVM chain support         | Ethereum JSON ABI, provider, network, and signer support |
-
-The crypto system supports multiple signature schemes:
-
-- k256 (ECDSA)
-- sr25519 (Schnorrkel)
-- ed25519
-- BLS (including BN254)
-- Tangle pair signer
-- Substrate crypto (sp-core)
-
-Installation examples:
-
-```bash
-# Default installation (includes Tangle + EVM)
-cargo install cargo-tangle
-
-# EVM support only
-cargo install cargo-tangle --features evm
-
-# Full installation with EigenLayer support
-cargo install cargo-tangle --features "tangle,eigenlayer"
-```
-
-### Environment Variables
-
-Required environment variables for different operations:
-
-| Variable     | Description                   | Example                                          |
-| ------------ | ----------------------------- | ------------------------------------------------ |
-| SIGNER       | Substrate signer account SURI | `export SIGNER="//Alice"`                        |
-| EVM_SIGNER   | EVM signer private key        | `export EVM_SIGNER="0xcb6df..."`                 |
-| RPC_URL      | Tangle Network RPC endpoint   | `export RPC_URL="wss://rpc.tangle.tools"`        |
-| HTTP_RPC_URL | HTTP RPC endpoint             | `export HTTP_RPC_URL="https://rpc.tangle.tools"` |
-
-## 🔨 Core Components
-
-### Blueprint System
-
-The Blueprint system is the core of the Tangle Network Gadget framework:
-
-- **Template Engine**: Standardized blueprint creation
-- **Metadata Management**: Blueprint information and configuration
-
-### Network Clients
-
-Specialized clients for different blockchain networks:
-
-- **Tangle Client**: Native integration with Tangle Network
-- **EigenLayer Client**: AVS (Actively Validated Service) integration
-- **EVM Client**: Ethereum and EVM-compatible chain support
-
-### Cryptography
-
-Comprehensive cryptographic implementations:
-
-- **Multiple Schemes**: Support for various signature algorithms
-- **Key Management**: Secure key storage and handling
-
-### Event System
-
-Robust event handling system:
-
-- **Event Listeners**: Custom event monitoring
-- **Async Processing**: Non-blocking event handling
-- **Filtering**: Configurable event filtering
-- **Error Handling**: Robust error recovery
-
-### Storage
-
-Flexible storage solutions:
-
-- **Local Database**: Efficient local storage
-- **Key-Value Store**: Fast key-value operations
-- **File System**: Secure file storage
-- **Remote Storage**: Cloud storage integration (e.g., AWS, GCP, Ledger)
-
-## 🧪 Development
-
-### Testing
-
-The framework includes comprehensive testing tools:
-
-```bash
-# Run all tests
-cargo test
-
-# Run specific test suite
-cargo test --package my_blueprint
-
-# Run with logging
-RUST_LOG=gadget=debug cargo test
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to get started.
+For additional commands, advanced configurations, and complete CLI usage, see the [official CLI reference](https://docs.tangle.tools/developers/cli/reference).
 
 ## 📮 Support
 
-- **Issues**: Use GitHub Issues for bug reports and feature requests
-- **Discussions**: Join our community discussions on GitHub
-- **Discord**: Join our [Discord server](https://discord.com/invite/cv8EfJu3Tn)
+For support or inquiries:
+- **Issues:** Report bugs or request features via GitHub Issues.
+- **Discussions:** Engage with the community in GitHub Discussions.
+- For real-time assistance and announcements:
+    - Join our [Discord server](https://discord.com/invite/cv8EfJu3Tn)
+    - Join our [Telegram channel](https://t.me/tanglenet)
+
+## 📜 License
+
+Licensed under either of
+
+* Apache License, Version 2.0
+  ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+* MIT license
+  ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+## 📬 Feedback and Contributions
+
+We welcome feedback and contributions to improve this blueprint.
+Please open an issue or submit a pull request on our GitHub repository.
+Please let us know if you fork this blueprint and extend it too!
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
+
+[Rust]: https://www.rust-lang.org/tools/install
+[Tangle Network]: https://tangle.tools
+[Eigenlayer]: https://eigenlayer.xyz
+[secp256k1]: https://en.bitcoin.it/wiki/Secp256k1
+[sp-core]: https://crates.io/crates/sp-core
+[round-based]: https://crates.io/crates/round-based
+[anvil]: https://book.getfoundry.sh/reference/anvil/
+[serde]: https://crates.io/crates/serde
