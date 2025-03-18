@@ -7,7 +7,7 @@ authors = ["Tangle Network"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
 homepage = "https://tangle.tools"
-repository = "https://github.com/tangle-network/gadget"
+repository = "https://github.com/tangle-network/blueprint"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "deny", priority = -1 }
