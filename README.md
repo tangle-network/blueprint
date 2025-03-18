@@ -30,43 +30,43 @@ tools for networking and testing.
 * [`gadget-benchmarking`] - Utilities for benchmarking blueprints
 * [`blueprint-build-utils`] - Utilities for simplifying build-time tasks (e.g., building contracts, installing dependencies)
 * [`gadget-clients`] - (**Meta-crate**) Clients for interacting with Tangle, [Eigenlayer], and other networks
-  * [`gadget-client-tangle`] - Client for interacting with the Tangle Network
-  * [`gadget-client-eigenlayer`] - Client for interacting with the [Eigenlayer] Network
-  * [`gadget-client-evm`] - Client for interacting with the EVM Network
+    * [`gadget-client-tangle`] - Client for interacting with the Tangle Network
+    * [`gadget-client-eigenlayer`] - Client for interacting with the [Eigenlayer] Network
+    * [`gadget-client-evm`] - Client for interacting with the EVM Network
 * [`gadget-contexts`] - Extensions for adding functionality to custom blueprint context types
 * [`gadget-context-derive`] - Derive macros for implementing context extension traits
 * [`blueprint-core`] - Core components for building blueprints, primarily job system primitives
 * [`gadget-crypto`] - (**Meta-crate**) Cryptographic utilities
-  * [`gadget-crypto-core`] - Core cryptographic utilities (traits, types)
-  * [`gadget-crypto-bls`] - Utilities for working with BLS signatures and keys
-  * [`gadget-crypto-bn254`] - Utilities for working with BN254 signatures and keys
-  * [`gadget-crypto-ed25519`] - Utilities for working with Ed25519 signatures and keys
-  * [`gadget-crypto-k256`] - Utilities for working with [secp256k1] signatures and keys
-  * [`gadget-crypto-sp-core`] - Blueprint-compatible crypto wrappers around [sp-core] primitives
-  * [`gadget-crypto-sr25519`] - Utilities for working with sr25519 signatures and keys
-  * [`gadget-crypto-tangle-pair-signer`] - Pair signer type for Tangle
+    * [`gadget-crypto-core`] - Core cryptographic utilities (traits, types)
+    * [`gadget-crypto-bls`] - Utilities for working with BLS signatures and keys
+    * [`gadget-crypto-bn254`] - Utilities for working with BN254 signatures and keys
+    * [`gadget-crypto-ed25519`] - Utilities for working with Ed25519 signatures and keys
+    * [`gadget-crypto-k256`] - Utilities for working with [secp256k1] signatures and keys
+    * [`gadget-crypto-sp-core`] - Blueprint-compatible crypto wrappers around [sp-core] primitives
+    * [`gadget-crypto-sr25519`] - Utilities for working with sr25519 signatures and keys
+    * [`gadget-crypto-tangle-pair-signer`] - Pair signer type for Tangle
 * [`gadget-keystore`] - Flexible keystore implementation, supporting local and remote signers
 * [`gadget-macros`] - Utility macros for simplifying blueprint development
 * [`blueprint-manager`] - A program executor that connects to the Tangle network and runs protocols dynamically on the fly
 * [`gadget-metrics`] (**Meta-crate**) Utilities for collecting metrics
-  * [`gadget-metrics-rpc-calls`] - Utilities for collecting metrics from RPC calls
+    * [`gadget-metrics-rpc-calls`] - Utilities for collecting metrics from RPC calls
 * [`gadget-networking`] - P2P networking support for blueprints
-  * [`gadget-networking-round-based-extension`] - A networking compatibility layer for [round-based] MPC protocols
+    * [`gadget-networking-round-based-extension`] - A networking compatibility layer for [round-based] MPC protocols
 * [`blueprint-producers-extra`] - Additional protocol-independent event producers
 * [`blueprint-router`] - A job router for dynamically scheduling jobs
 * [`blueprint-runner`] - The blueprint job runner, executing jobs in a protocol-specific manner
 * [`gadget-blueprint-serde`] - [serde]-compatible de/serialization for Tangle types
 * [`gadget-std`] - Standard library extensions, for use within the SDK
 * [`gadget-stores`] - (**Meta-crate**) Storage providers for blueprints
-  * [`gadget-store-local-database`] - A local JSON key-value database
+    * [`gadget-store-local-database`] - A local JSON key-value database
 * [`blueprint-tangle-extra`] - Tangle specific extensions for blueprints
 * [`blueprint-evm-extra`] - EVM specific extensions for blueprints
 * [`blueprint-eigenlayer-extra`] - Eigenlayer specific extensions for blueprints
 * [`gadget-testing-utils`] - (**Meta-crate**) Utilities for testing blueprints
-  * [`gadget-core-testing-utils`] - Core testing utility primitives
-  * [`gadget-anvil-testing-utils`] - Utilities for creating and interacting with Anvil testnets
-  * [`gadget-tangle-testing-utils`] - Utilities for creating end-to-end tests for Tangle blueprints
-  * [`gadget-eigenlayer-testing-utils`] - Utilities for creating end-to-end tests for Eigenlayer blueprints
+    * [`gadget-core-testing-utils`] - Core testing utility primitives
+    * [`gadget-anvil-testing-utils`] - Utilities for creating and interacting with Anvil testnets
+    * [`gadget-tangle-testing-utils`] - Utilities for creating end-to-end tests for Tangle blueprints
+    * [`gadget-eigenlayer-testing-utils`] - Utilities for creating end-to-end tests for Eigenlayer blueprints
 
 [`blueprint-sdk`]: https://docs.rs/blueprint-sdk
 [`gadget-benchmarking`]: https://docs.rs/gadget-benchmarking
@@ -178,8 +178,8 @@ For support or inquiries:
 - **Issues:** Report bugs or request features via GitHub Issues.
 - **Discussions:** Engage with the community in GitHub Discussions.
 - For real-time assistance and announcements:
-  - Join our [Discord server](https://discord.com/invite/cv8EfJu3Tn)
-  - Join our [Telegram channel](https://t.me/tanglenet)
+    - Join our [Discord server](https://discord.com/invite/cv8EfJu3Tn)
+    - Join our [Telegram channel](https://t.me/tanglenet)
 
 ## 📜 License
 
@@ -209,3 +209,4 @@ dual licensed as above, without any additional terms or conditions.
 [sp-core]: https://crates.io/crates/sp-core
 [round-based]: https://crates.io/crates/round-based
 [anvil]: https://book.getfoundry.sh/reference/anvil/
+[serde]: https://crates.io/crates/serde
