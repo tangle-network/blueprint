@@ -2727,7 +2727,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "auto_impl",
  "blueprint-core",
@@ -6839,7 +6839,7 @@ dependencies = [
 
 [[package]]
 name = "gadget-blueprint-serde"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "paste",
  "serde",
@@ -6935,7 +6935,7 @@ dependencies = [
 
 [[package]]
 name = "gadget-client-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "auto_impl",
  "gadget-std",
@@ -7030,7 +7030,7 @@ dependencies = [
 
 [[package]]
 name = "gadget-context-derive"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy-network",
  "alloy-provider",
@@ -7131,7 +7131,7 @@ dependencies = [
 
 [[package]]
 name = "gadget-crypto-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "gadget-std",
@@ -7363,7 +7363,7 @@ dependencies = [
 
 [[package]]
 name = "gadget-std"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "colored",
  "num-traits",
