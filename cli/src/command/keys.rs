@@ -94,10 +94,8 @@ pub fn generate_key(
     // Create keystore configuration
     let mut config = KeystoreConfig::new();
     if let Some(path) = output {
-        if let Some(path) = output {
-            if !path.as_ref().exists() {
-                std::fs::create_dir_all(path.as_ref())?;
-            }
+        if !path.as_ref().exists() {
+            std::fs::create_dir_all(path.as_ref())?;
         }
         config = config.fs_root(path);
     }
@@ -147,7 +145,7 @@ pub fn generate_key(
     let (public, secret) = (hex::encode(public_bytes), hex::encode(secret_bytes));
 
     let mut secret = Some(secret);
-    if !show_secret {
+    if !show_secret || output.is_none() {
         secret = None;
     }
 
