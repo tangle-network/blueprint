@@ -59,7 +59,7 @@ impl<R: Runtime> Bencher<R> {
     /// # Examples
     ///
     /// ```
-    /// use gadget_benchmarking::{Bencher, TokioRuntime};
+    /// use blueprint_benchmarking::{Bencher, TokioRuntime};
     ///
     /// const THREADS: usize = 4;
     ///
@@ -78,7 +78,7 @@ impl<R: Runtime> Bencher<R> {
     /// # Examples
     ///
     /// ```no_run
-    /// use gadget_benchmarking::{Bencher, TokioRuntime};
+    /// use blueprint_benchmarking::{Bencher, TokioRuntime};
     ///
     /// const THREADS: usize = 4;
     ///
@@ -103,7 +103,7 @@ impl<R: Runtime> Bencher<R> {
     /// # Examples
     ///
     /// ```no_run
-    /// use gadget_benchmarking::{Bencher, TokioRuntime};
+    /// use blueprint_benchmarking::{Bencher, TokioRuntime};
     /// const THREADS: usize = 4;
     ///
     /// let bencher = Bencher::new(THREADS, TokioRuntime);
