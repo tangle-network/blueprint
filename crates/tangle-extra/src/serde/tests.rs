@@ -1,7 +1,8 @@
-use crate::Field;
-use crate::from_field;
-use crate::ser::new_bounded_string;
-use crate::to_field;
+use super::Field;
+use super::error::Error;
+use super::from_field;
+use super::ser::new_bounded_string;
+use super::to_field;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec;
@@ -372,7 +373,7 @@ mod enums {
         );
 
         let err = to_field(&invalid_availability).unwrap_err();
-        assert!(matches!(err, crate::error::Error::UnsupportedType(_)));
+        assert!(matches!(err, Error::UnsupportedType(_)));
     }
 
     #[test]

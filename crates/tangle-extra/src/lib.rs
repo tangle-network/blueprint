@@ -21,6 +21,7 @@ pub mod layers;
 pub mod metadata;
 /// Tangle Network Job Producers
 pub mod producer;
+pub mod serde;
 #[cfg(any(feature = "std", feature = "web"))]
 pub mod util;
 

@@ -1,5 +1,4 @@
-use crate::error::{Result, UnsupportedType};
-use crate::Field;
+use super::error::{Result, UnsupportedType};
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
@@ -9,7 +8,7 @@ use serde::Serialize;
 use tangle_subxt::FieldExt;
 use tangle_subxt::subxt_core::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::{BoundedString, FieldType};
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::{BoundedString, Field, FieldType};
 
 /// A serializer for [`Field`]
 ///
@@ -18,7 +17,7 @@ pub struct Serializer;
 
 impl<'a> serde::Serializer for &'a mut Serializer {
     type Ok = Field<AccountId32>;
-    type Error = crate::error::Error;
+    type Error = super::error::Error;
     type SerializeSeq = SerializeSeq<'a>;
     type SerializeTuple = Self::SerializeSeq;
     type SerializeTupleStruct = SerializeTupleStruct<'a>;
@@ -218,19 +217,17 @@ impl SerializeSeq<'_> {
 
         macro_rules! homogeneous_check {
             ($($field:pat),+ $(,)?) => {
-                paste::paste! {
-                    match &self.vec[0] {
-                        $($field => { self.vec.iter().all(|f| matches!(f, $field)) },)+
-                        Field::Struct(name, fields) => {
-                            self.vec.iter().all(|f| {
-                                match f {
-                                    Field::Struct(n, f) => {
-                                        n == name && fields == f
-                                    },
-                                    _ => false,
-                                }
-                            })
-                        }
+                match &self.vec[0] {
+                    $($field => { self.vec.iter().all(|f| matches!(f, $field)) },)+
+                    Field::Struct(name, fields) => {
+                        self.vec.iter().all(|f| {
+                            match f {
+                                Field::Struct(n, f) => {
+                                    n == name && fields == f
+                                },
+                                _ => false,
+                            }
+                        })
                     }
                 }
             }
@@ -257,7 +254,7 @@ impl SerializeSeq<'_> {
 
 impl ser::SerializeSeq for SerializeSeq<'_> {
     type Ok = Field<AccountId32>;
-    type Error = crate::error::Error;
+    type Error = super::error::Error;
 
     fn serialize_element<T>(&mut self, value: &T) -> Result<()>
     where
@@ -282,7 +279,7 @@ impl ser::SerializeSeq for SerializeSeq<'_> {
 
 impl ser::SerializeTuple for SerializeSeq<'_> {
     type Ok = Field<AccountId32>;
-    type Error = crate::error::Error;
+    type Error = super::error::Error;
 
     #[inline]
     fn serialize_element<T>(&mut self, value: &T) -> Result<()>
@@ -301,7 +298,7 @@ impl ser::SerializeTuple for SerializeSeq<'_> {
             ));
         }
 
-        Err(crate::error::Error::HeterogeneousTuple)
+        Err(super::error::Error::HeterogeneousTuple)
     }
 }
 
@@ -313,7 +310,7 @@ pub struct SerializeTupleStruct<'a> {
 
 impl ser::SerializeTupleStruct for SerializeTupleStruct<'_> {
     type Ok = Field<AccountId32>;
-    type Error = crate::error::Error;
+    type Error = super::error::Error;
 
     fn serialize_field<T>(&mut self, value: &T) -> Result<()>
     where
@@ -342,7 +339,7 @@ pub struct SerializeStruct<'a> {
 
 impl ser::SerializeStruct for SerializeStruct<'_> {
     type Ok = Field<AccountId32>;
-    type Error = crate::error::Error;
+    type Error = super::error::Error;
 
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<()>
     where

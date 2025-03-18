@@ -2837,7 +2837,6 @@ dependencies = [
  "blueprint-tangle-extra",
  "document-features",
  "eigensdk",
- "gadget-blueprint-serde",
  "gadget-chain-setup",
  "gadget-clients",
  "gadget-context-derive",
@@ -2869,12 +2868,13 @@ dependencies = [
  "document-features",
  "futures-core",
  "futures-util",
- "gadget-blueprint-serde",
  "gadget-testing-utils",
  "paste",
  "pin-project-lite",
  "serde",
+ "serde_bytes",
  "serde_json",
+ "serde_test",
  "tangle-subxt",
  "tempfile",
  "thiserror 2.0.12",
@@ -3414,7 +3414,6 @@ dependencies = [
  "dialoguer",
  "dotenv",
  "eigensdk",
- "gadget-blueprint-serde",
  "gadget-chain-setup",
  "gadget-clients",
  "gadget-contexts",
@@ -6838,17 +6837,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-blueprint-serde"
-version = "0.3.1"
-dependencies = [
- "paste",
- "serde",
- "serde_bytes",
- "serde_test",
- "tangle-subxt",
-]
-
-[[package]]
 name = "gadget-chain-setup"
 version = "0.1.0"
 dependencies = [
@@ -6882,8 +6870,8 @@ name = "gadget-chain-setup-common"
 version = "0.1.0"
 dependencies = [
  "alloy-signer-local",
+ "blueprint-tangle-extra",
  "color-eyre",
- "gadget-blueprint-serde",
  "gadget-clients",
  "gadget-contexts",
  "gadget-crypto",
@@ -6915,7 +6903,6 @@ dependencies = [
  "color-eyre",
  "dialoguer",
  "dirs 6.0.0",
- "gadget-blueprint-serde",
  "gadget-chain-setup-common",
  "gadget-clients",
  "gadget-contexts",
@@ -7401,7 +7388,6 @@ dependencies = [
  "blueprint-runner",
  "blueprint-tangle-extra",
  "futures",
- "gadget-blueprint-serde",
  "gadget-chain-setup",
  "gadget-client-tangle",
  "gadget-contexts",

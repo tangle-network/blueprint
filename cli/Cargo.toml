@@ -37,7 +37,6 @@ gadget-chain-setup = { workspace = true, features = ["tangle", "anvil", "std"] }
 gadget-testing-utils = { workspace = true, features = ["tangle", "anvil", "eigenlayer"] }
 gadget-contexts = { workspace = true }
 tnt-core-bytecode = { workspace = true }
-gadget-blueprint-serde = { workspace = true }
 blueprint-manager = { workspace = true }
 dialoguer = { workspace = true, default-features = true }
 gadget-clients = { workspace = true, features = ["tangle", "eigenlayer", "evm", "std"] }

@@ -3,7 +3,7 @@ use blueprint_core::{FromJobCall, JobCall};
 use blueprint_core::__composite_rejection as composite_rejection;
 use blueprint_core::__define_rejection as define_rejection;
 
-use gadget_blueprint_serde::{Field, from_field};
+use crate::serde::{Field, from_field};
 use tangle_subxt::FieldExt;
 use tangle_subxt::parity_scale_codec::Decode;
 use tangle_subxt::subxt::utils::AccountId32;
@@ -103,7 +103,7 @@ macro_rules! impl_tangle_field_types {
             fn into_tangle_fields() -> Vec<FieldType> {
               vec![
                     $(
-                        gadget_blueprint_serde::to_field(<$ty as core::default::Default>::default()).expect("type should serialize").field_type()
+                        crate::serde::to_field(<$ty as core::default::Default>::default()).expect("type should serialize").field_type()
                     ),*
                 ]
             }

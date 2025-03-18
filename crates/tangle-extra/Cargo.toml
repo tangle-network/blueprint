@@ -18,7 +18,6 @@ document-features = { workspace = true }
 futures-core.workspace = true
 futures-util.workspace = true
 tower = { workspace = true, features = ["filter"] }
-gadget-blueprint-serde.workspace = true
 tangle-subxt.workspace = true
 serde.workspace = true
 pin-project-lite = { workspace = true }
@@ -35,6 +34,8 @@ cid = { workspace = true, features = ["serde", "alloc"], optional = true }
 color-eyre = { workspace = true, features = ["color-spantrace", "track-caller"] }
 tempfile = { workspace = true }
 paste = { workspace = true }
+serde_bytes = { workspace = true, features = ["alloc"] }
+serde_test.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 gadget-testing-utils = { workspace = true, features = ["tangle"] }
 
