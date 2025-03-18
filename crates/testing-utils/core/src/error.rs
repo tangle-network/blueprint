@@ -4,7 +4,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum TestRunnerError {
     #[error(transparent)]
-    Client(#[from] gadget_clients::Error),
+    Client(#[from] blueprint_clients::Error),
     #[error("Runner setup failed: {0}")]
     Setup(String),
     #[error("Runner execution failed: {0}")]

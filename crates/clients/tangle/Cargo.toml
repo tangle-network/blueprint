@@ -1,5 +1,5 @@
 [package]
-name = "gadget-client-tangle"
+name = "blueprint-client-tangle"
 version = "0.1.0"
 description = "Tangle client for Tangle Blueprints"
 authors.workspace = true
@@ -15,7 +15,7 @@ workspace = true
 blueprint-runner = { workspace = true, features = ["tangle"] }
 blueprint-core = { workspace = true }
 gadget-std = { workspace = true }
-gadget-client-core = { workspace = true }
+blueprint-client-core = { workspace = true }
 gadget-keystore = { workspace = true }
 blueprint-crypto-sp-core = { workspace = true }
 
@@ -31,7 +31,7 @@ tokio = { workspace = true }
 default = ["std", "tracing"]
 std = [
 	"blueprint-runner/std",
-	"gadget-client-core/std",
+	"blueprint-client-core/std",
 	"gadget-keystore/std",
 	"gadget-std/std",
 	"serde/std",

@@ -1,5 +1,5 @@
 [package]
-name = "gadget-client-evm"
+name = "blueprint-client-evm"
 version = "0.1.0"
 description = "EVM client for Tangle Blueprints"
 authors.workspace = true
@@ -14,7 +14,7 @@ workspace = true
 [dependencies]
 blueprint-core = { workspace = true }
 gadget-std = { workspace = true }
-gadget-client-core = { workspace = true }
+blueprint-client-core = { workspace = true }
 
 hex = { workspace = true }
 serde = { workspace = true }
@@ -49,8 +49,8 @@ testcontainers = { workspace = true }
 default = ["std", "tracing"]
 std = [
     "gadget-rpc-calls/std",
-    "gadget-client-core/std",
-    "gadget-client-core/std",
+    "blueprint-client-core/std",
+    "blueprint-client-core/std",
     "gadget-std/std",
     "hex/std",
     "serde/std",

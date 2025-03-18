@@ -2683,11 +2683,11 @@ name = "blueprint-chain-setup-common"
 version = "0.1.0"
 dependencies = [
  "alloy-signer-local",
+ "blueprint-clients",
  "blueprint-crypto",
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-tangle-extra",
  "color-eyre",
- "gadget-clients",
  "gadget-contexts",
  "gadget-keystore",
  "gadget-networking",
@@ -2711,6 +2711,7 @@ dependencies = [
  "alloy-sol-types 0.8.23",
  "alloy-transport",
  "blueprint-chain-setup-common",
+ "blueprint-clients",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-tangle-pair-signer",
@@ -2719,7 +2720,6 @@ dependencies = [
  "color-eyre",
  "dialoguer",
  "dirs 6.0.0",
- "gadget-clients",
  "gadget-contexts",
  "gadget-keystore",
  "gadget-networking",
@@ -2731,6 +2731,101 @@ dependencies = [
  "tangle-subxt",
  "thiserror 2.0.12",
  "tracing",
+]
+
+[[package]]
+name = "blueprint-client-core"
+version = "0.1.0"
+dependencies = [
+ "auto_impl",
+ "gadget-std",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "blueprint-client-eigenlayer"
+version = "0.1.0"
+dependencies = [
+ "alloy-contract",
+ "alloy-network",
+ "alloy-primitives 0.8.23",
+ "alloy-provider",
+ "alloy-transport",
+ "blueprint-chain-setup-anvil",
+ "blueprint-client-core",
+ "blueprint-evm-extra",
+ "blueprint-runner",
+ "eigensdk",
+ "gadget-eigenlayer-testing-utils",
+ "gadget-std",
+ "num-bigint 0.4.6",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-util",
+ "tracing-subscriber 0.3.19",
+ "url",
+]
+
+[[package]]
+name = "blueprint-client-evm"
+version = "0.1.0"
+dependencies = [
+ "alloy-consensus",
+ "alloy-json-rpc",
+ "alloy-network",
+ "alloy-primitives 0.8.23",
+ "alloy-provider",
+ "alloy-pubsub",
+ "alloy-rlp",
+ "alloy-rpc-types",
+ "alloy-rpc-types-eth",
+ "alloy-signer-local",
+ "alloy-transport",
+ "blueprint-chain-setup-anvil",
+ "blueprint-client-core",
+ "blueprint-core",
+ "blueprint-evm-extra",
+ "gadget-anvil-testing-utils",
+ "gadget-rpc-calls",
+ "gadget-std",
+ "hex",
+ "serde",
+ "serde_json",
+ "testcontainers",
+ "thiserror 2.0.12",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "blueprint-client-tangle"
+version = "0.1.0"
+dependencies = [
+ "auto_impl",
+ "blueprint-client-core",
+ "blueprint-core",
+ "blueprint-crypto-sp-core",
+ "blueprint-runner",
+ "gadget-keystore",
+ "gadget-std",
+ "serde",
+ "serde_json",
+ "sp-core",
+ "tangle-subxt",
+ "thiserror 2.0.12",
+ "tokio",
+]
+
+[[package]]
+name = "blueprint-clients"
+version = "0.1.0"
+dependencies = [
+ "blueprint-client-core",
+ "blueprint-client-eigenlayer",
+ "blueprint-client-evm",
+ "blueprint-client-tangle",
+ "gadget-std",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -2965,6 +3060,7 @@ name = "blueprint-manager"
 version = "0.2.2"
 dependencies = [
  "auto_impl",
+ "blueprint-clients",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-sdk",
@@ -2972,7 +3068,6 @@ dependencies = [
  "color-eyre",
  "dynosaur",
  "futures",
- "gadget-clients",
  "gadget-keystore",
  "gadget-networking",
  "gadget-std",
@@ -3064,6 +3159,7 @@ dependencies = [
  "alloy-json-abi",
  "blueprint-build-utils",
  "blueprint-chain-setup",
+ "blueprint-clients",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-tangle-pair-signer",
@@ -3075,7 +3171,6 @@ dependencies = [
  "blueprint-tangle-extra",
  "document-features",
  "eigensdk",
- "gadget-clients",
  "gadget-context-derive",
  "gadget-contexts",
  "gadget-keystore",
@@ -3638,6 +3733,7 @@ dependencies = [
  "anyhow",
  "bip39",
  "blueprint-chain-setup",
+ "blueprint-clients",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-core",
@@ -3652,7 +3748,6 @@ dependencies = [
  "dialoguer",
  "dotenv",
  "eigensdk",
- "gadget-clients",
  "gadget-contexts",
  "gadget-keystore",
  "gadget-std",
@@ -7072,101 +7167,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-client-core"
-version = "0.1.0"
-dependencies = [
- "auto_impl",
- "gadget-std",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "gadget-client-eigenlayer"
-version = "0.1.0"
-dependencies = [
- "alloy-contract",
- "alloy-network",
- "alloy-primitives 0.8.23",
- "alloy-provider",
- "alloy-transport",
- "blueprint-chain-setup-anvil",
- "blueprint-evm-extra",
- "blueprint-runner",
- "eigensdk",
- "gadget-client-core",
- "gadget-eigenlayer-testing-utils",
- "gadget-std",
- "num-bigint 0.4.6",
- "thiserror 2.0.12",
- "tokio",
- "tokio-util",
- "tracing-subscriber 0.3.19",
- "url",
-]
-
-[[package]]
-name = "gadget-client-evm"
-version = "0.1.0"
-dependencies = [
- "alloy-consensus",
- "alloy-json-rpc",
- "alloy-network",
- "alloy-primitives 0.8.23",
- "alloy-provider",
- "alloy-pubsub",
- "alloy-rlp",
- "alloy-rpc-types",
- "alloy-rpc-types-eth",
- "alloy-signer-local",
- "alloy-transport",
- "blueprint-chain-setup-anvil",
- "blueprint-core",
- "blueprint-evm-extra",
- "gadget-anvil-testing-utils",
- "gadget-client-core",
- "gadget-rpc-calls",
- "gadget-std",
- "hex",
- "serde",
- "serde_json",
- "testcontainers",
- "thiserror 2.0.12",
- "tokio",
- "url",
-]
-
-[[package]]
-name = "gadget-client-tangle"
-version = "0.1.0"
-dependencies = [
- "auto_impl",
- "blueprint-core",
- "blueprint-crypto-sp-core",
- "blueprint-runner",
- "gadget-client-core",
- "gadget-keystore",
- "gadget-std",
- "serde",
- "serde_json",
- "sp-core",
- "tangle-subxt",
- "thiserror 2.0.12",
- "tokio",
-]
-
-[[package]]
-name = "gadget-clients"
-version = "0.1.0"
-dependencies = [
- "gadget-client-core",
- "gadget-client-eigenlayer",
- "gadget-client-evm",
- "gadget-client-tangle",
- "gadget-std",
- "thiserror 2.0.12",
-]
-
-[[package]]
 name = "gadget-context-derive"
 version = "0.3.1"
 dependencies = [
@@ -7188,8 +7188,8 @@ dependencies = [
 name = "gadget-contexts"
 version = "0.1.0"
 dependencies = [
+ "blueprint-clients",
  "blueprint-runner",
- "gadget-clients",
  "gadget-keystore",
  "gadget-networking",
  "gadget-std",
@@ -7201,11 +7201,11 @@ dependencies = [
 name = "gadget-core-testing-utils"
 version = "0.1.0"
 dependencies = [
+ "blueprint-clients",
  "blueprint-core",
  "blueprint-router",
  "blueprint-runner",
  "cargo_toml",
- "gadget-clients",
  "gadget-keystore",
  "thiserror 2.0.12",
  "tracing",
@@ -7385,12 +7385,12 @@ dependencies = [
  "alloy-primitives 0.8.23",
  "alloy-signer-local",
  "blueprint-chain-setup",
+ "blueprint-client-tangle",
  "blueprint-core",
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-runner",
  "blueprint-tangle-extra",
  "futures",
- "gadget-client-tangle",
  "gadget-contexts",
  "gadget-core-testing-utils",
  "gadget-keystore",

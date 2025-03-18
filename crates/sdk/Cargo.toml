@@ -18,7 +18,7 @@ blueprint-router = { workspace = true }
 blueprint-runner = { workspace = true }
 blueprint-producers-extra = { workspace = true }
 gadget-keystore = { workspace = true }
-gadget-clients = { workspace = true }
+blueprint-clients = { workspace = true }
 blueprint-crypto = { workspace = true }
 gadget-std = { workspace = true }
 # The keystore context is the only one that doesn't bring in extra dependencies, so we can always include it
@@ -78,7 +78,7 @@ std = [
     "blueprint-runner/std",
     "gadget-keystore/std",
     "gadget-contexts/std",
-    "gadget-clients/std",
+    "blueprint-clients/std",
     "blueprint-crypto/std",
     "dep:blueprint-chain-setup",
     "blueprint-chain-setup/std",
@@ -137,7 +137,7 @@ tangle = [
     "dep:blueprint-tangle-extra",
     "dep:tangle-subxt",
     "dep:blueprint-crypto-tangle-pair-signer",
-    "gadget-clients/tangle",
+    "blueprint-clients/tangle",
     "gadget-contexts/tangle",
     "gadget-context-derive?/tangle",
     "gadget-testing-utils?/tangle",
@@ -150,7 +150,7 @@ evm = [
     "dep:blueprint-evm-extra",
     "dep:alloy",
     "dep:alloy-json-abi",
-    "gadget-clients/evm",
+    "blueprint-clients/evm",
     "gadget-contexts/evm",
     "gadget-context-derive/evm",
     "blueprint-crypto-tangle-pair-signer?/evm",
@@ -165,7 +165,7 @@ evm = [
 eigenlayer = [
     "dep:eigensdk",
     "gadget-contexts/eigenlayer",
-    "gadget-clients/eigenlayer",
+    "blueprint-clients/eigenlayer",
     "evm",
 ]
 

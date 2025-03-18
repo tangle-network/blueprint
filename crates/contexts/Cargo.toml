@@ -14,7 +14,7 @@ workspace = true
 [dependencies]
 blueprint-runner = { workspace = true }
 gadget-std = { workspace = true }
-gadget-clients = { workspace = true }
+blueprint-clients = { workspace = true }
 gadget-networking = { workspace = true, optional = true }
 gadget-keystore = { workspace = true, optional = true }
 
@@ -24,11 +24,11 @@ tangle-subxt = { workspace = true, optional = true }
 
 [features]
 default = ["std", "keystore"]
-std = ["blueprint-runner/std", "gadget-std/std", "gadget-clients/std", "gadget-keystore?/std", "gadget-networking?/std", "tangle-subxt?/std"]
+std = ["blueprint-runner/std", "gadget-std/std", "blueprint-clients/std", "gadget-keystore?/std", "gadget-networking?/std", "tangle-subxt?/std"]
 web = ["tangle-subxt?/web"]
 
-evm = ["gadget-clients/evm"]
-eigenlayer = ["gadget-clients/eigenlayer"]
+evm = ["blueprint-clients/evm"]
+eigenlayer = ["blueprint-clients/eigenlayer"]
 networking = ["dep:gadget-networking", "dep:proc-macro2"]
 keystore = ["dep:gadget-keystore"]
-tangle = ["dep:tangle-subxt", "gadget-clients/tangle"]
+tangle = ["dep:tangle-subxt", "blueprint-clients/tangle"]

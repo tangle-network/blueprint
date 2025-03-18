@@ -1,5 +1,5 @@
 [package]
-name = "gadget-client-eigenlayer"
+name = "blueprint-client-eigenlayer"
 version = "0.1.0"
 description = "Eigenlayer client for Tangle Blueprints"
 authors.workspace = true
@@ -14,7 +14,7 @@ workspace = true
 [dependencies]
 blueprint-runner = { workspace = true }
 
-gadget-client-core = { workspace = true }
+blueprint-client-core = { workspace = true }
 gadget-std = { workspace = true }
 blueprint-evm-extra = { workspace = true }
 alloy-contract = { workspace = true }
@@ -53,6 +53,6 @@ std = [
 	"gadget-std/std",
 	"blueprint-evm-extra/std",
 	"tokio/full",
-	"gadget-client-core/std",
+	"blueprint-client-core/std",
 	"url/std",
 ]

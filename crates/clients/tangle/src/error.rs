@@ -22,16 +22,16 @@ pub enum Error {
     #[error(transparent)]
     Keystore(#[from] gadget_keystore::Error),
     #[error(transparent)]
-    Core(#[from] gadget_client_core::error::Error),
+    Core(#[from] blueprint_client_core::error::Error),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
     #[error("Subxt error: {0}")]
     Subxt(#[from] subxt::Error),
 }
 
-impl From<Error> for gadget_client_core::error::Error {
+impl From<Error> for blueprint_client_core::error::Error {
     fn from(value: Error) -> Self {
-        gadget_client_core::error::Error::Tangle(value.to_string())
+        blueprint_client_core::error::Error::Tangle(value.to_string())
     }
 }
 

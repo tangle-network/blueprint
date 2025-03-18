@@ -39,7 +39,7 @@ gadget-contexts = { workspace = true }
 tnt-core-bytecode = { workspace = true }
 blueprint-manager = { workspace = true }
 dialoguer = { workspace = true, default-features = true }
-gadget-clients = { workspace = true, features = ["tangle", "eigenlayer", "evm", "std"] }
+blueprint-clients = { workspace = true, features = ["tangle", "eigenlayer", "evm", "std"] }
 blueprint-crypto = { workspace = true, features = [
     "k256",
     "sr25519-schnorrkel",

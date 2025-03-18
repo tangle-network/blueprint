@@ -1,6 +1,6 @@
+pub use blueprint_clients::Error;
+pub use blueprint_clients::tangle::client::TangleClient;
 use blueprint_runner::config::BlueprintEnvironment;
-pub use gadget_clients::Error;
-pub use gadget_clients::tangle::client::TangleClient;
 
 /// `TangleContext` trait provides access to the Tangle client from the context.
 pub trait TangleClientContext {

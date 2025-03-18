@@ -1,4 +1,4 @@
-pub use gadget_clients::tangle::services::TangleServicesClient;
+pub use blueprint_clients::tangle::services::TangleServicesClient;
 
 /// `ServicesContext` trait provides access to the Services client from the context.
 pub trait ServicesContext {

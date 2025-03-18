@@ -1,10 +1,10 @@
+use blueprint_clients::tangle::client::OnlineClient;
 use blueprint_core::info;
 use blueprint_crypto::sp_core::SpSr25519;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_runner::tangle::config::{PriceTargets, decompress_pubkey};
 use color_eyre::Result;
 use dialoguer::console::style;
-use gadget_clients::tangle::client::OnlineClient;
 use gadget_keystore::backends::Backend;
 use gadget_keystore::{Keystore, KeystoreConfig};
 use tangle_subxt::subxt::tx::Signer;
@@ -108,7 +108,7 @@ pub async fn register(
 
     // Create a TangleServicesClient to query operator blueprints
     let services_client =
-        gadget_clients::tangle::services::TangleServicesClient::new(client.clone());
+        blueprint_clients::tangle::services::TangleServicesClient::new(client.clone());
 
     info!("Querying blueprints for account: {:?}", account_id);
 

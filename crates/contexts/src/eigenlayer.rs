@@ -1,6 +1,6 @@
+use blueprint_clients::Error;
+pub use blueprint_clients::eigenlayer::client::EigenlayerClient;
 use blueprint_runner::config::BlueprintEnvironment;
-use gadget_clients::Error;
-pub use gadget_clients::eigenlayer::client::EigenlayerClient;
 
 /// Provides access to Eigenlayer utilities through its [`EigenlayerClient`].
 pub trait EigenlayerContext {

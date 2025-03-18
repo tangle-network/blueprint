@@ -16,7 +16,7 @@ blueprint-core = { workspace = true }
 blueprint-runner = { workspace = true }
 blueprint-router = { workspace = true }
 
-gadget-clients = { workspace = true, features = ["std"] }
+blueprint-clients = { workspace = true, features = ["std"] }
 gadget-keystore = { workspace = true, features = ["std"] }
 cargo_toml = { workspace = true }
 thiserror = { workspace = true }

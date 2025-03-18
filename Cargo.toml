@@ -76,11 +76,11 @@ blueprint-crypto = { version = "0.1.0", path = "./crates/crypto", default-featur
 blueprint-crypto-tangle-pair-signer = { version = "0.1.0", path = "./crates/crypto/tangle-pair-signer", default-features = false }
 
 # Clients
-gadget-clients = { version = "0.1.0", path = "./crates/clients", default-features = false }
-gadget-client-core = { version = "0.1.0", path = "./crates/clients/core", default-features = false }
-gadget-client-eigenlayer = { version = "0.1.0", path = "./crates/clients/eigenlayer", default-features = false }
-gadget-client-evm = { version = "0.1.0", path = "./crates/clients/evm", default-features = false }
-gadget-client-tangle = { version = "0.1.0", path = "./crates/clients/tangle", default-features = false }
+blueprint-clients = { version = "0.1.0", path = "./crates/clients", default-features = false }
+blueprint-client-core = { version = "0.1.0", path = "./crates/clients/core", default-features = false }
+blueprint-client-eigenlayer = { version = "0.1.0", path = "./crates/clients/eigenlayer", default-features = false }
+blueprint-client-evm = { version = "0.1.0", path = "./crates/clients/evm", default-features = false }
+blueprint-client-tangle = { version = "0.1.0", path = "./crates/clients/tangle", default-features = false }
 gadget-contexts = { version = "0.1.0", path = "./crates/contexts", default-features = false }
 
 # Macros

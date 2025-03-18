@@ -33,10 +33,10 @@ tools for networking and testing.
     * [`blueprint-chain-setup-common`] - Common utilities for setting up testnets
     * [`blueprint-chain-setup-anvil`] - Utilities for setting up [Anvil] testnets
     * [`blueprint-chain-setup-tangle`] - Utilities for setting up Tangle testnets
-* [`gadget-clients`] - (**Meta-crate**) Clients for interacting with Tangle, [Eigenlayer], and other networks
-    * [`gadget-client-tangle`] - Client for interacting with the Tangle Network
-    * [`gadget-client-eigenlayer`] - Client for interacting with the [Eigenlayer] Network
-    * [`gadget-client-evm`] - Client for interacting with the EVM Network
+* [`blueprint-clients`] - (**Meta-crate**) Clients for interacting with Tangle, [Eigenlayer], and other networks
+    * [`blueprint-client-tangle`] - Client for interacting with the Tangle Network
+    * [`blueprint-client-eigenlayer`] - Client for interacting with the [Eigenlayer] Network
+    * [`blueprint-client-evm`] - Client for interacting with the EVM Network
 * [`gadget-contexts`] - Extensions for adding functionality to custom blueprint context types
 * [`gadget-context-derive`] - Derive macros for implementing context extension traits
 * [`blueprint-core`] - Core components for building blueprints, primarily job system primitives
@@ -74,10 +74,10 @@ tools for networking and testing.
 [`blueprint-sdk`]: https://docs.rs/blueprint-sdk
 [`gadget-benchmarking`]: https://docs.rs/gadget-benchmarking
 [`blueprint-build-utils`]: https://docs.rs/blueprint-build-utils
-[`gadget-clients`]: https://docs.rs/gadget-clients
-[`gadget-client-tangle`]: https://docs.rs/gadget-client-tangle
-[`gadget-client-eigenlayer`]: https://docs.rs/gadget-client-eigenlayer
-[`gadget-client-evm`]: https://docs.rs/gadget-client-evm
+[`blueprint-clients`]: https://docs.rs/blueprint-clients
+[`blueprint-client-tangle`]: https://docs.rs/blueprint-client-tangle
+[`blueprint-client-eigenlayer`]: https://docs.rs/blueprint-client-eigenlayer
+[`blueprint-client-evm`]: https://docs.rs/blueprint-client-evm
 [`gadget-contexts`]: https://docs.rs/gadget-contexts
 [`gadget-context-derive`]: https://docs.rs/gadget-context-derive
 [`blueprint-core`]: https://docs.rs/blueprint-core

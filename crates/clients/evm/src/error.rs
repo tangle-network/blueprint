@@ -15,9 +15,9 @@ pub enum Error {
     Abi(String),
 }
 
-impl From<Error> for gadget_client_core::error::Error {
+impl From<Error> for blueprint_client_core::error::Error {
     fn from(value: Error) -> Self {
-        gadget_client_core::error::Error::Evm(value.to_string())
+        blueprint_client_core::error::Error::Evm(value.to_string())
     }
 }
 

@@ -4,7 +4,7 @@ use super::keystore;
 pub enum Error {
     // General Errors
     #[error("Client error: {0}")]
-    Client(#[from] gadget_clients::Error),
+    Client(#[from] blueprint_clients::Error),
     #[error("Keystore error: {0}")]
     Keystore(#[from] keystore::Error),
     #[error("Runner error: {0}")]
@@ -72,9 +72,9 @@ macro_rules! implement_client_error {
         }
     };
 }
-implement_client_error!("eigenlayer", gadget_clients::eigenlayer::error::Error);
-implement_client_error!("evm", gadget_clients::evm::error::Error);
-implement_client_error!("tangle", gadget_clients::tangle::error::Error);
+implement_client_error!("eigenlayer", blueprint_clients::eigenlayer::error::Error);
+implement_client_error!("evm", blueprint_clients::evm::error::Error);
+implement_client_error!("tangle", blueprint_clients::tangle::error::Error);
 
 #[cfg(any(feature = "evm", feature = "eigenlayer"))]
 macro_rules! implement_from_alloy_error {

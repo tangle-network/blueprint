@@ -35,5 +35,5 @@ pub enum Error {
     #[error(transparent)]
     Request(#[from] reqwest::Error),
     #[error(transparent)]
-    TangleClient(#[from] gadget_clients::tangle::error::Error),
+    TangleClient(#[from] blueprint_clients::tangle::error::Error),
 }

@@ -2463,7 +2463,7 @@ dependencies = [
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-tangle-extra",
  "color-eyre",
- "gadget-clients",
+ "blueprint-clients",
  "gadget-contexts",
  "gadget-keystore",
  "gadget-networking",
@@ -2495,7 +2495,7 @@ dependencies = [
  "color-eyre",
  "dialoguer",
  "dirs 6.0.0",
- "gadget-clients",
+ "blueprint-clients",
  "gadget-contexts",
  "gadget-keystore",
  "gadget-networking",
@@ -2771,7 +2771,7 @@ dependencies = [
  "blueprint-runner",
  "blueprint-tangle-extra",
  "document-features",
- "gadget-clients",
+ "blueprint-clients",
  "gadget-context-derive",
  "gadget-contexts",
  "gadget-keystore",
@@ -6316,7 +6316,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-client-core"
+name = "blueprint-client-core"
 version = "0.1.0"
 dependencies = [
  "auto_impl",
@@ -6325,7 +6325,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-client-eigenlayer"
+name = "blueprint-client-eigenlayer"
 version = "0.1.0"
 dependencies = [
  "alloy-contract",
@@ -6336,7 +6336,7 @@ dependencies = [
  "blueprint-evm-extra",
  "blueprint-runner",
  "eigensdk",
- "gadget-client-core",
+ "blueprint-client-core",
  "gadget-std",
  "num-bigint",
  "thiserror 2.0.12",
@@ -6346,7 +6346,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-client-evm"
+name = "blueprint-client-evm"
 version = "0.1.0"
 dependencies = [
  "alloy-consensus",
@@ -6360,7 +6360,7 @@ dependencies = [
  "alloy-rpc-types-eth",
  "alloy-transport",
  "blueprint-core",
- "gadget-client-core",
+ "blueprint-client-core",
  "gadget-rpc-calls",
  "gadget-std",
  "hex",
@@ -6372,14 +6372,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-client-tangle"
+name = "blueprint-client-tangle"
 version = "0.1.0"
 dependencies = [
  "auto_impl",
  "blueprint-core",
  "blueprint-crypto-sp-core",
  "blueprint-runner",
- "gadget-client-core",
+ "blueprint-client-core",
  "gadget-keystore",
  "gadget-std",
  "serde",
@@ -6391,13 +6391,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-clients"
+name = "blueprint-clients"
 version = "0.1.0"
 dependencies = [
- "gadget-client-core",
- "gadget-client-eigenlayer",
- "gadget-client-evm",
- "gadget-client-tangle",
+ "blueprint-client-core",
+ "blueprint-client-eigenlayer",
+ "blueprint-client-evm",
+ "blueprint-client-tangle",
  "gadget-std",
  "thiserror 2.0.12",
 ]
@@ -6416,7 +6416,7 @@ name = "gadget-contexts"
 version = "0.1.0"
 dependencies = [
  "blueprint-runner",
- "gadget-clients",
+ "blueprint-clients",
  "gadget-keystore",
  "gadget-networking",
  "gadget-std",
@@ -6431,7 +6431,7 @@ dependencies = [
  "blueprint-router",
  "blueprint-runner",
  "cargo_toml",
- "gadget-clients",
+ "blueprint-clients",
  "gadget-keystore",
  "thiserror 2.0.12",
  "tracing",
@@ -6534,7 +6534,7 @@ dependencies = [
  "blueprint-runner",
  "blueprint-tangle-extra",
  "futures",
- "gadget-client-tangle",
+ "blueprint-client-tangle",
  "gadget-contexts",
  "gadget-core-testing-utils",
  "gadget-keystore",

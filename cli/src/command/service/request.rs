@@ -1,6 +1,6 @@
 use color_eyre::Result;
 use dialoguer::console::style;
-use gadget_clients::tangle::client::OnlineClient;
+use blueprint_clients::tangle::client::OnlineClient;
 use blueprint_crypto::sp_core::SpSr25519;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use gadget_keystore::{Keystore, KeystoreConfig};
