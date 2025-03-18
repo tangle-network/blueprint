@@ -2694,18 +2694,23 @@ dependencies = [
  "alloy-network",
  "alloy-primitives 0.8.22",
  "alloy-provider",
+ "alloy-rpc-client",
  "alloy-sol-types 0.8.22",
  "alloy-transport",
  "blueprint-core",
  "blueprint-evm-extra",
  "eigensdk",
+ "gadget-crypto-bn254",
  "jsonrpc-core",
  "jsonrpc-http-server",
+ "num-bigint 0.4.6",
+ "reqwest 0.12.12",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
+ "url",
 ]
 
 [[package]]

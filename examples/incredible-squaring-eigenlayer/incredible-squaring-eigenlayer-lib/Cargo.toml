@@ -13,12 +13,21 @@ path = "src/main.rs"
 
 [dependencies]
 # Blueprint dependencies
-blueprint-sdk = { workspace = true, features = ["evm", "eigenlayer", "macros", "testing"] }
+blueprint-sdk = { workspace = true, features = [
+    "evm",
+    "eigenlayer",
+    "macros",
+    "testing",
+] }
 blueprint-eigenlayer-extra = { workspace = true }
+gadget-keystore = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing = { workspace = true }
 tower.workspace = true
+thiserror = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true }
 num-bigint = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

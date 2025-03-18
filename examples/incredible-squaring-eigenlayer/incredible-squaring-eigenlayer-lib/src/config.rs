@@ -1,12 +1,13 @@
-use alloy_primitives::Address;
-use alloy_provider::{Provider, ProviderBuilder, RootProvider};
-use alloy_signer_local::PrivateKeySigner;
+use blueprint_sdk::alloy::primitives::Address;
+use blueprint_sdk::alloy::providers::{Provider, ProviderBuilder, RootProvider};
+use blueprint_sdk::alloy::signers::local::PrivateKeySigner;
+use blueprint_sdk::eigensdk::client_avsregistry::reader::AvsRegistryChainReader;
+use blueprint_sdk::eigensdk::crypto_bls::BlsKeyPair;
+use blueprint_sdk::eigensdk::services_avsregistry::chaincaller::AvsRegistryServiceChainCaller;
+use blueprint_sdk::eigensdk::services_blsaggregation::bls_agg::BlsAggregatorService;
+use blueprint_sdk::eigensdk::services_operatorsinfo::operatorsinfo_inmemory::OperatorInfoServiceInMemory;
 use blueprint_sdk::testing::utils::anvil::keys::ANVIL_PRIVATE_KEYS;
-use eigensdk::client_avsregistry::reader::AvsRegistryChainReader;
-use eigensdk::crypto_bls::BlsKeyPair;
-use eigensdk::services_avsregistry::chaincaller::AvsRegistryServiceChainCaller;
-use eigensdk::services_blsaggregation::bls_agg::BlsAggregatorService;
-use eigensdk::services_operatorsinfo::operatorsinfo_inmemory::OperatorInfoServiceInMemory;
+use std::time::Duration;
 
 pub fn get_provider_http(http_endpoint: &str) -> RootProvider {
     let provider = ProviderBuilder::new()
@@ -23,7 +24,7 @@ pub type BlsAggServiceInMemory = BlsAggregatorService<
 
 pub fn get_wallet_provider_http(
     http_endpoint: &str,
-    signer: blueprint_sdk::alloy::signer_local::PrivateKeySigner,
+    signer: blueprint_sdk::alloy::signers::local::PrivateKeySigner,
 ) -> RootProvider {
     let wallet = blueprint_sdk::alloy::network::EthereumWallet::new(signer);
     let provider = ProviderBuilder::new()

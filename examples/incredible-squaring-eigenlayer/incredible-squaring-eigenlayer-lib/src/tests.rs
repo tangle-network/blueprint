@@ -1,36 +1,16 @@
-use crate::constants::{AGGREGATOR_PRIVATE_KEY, TASK_MANAGER_ADDRESS};
-use crate::contexts::aggregator::AggregatorContext;
-use crate::contexts::client::AggregatorClient;
-use crate::contexts::x_square::EigenSquareContext;
-use crate::jobs::compute_x_square::XsquareEigenEventHandler;
-use crate::jobs::initialize_task::InitializeBlsTaskEventHandler;
-use crate::IncredibleSquaringTaskManager;
-use alloy_network::EthereumWallet;
-use alloy_primitives::{Address, Bytes, U256};
-use alloy_provider::Provider;
-use alloy_signer_local::PrivateKeySigner;
-use alloy_sol_types::sol;
-use blueprint_sdk::{error, info, setup_log};
-use blueprint_sdk::runners::eigenlayer::bls::EigenlayerBLSConfig;
+use blueprint_sdk::alloy::network::EthereumWallet;
+use blueprint_sdk::alloy::primitives::{Address, Bytes, U256};
+use blueprint_sdk::alloy::providers::Provider;
+use blueprint_sdk::alloy::signers::local::PrivateKeySigner;
+use blueprint_sdk::alloy::sol;
 use blueprint_sdk::testing::utils::anvil::anvil::*;
-use blueprint_sdk::testing::utils::eigenlayer::runner::EigenlayerBLSTestEnv;
-use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
-use blueprint_sdk::testing::utils::harness::TestHarness;
 use blueprint_sdk::testing::utils::runner::TestEnv;
-use blueprint_sdk::utils::evm::{get_provider_http, get_provider_ws, get_wallet_provider_http};
+use blueprint_sdk::{error, info};
 use futures::StreamExt;
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-
-sol!(
-    #[allow(missing_docs, clippy::too_many_arguments)]
-    #[sol(rpc)]
-    #[derive(Debug)]
-    RegistryCoordinator,
-    "./contracts/out/RegistryCoordinator.sol/RegistryCoordinator.json"
-);
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_eigenlayer_incredible_squaring_blueprint() {
@@ -82,7 +62,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     // Create aggregator
     let server_address = format!("{}:{}", "127.0.0.1", 8081);
     let eigen_client_context = EigenSquareContext {
-        client: AggregatorClient::new(&server_address).unwrap(),
+        client: create_client(&server_address).unwrap(),
         std_config: env.clone(),
     };
     let aggregator_context =

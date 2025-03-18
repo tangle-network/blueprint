@@ -1,2 +1,2 @@
-pub mod compute_x_square;
 pub mod initialize_task;
+pub mod x_square;

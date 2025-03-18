@@ -178,23 +178,23 @@ where
     S: ResponseSender<T, R>,
 {
     /// Map of task index to task
-    tasks: Arc<RwLock<HashMap<TaskIndex, T>>>,
+    pub tasks: Arc<RwLock<HashMap<TaskIndex, T>>>,
     /// Map of task index to a map of response digest to response
-    responses: Arc<RwLock<HashMap<TaskIndex, HashMap<TaskResponseDigest, R>>>>,
+    pub responses: Arc<RwLock<HashMap<TaskIndex, HashMap<TaskResponseDigest, R>>>>,
     /// Queue of signed responses waiting to be processed
-    response_cache: Arc<Mutex<VecDeque<SignedTaskResponse<R>>>>,
+    pub response_cache: Arc<Mutex<VecDeque<SignedTaskResponse<R>>>>,
     /// The BLS aggregation service handle
-    bls_service: ServiceHandle,
+    pub bls_service: ServiceHandle,
     /// The receiver for aggregated results
-    aggregate_receiver: Arc<Mutex<AggregateReceiver>>,
+    pub aggregate_receiver: Arc<Mutex<AggregateReceiver>>,
     /// The contract response sender
-    response_sender: S,
+    pub response_sender: S,
     /// Configuration
-    config: AggregatorConfig,
+    pub config: AggregatorConfig,
     /// Shutdown notification
-    shutdown: Arc<(Notify, Mutex<bool>)>,
+    pub shutdown: Arc<(Notify, Mutex<bool>)>,
     /// Running task handles
-    task_handles: Arc<Mutex<Vec<JoinHandle<()>>>>,
+    pub task_handles: Arc<Mutex<Vec<JoinHandle<()>>>>,
     _phantom: PhantomData<(T, R)>,
 }
 

@@ -1,62 +1,60 @@
-use crate::IIncredibleSquaringTaskManager::Task;
-use crate::{
-    TaskError, FirstEvent, Context,
-    contexts::aggregator::AggregatorContext, IncredibleSquaringTaskManager,
-    INCREDIBLE_SQUARING_TASK_MANAGER_ABI_STRING,
-};
-use blueprint_sdk::info;
-use eigensdk::services_blsaggregation::bls_agg::TaskMetadata;
-use eigensdk::types::operator::QuorumThresholdPercentage;
-use std::convert::Infallible;
+use crate::contexts::task::IncredibleSquaringTask;
+use crate::contexts::EigenSquareContext;
+use crate::contracts::SquaringTask::NewTaskCreated;
+use crate::{Context, TaskError};
+use blueprint_sdk::core::info;
+use blueprint_sdk::eigensdk::services_blsaggregation::bls_agg::TaskMetadata;
+use blueprint_sdk::eigensdk::types::operator::QuorumThresholdPercentage;
+use blueprint_sdk::evm::extract::Events;
+use blueprint_sdk::job_result::Void;
 
 const TASK_CHALLENGE_WINDOW_BLOCK: u32 = 100;
 const BLOCK_TIME_SECONDS: u32 = 12;
 
 pub async fn initialize_bls_task(
-    Context(ctx): Context<AggregatorContext>,
-    FirstEvent(ev): FirstEvent<NewTaskCreated>,
-) -> Result<Tx, TaskError> {
+    Context(ctx): Context<EigenSquareContext>,
+    Events(ev): Events<NewTaskCreated>,
+) -> Result<Void, TaskError> {
     info!("Initializing task for BLS aggregation");
 
-    let mut tasks = ctx.tasks.lock().await;
-    tasks.insert(task_index, task.clone());
-    let time_to_expiry =
-        std::time::Duration::from_secs((TASK_CHALLENGE_WINDOW_BLOCK * BLOCK_TIME_SECONDS).into());
+    let aggregator = if let Some(aggregator) = &ctx.task_aggregator {
+        aggregator
+    } else {
+        return Err(TaskError::TaskAggregatorNotInitialized);
+    };
 
-    let quorum_threshold_percentage =
-        vec![QuorumThresholdPercentage::try_from(task.quorumThresholdPercentage).unwrap()];
+    for ev in ev {
+        let task_index = ev.taskIndex;
+        let task_created_block = ev.task.taskCreatedBlock;
+        let task = ev.task;
+        let mut tasks = aggregator.tasks.write().await;
+        tasks.insert(
+            task_index,
+            IncredibleSquaringTask {
+                task_index,
+                contract_task: task.clone(),
+            },
+        );
+        let time_to_expiry = std::time::Duration::from_secs(
+            (TASK_CHALLENGE_WINDOW_BLOCK * BLOCK_TIME_SECONDS).into(),
+        );
 
-    let task_metadata = TaskMetadata::new(
-        task_index,
-        task.taskCreatedBlock as u64,
-        task.quorumNumbers.0.to_vec(),
-        quorum_threshold_percentage,
-        time_to_expiry,
-    );
+        let quorum_threshold_percentage =
+            vec![QuorumThresholdPercentage::try_from(task.quorumThresholdPercentage).unwrap()];
 
-    if let Some(service) = &ctx.service_handle {
-        service
-            .lock()
-            .await
+        let task_metadata = TaskMetadata::new(
+            task_index,
+            task_created_block as u64,
+            task.quorumNumbers.0.to_vec(),
+            quorum_threshold_percentage,
+            time_to_expiry,
+        );
+
+        aggregator
+            .bls_service
             .initialize_task(task_metadata)
-            .await
-            .unwrap()
+            .await?;
     }
 
-    Ok(1)
-}
-
-/// Converts the event to inputs.
-///
-/// Uses a tuple to represent the return type because
-/// the macro will index all values in the #[job] function
-/// and parse the return type by the index.
-pub async fn convert_event_to_inputs(
-    event: (
-        IncredibleSquaringTaskManager::NewTaskCreated,
-        blueprint_sdk::alloy::rpc::types::Log,
-    ),
-) -> Result<Option<(Task, u32)>, ProcessorError> {
-    let task_index = event.0.taskIndex;
-    Ok(Some((event.0.task, task_index)))
+    Ok(Void)
 }

@@ -1,99 +1,64 @@
-use alloy_rpc_client::ReqwestClient;
-use color_eyre::Result;
-use eigenlayer_extra::generic_task_aggregation::SignedTaskResponse as GenericSignedTaskResponse;
-use eigensdk::crypto_bls::{OperatorId, Signature};
-use reqwest::Url;
+use super::task::IncredibleSquaringTaskResponse;
+use blueprint_eigenlayer_extra::client::{AggregatorClient, ClientConfig, ClientError};
+use blueprint_eigenlayer_extra::generic_task_aggregation::SignedTaskResponse as GenericSignedTaskResponse;
+use blueprint_sdk::eigensdk::crypto_bls::{OperatorId, Signature};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use tokio::time::{sleep, Duration};
-use tracing::{debug, info};
+use std::time::Duration;
 
-use crate::contexts::incredible_task::IncredibleTaskResponse;
-use crate::contracts::IIncredibleSquaringTaskManager::TaskResponse as ContractTaskResponse;
+/// Default retry configuration
+const DEFAULT_MAX_RETRIES: u32 = 5;
+const DEFAULT_INITIAL_RETRY_DELAY: Duration = Duration::from_secs(1);
 
-const MAX_RETRIES: u32 = 5;
-const INITIAL_RETRY_DELAY: Duration = Duration::from_secs(1);
-
+/// Signed task response sent by operators
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedTaskResponse {
-    pub task_response: ContractTaskResponse,
+    pub task_response: IncredibleSquaringTaskResponse,
     pub signature: Signature,
     pub operator_id: OperatorId,
 }
 
-impl SignedTaskResponse {
-    /// Convert the client SignedTaskResponse to the generic one used by TaskAggregator
-    pub fn to_generic(&self) -> GenericSignedTaskResponse<IncredibleTaskResponse> {
+/// Type alias for the specialized AggregatorClient
+pub type IncredibleSquaringAggregatorClient = AggregatorClient<
+    SignedTaskResponse,
+    IncredibleSquaringTaskResponse,
+    fn(SignedTaskResponse) -> GenericSignedTaskResponse<IncredibleSquaringTaskResponse>,
+>;
+
+/// Creates a new AggregatorClient for the Incredible Squaring service
+pub fn create_client(
+    aggregator_address: &str,
+) -> Result<IncredibleSquaringAggregatorClient, ClientError> {
+    // Create a client with default configuration
+    AggregatorClient::new(aggregator_address, |response: SignedTaskResponse| {
         GenericSignedTaskResponse::new(
-            IncredibleTaskResponse {
-                contract_response: self.task_response.clone(),
-            },
-            self.signature.clone(),
-            self.operator_id,
+            response.task_response.clone(),
+            response.signature.clone(),
+            response.operator_id,
         )
-    }
+    })
 }
 
-/// Client for interacting with the Aggregator RPC server
-#[derive(Debug, Clone)]
-pub struct AggregatorClient {
-    client: ReqwestClient,
-}
+/// Creates a new AggregatorClient with custom configuration
+pub fn create_client_with_config(
+    aggregator_address: &str,
+    max_retries: u32,
+    initial_retry_delay: Duration,
+) -> Result<IncredibleSquaringAggregatorClient, ClientError> {
+    let config = ClientConfig {
+        max_retries,
+        initial_retry_delay,
+        use_exponential_backoff: true,
+    };
 
-impl AggregatorClient {
-    /// Creates a new AggregatorClient
-    pub fn new(aggregator_address: &str) -> Result<Self> {
-        let url = Url::parse(&format!("http://{}", aggregator_address))?;
-        let client = ReqwestClient::new_http(url);
-        Ok(Self { client })
-    }
-
-    /// Sends a signed task response to the aggregator
-    pub async fn send_signed_task_response(&self, response: SignedTaskResponse) -> Result<()> {
-        let params = json!({
-            "params": response,
-            "id": 1,
-            "jsonrpc": "2.0"
-        });
-
-        for attempt in 1..=MAX_RETRIES {
-            match self
-                .client
-                .request::<_, bool>("process_signed_task_response", &params)
-                .await
-            {
-                Ok(true) => {
-                    info!("Task response accepted by aggregator");
-                    // MARK: Uncomment when metrics are implemented
-                    // incredible_metrics::inc_num_tasks_accepted_by_aggregator();
-                    return Ok(());
-                }
-                Ok(false) => debug!("Task response not accepted, retrying..."),
-                Err(e) => debug!("Error sending task response: {}", e),
-            }
-
-            if attempt < MAX_RETRIES {
-                let delay = INITIAL_RETRY_DELAY * 2u32.pow(attempt - 1);
-                info!("Retrying in {} seconds...", delay.as_secs());
-                sleep(delay).await;
-            }
-        }
-
-        debug!(
-            "Failed to send signed task response after {} attempts",
-            MAX_RETRIES
-        );
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_new_client() {
-        let client = AggregatorClient::new("127.0.0.1:8545");
-        assert!(client.is_ok());
-    }
+    AggregatorClient::with_config(
+        aggregator_address,
+        |response: SignedTaskResponse| {
+            GenericSignedTaskResponse::new(
+                response.task_response.clone(),
+                response.signature.clone(),
+                response.operator_id,
+            )
+        },
+        config,
+    )
 }
