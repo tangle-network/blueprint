@@ -18,7 +18,7 @@ use tangle_subxt::subxt;
 use tangle_subxt::tangle_testnet_runtime::api as TangleApi;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::ServiceBlueprint;
-use gadget_chain_setup_common::signer::{load_evm_signer_from_env, load_signer_from_env};
+use blueprint_chain_setup_common::signer::{load_evm_signer_from_env, load_signer_from_env};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 

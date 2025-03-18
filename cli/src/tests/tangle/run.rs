@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use blueprint_core::info;
 use color_eyre::eyre::Result;
-use gadget_chain_setup::tangle::OutputValue;
+use blueprint_chain_setup::tangle::OutputValue;
 use gadget_crypto::sp_core::{SpEcdsa, SpSr25519};
 use gadget_crypto::tangle_pair_signer::TanglePairSigner;
 use gadget_keystore::backends::Backend;
@@ -20,7 +20,7 @@ use crate::command::run::tangle::{RunOpts, run_blueprint};
 use crate::command::service::accept::accept_request;
 use crate::command::service::request::request_service;
 use crate::tests::tangle::blueprint::create_test_blueprint;
-use gadget_chain_setup::tangle::deploy::{Opts as DeployOpts, deploy_to_tangle};
+use blueprint_chain_setup::tangle::deploy::{Opts as DeployOpts, deploy_to_tangle};
 
 #[tokio::test]
 #[allow(clippy::too_many_lines)]

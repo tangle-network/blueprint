@@ -1,5 +1,5 @@
 [package]
-name = "gadget-chain-setup-anvil"
+name = "blueprint-chain-setup-anvil"
 version = "0.1.0"
 description = "Anvil-specific chain setup utilities"
 authors.workspace = true

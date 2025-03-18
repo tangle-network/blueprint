@@ -33,7 +33,7 @@ blueprint-core = { workspace = true, features = ["tracing"] }
 blueprint-runner = { workspace = true, features = ["networking", "tangle", "eigenlayer"] }
 gadget-std = { workspace = true, features = ["std"] }
 blueprint-tangle-extra = { workspace = true, features = ["std"] }
-gadget-chain-setup = { workspace = true, features = ["tangle", "anvil", "std"] }
+blueprint-chain-setup = { workspace = true, features = ["tangle", "anvil", "std"] }
 gadget-testing-utils = { workspace = true, features = ["tangle", "anvil", "eigenlayer"] }
 gadget-contexts = { workspace = true }
 tnt-core-bytecode = { workspace = true }

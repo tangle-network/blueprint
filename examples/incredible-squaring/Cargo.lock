@@ -2542,7 +2542,7 @@ dependencies = [
  "blueprint-runner",
  "blueprint-tangle-extra",
  "document-features",
- "gadget-chain-setup",
+ "blueprint-chain-setup",
  "gadget-clients",
  "gadget-context-derive",
  "gadget-contexts",
@@ -6090,16 +6090,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-chain-setup"
+name = "blueprint-chain-setup"
 version = "0.1.0"
 dependencies = [
- "gadget-chain-setup-anvil",
- "gadget-chain-setup-common",
- "gadget-chain-setup-tangle",
+ "blueprint-chain-setup-anvil",
+ "blueprint-chain-setup-common",
+ "blueprint-chain-setup-tangle",
 ]
 
 [[package]]
-name = "gadget-chain-setup-anvil"
+name = "blueprint-chain-setup-anvil"
 version = "0.1.0"
 dependencies = [
  "alloy-contract",
@@ -6119,7 +6119,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-chain-setup-common"
+name = "blueprint-chain-setup-common"
 version = "0.1.0"
 dependencies = [
  "alloy-signer-local",
@@ -6138,7 +6138,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gadget-chain-setup-tangle"
+name = "blueprint-chain-setup-tangle"
 version = "0.1.0"
 dependencies = [
  "alloy-json-abi",
@@ -6156,7 +6156,7 @@ dependencies = [
  "color-eyre",
  "dialoguer",
  "dirs 6.0.0",
- "gadget-chain-setup-common",
+ "blueprint-chain-setup-common",
  "gadget-clients",
  "gadget-contexts",
  "gadget-crypto",
@@ -6532,7 +6532,7 @@ dependencies = [
  "blueprint-runner",
  "blueprint-tangle-extra",
  "futures",
- "gadget-chain-setup",
+ "blueprint-chain-setup",
  "gadget-client-tangle",
  "gadget-contexts",
  "gadget-core-testing-utils",

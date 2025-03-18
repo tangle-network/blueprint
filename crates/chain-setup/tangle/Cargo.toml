@@ -1,5 +1,5 @@
 [package]
-name = "gadget-chain-setup-tangle"
+name = "blueprint-chain-setup-tangle"
 version = "0.1.0"
 description = "Tangle-specific chain setup utilities"
 authors.workspace = true
@@ -25,7 +25,7 @@ blueprint-tangle-extra = { workspace = true, features = ["metadata-types"] }
 blueprint-core = { workspace = true }
 gadget-clients = { workspace = true, features = ["tangle"] }
 gadget-keystore = { workspace = true }
-gadget-chain-setup-common = { workspace = true }
+blueprint-chain-setup-common = { workspace = true }
 gadget-crypto = { workspace = true, features = [
     "k256",
     "sr25519-schnorrkel",

@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use dialoguer::console::style;
-use gadget_chain_setup::tangle::deploy::{Opts, deploy_to_tangle};
-use gadget_chain_setup::tangle::transactions;
+use blueprint_chain_setup::tangle::deploy::{Opts, deploy_to_tangle};
+use blueprint_chain_setup::tangle::transactions;
 use gadget_contexts::tangle::TangleClientContext;
 use gadget_crypto::sp_core::{SpEcdsa, SpSr25519};
 use gadget_crypto::tangle_pair_signer::TanglePairSigner;
@@ -42,8 +42,8 @@ pub async fn deploy_tangle(
         fs::create_dir_all(&deploy_dir).await?;
 
         // Start Local Tangle Node
-        let node = gadget_chain_setup::tangle::run(
-            gadget_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
+        let node = blueprint_chain_setup::tangle::run(
+            blueprint_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
         )
         .await?;
         let http_endpoint = Url::parse(&format!("http://127.0.0.1:{}", node.ws_port()))?;

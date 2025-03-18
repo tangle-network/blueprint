@@ -1,6 +1,6 @@
 use blueprint_core::info;
 use color_eyre::eyre::Result;
-use gadget_chain_setup::tangle::deploy::{Opts as DeployOpts, deploy_to_tangle};
+use blueprint_chain_setup::tangle::deploy::{Opts as DeployOpts, deploy_to_tangle};
 use gadget_crypto::sp_core::{SpEcdsa, SpSr25519};
 use gadget_crypto::tangle_pair_signer::TanglePairSigner;
 use gadget_keystore::backends::Backend;

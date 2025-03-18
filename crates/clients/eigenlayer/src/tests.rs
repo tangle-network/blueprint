@@ -4,7 +4,7 @@ use alloy_provider::Provider;
 use blueprint_runner::config::{BlueprintEnvironment, ContextConfig, SupportedChains};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use client::EigenlayerClient;
-use gadget_chain_setup_anvil::{Container, start_default_anvil_testnet};
+use blueprint_chain_setup_anvil::{Container, start_default_anvil_testnet};
 use gadget_eigenlayer_testing_utils::env::EigenlayerTestEnvironment;
 use gadget_eigenlayer_testing_utils::env::setup_eigenlayer_test_environment;
 

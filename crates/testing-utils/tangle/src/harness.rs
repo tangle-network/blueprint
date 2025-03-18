@@ -7,9 +7,9 @@ use blueprint_runner::config::ContextConfig;
 use blueprint_runner::config::SupportedChains;
 use blueprint_runner::error::RunnerError;
 use blueprint_runner::tangle::config::PriceTargets;
-use gadget_chain_setup::tangle::testnet::SubstrateNode;
-use gadget_chain_setup::tangle::transactions;
-use gadget_chain_setup::tangle::transactions::setup_operator_and_service_multiple;
+use blueprint_chain_setup::tangle::testnet::SubstrateNode;
+use blueprint_chain_setup::tangle::transactions;
+use blueprint_chain_setup::tangle::transactions::setup_operator_and_service_multiple;
 use gadget_client_tangle::client::TangleClient;
 use gadget_contexts::tangle::TangleClientContext;
 use gadget_crypto_tangle_pair_signer::TanglePairSigner;
@@ -135,8 +135,8 @@ where
     /// ```
     pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
         // Start Local Tangle Node
-        let node = gadget_chain_setup::tangle::run(
-            gadget_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
+        let node = blueprint_chain_setup::tangle::run(
+            blueprint_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
         )
         .await
         .map_err(|e| Error::Setup(e.to_string()))?;
@@ -293,8 +293,8 @@ where
     pub fn create_deploy_opts(
         &self,
         manifest_path: PathBuf,
-    ) -> io::Result<gadget_chain_setup::tangle::deploy::Opts> {
-        Ok(gadget_chain_setup::tangle::deploy::Opts {
+    ) -> io::Result<blueprint_chain_setup::tangle::deploy::Opts> {
+        Ok(blueprint_chain_setup::tangle::deploy::Opts {
             pkg_name: Some(self.get_blueprint_name(&manifest_path)?),
             http_rpc_url: self.http_endpoint.to_string(),
             ws_rpc_url: self.ws_endpoint.to_string(),
@@ -320,7 +320,7 @@ where
     pub async fn deploy_blueprint(&self) -> Result<u64, Error> {
         let manifest_path = std::env::current_dir()?.join("Cargo.toml");
         let opts = self.create_deploy_opts(manifest_path)?;
-        let blueprint_id = gadget_chain_setup::tangle::deploy::deploy_to_tangle(opts)
+        let blueprint_id = blueprint_chain_setup::tangle::deploy::deploy_to_tangle(opts)
             .await
             .map_err(|e| Error::Setup(e.to_string()))?;
         Ok(blueprint_id)

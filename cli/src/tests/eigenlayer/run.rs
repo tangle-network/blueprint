@@ -3,7 +3,7 @@ use blueprint_runner::config::SupportedChains;
 use blueprint_runner::config::{ContextConfig, Protocol, ProtocolSettings};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use color_eyre::eyre::Result;
-use gadget_chain_setup::anvil::start_default_anvil_testnet;
+use blueprint_chain_setup::anvil::start_default_anvil_testnet;
 use gadget_std::collections::HashMap;
 use gadget_std::fs;
 use gadget_std::process::Command;

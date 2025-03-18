@@ -7,7 +7,7 @@ use color_eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use dialoguer::console::style;
 use dialoguer::{Confirm, Input, Select};
-use gadget_chain_setup::anvil::start_default_anvil_testnet;
+use blueprint_chain_setup::anvil::start_default_anvil_testnet;
 use gadget_crypto::KeyTypeId;
 use gadget_crypto::k256::K256Ecdsa;
 use gadget_keystore::backends::Backend;

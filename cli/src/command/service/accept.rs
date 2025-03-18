@@ -1,6 +1,6 @@
 use color_eyre::Result;
 use dialoguer::console::style;
-use gadget_chain_setup::tangle::transactions::get_security_commitment;
+use blueprint_chain_setup::tangle::transactions::get_security_commitment;
 use gadget_clients::tangle::client::OnlineClient;
 use gadget_crypto::sp_core::SpSr25519;
 use gadget_crypto::tangle_pair_signer::TanglePairSigner;

@@ -29,6 +29,10 @@ tools for networking and testing.
 * [`blueprint-sdk`] - Main crate for the Tangle Blueprint SDK, re-exporting all of the following
 * [`gadget-benchmarking`] - Utilities for benchmarking blueprints
 * [`blueprint-build-utils`] - Utilities for simplifying build-time tasks (e.g., building contracts, installing dependencies)
+* [`blueprint-chain-setup`] - (**Meta-crate**) Utilities for setting local testnets
+    * [`blueprint-chain-setup-common`] - Common utilities for setting up testnets
+    * [`blueprint-chain-setup-anvil`] - Utilities for setting up [Anvil] testnets
+    * [`blueprint-chain-setup-tangle`] - Utilities for setting up Tangle testnets
 * [`gadget-clients`] - (**Meta-crate**) Clients for interacting with Tangle, [Eigenlayer], and other networks
     * [`gadget-client-tangle`] - Client for interacting with the Tangle Network
     * [`gadget-client-eigenlayer`] - Client for interacting with the [Eigenlayer] Network
@@ -55,7 +59,6 @@ tools for networking and testing.
 * [`blueprint-producers-extra`] - Additional protocol-independent event producers
 * [`blueprint-router`] - A job router for dynamically scheduling jobs
 * [`blueprint-runner`] - The blueprint job runner, executing jobs in a protocol-specific manner
-* [`gadget-blueprint-serde`] - [serde]-compatible de/serialization for Tangle types
 * [`gadget-std`] - Standard library extensions, for use within the SDK
 * [`gadget-stores`] - (**Meta-crate**) Storage providers for blueprints
     * [`gadget-store-local-database`] - A local JSON key-value database
@@ -209,4 +212,3 @@ dual licensed as above, without any additional terms or conditions.
 [sp-core]: https://crates.io/crates/sp-core
 [round-based]: https://crates.io/crates/round-based
 [anvil]: https://book.getfoundry.sh/reference/anvil/
-[serde]: https://crates.io/crates/serde
