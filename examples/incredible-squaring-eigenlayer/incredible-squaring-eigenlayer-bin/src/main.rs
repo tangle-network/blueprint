@@ -10,13 +10,14 @@
 //! - Manage graceful shutdown
 
 use ::std::{str::FromStr, sync::Arc, time::Duration};
-use alloy_primitives::Address;
-use blueprint_evm_extra::producer::{PollingConfig, PollingProducer};
-use blueprint_runner::eigenlayer::bls::EigenlayerBLSConfig;
-use blueprint_runner::{config::BlueprintEnvironment, BlueprintRunner};
-use blueprint_sdk::utils::evm::get_provider_http;
+use blueprint_sdk::alloy::primitives::Address;
+use blueprint_sdk::evm::producer::{PollingConfig, PollingProducer};
+use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
+use blueprint_sdk::runner::{config::BlueprintEnvironment, BlueprintRunner};
+use blueprint_sdk::evm::util::get_provider_http;
 use blueprint_sdk::*;
-use incredible_squaring_eigenlayer::{create_contract_router, ExampleContext};
+use incredible_squaring_eigenlayer_lib::contexts::ExampleContext;
+// use incredible_squaring_eigenlayer_lib::{create_contract_router, ExampleContext};
 use tracing::{info, warn};
 use tracing_subscriber::filter::LevelFilter;
 

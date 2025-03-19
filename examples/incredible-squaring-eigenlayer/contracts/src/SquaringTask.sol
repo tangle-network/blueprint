@@ -8,7 +8,6 @@ import {IRegistryCoordinator} from "eigenlayer-middleware/src/RegistryCoordinato
 /// @notice A specialized TaskManager that handles squaring number tasks
 contract SquaringTask is TaskManager {
     /// @notice Emitted when a squaring task is completed
-    /// @notice Emitted when a squaring task is completed
     event SquaringTaskCompleted(uint256 number, uint256 result);
 
     /// @notice Error thrown when the submitted result is incorrect

@@ -1,6 +1,10 @@
 [profile.default]
 src = "contracts/src"
+test = "contracts/test"
 out = "contracts/out"
+script = "contracts/script"
+cache_path = "contracts/cache"
+broadcast = "contracts/broadcast"
 libs = ["dependencies"]
 evm_version = "shanghai"
 
