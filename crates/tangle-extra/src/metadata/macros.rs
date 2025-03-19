@@ -355,7 +355,7 @@ macro_rules! blueprint_inner {
         $crate::blueprint_inner!(@__CONSTRUCT $object $($rest)*);
     }};
     (@__CONSTRUCT $object:ident registration_params: $registration_params:ty , $($rest:tt)*) => {
-        let registration_params = <$registration_params as $crate::metadata::job_definition::IntoTangleFieldTypes>::into_tangle_fields();
+        let registration_params = <$registration_params as $crate::metadata::IntoTangleFieldTypes>::into_tangle_fields();
         $object.insert(
             String::from("registration_params"),
             $crate::metadata::macros::ext::serde_json::to_value(registration_params).expect("should serialize"),
@@ -363,7 +363,7 @@ macro_rules! blueprint_inner {
         $crate::blueprint_inner!(@__CONSTRUCT $object $($rest)*)
     };
     (@__CONSTRUCT $object:ident request_params: $request_params:ty , $($rest:tt)*) => {
-        let request_params = <$request_params as $crate::metadata::job_definition::IntoTangleFieldTypes>::into_tangle_fields();
+        let request_params = <$request_params as $crate::metadata::IntoTangleFieldTypes>::into_tangle_fields();
         $object.insert(
             String::from("request_params"),
             $crate::metadata::macros::ext::serde_json::to_value(request_params).expect("should serialize"),
