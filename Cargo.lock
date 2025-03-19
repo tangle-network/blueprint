@@ -5267,8 +5267,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-client-avsregistry"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16480006823e3b09495cd5fee89d03364ba23fc254720a98efd97ee0a5a0f6c0"
 dependencies = [
  "alloy",
  "ark-ff 0.5.0",
@@ -5286,8 +5287,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-client-elcontracts"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c21afc43f721abbd0d49d42ad9ba26cb8ceed2eb86c3a056050d6945a8604780"
 dependencies = [
  "alloy",
  "eigen-common",
@@ -5301,8 +5303,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-client-eth"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98212a2eac963720a7d795f3a05c22fd88e21c673884d9aed167cc4912370ea8"
 dependencies = [
  "alloy",
  "async-trait",
@@ -5315,8 +5318,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-client-fireblocks"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab4c99c9c2bd4aae7453b935ac20d08c1c4884560aa7aa3acb26bac84fa43a6b"
 dependencies = [
  "alloy",
  "chrono",
@@ -5335,8 +5339,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-common"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "866a44244903cda1ea05d6f9cd2e5680a02236849c1290bf11cc8c3e305574b9"
 dependencies = [
  "alloy",
  "url",
@@ -5344,8 +5349,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-crypto-bls"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76af95503e08dfc9500910301220c4153d4de2345127326c5b4cf407fd1a02e2"
 dependencies = [
  "alloy",
  "ark-bn254",
@@ -5361,8 +5367,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-crypto-bn254"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "039664a95a1c6e47fde635b9a5c07f3377901bf0463e10120f96627ac4386a8b"
 dependencies = [
  "ark-bn254",
  "ark-ec 0.5.0",
@@ -5372,8 +5379,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-logging"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2348fa5a3b774e75a6db59f389c04ee3edcabc182349eb8c4b5888ef68cd888"
 dependencies = [
  "ctor",
  "once_cell",
@@ -5383,8 +5391,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-metrics"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e49aa6d4b362c0d1194b7a38ecda736d2838e0dbf83f83214297f51a7a2ad37"
 dependencies = [
  "eigen-logging",
  "metrics",
@@ -5394,8 +5403,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-metrics-collectors-economic"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7051c5cb6bc887038ba2c0a2625e2a2da176db2b70648decbcbe3617610ae7ac"
 dependencies = [
  "alloy",
  "eigen-client-avsregistry",
@@ -5409,8 +5419,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-metrics-collectors-rpc-calls"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73a09a261bcdac46a946f8f11965da87a5f025005d4a1867b69637efc2e716c4"
 dependencies = [
  "eigen-logging",
  "metrics",
@@ -5418,8 +5429,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-nodeapi"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c433c184666dbb57e9126c57f607b26f0b7f43d3a60cf3d76019ec3f94abc0f"
 dependencies = [
  "ntex",
  "serde",
@@ -5430,8 +5442,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-services-avsregistry"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b84fc826c4bd9a019936469aa6da1a81ce23e8108c7e05459050f520751fc98d"
 dependencies = [
  "alloy",
  "ark-bn254",
@@ -5446,8 +5459,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-services-blsaggregation"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89eae314e9bb7465bad361fb5d33d6ac5103e6fc700b86e2c8863104429e390d"
 dependencies = [
  "alloy",
  "ark-bn254",
@@ -5468,8 +5482,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-services-operatorsinfo"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f100e075eca078c7db5a49956d132a9a35e93044a2fc5de9d0da8e6f69f23bc"
 dependencies = [
  "alloy",
  "async-trait",
@@ -5489,8 +5504,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-signer"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9aa4dbc5ac13e1ee9dd70df619baffa62d206412b7e89e081a7963d833645b62"
 dependencies = [
  "alloy",
  "async-trait",
@@ -5503,8 +5519,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-testing-utils"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b4d6ea880a185d447a3e399ced2b157cd7bae5b7d6fdbe3842fc1f2e9a5de8e"
 dependencies = [
  "alloy",
  "eigen-common",
@@ -5517,8 +5534,9 @@ dependencies = [
 
 [[package]]
 name = "eigen-types"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbaed5435c73bd3085feac3460a22d153ab472542caded78a7481a7a4247aab2"
 dependencies = [
  "alloy",
  "ark-ff 0.5.0",
@@ -5531,14 +5549,14 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
- "tokio",
  "url",
 ]
 
 [[package]]
 name = "eigen-utils"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0813ece83d4e9c95eddad48bf6cbfe2e1c083ffbd9eac87a40d818225be31db0"
 dependencies = [
  "alloy",
  "regex",
@@ -5547,8 +5565,9 @@ dependencies = [
 
 [[package]]
 name = "eigensdk"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "755d34a0a79ad84792325ca94e7c5f72d7dc5dbe92cbdd51780fa8ac0b7ba7f6"
 dependencies = [
  "eigen-client-avsregistry",
  "eigen-client-elcontracts",
