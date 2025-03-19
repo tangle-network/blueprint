@@ -18,6 +18,8 @@ use blueprint_runner::tangle::config::PriceTargets;
 use blueprint_std::io;
 use blueprint_std::path::{Path, PathBuf};
 use std::marker::PhantomData;
+use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
+use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::request::RequestArgs;
 use tangle_subxt::tangle_testnet_runtime::api::services::events::JobCalled;
 use tangle_subxt::tangle_testnet_runtime::api::services::{
     calls::types::{call::Job, register::Preferences},
@@ -200,6 +202,26 @@ struct NodeInfo {
     preferences: Preferences,
 }
 
+#[derive(Debug, Clone)]
+pub struct SetupServicesOpts<const N: usize> {
+    /// Whether to exit after registration
+    pub exit_after_registration: bool,
+    /// Registration parameters for each node
+    pub registration_args: [RegistrationArgs; N],
+    /// Request parameters for the service
+    pub request_args: RequestArgs,
+}
+
+impl<const N: usize> Default for SetupServicesOpts<N> {
+    fn default() -> Self {
+        Self {
+            exit_after_registration: false,
+            registration_args: vec![RegistrationArgs::default(); N].try_into().unwrap(),
+            request_args: Vec::default(),
+        }
+    }
+}
+
 impl<Ctx> TangleTestHarness<Ctx>
 where
     Ctx: Clone + Send + Sync + 'static,
@@ -329,10 +351,14 @@ where
     ///
     /// # Errors
     ///
-    /// * See [`Self::deploy_blueprint()`] and [`MultiNodeTestEnv::new()`]
-    pub async fn setup_services<const N: usize>(
+    /// * See [`Self::setup_services`], [`Self::deploy_blueprint()`] and [`MultiNodeTestEnv::new()`]
+    pub async fn setup_services_with_options<const N: usize>(
         &self,
-        exit_after_registration: bool,
+        SetupServicesOpts {
+            exit_after_registration,
+            registration_args,
+            request_args,
+        }: SetupServicesOpts<N>,
     ) -> Result<(MultiNodeTestEnv<Ctx>, u64, u64), Error> {
         const { assert!(N > 0, "Must have at least 1 initial node") };
 
@@ -368,6 +394,8 @@ where
                 &all_signers[..N],
                 blueprint_id,
                 &all_preferences,
+                &registration_args,
+                request_args.clone(),
                 exit_after_registration,
             )
             .await
@@ -378,6 +406,31 @@ where
         let executor = MultiNodeTestEnv::new::<N>(self.config.clone());
 
         Ok((executor, service_id, blueprint_id))
+    }
+
+    /// Sets up a complete service environment with initialized event handlers
+    ///
+    /// # Returns
+    /// A tuple of the test environment, the service ID, and the blueprint ID i.e., (`test_env`, `service_id`, `blueprint_id`)
+    ///
+    /// # Note
+    /// The Service ID will always be 0 if automatic registration is disabled, as there is not yet a service to have an ID
+    ///
+    /// # Errors
+    ///
+    /// * See [`Self::deploy_blueprint()`] and [`MultiNodeTestEnv::new()`]
+    pub async fn setup_services<const N: usize>(
+        &self,
+        exit_after_registration: bool,
+    ) -> Result<(MultiNodeTestEnv<Ctx>, u64, u64), Error> {
+        const { assert!(N > 0, "Must have at least 1 initial node") };
+
+        self.setup_services_with_options::<N>(SetupServicesOpts {
+            exit_after_registration,
+            registration_args: vec![RegistrationArgs::default(); N].try_into().unwrap(),
+            request_args: RequestArgs::default(),
+        })
+        .await
     }
 
     /// Submits a job to be executed
