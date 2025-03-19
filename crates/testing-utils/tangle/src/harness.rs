@@ -217,7 +217,7 @@ impl<const N: usize> Default for SetupServicesOpts<N> {
         Self {
             exit_after_registration: false,
             registration_args: vec![RegistrationArgs::default(); N].try_into().unwrap(),
-            request_args: Vec::default(),
+            request_args: RequestArgs::default(),
         }
     }
 }
