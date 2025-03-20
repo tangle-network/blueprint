@@ -1,3 +1,2 @@
-@eigenlayer-middleware/=dependencies/eigenlayer-middleware-0.1.0/
-eigenlayer-middleware/=dependencies/eigenlayer-middleware-0.1.0/
-forge-std/=dependencies/forge-std-1.9.6/src/
+eigenlayer-middleware/=dependencies/eigenlayer-middleware-0.4.3/
+forge-std-1.9.5/=dependencies/forge-std-1.9.5/

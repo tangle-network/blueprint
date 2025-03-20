@@ -1,34 +1,32 @@
-use crate::BN254::G1Point;
-use crate::BN254::G2Point;
-use crate::IBLSSignatureCheckerTypes::NonSignerStakesAndSignature;
+use crate::IBLSSignatureChecker::NonSignerStakesAndSignature;
 use crate::IIncredibleSquaringTaskManager::Task;
 use crate::IIncredibleSquaringTaskManager::TaskResponse;
-use crate::{Error, IncredibleSquaringTaskManager, contexts::client::SignedTaskResponse};
+use crate::BN254::G1Point;
+use crate::BN254::G2Point;
+use crate::{contexts::client::SignedTaskResponse, Error, IncredibleSquaringTaskManager};
 use alloy_network::{Ethereum, NetworkWallet};
-use alloy_primitives::{Address, keccak256};
+use alloy_primitives::{keccak256, Address};
 use alloy_sol_types::SolType;
 use jsonrpc_core::{IoHandler, Params, Value};
 use jsonrpc_http_server::{AccessControlAllowOrigin, DomainsValidation, ServerBuilder};
 use std::{collections::VecDeque, net::SocketAddr, sync::Arc, time::Duration};
-use tokio::sync::{Mutex, Notify, oneshot};
+use tokio::sync::{oneshot, Mutex, Notify};
 use tokio::task::JoinHandle;
 use tokio::time::interval;
 
 use alloy_network::EthereumWallet;
+use blueprint_sdk::config::GadgetConfiguration;
 use blueprint_sdk::contexts::eigenlayer::EigenlayerContext;
-use blueprint_sdk::{debug, error, info};
-use blueprint_sdk::macros::context::{EigenlayerContext, KeystoreContext};
-use blueprint_sdk::runner::config::BlueprintEnvironment;
-use blueprint_sdk::runner::error::RunnerError;
-use blueprint_sdk::runner::BackgroundService;
+use blueprint_sdk::logging::{debug, error, info};
+use blueprint_sdk::macros::contexts::{EigenlayerContext, KeystoreContext};
+use blueprint_sdk::runners::core::error::RunnerError;
+use blueprint_sdk::runners::core::runner::BackgroundService;
 use eigensdk::client_avsregistry::reader::AvsRegistryChainReader;
 use eigensdk::common::get_provider;
-use eigensdk::crypto_bls::{BlsG1Point, BlsG2Point, convert_to_g1_point, convert_to_g2_point};
+use eigensdk::crypto_bls::{convert_to_g1_point, convert_to_g2_point, BlsG1Point, BlsG2Point};
 use eigensdk::services_avsregistry::chaincaller::AvsRegistryServiceChainCaller;
-use eigensdk::services_blsaggregation::bls_agg::TaskSignature;
 use eigensdk::services_blsaggregation::{
-    bls_agg, bls_agg::BlsAggregatorService,
-    bls_aggregation_service_response::BlsAggregationServiceResponse,
+    bls_agg::BlsAggregatorService, bls_aggregation_service_response::BlsAggregationServiceResponse,
 };
 use eigensdk::services_operatorsinfo::operatorsinfo_inmemory::OperatorInfoServiceInMemory;
 use eigensdk::types::avs::{TaskIndex, TaskResponseDigest};
@@ -44,13 +42,12 @@ pub struct AggregatorContext {
     pub task_manager_address: Address,
     pub tasks: Arc<Mutex<HashMap<TaskIndex, Task>>>,
     pub tasks_responses: Arc<Mutex<HashMap<TaskIndex, HashMap<TaskResponseDigest, TaskResponse>>>>,
-    pub service_handle: Option<Arc<Mutex<bls_agg::ServiceHandle>>>,
-    pub aggregate_receiver: Option<Arc<Mutex<bls_agg::AggregateReceiver>>>,
+    pub bls_aggregation_service: Option<Arc<Mutex<BlsAggServiceInMemory>>>,
     pub http_rpc_url: String,
     pub wallet: EthereumWallet,
     pub response_cache: Arc<Mutex<VecDeque<SignedTaskResponse>>>,
     #[config]
-    pub sdk_config: BlueprintEnvironment,
+    pub sdk_config: GadgetConfiguration,
     shutdown: Arc<(Notify, Mutex<bool>)>,
 }
 
@@ -59,15 +56,14 @@ impl AggregatorContext {
         port_address: String,
         task_manager_address: Address,
         wallet: EthereumWallet,
-        sdk_config: BlueprintEnvironment,
+        sdk_config: GadgetConfiguration,
     ) -> Result<Self, Error> {
         let mut aggregator_context = AggregatorContext {
             port_address,
             task_manager_address,
             tasks: Arc::new(Mutex::new(HashMap::new())),
             tasks_responses: Arc::new(Mutex::new(HashMap::new())),
-            service_handle: None,
-            aggregate_receiver: None,
+            bls_aggregation_service: None,
             http_rpc_url: sdk_config.http_rpc_endpoint.clone(),
             wallet,
             response_cache: Arc::new(Mutex::new(VecDeque::new())),
@@ -83,9 +79,7 @@ impl AggregatorContext {
             .bls_aggregation_service_in_memory()
             .await
             .map_err(|e| Error::Context(e.to_string()))?;
-        let (service_handle, aggregate_receiver) = bls_service.start();
-        aggregator_context.aggregate_receiver = Some(Arc::new(Mutex::new(aggregate_receiver)));
-        aggregator_context.service_handle = Some(Arc::new(Mutex::new(service_handle)));
+        aggregator_context.bls_aggregation_service = Some(Arc::new(Mutex::new(bls_service)));
 
         Ok(aggregator_context)
     }
@@ -337,10 +331,7 @@ impl AggregatorContext {
             task_index, task_response_digest
         );
 
-        let task_signature =
-            TaskSignature::new(task_index, task_response_digest, signature, operator_id);
-
-        self.service_handle
+        self.bls_aggregation_service
             .as_ref()
             .ok_or_else(|| {
                 std::io::Error::new(
@@ -351,7 +342,7 @@ impl AggregatorContext {
             .map_err(|e| Error::Context(e.to_string()))?
             .lock()
             .await
-            .process_signature(task_signature)
+            .process_new_signature(task_index, task_response_digest, signature, operator_id)
             .await
             .map_err(|e| Error::Context(e.to_string()))?;
 
@@ -364,8 +355,8 @@ impl AggregatorContext {
             task_index
         );
 
-        let aggregated_response = self
-            .aggregate_receiver
+        if let Some(aggregated_response) = self
+            .bls_aggregation_service
             .as_ref()
             .ok_or_else(|| {
                 std::io::Error::new(
@@ -376,10 +367,15 @@ impl AggregatorContext {
             .map_err(|e| Error::Context(e.to_string()))?
             .lock()
             .await
-            .receive_aggregated_response()
-            .await;
-        let response = aggregated_response.map_err(|e| Error::Context(e.to_string()))?;
-        self.send_aggregated_response_to_contract(response).await?;
+            .aggregated_response_receiver
+            .lock()
+            .await
+            .recv()
+            .await
+        {
+            let response = aggregated_response.map_err(|e| Error::Context(e.to_string()))?;
+            self.send_aggregated_response_to_contract(response).await?;
+        }
         Ok(())
     }
 
@@ -453,6 +449,7 @@ impl AggregatorContext {
     }
 }
 
+#[async_trait::async_trait]
 impl BackgroundService for AggregatorContext {
     async fn start(&self) -> Result<oneshot::Receiver<Result<(), RunnerError>>, RunnerError> {
         let handle = self.clone().start().await;

@@ -1,4 +1,5 @@
 [profile.default]
+evm_version = "shanghai"
 src = "contracts/src"
 test = "contracts/test"
 out = "contracts/out"
@@ -6,7 +7,13 @@ script = "contracts/script"
 cache_path = "contracts/cache"
 broadcast = "contracts/broadcast"
 libs = ["dependencies"]
-evm_version = "shanghai"
+remappings = [
+    "@eigenlayer/=dependencies/eigenlayer-middleware-0.4.3/lib/eigenlayer-contracts/src/",
+    "@eigenlayer-middleware/=dependencies/eigenlayer-middleware-0.4.3/",
+    "eigenlayer-contracts/=dependencies/eigenlayer-middleware-0.4.3/lib/eigenlayer-contracts/",
+    "forge-std-1.9.5/=dependencies/forge-std-1.9.5/",
+    "incredible-squaring/=contracts/src/",
+]
 
 [soldeer]
 recursive_deps = true
@@ -14,5 +21,7 @@ remappings_location = "txt"
 remappings_version = false
 
 [dependencies]
-forge-std = "1.9.6"
-eigenlayer-middleware = { version = "0.1.0", git = "https://github.com/Layr-Labs/eigenlayer-middleware.git", rev = "fe5834371caed60c1d26ab62b5519b0cbdcb42fa" }
+eigenlayer-middleware = { version = "0.4.3", git = "https://github.com/Layr-Labs/eigenlayer-middleware", rev = "fe5834371caed60c1d26ab62b5519b0cbdcb42fa" }
+forge-std = "1.9.5"
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
