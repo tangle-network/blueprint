@@ -20,7 +20,6 @@
 //! 5. Maintains a buffer of pending jobs
 
 use alloc::collections::VecDeque;
-use gadget_std::sync::{Arc, Mutex};
 use alloy_provider::Provider;
 use alloy_rpc_types::{Filter, Log};
 use alloy_transport::TransportError;
@@ -32,6 +31,7 @@ use core::{
     time::Duration,
 };
 use futures::Stream;
+use gadget_std::sync::{Arc, Mutex};
 use tokio::time::Sleep;
 
 /// Configuration parameters for the polling producer
@@ -121,7 +121,9 @@ impl<P: Provider> PollingProducer<P> {
             provider,
             config,
             filter,
-            state: Arc::new(Mutex::new(PollingState::Idle(Box::pin(tokio::time::sleep(Duration::from_micros(1)))))),
+            state: Arc::new(Mutex::new(PollingState::Idle(Box::pin(
+                tokio::time::sleep(Duration::from_micros(1)),
+            )))),
             buffer: VecDeque::with_capacity(config.step as usize),
         }
     }

@@ -13,7 +13,7 @@ workspace = true
 
 [dependencies]
 blueprint-core = { workspace = true }
-gadget-crypto-bn254 = { workspace = true }
+blueprint-crypto-bn254 = { workspace = true }
 blueprint-evm-extra = { workspace = true }
 alloy-contract = { workspace = true, default-features = false }
 alloy-network = { workspace = true, default-features = false }
