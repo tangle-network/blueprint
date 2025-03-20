@@ -75,8 +75,7 @@ async fn get_provider_ws() {
 async fn avs_registry_reader() {
     let env = setup_test_environment().await;
     let client = EigenlayerClient::new(env.config.clone());
-    let result = client.avs_registry_reader().await;
-    assert!(result.is_ok());
+    let _ = client.avs_registry_reader().await.unwrap();
 }
 
 #[tokio::test]
@@ -84,16 +83,17 @@ async fn avs_registry_writer() {
     let env = setup_test_environment().await;
     let client = EigenlayerClient::new(env.config.clone());
     let private_key = "0000000000000000000000000000000000000000000000000000000000000001";
-    let result = client.avs_registry_writer(private_key.to_string()).await;
-    assert!(result.is_ok());
+    let _ = client
+        .avs_registry_writer(private_key.to_string())
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
 async fn operator_info_service() {
     let env = setup_test_environment().await;
     let client = EigenlayerClient::new(env.config.clone());
-    let result = client.operator_info_service_in_memory().await;
-    assert!(result.is_ok());
+    let _ = client.operator_info_service_in_memory().await.unwrap();
 }
 
 #[tokio::test]
@@ -129,6 +129,5 @@ async fn get_operator_id() {
     let env = setup_test_environment().await;
     let client = EigenlayerClient::new(env.config.clone());
     let operator_addr = address!("f39fd6e51aad88f6f4ce6ab8827279cfffb92266");
-    let result = client.get_operator_id(operator_addr).await;
-    assert!(result.is_ok());
+    let _ = client.get_operator_id(operator_addr).await.unwrap();
 }

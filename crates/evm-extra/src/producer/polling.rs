@@ -24,6 +24,7 @@ use alloy_provider::Provider;
 use alloy_rpc_types::{Filter, Log};
 use alloy_transport::TransportError;
 use blueprint_core::JobCall;
+use blueprint_std::sync::{Arc, Mutex};
 use core::{
     fmt::Debug,
     pin::Pin,
@@ -31,7 +32,6 @@ use core::{
     time::Duration,
 };
 use futures::Stream;
-use std::sync::{Arc, Mutex};
 use tokio::time::Sleep;
 
 /// Configuration parameters for the polling producer
