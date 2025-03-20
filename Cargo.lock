@@ -2775,6 +2775,7 @@ dependencies = [
  "alloy-transport",
  "blueprint-chain-setup-anvil",
  "blueprint-client-core",
+ "blueprint-core",
  "blueprint-eigenlayer-testing-utils",
  "blueprint-evm-extra",
  "blueprint-runner",
@@ -5777,6 +5778,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
 dependencies = [
  "pkcs8",
+ "serde",
  "signature",
 ]
 
@@ -5802,10 +5804,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d9ce6874da5d4415896cd45ffbc4d1cfc0c4f9c079427bd870742c30f2f65a9"
 dependencies = [
  "curve25519-dalek",
+ "der",
  "ed25519",
  "hashbrown 0.14.5",
  "hex",
+ "pkcs8",
  "rand_core 0.6.4",
+ "serde",
  "sha2 0.10.8",
  "zeroize",
 ]
@@ -8735,6 +8740,57 @@ checksum = "7cab85a7ed0bd5f0e76d93846e0147172bed2e2d3f859bcc33a8d9699cad1a75"
 dependencies = [
  "proc-macro2",
  "quote",
+]
+
+[[package]]
+name = "incredible-squaring-blueprint-eigenlayer"
+version = "0.1.1"
+dependencies = [
+ "alloy-consensus",
+ "alloy-contract",
+ "alloy-json-abi",
+ "alloy-network",
+ "alloy-primitives 0.8.23",
+ "alloy-provider",
+ "alloy-pubsub",
+ "alloy-rpc-client",
+ "alloy-rpc-types",
+ "alloy-rpc-types-eth",
+ "alloy-signer",
+ "alloy-signer-local",
+ "alloy-sol-types 0.8.23",
+ "alloy-transport",
+ "alloy-transport-http",
+ "ark-bn254",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "bip39",
+ "blueprint-build-utils",
+ "blueprint-sdk",
+ "clap",
+ "color-eyre",
+ "ed25519-zebra",
+ "eigensdk",
+ "futures",
+ "hex",
+ "jsonrpc-core",
+ "jsonrpc-http-server",
+ "k256",
+ "lazy_static",
+ "libp2p",
+ "lock_api",
+ "num-bigint 0.4.6",
+ "parking_lot 0.12.3",
+ "reqwest 0.12.14",
+ "serde",
+ "serde_json",
+ "sp-core",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-util 0.7.14",
+ "tracing",
+ "uuid 1.16.0",
 ]
 
 [[package]]

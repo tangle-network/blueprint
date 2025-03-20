@@ -14,6 +14,7 @@ workspace = true
 [dependencies]
 blueprint-runner = { workspace = true, features = ["eigenlayer"] }
 
+blueprint-core.workspace = true
 blueprint-client-core = { workspace = true }
 blueprint-std = { workspace = true }
 blueprint-evm-extra = { workspace = true }
@@ -48,7 +49,7 @@ alloy-primitives = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 
 [features]
-default = ["std"]
+default = ["std", "tracing"]
 std = [
 	"blueprint-std/std",
 	"blueprint-evm-extra/std",
@@ -56,3 +57,5 @@ std = [
 	"blueprint-client-core/std",
 	"url/std",
 ]
+
+tracing = ["blueprint-core/tracing"]

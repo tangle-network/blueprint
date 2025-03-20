@@ -2533,6 +2533,7 @@ dependencies = [
  "alloy-provider",
  "alloy-transport",
  "blueprint-client-core",
+ "blueprint-core",
  "blueprint-evm-extra",
  "blueprint-runner",
  "blueprint-std",

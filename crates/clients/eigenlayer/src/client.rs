@@ -23,7 +23,7 @@ pub struct EigenlayerClient {
 }
 
 impl EigenlayerClient {
-    /// Creates a new instance of the [`EigenlayerClient`] given a [`BlueprintEnvironment`].
+    /// Creates a new [`EigenlayerClient`].
     #[must_use]
     pub fn new(config: BlueprintEnvironment) -> Self {
         Self { config }
@@ -501,19 +501,16 @@ impl EigenlayerClient {
         let contract_addresses = self.config.protocol_settings.eigenlayer()?;
         let provider = self.get_provider_http();
 
-        // Create the AllocationManager instance
         let allocation_manager = AllocationManager::AllocationManagerInstance::new(
             contract_addresses.allocation_manager_address,
             provider,
         );
 
-        // Create the OperatorSet struct
         let operator_set = AllocationManager::OperatorSet {
             avs: avs_address,
             id: u32::from(operator_set_id), // Convert u8 to u32
         };
 
-        // Call the contract method
         let result = allocation_manager
             .getStrategiesInOperatorSet(operator_set)
             .call()
@@ -549,13 +546,11 @@ impl EigenlayerClient {
         let contract_addresses = self.config.protocol_settings.eigenlayer()?;
         let provider = self.get_provider_http();
 
-        // Create the AllocationManager instance
         let allocation_manager = AllocationManager::AllocationManagerInstance::new(
             contract_addresses.allocation_manager_address,
             provider,
         );
 
-        // Call the contract method
         let result = allocation_manager
             .getStrategyAllocations(operator_address, strategy_address)
             .call()
@@ -586,13 +581,11 @@ impl EigenlayerClient {
         let contract_addresses = self.config.protocol_settings.eigenlayer()?;
         let provider = self.get_provider_http();
 
-        // Create the AllocationManager instance
         let allocation_manager = AllocationManager::AllocationManagerInstance::new(
             contract_addresses.allocation_manager_address,
             provider,
         );
 
-        // Call the contract method
         let result = allocation_manager
             .getMaxMagnitude(operator_address, strategy_address)
             .call()
@@ -623,13 +616,11 @@ impl EigenlayerClient {
         let contract_addresses = self.config.protocol_settings.eigenlayer()?;
         let provider = self.get_provider_http();
 
-        // Create the DelegationManager instance - note this is where getSlashableSharesInQueue lives
         let delegation_manager = DelegationManager::DelegationManagerInstance::new(
             contract_addresses.delegation_manager_address,
             provider,
         );
 
-        // Call the contract method
         let result = delegation_manager
             .getSlashableSharesInQueue(operator_address, strategy_address)
             .call()
@@ -659,10 +650,7 @@ impl EigenlayerClient {
         block_number: u32,
         quorum_numbers: Vec<u8>,
     ) -> Result<Vec<Vec<OperatorStateRetriever::Operator>>> {
-        // Convert quorum numbers to bytes
         let quorum_bytes = Bytes::from(quorum_numbers);
-
-        // Get operators stake in quorums
         self.get_operator_stake_in_quorums_at_block(block_number, quorum_bytes)
             .await
     }
@@ -694,51 +682,34 @@ impl EigenlayerClient {
     ) -> Result<HashMap<Address, HashMap<Address, U256>>> {
         let mut result = HashMap::new();
 
-        // Get operators for each quorum
         let all_operator_info = self
             .get_operators_for_service(avs_address, block_number, quorum_numbers.clone())
             .await?;
 
-        // Process each quorum
-        for (i, operators) in all_operator_info.iter().enumerate() {
-            // Skip if the quorum index is out of bounds
-            if i >= quorum_numbers.len() {
-                continue;
-            }
-
-            let quorum_number = quorum_numbers[i];
-
-            // Get strategies for this operator set
+        for (operators, quorum_number) in all_operator_info.iter().zip(quorum_numbers) {
             let strategies = self
                 .get_strategies_in_operator_set(avs_address, quorum_number)
                 .await?;
 
-            // Process each operator in the quorum
             for operator in operators {
                 let operator_id = operator.operatorId;
 
-                // Get operator address from operator ID
                 let operator_address = self.get_operator_by_id(operator_id.into()).await?;
 
-                // Initialize the operator's entry in the result HashMap if it doesn't exist
                 let operator_entry = result.entry(operator_address).or_insert_with(HashMap::new);
 
-                // Process each strategy
                 for strategy_address in &strategies {
-                    // Get slashable shares directly using DelegationManager
                     match self
                         .get_slashable_shares_in_queue(operator_address, *strategy_address)
                         .await
                     {
                         Ok(slashable_shares) => {
-                            // Add to the result
                             operator_entry.insert(*strategy_address, slashable_shares);
                         }
                         Err(e) => {
                             // Log the error but continue with other strategies
-                            eprintln!(
-                                "Error getting slashable shares for operator {}, strategy {}: {}",
-                                operator_address, strategy_address, e
+                            blueprint_core::error!(
+                                "Error getting slashable shares for operator {operator_address}, strategy {strategy_address}: {e}",
                             );
                         }
                     }
