@@ -655,7 +655,7 @@ impl EigenlayerClient {
     /// * [`Error::AlloyContractError`] - If the call to the contract fails
     pub async fn get_operators_for_service(
         &self,
-        avs_address: Address,
+        _avs_address: Address,
         block_number: u32,
         quorum_numbers: Vec<u8>,
     ) -> Result<Vec<Vec<OperatorStateRetriever::Operator>>> {

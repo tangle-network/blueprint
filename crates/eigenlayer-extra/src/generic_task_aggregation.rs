@@ -55,7 +55,7 @@ pub enum AggregationError {
     TaskJoinError(#[from] tokio::task::JoinError),
 }
 
-/// Type alias for using Result with AggregationError
+/// Type alias for using Result with [`AggregationError`]
 pub type Result<T> = std::result::Result<T, AggregationError>;
 
 /// Convenience type alias for the BLS Aggregation Service used in EigenLayer
@@ -134,7 +134,7 @@ impl<R: TaskResponse> SignedTaskResponse<R> {
 
 /// Trait for sending aggregated responses to EigenLayer contracts
 pub trait ResponseSender<T: EigenTask, R: TaskResponse>: Send + Sync + Clone + 'static {
-    /// Future type returned by send_aggregated_response
+    /// Future type returned by `send_aggregated_response`
     type Future: std::future::Future<Output = Result<()>> + Send + 'static;
 
     /// Send an aggregated response to the contract
@@ -227,6 +227,9 @@ where
     }
 
     /// Register a new task with the aggregator
+    ///
+    /// # Errors
+    /// - [`AggregationError::BlsAggregationError`] - If the task index already exists in the aggregator
     pub async fn register_task(&self, task: T) -> Result<()> {
         let task_index = task.task_index();
         let mut tasks = self.tasks.write().await;
@@ -241,7 +244,7 @@ where
         // Initialize the task in the BLS service
         let task_metadata = TaskMetadata::new(
             task_index,
-            task.created_block() as u64,
+            u64::from(task.created_block()),
             task.quorum_numbers(),
             vec![task.quorum_threshold_percentage(); task.quorum_numbers().len()],
             Duration::from_secs(self.config.processing_interval * 10), // Set a reasonable expiry time
@@ -256,32 +259,29 @@ where
     }
 
     /// Process a signed task response
-    pub async fn process_signed_response(
-        &self,
-        signed_response: SignedTaskResponse<R>,
-    ) -> Result<()> {
+    pub async fn process_signed_response(&self, signed_response: SignedTaskResponse<R>) {
         // Add to cache for processing
         self.response_cache.lock().await.push_back(signed_response);
-        Ok(())
     }
 
     /// Start the aggregator service
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(&self) {
         // Start the processing loop
-        let process_handle = self.start_processing_loop().await?;
+        let process_handle = self.start_processing_loop();
 
         // Start the aggregation result handling loop
-        let aggregation_handle = self.start_aggregation_handling_loop().await?;
+        let aggregation_handle = self.start_aggregation_handling_loop();
 
         // Store the handles
         let mut handles = self.task_handles.lock().await;
         handles.push(process_handle);
         handles.push(aggregation_handle);
-
-        Ok(())
     }
 
     /// Stop the aggregator service
+    ///
+    /// # Errors
+    /// - [`AggregationError::AlreadyStopped`] - If the service is already stopped
     pub async fn stop(&self) -> Result<()> {
         // Set shutdown flag
         let (notify, is_shutdown) = &*self.shutdown;
@@ -311,7 +311,7 @@ where
 
     // Private helper methods
 
-    async fn start_processing_loop(&self) -> Result<JoinHandle<()>> {
+    fn start_processing_loop(&self) -> JoinHandle<()> {
         let tasks = self.tasks.clone();
         let responses = self.responses.clone();
         let response_cache = self.response_cache.clone();
@@ -319,7 +319,7 @@ where
         let shutdown = self.shutdown.clone();
         let interval_secs = self.config.processing_interval;
 
-        let handle = tokio::spawn(async move {
+        tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(interval_secs));
 
             loop {
@@ -355,7 +355,7 @@ where
                                 &responses,
                                 &bls_service,
                             ).await {
-                                Ok(_) => {
+                                Ok(()) => {
                                     // Successfully processed
                                 }
                                 Err(e) => {
@@ -366,7 +366,7 @@ where
                             }
                         }
                     }
-                    _ = shutdown.0.notified() => {
+                    () = shutdown.0.notified() => {
                         if *shutdown.1.lock().await {
                             break;
                         }
@@ -375,12 +375,10 @@ where
             }
 
             blueprint_core::info!("Processing loop shutdown complete");
-        });
-
-        Ok(handle)
+        })
     }
 
-    async fn start_aggregation_handling_loop(&self) -> Result<JoinHandle<()>> {
+    fn start_aggregation_handling_loop(&self) -> JoinHandle<()> {
         let tasks = self.tasks.clone();
         let responses = self.responses.clone();
         let aggregate_receiver = self.aggregate_receiver.clone();
@@ -388,7 +386,7 @@ where
         let shutdown = self.shutdown.clone();
         let config = self.config.clone();
 
-        let handle = tokio::spawn(async move {
+        tokio::spawn(async move {
             loop {
                 tokio::select! {
                     Ok(aggregation_result) = async {
@@ -418,7 +416,7 @@ where
                                     .send_aggregated_response(&task, &response, aggregation_result.clone())
                                     .await
                                 {
-                                    Ok(_) => {
+                                    Ok(()) => {
                                         blueprint_core::info!(
                                             "Successfully sent aggregated response for task {}",
                                             task_index
@@ -451,7 +449,7 @@ where
                             );
                         }
                     }
-                    _ = shutdown.0.notified() => {
+                    () = shutdown.0.notified() => {
                         if *shutdown.1.lock().await {
                             break;
                         }
@@ -460,9 +458,7 @@ where
             }
 
             blueprint_core::info!("Aggregation handling loop shutdown complete");
-        });
-
-        Ok(handle)
+        })
     }
 
     async fn process_response(
@@ -478,8 +474,7 @@ where
             let resp_map = responses.read().await;
             resp_map
                 .get(&task_index)
-                .map(|m| m.contains_key(&response_digest))
-                .unwrap_or(false)
+                .is_some_and(|m| m.contains_key(&response_digest))
         };
 
         if response_exists {

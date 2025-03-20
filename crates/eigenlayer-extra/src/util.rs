@@ -28,7 +28,11 @@ pub async fn get_allocation_manager_address(
 }
 
 /// Generate the Operator ID from the BLS Keypair
-pub fn operator_id_from_key(key: BlsKeyPair) -> OperatorId {
+///
+/// # Returns
+/// - [`OperatorId`] - The operator ID
+#[must_use]
+pub fn operator_id_from_key(key: &BlsKeyPair) -> OperatorId {
     let pub_key = key.public_key();
     let pub_key_affine = pub_key.g1();
 
@@ -41,6 +45,13 @@ pub fn operator_id_from_key(key: BlsKeyPair) -> OperatorId {
     keccak256([x_bytes, y_bytes].concat())
 }
 
-pub fn operator_id_from_ark_bls_bn254(key: ArkBlsBn254Secret) -> Result<OperatorId, BlsError> {
-    BlsKeyPair::new(key.0.to_string()).map(operator_id_from_key)
+/// Generate the Operator ID from the Ark BLS Keypair
+///
+/// # Returns
+/// - [`OperatorId`] - The operator ID
+///
+/// # Errors
+/// - [`BlsError`] - If the key is invalid
+pub fn operator_id_from_ark_bls_bn254(key: &ArkBlsBn254Secret) -> Result<OperatorId, BlsError> {
+    BlsKeyPair::new(key.0.to_string()).map(|key| operator_id_from_key(&key))
 }

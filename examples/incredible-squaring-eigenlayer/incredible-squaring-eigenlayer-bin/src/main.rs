@@ -8,7 +8,6 @@
 //! - Handle task processing and response submission
 //! - Implement proper error handling and logging
 //! - Manage graceful shutdown
-
 use ::std::{str::FromStr, sync::Arc, time::Duration};
 use blueprint_sdk::alloy::primitives::Address;
 use blueprint_sdk::evm::producer::{PollingConfig, PollingProducer};
@@ -16,8 +15,8 @@ use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
 use blueprint_sdk::runner::{config::BlueprintEnvironment, BlueprintRunner};
 use blueprint_sdk::evm::util::get_provider_http;
 use blueprint_sdk::*;
-use incredible_squaring_eigenlayer_lib::contexts::ExampleContext;
-// use incredible_squaring_eigenlayer_lib::{create_contract_router, ExampleContext};
+use incredible_squaring_eigenlayer_lib::jobs::x_square::IncredibleSquaringClientContext;
+use incredible_squaring_eigenlayer_lib::jobs::x_square_create_contract_router;
 use tracing::{info, warn};
 use tracing_subscriber::filter::LevelFilter;
 
@@ -43,12 +42,12 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
         Ok(Ok(address)) => address,
         _ => {
             warn!("TASK_MANAGER_ADDRESS environment variable not set or invalid");
-            return Err(blueprint_sdk::Error::Custom("Missing or invalid TASK_MANAGER_ADDRESS".into()));
+            return Err(blueprint_sdk::Error::Other("Missing or invalid TASK_MANAGER_ADDRESS".into()));
         }
     };
 
     let rpc_url = std::env::var("RPC_URL")
-        .map_err(|_| blueprint_sdk::Error::Custom("RPC_URL environment variable not set".into()))?;
+        .map_err(|_| blueprint_sdk::Error::Other("RPC_URL environment variable not set".into()))?;
 
     // Initialize Ethereum RPC client
     let client = Arc::new(get_provider_http(&rpc_url));
@@ -72,11 +71,14 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     );
 
     // Create service context and start the runner
-    let ctx = ExampleContext {};
+    let ctx = IncredibleSquaringClientContext {
+        env: BlueprintEnvironment::default(),
+        client: Arc::new(incredible_squaring_eigenlayer_lib::contexts::client::create_client("http://localhost:8080").unwrap()),
+    };
     info!("Starting BlueprintRunner with TaskManager at {}", task_manager);
     
     BlueprintRunner::builder(eigenlayer_bls_config, BlueprintEnvironment::default())
-        .router(create_contract_router(ctx, task_manager))
+        .router(x_square_create_contract_router(ctx, task_manager))
         .producer(task_producer)
         .with_shutdown_handler(async {
             info!("Initiating graceful shutdown of task manager service");

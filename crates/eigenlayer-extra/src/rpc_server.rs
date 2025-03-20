@@ -39,6 +39,9 @@ where
     E: DeserializeOwned + Debug + Send + 'static,
 {
     /// Create a new task aggregator server
+    ///
+    /// # Errors
+    /// - [`AggregationError::ContractError`] - If the address is invalid
     pub fn new<F>(
         aggregator: Arc<TaskAggregator<T, R, S>>,
         address: impl AsRef<str>,
@@ -61,7 +64,10 @@ where
     }
 
     /// Start the server
-    pub async fn start(&mut self) -> Result<(), AggregationError> {
+    ///
+    /// # Errors
+    /// - [`AggregationError::ServiceInitError`] - If the server is already running
+    pub fn start(&mut self) -> Result<(), AggregationError> {
         if self.shutdown_sender.is_some() {
             return Err(AggregationError::ServiceInitError(
                 "Server is already running".to_string(),
@@ -104,13 +110,7 @@ where
                 );
 
                 // Process the response through the aggregator
-                aggregator
-                    .process_signed_response(generic_response)
-                    .await
-                    .map_err(|e| {
-                        error!("Failed to process response: {}", e);
-                        RpcError::invalid_params(e.to_string())
-                    })?;
+                aggregator.process_signed_response(generic_response).await;
 
                 Ok(Value::Bool(true))
             }
@@ -143,7 +143,7 @@ where
                     close_handle.close();
                 }
                 // Keep server running
-                _ = async { server.wait(); } => {
+                () = async { server.wait(); } => {
                     info!("Server stopped unexpectedly");
                 }
             }
@@ -157,7 +157,10 @@ where
     }
 
     /// Stop the server
-    pub async fn stop(&mut self) -> Result<(), AggregationError> {
+    ///
+    /// # Errors
+    /// - [`AggregationError::ServiceInitError`] - If the server is not running
+    pub fn stop(&mut self) -> Result<(), AggregationError> {
         if let Some(sender) = self.shutdown_sender.take() {
             let _ = sender.send(());
             info!("Sent shutdown signal to RPC server");

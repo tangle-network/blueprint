@@ -26,6 +26,7 @@ where
     G2: ContractG2Point,
 {
     /// Create a new instance with the given parameters
+    #[allow(clippy::too_many_arguments)]
     fn new(
         non_signer_pubkeys: Vec<G1>,
         non_signer_quorum_bitmap_indices: Vec<u32>,
@@ -38,7 +39,7 @@ where
     ) -> Self;
 }
 
-/// Converts a BlsG1Point to a contract-compatible G1 point
+/// Converts a `BlsG1Point` to a contract-compatible G1 point
 pub fn convert_to_contract_g1<G1: ContractG1Point>(
     point: &BlsG1Point,
     convert_g1: impl FnOnce(&BlsG1Point) -> (G1::X, G1::Y),
@@ -47,7 +48,7 @@ pub fn convert_to_contract_g1<G1: ContractG1Point>(
     G1::new(x, y)
 }
 
-/// Converts a BlsG2Point to a contract-compatible G2 point
+/// Converts a `BlsG2Point` to a contract-compatible G2 point
 pub fn convert_to_contract_g2<G2: ContractG2Point>(
     point: &BlsG2Point,
     convert_g2: impl FnOnce(&BlsG2Point) -> (G2::X, G2::Y),
@@ -56,7 +57,7 @@ pub fn convert_to_contract_g2<G2: ContractG2Point>(
     G2::new(x, y)
 }
 
-/// Converts a BlsAggregationServiceResponse to a contract-compatible NonSignerStakesAndSignature
+/// Converts a `BlsAggregationServiceResponse` to a contract-compatible `NonSignerStakesAndSignature`
 pub fn convert_aggregation_response<G1, G2, NSS>(
     response: &BlsAggregationServiceResponse,
     convert_g1: impl Fn(&BlsG1Point) -> (G1::X, G1::Y) + Copy,

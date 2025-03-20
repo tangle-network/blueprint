@@ -90,6 +90,9 @@ where
     C: Fn(E) -> SignedTaskResponse<R> + Clone + Send + Sync + 'static,
 {
     /// Create a new Aggregator Client
+    ///
+    /// # Errors
+    /// - `ClientError::UrlParse`: If the URL parsing fails
     pub fn new(aggregator_address: &str, converter: C) -> Result<Self> {
         let url = Url::parse(&format!("http://{}", aggregator_address))?;
         let client = Client::new();
@@ -104,6 +107,9 @@ where
     }
 
     /// Create a new Aggregator Client with custom configuration
+    ///
+    /// # Errors
+    /// - `ClientError::UrlParse`: If the URL parsing fails
     pub fn with_config(
         aggregator_address: &str,
         converter: C,
@@ -160,6 +166,10 @@ where
     }
 
     /// Send a signed task response to the aggregator with retries
+    ///
+    /// # Errors
+    /// - `ClientError::RpcError`: If the JSON-RPC request fails
+    /// - `ClientError::RetryLimitExceeded`: If the maximum number of retries is exceeded
     pub async fn send_signed_task_response(&self, external_response: E) -> Result<()> {
         // Convert to the generic format for debugging/logs
         let generic_response = (self.converter)(external_response.clone());
