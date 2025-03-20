@@ -162,6 +162,7 @@ eigenlayer = [
     "dep:eigensdk",
     "gadget-contexts/eigenlayer",
     "gadget-clients/eigenlayer",
+    "gadget-testing-utils?/eigenlayer",
     "evm",
 ]
 

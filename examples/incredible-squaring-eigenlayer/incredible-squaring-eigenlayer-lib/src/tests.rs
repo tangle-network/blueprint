@@ -6,6 +6,8 @@ use blueprint_sdk::evm::util::{get_provider_http, get_wallet_provider_http};
 use blueprint_sdk::testing::utils::anvil::anvil::*;
 use blueprint_sdk::testing::utils::runner::TestEnv;
 use blueprint_sdk::testing::utils::setup_log;
+use blueprint_sdk::testing::utils::eigenlayer::harness::EigenlayerTestHarness;
+use blueprint_sdk::testing::utils::eigenlayer::harness::EigenlayerTestConfig;
 use blueprint_sdk::{error, info};
 use futures::StreamExt;
 use std::{
@@ -13,7 +15,14 @@ use std::{
     time::Duration,
 };
 
-use crate::contexts::EigenSquareContext;
+use crate::contexts::aggregator::EigenSquareContext;
+use crate::contexts::client::create_client;
+use crate::contracts::registry_coordinator::RegistryCoordinator;
+use crate::contracts::task_manager::SquaringTask as IncredibleSquaringTaskManager;
+use tempfile;
+
+const AGGREGATOR_PRIVATE_KEY: &str = "0xac0974bec39a17e36ba4a6b41058f245b95fb0cd0315737425652a595140d55b";
+const TASK_MANAGER_ADDRESS: Address = Address::from("0000000000000000000000000000000000000000");
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_eigenlayer_incredible_squaring_blueprint() {
@@ -69,13 +78,13 @@ async fn run_eigenlayer_incredible_squaring_test(
         std_config: env.clone(),
     };
     let aggregator_context =
-        AggregatorContext::new(server_address, *TASK_MANAGER_ADDRESS, wallet, env.clone())
+        AggregatorContext::new(server_address, task_manager_address, wallet, env.clone())
             .await
             .unwrap();
     let aggregator_context_clone = aggregator_context.clone();
 
     // Create jobs
-    let contract = IncredibleSquaringTaskManager::IncredibleSquaringTaskManagerInstance::new(
+    let contract = IncredibleSquaringTaskManager::SquaringTaskInstance::new(
         task_manager_address,
         provider,
     );
@@ -131,7 +140,24 @@ async fn run_eigenlayer_incredible_squaring_test(
     }
 }
 
-pub async fn deploy_task_manager(harness: &EigenlayerTestHarness) -> Address {
+async fn wait_for_responses(
+    successful_responses: Arc<Mutex<usize>>,
+    expected_responses: usize,
+    timeout_duration: Duration,
+) -> Result<Result<(), ()>, tokio::time::error::Elapsed> {
+    tokio::time::timeout(timeout_duration, async move {
+        loop {
+            let count = *successful_responses.lock().unwrap();
+            if count >= expected_responses {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    })
+    .await
+}
+
+pub async fn deploy_task_manager<Ctx>(harness: &EigenlayerTestHarness<Ctx>) -> Address {
     let env = harness.env().clone();
     let http_endpoint = &env.http_rpc_endpoint;
     let registry_coordinator_address = harness
@@ -177,8 +203,8 @@ pub async fn deploy_task_manager(harness: &EigenlayerTestHarness) -> Address {
     task_manager_address
 }
 
-pub async fn setup_task_spawner(
-    harness: &EigenlayerTestHarness,
+pub async fn setup_task_spawner<Ctx>(
+    harness: &EigenlayerTestHarness<Ctx>,
     task_manager_address: Address,
 ) -> impl std::future::Future<Output = ()> {
     let registry_coordinator_address = harness
@@ -240,8 +266,8 @@ pub async fn setup_task_spawner(
     }
 }
 
-pub async fn setup_task_response_listener(
-    harness: &EigenlayerTestHarness,
+pub async fn setup_task_response_listener<Ctx>(
+    harness: &EigenlayerTestHarness<Ctx>,
     task_manager_address: Address,
     successful_responses: Arc<Mutex<usize>>,
 ) -> impl std::future::Future<Output = ()> {
@@ -249,7 +275,7 @@ pub async fn setup_task_response_listener(
 
     let task_manager = IncredibleSquaringTaskManager::new(
         task_manager_address,
-        get_provider_ws(ws_endpoint.as_str()).await,
+        get_provider_http(&ws_endpoint),
     );
 
     async move {

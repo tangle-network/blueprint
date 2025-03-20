@@ -32,8 +32,8 @@ use super::TaskError;
 #[derive(Clone, Debug, KeystoreContext, EigenlayerContext)]
 pub struct IncredibleSquaringClientContext {
     #[config]
-    env: BlueprintEnvironment,
-    client: Arc<IncredibleSquaringAggregatorClient>,
+    pub env: BlueprintEnvironment,
+    pub client: Arc<IncredibleSquaringAggregatorClient>,
 }
 
 /// Sends a signed task response to the BLS Aggregator.
