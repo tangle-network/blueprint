@@ -75,7 +75,7 @@ pub async fn compute_x_square(
         let signature = keystore.sign_with_local::<ArkBlsBn254>(&public_key, &msg_hash.to_vec())?;
 
         let operator_id = if let Some(secret_key) = secret_key {
-            operator_id_from_ark_bls_bn254(secret_key)?
+            operator_id_from_ark_bls_bn254(&secret_key)?
         } else {
             error!("No secret key found");
             return Err(TaskError::KeystoreError(gadget_keystore::Error::Other(

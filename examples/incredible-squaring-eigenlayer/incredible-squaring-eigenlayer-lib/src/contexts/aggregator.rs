@@ -37,7 +37,7 @@ pub async fn start_server(
             )
         })?;
 
-    server.start().await?;
+    server.start()?;
     info!("Incredible Squaring Task aggregator server started successfully");
 
     Ok(())
@@ -74,7 +74,7 @@ impl EigenSquareContext {
         let aggregator = Arc::new(aggregator);
 
         // Start the aggregator
-        aggregator.start().await?;
+        aggregator.start().await;
 
         // Start the RPC server
         start_server(Arc::clone(&aggregator), server_address).await?;

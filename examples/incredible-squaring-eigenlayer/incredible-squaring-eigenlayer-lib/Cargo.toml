@@ -23,6 +23,7 @@ reqwest = { workspace = true }
 num-bigint = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tokio-util = { version = "0.7.14", features = ["full"] }
 
 [dev-dependencies]
 blueprint-sdk = { workspace = true, features = [

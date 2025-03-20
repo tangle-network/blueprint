@@ -8,30 +8,31 @@ pub mod contracts;
 pub mod jobs;
 
 #[cfg(test)]
-mod tests;
-
-#[cfg(test)]
 mod tests {
+    use crate::contracts::task_manager::SquaringTask;
     use crate::jobs::x_square::IncredibleSquaringClientContext;
     use crate::jobs::x_square_create_contract_router;
-    use crate::{config::get_provider_http, contracts::SquaringTask};
 
     use super::*;
-    use alloy_network::EthereumWallet;
-    use alloy_primitives::{address, Address, U256};
-    use alloy_provider::Provider;
-    use alloy_signer_local::PrivateKeySigner;
-    use blueprint_evm_extra::consumer::EVMConsumer;
-    use blueprint_evm_extra::producer::{PollingConfig, PollingProducer};
-    use blueprint_runner::config::{BlueprintEnvironment, ProtocolSettings};
-    use blueprint_runner::eigenlayer::bls::EigenlayerBLSConfig;
-    use blueprint_runner::BlueprintRunner;
+    use blueprint_sdk::alloy::network::EthereumWallet;
+    use blueprint_sdk::alloy::primitives::{address, Address, U256};
+    use blueprint_sdk::alloy::providers::Provider;
+    use blueprint_sdk::alloy::signers::local::PrivateKeySigner;
     use blueprint_sdk::eigensdk;
-    use blueprint_sdk::error::BoxError;
-    use gadget_anvil_testing_utils::keys::ANVIL_PRIVATE_KEYS;
-    use gadget_anvil_testing_utils::start_default_anvil_testnet;
-    use gadget_logging::setup_log;
-    use std::{sync::Arc, time::Duration};
+    use blueprint_sdk::evm::consumer::EVMConsumer;
+    use blueprint_sdk::evm::producer::{PollingConfig, PollingProducer};
+    use blueprint_sdk::evm::util::get_provider_http;
+    use blueprint_sdk::runner::config::{BlueprintEnvironment, ProtocolSettings};
+    use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
+    use blueprint_sdk::runner::BlueprintRunner;
+    use blueprint_sdk::testing::utils::anvil::keys::ANVIL_PRIVATE_KEYS;
+    use blueprint_sdk::testing::utils::anvil::start_default_anvil_testnet;
+    use blueprint_sdk::testing::utils::setup_log;
+    use gadget_keystore::Keystore;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+    use tokio_util::sync::CancellationToken;
+    use tower::BoxError;
 
     const REGISTRY_COORDINATOR_ADDRESS: Address =
         address!("0xc3e53f4d16ae77db1c982e75a937b9f60fe63690");
@@ -90,7 +91,7 @@ mod tests {
         env.protocol_settings = ProtocolSettings::Eigenlayer(el_settings);
         let signer: PrivateKeySigner = ANVIL_PRIVATE_KEYS[0].parse().unwrap();
 
-        let provider = get_provider_http(&rpc_url);
+        let provider = blueprint_sdk::evm::util::get_provider_http(&rpc_url);
 
         // Deploy contracts and get addresses
         let generator = ANVIL_FIRST_ADDRESS;
@@ -113,7 +114,7 @@ mod tests {
             ws_url,
         )
         .await?;
-        let cancellation_token = tokio_util::sync::CancellationToken::new();
+        let cancellation_token = CancellationToken::new();
         let token_clone = cancellation_token.clone();
         let provider = provider.clone();
         let current_block = provider.get_block_number().await?;
@@ -172,14 +173,7 @@ mod tests {
 
         // Create and run the blueprint
         BlueprintRunner::builder(config, env)
-            .router(x_square_create_contract_router(
-                IncredibleSquaringClientContext {
-                    provider: provider.clone(),
-                    keystore: Keystore::default(),
-                    bls_aggregation_service: Arc::new(Mutex::new(bls_aggregator_service.start())),
-                },
-                *contract.address(),
-            ))
+            .router(x_square_create_contract_router(ctx, *contract.address()))
             .producer(task_polling_producer)
             .consumer(evm_consumer)
             .with_shutdown_handler(async move {
