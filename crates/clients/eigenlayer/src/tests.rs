@@ -83,7 +83,10 @@ async fn avs_registry_writer() {
     let env = setup_test_environment().await;
     let client = EigenlayerClient::new(env.config.clone());
     let private_key = "0000000000000000000000000000000000000000000000000000000000000001";
-    let _ = client.avs_registry_writer(private_key.to_string()).await.unwrap();
+    let _ = client
+        .avs_registry_writer(private_key.to_string())
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
