@@ -1,22 +1,26 @@
+use std::sync::Arc;
+use std::time::Duration;
+
 use alloy_network::EthereumWallet;
 use alloy_primitives::Address;
 use alloy_signer_local::PrivateKeySigner;
-use blueprint_sdk::logging::info;
-use blueprint_sdk::runners::core::runner::BlueprintRunner;
-use blueprint_sdk::runners::eigenlayer::bls::EigenlayerBLSConfig;
-use blueprint_sdk::utils::evm::get_wallet_provider_http;
-use incredible_squaring_blueprint_eigenlayer::constants::{
-    AGGREGATOR_PRIVATE_KEY, TASK_MANAGER_ADDRESS,
-};
-use incredible_squaring_blueprint_eigenlayer::contexts::aggregator::AggregatorContext;
+use blueprint_sdk::evm::producer::{PollingConfig, PollingProducer};
+use blueprint_sdk::evm::util::get_wallet_provider_http;
+use blueprint_sdk::runner::BlueprintRunner;
+use blueprint_sdk::runner::config::BlueprintEnvironment;
+use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
+use blueprint_sdk::{Router, info};
+use incredible_squaring_blueprint_eigenlayer::constants::AGGREGATOR_PRIVATE_KEY;
 use incredible_squaring_blueprint_eigenlayer::contexts::client::AggregatorClient;
 use incredible_squaring_blueprint_eigenlayer::contexts::x_square::EigenSquareContext;
-use incredible_squaring_blueprint_eigenlayer::jobs::compute_x_square::XsquareEigenEventHandler;
-use incredible_squaring_blueprint_eigenlayer::jobs::initialize_task::InitializeBlsTaskEventHandler;
-use incredible_squaring_blueprint_eigenlayer::IncredibleSquaringTaskManager;
+use incredible_squaring_blueprint_eigenlayer::jobs::compute_x_square::{
+    XSQUARE_JOB_ID, xsquare_eigen,
+};
 
-#[blueprint_sdk::main(env)]
-async fn main() {
+#[tokio::main]
+async fn main() -> Result<(), blueprint_sdk::Error> {
+    let env = BlueprintEnvironment::load()?;
+
     let signer: PrivateKeySigner = AGGREGATOR_PRIVATE_KEY
         .parse()
         .expect("failed to generate wallet ");
@@ -25,30 +29,47 @@ async fn main() {
 
     let server_address = format!("{}:{}", "127.0.0.1", 8081);
     let eigen_client_context = EigenSquareContext {
-        client: AggregatorClient::new(&server_address)?,
+        client: AggregatorClient::new(&server_address)
+            .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?,
         std_config: env.clone(),
     };
-    let aggregator_context =
-        AggregatorContext::new(server_address, *TASK_MANAGER_ADDRESS, wallet, env.clone())
-            .await
-            .unwrap();
+    // let aggregator_context =
+    //     AggregatorContext::new(server_address, *TASK_MANAGER_ADDRESS, wallet, env.clone())
+    //         .await
+    //         .unwrap();
 
-    let contract = IncredibleSquaringTaskManager::IncredibleSquaringTaskManagerInstance::new(
-        *TASK_MANAGER_ADDRESS,
-        provider,
+    // let contract = IncredibleSquaringTaskManager::new(
+    //     *TASK_MANAGER_ADDRESS,
+    //     provider,
+    // );
+
+    let client = Arc::new(provider);
+    // Create producer for task events
+    let task_producer = PollingProducer::new(
+        client.clone(),
+        PollingConfig {
+            poll_interval: Duration::from_secs(1),
+            ..Default::default()
+        },
     );
 
-    let initialize_task =
-        InitializeBlsTaskEventHandler::new(contract.clone(), aggregator_context.clone());
+    // let initialize_task =
+    //     InitializeBlsTaskEventHandler::new(contract.clone(), aggregator_context.clone());
 
-    let x_square_eigen = XsquareEigenEventHandler::new(contract.clone(), eigen_client_context);
+    // let x_square_eigen = XsquareEigenEventHandler::new(contract.clone(), eigen_client_context);
 
     info!("~~~ Executing the incredible squaring blueprint ~~~");
     let eigen_config = EigenlayerBLSConfig::new(Address::default(), Address::default());
-    BlueprintRunner::new(eigen_config, env)
-        .job(x_square_eigen)
-        .job(initialize_task)
-        .background_service(Box::new(aggregator_context))
+    BlueprintRunner::builder(eigen_config, BlueprintEnvironment::default())
+        .router(
+            Router::new()
+                .route(XSQUARE_JOB_ID, xsquare_eigen)
+                .with_context(eigen_client_context),
+        )
+        .producer(task_producer)
+        .with_shutdown_handler(async {
+            tracing::info!("Shutting down task manager service");
+        })
         .run()
         .await?;
 

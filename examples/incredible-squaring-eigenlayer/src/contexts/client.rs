@@ -4,10 +4,10 @@ use eigensdk::crypto_bls::{OperatorId, Signature};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use tracing::{debug, info};
 
-use crate::IIncredibleSquaringTaskManager::TaskResponse;
+use crate::contracts::TaskManager::TaskResponse;
 
 const MAX_RETRIES: u32 = 5;
 const INITIAL_RETRY_DELAY: Duration = Duration::from_secs(1);
