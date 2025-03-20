@@ -7,7 +7,7 @@ authors = ["Tangle Network"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
 homepage = "https://tangle.tools"
-repository = "https://github.com/tangle-network/gadget"
+repository = "https://github.com/tangle-network/blueprint"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "deny", priority = -1 }
@@ -56,54 +56,59 @@ incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./exampl
 # Blueprint utils
 blueprint-manager = { version = "0.2.2", path = "./crates/manager", default-features = false }
 blueprint-build-utils = { version = "0.1.0", path = "./crates/build-utils", default-features = false }
-gadget-blueprint-serde = { version = "0.3.1", path = "./crates/serde", default-features = false }
+
+# Chain Setup
+blueprint-chain-setup = { version = "0.1.0", path = "./crates/chain-setup", default-features = false }
+blueprint-chain-setup-common = { version = "0.1.0", path = "./crates/chain-setup/common", default-features = false }
+blueprint-chain-setup-tangle = { version = "0.1.0", path = "./crates/chain-setup/tangle", default-features = false }
+blueprint-chain-setup-anvil = { version = "0.1.0", path = "./crates/chain-setup/anvil", default-features = false }
 
 # Crypto
-gadget-crypto-core = { version = "0.1.0", path = "./crates/crypto/core", default-features = false }
-gadget-crypto-k256 = { version = "0.1.0", path = "./crates/crypto/k256", default-features = false }
-gadget-crypto-sr25519 = { version = "0.1.0", path = "./crates/crypto/sr25519", default-features = false }
-gadget-crypto-ed25519 = { version = "0.1.0", path = "./crates/crypto/ed25519", default-features = false }
-gadget-crypto-hashing = { version = "0.1.0", path = "./crates/crypto/hashing", default-features = false }
-gadget-crypto-bls = { version = "0.1.0", path = "./crates/crypto/bls", default-features = false }
-gadget-crypto-bn254 = { version = "0.1.0", path = "./crates/crypto/bn254", default-features = false }
-gadget-crypto-sp-core = { version = "0.1.0", path = "./crates/crypto/sp-core", default-features = false }
-gadget-crypto = { version = "0.1.0", path = "./crates/crypto", default-features = false }
-gadget-crypto-tangle-pair-signer = { version = "0.1.0", path = "./crates/crypto/tangle-pair-signer", default-features = false }
+blueprint-crypto-core = { version = "0.1.0", path = "./crates/crypto/core", default-features = false }
+blueprint-crypto-k256 = { version = "0.1.0", path = "./crates/crypto/k256", default-features = false }
+blueprint-crypto-sr25519 = { version = "0.1.0", path = "./crates/crypto/sr25519", default-features = false }
+blueprint-crypto-ed25519 = { version = "0.1.0", path = "./crates/crypto/ed25519", default-features = false }
+blueprint-crypto-hashing = { version = "0.1.0", path = "./crates/crypto/hashing", default-features = false }
+blueprint-crypto-bls = { version = "0.1.0", path = "./crates/crypto/bls", default-features = false }
+blueprint-crypto-bn254 = { version = "0.1.0", path = "./crates/crypto/bn254", default-features = false }
+blueprint-crypto-sp-core = { version = "0.1.0", path = "./crates/crypto/sp-core", default-features = false }
+blueprint-crypto = { version = "0.1.0", path = "./crates/crypto", default-features = false }
+blueprint-crypto-tangle-pair-signer = { version = "0.1.0", path = "./crates/crypto/tangle-pair-signer", default-features = false }
 
 # Clients
-gadget-clients = { version = "0.1.0", path = "./crates/clients", default-features = false }
-gadget-client-core = { version = "0.1.0", path = "./crates/clients/core", default-features = false }
-gadget-client-eigenlayer = { version = "0.1.0", path = "./crates/clients/eigenlayer", default-features = false }
-gadget-client-evm = { version = "0.1.0", path = "./crates/clients/evm", default-features = false }
-gadget-client-tangle = { version = "0.1.0", path = "./crates/clients/tangle", default-features = false }
-gadget-contexts = { version = "0.1.0", path = "./crates/contexts", default-features = false }
+blueprint-clients = { version = "0.1.0", path = "./crates/clients", default-features = false }
+blueprint-client-core = { version = "0.1.0", path = "./crates/clients/core", default-features = false }
+blueprint-client-eigenlayer = { version = "0.1.0", path = "./crates/clients/eigenlayer", default-features = false }
+blueprint-client-evm = { version = "0.1.0", path = "./crates/clients/evm", default-features = false }
+blueprint-client-tangle = { version = "0.1.0", path = "./crates/clients/tangle", default-features = false }
+blueprint-contexts = { version = "0.1.0", path = "./crates/contexts", default-features = false }
 
 # Macros
 blueprint-macros = { version = "0.1.0", path = "./crates/macros", default-features = false }
-gadget-context-derive = { version = "0.3.1", path = "./crates/macros/context-derive", default-features = false }
+blueprint-context-derive = { version = "0.3.1", path = "./crates/macros/context-derive", default-features = false }
 
 # Stores
-gadget-stores = { version = "0.1.0", path = "./crates/stores", default-features = false }
-gadget-store-local-database = { version = "0.1.0", path = "./crates/stores/local-database", default-features = false }
+blueprint-stores = { version = "0.1.0", path = "./crates/stores", default-features = false }
+blueprint-store-local-database = { version = "0.1.0", path = "./crates/stores/local-database", default-features = false }
 
 # SDK
-gadget-keystore = { version = "0.1.0", path = "./crates/keystore", default-features = false }
-gadget-std = { version = "0.1.0", path = "./crates/std", default-features = false }
+blueprint-keystore = { version = "0.1.0", path = "./crates/keystore", default-features = false }
+blueprint-std = { version = "0.1.0", path = "./crates/std", default-features = false }
 
 # P2P
-gadget-networking = { version = "0.1.0", path = "./crates/networking", default-features = false }
-gadget-networking-round-based-extension = { version = "0.1.0", path = "./crates/networking/extensions/round-based", default-features = false }
+blueprint-networking = { version = "0.1.0", path = "./crates/networking", default-features = false }
+blueprint-networking-round-based-extension = { version = "0.1.0", path = "./crates/networking/extensions/round-based", default-features = false }
 
 # Testing utilities
-gadget-testing-utils = { version = "0.1.0", path = "./crates/testing-utils", default-features = false }
-gadget-core-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/core", default-features = false }
-gadget-anvil-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/anvil", default-features = false }
-gadget-tangle-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/tangle", default-features = false }
-gadget-eigenlayer-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/eigenlayer", default-features = false }
+blueprint-testing-utils = { version = "0.1.0", path = "./crates/testing-utils", default-features = false }
+blueprint-core-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/core", default-features = false }
+blueprint-anvil-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/anvil", default-features = false }
+blueprint-tangle-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/tangle", default-features = false }
+blueprint-eigenlayer-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/eigenlayer", default-features = false }
 
 # Metrics
-gadget-metrics = { version = "0.1.0", path = "./crates/metrics", default-features = false }
-gadget-rpc-calls = { version = "0.1.0", path = "./crates/metrics/rpc-calls", default-features = false }
+blueprint-metrics = { version = "0.1.0", path = "./crates/metrics", default-features = false }
+blueprint-metrics-rpc-calls = { version = "0.1.0", path = "./crates/metrics/rpc-calls", default-features = false }
 
 cargo-tangle = { version = "0.1.0", path = "./cli", default-features = false }
 cargo_metadata = { version = "0.18.1" }

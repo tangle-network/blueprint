@@ -11,11 +11,11 @@ use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
 use ark_ff::UniformRand;
 use ark_ff::{BigInteger256, Field, One, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use gadget_crypto_core::BytesEncoding;
-use gadget_crypto_core::{KeyType, KeyTypeId};
-use gadget_std::hash::Hash;
-use gadget_std::vec::Vec;
-use gadget_std::{
+use blueprint_crypto_core::BytesEncoding;
+use blueprint_crypto_core::{KeyType, KeyTypeId};
+use blueprint_std::hash::Hash;
+use blueprint_std::vec::Vec;
+use blueprint_std::{
     str::FromStr,
     string::{String, ToString},
 };
@@ -110,19 +110,19 @@ macro_rules! impl_ark_serde {
         pub struct $name(pub $inner);
 
         impl PartialOrd for $name {
-            fn partial_cmp(&self, other: &Self) -> Option<gadget_std::cmp::Ordering> {
+            fn partial_cmp(&self, other: &Self) -> Option<blueprint_std::cmp::Ordering> {
                 Some(self.cmp(other))
             }
         }
 
         impl Ord for $name {
-            fn cmp(&self, other: &Self) -> gadget_std::cmp::Ordering {
+            fn cmp(&self, other: &Self) -> blueprint_std::cmp::Ordering {
                 self.to_bytes().cmp(&other.to_bytes())
             }
         }
 
         impl Hash for $name {
-            fn hash<H: gadget_std::hash::Hasher>(&self, state: &mut H) {
+            fn hash<H: blueprint_std::hash::Hasher>(&self, state: &mut H) {
                 self.to_bytes().hash(state);
             }
         }

@@ -3,8 +3,8 @@ use crate::error::{Error, Result};
 use alloy_primitives::keccak256;
 use alloy_signer_aws::AwsSigner;
 use aws_config::{BehaviorVersion, Region};
-use gadget_crypto::k256::{K256Ecdsa, K256Signature, K256VerifyingKey};
-use gadget_std::collections::BTreeMap;
+use blueprint_crypto::k256::{K256Ecdsa, K256Signature, K256VerifyingKey};
+use blueprint_std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -183,8 +183,8 @@ mod tests {
     async fn test_aws_signer() {
         let config = AwsRemoteSignerConfig {
             keys: vec![AwsKeyConfig {
-                key_id: gadget_std::env::var("AWS_KMS_KEY_ID").expect("AWS_KMS_KEY_ID not set"),
-                region: gadget_std::env::var("AWS_REGION").expect("AWS_REGION not set"),
+                key_id: blueprint_std::env::var("AWS_KMS_KEY_ID").expect("AWS_KMS_KEY_ID not set"),
+                region: blueprint_std::env::var("AWS_REGION").expect("AWS_REGION not set"),
                 chain_id: Some(1),
             }],
         };

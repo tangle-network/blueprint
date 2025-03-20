@@ -1,7 +1,7 @@
 [package]
-name = "gadget-stores"
+name = "blueprint-stores"
 version = "0.1.0"
-description = "Storage providors for Tangle Blueprints"
+description = "Storage providers for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,12 +12,12 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-gadget-store-local-database = { workspace = true, optional = true }
+blueprint-store-local-database = { workspace = true, optional = true }
 thiserror.workspace = true
 
 [features]
 default = ["std", "local"]
 std = [
-    "gadget-store-local-database?/std",
+    "blueprint-store-local-database?/std",
 ]
-local = ["dep:gadget-store-local-database"]
+local = ["dep:blueprint-store-local-database"]

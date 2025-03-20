@@ -1,5 +1,5 @@
 [package]
-name = "gadget-crypto-tangle-pair-signer"
+name = "blueprint-crypto-tangle-pair-signer"
 version = "0.1.0"
 description = "Pair signer for Tangle"
 authors.workspace = true
@@ -9,9 +9,9 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
-gadget-crypto-core = { workspace = true, features = ["tangle"] }
-gadget-crypto-sp-core = { workspace = true }
+blueprint-std = { workspace = true }
+blueprint-crypto-core = { workspace = true, features = ["tangle"] }
+blueprint-crypto-sp-core = { workspace = true }
 
 k256 = { workspace = true, optional = true }
 serde = { workspace = true }
@@ -26,9 +26,9 @@ alloy-signer-local = { workspace = true, optional = true }
 [features]
 default = ["std", "evm"]
 std = [
-	"gadget-crypto-core/std",
-	"gadget-crypto-sp-core/std",
-	"gadget-std/std",
+	"blueprint-crypto-core/std",
+	"blueprint-crypto-sp-core/std",
+	"blueprint-std/std",
 	"serde/std",
 	"tangle-subxt/std",
 	"sp-runtime/std",

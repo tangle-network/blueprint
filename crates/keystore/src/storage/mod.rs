@@ -1,8 +1,8 @@
 //! Backing storage implementations for local keystores
 
 use crate::error::Result;
-use gadget_crypto::{BytesEncoding, KeyType, KeyTypeId};
-use gadget_std::{boxed::Box, vec::Vec};
+use blueprint_crypto::{BytesEncoding, KeyType, KeyTypeId};
+use blueprint_std::{boxed::Box, vec::Vec};
 use serde::de::DeserializeOwned;
 
 #[cfg(feature = "std")]

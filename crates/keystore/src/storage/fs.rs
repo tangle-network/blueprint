@@ -1,9 +1,9 @@
 use super::RawStorage;
 use crate::error::{Error, Result};
-use gadget_crypto::KeyTypeId;
-use gadget_std::fs;
-use gadget_std::io;
-use gadget_std::path::{Path, PathBuf};
+use blueprint_crypto::KeyTypeId;
+use blueprint_std::fs;
+use blueprint_std::io;
+use blueprint_std::path::{Path, PathBuf};
 
 /// A filesystem-backed local storage
 #[derive(Clone)]
@@ -24,13 +24,13 @@ impl FileStorage {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use gadget_keystore::Keystore;
-    /// use gadget_keystore::backends::{Backend, BackendConfig};
-    /// use gadget_keystore::crypto::KeyType;
-    /// use gadget_keystore::crypto::k256::K256Ecdsa;
-    /// use gadget_keystore::storage::{FileStorage, TypedStorage};
+    /// use blueprint_keystore::Keystore;
+    /// use blueprint_keystore::backends::{Backend, BackendConfig};
+    /// use blueprint_keystore::crypto::KeyType;
+    /// use blueprint_keystore::crypto::k256::K256Ecdsa;
+    /// use blueprint_keystore::storage::{FileStorage, TypedStorage};
     ///
-    /// # fn main() -> gadget_keystore::Result<()> {
+    /// # fn main() -> blueprint_keystore::Result<()> {
     /// // Create storage at the specified path
     /// let storage = FileStorage::new("/path/to/keystore")?;
     /// let storage = TypedStorage::new(storage);
@@ -141,7 +141,7 @@ mod tests {
     use crate::storage::TypedStorage;
 
     use super::*;
-    use gadget_crypto::{IntoCryptoError, KeyType, k256::K256Ecdsa};
+    use blueprint_crypto::{IntoCryptoError, KeyType, k256::K256Ecdsa};
     use tempfile::tempdir;
 
     #[test]

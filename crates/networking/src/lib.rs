@@ -11,5 +11,5 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
-pub use gadget_crypto::KeyType;
+pub use blueprint_crypto::KeyType;
 pub use service::{AllowedKeys, NetworkConfig, NetworkEvent, NetworkService};

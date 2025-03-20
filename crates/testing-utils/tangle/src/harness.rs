@@ -1,25 +1,25 @@
 use crate::Error;
 use crate::multi_node::MultiNodeTestEnv;
-use crate::node::transactions::setup_operator_and_service_multiple;
-use crate::{
-    InputValue, OutputValue,
-    keys::inject_tangle_key,
-    node::{NodeConfig, run, transactions},
-};
+use crate::{InputValue, OutputValue, keys::inject_tangle_key};
+use blueprint_chain_setup::tangle::testnet::SubstrateNode;
+use blueprint_chain_setup::tangle::transactions;
+use blueprint_chain_setup::tangle::transactions::setup_operator_and_service_multiple;
+use blueprint_client_tangle::client::TangleClient;
+use blueprint_contexts::tangle::TangleClientContext;
 use blueprint_core::debug;
+use blueprint_crypto_tangle_pair_signer::TanglePairSigner;
+use blueprint_keystore::backends::Backend;
+use blueprint_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::ContextConfig;
 use blueprint_runner::config::SupportedChains;
 use blueprint_runner::error::RunnerError;
 use blueprint_runner::tangle::config::PriceTargets;
-use gadget_client_tangle::client::TangleClient;
-use gadget_contexts::tangle::TangleClientContext;
-use gadget_crypto_tangle_pair_signer::TanglePairSigner;
-use gadget_keystore::backends::Backend;
-use gadget_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
-use std::io;
+use blueprint_std::io;
+use blueprint_std::path::{Path, PathBuf};
 use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
+use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
+use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::request::RequestArgs;
 use tangle_subxt::tangle_testnet_runtime::api::services::events::JobCalled;
 use tangle_subxt::tangle_testnet_runtime::api::services::{
     calls::types::{call::Job, register::Preferences},
@@ -59,11 +59,20 @@ pub struct TangleTestHarness<Ctx = ()> {
     pub alloy_key: alloy_signer_local::PrivateKeySigner,
     config: TangleTestConfig,
     temp_dir: tempfile::TempDir,
-    _node: crate::node::testnet::SubstrateNode,
+    _node: SubstrateNode,
     _phantom: PhantomData<Ctx>,
 }
 
-pub(crate) async fn generate_env_from_node_id(
+/// Create a new Tangle test harness
+///
+/// # Returns
+///
+/// The [`BlueprintEnvironment`] for the relevant node
+///
+/// # Errors
+///
+/// Returns an error if the keystore fails to be created
+pub async fn generate_env_from_node_id(
     identity: &str,
     http_endpoint: Url,
     ws_endpoint: Url,
@@ -102,35 +111,30 @@ where
 {
     /// Create a new `TangleTestHarness`
     ///
-    /// NOTE: The resulting harness will have a context of `()`. This is not valid for jobs that require
-    ///       a context. See [`Self::setup_with_context()`] and [`Self::set_context()`].
-    ///
-    /// This is useful for cases where:
-    ///
-    /// * None of the jobs require a context
-    /// * The context creation depends on [`Self::env()`]
-    ///
     /// # Errors
     ///
-    /// * See [`Self::setup_with_context()`]
+    /// TODO
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use gadget_tangle_testing_utils::TangleTestHarness;
+    /// use blueprint_tangle_testing_utils::TangleTestHarness;
     /// use tempfile::TempDir;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let tmp_dir = TempDir::new()?;
     /// let harness = TangleTestHarness::setup(tmp_dir).await?;
+    /// # let _: TangleTestHarness<()> = harness;
     /// # Ok(()) }
     /// ```
     pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
         // Start Local Tangle Node
-        let node = run(NodeConfig::new(false))
-            .await
-            .map_err(|e| Error::Setup(e.to_string()))?;
+        let node = blueprint_chain_setup::tangle::run(
+            blueprint_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
+        )
+        .await
+        .map_err(|e| Error::Setup(e.to_string()))?;
         let http_endpoint = Url::parse(&format!("http://127.0.0.1:{}", node.ws_port()))?;
         let ws_endpoint = Url::parse(&format!("ws://127.0.0.1:{}", node.ws_port()))?;
 
@@ -196,6 +200,26 @@ struct NodeInfo {
     env: BlueprintEnvironment,
     client: TangleClient,
     preferences: Preferences,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetupServicesOpts<const N: usize> {
+    /// Whether to exit after registration
+    pub exit_after_registration: bool,
+    /// Registration parameters for each node
+    pub registration_args: [RegistrationArgs; N],
+    /// Request parameters for the service
+    pub request_args: RequestArgs,
+}
+
+impl<const N: usize> Default for SetupServicesOpts<N> {
+    fn default() -> Self {
+        Self {
+            exit_after_registration: false,
+            registration_args: vec![RegistrationArgs::default(); N].try_into().unwrap(),
+            request_args: RequestArgs::default(),
+        }
+    }
 }
 
 impl<Ctx> TangleTestHarness<Ctx>
@@ -280,12 +304,12 @@ where
     ///
     /// See [`read_cargo_toml_file()`]
     ///
-    /// [`read_cargo_toml_file()`]: gadget_core_testing_utils::read_cargo_toml_file
+    /// [`read_cargo_toml_file()`]: blueprint_core_testing_utils::read_cargo_toml_file
     pub fn create_deploy_opts(
         &self,
-        manifest_path: std::path::PathBuf,
-    ) -> io::Result<cargo_tangle::deploy::tangle::Opts> {
-        Ok(cargo_tangle::deploy::tangle::Opts {
+        manifest_path: PathBuf,
+    ) -> io::Result<blueprint_chain_setup::tangle::deploy::Opts> {
+        Ok(blueprint_chain_setup::tangle::deploy::Opts {
             pkg_name: Some(self.get_blueprint_name(&manifest_path)?),
             http_rpc_url: self.http_endpoint.to_string(),
             ws_rpc_url: self.ws_endpoint.to_string(),
@@ -297,7 +321,7 @@ where
 
     #[allow(clippy::unused_self)]
     fn get_blueprint_name(&self, manifest_path: &std::path::Path) -> io::Result<String> {
-        let manifest = gadget_core_testing_utils::read_cargo_toml_file(manifest_path)?;
+        let manifest = blueprint_core_testing_utils::read_cargo_toml_file(manifest_path)?;
         Ok(manifest.package.unwrap().name)
     }
 
@@ -311,7 +335,7 @@ where
     pub async fn deploy_blueprint(&self) -> Result<u64, Error> {
         let manifest_path = std::env::current_dir()?.join("Cargo.toml");
         let opts = self.create_deploy_opts(manifest_path)?;
-        let blueprint_id = cargo_tangle::deploy::tangle::deploy_to_tangle(opts)
+        let blueprint_id = blueprint_chain_setup::tangle::deploy::deploy_to_tangle(opts)
             .await
             .map_err(|e| Error::Setup(e.to_string()))?;
         Ok(blueprint_id)
@@ -327,10 +351,14 @@ where
     ///
     /// # Errors
     ///
-    /// * See [`Self::deploy_blueprint()`] and [`MultiNodeTestEnv::new()`]
-    pub async fn setup_services<const N: usize>(
+    /// * See [`Self::setup_services`], [`Self::deploy_blueprint()`] and [`MultiNodeTestEnv::new()`]
+    pub async fn setup_services_with_options<const N: usize>(
         &self,
-        exit_after_registration: bool,
+        SetupServicesOpts {
+            exit_after_registration,
+            registration_args,
+            request_args,
+        }: SetupServicesOpts<N>,
     ) -> Result<(MultiNodeTestEnv<Ctx>, u64, u64), Error> {
         const { assert!(N > 0, "Must have at least 1 initial node") };
 
@@ -366,6 +394,8 @@ where
                 &all_signers[..N],
                 blueprint_id,
                 &all_preferences,
+                &registration_args,
+                request_args.clone(),
                 exit_after_registration,
             )
             .await
@@ -376,6 +406,31 @@ where
         let executor = MultiNodeTestEnv::new::<N>(self.config.clone());
 
         Ok((executor, service_id, blueprint_id))
+    }
+
+    /// Sets up a complete service environment with initialized event handlers
+    ///
+    /// # Returns
+    /// A tuple of the test environment, the service ID, and the blueprint ID i.e., (`test_env`, `service_id`, `blueprint_id`)
+    ///
+    /// # Note
+    /// The Service ID will always be 0 if automatic registration is disabled, as there is not yet a service to have an ID
+    ///
+    /// # Errors
+    ///
+    /// * See [`Self::deploy_blueprint()`] and [`MultiNodeTestEnv::new()`]
+    pub async fn setup_services<const N: usize>(
+        &self,
+        exit_after_registration: bool,
+    ) -> Result<(MultiNodeTestEnv<Ctx>, u64, u64), Error> {
+        const { assert!(N > 0, "Must have at least 1 initial node") };
+
+        self.setup_services_with_options::<N>(SetupServicesOpts {
+            exit_after_registration,
+            registration_args: vec![RegistrationArgs::default(); N].try_into().unwrap(),
+            request_args: RequestArgs::default(),
+        })
+        .await
     }
 
     /// Submits a job to be executed

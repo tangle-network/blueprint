@@ -1,9 +1,9 @@
 use super::*;
 use crate::{ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Secret, ArkBlsBn254Signature};
 use ark_ff::UniformRand;
-use gadget_crypto_core::KeyType;
-use gadget_crypto_hashing::keccak_256;
-use gadget_std::string::ToString;
+use blueprint_crypto_core::KeyType;
+use blueprint_crypto_hashing::keccak_256;
+use blueprint_std::string::ToString;
 
 // Helper function to generate test message
 fn test_message() -> Vec<u8> {
@@ -12,7 +12,7 @@ fn test_message() -> Vec<u8> {
 
 mod ark_bn254_crypto_tests {
     use super::*;
-    gadget_crypto_core::impl_crypto_tests!(ArkBlsBn254, ArkBlsBn254Secret, ArkBlsBn254Signature);
+    blueprint_crypto_core::impl_crypto_tests!(ArkBlsBn254, ArkBlsBn254Secret, ArkBlsBn254Signature);
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn test_error_handling() {
     assert!(result.is_err());
 
     // Test invalid points for signature verification
-    let mut rng = gadget_std::test_rng();
+    let mut rng = blueprint_std::test_rng();
     let invalid_signature = G1Affine::rand(&mut rng);
     let invalid_public = G2Affine::rand(&mut rng);
     let message = test_message();

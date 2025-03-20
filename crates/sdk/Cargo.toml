@@ -17,23 +17,23 @@ blueprint-core = { workspace = true }
 blueprint-router = { workspace = true }
 blueprint-runner = { workspace = true }
 blueprint-producers-extra = { workspace = true }
-gadget-keystore = { workspace = true }
-gadget-clients = { workspace = true }
-gadget-crypto = { workspace = true }
-gadget-std = { workspace = true }
+blueprint-keystore = { workspace = true }
+blueprint-clients = { workspace = true }
+blueprint-crypto = { workspace = true }
+blueprint-std = { workspace = true }
 # The keystore context is the only one that doesn't bring in extra dependencies, so we can always include it
-gadget-contexts = { workspace = true, features = ["keystore"] }
+blueprint-contexts = { workspace = true, features = ["keystore"] }
 document-features = { workspace = true }
+blueprint-chain-setup = { workspace = true, optional = true }
 
 # Macros
 blueprint-macros = { workspace = true, optional = true }
-gadget-context-derive = { workspace = true, optional = true }
+blueprint-context-derive = { workspace = true, optional = true }
 
 # Tangle-specific extras
 blueprint-tangle-extra = { workspace = true, optional = true }
 tangle-subxt = { workspace = true, optional = true }
-gadget-crypto-tangle-pair-signer = { workspace = true, optional = true }
-gadget-blueprint-serde = { workspace = true, optional = true }
+blueprint-crypto-tangle-pair-signer = { workspace = true, optional = true }
 
 # Eigenlayer and EVM-specific extras
 blueprint-evm-extra = { workspace = true, optional = true }
@@ -42,25 +42,22 @@ alloy-json-abi = { workspace = true, optional = true, features = ["serde_json"] 
 eigensdk = { workspace = true, optional = true, features = ["full"] }
 
 # K, V Stores
-gadget-stores = { workspace = true, optional = true }
+blueprint-stores = { workspace = true, optional = true }
 
 # Error Handling
 thiserror = { workspace = true }
-
-# Serialization
-serde = { workspace = true, features = ["derive"] }
 
 # Required Features for macro resolution
 tokio = { workspace = true, default-features = false }
 
 # Networking-related dependencies
-gadget-networking = { workspace = true, optional = true }
+blueprint-networking = { workspace = true, optional = true }
 
 # Round-based protocol support
-gadget-networking-round-based-extension = { workspace = true, optional = true }
+blueprint-networking-round-based-extension = { workspace = true, optional = true }
 
 # Optional dependencies for testing
-gadget-testing-utils = { workspace = true, optional = true }
+blueprint-testing-utils = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 
 # Optional dependencies for build
@@ -76,15 +73,17 @@ std = [
     # Core
     "blueprint-core/std",
     "blueprint-runner/std",
-    "gadget-keystore/std",
-    "gadget-contexts/std",
-    "gadget-clients/std",
-    "gadget-crypto/std",
+    "blueprint-keystore/std",
+    "blueprint-contexts/std",
+    "blueprint-clients/std",
+    "blueprint-crypto/std",
+    "blueprint-context-derive?/std",
     # Tangle
     "tangle-subxt/std",
     # Extras
     "blueprint-tangle-extra?/std",
-    "blueprint-evm-extra?/std"
+    "blueprint-evm-extra?/std",
+    "blueprint-chain-setup/std",
 ]
 
 ## Enable support for web targets
@@ -105,25 +104,25 @@ tracing = [
 
 ## Enable networking support
 networking = [
-    "dep:gadget-networking",
-    "gadget-contexts/networking",
-    "gadget-keystore/std",
-    "gadget-context-derive?/networking",
+    "dep:blueprint-networking",
+    "blueprint-contexts/networking",
+    "blueprint-keystore/std",
+    "blueprint-context-derive?/networking",
     "blueprint-runner/networking"
 ]
 
 ## Enable local KV stores
-local-store = ["gadget-stores/local"]
+local-store = ["blueprint-stores/local"]
 
 ## Enable [round-based] networking capability
 ##
 ## [round-based]: https://github.com/LFDT-Lockness/round-based
-round-based-compat = ["dep:gadget-networking-round-based-extension"]
+round-based-compat = ["dep:blueprint-networking-round-based-extension"]
 
 ## Enable all macros of subcrates
 macros = [
     "dep:blueprint-macros",
-    "dep:gadget-context-derive",
+    "dep:blueprint-context-derive",
     "blueprint-tangle-extra?/macros"
 ]
 
@@ -133,13 +132,13 @@ macros = [
 tangle = [
     "dep:blueprint-tangle-extra",
     "dep:tangle-subxt",
-    "dep:gadget-crypto-tangle-pair-signer",
-    "dep:gadget-blueprint-serde",
-    "gadget-clients/tangle",
-    "gadget-contexts/tangle",
-    "gadget-context-derive?/tangle",
-    "gadget-testing-utils?/tangle",
+    "dep:blueprint-crypto-tangle-pair-signer",
+    "blueprint-clients/tangle",
+    "blueprint-contexts/tangle",
+    "blueprint-context-derive?/tangle",
+    "blueprint-testing-utils?/tangle",
     "blueprint-runner/tangle",
+    "blueprint-chain-setup?/tangle",
 ]
 
 ## Enable EVM support
@@ -147,12 +146,13 @@ evm = [
     "dep:blueprint-evm-extra",
     "dep:alloy",
     "dep:alloy-json-abi",
-    "gadget-clients/evm",
-    "gadget-contexts/evm",
-    "gadget-context-derive/evm",
-    "gadget-crypto-tangle-pair-signer?/evm",
+    "blueprint-clients/evm",
+    "blueprint-contexts/evm",
+    "blueprint-context-derive?/evm",
+    "blueprint-crypto-tangle-pair-signer?/evm",
     "blueprint-macros?/evm",
-    "gadget-testing-utils?/anvil",
+    "blueprint-testing-utils?/anvil",
+    "blueprint-chain-setup?/anvil",
 ]
 
 ## Enable [Eigenlayer] support
@@ -160,9 +160,9 @@ evm = [
 ## [Eigenlayer]: https://eigenlayer.xyz
 eigenlayer = [
     "dep:eigensdk",
-    "gadget-contexts/eigenlayer",
-    "gadget-clients/eigenlayer",
-    "gadget-testing-utils?/eigenlayer",
+    "blueprint-contexts/eigenlayer",
+    "blueprint-clients/eigenlayer",
+    "blueprint-testing-utils?/eigenlayer",
     "evm",
 ]
 
@@ -170,7 +170,7 @@ eigenlayer = [
 build = ["dep:blueprint-build-utils", "macros"]
 
 ## Enable testing utilities
-testing = ["dep:gadget-testing-utils", "dep:tempfile", "std"]
+testing = ["dep:blueprint-testing-utils", "dep:tempfile", "dep:blueprint-chain-setup", "std"]
 
 #! ### Extra producers
 

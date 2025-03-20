@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::error::{Result, TangleDispatchError};
-use gadget_std::string::ToString;
-use gadget_std::vec::Vec;
+use blueprint_std::string::ToString;
+use blueprint_std::vec::Vec;
 use subxt::backend::BlockRef;
 use subxt::utils::AccountId32;
 use subxt::utils::H256;
@@ -26,7 +26,7 @@ impl<C: Config> TangleServicesClient<C> {
     }
 }
 
-impl<C: Config> gadget_std::ops::Deref for TangleServicesClient<C> {
+impl<C: Config> blueprint_std::ops::Deref for TangleServicesClient<C> {
     type Target = OnlineClient<C>;
 
     fn deref(&self) -> &Self::Target {

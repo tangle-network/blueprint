@@ -1,0 +1,49 @@
+[package]
+name = "blueprint-chain-setup-common"
+version = "0.1.0"
+description = "Common chain setup utilities for use with the Blueprint SDK"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+blueprint-std = { workspace = true }
+color-eyre = { workspace = true }
+
+blueprint-tangle-extra = { workspace = true }
+blueprint-networking = { workspace = true }
+blueprint-contexts = { workspace = true, features = ["tangle"] }
+blueprint-crypto-tangle-pair-signer = { workspace = true, features = ["evm"] }
+blueprint-clients = { workspace = true, features = ["tangle"] }
+blueprint-keystore = { workspace = true }
+blueprint-crypto = { workspace = true, features = [
+    "k256",
+    "sr25519-schnorrkel",
+    "ed25519",
+    "bls",
+    "bn254",
+    "sp-core",
+    "sp-core-bls",
+    "tangle-pair-signer",
+] }
+alloy-signer-local = { workspace = true }
+sp-core = { workspace = true }
+tangle-subxt = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+    "sp-core/std",
+    "tangle-subxt/std",
+    "blueprint-std/std",
+    "blueprint-networking/std",
+    "blueprint-contexts/std",
+    "blueprint-crypto-tangle-pair-signer/std",
+    "blueprint-crypto/std",
+    "blueprint-clients/std",
+    "blueprint-keystore/std",
+    "thiserror/std",
+]

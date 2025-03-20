@@ -1,5 +1,5 @@
 [package]
-name = "gadget-store-local-database"
+name = "blueprint-store-local-database"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,7 @@ edition = "2021"
 workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["alloc"] }
 thiserror = { workspace = true }
@@ -15,7 +15,7 @@ thiserror = { workspace = true }
 [features]
 default = ["std"]
 std = [
-    "gadget-std/std",
+    "blueprint-std/std",
     "serde/std",
     "serde_json/std",
 ]

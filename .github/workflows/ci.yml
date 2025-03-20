@@ -13,7 +13,6 @@ concurrency:
 
 env:
   RUST_BACKTRACE: full
-  RUST_LOG: "gadget=trace"
   CARGO_TERM_COLOR: always
   IN_CI: "true"
 
@@ -149,7 +148,7 @@ jobs:
 
       - name: Determine nextest profile
         run: |
-          SERIAL_CRATES=("gadget-tangle-testing-utils" "gadget-client-evm" "blueprint-tangle-extra" "gadget-networking")
+          SERIAL_CRATES=("blueprint-tangle-testing-utils" "blueprint-client-evm" "blueprint-tangle-extra" "blueprint-networking", "cargo-tangle")
           PROFILE=ci
 
           for crate in "${SERIAL_CRATES[@]}"; do

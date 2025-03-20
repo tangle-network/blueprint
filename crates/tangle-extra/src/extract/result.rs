@@ -1,8 +1,8 @@
+use crate::serde::Field;
+use crate::serde::to_field;
 use blueprint_core::IntoJobResult;
 use blueprint_core::JobResult;
 use bytes::Bytes;
-use gadget_blueprint_serde::Field;
-use gadget_blueprint_serde::to_field;
 use tangle_subxt::FieldExt;
 use tangle_subxt::parity_scale_codec::Encode;
 use tangle_subxt::subxt::utils::AccountId32;
@@ -83,7 +83,7 @@ macro_rules! impl_tangle_field_types {
             fn into_tangle_fields() -> Vec<FieldType> {
                 vec![
                     $(
-                        gadget_blueprint_serde::to_field(<$ty as core::default::Default>::default()).expect("type should serialize").field_type()
+                        crate::serde::to_field(<$ty as core::default::Default>::default()).expect("type should serialize").field_type()
                     ),*
                 ]
             }
@@ -96,7 +96,7 @@ macro_rules! impl_tangle_field_types {
             fn into_tangle_fields() -> Vec<FieldType> {
                 vec![
                     $(
-                        gadget_blueprint_serde::to_field(<$ty as core::default::Default>::default()).expect("type should serialize").field_type()
+                        crate::serde::to_field(<$ty as core::default::Default>::default()).expect("type should serialize").field_type()
                     ),*
                 ]
             }
@@ -109,7 +109,7 @@ macro_rules! impl_tangle_field_types {
             fn into_tangle_fields() -> Vec<FieldType> {
                 vec![
                     $(
-                        gadget_blueprint_serde::to_field(<$ty as core::default::Default>::default()).expect("type should serialize").field_type()
+                        crate::serde::to_field(<$ty as core::default::Default>::default()).expect("type should serialize").field_type()
                     ),*
                 ]
             }

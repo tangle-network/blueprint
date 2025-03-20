@@ -1,5 +1,5 @@
 [package]
-name = "gadget-benchmarking"
+name = "blueprint-benchmarking"
 version = "0.1.0"
 description = "Utilities for benchmarking Tangle Blueprints"
 authors.workspace = true
@@ -12,10 +12,10 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 sysinfo = { workspace = true, optional = true, features = ["system"] }
 tokio = { workspace = true, features = ["sync", "time"] }
 
 [features]
 default = ["std"]
-std = ["dep:sysinfo", "gadget-std/std", "tokio/full"]
+std = ["dep:sysinfo", "blueprint-std/std", "tokio/full"]

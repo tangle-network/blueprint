@@ -1,7 +1,7 @@
-use gadget_keystore::backends::bn254::Bn254Backend;
-use gadget_keystore::backends::tangle::TangleBackend;
-use gadget_keystore::backends::tangle::bls::TangleBlsBackend;
-use gadget_keystore::{Keystore, KeystoreConfig};
+use blueprint_keystore::backends::bn254::Bn254Backend;
+use blueprint_keystore::backends::tangle::TangleBackend;
+use blueprint_keystore::backends::tangle::bls::TangleBlsBackend;
+use blueprint_keystore::{Keystore, KeystoreConfig};
 use std::path::Path;
 
 /// Injects the pre-made Tangle keys of the given name
@@ -27,7 +27,7 @@ use std::path::Path;
 pub fn inject_tangle_key<P: AsRef<Path>>(
     keystore_path: P,
     name: &str,
-) -> Result<(), gadget_keystore::Error> {
+) -> Result<(), blueprint_keystore::Error> {
     let config = KeystoreConfig::new().fs_root(keystore_path);
     let keystore = Keystore::new(config)?;
 

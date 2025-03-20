@@ -3,7 +3,7 @@
 use crate::{
     NetworkConfig, NetworkService, service::AllowedKeys, service_handle::NetworkServiceHandle,
 };
-use gadget_crypto::KeyType;
+use blueprint_crypto::KeyType;
 use libp2p::{
     Multiaddr, PeerId,
     identity::{self, Keypair},

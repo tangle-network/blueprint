@@ -1,10 +1,10 @@
 use super::*;
+use blueprint_crypto_core::{BytesEncoding, KeyType};
 use error::K256Error;
-use gadget_crypto_core::{BytesEncoding, KeyType};
 
 mod k256_crypto_tests {
     use super::*;
-    gadget_crypto_core::impl_crypto_tests!(K256Ecdsa, K256SigningKey, K256Signature);
+    blueprint_crypto_core::impl_crypto_tests!(K256Ecdsa, K256SigningKey, K256Signature);
 }
 
 #[test]
@@ -164,8 +164,8 @@ fn test_invalid_key_deserialization() {
 
 #[test]
 fn test_concurrent_key_usage() {
-    use gadget_std::sync::Arc;
-    use gadget_std::thread;
+    use blueprint_std::sync::Arc;
+    use blueprint_std::thread;
 
     let seed = b"concurrent_test";
     let secret = Arc::new(K256Ecdsa::generate_with_seed(Some(seed)).unwrap());

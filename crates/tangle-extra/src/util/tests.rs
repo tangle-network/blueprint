@@ -1,6 +1,6 @@
 use crate::util::TxProgressExt;
 use alloc::sync::Arc;
-use gadget_testing_utils::tangle::TangleTestHarness;
+use blueprint_testing_utils::tangle::TangleTestHarness;
 use tangle_subxt::subxt::tx::Signer;
 
 #[tokio::test]

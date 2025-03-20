@@ -1,5 +1,5 @@
 use crate::discovery::peers::VerificationIdentifierKey;
-use gadget_crypto::KeyType;
+use blueprint_crypto::KeyType;
 use libp2p::{PeerId, gossipsub::IdentTopic};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;

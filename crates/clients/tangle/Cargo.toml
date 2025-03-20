@@ -1,5 +1,5 @@
 [package]
-name = "gadget-client-tangle"
+name = "blueprint-client-tangle"
 version = "0.1.0"
 description = "Tangle client for Tangle Blueprints"
 authors.workspace = true
@@ -14,10 +14,10 @@ workspace = true
 [dependencies]
 blueprint-runner = { workspace = true, features = ["tangle"] }
 blueprint-core = { workspace = true }
-gadget-std = { workspace = true }
-gadget-client-core = { workspace = true }
-gadget-keystore = { workspace = true }
-gadget-crypto-sp-core = { workspace = true }
+blueprint-std = { workspace = true }
+blueprint-client-core = { workspace = true }
+blueprint-keystore = { workspace = true }
+blueprint-crypto-sp-core = { workspace = true }
 
 auto_impl = { workspace = true }
 serde = { workspace = true }
@@ -27,16 +27,13 @@ tangle-subxt = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 
-[dev-dependencies]
-gadget-tangle-testing-utils = { workspace = true }
-color-eyre = { workspace = true, features = ["capture-spantrace", "track-caller"] }
-
 [features]
 default = ["std", "tracing"]
 std = [
-	"gadget-client-core/std",
-	"gadget-keystore/std",
-	"gadget-std/std",
+	"blueprint-runner/std",
+	"blueprint-client-core/std",
+	"blueprint-keystore/std",
+	"blueprint-std/std",
 	"serde/std",
 	"serde_json/std",
 	"sp-core/std",

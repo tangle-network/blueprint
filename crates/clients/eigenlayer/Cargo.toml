@@ -1,5 +1,5 @@
 [package]
-name = "gadget-client-eigenlayer"
+name = "blueprint-client-eigenlayer"
 version = "0.1.0"
 description = "Eigenlayer client for Tangle Blueprints"
 authors.workspace = true
@@ -13,14 +13,14 @@ workspace = true
 
 [dependencies]
 blueprint-runner = { workspace = true, features = ["eigenlayer"] }
-gadget-client-core = { workspace = true }
-gadget-std = { workspace = true }
+
+blueprint-client-core = { workspace = true }
+blueprint-std = { workspace = true }
 blueprint-evm-extra = { workspace = true }
 alloy-contract = { workspace = true }
 alloy-network = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-provider = { workspace = true }
-alloy-pubsub = { workspace = true }
 alloy-transport = { workspace = true }
 eigensdk = { workspace = true, features = [
 	"common",
@@ -41,8 +41,8 @@ url = { workspace = true }
 
 [dev-dependencies]
 tracing-subscriber.workspace = true
-gadget-eigenlayer-testing-utils.workspace = true
-gadget-anvil-testing-utils = { workspace = true }
+blueprint-chain-setup-anvil = { workspace = true }
+blueprint-eigenlayer-testing-utils = { workspace = true }
 blueprint-evm-extra = { workspace = true }
 alloy-primitives = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
@@ -50,9 +50,9 @@ tokio = { workspace = true, features = ["full"] }
 [features]
 default = ["std"]
 std = [
-	"gadget-std/std",
+	"blueprint-std/std",
 	"blueprint-evm-extra/std",
 	"tokio/full",
-	"gadget-client-core/std",
+	"blueprint-client-core/std",
 	"url/std",
 ]

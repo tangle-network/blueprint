@@ -1,5 +1,5 @@
 [package]
-name = "gadget-clients"
+name = "blueprint-clients"
 version = "0.1.0"
 description = "Metapackage for Tangle Blueprint clients"
 authors.workspace = true
@@ -12,25 +12,25 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-gadget-client-eigenlayer = { workspace = true, optional = true }
-gadget-client-evm = { workspace = true, optional = true }
-gadget-client-tangle = { workspace = true, optional = true }
-gadget-client-core = { workspace = true }
-gadget-std.workspace = true
+blueprint-client-eigenlayer = { workspace = true, optional = true }
+blueprint-client-evm = { workspace = true, optional = true }
+blueprint-client-tangle = { workspace = true, optional = true }
+blueprint-client-core = { workspace = true }
+blueprint-std.workspace = true
 
 thiserror.workspace = true
 
 [features]
 default = ["std"]
 std = [
-	"gadget-client-eigenlayer?/std",
-	"gadget-client-evm?/std",
-	"gadget-client-tangle?/std",
-	"gadget-std/std",
+	"blueprint-client-eigenlayer?/std",
+	"blueprint-client-evm?/std",
+	"blueprint-client-tangle?/std",
+	"blueprint-std/std",
 	"thiserror/std",
 ]
-web = ["gadget-client-tangle?/web"]
+web = ["blueprint-client-tangle?/web"]
 
-eigenlayer = ["dep:gadget-client-eigenlayer"]
-evm = ["dep:gadget-client-evm"]
-tangle = ["dep:gadget-client-tangle"]
+eigenlayer = ["dep:blueprint-client-eigenlayer"]
+evm = ["dep:blueprint-client-evm"]
+tangle = ["dep:blueprint-client-tangle"]

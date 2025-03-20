@@ -2,7 +2,7 @@ mod behaviour;
 mod handler;
 
 pub use behaviour::{BlueprintProtocolBehaviour, BlueprintProtocolEvent};
-use gadget_crypto::KeyType;
+use blueprint_crypto::KeyType;
 use libp2p::PeerId;
 
 use crate::discovery::peers::VerificationIdentifierKey;
