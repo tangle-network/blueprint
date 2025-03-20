@@ -1,3 +1,4 @@
+// TODO: Document
 //! Blueprint SDK
 //!
 //! ## Features
@@ -77,6 +78,8 @@ pub use eigensdk;
 #[cfg(feature = "testing")]
 /// Testing utilities and helpers
 pub mod testing {
+    /// Utilities for creating and interacting with local chains
+    pub use blueprint_chain_setup as chain_setup;
     /// General testing utilities for blueprints
     pub use blueprint_testing_utils as utils;
     /// Temporary file and directory management for tests
