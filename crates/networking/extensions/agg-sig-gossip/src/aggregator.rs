@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
 /// Deterministic aggregator selection based on round and message
+#[derive(Clone, Debug)]
 pub struct AggregatorSelector {
     // Maximum number of participants
     max_participants: u16,

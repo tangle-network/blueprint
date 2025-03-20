@@ -1,6 +1,6 @@
 use crate::service::AllowedKeys;
 use crate::test_utils::{
-    TestNode, create_whitelisted_nodes, init_tracing, wait_for_peer_discovery, wait_for_peer_info,
+    TestNode, create_whitelisted_nodes, setup_log, wait_for_peer_discovery, wait_for_peer_info,
 };
 use gadget_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
@@ -9,7 +9,7 @@ use tracing::info;
 
 #[tokio::test]
 async fn test_peer_discovery_mdns() {
-    init_tracing();
+    setup_log();
 
     let network_name = "test-network";
     let instance_id = "test-instance";
@@ -43,7 +43,7 @@ async fn test_peer_discovery_mdns() {
 
 #[tokio::test]
 async fn test_peer_discovery_kademlia() {
-    init_tracing();
+    setup_log();
 
     let network_name = "test-network";
     let instance_id = "test-instance";
@@ -111,7 +111,7 @@ async fn test_peer_discovery_kademlia() {
 
 #[tokio::test]
 async fn test_peer_info_updates() {
-    init_tracing();
+    setup_log();
 
     info!("Creating test nodes...");
     // Create nodes with whitelisted keys

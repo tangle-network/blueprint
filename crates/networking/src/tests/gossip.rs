@@ -1,10 +1,9 @@
-use super::{TestNode, init_tracing, wait_for_handshake_completion};
 use crate::{
     discovery::peers::VerificationIdentifierKey,
     service::AllowedKeys,
     service_handle::NetworkServiceHandle,
     test_utils::{
-        TestNode, create_whitelisted_nodes, init_tracing, wait_for_all_handshakes,
+        TestNode, create_whitelisted_nodes, setup_log, wait_for_all_handshakes,
         wait_for_handshake_completion,
     },
     types::{MessageRouting, ParticipantId, ParticipantInfo},
@@ -19,7 +18,7 @@ const PROTOCOL_NAME: &str = "/gossip/1.0.0";
 
 #[tokio::test]
 async fn test_gossip_between_verified_peers() {
-    init_tracing();
+    setup_log();
     info!("Starting gossip test between verified peers");
 
     // Create nodes with whitelisted keys
@@ -87,7 +86,7 @@ async fn test_gossip_between_verified_peers() {
 
 #[tokio::test]
 async fn test_multi_node_gossip() {
-    init_tracing();
+    setup_log();
     info!("Starting multi-node gossip test");
 
     // Create three nodes with all keys whitelisted
@@ -158,7 +157,7 @@ async fn test_multi_node_gossip() {
 
 #[tokio::test]
 async fn test_unverified_peer_gossip() {
-    init_tracing();
+    setup_log();
     info!("Starting unverified peer gossip test");
 
     // Create two nodes with no whitelisted keys

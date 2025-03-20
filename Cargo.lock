@@ -7816,6 +7816,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "gadget-networking-agg-sig-gossip"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "bitvec",
+ "blueprint-core",
+ "crossbeam",
+ "crossbeam-channel",
+ "dashmap",
+ "futures",
+ "gadget-crypto",
+ "gadget-crypto-core",
+ "gadget-networking",
+ "gadget-std",
+ "generic-array",
+ "hex",
+ "libp2p",
+ "rand 0.8.5",
+ "rand_dev",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+]
+
+[[package]]
 name = "gadget-networking-round-based-extension"
 version = "0.1.0"
 dependencies = [

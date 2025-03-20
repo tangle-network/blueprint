@@ -4,8 +4,8 @@ use crate::{
     signature_weight::SignatureWeight,
     zk_proof::{ThresholdProofGenerator, ThresholdWeightProof},
 };
+use blueprint_core::warn;
 use gadget_crypto::aggregation::AggregatableSignature;
-use gadget_logging::warn;
 use gadget_networking::{
     service_handle::NetworkServiceHandle,
     types::{MessageRouting, ParticipantId, ParticipantInfo, ProtocolMessage},
@@ -282,7 +282,8 @@ where
         }
 
         // Check if we've already seen a signature from this participant for this message
-        if self.has_seen_signature_for_message(sender_id, &message) {
+        let is_new_signature = !self.has_seen_signature_for_message(sender_id, &message);
+        if !is_new_signature {
             // We already have a signature from this sender for this message, just ignore the new one
             warn!(
                 "Duplicate signature attempt from {} for same message, ignoring",
@@ -291,54 +292,15 @@ where
             return Ok(());
         }
 
-        // Check if the participant has signed any other messages
-        if let Some(previous_messages) = self.state.participant_messages.get(&sender_id).cloned() {
-            for prev_msg_hash in previous_messages {
-                // Get the original message from the hash
-                let has_conflicting_message = self
-                    .state
-                    .signatures_by_message
-                    .keys()
-                    .any(|m| self.hash_message(m) == prev_msg_hash && m != &message);
-
-                if has_conflicting_message {
-                    // This participant has signed multiple different messages - report as malicious
-                    let prev_message = self
-                        .state
-                        .signatures_by_message
-                        .keys()
-                        .find(|m| self.hash_message(m) == prev_msg_hash)
-                        .cloned()
-                        .unwrap_or_default();
-
-                    let prev_sig = self
-                        .state
-                        .signatures_by_message
-                        .get(&prev_message)
-                        .and_then(|map| map.get(sender_id))
-                        .cloned()
-                        .unwrap_or_else(|| signature.clone()); // Fallback if not found
-
-                    warn!("Detected conflicting signatures from {}", sender_id.0);
-
-                    self.mark_participant_malicious(
-                        sender_id,
-                        MaliciousEvidence::ConflictingSignatures {
-                            signature1: prev_sig,
-                            signature2: signature.clone(),
-                            message1: prev_message,
-                            message2: message.clone(),
-                        },
-                        network_handle,
-                    )
-                    .await?;
-
-                    return Ok(());
-                }
-            }
+        // Check for equivocation (conflicting signatures)
+        if let Some(evidence) = self.check_for_equivocation(sender_id, &message, &signature) {
+            warn!("Detected equivocation from {}", sender_id.0);
+            self.mark_participant_malicious(sender_id, evidence, network_handle)
+                .await?;
+            return Ok(());
         }
 
-        // Verify the signature
+        // Verify the new signature
         if !self.verify_signature(sender_id, &signature, &message, public_keys) {
             // Invalid signature - mark as malicious
             warn!("Invalid signature from {}", sender_id.0);
@@ -361,19 +323,32 @@ where
         self.state.seen_signatures.add(sender_id);
 
         // Track which message this participant signed
-        let message_hash = self.hash_message(&message);
+        let msg_hash = self.hash_message(&message);
         self.state
             .participant_messages
             .entry(sender_id)
             .or_insert_with(HashSet::new)
-            .insert(message_hash);
+            .insert(msg_hash);
 
         // Send an acknowledgment
         self.send_ack(sender_id, &message, network_handle).await?;
 
         // If we're an aggregator, update our aggregate signature for this message
         if self.is_aggregator() {
-            self.update_aggregate_for_message(message)?;
+            self.update_aggregate_for_message(message.clone())?;
+        }
+
+        // Always re-gossip new valid signatures to ensure network propagation
+        // This is crucial for ensuring signatures reach all aggregators
+        // Don't send back to the original sender to avoid loops
+        if sender_id != self.config.local_id {
+            let gossip_msg = AggSigMessage::SignatureShare {
+                signature: signature.clone(),
+                message: message.clone(),
+                weight: Some(self.weight_scheme.weight(&sender_id)),
+            };
+
+            self.send_message(gossip_msg, None, network_handle).await?;
         }
 
         Ok(())
@@ -612,12 +587,13 @@ where
             .entry(message.clone())
             .or_insert_with(|| ParticipantMap::new(self.config.max_participants));
 
-        // Create a set of contributors for this message
+        // Create a set of contributors for this message, excluding malicious participants
         let mut contributors = ParticipantSet::new(self.config.max_participants);
 
-        // Iterate through all possible participant IDs
+        // Iterate through all participants with signatures for this message
         for id_val in 0..self.config.max_participants {
             let id = ParticipantId(id_val.into());
+            // Only include non-malicious participants who have provided signatures
             if sig_map.contains_key(id) && !self.state.malicious.contains(id) {
                 contributors.add(id);
             }
@@ -627,7 +603,7 @@ where
             return Ok(());
         }
 
-        // Collect signatures from all contributors
+        // Collect valid signatures from all contributors
         let mut signatures = Vec::new();
         for id in contributors.iter() {
             if let Some(sig) = sig_map.get(id) {
@@ -650,23 +626,31 @@ where
         Ok(())
     }
 
-    /// Rebuild the aggregate signature after removing malicious operators
+    /// Rebuild the aggregate after removing malicious operators
     fn rebuild_aggregate(&mut self) -> Result<(), AggregationError> {
+        // If local message is empty, nothing to do
+        if self.state.local_message.is_empty() {
+            return Ok(());
+        }
+
         // Get the set of valid contributors (non-malicious)
-        let valid_contributors: ParticipantSet = {
+        let valid_contributors = {
             let local_message = self.state.local_message.clone();
             if let Some((_, contributors)) = self.state.messages.get(&local_message) {
                 let mut valid = contributors.clone();
+                // Remove all malicious participants
                 for id in self.state.malicious.iter() {
                     valid.remove(id);
                 }
                 valid
             } else {
+                // No existing message data, nothing to rebuild
                 return Ok(());
             }
         };
 
         if valid_contributors.is_empty() {
+            // No valid contributors left, remove the message entry completely
             self.state.messages.remove(&self.state.local_message);
             return Ok(());
         }
@@ -684,6 +668,7 @@ where
         }
 
         if signatures.is_empty() {
+            // No signatures despite having contributors, remove the message entry
             self.state.messages.remove(&self.state.local_message);
             return Ok(());
         }
@@ -693,10 +678,12 @@ where
             AggregationError::AggregationError(format!("Failed to aggregate signatures: {:?}", e))
         })?;
 
+        // Store the updated aggregate
         self.state.messages.insert(
             self.state.local_message.clone(),
             (agg_sig, valid_contributors),
         );
+
         Ok(())
     }
 
@@ -731,6 +718,9 @@ where
         public_keys: &HashMap<ParticipantId, S::Public>,
         network_handle: &NetworkServiceHandle<S>,
     ) -> Result<(AggregationResult<S>, Option<ThresholdWeightProof>), AggregationError> {
+        // Set the local message first to ensure all operations reference the correct message
+        self.state.local_message = message.clone();
+
         // Verify the message is valid
         if !self.message_verifier.is_valid_message(&message) {
             return Err(AggregationError::InvalidMessage);
@@ -782,73 +772,95 @@ where
         // Track if we've sent a completion message
         let mut sent_completion = false;
 
+        // Progress tracking variables
+        let mut last_signature_count = self.count_total_signatures();
+        let mut stalled_iterations = 0;
+        let mut progress_check_interval = tokio::time::interval(Duration::from_millis(100));
+
         // Main protocol loop
         loop {
-            // If the protocol is completed (received and verified completion message)
-            if self.state.protocol_completed {
-                if let Some((signature, contributors)) = &self.state.verified_completion {
-                    // Use the verified completion result
-                    let total_weight = self.weight_scheme.calculate_weight(contributors);
+            tokio::select! {
+                _ = progress_check_interval.tick() => {
+                    // If the protocol is completed (received and verified completion message)
+                    if self.state.protocol_completed {
+                        if let Some((signature, contributors)) = &self.state.verified_completion {
+                            // Use the verified completion result
+                            let total_weight = self.weight_scheme.calculate_weight(contributors);
 
-                    // Create weights map for result
-                    let mut weight_map = HashMap::new();
-                    for &id in &contributors.to_hashset() {
-                        weight_map.insert(id, self.weight_scheme.weight(&id));
+                            // Create weights map for result
+                            let mut weight_map = HashMap::new();
+                            for &id in &contributors.to_hashset() {
+                                weight_map.insert(id, self.weight_scheme.weight(&id));
+                            }
+
+                            let result = AggregationResult {
+                                signature: signature.clone(),
+                                contributors: contributors.to_hashset(),
+                                weights: Some(weight_map),
+                                total_weight: Some(total_weight),
+                                malicious_participants: self.state.malicious.to_hashset(),
+                            };
+
+                            return Ok((result, None)); // No weight proof for verified completion
+                        }
                     }
 
-                    let result = AggregationResult {
-                        signature: signature.clone(),
-                        contributors: contributors.to_hashset(),
-                        weights: Some(weight_map),
-                        total_weight: Some(total_weight),
-                        malicious_participants: self.state.malicious.to_hashset(),
-                    };
+                    // Check if we've reached threshold locally for our message and should send completion message
+                    if !sent_completion && self.is_aggregator() {
+                        // Check if our local message has reached threshold
+                        if let Some((signature, contributors)) =
+                            self.state.messages.get(&self.state.local_message)
+                        {
+                            let total_weight = self.weight_scheme.calculate_weight(contributors);
 
-                    return Ok((result, None)); // No weight proof for verified completion
-                }
-            }
+                            if total_weight >= self.weight_scheme.threshold_weight() {
+                                // We've reached threshold, broadcast completion message
+                                let completion_msg = AggSigMessage::ProtocolComplete {
+                                    aggregate_signature: signature.clone(),
+                                    message: self.state.local_message.clone(),
+                                    contributors: contributors.to_hashset(),
+                                };
 
-            // Check if we've reached threshold locally for our message and should send completion message
-            if !sent_completion && self.is_aggregator() {
-                // Check if our local message has reached threshold
-                if let Some((signature, contributors)) =
-                    self.state.messages.get(&self.state.local_message)
-                {
-                    let total_weight = self.weight_scheme.calculate_weight(contributors);
-
-                    if total_weight >= self.weight_scheme.threshold_weight() {
-                        // We've reached threshold, broadcast completion message
-                        let completion_msg = AggSigMessage::ProtocolComplete {
-                            aggregate_signature: signature.clone(),
-                            message: self.state.local_message.clone(),
-                            contributors: contributors.to_hashset(),
-                        };
-
-                        self.send_message(completion_msg, None, network_handle)
-                            .await?;
-                        sent_completion = true;
+                                self.send_message(completion_msg, None, network_handle)
+                                    .await?;
+                                sent_completion = true;
+                            }
+                        }
                     }
+
+                    // Check progress
+                    let current_signature_count = self.count_total_signatures();
+                    if current_signature_count > last_signature_count {
+                        // Progress has been made, reset stall counter
+                        stalled_iterations = 0;
+                        last_signature_count = current_signature_count;
+                    } else {
+                        stalled_iterations += 1;
+
+                        // If stalled for too long, try to stimulate progress
+                        if stalled_iterations > 5 && !sent_completion {
+                            // Re-gossip our own signature to ensure it propagates
+                            self.resend_local_signature(network_handle).await?;
+                            stalled_iterations = 0;
+                        }
+                    }
+
+                    // Check if we have too many malicious participants to ever reach threshold
+                    let remaining_weight = self.calculate_remaining_potential_weight();
+                    if remaining_weight < self.weight_scheme.threshold_weight() {
+                        // We can't possibly reach the threshold, too many malicious participants
+                        return Err(AggregationError::ThresholdNotMet(
+                            remaining_weight as usize,
+                            self.weight_scheme.threshold_weight() as usize,
+                        ));
+                    }
+                },
+
+                _ = tokio::time::sleep_until(timeout_deadline) => {
+                    // Timed out, but we still might have reached threshold locally
+                    return self.build_result();
                 }
             }
-
-            // Check if we have too many malicious participants to ever reach threshold
-            let remaining_weight = self.calculate_remaining_potential_weight();
-            if remaining_weight < self.weight_scheme.threshold_weight() {
-                // We can't possibly reach the threshold, too many malicious participants
-                return Err(AggregationError::ThresholdNotMet(
-                    remaining_weight as usize,
-                    self.weight_scheme.threshold_weight() as usize,
-                ));
-            }
-
-            // Check if we've hit the timeout
-            if tokio::time::Instant::now() >= timeout_deadline {
-                // Timed out, but we still might have reached threshold locally
-                return self.build_result();
-            }
-
-            // Wait a bit before checking again
-            tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
 
@@ -989,5 +1001,91 @@ where
         network_handle
             .send(routing, payload)
             .map_err(|e| AggregationError::NetworkError(format!("Failed to send message: {}", e)))
+    }
+
+    /// Count the total number of signatures we've collected
+    fn count_total_signatures(&self) -> usize {
+        let mut count = 0;
+        for sig_map in self.state.signatures_by_message.values() {
+            count += sig_map.len();
+        }
+        count
+    }
+
+    /// Resend our own signature if progress stalls
+    async fn resend_local_signature(
+        &self,
+        network_handle: &NetworkServiceHandle<S>,
+    ) -> Result<(), AggregationError> {
+        // Only resend if we have a local message
+        if self.state.local_message.is_empty() {
+            return Ok(());
+        }
+
+        // Get our signature for the local message
+        if let Some(sig_map) = self
+            .state
+            .signatures_by_message
+            .get(&self.state.local_message)
+        {
+            if let Some(signature) = sig_map.get(self.config.local_id) {
+                // Create and send message
+                let msg = AggSigMessage::SignatureShare {
+                    signature: signature.clone(),
+                    message: self.state.local_message.clone(),
+                    weight: Some(self.weight_scheme.weight(&self.config.local_id)),
+                };
+
+                self.send_message(msg, None, network_handle).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if a participant has equivocated (signed conflicting messages)
+    /// Returns evidence if equivocation is detected
+    fn check_for_equivocation(
+        &self,
+        participant_id: ParticipantId,
+        new_message: &[u8],
+        new_signature: &S::Signature,
+    ) -> Option<MaliciousEvidence<S>> {
+        let new_message_hash = self.hash_message(new_message);
+
+        // Clone the message hashes to avoid borrow checker issues
+        let prev_message_hashes =
+            if let Some(hashes) = self.state.participant_messages.get(&participant_id) {
+                hashes.clone()
+            } else {
+                return None;
+            };
+
+        // For each previously signed message hash
+        for prev_hash in prev_message_hashes {
+            // Skip if it's the same message
+            if prev_hash == new_message_hash {
+                continue;
+            }
+
+            // Find the original message and signature for this hash
+            for (prev_message, sig_map) in &self.state.signatures_by_message {
+                if self.hash_message(prev_message) == prev_hash
+                    && sig_map.contains_key(participant_id)
+                {
+                    if let Some(prev_sig) = sig_map.get(participant_id) {
+                        // We found a different message with a valid signature from this participant
+                        return Some(MaliciousEvidence::ConflictingSignatures {
+                            signature1: prev_sig.clone(),
+                            signature2: new_signature.clone(),
+                            message1: prev_message.clone(),
+                            message2: new_message.to_vec(),
+                        });
+                    }
+                }
+            }
+        }
+
+        None
     }
 }

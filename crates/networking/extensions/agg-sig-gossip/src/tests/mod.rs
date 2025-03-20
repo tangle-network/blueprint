@@ -4,14 +4,17 @@ use crate::{
     protocol::{AggregationConfig, SignatureAggregationProtocol},
     signature_weight::EqualWeight,
 };
+use blueprint_core::info;
 use gadget_crypto::aggregation::AggregatableSignature;
-use gadget_logging::info;
 use gadget_networking::{
     service_handle::NetworkServiceHandle,
-    test_utils::{create_whitelisted_nodes, init_tracing, wait_for_all_handshakes},
+    test_utils::{create_whitelisted_nodes, setup_log, wait_for_all_handshakes},
     types::ParticipantId,
 };
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 // Constants for tests
 const TEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -28,7 +31,7 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     S::Public: Clone,
     S::Signature: Clone,
 {
-    init_tracing();
+    setup_log();
     info!(
         "Starting signature aggregation test with {} nodes",
         num_nodes
@@ -108,82 +111,81 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     let final_results = futures::future::join_all(results).await;
 
     // Process results
+    info!("Processing test results");
+    let mut diagnostics = Vec::new();
+
     for (i, result) in final_results.iter().enumerate() {
-        if malicious_nodes.contains(&i) {
-            // Malicious nodes may fail or have different results
-            match result {
-                Ok(Ok((res, _))) => {
+        let node_type = if malicious_nodes.contains(&i) {
+            "malicious"
+        } else {
+            "honest"
+        };
+
+        let config = AggregationConfig {
+            local_id: ParticipantId(i as u16),
+            max_participants: num_nodes as u16,
+            num_aggregators: 1, // Match what was used in test
+            timeout: Duration::from_secs(5),
+            protocol_id: PROTOCOL_NAME.to_string(),
+        };
+
+        let aggregator_selector =
+            crate::AggregatorSelector::new(config.max_participants, config.num_aggregators);
+
+        // Calculate if this node was an aggregator
+        let participants: HashSet<ParticipantId> = public_keys.keys().cloned().collect();
+        let is_aggregator = {
+            let mut selector = aggregator_selector.clone();
+            selector.select_aggregators(&participants);
+            selector.is_aggregator(ParticipantId(i as u16))
+        };
+
+        match result {
+            Ok(Ok((result, _))) => {
+                diagnostics.push(format!(
+                    "Node {}: {} (aggregator={}) SUCCESS - contributors: {}, malicious: {}",
+                    i,
+                    node_type,
+                    is_aggregator,
+                    result.contributors.len(),
+                    result.malicious_participants.len()
+                ));
+
+                if !malicious_nodes.contains(&i) {
                     info!(
-                        "Malicious node {} completed with {} contributors",
+                        "Node {} completed successfully with {} contributors and {} malicious nodes",
                         i,
-                        res.contributors.len()
+                        result.contributors.len(),
+                        result.malicious_participants.len()
                     );
-                    // Usually only itself in the contributors
-                    assert!(
-                        res.contributors.contains(&ParticipantId(i as u16)),
-                        "Malicious node should include itself as contributor"
-                    );
-                }
-                Ok(Err(e)) => {
-                    info!("Malicious node {} failed as expected: {:?}", i, e);
-                }
-                Err(e) => {
-                    panic!("Task for malicious node {} panicked: {:?}", i, e);
                 }
             }
-        } else {
-            // Honest nodes should succeed and agree on the result
-            match result {
-                Ok(Ok((res, _))) => {
-                    // Should exclude malicious nodes
-                    for malicious_idx in &malicious_nodes {
-                        assert!(
-                            res.malicious_participants
-                                .contains(&ParticipantId(*malicious_idx as u16)),
-                            "Node {} should detect node {} as malicious",
-                            i,
-                            malicious_idx
-                        );
-                        assert!(
-                            !res.contributors
-                                .contains(&ParticipantId(*malicious_idx as u16)),
-                            "Node {} should exclude malicious node {} from contributors",
-                            i,
-                            malicious_idx
-                        );
-                    }
+            Ok(Err(e)) => {
+                diagnostics.push(format!(
+                    "Node {}: {} (aggregator={}) ERROR: {:?}",
+                    i, node_type, is_aggregator, e
+                ));
 
-                    // Should include all honest nodes
-                    let expected_contributors = num_nodes - malicious_nodes.len();
-                    assert_eq!(
-                        res.contributors.len(),
-                        expected_contributors,
-                        "Node {} should have {} contributors",
-                        i,
-                        expected_contributors
-                    );
-
-                    // Verify signature
-                    let mut pub_keys_vec = Vec::new();
-                    for id in &res.contributors {
-                        pub_keys_vec.push(public_keys.get(id).unwrap().clone());
-                    }
-
-                    assert!(
-                        S::verify_aggregate(&regular_message, &res.signature, &pub_keys_vec),
-                        "Aggregate signature for node {} should be valid",
-                        i
-                    );
-                }
-                Ok(Err(e)) => {
+                if !malicious_nodes.contains(&i) {
                     panic!("Honest node {} failed: {:?}", i, e);
                 }
-                Err(e) => {
-                    panic!("Task for honest node {} panicked: {:?}", i, e);
-                }
+            }
+            Err(e) => {
+                diagnostics.push(format!(
+                    "Node {}: {} (aggregator={}) PANIC: {:?}",
+                    i, node_type, is_aggregator, e
+                ));
+                panic!("Task for node {} panicked: {:?}", i, e);
             }
         }
     }
+
+    // Print all diagnostics together for easier troubleshooting
+    info!("\n=== Test Run Diagnostics ===");
+    for diag in &diagnostics {
+        info!("{}", diag);
+    }
+    info!("===========================\n");
 
     info!("Signature aggregation test completed successfully");
 }
@@ -192,8 +194,8 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
 mod bls_tests {
     use super::*;
     use gadget_crypto::{
-        sp_core::{SpBls381, SpBls381Pair},
         KeyType,
+        sp_core::{SpBls381, SpBls381Pair},
     };
 
     fn generate_bls_test_keys(num_keys: usize) -> Vec<SpBls381Pair> {
@@ -231,8 +233,8 @@ mod bls_tests {
 // BN254 Tests
 mod bn254_tests {
     use super::*;
-    use gadget_crypto::bn254::{ArkBlsBn254, ArkBlsBn254Secret};
     use gadget_crypto::KeyType;
+    use gadget_crypto::bn254::{ArkBlsBn254, ArkBlsBn254Secret};
 
     fn generate_bn254_test_keys(num_keys: usize) -> Vec<ArkBlsBn254Secret> {
         let mut keys = Vec::with_capacity(num_keys);

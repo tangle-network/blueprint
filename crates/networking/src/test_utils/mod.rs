@@ -10,13 +10,19 @@ use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 use tracing::info;
 
-pub fn init_tracing() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_target(true)
-        .with_thread_ids(true)
-        .with_file(true)
-        .with_line_number(true)
+pub fn setup_log() {
+    use tracing_subscriber::filter::LevelFilter;
+    use tracing_subscriber::util::SubscriberInitExt;
+
+    let _ = tracing_subscriber::fmt::SubscriberBuilder::default()
+        .without_time()
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NONE)
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .finish()
         .try_init();
 }
 

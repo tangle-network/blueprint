@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cli", "crates/*"]
+members = ["cli", "crates/*", "crates/networking/extensions/*"]
 
 [workspace.package]
 authors = ["Tangle Network"]

@@ -48,7 +48,6 @@ libp2p = { workspace = true, features = [
 ] }
 gadget-crypto = { workspace = true, features = ["sp-core"] }
 gadget-crypto-core = { workspace = true, features = ["tangle"] }
-
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 sha2 = { workspace = true }
@@ -60,7 +59,4 @@ generic-array = { version = "0.14", features = ["serde"] }
 
 [features]
 default = ["std"]
-std = [
-  "gadget-crypto/std",
-	"gadget-networking/std",
-]
+std = ["gadget-crypto/std", "gadget-networking/std"]
