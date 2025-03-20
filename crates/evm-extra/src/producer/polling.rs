@@ -31,7 +31,7 @@ use core::{
     time::Duration,
 };
 use futures::Stream;
-use gadget_std::sync::{Arc, Mutex};
+use blueprint_std::sync::{Arc, Mutex};
 use tokio::time::Sleep;
 
 /// Configuration parameters for the polling producer
