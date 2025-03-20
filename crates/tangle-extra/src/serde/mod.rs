@@ -106,7 +106,7 @@ where
 /// # Errors
 ///
 /// * Attempting to deserialize an [`UnsupportedType`](error::UnsupportedType)
-/// * Attempting to deserialize non UTF-8 bytes into a [`String`](alloc::string::String)
+/// * Attempting to deserialize non UTF-8 bytes into a [`String`]
 /// * Any type mismatch (e.g. attempting to deserialize [`Field::Int8`] into a [`char`]).
 ///
 /// # Examples

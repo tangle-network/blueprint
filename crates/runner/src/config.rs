@@ -53,7 +53,7 @@ impl Protocol {
     ///
     /// # Errors
     ///
-    /// * [`Error::UnsupportedProtocol`] if the protocol is unknown. See [`Protocol`].
+    /// * [`ConfigError::UnsupportedProtocol`] if the protocol is unknown. See [`Protocol`].
     pub fn from_env() -> Result<Option<Self>, ConfigError> {
         if let Ok(protocol) = std::env::var("PROTOCOL") {
             return protocol.to_ascii_lowercase().parse::<Protocol>().map(Some);
@@ -160,11 +160,13 @@ impl ProtocolSettingsT for ProtocolSettings {
 }
 
 impl ProtocolSettings {
-    /// Attempt to extract the [`TangleInstanceSettings`]
+    /// Attempt to extract the [`TangleProtocolSettings`]
     ///
     /// # Errors
     ///
     /// `self` is not [`ProtocolSettings::Tangle`]
+    ///
+    /// [`TangleProtocolSettings`]: crate::tangle::config::TangleProtocolSettings
     #[cfg(feature = "tangle")]
     #[allow(clippy::match_wildcard_for_single_variants)]
     pub fn tangle(&self) -> Result<&crate::tangle::config::TangleProtocolSettings, ConfigError> {
@@ -179,6 +181,8 @@ impl ProtocolSettings {
     /// # Errors
     ///
     /// `self` is not [`ProtocolSettings::Eigenlayer`]
+    ///
+    /// [`EigenlayerProtocolSettings`]: crate::eigenlayer::config::EigenlayerProtocolSettings
     #[cfg(feature = "eigenlayer")]
     #[allow(clippy::match_wildcard_for_single_variants)]
     pub fn eigenlayer(
@@ -190,16 +194,19 @@ impl ProtocolSettings {
         }
     }
 
-    /// Attempt to extract the [`SymbioticContractAddresses`]
-    ///
-    /// # Errors
-    ///
-    /// `self` is not [`ProtocolSettings::Symbiotic`]
-    #[cfg(feature = "symbiotic")]
-    #[allow(clippy::match_wildcard_for_single_variants)]
-    pub fn symbiotic(&self) -> Result<(), ConfigError> {
-        todo!()
-    }
+    // TODO
+    // /// Attempt to extract the [`SymbioticContractAddresses`]
+    // ///
+    // /// # Errors
+    // ///
+    // /// `self` is not [`ProtocolSettings::Symbiotic`]
+    // ///
+    // /// [`SymbioticContractAddresses`]: crate::symbiotic::config::SymbioticContractAddresses
+    // #[cfg(feature = "symbiotic")]
+    // #[allow(clippy::match_wildcard_for_single_variants)]
+    // pub fn symbiotic(&self) -> Result<(), ConfigError> {
+    //     todo!()
+    // }
 }
 
 /// Description of the environment in which the blueprint is running
@@ -409,10 +416,7 @@ impl ContextConfig {
     /// - `keystore_uri`: The keystore URI as a string
     /// - `chain`: The [`chain`](SupportedChains)
     /// - `protocol`: The [`Protocol`]
-    /// - `eigenlayer_contract_addresses`: The [`contract addresses`](EigenlayerContractAddresses) for the necessary EigenLayer contracts
-    /// - `symbiotic_contract_addresses`: The [`contract addresses`](SymbioticContractAddresses) for the necessary Symbiotic contracts
-    /// - `blueprint_id`: The blueprint ID - only required for Tangle
-    /// - `service_id`: The service ID - only required for Tangle
+    /// - `protocol_settings`: The protocol-specific settings
     #[allow(
         clippy::too_many_arguments,
         clippy::too_many_lines,

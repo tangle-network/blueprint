@@ -5,7 +5,7 @@ use serde::{de, ser};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-/// Types that cannot be represented as a [`Field`](crate::Field)
+/// Types that cannot be represented as a [`Field`](super::Field)
 ///
 /// Attempting to de/serialize any of these types will cause an error.
 #[derive(Debug)]
@@ -46,7 +46,7 @@ pub enum UnsupportedType {
 #[derive(Debug)]
 pub enum Error {
     UnsupportedType(UnsupportedType),
-    /// Attempting to deserialize a [`char`] from a [`Field::String`](crate::Field::String)
+    /// Attempting to deserialize a [`char`] from a [`Field::String`](super::Field::String)
     BadCharLength(usize),
     HeterogeneousTuple,
     FromUtf8Error(alloc::string::FromUtf8Error),

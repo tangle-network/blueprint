@@ -12,7 +12,9 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 ///
 /// This is simply a wrapper over an owned `Field<AccountId32>`, since it's an external type.
 ///
-/// See [`crate::from_field`].
+/// See [`from_field`].
+///
+/// [`from_field`]: super::from_field
 pub struct Deserializer(pub(crate) Field<AccountId32>);
 
 impl<'de> de::Deserializer<'de> for Deserializer {

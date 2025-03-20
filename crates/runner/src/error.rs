@@ -94,7 +94,7 @@ pub enum ConfigError {
     UnsupportedProtocol(String),
     /// Attempting to load the [`ProtocolSettings`] of a protocol differing from the target
     ///
-    /// [`ProtocolSettings`]: crate::ProtocolSettings
+    /// [`ProtocolSettings`]: crate::config::ProtocolSettings
     #[error("Unexpect protocol, expected {0}")]
     UnexpectedProtocol(&'static str),
     /// No Sr25519 keypair found in the keystore.

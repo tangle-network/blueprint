@@ -12,7 +12,9 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 
 /// A serializer for [`Field`]
 ///
-/// See [`crate::into_field`].
+/// See [`into_field`].
+///
+/// [`into_field`]: super::from_field
 pub struct Serializer;
 
 impl<'a> serde::Serializer for &'a mut Serializer {

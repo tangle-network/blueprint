@@ -3383,7 +3383,6 @@ dependencies = [
  "blueprint-testing-utils",
  "document-features",
  "eigensdk",
- "serde",
  "tangle-subxt",
  "tempfile",
  "thiserror 2.0.12",

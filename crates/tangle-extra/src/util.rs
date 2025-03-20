@@ -28,6 +28,8 @@ pub trait TxProgressExt<T: subxt::Config, C> {
     /// probability that the transaction will not make it into a block but there is no guarantee
     /// that this is true. In those cases the stream is closed however, so you currently have no way to find
     /// out if they finally made it into a block or not.
+    ///
+    /// [`TxProgress::next()`]: subxt::tx::TxProgress::next
     async fn wait_for_in_block(self) -> Result<TxInBlock<T, C>, subxt::Error>;
 
     /// Wait for the transaction to be finalized, and for the transaction events to indicate
@@ -41,6 +43,8 @@ pub trait TxProgressExt<T: subxt::Config, C> {
     /// probability that the transaction will not make it into a block but there is no guarantee
     /// that this is true. In those cases the stream is closed however, so you currently have no way to find
     /// out if they finally made it into a block or not.
+    ///
+    /// [`TxProgress::next()`]: subxt::tx::TxProgress::next
     async fn wait_for_in_block_success(
         self,
     ) -> Result<subxt::blocks::ExtrinsicEvents<T>, subxt::Error>;

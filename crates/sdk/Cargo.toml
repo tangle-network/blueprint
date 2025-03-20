@@ -102,29 +102,7 @@ tracing = [
     "blueprint-tangle-extra?/tracing"
 ]
 
-## Enable networking support
-networking = [
-    "dep:blueprint-networking",
-    "blueprint-contexts/networking",
-    "blueprint-keystore/std",
-    "blueprint-context-derive?/networking",
-    "blueprint-runner/networking"
-]
-
-## Enable local KV stores
-local-store = ["blueprint-stores/local"]
-
-## Enable [round-based] networking capability
-##
-## [round-based]: https://github.com/LFDT-Lockness/round-based
-round-based-compat = ["dep:blueprint-networking-round-based-extension"]
-
-## Enable all macros of subcrates
-macros = [
-    "dep:blueprint-macros",
-    "dep:blueprint-context-derive",
-    "blueprint-tangle-extra?/macros"
-]
+##! ### Protocol Support
 
 ## Enable [Tangle] support
 ##
@@ -163,6 +141,34 @@ eigenlayer = [
     "blueprint-contexts/eigenlayer",
     "blueprint-clients/eigenlayer",
     "evm",
+]
+
+##! ### Networking Support
+
+## Enable networking support
+networking = [
+    "dep:blueprint-networking",
+    "blueprint-contexts/networking",
+    "blueprint-keystore/std",
+    "blueprint-context-derive?/networking",
+    "blueprint-runner/networking"
+]
+
+## Enable [round-based] networking capability
+##
+## [round-based]: https://github.com/LFDT-Lockness/round-based
+round-based-compat = ["dep:blueprint-networking-round-based-extension"]
+
+##! ### Utilities
+
+## Enable local KV stores
+local-store = ["blueprint-stores/local"]
+
+## Enable all macros of subcrates
+macros = [
+    "dep:blueprint-macros",
+    "dep:blueprint-context-derive",
+    "blueprint-tangle-extra?/macros"
 ]
 
 ## Enable build-time utilities

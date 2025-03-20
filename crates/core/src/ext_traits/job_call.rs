@@ -15,7 +15,7 @@ pub trait JobCallExt: sealed::Sealed + Sized {
     ///
     /// This is just a convenience for `E::from_job_call(call, &())`.
     ///
-    /// Note this consumes the job call. Use [`JobCallExt::extract_parts`] if you're not extracting
+    /// Note this consumes the job call. Use [`JobCallExt::extract_parts()`] if you're not extracting
     /// the body and don't want to consume the job call.
     fn extract<E, M>(self) -> impl Future<Output = Result<E, E::Rejection>> + Send
     where
@@ -26,7 +26,7 @@ pub trait JobCallExt: sealed::Sealed + Sized {
     ///
     /// This is just a convenience for `E::from_job_call(call, ctx)`.
     ///
-    /// Note this consumes the job call. Use [`JobCallExt::extract_parts_with_state`] if you're not
+    /// Note this consumes the job call. Use [`JobCallExt::extract_parts_with_context()`] if you're not
     /// extracting the body and don't want to consume the job call.
     ///
     /// # Example
@@ -47,7 +47,7 @@ pub trait JobCallExt: sealed::Sealed + Sized {
     ///     type Rejection = std::convert::Infallible;
     ///
     ///     async fn from_job_call(call: JobCall, context: &Ctx) -> Result<Self, Self::Rejection> {
-    ///         let requires_context = call.extract_with_ctx::<RequiresContext, _, _>(context).await?;
+    ///         let requires_context = call.extract_with_context::<RequiresContext, _, _>(context).await?;
     ///
     ///         Ok(Self { requires_context })
     ///     }
@@ -68,7 +68,7 @@ pub trait JobCallExt: sealed::Sealed + Sized {
     ///     # }
     /// }
     /// ```
-    fn extract_with_ctx<E, Ctx, M>(
+    fn extract_with_context<E, Ctx, M>(
         self,
         ctx: &Ctx,
     ) -> impl Future<Output = Result<E, E::Rejection>> + Send
@@ -86,7 +86,7 @@ pub trait JobCallExt: sealed::Sealed + Sized {
     /// Apply a parts extractor that requires some state to this `Request`.
     ///
     /// This is just a convenience for `E::from_job_call_parts(parts, ctx)`.
-    fn extract_parts_with_ctx<'a, E, Ctx>(
+    fn extract_parts_with_context<'a, E, Ctx>(
         &'a mut self,
         ctx: &'a Ctx,
     ) -> impl Future<Output = Result<E, E::Rejection>> + Send + 'a
@@ -101,10 +101,10 @@ impl JobCallExt for JobCall {
         E: FromJobCall<(), M> + 'static,
         M: 'static,
     {
-        self.extract_with_ctx(&())
+        self.extract_with_context(&())
     }
 
-    fn extract_with_ctx<E, Ctx, M>(
+    fn extract_with_context<E, Ctx, M>(
         self,
         ctx: &Ctx,
     ) -> impl Future<Output = Result<E, E::Rejection>> + Send
@@ -119,10 +119,10 @@ impl JobCallExt for JobCall {
     where
         E: FromJobCallParts<()> + 'static,
     {
-        self.extract_parts_with_ctx(&())
+        self.extract_parts_with_context(&())
     }
 
-    async fn extract_parts_with_ctx<'a, E, Ctx>(
+    async fn extract_parts_with_context<'a, E, Ctx>(
         &'a mut self,
         ctx: &'a Ctx,
     ) -> Result<E, E::Rejection>
