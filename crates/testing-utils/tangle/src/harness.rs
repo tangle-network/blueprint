@@ -117,7 +117,7 @@ where
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use blueprint_tangle_testing_utils::TangleTestHarness;
     /// use tempfile::TempDir;
     ///
