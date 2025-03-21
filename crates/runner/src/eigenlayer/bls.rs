@@ -1,14 +1,17 @@
 use alloy_primitives::{Address, Bytes, FixedBytes, U256, hex};
+use blueprint_std::time::{SystemTime, UNIX_EPOCH};
 use eigensdk::client_avsregistry::writer::AvsRegistryChainWriter;
 use eigensdk::client_elcontracts::{reader::ELChainReader, writer::ELChainWriter};
 use eigensdk::crypto_bls::BlsKeyPair;
 use eigensdk::logging::get_test_logger;
+use eigensdk::testing_utils::transaction::wait_transaction;
 use eigensdk::types::operator::Operator;
 
 use super::error::EigenlayerError;
 use crate::BlueprintConfig;
 use crate::config::BlueprintEnvironment;
 use crate::error::RunnerError;
+use blueprint_core::{error, info, warn};
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::backends::bn254::Bn254Backend;
 use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
@@ -45,6 +48,7 @@ impl EigenlayerBLSConfig {
 
 impl BlueprintConfig for EigenlayerBLSConfig {
     async fn register(&self, env: &BlueprintEnvironment) -> Result<(), RunnerError> {
+        info!("Eigenlayer BLS Config: Registering");
         register_bls_impl(
             env,
             self.earnings_receiver_address,
@@ -54,15 +58,176 @@ impl BlueprintConfig for EigenlayerBLSConfig {
     }
 
     async fn requires_registration(&self, env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
+        info!("Eigenlayer BLS Config: Checking if registration is required");
         requires_registration_bls_impl(env).await
     }
 
     fn should_exit_after_registration(&self) -> bool {
+        info!(
+            "Eigenlayer BLS Config: {} exit after registration",
+            if self.exit_after_register {
+                "Should"
+            } else {
+                "Should not"
+            }
+        );
         self.exit_after_register
     }
 }
 
 async fn requires_registration_bls_impl(env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
+    is_operator_registered(env).await
+}
+
+async fn register_bls_impl(
+    env: &BlueprintEnvironment,
+    earnings_receiver_address: Address,
+    delegation_approver_address: Address,
+) -> Result<(), RunnerError> {
+    info!("Eigenlayer BLS Registration: Fetching Contract Addresses");
+    let contract_addresses = env.protocol_settings.eigenlayer()?;
+    let allocation_manager_address = contract_addresses.allocation_manager_address;
+    let registry_coordinator_address = contract_addresses.registry_coordinator_address;
+    let delegation_manager_address = contract_addresses.delegation_manager_address;
+    let strategy_manager_address = contract_addresses.strategy_manager_address;
+    let rewards_coordinator_address = contract_addresses.rewards_coordinator_address;
+    let avs_directory_address = contract_addresses.avs_directory_address;
+    let permission_controller_address = contract_addresses.permission_controller_address;
+    let service_manager_address = contract_addresses.service_manager_address;
+
+    info!("Eigenlayer BLS Registration: Fetching ECDSA Keys");
+    let ecdsa_public = env.keystore().first_local::<K256Ecdsa>()?;
+    let ecdsa_secret = env
+        .keystore()
+        .expose_ecdsa_secret(&ecdsa_public)?
+        .ok_or_else(|| RunnerError::Other("No ECDSA secret found".into()))?;
+    let operator_address = ecdsa_secret
+        .alloy_address()
+        .map_err(|e| RunnerError::Eigenlayer(e.to_string()))?;
+
+    let operator_private_key = hex::encode(ecdsa_secret.0.to_bytes());
+
+    info!("Eigenlayer BLS Registration: Creating AVS Registry Writer");
+    let logger = get_test_logger();
+    let avs_registry_writer = AvsRegistryChainWriter::build_avs_registry_chain_writer(
+        logger.clone(),
+        env.http_rpc_endpoint.clone(),
+        operator_private_key.clone(),
+        registry_coordinator_address,
+        service_manager_address,
+    )
+    .await
+    .map_err(EigenlayerError::AvsRegistry)?;
+
+    info!("Eigenlayer BLS Registration: Fetching BLS BN254 Keys");
+    let bn254_public = env.keystore().iter_bls_bn254().next().unwrap();
+    let bn254_secret = env
+        .keystore()
+        .expose_bls_bn254_secret(&bn254_public)
+        .map_err(|e| EigenlayerError::Keystore(e.to_string()))?
+        .ok_or(EigenlayerError::Keystore(
+            "Missing BLS BN254 key".to_string(),
+        ))?;
+    let operator_bls_key = BlsKeyPair::new(bn254_secret.0.to_string())
+        .map_err(|e| EigenlayerError::Keystore(e.to_string()))?;
+
+    let digest_hash: FixedBytes<32> = operator_address.into_word();
+
+    let now = SystemTime::now();
+    let mut expiry: U256 = U256::from(0);
+    if let Ok(duration_since_epoch) = now.duration_since(UNIX_EPOCH) {
+        let seconds = duration_since_epoch.as_secs();
+        expiry = U256::from(seconds) + U256::from(10000);
+    } else {
+        warn!("System time seems to be before the UNIX epoch.");
+    }
+
+    let quorum_nums = Bytes::from(vec![0]);
+
+    info!("Eigenlayer BLS Registration: Creating EL Chain Reader");
+    let el_chain_reader = ELChainReader::new(
+        logger,
+        Some(allocation_manager_address),
+        delegation_manager_address,
+        rewards_coordinator_address,
+        avs_directory_address,
+        Some(permission_controller_address),
+        env.http_rpc_endpoint.clone(),
+    );
+
+    info!("Eigenlayer BLS Registration: Creating EL Chain Writer");
+    let el_writer = ELChainWriter::new(
+        strategy_manager_address,
+        rewards_coordinator_address,
+        Some(permission_controller_address),
+        Some(allocation_manager_address),
+        registry_coordinator_address,
+        el_chain_reader,
+        env.http_rpc_endpoint.clone(),
+        operator_private_key,
+    );
+
+    let staker_opt_out_window_blocks = 50400u32;
+    let operator_details = Operator {
+        address: operator_address,
+        delegation_approver_address,
+        metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
+        allocation_delay: Some(30), // TODO: Make allocation delay configurable
+        _deprecated_earnings_receiver_address: Some(earnings_receiver_address),
+        staker_opt_out_window_blocks: Some(staker_opt_out_window_blocks),
+    };
+
+    let tx_hash = el_writer
+        .register_as_operator_preslashing(operator_details)
+        .await
+        .map_err(EigenlayerError::ElContracts)?;
+    let registration_receipt = wait_transaction(&env.http_rpc_endpoint, tx_hash)
+        .await
+        .map_err(|e| {
+            EigenlayerError::Registration(format!("AVS registration error: {}", e.to_string()))
+        })?;
+    if registration_receipt.status() {
+        info!("Registered as operator {} for Eigenlayer", operator_address);
+    } else if is_operator_registered(env).await? {
+        info!(
+            "Operator {} is already registered for Eigenlayer",
+            operator_address
+        );
+    } else {
+        error!(
+            "Operator registration failed for operator {}",
+            operator_address
+        );
+        return Err(RunnerError::Other("Operator registration failed".into()));
+    }
+
+    let tx_hash = avs_registry_writer
+        .register_operator_in_quorum_with_avs_registry_coordinator(
+            operator_bls_key,
+            digest_hash,
+            expiry,
+            quorum_nums,
+            env.http_rpc_endpoint.clone(),
+        )
+        .await
+        .map_err(EigenlayerError::AvsRegistry)?;
+    let avs_registration_receipt = wait_transaction(&env.http_rpc_endpoint, tx_hash)
+        .await
+        .map_err(|e| {
+            EigenlayerError::Registration(format!("AVS registration error: {}", e.to_string()))
+        })?;
+    if avs_registration_receipt.status() {
+        info!("Registered operator {} to AVS", operator_address);
+    } else {
+        error!("AVS registration failed for operator {}", operator_address);
+        return Err(RunnerError::Other("AVS registration failed".into()));
+    }
+
+    info!("If the terminal exits, you should re-run the runner to continue execution.");
+    Ok(())
+}
+
+async fn is_operator_registered(env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
     let contract_addresses = env.protocol_settings.eigenlayer()?;
     let registry_coordinator_address = contract_addresses.registry_coordinator_address;
     let operator_state_retriever_address = contract_addresses.operator_state_retriever_address;
@@ -93,120 +258,4 @@ async fn requires_registration_bls_impl(env: &BlueprintEnvironment) -> Result<bo
         Ok(is_registered) => Ok(!is_registered),
         Err(e) => Err(EigenlayerError::AvsRegistry(e).into()),
     }
-}
-
-async fn register_bls_impl(
-    env: &BlueprintEnvironment,
-    earnings_receiver_address: Address,
-    delegation_approver_address: Address,
-) -> Result<(), RunnerError> {
-    let contract_addresses = env.protocol_settings.eigenlayer()?;
-    let allocation_manager_address = contract_addresses.allocation_manager_address;
-    let registry_coordinator_address = contract_addresses.registry_coordinator_address;
-    let operator_state_retriever_address = contract_addresses.operator_state_retriever_address;
-    let delegation_manager_address = contract_addresses.delegation_manager_address;
-    let strategy_manager_address = contract_addresses.strategy_manager_address;
-    let rewards_coordinator_address = contract_addresses.rewards_coordinator_address;
-    let avs_directory_address = contract_addresses.avs_directory_address;
-    let permission_controller_address = contract_addresses.permission_controller_address;
-
-    let ecdsa_public = env.keystore().first_local::<K256Ecdsa>()?;
-    let ecdsa_secret = env
-        .keystore()
-        .expose_ecdsa_secret(&ecdsa_public)?
-        .ok_or_else(|| RunnerError::Other("No ECDSA secret found".into()))?;
-    let operator_address = ecdsa_secret
-        .alloy_address()
-        .map_err(|e| RunnerError::Eigenlayer(e.to_string()))?;
-
-    let operator_private_key = hex::encode(ecdsa_secret.0.to_bytes());
-
-    let logger = get_test_logger();
-    let avs_registry_writer = AvsRegistryChainWriter::build_avs_registry_chain_writer(
-        logger.clone(),
-        env.http_rpc_endpoint.clone(),
-        operator_private_key.clone(),
-        registry_coordinator_address,
-        operator_state_retriever_address,
-    )
-    .await
-    .map_err(EigenlayerError::AvsRegistry)?;
-
-    let bn254_public = env.keystore().iter_bls_bn254().next().unwrap();
-    let bn254_secret = env
-        .keystore()
-        .expose_bls_bn254_secret(&bn254_public)
-        .map_err(|e| EigenlayerError::Keystore(e.to_string()))?
-        .ok_or(EigenlayerError::Keystore(
-            "Missing BLS BN254 key".to_string(),
-        ))?;
-    let operator_bls_key = BlsKeyPair::new(bn254_secret.0.to_string())
-        .map_err(|e| EigenlayerError::Keystore(e.to_string()))?;
-
-    let digest_hash: FixedBytes<32> = FixedBytes::from([0x02; 32]);
-
-    let now = std::time::SystemTime::now();
-    let sig_expiry = now.duration_since(std::time::UNIX_EPOCH).map_or_else(
-        |_| {
-            blueprint_core::info!("System time seems to be before the UNIX epoch.");
-            U256::from(0)
-        },
-        |duration| U256::from(duration.as_secs()) + U256::from(86400),
-    );
-
-    let quorum_nums = Bytes::from(vec![0]);
-
-    let el_chain_reader = ELChainReader::new(
-        logger,
-        Some(allocation_manager_address),
-        delegation_manager_address,
-        rewards_coordinator_address,
-        avs_directory_address,
-        Some(permission_controller_address),
-        env.http_rpc_endpoint.clone(),
-    );
-
-    let el_writer = ELChainWriter::new(
-        strategy_manager_address,
-        rewards_coordinator_address,
-        Some(permission_controller_address),
-        Some(allocation_manager_address),
-        registry_coordinator_address,
-        el_chain_reader,
-        env.http_rpc_endpoint.clone(),
-        operator_private_key,
-    );
-
-    let staker_opt_out_window_blocks = 50400u32;
-    let operator_details = Operator {
-        address: operator_address,
-        delegation_approver_address,
-        metadata_url: "https://github.com/tangle-network/gadget".to_string(),
-        allocation_delay: Some(30), // TODO: Make allocation delay configurable
-        _deprecated_earnings_receiver_address: Some(earnings_receiver_address),
-        staker_opt_out_window_blocks: Some(staker_opt_out_window_blocks),
-    };
-
-    let tx_hash = el_writer
-        .register_as_operator(operator_details)
-        .await
-        .map_err(EigenlayerError::ElContracts)?;
-    blueprint_core::info!("Registered as operator for Eigenlayer {:?}", tx_hash);
-
-    let tx_hash = avs_registry_writer
-        .register_operator_in_quorum_with_avs_registry_coordinator(
-            operator_bls_key,
-            digest_hash,
-            sig_expiry,
-            quorum_nums,
-            env.http_rpc_endpoint.clone(),
-        )
-        .await
-        .map_err(EigenlayerError::AvsRegistry)?;
-
-    blueprint_core::info!("Registered operator for Eigenlayer {:?}", tx_hash);
-    blueprint_core::info!(
-        "If the terminal exits, you should re-run the runner to continue execution."
-    );
-    Ok(())
 }

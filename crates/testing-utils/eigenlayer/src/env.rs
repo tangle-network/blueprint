@@ -10,11 +10,11 @@ use eigensdk::utils::slashing::middleware::registrycoordinator::IStakeRegistryTy
 use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordinator;
 
 /// The default Allocation Manager address on our testnet
-pub const ALLOCATION_MANAGER_ADDR: Address = address!("8A791620dd6260079BF849Dc5567aDC3F2FDC318");
+pub const ALLOCATION_MANAGER_ADDR: Address = address!("8a791620dd6260079bf849dc5567adc3f2fdc318");
 /// The default AVS Directory address on our testnet
-pub const AVS_DIRECTORY_ADDR: Address = address!("B7f8BC63BbcaD18155201308C8f3540b07f84F5e");
+pub const AVS_DIRECTORY_ADDR: Address = address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e");
 /// The default Delegation Manager address on our testnet
-pub const DELEGATION_MANAGER_ADDR: Address = address!("Cf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9");
+pub const DELEGATION_MANAGER_ADDR: Address = address!("cf7ed3acca5a467e9e704c703e8d87f634fb0fc9");
 /// The default ERC20 Mock address on our testnet
 pub const ERC20_MOCK_ADDR: Address = address!("eC4cFde48EAdca2bC63E94BB437BbeAcE1371bF3");
 /// The default Operator State Retriever address on our testnet
@@ -22,14 +22,17 @@ pub const OPERATOR_STATE_RETRIEVER_ADDR: Address =
     address!("1429859428c0abc9c2c47c8ee9fbaf82cfa0f20f");
 /// The default Permission Controller address on our testnet
 pub const PERMISSION_CONTROLLER_ADDR: Address =
-    address!("322813Fd9A801c5507c9de605d63CEA4f2CE6c44");
+    address!("322813fd9a801c5507c9de605d63cea4f2ce6c44");
 /// The default Registry Coordinator address on our testnet
-pub const REGISTRY_COORDINATOR_ADDR: Address = address!("4c4a2f8c81640e47606d3fd77b353e87ba015584");
-/// The default Service Manager address on our testnet
-pub const SERVICE_MANAGER_ADDR: Address = address!("67d269191c92caf3cd7723f116c85e6e9bf55933");
+pub const REGISTRY_COORDINATOR_ADDR: Address = address!("7969c5ed335650692bc04293b07f5bf2e7a673c0");
+/// The default Rewards Coordinator address on our testnet
+pub const REWARDS_COORDINATOR_ADDR: Address = address!("0dcd1bf9a1b36ce34237eeafef220932846bcd82");
+/// The default Service Manager address on our testnet (Depends on AVS)
+pub const SERVICE_MANAGER_ADDR: Address = address!("b7278a61aa25c888815afc32ad3cc52ff24fe575");
 /// The default Strategy Manager address on our testnet
-pub const STRATEGY_MANAGER_ADDR: Address = address!("a513E6E4b8f2a923D98304ec87F64353C4D5C853");
-pub const STAKE_REGISTRY_ADDR: Address = address!("922d6956c99e12dfeb3224dea977d0939758a1fe");
+pub const STRATEGY_MANAGER_ADDR: Address = address!("a513e6e4b8f2a923d98304ec87f64353c4d5c853");
+/// The default Stake Registry address on our testnet (Differs when using ECDSA Base)
+pub const STAKE_REGISTRY_ADDR: Address = address!("82e01223d51eb87e16a03e24687edf0f294da6f1");
 
 pub struct EigenlayerTestEnvironment {
     pub http_endpoint: String,
