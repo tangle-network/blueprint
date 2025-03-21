@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use crate::contexts::client::SignedTaskResponse;
-use crate::contexts::x_square::EigenSquareContext;
+use crate::contexts::combined::CombinedContext;
 use crate::contracts::SquaringTask::NewTaskCreated;
 use crate::contracts::TaskManager::TaskResponse;
 use crate::error::TaskError;
@@ -24,10 +24,10 @@ pub const XSQUARE_JOB_ID: u32 = 0;
 /// The job calculates the square of the number to be squared and sends the signed task response to the BLS Aggregator.
 #[blueprint_sdk::macros::debug_job]
 pub async fn xsquare_eigen(
-    Context(ctx): Context<EigenSquareContext>,
+    Context(ctx): Context<CombinedContext>,
     BlockEvents(events): BlockEvents,
 ) -> Result<(), TaskError> {
-    let client = ctx.client.clone();
+    let client = ctx.eigen_context.client.clone();
 
     let task_created_events = events.iter().filter_map(|log| {
         NewTaskCreated::decode_log(&log.inner, true)

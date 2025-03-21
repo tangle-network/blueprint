@@ -1,28 +1,24 @@
-use crate::IncredibleSquaringTaskManager;
 use crate::constants::{AGGREGATOR_PRIVATE_KEY, TASK_MANAGER_ADDRESS};
 use crate::contexts::aggregator::AggregatorContext;
 use crate::contexts::client::AggregatorClient;
 use crate::contexts::x_square::EigenSquareContext;
-use crate::jobs::compute_x_square::XsquareEigenEventHandler;
-use crate::jobs::initialize_task::InitializeBlsTaskEventHandler;
+use crate::contracts::{SquaringTask, TaskManager};
 use alloy_network::EthereumWallet;
 use alloy_primitives::{Address, Bytes, U256};
 use alloy_provider::Provider;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::sol;
-use blueprint_sdk::logging::{error, info, setup_log};
-use blueprint_sdk::runners::eigenlayer::bls::EigenlayerBLSConfig;
-use blueprint_sdk::testing::utils::anvil::anvil::*;
-use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
-use blueprint_sdk::testing::utils::eigenlayer::runner::EigenlayerBLSTestEnv;
-use blueprint_sdk::testing::utils::harness::TestHarness;
-use blueprint_sdk::testing::utils::runner::TestEnv;
-use blueprint_sdk::utils::evm::{get_provider_http, get_provider_ws, get_wallet_provider_http};
-use futures::StreamExt;
-use std::{
+use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
+use blueprint_sdk::std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
+use blueprint_sdk::testing::utils::eigenlayer::runner::EigenlayerBLSTestEnv;
+use blueprint_sdk::testing::utils::runner::TestEnv;
+use blueprint_sdk::testing::utils::setup_log;
+use blueprint_sdk::{error, info};
+use futures::StreamExt;
 
 sol!(
     #[allow(missing_docs, clippy::too_many_arguments)]
@@ -92,13 +88,10 @@ async fn run_eigenlayer_incredible_squaring_test(
     let aggregator_context_clone = aggregator_context.clone();
 
     // Create jobs
-    let contract = IncredibleSquaringTaskManager::IncredibleSquaringTaskManagerInstance::new(
-        task_manager_address,
-        provider,
-    );
-    let initialize_task =
-        InitializeBlsTaskEventHandler::new(contract.clone(), aggregator_context.clone());
-    let x_square_eigen = XsquareEigenEventHandler::new(contract.clone(), eigen_client_context);
+    let contract = SquaringTask::new(task_manager_address, provider);
+    // let initialize_task =
+    //     InitializeBlsTaskEventHandler::new(contract.clone(), aggregator_context.clone());
+    // let x_square_eigen = XsquareEigenEventHandler::new(contract.clone(), eigen_client_context);
 
     let mut test_env = EigenlayerBLSTestEnv::new(
         EigenlayerBLSConfig::new(Default::default(), Default::default())

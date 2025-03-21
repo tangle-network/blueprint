@@ -2775,6 +2775,7 @@ dependencies = [
  "alloy-transport",
  "blueprint-chain-setup-anvil",
  "blueprint-client-core",
+ "blueprint-core",
  "blueprint-eigenlayer-testing-utils",
  "blueprint-evm-extra",
  "blueprint-runner",

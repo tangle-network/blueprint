@@ -11,10 +11,17 @@ use blueprint_sdk::runner::config::BlueprintEnvironment;
 use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
 use blueprint_sdk::{Router, info};
 use incredible_squaring_blueprint_eigenlayer::constants::AGGREGATOR_PRIVATE_KEY;
+use incredible_squaring_blueprint_eigenlayer::constants::TASK_MANAGER_ADDRESS;
+use incredible_squaring_blueprint_eigenlayer::contexts::aggregator::AggregatorContext;
 use incredible_squaring_blueprint_eigenlayer::contexts::client::AggregatorClient;
+use incredible_squaring_blueprint_eigenlayer::contexts::combined::CombinedContext;
 use incredible_squaring_blueprint_eigenlayer::contexts::x_square::EigenSquareContext;
+use incredible_squaring_blueprint_eigenlayer::contracts::SquaringTask as IncredibleSquaringTaskManager;
 use incredible_squaring_blueprint_eigenlayer::jobs::compute_x_square::{
     XSQUARE_JOB_ID, xsquare_eigen,
+};
+use incredible_squaring_blueprint_eigenlayer::jobs::initialize_task::{
+    INITIALIZE_TASK_JOB_ID, initialize_bls_task,
 };
 
 #[tokio::main]
@@ -33,15 +40,25 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
             .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?,
         std_config: env.clone(),
     };
-    // let aggregator_context =
-    //     AggregatorContext::new(server_address, *TASK_MANAGER_ADDRESS, wallet, env.clone())
-    //         .await
-    //         .unwrap();
 
-    // let contract = IncredibleSquaringTaskManager::new(
-    //     *TASK_MANAGER_ADDRESS,
-    //     provider,
-    // );
+    // Create the aggregator context
+    let aggregator_context = AggregatorContext::new(
+        server_address,
+        *TASK_MANAGER_ADDRESS,
+        wallet.clone(),
+        env.clone(),
+    )
+    .await
+    .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?;
+
+    // Create the combined context for both tasks
+    let combined_context = CombinedContext::new(
+        eigen_client_context,
+        Some(aggregator_context.clone()),
+        env.clone(),
+    );
+
+    let _contract = IncredibleSquaringTaskManager::new(*TASK_MANAGER_ADDRESS, provider.clone());
 
     let client = Arc::new(provider);
     // Create producer for task events
@@ -53,20 +70,17 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
         },
     );
 
-    // let initialize_task =
-    //     InitializeBlsTaskEventHandler::new(contract.clone(), aggregator_context.clone());
-
-    // let x_square_eigen = XsquareEigenEventHandler::new(contract.clone(), eigen_client_context);
-
     info!("~~~ Executing the incredible squaring blueprint ~~~");
     let eigen_config = EigenlayerBLSConfig::new(Address::default(), Address::default());
     BlueprintRunner::builder(eigen_config, BlueprintEnvironment::default())
         .router(
             Router::new()
                 .route(XSQUARE_JOB_ID, xsquare_eigen)
-                .with_context(eigen_client_context),
+                .route(INITIALIZE_TASK_JOB_ID, initialize_bls_task)
+                .with_context(combined_context),
         )
         .producer(task_producer)
+        .background_service(aggregator_context)
         .with_shutdown_handler(async {
             tracing::info!("Shutting down task manager service");
         })
