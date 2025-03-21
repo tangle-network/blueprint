@@ -2931,6 +2931,10 @@ dependencies = [
 name = "blueprint-runner"
 version = "0.1.0"
 dependencies = [
+ "alloy-contract",
+ "alloy-primitives 0.8.23",
+ "alloy-signer",
+ "alloy-signer-local",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-evm-extra",
@@ -2943,6 +2947,7 @@ dependencies = [
  "crossbeam-channel",
  "document-features",
  "dynosaur",
+ "eigensdk",
  "futures",
  "futures-core",
  "futures-util",
@@ -2979,7 +2984,6 @@ dependencies = [
  "blueprint-tangle-extra",
  "blueprint-testing-utils",
  "document-features",
- "serde",
  "tangle-subxt",
  "tempfile",
  "thiserror 2.0.12",

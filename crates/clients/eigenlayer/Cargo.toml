@@ -12,7 +12,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-blueprint-runner = { workspace = true }
+blueprint-runner = { workspace = true, features = ["eigenlayer"] }
 
 blueprint-client-core = { workspace = true }
 blueprint-std = { workspace = true }

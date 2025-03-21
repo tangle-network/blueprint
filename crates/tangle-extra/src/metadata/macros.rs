@@ -240,6 +240,9 @@ fn generate_gadget_for_current_crate() -> Result<Gadget<'static>, Error> {
 /// * `manager`: The name of the smart contract that will manage the service (likely the UpperCamelCase version of your crate name)
 /// * `master_manager_revision`: The revision of the Master Blueprint Service Manager (MBSM), as a string
 /// * `supported_membership_models`: A list of the supported [`MembershipModelType`] variants
+///
+/// [`FieldType`]: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::Field
+/// [`MembershipModelType`]: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::MembershipModelType
 #[macro_export]
 macro_rules! blueprint {
     ($($tt:tt)*) => {{

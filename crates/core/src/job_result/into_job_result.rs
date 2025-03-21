@@ -15,7 +15,7 @@ use core::convert::Infallible;
 ///
 /// # Optional return value
 ///
-/// The [`into_job_result`] method returns `Option<JobResult>`, as certain values can be considered
+/// The [`into_job_result()`] method returns `Option<JobResult>`, as certain values can be considered
 /// "void", meaning that they don't produce a result. This is useful in the case of [`Job`]s that
 /// multiple parties are running, but only one party should submit the result. In this case, the
 /// other parties should return [`Void`] from their [`Job`]s.
@@ -98,6 +98,7 @@ use core::convert::Infallible;
 /// ```
 ///
 /// [`Job`]: crate::job::Job
+/// [`into_job_result()`]: IntoJobResult::into_job_result
 pub trait IntoJobResult {
     /// Create a JobResult.
     #[must_use]
