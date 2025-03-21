@@ -1,8 +1,8 @@
 #![allow(clippy::too_many_lines)]
 
 use crate::{
-    protocol::{AggregationConfig, SignatureAggregationProtocol},
-    signature_weight::EqualWeight,
+    protocol::{ProtocolConfig, SignatureAggregationProtocol},
+    signature_weight::{EqualWeight, SignatureWeight},
 };
 use blueprint_core::info;
 use gadget_crypto::aggregation::AggregatableSignature;
@@ -33,8 +33,8 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
 {
     setup_log();
     info!(
-        "Starting signature aggregation test with {} nodes",
-        num_nodes
+        "Starting signature aggregation test with {} nodes, threshold {}%, malicious nodes: {:?}",
+        num_nodes, threshold_percentage, malicious_nodes
     );
 
     // Create whitelisted nodes
@@ -60,6 +60,7 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     );
     wait_for_all_handshakes(&handle_refs, TEST_TIMEOUT).await;
     info!("All handshakes completed successfully");
+    info!("==================== STARTING PROTOCOL PHASE ====================");
 
     // Generate keys for the signature aggregation protocol
     let secrets = generate_keys_fn(num_nodes);
@@ -67,48 +68,95 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     for i in 0..num_nodes {
         let public_key = S::public_from_secret(&secrets[i]);
         public_keys.insert(ParticipantId(i as u16), public_key);
+        info!("Generated key pair for node {}", i);
     }
 
     // Test messages
     let regular_message = b"test message".to_vec();
     let malicious_message = b"different message".to_vec();
 
+    // Increase timeout for testing
+    let protocol_timeout = Duration::from_secs(15);
+    info!("Protocol timeout set to {:?}", protocol_timeout);
+
+    // Use multiple aggregators for better reliability
+    let num_aggregators = 2;
+    info!("Using {} aggregators", num_aggregators);
+
     // Run the protocol directly on each node
     let mut results = Vec::new();
+    info!("Starting protocol on {} nodes", num_nodes);
     for i in 0..num_nodes {
         let message = if malicious_nodes.contains(&i) {
+            info!("Node {} is malicious, will sign a different message", i);
             malicious_message.clone()
         } else {
+            info!("Node {} is honest, will sign the regular message", i);
             regular_message.clone()
         };
 
-        let config = AggregationConfig {
+        let config = ProtocolConfig {
             local_id: ParticipantId(i as u16),
             max_participants: num_nodes as u16,
-            num_aggregators: 1, // Use single aggregator for simplicity
-            timeout: Duration::from_secs(5),
+            num_aggregators, // Match what was used in test
+            timeout: protocol_timeout,
             protocol_id: PROTOCOL_NAME.to_string(),
         };
 
         let weight_scheme = EqualWeight::new(num_nodes, threshold_percentage);
+        info!(
+            "Node {} threshold weight: {}",
+            i,
+            weight_scheme.threshold_weight()
+        );
 
         let mut protocol = SignatureAggregationProtocol::new(config, weight_scheme);
+
+        // Check if this node is an aggregator
+        let is_aggregator = protocol.is_aggregator();
+        info!("Node {} is_aggregator: {}", i, is_aggregator);
 
         let mut secret = secrets[i].clone();
         let handle = handles[i].clone();
 
         let public_keys_clone = public_keys.clone();
+
+        // Add more detailed logging for each node's protocol run
+        info!("Node {} about to start protocol execution", i);
+
         let result = tokio::spawn(async move {
-            protocol
+            info!("Node {} starting protocol execution", i);
+            info!("Node {} preparing to sign and broadcast message", i);
+            let result = protocol
                 .run(message, &mut secret, &public_keys_clone, &handle)
-                .await
+                .await;
+
+            if result.is_ok() {
+                info!("Node {} protocol completed successfully", i);
+
+                // Get more details about the result
+                if let Ok(agg_result) = &result {
+                    info!(
+                        "Node {} aggregation successful - contributors: {}, total_weight: {}",
+                        i,
+                        agg_result.contributors.len(),
+                        agg_result.total_weight.unwrap_or(0)
+                    );
+                }
+            } else {
+                info!("Node {} protocol failed: {:?}", i, result);
+            }
+
+            result
         });
 
         results.push(result);
     }
 
     // Wait for results
+    info!("Waiting for all nodes to complete the protocol");
     let final_results = futures::future::join_all(results).await;
+    info!("All nodes completed their protocol runs");
 
     // Process results
     info!("Processing test results");
@@ -121,27 +169,30 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
             "honest"
         };
 
-        let config = AggregationConfig {
+        // Get the message that was used by this node
+        let message = if malicious_nodes.contains(&i) {
+            malicious_message.clone()
+        } else {
+            regular_message.clone()
+        };
+
+        let config = ProtocolConfig {
             local_id: ParticipantId(i as u16),
             max_participants: num_nodes as u16,
-            num_aggregators: 1, // Match what was used in test
-            timeout: Duration::from_secs(5),
+            num_aggregators, // Match what was used in test
+            timeout: protocol_timeout,
             protocol_id: PROTOCOL_NAME.to_string(),
         };
 
         let aggregator_selector =
-            crate::AggregatorSelector::new(config.max_participants, config.num_aggregators);
+            crate::aggregator_selection::AggregatorSelector::new(config.num_aggregators);
 
         // Calculate if this node was an aggregator
-        let participants: HashSet<ParticipantId> = public_keys.keys().cloned().collect();
-        let is_aggregator = {
-            let mut selector = aggregator_selector.clone();
-            selector.select_aggregators(&participants);
-            selector.is_aggregator(ParticipantId(i as u16))
-        };
+        let is_aggregator =
+            aggregator_selector.is_aggregator::<S>(ParticipantId(i as u16), &public_keys, &message);
 
         match result {
-            Ok(Ok((result, _))) => {
+            Ok(Ok(result)) => {
                 diagnostics.push(format!(
                     "Node {}: {} (aggregator={}) SUCCESS - contributors: {}, malicious: {}",
                     i,

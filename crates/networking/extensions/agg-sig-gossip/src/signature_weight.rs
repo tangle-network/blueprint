@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use gadget_networking::types::ParticipantId;
 
-use crate::ParticipantSet;
+use crate::participants::ParticipantSet;
 
 /// Trait for weighting of participants in signature aggregation
 pub trait SignatureWeight {

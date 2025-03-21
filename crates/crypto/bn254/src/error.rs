@@ -9,6 +9,8 @@ pub enum Bn254Error {
     SignatureFailed(String),
     #[error("Signature not in subgroup")]
     SignatureNotInSubgroup,
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
 }
 
 pub type Result<T> = gadget_std::result::Result<T, Bn254Error>;

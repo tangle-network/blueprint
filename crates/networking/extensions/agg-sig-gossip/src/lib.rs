@@ -1,16 +1,30 @@
-mod aggregator;
-mod messages;
+// Re-export main types
 mod protocol;
-mod signature_weight;
-mod zk_proof;
+pub use protocol::{AggregationError, ProtocolConfig, SignatureAggregationProtocol};
 
-// Re-export the main components
-pub use aggregator::{AggregatorSelector, ParticipantMap, ParticipantSet};
+// State management
+mod protocol_state;
+pub use protocol_state::{AggregationState, ProtocolRound};
+
+// Aggregator selection
+mod aggregator_selection;
+pub use aggregator_selection::AggregatorSelector;
+
+// Participant data structures
+mod participants;
+pub use participants::{ParticipantMap, ParticipantSet};
+
+// Message types
+mod messages;
 pub use messages::{AggSigMessage, AggregationResult, MaliciousEvidence};
-pub use protocol::{AggregationConfig, AggregationError, SignatureAggregationProtocol};
-pub use zk_proof::{
-    ThresholdProofGenerator, ThresholdProofVerifier, ThresholdWeightProof, ZkProofError,
-};
+
+// Signature weighting schemes
+mod signature_weight;
+pub use signature_weight::{CustomWeight, EqualWeight, SignatureWeight};
+
+// ZK proof generation (optional component)
+mod zk_proof;
+pub use zk_proof::{ThresholdProofGenerator, ThresholdWeightProof};
 
 #[cfg(test)]
-pub mod tests;
+mod tests;

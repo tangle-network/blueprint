@@ -17,8 +17,16 @@ pub enum AggSigMessage<S: AggregatableSignature> {
         /// Weight of the signer (optional for weighted protocols)
         weight: Option<u64>,
     },
+
+    /// Request a signature from a specific participant
+    SignatureRequest {
+        /// Message to sign
+        message: Vec<u8>,
+        /// The current protocol round
+        round: u8,
+    },
+
     /// ACK message to confirm receipt of signatures
-    // This helps optimize gossip by preventing redundant message sends
     AckSignatures {
         /// Message hash being acknowledged
         message_hash: Vec<u8>,
@@ -32,6 +40,20 @@ pub enum AggSigMessage<S: AggregatableSignature> {
         operator: ParticipantId,
         /// Evidence of malicious behavior
         evidence: MaliciousEvidence<S>,
+    },
+
+    /// Status update message for protocol progress
+    ProgressUpdate {
+        /// Message being signed
+        message: Vec<u8>,
+        /// Current collection round
+        round: u8,
+        /// Current signers
+        signers: HashSet<ParticipantId>,
+        /// Current aggregated weight
+        weight: u64,
+        /// Weight threshold needed
+        threshold: u64,
     },
 
     /// Protocol completion message
@@ -94,4 +116,8 @@ pub struct AggregationResult<S: AggregatableSignature> {
     pub total_weight: Option<u64>,
     /// Set of participants identified as malicious
     pub malicious_participants: HashSet<ParticipantId>,
+    /// Protocol round when the threshold was reached
+    pub completion_round: u8,
+    /// Total rounds that were needed
+    pub total_rounds: u8,
 }

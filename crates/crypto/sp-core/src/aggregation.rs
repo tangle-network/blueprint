@@ -8,12 +8,29 @@ macro_rules! impl_aggregatable_signature {
     ($key_type:ident, $tiny_engine:ty) => {
         paste::paste! {
             impl AggregatableSignature for [<Sp $key_type>] {
-                fn verify_single(
-                    message: &[u8],
-                    signature: &<Self as KeyType>::Signature,
-                    public_key: &<Self as KeyType>::Public,
-                ) -> bool {
-                    <Self>::verify(public_key, message, signature)
+                fn aggregate_public_keys(
+                    public_keys: &[<Self as KeyType>::Public],
+                ) -> <Self as KeyType>::Public {
+                    if public_keys.is_empty() {
+                        // Create an empty public key
+                        let pk = <$tiny_engine as EngineBLS>::PublicKeyGroup::zero();
+                        let empty_bytes = PublicKey::<$tiny_engine>(pk).to_bytes();
+                        return [<Sp $key_type Public>](sp_core::[<$key_type:lower>]::Public::from_slice(&empty_bytes).unwrap_or_default());
+                    }
+
+                    let mut aggregated_pk =
+                        PublicKey::<$tiny_engine>(<$tiny_engine as EngineBLS>::PublicKeyGroup::zero());
+
+                    for key in public_keys {
+                        if let Ok(public_key) = tnt_bls::PublicKey::<$tiny_engine>::from_bytes(
+                            &key.0.as_ref(),
+                        ) {
+                            aggregated_pk.0 += public_key.0;
+                        }
+                    }
+
+                    // Convert back to our public key format
+                    [<Sp $key_type Public>](sp_core::[<$key_type:lower>]::Public::from_slice(&aggregated_pk.to_bytes()).unwrap_or_default())
                 }
 
                 fn verify_aggregate(

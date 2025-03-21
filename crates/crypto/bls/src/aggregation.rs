@@ -11,14 +11,6 @@ macro_rules! impl_aggregatable_signature {
     ($key_type:ident, $tiny_engine:ty) => {
         paste::paste! {
             impl AggregatableSignature for [<W3f $key_type>] {
-                fn verify_single(
-                    message: &[u8],
-                    signature: &[<W3f $key_type Signature>],
-                    public_key: &[<W3f $key_type Public>],
-                ) -> bool {
-                    [<W3f $key_type>]::verify(public_key, message, signature)
-                }
-
                 fn verify_aggregate(
                     message: &[u8],
                     signature: &[<W3f $key_type Signature>],

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Secret, ArkBlsBn254Signature};
 use ark_ff::UniformRand;
-use gadget_crypto_core::KeyType;
+use gadget_crypto_core::{KeyType, aggregation::AggregatableSignature};
 use gadget_crypto_hashing::keccak_256;
 use gadget_std::string::ToString;
 
@@ -264,4 +264,131 @@ fn test_key_generation_edge_cases() {
         let signature = ArkBlsBn254::sign_with_secret(&mut secret_clone, msg).unwrap();
         assert!(ArkBlsBn254::verify(&public, msg, &signature));
     }
+}
+
+#[test]
+fn test_signature_aggregation_success() {
+    let message = test_message();
+
+    // Generate 3 test keys
+    let secrets: Vec<ArkBlsBn254Secret> = (0..3)
+        .map(|i| ArkBlsBn254::generate_with_seed(Some(&[i as u8; 32])).unwrap())
+        .collect();
+    let publics: Vec<ArkBlsBn254Public> = secrets
+        .iter()
+        .map(|s| ArkBlsBn254::public_from_secret(s))
+        .collect();
+
+    // Create individual signatures
+    let signatures: Vec<ArkBlsBn254Signature> = secrets
+        .iter()
+        .map(|s| {
+            let mut secret = s.clone();
+            ArkBlsBn254::sign_with_secret(&mut secret, &message).unwrap()
+        })
+        .collect();
+
+    // Aggregate signatures
+    let aggregated_sig = ArkBlsBn254::aggregate(&signatures).unwrap();
+
+    // Verify aggregate signature against all public keys
+    assert!(ArkBlsBn254::verify_aggregate(
+        &message,
+        &aggregated_sig,
+        &publics
+    ));
+}
+
+#[test]
+fn test_signature_aggregation_failure() {
+    let message = test_message();
+    let different_message = b"completely different message".to_vec();
+
+    // Generate 3 valid keys
+    let secrets = vec![
+        ArkBlsBn254::generate_with_seed(Some(&[1u8; 32])).unwrap(),
+        ArkBlsBn254::generate_with_seed(Some(&[2u8; 32])).unwrap(),
+        ArkBlsBn254::generate_with_seed(Some(&[3u8; 32])).unwrap(),
+    ];
+
+    let publics: Vec<ArkBlsBn254Public> = secrets
+        .iter()
+        .map(|s| ArkBlsBn254::public_from_secret(s))
+        .collect();
+
+    // Create two valid signatures for the original message
+    let mut signatures: Vec<ArkBlsBn254Signature> = secrets[0..2]
+        .iter()
+        .map(|s| {
+            let mut secret = s.clone();
+            ArkBlsBn254::sign_with_secret(&mut secret, &message).unwrap()
+        })
+        .collect();
+
+    // Create one signature for a different message - valid but for wrong message
+    let mut different_secret = secrets[2].clone();
+    let different_signature =
+        ArkBlsBn254::sign_with_secret(&mut different_secret, &different_message).unwrap();
+    signatures.push(different_signature);
+
+    // This aggregation should succeed since all signatures are valid
+    let aggregated_sig = ArkBlsBn254::aggregate(&signatures).unwrap();
+
+    // But verification should fail because one signature is for a different message
+    assert!(!ArkBlsBn254::verify_aggregate(
+        &message,
+        &aggregated_sig,
+        &publics
+    ));
+}
+
+#[test]
+fn test_aggregation_with_mismatched_keys() {
+    let message = test_message();
+
+    // Generate valid set
+    let valid_secrets = (0..2)
+        .map(|i| ArkBlsBn254::generate_with_seed(Some(&[i as u8; 32])).unwrap())
+        .collect::<Vec<_>>();
+    let valid_publics = valid_secrets
+        .iter()
+        .map(|s| ArkBlsBn254::public_from_secret(s))
+        .collect::<Vec<_>>();
+
+    // Generate unrelated key
+    let unrelated_secret = ArkBlsBn254::generate_with_seed(Some(&[99u8; 32])).unwrap();
+    let unrelated_public = ArkBlsBn254::public_from_secret(&unrelated_secret);
+
+    // Create signatures with one invalid public key
+    let mut mixed_publics = valid_publics.clone();
+    mixed_publics[1] = unrelated_public;
+
+    // Create valid signatures
+    let signatures = valid_secrets
+        .iter()
+        .map(|s| {
+            let mut secret = s.clone();
+            ArkBlsBn254::sign_with_secret(&mut secret, &message).unwrap()
+        })
+        .collect::<Vec<_>>();
+
+    // Aggregate signatures
+    let aggregated_sig = ArkBlsBn254::aggregate(&signatures).unwrap();
+
+    // Verification should fail with mismatched publics
+    assert!(!ArkBlsBn254::verify_aggregate(
+        &message,
+        &aggregated_sig,
+        &mixed_publics
+    ));
+}
+
+#[test]
+fn test_empty_aggregation() {
+    // Test empty signature aggregation
+    let empty_sigs: Vec<ArkBlsBn254Signature> = vec![];
+    let agg_result = ArkBlsBn254::aggregate(&empty_sigs);
+
+    // Should return error for empty aggregation
+    assert!(matches!(agg_result, Err(Bn254Error::InvalidInput(_))));
 }
