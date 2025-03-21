@@ -9,6 +9,8 @@ pub enum BlsError {
     HexError(hex::FromHexError),
     #[error("Invalid signature")]
     InvalidSignature,
+    #[error("Invalid input")]
+    InvalidInput(String),
 }
 
 impl From<hex::FromHexError> for BlsError {

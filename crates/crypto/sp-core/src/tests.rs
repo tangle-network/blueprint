@@ -1,3 +1,7 @@
+use gadget_crypto_core::{KeyType, aggregation::AggregatableSignature};
+
+use crate::error::SpCoreError;
+
 use super::*;
 
 mod ecdsa_crypto_tests {
@@ -16,8 +20,10 @@ mod sr25519_crypto_tests {
 }
 
 mod bls381_tests {
+    use crate::error::SpCoreError;
+
     use super::*;
-    use gadget_crypto_core::KeyType;
+    use gadget_crypto_core::{KeyType, aggregation::AggregatableSignature};
     use sp_core::Pair;
 
     #[test]
@@ -102,6 +108,124 @@ mod bls381_tests {
         assert_eq!(
             signature, deserialized,
             "Signature serialization roundtrip failed"
+        );
+    }
+
+    #[test]
+    fn test_bls381_aggregation_success() {
+        let message = b"Test message";
+
+        // Generate 3 test keys
+        let secrets: Vec<SpBls381Pair> = (0..3)
+            .map(|i| SpBls381::generate_with_seed(Some(&[i as u8; 32])).unwrap())
+            .collect();
+        let publics: Vec<SpBls381Public> = secrets
+            .iter()
+            .map(|s| SpBls381::public_from_secret(s))
+            .collect();
+
+        // Create individual signatures
+        let signatures: Vec<SpBls381Signature> = secrets
+            .iter()
+            .map(|s| {
+                let mut secret = s.clone();
+                SpBls381::sign_with_secret(&mut secret, message).unwrap()
+            })
+            .collect();
+
+        // Aggregate signatures
+        let aggregated_sig = SpBls381::aggregate(&signatures).unwrap();
+
+        // Verify aggregate signature against all public keys
+        assert!(
+            SpBls381::verify_aggregate(message, &aggregated_sig, &publics),
+            "Aggregate verification failed with valid signatures"
+        );
+    }
+
+    #[test]
+    fn test_bls381_aggregation_failure() {
+        let message = b"Test message";
+        let different_message = b"Different message";
+
+        // Generate 3 valid keys
+        let secrets = vec![
+            SpBls381::generate_with_seed(Some(&[1u8; 32])).unwrap(),
+            SpBls381::generate_with_seed(Some(&[2u8; 32])).unwrap(),
+            SpBls381::generate_with_seed(Some(&[3u8; 32])).unwrap(),
+        ];
+
+        let publics: Vec<SpBls381Public> = secrets
+            .iter()
+            .map(|s| SpBls381::public_from_secret(s))
+            .collect();
+
+        // Create two valid signatures and one invalid
+        let mut signatures: Vec<SpBls381Signature> = secrets[0..2]
+            .iter()
+            .map(|s| {
+                let mut secret = s.clone();
+                SpBls381::sign_with_secret(&mut secret, message).unwrap()
+            })
+            .collect();
+
+        // Add signature for different message
+        let mut different_secret = secrets[2].clone();
+        let different_signature =
+            SpBls381::sign_with_secret(&mut different_secret, different_message).unwrap();
+        signatures.push(different_signature);
+
+        let aggregated_sig = SpBls381::aggregate(&signatures).unwrap();
+        assert!(
+            !SpBls381::verify_aggregate(message, &aggregated_sig, &publics),
+            "Aggregate verification should fail with mixed messages"
+        );
+    }
+
+    #[test]
+    fn test_bls381_aggregation_mismatched_keys() {
+        let message = b"Test message";
+
+        // Generate valid set
+        let valid_secrets = (0..2)
+            .map(|i| SpBls381::generate_with_seed(Some(&[i as u8; 32])).unwrap())
+            .collect::<Vec<_>>();
+        let valid_publics = valid_secrets
+            .iter()
+            .map(|s| SpBls381::public_from_secret(s))
+            .collect::<Vec<_>>();
+
+        // Generate unrelated key
+        let unrelated_secret = SpBls381::generate_with_seed(Some(&[99u8; 32])).unwrap();
+        let unrelated_public = SpBls381::public_from_secret(&unrelated_secret);
+
+        // Create signatures with one invalid public key
+        let mut mixed_publics = valid_publics.clone();
+        mixed_publics[1] = unrelated_public;
+
+        // Create valid signatures
+        let signatures = valid_secrets
+            .iter()
+            .map(|s| {
+                let mut secret = s.clone();
+                SpBls381::sign_with_secret(&mut secret, message).unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let aggregated_sig = SpBls381::aggregate(&signatures).unwrap();
+        assert!(
+            !SpBls381::verify_aggregate(message, &aggregated_sig, &mixed_publics),
+            "Aggregate verification should fail with mismatched keys"
+        );
+    }
+
+    #[test]
+    fn test_bls381_empty_aggregation() {
+        let empty_sigs: Vec<SpBls381Signature> = vec![];
+        let agg_result = SpBls381::aggregate(&empty_sigs);
+        assert!(
+            matches!(agg_result, Err(SpCoreError::InvalidInput(_))),
+            "Empty aggregation should return InvalidInput error"
         );
     }
 }
@@ -195,4 +319,97 @@ mod bls377_tests {
             "Signature serialization roundtrip failed"
         );
     }
+}
+#[test]
+fn test_bls377_signature_aggregation() {
+    let message = b"Test aggregation message";
+    let mut secrets = (0..3)
+        .map(|i| SpBls377::generate_with_seed(Some(&[i as u8; 32])).unwrap())
+        .collect::<Vec<_>>();
+    let publics = secrets
+        .iter()
+        .map(|s| SpBls377::public_from_secret(s))
+        .collect::<Vec<_>>();
+
+    // Generate signatures
+    let signatures = secrets
+        .iter_mut()
+        .map(|s| SpBls377::sign_with_secret(s, message).unwrap())
+        .collect::<Vec<_>>();
+
+    // Aggregate and verify
+    let aggregated_sig = SpBls377::aggregate(&signatures).unwrap();
+    assert!(
+        SpBls377::verify_aggregate(message, &aggregated_sig, &publics),
+        "Valid aggregate signature should verify"
+    );
+}
+
+#[test]
+fn test_bls377_aggregation_with_invalid_signature() {
+    let message = b"Test aggregation message";
+    let mut secrets = (0..2)
+        .map(|i| SpBls377::generate_with_seed(Some(&[i as u8; 32])).unwrap())
+        .collect::<Vec<_>>();
+    let publics = secrets
+        .iter()
+        .map(|s| SpBls377::public_from_secret(s))
+        .collect::<Vec<_>>();
+
+    // Generate one valid and one invalid signature
+    let mut signatures = vec![
+        SpBls377::sign_with_secret(&mut secrets[0], message).unwrap(),
+        SpBls377::sign_with_secret(&mut secrets[1], b"Different message").unwrap(),
+    ];
+
+    // Aggregation should succeed but verification should fail
+    let aggregated_sig = SpBls377::aggregate(&signatures).unwrap();
+    assert!(
+        !SpBls377::verify_aggregate(message, &aggregated_sig, &publics),
+        "Aggregate with invalid signature should fail verification"
+    );
+}
+
+#[test]
+fn test_bls377_empty_aggregation() {
+    let empty_sigs: Vec<SpBls377Signature> = vec![];
+    let agg_result = SpBls377::aggregate(&empty_sigs);
+    assert!(
+        matches!(agg_result, Err(SpCoreError::InvalidInput(_))),
+        "Empty aggregation should return InvalidInput error"
+    );
+}
+
+#[test]
+fn test_bls377_aggregation_with_mismatched_keys() {
+    let message = b"Test message";
+
+    // Generate valid set
+    let mut valid_secrets = (0..2)
+        .map(|i| SpBls377::generate_with_seed(Some(&[i as u8; 32])).unwrap())
+        .collect::<Vec<_>>();
+    let valid_publics = valid_secrets
+        .iter()
+        .map(|s| SpBls377::public_from_secret(s))
+        .collect::<Vec<_>>();
+
+    // Generate unrelated key
+    let unrelated_secret = SpBls377::generate_with_seed(Some(&[99u8; 32])).unwrap();
+    let unrelated_public = SpBls377::public_from_secret(&unrelated_secret);
+
+    // Create signatures with one invalid public key
+    let mut mixed_publics = valid_publics.clone();
+    mixed_publics[1] = unrelated_public;
+
+    // Create valid signatures
+    let signatures = valid_secrets
+        .iter_mut()
+        .map(|s| SpBls377::sign_with_secret(&mut s.clone(), message).unwrap())
+        .collect::<Vec<_>>();
+
+    let aggregated_sig = SpBls377::aggregate(&signatures).unwrap();
+    assert!(
+        !SpBls377::verify_aggregate(message, &aggregated_sig, &mixed_publics),
+        "Aggregate verification should fail with mismatched public keys"
+    );
 }

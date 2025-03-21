@@ -12,6 +12,8 @@ pub enum SpCoreError {
     InvalidSignature,
     #[error("Invalid public key")]
     InvalidPublicKey,
+    #[error("Invalid input")]
+    InvalidInput(String),
 }
 
 #[derive(Debug, Clone)]

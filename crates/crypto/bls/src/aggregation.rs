@@ -11,6 +11,19 @@ macro_rules! impl_aggregatable_signature {
     ($key_type:ident, $tiny_engine:ty) => {
         paste::paste! {
             impl AggregatableSignature for [<W3f $key_type>] {
+                fn aggregate_public_keys(
+                    public_keys: &[[<W3f $key_type Public>]],
+                ) -> <Self as KeyType>::Public {
+                    let mut aggregated_public_key =
+                        PublicKey::<$tiny_engine>(<$tiny_engine as EngineBLS>::PublicKeyGroup::zero());
+
+                    for key in public_keys {
+                        aggregated_public_key.0 += key.0.0;
+                    }
+
+                    [<W3f $key_type Public>](aggregated_public_key)
+                }
+
                 fn verify_aggregate(
                     message: &[u8],
                     signature: &[<W3f $key_type Signature>],

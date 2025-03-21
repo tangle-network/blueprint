@@ -22,8 +22,11 @@ mod bls381_crypto_tests {
 }
 
 mod bls377_tests {
+    use crate::{bls377::W3fBls377Signature, error::BlsError};
+
     use super::*;
     use ::tnt_bls::SerializableToBytes;
+    use gadget_crypto_core::aggregation::AggregatableSignature;
     use gadget_crypto_hashing::sha2_256;
 
     #[test]
@@ -106,11 +109,132 @@ mod bls377_tests {
         let result = W3fBls377::generate_with_string("".to_string());
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_signature_aggregation_success() {
+        let message = test_message();
+
+        // Generate 3 test keys
+        let secrets: Vec<W3fBls377Secret> = (0..3)
+            .map(|i| W3fBls377::generate_with_seed(Some(&[i as u8; 32])).unwrap())
+            .collect();
+        let publics: Vec<W3fBls377Public> = secrets
+            .iter()
+            .map(|s| W3fBls377::public_from_secret(s))
+            .collect();
+
+        // Create individual signatures
+        let signatures: Vec<W3fBls377Signature> = secrets
+            .iter()
+            .map(|s| {
+                let mut secret = s.clone();
+                W3fBls377::sign_with_secret(&mut secret, &message).unwrap()
+            })
+            .collect();
+
+        // Aggregate signatures
+        let aggregated_sig = W3fBls377::aggregate(&signatures).unwrap();
+
+        // Verify aggregate signature against all public keys
+        assert!(W3fBls377::verify_aggregate(
+            &message,
+            &aggregated_sig,
+            &publics
+        ));
+    }
+
+    #[test]
+    fn test_signature_aggregation_failure() {
+        let message = test_message();
+        let different_message = b"completely different message".to_vec();
+
+        // Generate 3 valid keys
+        let secrets = vec![
+            W3fBls377::generate_with_seed(Some(&[1u8; 32])).unwrap(),
+            W3fBls377::generate_with_seed(Some(&[2u8; 32])).unwrap(),
+            W3fBls377::generate_with_seed(Some(&[3u8; 32])).unwrap(),
+        ];
+
+        let publics: Vec<W3fBls377Public> = secrets
+            .iter()
+            .map(|s| W3fBls377::public_from_secret(s))
+            .collect();
+
+        // Create two valid signatures and one invalid
+        let mut signatures: Vec<W3fBls377Signature> = secrets[0..2]
+            .iter()
+            .map(|s| {
+                let mut secret = s.clone();
+                W3fBls377::sign_with_secret(&mut secret, &message).unwrap()
+            })
+            .collect();
+
+        // Add signature for different message
+        let mut different_secret = secrets[2].clone();
+        let different_signature =
+            W3fBls377::sign_with_secret(&mut different_secret, &different_message).unwrap();
+        signatures.push(different_signature);
+
+        let aggregated_sig = W3fBls377::aggregate(&signatures).unwrap();
+        assert!(!W3fBls377::verify_aggregate(
+            &message,
+            &aggregated_sig,
+            &publics
+        ));
+    }
+
+    #[test]
+    fn test_aggregation_with_mismatched_keys() {
+        let message = test_message();
+
+        // Generate valid set
+        let valid_secrets = (0..2)
+            .map(|i| W3fBls377::generate_with_seed(Some(&[i as u8; 32])).unwrap())
+            .collect::<Vec<_>>();
+        let valid_publics = valid_secrets
+            .iter()
+            .map(|s| W3fBls377::public_from_secret(s))
+            .collect::<Vec<_>>();
+
+        // Generate unrelated key
+        let unrelated_secret = W3fBls377::generate_with_seed(Some(&[99u8; 32])).unwrap();
+        let unrelated_public = W3fBls377::public_from_secret(&unrelated_secret);
+
+        // Create signatures with one invalid public key
+        let mut mixed_publics = valid_publics.clone();
+        mixed_publics[1] = unrelated_public;
+
+        // Create valid signatures
+        let signatures = valid_secrets
+            .iter()
+            .map(|s| {
+                let mut secret = s.clone();
+                W3fBls377::sign_with_secret(&mut secret, &message).unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let aggregated_sig = W3fBls377::aggregate(&signatures).unwrap();
+        assert!(!W3fBls377::verify_aggregate(
+            &message,
+            &aggregated_sig,
+            &mixed_publics
+        ));
+    }
+
+    #[test]
+    fn test_empty_aggregation() {
+        let empty_sigs: Vec<W3fBls377Signature> = vec![];
+        let agg_result = W3fBls377::aggregate(&empty_sigs);
+        assert!(matches!(agg_result, Err(BlsError::InvalidInput(_))));
+    }
 }
 
 mod bls381_tests {
+    use crate::{bls381::W3fBls381Signature, error::BlsError};
+
     use super::*;
     use ::tnt_bls::SerializableToBytes;
+    use gadget_crypto_core::aggregation::AggregatableSignature;
     use gadget_crypto_hashing::sha2_256;
 
     #[test]
@@ -193,5 +317,123 @@ mod bls381_tests {
         // Test empty seed
         let result = W3fBls381::generate_with_string("".to_string());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_signature_aggregation_success() {
+        let message = test_message();
+
+        // Generate 3 test keys
+        let secrets: Vec<W3fBls381Secret> = (0..3)
+            .map(|i| W3fBls381::generate_with_seed(Some(&[i as u8; 32])).unwrap())
+            .collect();
+        let publics: Vec<W3fBls381Public> = secrets
+            .iter()
+            .map(|s| W3fBls381::public_from_secret(s))
+            .collect();
+
+        // Create individual signatures
+        let signatures: Vec<W3fBls381Signature> = secrets
+            .iter()
+            .map(|s| {
+                let mut secret = s.clone();
+                W3fBls381::sign_with_secret(&mut secret, &message).unwrap()
+            })
+            .collect();
+
+        // Aggregate signatures
+        let aggregated_sig = W3fBls381::aggregate(&signatures).unwrap();
+
+        // Verify aggregate signature against all public keys
+        assert!(W3fBls381::verify_aggregate(
+            &message,
+            &aggregated_sig,
+            &publics
+        ));
+    }
+
+    #[test]
+    fn test_signature_aggregation_failure() {
+        let message = test_message();
+        let different_message = b"completely different message".to_vec();
+
+        // Generate 3 valid keys
+        let secrets = vec![
+            W3fBls381::generate_with_seed(Some(&[1u8; 32])).unwrap(),
+            W3fBls381::generate_with_seed(Some(&[2u8; 32])).unwrap(),
+            W3fBls381::generate_with_seed(Some(&[3u8; 32])).unwrap(),
+        ];
+
+        let publics: Vec<W3fBls381Public> = secrets
+            .iter()
+            .map(|s| W3fBls381::public_from_secret(s))
+            .collect();
+
+        // Create two valid signatures and one invalid
+        let mut signatures: Vec<W3fBls381Signature> = secrets[0..2]
+            .iter()
+            .map(|s| {
+                let mut secret = s.clone();
+                W3fBls381::sign_with_secret(&mut secret, &message).unwrap()
+            })
+            .collect();
+
+        // Add signature for different message
+        let mut different_secret = secrets[2].clone();
+        let different_signature =
+            W3fBls381::sign_with_secret(&mut different_secret, &different_message).unwrap();
+        signatures.push(different_signature);
+
+        let aggregated_sig = W3fBls381::aggregate(&signatures).unwrap();
+        assert!(!W3fBls381::verify_aggregate(
+            &message,
+            &aggregated_sig,
+            &publics
+        ));
+    }
+
+    #[test]
+    fn test_aggregation_with_mismatched_keys() {
+        let message = test_message();
+
+        // Generate valid set
+        let valid_secrets = (0..2)
+            .map(|i| W3fBls381::generate_with_seed(Some(&[i as u8; 32])).unwrap())
+            .collect::<Vec<_>>();
+        let valid_publics = valid_secrets
+            .iter()
+            .map(|s| W3fBls381::public_from_secret(s))
+            .collect::<Vec<_>>();
+
+        // Generate unrelated key
+        let unrelated_secret = W3fBls381::generate_with_seed(Some(&[99u8; 32])).unwrap();
+        let unrelated_public = W3fBls381::public_from_secret(&unrelated_secret);
+
+        // Create signatures with one invalid public key
+        let mut mixed_publics = valid_publics.clone();
+        mixed_publics[1] = unrelated_public;
+
+        // Create valid signatures
+        let signatures = valid_secrets
+            .iter()
+            .map(|s| {
+                let mut secret = s.clone();
+                W3fBls381::sign_with_secret(&mut secret, &message).unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let aggregated_sig = W3fBls381::aggregate(&signatures).unwrap();
+        assert!(!W3fBls381::verify_aggregate(
+            &message,
+            &aggregated_sig,
+            &mixed_publics
+        ));
+    }
+
+    #[test]
+    fn test_empty_aggregation() {
+        let empty_sigs: Vec<W3fBls381Signature> = vec![];
+        let agg_result = W3fBls381::aggregate(&empty_sigs);
+        assert!(matches!(agg_result, Err(BlsError::InvalidInput(_))));
     }
 }
