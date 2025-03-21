@@ -18,14 +18,6 @@ pub enum AggSigMessage<S: AggregatableSignature> {
         weight: Option<u64>,
     },
 
-    /// Request a signature from a specific participant
-    SignatureRequest {
-        /// Message to sign
-        message: Vec<u8>,
-        /// The current protocol round
-        round: u8,
-    },
-
     /// ACK message to confirm receipt of signatures
     AckSignatures {
         /// Message hash being acknowledged
@@ -40,20 +32,6 @@ pub enum AggSigMessage<S: AggregatableSignature> {
         operator: ParticipantId,
         /// Evidence of malicious behavior
         evidence: MaliciousEvidence<S>,
-    },
-
-    /// Status update message for protocol progress
-    ProgressUpdate {
-        /// Message being signed
-        message: Vec<u8>,
-        /// Current collection round
-        round: u8,
-        /// Current signers
-        signers: HashSet<ParticipantId>,
-        /// Current aggregated weight
-        weight: u64,
-        /// Weight threshold needed
-        threshold: u64,
     },
 
     /// Protocol completion message
@@ -80,7 +58,7 @@ pub enum MaliciousEvidence<S: AggregatableSignature> {
         message: Vec<u8>,
     },
     /// Conflicting valid signatures for different messages in the same round
-    ConflictingSignatures {
+    Equivocation {
         /// First signature
         signature1: S::Signature,
         /// Second signature

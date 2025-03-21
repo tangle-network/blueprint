@@ -8,7 +8,6 @@ use gadget_networking::types::ParticipantId;
 use gadget_std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Formatter, Result as FmtResult},
-    time::Instant,
 };
 
 /// Protocol rounds for the signature aggregation protocol
@@ -19,7 +18,7 @@ pub enum ProtocolRound {
     Initialization,
 
     /// Actively collecting signatures, with round number
-    SignatureCollection(u8),
+    SignatureCollection,
 
     /// Finalizing aggregation and verifying threshold
     Completion,
@@ -29,8 +28,8 @@ impl Display for ProtocolRound {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             ProtocolRound::Initialization => write!(f, "Initialization"),
-            ProtocolRound::SignatureCollection(round) => {
-                write!(f, "Signature Collection (round {})", round)
+            ProtocolRound::SignatureCollection => {
+                write!(f, "Signature Collection")
             }
             ProtocolRound::Completion => write!(f, "Completion"),
         }
@@ -61,9 +60,6 @@ pub struct AggregationState<S: AggregatableSignature> {
     /// Set of participants we've seen signatures from (across all messages)
     pub seen_signatures: ParticipantSet,
 
-    /// Set of participants we've explicitly requested signatures from
-    pub requested_signatures: ParticipantSet,
-
     /// Set of participants we've sent ACKs to
     pub sent_acks: ParticipantSet,
 
@@ -87,7 +83,6 @@ impl<S: AggregatableSignature> AggregationState<S> {
             local_message: Vec::new(),
             malicious: ParticipantSet::new(max_participants),
             seen_signatures: ParticipantSet::new(max_participants),
-            requested_signatures: ParticipantSet::new(max_participants),
             sent_acks: ParticipantSet::new(max_participants),
             round: ProtocolRound::Initialization,
             verified_completion: None,
@@ -118,45 +113,5 @@ impl<S: AggregatableSignature> AggregationState<S> {
         }
 
         missing
-    }
-
-    /// Calculate the current total weight of collected signatures
-    pub fn calculate_current_weight<W: crate::signature_weight::SignatureWeight>(
-        &self,
-        weight_scheme: &W,
-    ) -> u64 {
-        if let Some((_, contributors)) = self.messages.get(&self.local_message) {
-            weight_scheme.calculate_weight(contributors)
-        } else {
-            0
-        }
-    }
-
-    /// Calculate the remaining potential weight that could be collected
-    pub fn calculate_remaining_potential_weight<W: crate::signature_weight::SignatureWeight>(
-        &self,
-        weight_scheme: &W,
-    ) -> u64 {
-        // Start with current weight
-        let current_weight = self.calculate_current_weight(weight_scheme);
-
-        // Add weight of all potential contributors we haven't heard from yet
-        let mut potential_weight = current_weight;
-
-        for id in 0..self.max_participants {
-            let participant_id = ParticipantId(id);
-
-            // Skip if we've already counted them or they're malicious
-            if self.seen_signatures.contains(participant_id)
-                || self.malicious.contains(participant_id)
-            {
-                continue;
-            }
-
-            // Add their potential weight
-            potential_weight += weight_scheme.weight(&participant_id);
-        }
-
-        potential_weight
     }
 }

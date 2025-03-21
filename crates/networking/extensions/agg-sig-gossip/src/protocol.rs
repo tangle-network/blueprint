@@ -331,23 +331,6 @@ where
                 contributors,
                 public_keys,
             ),
-            AggSigMessage::SignatureRequest { message, round } => {
-                self.handle_signature_request(
-                    sender_id,
-                    message,
-                    round,
-                    public_keys,
-                    network_handle,
-                )
-                .await
-            }
-            AggSigMessage::ProgressUpdate {
-                message,
-                round,
-                signers,
-                weight,
-                threshold,
-            } => self.handle_progress_update(sender_id, message, round, signers, weight, threshold),
         }
     }
 
@@ -467,96 +450,6 @@ where
         Ok(())
     }
 
-    /// Handle a signature request message
-    async fn handle_signature_request(
-        &mut self,
-        sender_id: ParticipantId,
-        message: Vec<u8>,
-        _round: u8,
-        _public_keys: &HashMap<ParticipantId, S::Public>,
-        network_handle: &NetworkServiceHandle<S>,
-    ) -> Result<(), AggregationError> {
-        // If we already sent our signature to this node, ignore the request
-        if self.state.sent_acks.contains(sender_id) {
-            return Ok(());
-        }
-
-        // If this isn't the message we're signing, ignore the request
-        if message != self.state.local_message && !self.state.local_message.is_empty() {
-            return Ok(());
-        }
-
-        // If we have a signature for this message, resend it
-        let mut resend_needed = false;
-        let mut signature_to_send = None;
-
-        if let Some(sig_map) = self.state.signatures_by_message.get(&message) {
-            if let Some(signature) = sig_map.get(self.config.local_id) {
-                resend_needed = true;
-                signature_to_send = Some(signature.clone());
-            }
-        }
-
-        if resend_needed {
-            if let Some(signature) = signature_to_send {
-                // Create a signature share message
-                let share_msg = AggSigMessage::SignatureShare {
-                    signature,
-                    message: message.clone(),
-                    weight: Some(self.weight_scheme.weight(&self.config.local_id)),
-                };
-
-                // Send directly to the requestor
-                self.send_message(share_msg, Some(sender_id), network_handle)
-                    .await?;
-                self.state.sent_acks.add(sender_id);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Handle a progress update message
-    fn handle_progress_update(
-        &mut self,
-        _sender_id: ParticipantId,
-        _message: Vec<u8>,
-        round: u8,
-        signers: HashSet<ParticipantId>,
-        _weight: u64,
-        _threshold: u64,
-    ) -> Result<(), AggregationError> {
-        // Update our knowledge of who has signed
-        for signer in &signers {
-            self.state.seen_signatures.add(*signer);
-        }
-
-        // Record that we've seen progress
-        self.state.round = ProtocolRound::SignatureCollection(round);
-
-        // Handle updating the protocol round
-        match (
-            self.state.round.clone(),
-            ProtocolRound::SignatureCollection(round),
-        ) {
-            // Only advance to later rounds
-            (ProtocolRound::Initialization, ProtocolRound::SignatureCollection(round_num))
-                if round_num > 0 =>
-            {
-                self.state.round = ProtocolRound::SignatureCollection(round_num);
-            }
-            (
-                ProtocolRound::SignatureCollection(curr_round),
-                ProtocolRound::SignatureCollection(round_num),
-            ) if round_num > curr_round => {
-                self.state.round = ProtocolRound::SignatureCollection(round_num);
-            }
-            _ => {}
-        }
-
-        Ok(())
-    }
-
     /// Mark a participant as malicious and broadcast a report
     async fn mark_participant_malicious(
         &mut self,
@@ -628,7 +521,7 @@ where
                 Ok(!S::verify(operator_key, message, signature))
             }
 
-            MaliciousEvidence::ConflictingSignatures {
+            MaliciousEvidence::Equivocation {
                 signature1,
                 signature2,
                 message1,
@@ -877,8 +770,8 @@ where
         // Set the local message first to ensure all operations reference the correct message
         self.state.local_message = message.clone();
 
-        // Initialize the signature collection phase
-        self.state.round = ProtocolRound::SignatureCollection(1);
+        // Initialize the signature collection phase - now without a round number
+        self.state.round = ProtocolRound::SignatureCollection;
 
         // Store the public keys for aggregator selection
         self.participant_public_keys = public_keys.clone();
@@ -938,7 +831,7 @@ where
                     let current_round = self.state.round.clone();
 
                     match current_round {
-                        ProtocolRound::SignatureCollection(round) => {
+                        ProtocolRound::SignatureCollection => {
                             // Check current signature count and total
                             let sig_count = if let Some(sig_map) = self.state.signatures_by_message.get(&self.state.local_message) {
                                 sig_map.len()
@@ -947,9 +840,8 @@ where
                             };
 
                             debug!(
-                                "Node {} round {}: collected {}/{} signatures",
+                                "Node {} collecting signatures: collected {}/{} signatures",
                                 self.config.local_id.0,
-                                round,
                                 sig_count,
                                 self.config.max_participants
                             );
@@ -1209,12 +1101,8 @@ where
             weight_map.insert(*id, self.weight_scheme.weight(id));
         }
 
-        // Extract the round number
-        let round_num = match round {
-            ProtocolRound::SignatureCollection(r) => r,
-            ProtocolRound::Completion => 0, // Use 0 for completion round
-            _ => 0,
-        };
+        // We no longer track round numbers - simplify this
+        let completed = matches!(round, ProtocolRound::Completion);
 
         info!(
             "Node {} built successful result with {} contributors",
@@ -1222,15 +1110,15 @@ where
             contributors_hashset.len()
         );
 
-        // Create a successful result
+        // Create a successful result, without round numbers
         Ok(Some(AggregationResult {
             signature: agg_sig,
             contributors: contributors_hashset,
             weights: Some(weight_map),
             total_weight: Some(total_weight),
             malicious_participants: self.state.malicious.to_hashset(),
-            completion_round: round_num,
-            total_rounds: round_num,
+            completion_round: 0, // We no longer track round numbers
+            total_rounds: 0,     // We no longer track round numbers
         }))
     }
 
@@ -1412,7 +1300,7 @@ where
                 {
                     if let Some(prev_sig) = sig_map.get(participant_id) {
                         // We found a different message with a valid signature from this participant
-                        return Some(MaliciousEvidence::ConflictingSignatures {
+                        return Some(MaliciousEvidence::Equivocation {
                             signature1: prev_sig.clone(),
                             signature2: new_signature.clone(),
                             message1: prev_message.clone(),
