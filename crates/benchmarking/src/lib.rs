@@ -39,6 +39,8 @@ pub struct Bencher<R> {
 /// The results of a benchmark.
 ///
 /// This implements [`Display`] to provide a human-readable summary of the benchmark.
+///
+/// [`Display`]: core::fmt::Display
 #[derive(Debug, Clone)]
 pub struct BenchmarkSummary {
     /// The name of the benchmark.

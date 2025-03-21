@@ -18,7 +18,7 @@ use url::Url;
 ///
 /// # Returns
 ///
-/// A [`TransportResult`] containing the transaction hash.
+/// A [`TransactionReceipt`] containing the transaction hash.
 pub async fn wait_transaction(
     rpc_url: &str,
     tx_hash: FixedBytes<32>,
