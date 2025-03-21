@@ -63,18 +63,37 @@ async fn run_eigenlayer_incredible_squaring_test(
     // Deploy Task Manager
     let task_manager_address = deploy_task_manager(&harness).await;
 
+    // Extract necessary data from harness before moving it
+    let ws_endpoint = harness.ws_endpoint.to_string();
+    let registry_coordinator_address = harness.eigenlayer_contract_addresses.registry_coordinator_address;
+    let accounts = harness.accounts().to_vec();
+    let task_generator_address = harness.task_generator_account();
+    
     // Spawn Task Spawner and Task Response Listener
     let successful_responses = Arc::new(Mutex::new(0));
     let successful_responses_clone = successful_responses.clone();
-    let response_listener_address =
-        setup_task_response_listener(&harness, task_manager_address, successful_responses.clone())
-            .await;
-    let task_spawner = setup_task_spawner(&harness, task_manager_address).await;
+    
+    // Create task response listener
+    let response_listener = setup_task_response_listener(
+        ws_endpoint,
+        task_manager_address,
+        successful_responses.clone(),
+    );
+    
+    // Create task spawner
+    let task_spawner = setup_task_spawner(
+        http_endpoint.clone(),
+        registry_coordinator_address,
+        task_generator_address,
+        accounts,
+        task_manager_address,
+    );
+    
     tokio::spawn(async move {
-        task_spawner.await;
+        let _ = task_spawner.await;
     });
     tokio::spawn(async move {
-        response_listener_address.await;
+        let _ = response_listener.await;
     });
 
     info!("Starting Blueprint Execution...");
@@ -120,7 +139,7 @@ async fn run_eigenlayer_incredible_squaring_test(
         .with_exit_after_register(exit_after_registration);
 
     // Create and run the blueprint runner
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let (shutdown_tx, _shutdown_rx) = oneshot::channel();
     let runner_handle = tokio::spawn(async move {
         let result = BlueprintRunner::builder(eigen_config, env.clone())
             .router(
@@ -172,7 +191,10 @@ async fn run_eigenlayer_incredible_squaring_test(
     }
 }
 
-pub async fn deploy_task_manager<Ctx>(harness: &EigenlayerTestHarness<Ctx>) -> Address {
+pub async fn deploy_task_manager<Ctx>(harness: &EigenlayerTestHarness<Ctx>) -> Address 
+where
+    Ctx: Clone + Send + Sync + 'static,
+{
     let env = harness.env().clone();
     let http_endpoint = &env.http_rpc_endpoint;
     let registry_coordinator_address = harness
@@ -217,18 +239,14 @@ pub async fn deploy_task_manager<Ctx>(harness: &EigenlayerTestHarness<Ctx>) -> A
     task_manager_address
 }
 
-pub async fn setup_task_spawner<Ctx>(
-    harness: &EigenlayerTestHarness<Ctx>,
+pub async fn setup_task_spawner(
+    http_endpoint: String,
+    registry_coordinator_address: Address,
+    task_generator_address: Address,
+    accounts: Vec<Address>,
     task_manager_address: Address,
 ) -> impl std::future::Future<Output = ()> {
-    let registry_coordinator_address = harness
-        .eigenlayer_contract_addresses
-        .registry_coordinator_address;
-    let task_generator_address = harness.task_generator_account();
-    let accounts = harness.accounts().to_vec();
-    let http_endpoint = harness.http_endpoint.to_string();
-
-    let provider = get_provider_http(http_endpoint.as_str());
+    let provider = get_provider_http(&http_endpoint);
     let task_manager = SquaringTask::new(task_manager_address, provider.clone());
     let registry_coordinator =
         RegistryCoordinator::new(registry_coordinator_address, provider.clone());
@@ -280,16 +298,14 @@ pub async fn setup_task_spawner<Ctx>(
     }
 }
 
-pub async fn setup_task_response_listener<Ctx>(
-    harness: &EigenlayerTestHarness<Ctx>,
+pub async fn setup_task_response_listener(
+    ws_endpoint: String,
     task_manager_address: Address,
     successful_responses: Arc<Mutex<usize>>,
 ) -> impl std::future::Future<Output = ()> {
-    let ws_endpoint = harness.ws_endpoint.to_string();
-
     let task_manager = SquaringTask::new(
         task_manager_address,
-        get_provider_ws(ws_endpoint.as_str()).await,
+        get_provider_ws(&ws_endpoint).await,
     );
 
     async move {
