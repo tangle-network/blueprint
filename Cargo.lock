@@ -2652,6 +2652,9 @@ dependencies = [
  "alloy-rpc-types-eth",
  "alloy-transport",
  "blueprint-core",
+ "blueprint-core-testing-utils",
+ "blueprint-std",
+ "tokio",
  "url",
 ]
 

@@ -17,4 +17,6 @@ pub enum TestRunnerError {
     Parse(#[from] url::ParseError),
     #[error(transparent)]
     Runner(#[from] RunnerError),
+    #[error("Failed to wait for response: {0}")]
+    WaitResponse(String),
 }
