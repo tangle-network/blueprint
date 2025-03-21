@@ -81,16 +81,16 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
 impl Default for EigenlayerProtocolSettings {
     fn default() -> Self {
         Self {
-            allocation_manager_address: address!("67d269191c92caf3cd7723f116c85e6e9bf55933"),
-            registry_coordinator_address: address!("4c4a2f8c81640e47606d3fd77b353e87ba015584"),
+            allocation_manager_address: address!("8a791620dd6260079bf849dc5567adc3f2fdc318"),
+            registry_coordinator_address: address!("7969c5ed335650692bc04293b07f5bf2e7a673c0"),
             operator_state_retriever_address: address!("1429859428c0abc9c2c47c8ee9fbaf82cfa0f20f"),
-            delegation_manager_address: address!("a85233c63b9ee964add6f2cffe00fd84eb32338f"),
-            service_manager_address: address!("0000000000000000000000000000000000000000"), // Depends on AVS
-            stake_registry_address: address!("922d6956c99e12dfeb3224dea977d0939758a1fe"), // Differs when using ECDSA Base
-            strategy_manager_address: address!("09635f643e140090a9a8dcd712ed6285858cebef"),
-            avs_directory_address: address!("7a2088a1bfc9d81c55368ae168c2c02570cb814f"),
-            rewards_coordinator_address: address!("c3e53f4d16ae77db1c982e75a937b9f60fe63690"),
-            permission_controller_address: address!("0x4a679253410272dd5232b3ff7cf5dbb88f295319"),
+            delegation_manager_address: address!("cf7ed3acca5a467e9e704c703e8d87f634fb0fc9"),
+            service_manager_address: address!("b7278a61aa25c888815afc32ad3cc52ff24fe575"), // Depends on AVS
+            stake_registry_address: address!("82e01223d51eb87e16a03e24687edf0f294da6f1"), // Differs when using ECDSA Base
+            strategy_manager_address: address!("a513e6e4b8f2a923d98304ec87f64353c4d5c853"),
+            avs_directory_address: address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e"),
+            rewards_coordinator_address: address!("0dcd1bf9a1b36ce34237eeafef220932846bcd82"),
+            permission_controller_address: address!("322813fd9a801c5507c9de605d63cea4f2ce6c44"),
         }
     }
 }
