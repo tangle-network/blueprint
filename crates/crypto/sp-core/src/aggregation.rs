@@ -1,8 +1,8 @@
 use crate::{bls::*, error::SpCoreError};
-use gadget_crypto_core::{BytesEncoding, KeyType, aggregation::AggregatableSignature};
+use gadget_crypto_core::aggregation::AggregatableSignature;
 use gadget_std::Zero;
-use sp_core::ByteArray;
 use tnt_bls::{EngineBLS, Message, SerializableToBytes, TinyBLS377, TinyBLS381};
+
 macro_rules! impl_aggregatable_sp_bls {
     ($variant:ident) => {
         paste::paste! {
