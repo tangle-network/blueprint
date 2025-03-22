@@ -1,9 +1,12 @@
+use core::fmt::Debug;
+use serde::{Serialize, de::DeserializeOwned};
+
 use crate::KeyType;
 
 /// Trait defining the requirements for an aggregatable signature scheme
 pub trait AggregatableSignature: KeyType {
-    type AggregatedSignature;
-    type AggregatedPublic;
+    type AggregatedSignature: Clone + Debug + Serialize + DeserializeOwned + Send + Sync;
+    type AggregatedPublic: Clone + Debug + Serialize + DeserializeOwned + Send + Sync;
 
     /// Aggregates signatures and public keys
     fn aggregate(

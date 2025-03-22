@@ -3,12 +3,9 @@ use crate::{
     bls381::{W3fBls381, W3fBls381Public, W3fBls381Signature},
     error::BlsError,
 };
-use gadget_crypto_core::{BytesEncoding, KeyType, aggregation::AggregatableSignature};
+use gadget_crypto_core::{KeyType, aggregation::AggregatableSignature};
 use gadget_std::Zero;
-use tnt_bls::{
-    EngineBLS, Message, PublicKey, SerializableToBytes, Signature, Signed, TinyBLS377, TinyBLS381,
-    single_pop_aggregator::SignatureAggregatorAssumingPoP,
-};
+use tnt_bls::{PublicKey, Signature, TinyBLS377, TinyBLS381};
 
 macro_rules! impl_aggregatable_bls {
     ($variant:ident) => {
@@ -18,7 +15,6 @@ macro_rules! impl_aggregatable_bls {
                 type AggregatedPublic = [<W3f $variant Public>];
 
                 fn aggregate(
-                    message: &[u8],
                     signatures: &[Self::AggregatedSignature],
                     public_keys: &[Self::AggregatedPublic],
                 ) -> Result<(Self::AggregatedSignature, Self::AggregatedPublic), BlsError> {

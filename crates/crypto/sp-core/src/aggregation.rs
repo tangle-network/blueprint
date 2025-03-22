@@ -1,14 +1,18 @@
 use crate::{bls::*, error::SpCoreError};
+use gadget_crypto_bls::bls377::{W3fBls377Public, W3fBls377Signature};
+use gadget_crypto_bls::bls381::{W3fBls381Public, W3fBls381Signature};
 use gadget_crypto_core::aggregation::AggregatableSignature;
 use gadget_std::Zero;
-use tnt_bls::{EngineBLS, Message, SerializableToBytes, TinyBLS377, TinyBLS381};
+use tnt_bls::{
+    EngineBLS, Message, PublicKey, SerializableToBytes, Signature, TinyBLS377, TinyBLS381,
+};
 
 macro_rules! impl_aggregatable_sp_bls {
     ($variant:ident) => {
         paste::paste! {
             impl AggregatableSignature for [<Sp $variant>] {
-                type AggregatedSignature = tnt_bls::Signature<[<Tiny $variant:upper>]>;
-                type AggregatedPublic = tnt_bls::PublicKey<[<Tiny $variant:upper>]>;
+                type AggregatedSignature = [<W3f $variant Signature>];
+                type AggregatedPublic = [<W3f $variant Public>];
 
                 fn aggregate(
                     signatures: &[[<Sp $variant Signature>]],
@@ -42,20 +46,20 @@ macro_rules! impl_aggregatable_sp_bls {
                     }
 
                     Ok((
-                        tnt_bls::Signature::<[<Tiny $variant:upper>]>(aggregated_signature),
-                        tnt_bls::PublicKey::<[<Tiny $variant:upper>]>(aggregated_public_key_g2),
+                        [<W3f $variant Signature>](Signature::<[<Tiny $variant:upper>]>(aggregated_signature)),
+                        [<W3f $variant Public>](PublicKey::<[<Tiny $variant:upper>]>(aggregated_public_key_g2)),
                     ))
                 }
 
                 fn verify_aggregate(
                     message: &[u8],
-                    signature: &tnt_bls::Signature<[<Tiny $variant:upper>]>,
-                    public_key: &tnt_bls::PublicKey<[<Tiny $variant:upper>]>,
+                    signature: &[<W3f $variant Signature>],
+                    public_key: &[<W3f $variant Public>],
                 ) -> Result<bool, SpCoreError> {
-                    Ok(tnt_bls::Signature::<[<Tiny $variant:upper>]>::verify(
-                        signature,
+                    Ok(Signature::<[<Tiny $variant:upper>]>::verify(
+                        &signature.0,
                         &Message::new(b"", message),
-                        public_key,
+                        &public_key.0,
                     ))
                 }
             }

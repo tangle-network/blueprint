@@ -7671,6 +7671,7 @@ dependencies = [
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
+ "gadget-crypto-bls",
  "gadget-crypto-core",
  "gadget-crypto-sp-core",
  "gadget-std",

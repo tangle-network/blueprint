@@ -21,6 +21,7 @@ thiserror = { workspace = true }
 ark-ec = { workspace = true, optional = true }
 ark-ff = { workspace = true, optional = true }
 ark-serialize = { workspace = true, optional = true }
+gadget-crypto-bls = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 tnt-bls = { workspace = true, optional = true }
 
@@ -31,6 +32,7 @@ serde_json = { workspace = true, features = ["alloc"] }
 [features]
 default = ["std", "aggregation"]
 std = [
+	"gadget-crypto-bls?/std",
 	"gadget-crypto-core/std",
 	"gadget-std/std",
 	"ark-ec?/std",
@@ -42,4 +44,4 @@ std = [
 	"tnt-bls?/std",
 ]
 bls = ["sp-core/bls-experimental"]
-aggregation = ["bls", "dep:ark-ec", "dep:ark-ff", "dep:ark-serialize", "dep:tnt-bls", "dep:sha2"]
+aggregation = ["gadget-crypto-bls", "bls", "dep:ark-ec", "dep:ark-ff", "dep:ark-serialize", "dep:tnt-bls", "dep:sha2"]

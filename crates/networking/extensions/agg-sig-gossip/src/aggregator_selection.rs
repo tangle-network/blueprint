@@ -1,4 +1,5 @@
-use gadget_crypto::{BytesEncoding, KeyType, aggregation::AggregatableSignature};
+use blueprint_core::{debug, error, warn};
+use gadget_crypto::{BytesEncoding, aggregation::AggregatableSignature};
 use gadget_networking::types::ParticipantId;
 use gadget_std::{
     collections::HashMap,
@@ -6,6 +7,11 @@ use gadget_std::{
     hash::{Hash, Hasher},
 };
 use std::collections::hash_map::DefaultHasher;
+
+use crate::{
+    AggregationError, AggregationResult, ParticipantSet, ProtocolRound,
+    SignatureAggregationProtocol, SignatureWeight,
+};
 
 /// Simplified mechanism for selecting aggregators in a deterministic way based on public keys.
 /// This approach ensures the selection is cryptographically tamper-resistant.
@@ -79,5 +85,157 @@ impl AggregatorSelector {
     /// Get the target number of aggregators
     pub fn target_aggregator_count(&self) -> u16 {
         self.target_aggregators
+    }
+}
+
+impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<S, W> {
+    /// Check for a given message if we have enough signatures to meet the threshold
+    pub fn check_threshold(
+        &mut self,
+        message: &[u8],
+    ) -> Result<Option<(ParticipantSet, u64)>, AggregationError> {
+        match self.state.signatures_by_message.get(message) {
+            Some(contributors) => {
+                // Filter out malicious contributors
+                let mut honest_contributors = ParticipantSet::new(self.state.max_participants);
+                for id in contributors.iter() {
+                    if !self.state.malicious.contains(&id) {
+                        honest_contributors.add(id.clone());
+                    }
+                }
+                let total_weight = self.weight_scheme.calculate_weight(&honest_contributors);
+                let threshold_weight = self.weight_scheme.threshold_weight();
+                // Check if we've met the threshold
+                if total_weight < threshold_weight {
+                    if matches!(self.state.round, ProtocolRound::Completion) {
+                        return Err(AggregationError::ThresholdNotMet(
+                            total_weight as usize,
+                            threshold_weight as usize,
+                        ));
+                    }
+                    return Ok(None);
+                }
+                Ok(Some((contributors.clone(), total_weight)))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Collect signatures and public keys for verification
+    fn collect_signatures_and_public_keys(
+        &self,
+        contributors: &ParticipantSet,
+    ) -> Result<(Vec<S::Signature>, Vec<S::Public>), AggregationError> {
+        // Collect signatures and public keys for verification
+        let mut signatures = Vec::new();
+        let mut public_keys = Vec::new();
+        for id in contributors.iter() {
+            let is_malicious = self.state.malicious.contains(&id);
+
+            if is_malicious {
+                continue;
+            }
+
+            if let Some((sig, _)) = self.state.seen_signatures.get(&id) {
+                signatures.push(sig.clone());
+            }
+
+            if let Some(pk) = self.participant_public_keys.get(&id) {
+                public_keys.push(pk.clone());
+            }
+        }
+
+        if signatures.is_empty() {
+            debug!("Missing data for verification");
+            return Err(AggregationError::MissingData);
+        }
+
+        Ok((signatures, public_keys))
+    }
+
+    pub fn aggregate_and_verify(
+        &mut self,
+        message: &[u8],
+        contributors: &ParticipantSet,
+    ) -> Result<Option<AggregationResult<S>>, AggregationError> {
+        let (signatures, public_keys) = self.collect_signatures_and_public_keys(contributors)?;
+
+        // Verify with the new API (re-aggregate to get proper types)
+        match S::aggregate(&signatures, &public_keys) {
+            Ok((aggregated_sig, aggregated_pub)) => {
+                // Verify the aggregated signature
+                if !S::verify_aggregate(message, &aggregated_sig, &aggregated_pub).unwrap_or(false)
+                {
+                    warn!("Aggregated signature verification failed");
+                    return Ok(None);
+                }
+
+                let total_weight = self.weight_scheme.calculate_weight(contributors);
+
+                Ok(Some(AggregationResult {
+                    message: message.to_vec(),
+                    signature: aggregated_sig,
+                    contributors: contributors.clone(),
+                    total_weight: Some(total_weight),
+                    malicious_participants: self.state.malicious.clone(),
+                }))
+            }
+            Err(e) => {
+                error!("Aggregation error during verification: {:?}", e);
+                Err(AggregationError::AggregationError(format!(
+                    "Failed to aggregate: {:?}",
+                    e
+                )))
+            }
+        }
+    }
+
+    /// Build a result for the current protocol round, if possible
+    pub fn build_result(
+        &mut self,
+        message: &[u8],
+        round: ProtocolRound,
+    ) -> Result<Option<AggregationResult<S>>, AggregationError> {
+        debug!("Building result for round {:?}", round);
+
+        let threshold_met = self.check_threshold(message)?;
+        debug!(
+            "Verifying threshold: message={:?}, sufficient={:?}",
+            message, threshold_met
+        );
+
+        let Some((contributors, _)) = threshold_met else {
+            return Ok(None);
+        };
+
+        // Verify with the new API (re-aggregate to get proper types)
+        let result = self.aggregate_and_verify(message, &contributors)?;
+        Ok(result)
+    }
+
+    /// Verify a result received from another node
+    pub fn verify_result(&mut self, result: &AggregationResult<S>) -> Result<(), AggregationError> {
+        // Get the signatures and public keys
+        let (signatures, public_keys) =
+            self.collect_signatures_and_public_keys(&result.contributors)?;
+
+        // Verify the result
+        self.aggregate_and_verify(&result.message, &result.contributors)?;
+
+        // Check the threshold
+        let threshold_met = self.check_threshold(&result.message)?;
+        match threshold_met {
+            Some((_, total_weight)) => {
+                if total_weight < self.weight_scheme.threshold_weight() {
+                    return Err(AggregationError::ThresholdNotMet(
+                        total_weight as usize,
+                        self.weight_scheme.threshold_weight() as usize,
+                    ));
+                }
+            }
+            None => return Err(AggregationError::ThresholdNotMet(0, 0)),
+        }
+
+        Ok(())
     }
 }

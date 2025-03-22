@@ -1,9 +1,10 @@
 use bitvec::prelude::*;
 use gadget_networking::types::ParticipantId;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 /// Efficient representation of participants using bitvec
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ParticipantSet {
     /// Bit vector representation for quick membership checks
     bitvec: BitVec,
@@ -43,7 +44,7 @@ impl ParticipantSet {
     }
 
     /// Check if a participant is in the set
-    pub fn contains(&self, id: ParticipantId) -> bool {
+    pub fn contains(&self, id: &ParticipantId) -> bool {
         if id.0 > self.max_id {
             return false;
         }
@@ -102,120 +103,5 @@ impl ParticipantSet {
     /// Iterate over participants in the set
     pub fn iter(&self) -> impl Iterator<Item = ParticipantId> + '_ {
         self.bitvec.iter_ones().map(|idx| ParticipantId(idx as u16))
-    }
-}
-
-/// A mapping from participants to data, optimized using bitvec
-#[derive(Clone, Debug)]
-pub struct ParticipantMap<T> {
-    /// Bit vector to track which participants have data
-    presence: BitVec,
-    /// Storage for participant data
-    data: Vec<Option<T>>,
-    /// Maximum participant ID
-    max_id: u16,
-}
-
-impl<T: Clone> ParticipantMap<T> {
-    /// Create a new participant map
-    pub fn new(max_id: u16) -> Self {
-        Self {
-            presence: bitvec![0; max_id as usize + 1],
-            data: vec![None; max_id as usize + 1],
-            max_id,
-        }
-    }
-
-    /// Insert data for a participant
-    pub fn insert(&mut self, id: ParticipantId, value: T) -> Option<T> {
-        if id.0 > self.max_id {
-            return None;
-        }
-
-        let idx = id.0 as usize;
-        let old_value = self.data[idx].take();
-        self.data[idx] = Some(value);
-        self.presence.set(idx, true);
-        old_value
-    }
-
-    /// Remove data for a participant
-    pub fn remove(&mut self, id: ParticipantId) -> Option<T> {
-        if id.0 > self.max_id {
-            return None;
-        }
-
-        let idx = id.0 as usize;
-        let old_value = self.data[idx].take();
-        self.presence.set(idx, false);
-        old_value
-    }
-
-    /// Get data for a participant
-    pub fn get(&self, id: ParticipantId) -> Option<&T> {
-        if id.0 > self.max_id {
-            return None;
-        }
-
-        let idx = id.0 as usize;
-        if self.presence[idx] {
-            self.data[idx].as_ref()
-        } else {
-            None
-        }
-    }
-
-    /// Get mutable data for a participant
-    pub fn get_mut(&mut self, id: ParticipantId) -> Option<&mut T> {
-        if id.0 > self.max_id {
-            return None;
-        }
-
-        let idx = id.0 as usize;
-        if self.presence[idx] {
-            self.data[idx].as_mut()
-        } else {
-            None
-        }
-    }
-
-    /// Check if the map contains data for a participant
-    pub fn contains_key(&self, id: ParticipantId) -> bool {
-        if id.0 > self.max_id {
-            return false;
-        }
-
-        self.presence[id.0 as usize]
-    }
-
-    /// Convert to a HashMap
-    pub fn to_hashmap(&self) -> HashMap<ParticipantId, T> {
-        let mut result = HashMap::with_capacity(self.presence.count_ones());
-        for i in 0..=self.max_id as usize {
-            if self.presence[i] {
-                if let Some(value) = &self.data[i] {
-                    result.insert(ParticipantId(i as u16), value.clone());
-                }
-            }
-        }
-        result
-    }
-
-    /// Get the set of participants with data
-    pub fn keys(&self) -> ParticipantSet {
-        ParticipantSet {
-            bitvec: self.presence.clone(),
-            max_id: self.max_id,
-        }
-    }
-
-    /// Get the number of participants with data
-    pub fn len(&self) -> usize {
-        self.presence.count_ones()
-    }
-
-    /// Check if the map is empty
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 }

@@ -12,19 +12,19 @@ pub use aggregator_selection::AggregatorSelector;
 
 // Participant data structures
 mod participants;
-pub use participants::{ParticipantMap, ParticipantSet};
+pub use participants::ParticipantSet;
+
+// Malicious detection
+mod malicious;
+pub use malicious::MaliciousEvidence;
 
 // Message types
 mod messages;
-pub use messages::{AggSigMessage, AggregationResult, MaliciousEvidence};
+pub use messages::{AggSigMessage, AggregationResult};
 
 // Signature weighting schemes
 mod signature_weight;
 pub use signature_weight::{CustomWeight, EqualWeight, SignatureWeight};
-
-// ZK proof generation (optional component)
-mod zk_proof;
-pub use zk_proof::{ThresholdProofGenerator, ThresholdWeightProof};
 
 #[cfg(test)]
 mod tests;

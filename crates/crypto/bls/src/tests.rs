@@ -134,7 +134,7 @@ mod bls377_tests {
 
         // Aggregate signatures
         let (aggregated_sig, aggregated_public) =
-            W3fBls377::aggregate(&message, &signatures, &publics).unwrap();
+            W3fBls377::aggregate(&signatures, &publics).unwrap();
 
         // Verify aggregate signature against all public keys
         assert!(
@@ -176,7 +176,7 @@ mod bls377_tests {
 
         // Properly aggregate the mismatched signatures with their publics
         let (aggregated_sig, aggregated_public) =
-            W3fBls377::aggregate(&message, &valid_signatures, &publics).unwrap();
+            W3fBls377::aggregate(&valid_signatures, &publics).unwrap();
 
         // Verification should fail because aggregation included invalid signature
         assert!(
@@ -216,7 +216,7 @@ mod bls377_tests {
 
         // Aggregate with mismatched public keys
         let (aggregated_sig, aggregated_public) =
-            W3fBls377::aggregate(&message, &signatures, &mixed_publics).unwrap();
+            W3fBls377::aggregate(&signatures, &mixed_publics).unwrap();
 
         // Verification should fail because public keys don't match signatures
         assert!(
@@ -228,7 +228,7 @@ mod bls377_tests {
     fn test_empty_aggregation() {
         let empty_sigs: Vec<W3fBls377Signature> = vec![];
         let empty_publics: Vec<W3fBls377Public> = vec![];
-        let agg_result = W3fBls377::aggregate(b"", &empty_sigs, &empty_publics);
+        let agg_result = W3fBls377::aggregate(&empty_sigs, &empty_publics);
         assert!(matches!(agg_result, Err(BlsError::InvalidInput(_))));
     }
 }
@@ -347,7 +347,7 @@ mod bls381_tests {
 
         // Aggregate signatures
         let (aggregated_sig, aggregated_public) =
-            W3fBls381::aggregate(&message, &signatures, &publics).unwrap();
+            W3fBls381::aggregate(&signatures, &publics).unwrap();
 
         // Verify aggregate signature against all public keys
         assert!(
@@ -389,7 +389,7 @@ mod bls381_tests {
 
         // Properly aggregate the mismatched signatures with their publics
         let (aggregated_sig, aggregated_public) =
-            W3fBls381::aggregate(&message, &signatures, &publics).unwrap();
+            W3fBls381::aggregate(&signatures, &publics).unwrap();
 
         // Verification should fail because aggregation included invalid signature
         assert!(
@@ -429,7 +429,7 @@ mod bls381_tests {
 
         // Aggregate with mismatched public keys
         let (aggregated_sig, aggregated_public) =
-            W3fBls381::aggregate(&message, &signatures, &mixed_publics).unwrap();
+            W3fBls381::aggregate(&signatures, &mixed_publics).unwrap();
 
         // Verification should fail because public keys don't match signatures
         assert!(
@@ -441,7 +441,7 @@ mod bls381_tests {
     fn test_empty_aggregation() {
         let empty_sigs: Vec<W3fBls381Signature> = vec![];
         let empty_publics: Vec<W3fBls381Public> = vec![];
-        let agg_result = W3fBls381::aggregate(b"", &empty_sigs, &empty_publics);
+        let agg_result = W3fBls381::aggregate(&empty_sigs, &empty_publics);
         assert!(matches!(agg_result, Err(BlsError::InvalidInput(_))));
     }
 }
