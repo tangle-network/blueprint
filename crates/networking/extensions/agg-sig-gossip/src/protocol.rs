@@ -416,26 +416,51 @@ where
             return Ok(());
         }
 
-        // Verify aggregate signature
+        // Collect signatures and public keys for verification
+        let mut signatures = Vec::new();
         let mut public_key_vec = Vec::new();
-        let mut missing_keys = false;
+        let mut missing_data = false;
 
         for &id in &contributors {
-            if let Some(key) = public_keys.get(&id) {
-                public_key_vec.push(key.clone());
+            // Get the participant's signature
+            if let Some(sig_map) = self.state.signatures_by_message.get(&message) {
+                if let Some(sig) = sig_map.get(id) {
+                    if let Some(key) = public_keys.get(&id) {
+                        signatures.push(sig.clone());
+                        public_key_vec.push(key.clone());
+                    } else {
+                        missing_data = true;
+                        break;
+                    }
+                } else {
+                    missing_data = true;
+                    break;
+                }
             } else {
-                missing_keys = true;
+                missing_data = true;
                 break;
             }
         }
 
-        if missing_keys {
-            warn!("Missing public keys for verification from {}", sender_id.0);
+        if missing_data {
+            warn!(
+                "Missing signatures or public keys for verification from {}",
+                sender_id.0
+            );
             return Ok(());
         }
 
-        // Verify the aggregate signature
-        if !S::verify_aggregate(&message, &aggregate_signature, &public_key_vec) {
+        // Aggregate and verify the signatures
+        let (agg_sig, agg_pub) = match S::aggregate(&message, &signatures, &public_key_vec) {
+            Ok(result) => result,
+            Err(e) => {
+                warn!("Aggregation error in completion message: {:?}", e);
+                return Ok(());
+            }
+        };
+
+        // Verify the aggregate signature with the new API
+        if !S::verify_aggregate(&message, &agg_sig, &agg_pub).unwrap_or(false) {
             warn!(
                 "Invalid aggregate signature in completion message from {}",
                 sender_id.0
@@ -518,7 +543,9 @@ where
                     AggregationError::Protocol(format!("Missing public key for {}", operator.0))
                 })?;
 
-                Ok(!S::verify(operator_key, message, signature))
+                // Verify the signature is invalid - handle the Result properly
+                let is_valid = S::verify(operator_key, message, signature);
+                Ok(!is_valid)
             }
 
             MaliciousEvidence::Equivocation {
@@ -537,148 +564,85 @@ where
                 }
 
                 // Both signatures must be valid for their respective messages
-                Ok(S::verify(operator_key, message1, signature1)
-                    && S::verify(operator_key, message2, signature2))
+                let is_valid1 = S::verify(operator_key, message1, signature1);
+                let is_valid2 = S::verify(operator_key, message2, signature2);
+
+                Ok(is_valid1 && is_valid2)
             }
         }
     }
 
     /// Update the local aggregate for a message
     fn update_aggregate_for_message(&mut self, message: &[u8]) -> Result<(), AggregationError> {
-        debug!(
-            "Node {} updating aggregate for message (len: {})",
-            self.config.local_id.0,
-            message.len()
-        );
-
-        // Debug: Print first few bytes of the message to help diagnose comparison issues
-        if message.len() > 4 {
-            debug!(
-                "Node {} message starts with: {:02x?}",
-                self.config.local_id.0,
-                &message[0..4]
-            );
-        }
-
-        // Get signatures for this message - using direct reference to avoid clone issues
+        // Get signatures for this message
         let sig_map = match self.state.signatures_by_message.get(message) {
-            Some(map) => {
-                debug!(
-                    "Node {} found {} signatures for this message",
-                    self.config.local_id.0,
-                    map.len()
-                );
-                map
-            }
+            Some(map) => map,
             None => {
-                // Try to find the message by content comparison instead of direct reference comparison
-                let mut found_map = None;
+                // Try to find the message by content comparison
                 for (msg, map) in &self.state.signatures_by_message {
                     if msg.len() == message.len() && msg == message {
-                        debug!(
-                            "Node {} found matching message content with {} signatures",
-                            self.config.local_id.0,
-                            map.len()
-                        );
-                        found_map = Some(map);
-                        break;
+                        return self.update_aggregate_for_message(msg);
                     }
                 }
-
-                if let Some(map) = found_map {
-                    map
-                } else {
-                    debug!(
-                        "Node {} has no signatures for this message",
-                        self.config.local_id.0
-                    );
-                    return Ok(());
-                }
+                debug!("No signatures found for this message");
+                return Ok(());
             }
         };
 
         // Collect valid signatures from non-malicious participants
         let mut signatures = Vec::new();
         let mut contributors = ParticipantSet::new(self.config.max_participants);
+        let mut public_keys = Vec::new();
 
-        debug!(
-            "Node {} is collecting valid signatures from non-malicious participants",
-            self.config.local_id.0
-        );
-
-        // Iterate through all participants with signatures for this message
+        // Iterate through participants with signatures
         for id_val in 0..self.config.max_participants {
             let id = ParticipantId(id_val);
-            // Only include non-malicious participants who have provided signatures
             if sig_map.contains_key(id) && !self.state.malicious.contains(id) {
-                debug!(
-                    "Node {} including signature from participant {}",
-                    self.config.local_id.0, id.0
-                );
                 if let Some(sig) = sig_map.get(id) {
                     signatures.push(sig.clone());
                     contributors.add(id);
+
+                    if let Some(pk) = self.participant_public_keys.get(&id) {
+                        public_keys.push(pk.clone());
+                    }
                 }
-            } else if self.state.malicious.contains(id) && sig_map.contains_key(id) {
-                debug!(
-                    "Node {} skipping signature from malicious participant {}",
-                    self.config.local_id.0, id.0
-                );
             }
         }
 
-        if signatures.is_empty() {
-            debug!(
-                "Node {} found no valid signatures to aggregate",
-                self.config.local_id.0
-            );
+        if signatures.is_empty() || public_keys.len() != signatures.len() {
+            debug!("No valid signatures or missing public keys for this message");
             return Ok(());
         }
 
-        debug!(
-            "Node {} attempting to aggregate {} signatures",
-            self.config.local_id.0,
-            signatures.len()
-        );
+        // Aggregate the signatures with the new API
+        match S::aggregate(message, &signatures, &public_keys) {
+            Ok((agg_sig, _)) => {
+                // Store the aggregated signature and contributors in the messages map
+                self.state
+                    .messages
+                    .insert(message.to_vec(), (agg_sig, contributors.clone()));
 
-        // Aggregate signatures
-        let agg_sig = S::aggregate(&signatures).map_err(|e| {
-            error!("Node {} aggregation error: {:?}", self.config.local_id.0, e);
-            let error_msg = format!("Failed to aggregate signatures: {:?}", e);
-            AggregationError::AggregationError(error_msg)
-        })?;
+                // Log threshold information
+                let total_weight = self.weight_scheme.calculate_weight(&contributors);
+                let threshold_weight = self.weight_scheme.threshold_weight();
+                debug!(
+                    "Updated signature collection: contributors={}, total_weight={}, threshold={}, sufficient={}",
+                    contributors.len(),
+                    total_weight,
+                    threshold_weight,
+                    total_weight >= threshold_weight
+                );
 
-        // Store the aggregate using the message clone to ensure consistent storage
-        let message_clone = message.to_vec();
-        debug!(
-            "Node {} storing aggregate with {} contributors in messages map",
-            self.config.local_id.0,
-            contributors.len()
-        );
-        self.state
-            .messages
-            .insert(message_clone, (agg_sig, contributors.clone()));
-
-        // Log threshold information
-        let total_weight = self.weight_scheme.calculate_weight(&contributors);
-        let threshold_weight = self.weight_scheme.threshold_weight();
-        debug!(
-            "Node {} updated aggregate: contributors={}, total_weight={}, threshold={}, sufficient={}",
-            self.config.local_id.0,
-            contributors.len(),
-            total_weight,
-            threshold_weight,
-            total_weight >= threshold_weight
-        );
-
-        // Debug: log contributors for visibility
-        let contrib_list: Vec<_> = contributors.iter().collect();
-        debug!(
-            "Node {} contributors: {:?}",
-            self.config.local_id.0, contrib_list
-        );
-
-        Ok(())
+                Ok(())
+            }
+            Err(e) => {
+                error!("Aggregation error: {:?}", e);
+                Err(AggregationError::AggregationError(format!(
+                    "Failed to aggregate: {:?}",
+                    e
+                )))
+            }
+        }
     }
 
     /// Rebuild the aggregate after removing malicious operators
@@ -710,36 +674,50 @@ where
             return Ok(());
         }
 
-        // Collect signatures from valid contributors
+        // Collect signatures and public keys from valid contributors
         let mut signatures = Vec::new();
+        let mut public_keys = Vec::new();
         let local_message = self.state.local_message.clone();
 
         if let Some(sig_map) = self.state.signatures_by_message.get(&local_message) {
             for id in valid_contributors.iter() {
                 if let Some(sig) = sig_map.get(id) {
                     signatures.push(sig.clone());
+
+                    if let Some(pk) = self.participant_public_keys.get(&id) {
+                        public_keys.push(pk.clone());
+                    } else {
+                        // Missing public key, can't aggregate
+                        return Err(AggregationError::Protocol(format!(
+                            "Missing public key for {}",
+                            id.0
+                        )));
+                    }
                 }
             }
         }
 
-        if signatures.is_empty() {
-            // No signatures despite having contributors, remove the message entry
+        if signatures.is_empty() || signatures.len() != public_keys.len() {
+            // No signatures or missing public keys, remove the message entry
             self.state.messages.remove(&self.state.local_message);
             return Ok(());
         }
 
-        // Aggregate signatures
-        let agg_sig = S::aggregate(&signatures).map_err(|e| {
-            AggregationError::AggregationError(format!("Failed to aggregate signatures: {:?}", e))
-        })?;
-
-        // Store the updated aggregate
-        self.state.messages.insert(
-            self.state.local_message.clone(),
-            (agg_sig, valid_contributors),
-        );
-
-        Ok(())
+        // Aggregate signatures with the new API
+        match S::aggregate(&local_message, &signatures, &public_keys) {
+            Ok((agg_sig, _)) => {
+                // Store the updated aggregate
+                self.state.messages.insert(
+                    self.state.local_message.clone(),
+                    (agg_sig, valid_contributors),
+                );
+                Ok(())
+            }
+            Err(e) => Err(AggregationError::AggregationError(format!(
+                "Failed to aggregate signatures: {:?}",
+                e
+            ))),
+        }
     }
 
     /// Hash a message for acknowledgments
@@ -849,7 +827,41 @@ where
                             // Check if we have enough signatures to complete
                             match self.build_result(&message, current_round) {
                                 Ok(Some(result)) => {
-                                    debug!("Protocol completed successfully for node {}", self.config.local_id.0);
+                                    // If we're an aggregator, send completion message
+                                    if self.is_aggregator() {
+                                        // Collect signatures and public keys for all contributors
+                                        let mut signatures = Vec::new();
+                                        let mut public_keys = Vec::new();
+                                        for id in &result.contributors {
+                                            if let Some(sig_map) = self.state.signatures_by_message.get(&self.state.local_message) {
+                                                if let Some(sig) = sig_map.get(id) {
+                                                    signatures.push(sig.clone());
+                                                    if let Some(pk) = self.participant_public_keys.get(id) {
+                                                        public_keys.push(pk.clone());
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Create a ParticipantSet from contributors
+                                        let contributor_set = ParticipantSet::from_hashset(
+                                            &result.contributors,
+                                            self.config.max_participants
+                                        );
+
+                                        // Send completion message
+                                        if let Err(e) = self.send_completion_message(
+                                            &self.state.local_message,
+                                            &signatures,
+                                            &public_keys,
+                                            &contributor_set,
+                                            network_handle
+                                        ).await {
+                                            warn!("Failed to send completion message: {:?}", e);
+                                        }
+                                    }
+
+                                    debug!("Protocol completed successfully");
                                     return Ok(result);
                                 }
                                 Ok(None) => {
@@ -901,166 +913,37 @@ where
         message: &[u8],
         round: ProtocolRound,
     ) -> Result<Option<AggregationResult<S>>, AggregationError> {
-        debug!(
-            "Node {} building result for round {:?}, message length: {}",
-            self.config.local_id.0,
-            round,
-            message.len()
-        );
+        debug!("Building result for round {:?}", round);
 
-        // Debug: Print first few bytes of the message to help diagnose issues
-        if message.len() > 4 {
-            debug!(
-                "Node {} result message starts with: {:02x?}",
-                self.config.local_id.0,
-                &message[0..4]
-            );
-        }
-
-        // Log what's in the messages map to help debug
-        if self.state.messages.is_empty() {
-            debug!("Node {} messages map is empty", self.config.local_id.0);
-        } else {
-            debug!(
-                "Node {} messages map has {} entries",
-                self.config.local_id.0,
-                self.state.messages.len()
-            );
-
-            // If we're having trouble finding the message, try to match it against what we have
-            if !self.state.messages.contains_key(message) {
-                debug!(
-                    "Node {} can't find exact message match, checking alternatives",
-                    self.config.local_id.0
-                );
-
+        // Find the contributors for this message
+        let (agg_sig, contributors) = match self.state.messages.get(message) {
+            Some((agg_sig, contributors)) => (agg_sig.clone(), contributors.clone()),
+            None => {
                 // Try to find by comparing contents
-                for (msg, _) in &self.state.messages {
+                let mut found_entry = None;
+                for (msg, entry) in &self.state.messages {
                     if msg.len() == message.len() && msg == message {
-                        debug!(
-                            "Node {} found matching message content but different Vec instance",
-                            self.config.local_id.0
-                        );
-                    }
-                }
-            }
-        }
-
-        // Try to get an exact match from the messages map
-        let mut result = None;
-        for (msg, (agg_sig, contributors)) in &self.state.messages {
-            // Compare message content, not just reference
-            if msg.len() == message.len() && msg == message {
-                debug!(
-                    "Node {} found exact content match with {} contributors",
-                    self.config.local_id.0,
-                    contributors.len()
-                );
-                result = Some((agg_sig.clone(), contributors.clone()));
-                break;
-            }
-        }
-
-        // If no entry found in messages map, try to aggregate directly from signatures
-        if result.is_none() {
-            debug!(
-                "Node {} has no entry in messages map for this message, checking signatures_by_message",
-                self.config.local_id.0
-            );
-
-            // First look for an exact match in signatures map
-            let mut sig_map = None;
-            for (msg, map) in &self.state.signatures_by_message {
-                if msg.len() == message.len() && msg == message {
-                    sig_map = Some(map);
-                    break;
-                }
-            }
-
-            if let Some(map) = sig_map {
-                debug!(
-                    "Node {} found {} signatures in signatures_by_message map",
-                    self.config.local_id.0,
-                    map.len()
-                );
-
-                // Collect valid signatures from non-malicious participants
-                let mut signatures = Vec::new();
-                let mut contributors = ParticipantSet::new(self.config.max_participants);
-
-                // Iterate through all participants with signatures for this message
-                for id_val in 0..self.config.max_participants {
-                    let id = ParticipantId(id_val);
-                    // Only include non-malicious participants who have provided sig
-                    if map.contains_key(id) && !self.state.malicious.contains(id) {
-                        debug!(
-                            "Node {} including signature from participant {}",
-                            self.config.local_id.0, id.0
-                        );
-                        if let Some(sig) = map.get(id) {
-                            signatures.push(sig.clone());
-                            contributors.add(id);
-                        }
+                        found_entry = Some(entry.clone());
+                        break;
                     }
                 }
 
-                if signatures.is_empty() {
-                    debug!(
-                        "Node {} found no valid signatures to aggregate",
-                        self.config.local_id.0
-                    );
-                } else {
-                    debug!(
-                        "Node {} attempting to aggregate {} signatures",
-                        self.config.local_id.0,
-                        signatures.len()
-                    );
-
-                    // Aggregate signatures
-                    match S::aggregate(&signatures) {
-                        Ok(agg_sig) => {
-                            // Store the aggregate for future references
-                            let message_clone = message.to_vec();
-                            self.state
-                                .messages
-                                .insert(message_clone, (agg_sig.clone(), contributors.clone()));
-
-                            result = Some((agg_sig, contributors));
-                        }
-                        Err(e) => {
-                            error!("Node {} aggregation error: {:?}", self.config.local_id.0, e);
-                        }
+                match found_entry {
+                    Some((agg_sig, contributors)) => (agg_sig, contributors),
+                    None => {
+                        debug!("No contributors found for this message");
+                        return Ok(None);
                     }
                 }
-            } else {
-                debug!(
-                    "Node {} has no aggregated signatures for this message",
-                    self.config.local_id.0
-                );
             }
-        }
+        };
 
-        if result.is_none() {
-            debug!("Still waiting for signatures");
-            return Ok(None);
-        }
-
-        let (agg_sig, contributors) = result.unwrap();
-
-        // Calculate total weight of contributors
+        // Check if we have enough signatures to meet threshold
         let total_weight = self.weight_scheme.calculate_weight(&contributors);
         let threshold_weight = self.weight_scheme.threshold_weight();
 
-        // Debug: log the contributors
-        let contrib_list: Vec<_> = contributors.iter().collect();
         debug!(
-            "Node {} result contributors: {:?}",
-            self.config.local_id.0, contrib_list
-        );
-
-        debug!(
-            "Node {} verifying threshold: contributors={}, total_weight={}, threshold={}, sufficient={}",
-            self.config.local_id.0,
+            "Verifying threshold: contributors={}, total_weight={}, threshold={}, sufficient={}",
             contributors.len(),
             total_weight,
             threshold_weight,
@@ -1069,57 +952,78 @@ where
 
         // Check if we've met the threshold
         if total_weight < threshold_weight {
-            info!(
-                "Node {} threshold not met: contributors={}, total_weight={}, threshold={}",
-                self.config.local_id.0,
-                contributors.len(),
-                total_weight,
-                threshold_weight
-            );
-
-            // If this is the completion round and we still haven't met the threshold, return an error
             if matches!(round, ProtocolRound::Completion) {
-                info!(
-                    "Node {} returning ThresholdNotMet in completion round",
-                    self.config.local_id.0
-                );
                 return Err(AggregationError::ThresholdNotMet(
                     total_weight as usize,
                     threshold_weight as usize,
                 ));
             }
-
             return Ok(None);
         }
 
-        // Convert the ParticipantSet to a HashSet
-        let contributors_hashset = contributors.to_hashset();
+        // Collect signatures and public keys for verification
+        let mut signatures = Vec::new();
+        let mut public_keys = Vec::new();
+        let mut missing_data = false;
 
-        // Create a map of participant weights
-        let mut weight_map = HashMap::new();
-        for id in &contributors_hashset {
-            weight_map.insert(*id, self.weight_scheme.weight(id));
+        for id in contributors.iter() {
+            if let Some(sig_map) = self.state.signatures_by_message.get(message) {
+                if let Some(sig) = sig_map.get(id) {
+                    signatures.push(sig.clone());
+
+                    if let Some(pk) = self.participant_public_keys.get(&id) {
+                        public_keys.push(pk.clone());
+                    } else {
+                        missing_data = true;
+                        break;
+                    }
+                }
+            }
         }
 
-        // We no longer track round numbers - simplify this
-        let completed = matches!(round, ProtocolRound::Completion);
+        if missing_data || signatures.is_empty() {
+            debug!("Missing data for verification");
+            return Ok(None);
+        }
 
-        info!(
-            "Node {} built successful result with {} contributors",
-            self.config.local_id.0,
-            contributors_hashset.len()
-        );
+        // Verify with the new API (re-aggregate to get proper types)
+        match S::aggregate(message, &signatures, &public_keys) {
+            Ok((aggregated_sig, aggregated_pub)) => {
+                // Verify the aggregated signature
+                if !S::verify_aggregate(message, &aggregated_sig, &aggregated_pub).unwrap_or(false)
+                {
+                    warn!("Aggregated signature verification failed");
+                    return Ok(None);
+                }
 
-        // Create a successful result, without round numbers
-        Ok(Some(AggregationResult {
-            signature: agg_sig,
-            contributors: contributors_hashset,
-            weights: Some(weight_map),
-            total_weight: Some(total_weight),
-            malicious_participants: self.state.malicious.to_hashset(),
-            completion_round: 0, // We no longer track round numbers
-            total_rounds: 0,     // We no longer track round numbers
-        }))
+                // Convert the ParticipantSet to a HashSet
+                let contributors_hashset = contributors.to_hashset();
+
+                // Create a map of participant weights
+                let mut weight_map = HashMap::new();
+                for id in &contributors_hashset {
+                    weight_map.insert(*id, self.weight_scheme.weight(id));
+                }
+
+                // Create a successful result
+                Ok(Some(AggregationResult {
+                    signature: agg_sig,
+                    contributors: contributors_hashset,
+                    weights: Some(weight_map),
+                    total_weight: Some(total_weight),
+                    malicious_participants: self.state.malicious.to_hashset(),
+                    completion_round: 0,
+                    total_rounds: 0,
+                }))
+            }
+            Err(e) => {
+                error!("Aggregation error during verification: {:?}", e);
+                Err(AggregationError::AggregationError(format!(
+                    "Failed to aggregate: {:?}",
+                    e
+                )))
+            }
+        }
     }
 
     /// New helper method to add a signature to our state
@@ -1367,5 +1271,34 @@ where
         );
 
         Ok(())
+    }
+
+    /// Add a helper method to send completion message with the new API
+    async fn send_completion_message(
+        &self,
+        message: &[u8],
+        signatures: &[S::Signature],
+        public_keys: &[S::Public],
+        contributors: &ParticipantSet,
+        network_handle: &NetworkServiceHandle<S>,
+    ) -> Result<(), AggregationError> {
+        // Aggregate signatures with the new API
+        let (aggregate_signature, _) =
+            S::aggregate(message, signatures, public_keys).map_err(|e| {
+                AggregationError::AggregationError(format!(
+                    "Failed to aggregate signatures: {:?}",
+                    e
+                ))
+            })?;
+
+        // Create completion message
+        let complete_msg = AggSigMessage::ProtocolComplete {
+            aggregate_signature,
+            message: message.to_vec(),
+            contributors: contributors.to_hashset(),
+        };
+
+        // Broadcast to all nodes
+        self.send_message(complete_msg, None, network_handle).await
     }
 }

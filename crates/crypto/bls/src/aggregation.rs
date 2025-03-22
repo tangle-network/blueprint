@@ -5,98 +5,67 @@ use crate::{
 };
 use gadget_crypto_core::{BytesEncoding, KeyType, aggregation::AggregatableSignature};
 use gadget_std::Zero;
-use tnt_bls::{single_pop_aggregator::SignatureAggregatorAssumingPoP, *};
+use tnt_bls::{
+    EngineBLS, Message, PublicKey, SerializableToBytes, Signature, Signed, TinyBLS377, TinyBLS381,
+    single_pop_aggregator::SignatureAggregatorAssumingPoP,
+};
 
-macro_rules! impl_aggregatable_signature {
-    ($key_type:ident, $tiny_engine:ty) => {
+macro_rules! impl_aggregatable_bls {
+    ($variant:ident) => {
         paste::paste! {
-            impl AggregatableSignature for [<W3f $key_type>] {
-                fn aggregate_public_keys(
-                    public_keys: &[[<W3f $key_type Public>]],
-                ) -> <Self as KeyType>::Public {
-                    let mut aggregated_public_key =
-                        PublicKey::<$tiny_engine>(<$tiny_engine as EngineBLS>::PublicKeyGroup::zero());
+            impl AggregatableSignature for [<W3f $variant>] {
+                type AggregatedSignature = [<W3f $variant Signature>];
+                type AggregatedPublic = [<W3f $variant Public>];
 
-                    for key in public_keys {
-                        aggregated_public_key.0 += key.0.0;
+                fn aggregate(
+                    message: &[u8],
+                    signatures: &[Self::AggregatedSignature],
+                    public_keys: &[Self::AggregatedPublic],
+                ) -> Result<(Self::AggregatedSignature, Self::AggregatedPublic), BlsError> {
+                    if signatures.is_empty() || public_keys.is_empty() {
+                        return Err(BlsError::InvalidInput(
+                            "No signatures or public keys provided".to_string(),
+                        ));
                     }
 
-                    [<W3f $key_type Public>](aggregated_public_key)
+                    if signatures.len() != public_keys.len() {
+                        return Err(BlsError::InvalidInput(
+                            "Mismatched number of signatures and public keys".to_string(),
+                        ));
+                    }
+
+                    let public_key_group_elts = public_keys.iter().map(|pk| pk.0.0).collect::<Vec<_>>();
+                    let mut aggregated_public_key =
+                        <<[<Tiny $variant:upper>] as tnt_bls::EngineBLS>::PublicKeyGroup>::zero();
+
+                    for pk in public_key_group_elts {
+                        aggregated_public_key += pk;
+                    }
+
+                    let mut aggregated_signature =
+                        <<[<Tiny $variant:upper>] as tnt_bls::EngineBLS>::SignatureGroup>::zero();
+
+                    for sig in signatures {
+                        aggregated_signature += sig.0.0;
+                    }
+
+                    Ok((
+                        [<W3f $variant Signature>](Signature(aggregated_signature)),
+                        [<W3f $variant Public>](PublicKey(aggregated_public_key)),
+                    ))
                 }
 
                 fn verify_aggregate(
                     message: &[u8],
-                    signature: &[<W3f $key_type Signature>],
-                    public_keys: &[[<W3f $key_type Public>]],
-                ) -> bool {
-                    let sig = match tnt_bls::Signature::<$tiny_engine>::from_bytes(&signature.to_bytes()[..]) {
-                        Ok(s) => s,
-                        Err(_) => return false,
-                    };
-                    let mut aggregated_public_key =
-                        PublicKey::<$tiny_engine>(<$tiny_engine as EngineBLS>::PublicKeyGroup::zero());
-
-                    let mut double_pubkeys: Vec<DoublePublicKey<$tiny_engine>> = vec![];
-
-                    for key in public_keys {
-                        let public_key = match tnt_bls::double::DoublePublicKey::<$tiny_engine>::from_bytes(
-                            &key.to_bytes()[..],
-                        ) {
-                            Ok(pk) => pk,
-                            Err(_) => return false,
-                        };
-                        aggregated_public_key.0 += public_key.1.clone();
-                        double_pubkeys.push(public_key);
-                    }
-
-                    let public_keys_in_sig_grp: Vec<PublicKeyInSignatureGroup<$tiny_engine>> = double_pubkeys
-                        .iter()
-                        .map(|k| PublicKeyInSignatureGroup(k.0))
-                        .collect();
-
-                    let message: Message = Message::new(b"", message);
-                    let mut prover_aggregator =
-                        SignatureAggregatorAssumingPoP::<$tiny_engine>::new(message.clone());
-                    prover_aggregator.add_signature(&sig);
-                    let mut verifier_aggregator = SignatureAggregatorAssumingPoP::<$tiny_engine>::new(message);
-                    //get the signature and already aggregated public key from the prover
-                    verifier_aggregator.add_signature(&(&prover_aggregator).signature());
-                    verifier_aggregator.add_publickey(&aggregated_public_key);
-
-                    // aggregate public keys in signature group
-                    public_keys_in_sig_grp.iter().for_each(|pk| {
-                        verifier_aggregator.add_auxiliary_public_key(pk);
-                    });
-
-                    verifier_aggregator.verify_using_aggregated_auxiliary_public_keys::<sha2::Sha256>()
-                }
-
-                fn aggregate(signatures: &[[<W3f $key_type Signature>]]) -> Result<[<W3f $key_type Signature>], BlsError> {
-                    let mut aggregated_signature =
-                        Signature::<$tiny_engine>(<$tiny_engine as EngineBLS>::SignatureGroup::zero());
-                    for signature in signatures.iter() {
-                        let signature = match tnt_bls::double::DoubleSignature::<$tiny_engine>::from_bytes(
-                            &signature.to_bytes()[..],
-                        ) {
-                            Ok(s) => s,
-                            Err(_) => return Err(BlsError::InvalidSignature),
-                        };
-
-                        aggregated_signature.0 += signature.0;
-                    }
-
-                    let aggregated_signature =
-                        match Signature::<$tiny_engine>::from_bytes(&aggregated_signature.to_bytes()) {
-                            Ok(sig) => sig,
-                            Err(_) => return Err(BlsError::InvalidSignature),
-                        };
-
-                    Ok([<W3f $key_type Signature>](aggregated_signature))
+                    signature: &Self::AggregatedSignature,
+                    public_key: &Self::AggregatedPublic,
+                ) -> Result<bool, BlsError> {
+                    Ok(Self::verify(public_key, message, signature))
                 }
             }
         }
     };
 }
 
-impl_aggregatable_signature!(Bls377, TinyBLS377);
-impl_aggregatable_signature!(Bls381, TinyBLS381);
+impl_aggregatable_bls!(Bls377);
+impl_aggregatable_bls!(Bls381);

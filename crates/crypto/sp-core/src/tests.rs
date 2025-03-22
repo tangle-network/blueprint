@@ -134,11 +134,12 @@ mod bls381_tests {
             .collect();
 
         // Aggregate signatures
-        let aggregated_sig = SpBls381::aggregate(&signatures).unwrap();
+        let (aggregated_sig, aggregated_public) =
+            SpBls381::aggregate(&signatures, &publics).unwrap();
 
         // Verify aggregate signature against all public keys
         assert!(
-            SpBls381::verify_aggregate(message, &aggregated_sig, &publics),
+            SpBls381::verify_aggregate(message, &aggregated_sig, &aggregated_public).unwrap(),
             "Aggregate verification failed with valid signatures"
         );
     }
@@ -175,9 +176,10 @@ mod bls381_tests {
             SpBls381::sign_with_secret(&mut different_secret, different_message).unwrap();
         signatures.push(different_signature);
 
-        let aggregated_sig = SpBls381::aggregate(&signatures).unwrap();
+        let (aggregated_sig, aggregated_public) =
+            SpBls381::aggregate(&signatures, &publics).unwrap();
         assert!(
-            !SpBls381::verify_aggregate(message, &aggregated_sig, &publics),
+            !SpBls381::verify_aggregate(message, &aggregated_sig, &aggregated_public).unwrap(),
             "Aggregate verification should fail with mixed messages"
         );
     }
@@ -212,9 +214,10 @@ mod bls381_tests {
             })
             .collect::<Vec<_>>();
 
-        let aggregated_sig = SpBls381::aggregate(&signatures).unwrap();
+        let (aggregated_sig, aggregated_public) =
+            SpBls381::aggregate(&signatures, &mixed_publics).unwrap();
         assert!(
-            !SpBls381::verify_aggregate(message, &aggregated_sig, &mixed_publics),
+            !SpBls381::verify_aggregate(message, &aggregated_sig, &aggregated_public).unwrap(),
             "Aggregate verification should fail with mismatched keys"
         );
     }
@@ -222,7 +225,7 @@ mod bls381_tests {
     #[test]
     fn test_bls381_empty_aggregation() {
         let empty_sigs: Vec<SpBls381Signature> = vec![];
-        let agg_result = SpBls381::aggregate(&empty_sigs);
+        let agg_result = SpBls381::aggregate(&empty_sigs, &[]);
         assert!(
             matches!(agg_result, Err(SpCoreError::InvalidInput(_))),
             "Empty aggregation should return InvalidInput error"
@@ -338,9 +341,9 @@ fn test_bls377_signature_aggregation() {
         .collect::<Vec<_>>();
 
     // Aggregate and verify
-    let aggregated_sig = SpBls377::aggregate(&signatures).unwrap();
+    let (aggregated_sig, aggregated_public) = SpBls377::aggregate(&signatures, &publics).unwrap();
     assert!(
-        SpBls377::verify_aggregate(message, &aggregated_sig, &publics),
+        SpBls377::verify_aggregate(message, &aggregated_sig, &aggregated_public).unwrap(),
         "Valid aggregate signature should verify"
     );
 }
@@ -357,15 +360,15 @@ fn test_bls377_aggregation_with_invalid_signature() {
         .collect::<Vec<_>>();
 
     // Generate one valid and one invalid signature
-    let mut signatures = vec![
+    let signatures = vec![
         SpBls377::sign_with_secret(&mut secrets[0], message).unwrap(),
         SpBls377::sign_with_secret(&mut secrets[1], b"Different message").unwrap(),
     ];
 
     // Aggregation should succeed but verification should fail
-    let aggregated_sig = SpBls377::aggregate(&signatures).unwrap();
+    let (aggregated_sig, aggregated_public) = SpBls377::aggregate(&signatures, &publics).unwrap();
     assert!(
-        !SpBls377::verify_aggregate(message, &aggregated_sig, &publics),
+        !SpBls377::verify_aggregate(message, &aggregated_sig, &aggregated_public).unwrap(),
         "Aggregate with invalid signature should fail verification"
     );
 }
@@ -373,7 +376,7 @@ fn test_bls377_aggregation_with_invalid_signature() {
 #[test]
 fn test_bls377_empty_aggregation() {
     let empty_sigs: Vec<SpBls377Signature> = vec![];
-    let agg_result = SpBls377::aggregate(&empty_sigs);
+    let agg_result = SpBls377::aggregate(&empty_sigs, &[]);
     assert!(
         matches!(agg_result, Err(SpCoreError::InvalidInput(_))),
         "Empty aggregation should return InvalidInput error"
@@ -407,9 +410,10 @@ fn test_bls377_aggregation_with_mismatched_keys() {
         .map(|s| SpBls377::sign_with_secret(&mut s.clone(), message).unwrap())
         .collect::<Vec<_>>();
 
-    let aggregated_sig = SpBls377::aggregate(&signatures).unwrap();
+    let (aggregated_sig, aggregated_public) =
+        SpBls377::aggregate(&signatures, &mixed_publics).unwrap();
     assert!(
-        !SpBls377::verify_aggregate(message, &aggregated_sig, &mixed_publics),
+        !SpBls377::verify_aggregate(message, &aggregated_sig, &aggregated_public).unwrap(),
         "Aggregate verification should fail with mismatched public keys"
     );
 }

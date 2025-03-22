@@ -2,25 +2,54 @@ use crate::KeyType;
 
 /// Trait defining the requirements for an aggregatable signature scheme
 pub trait AggregatableSignature: KeyType {
-    /// Generate the aggregate public key from a list of public keys
-    fn aggregate_public_keys(public_keys: &[Self::Public]) -> Self::Public;
+    type AggregatedSignature;
+    type AggregatedPublic;
 
-    /// Verifies the signature against multiple public keys (for aggregated signatures)
+    /// Aggregates signatures and public keys
+    fn aggregate(
+        signatures: &[Self::Signature],
+        public_keys: &[Self::Public],
+    ) -> Result<(Self::AggregatedSignature, Self::AggregatedPublic), Self::Error>;
+
+    /// Verifies them
     fn verify_aggregate(
         message: &[u8],
-        signature: &Self::Signature,
-        public_keys: &[Self::Public],
-    ) -> bool;
-
-    /// Aggregates this signature with another signature
-    fn aggregate(signatures: &[Self::Signature]) -> Result<Self::Signature, Self::Error>;
+        signature: &Self::AggregatedSignature,
+        public_key: &Self::AggregatedPublic,
+    ) -> Result<bool, Self::Error>;
 }
 
 pub trait WeightedAggregatableSignature: AggregatableSignature {
-    fn verify_aggregate(
+    fn verify_weighted_aggregate(
         message: &[u8],
-        signature: &Self::Signature,
+        signatures: &[Self::Signature],
         public_keys_and_weights: &[(Self::Public, u64)],
         threshold: u64,
-    ) -> bool;
+    ) -> bool {
+        let public_keys = public_keys_and_weights
+            .iter()
+            .map(|(pk, _)| pk.clone())
+            .collect::<Vec<_>>();
+        let weight_sum = public_keys_and_weights.iter().map(|(_, w)| *w).sum::<u64>();
+
+        match Self::aggregate(signatures, &public_keys) {
+            Ok((aggregated_signature, aggregated_public)) => {
+                match Self::verify_aggregate(message, &aggregated_signature, &aggregated_public) {
+                    Ok(is_valid) => {
+                        if !is_valid {
+                            return false;
+                        }
+                    }
+                    Err(_) => return false,
+                }
+
+                if weight_sum < threshold {
+                    return false;
+                }
+
+                true
+            }
+            Err(_) => false,
+        }
+    }
 }

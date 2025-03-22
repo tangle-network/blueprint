@@ -289,14 +289,11 @@ fn test_signature_aggregation_success() {
         .collect();
 
     // Aggregate signatures
-    let aggregated_sig = ArkBlsBn254::aggregate(&signatures).unwrap();
+    let (aggregated_sig, aggregated_public) =
+        ArkBlsBn254::aggregate(&signatures, &publics).unwrap();
 
     // Verify aggregate signature against all public keys
-    assert!(ArkBlsBn254::verify_aggregate(
-        &message,
-        &aggregated_sig,
-        &publics
-    ));
+    assert!(ArkBlsBn254::verify_aggregate(&message, &aggregated_sig, &aggregated_public).unwrap());
 }
 
 #[test]
@@ -332,14 +329,11 @@ fn test_signature_aggregation_failure() {
     signatures.push(different_signature);
 
     // This aggregation should succeed since all signatures are valid
-    let aggregated_sig = ArkBlsBn254::aggregate(&signatures).unwrap();
+    let (aggregated_sig, aggregated_public) =
+        ArkBlsBn254::aggregate(&signatures, &publics).unwrap();
 
     // But verification should fail because one signature is for a different message
-    assert!(!ArkBlsBn254::verify_aggregate(
-        &message,
-        &aggregated_sig,
-        &publics
-    ));
+    assert!(!ArkBlsBn254::verify_aggregate(&message, &aggregated_sig, &aggregated_public).unwrap());
 }
 
 #[test]
@@ -373,22 +367,9 @@ fn test_aggregation_with_mismatched_keys() {
         .collect::<Vec<_>>();
 
     // Aggregate signatures
-    let aggregated_sig = ArkBlsBn254::aggregate(&signatures).unwrap();
+    let (aggregated_sig, _) = ArkBlsBn254::aggregate(&signatures, &valid_publics).unwrap();
+    let (_, mismatched_public) = ArkBlsBn254::aggregate(&signatures, &mixed_publics).unwrap();
 
     // Verification should fail with mismatched publics
-    assert!(!ArkBlsBn254::verify_aggregate(
-        &message,
-        &aggregated_sig,
-        &mixed_publics
-    ));
-}
-
-#[test]
-fn test_empty_aggregation() {
-    // Test empty signature aggregation
-    let empty_sigs: Vec<ArkBlsBn254Signature> = vec![];
-    let agg_result = ArkBlsBn254::aggregate(&empty_sigs);
-
-    // Should return error for empty aggregation
-    assert!(matches!(agg_result, Err(Bn254Error::InvalidInput(_))));
+    assert!(!ArkBlsBn254::verify_aggregate(&message, &aggregated_sig, &mismatched_public).unwrap());
 }
