@@ -426,7 +426,8 @@ pub fn create_node_with_keys<K: KeyType>(
 /// # Panics
 ///
 /// Panics if the local key is not provided and cannot be generated
-pub async fn create_whitelisted_nodes<K: KeyType>(
+#[must_use]
+pub fn create_whitelisted_nodes<K: KeyType>(
     count: usize,
     using_evm_address_for_handshake_verification: bool,
 ) -> Vec<TestNode<K>> {
