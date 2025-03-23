@@ -7,13 +7,13 @@ use crate::sdk::utils::{
 };
 use crate::sources::github::GithubBinaryFetcher;
 use crate::sources::{process_arguments_and_env, BinarySourceFetcher, DynBinarySourceFetcher};
-use gadget_clients::tangle::client::{TangleConfig, TangleEvent};
-use gadget_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
+use blueprint_clients::tangle::client::{TangleConfig, TangleEvent};
+use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
 use blueprint_sdk::runner::config::Protocol;
 use blueprint_sdk::runner::config::BlueprintEnvironment;
 use blueprint_core::{error, info, trace, warn};
-use gadget_std::fmt::Debug;
-use gadget_std::sync::atomic::Ordering;
+use blueprint_std::fmt::Debug;
+use blueprint_std::sync::atomic::Ordering;
 use tangle_subxt::subxt::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::{
     Gadget, GadgetSourceFetcher,

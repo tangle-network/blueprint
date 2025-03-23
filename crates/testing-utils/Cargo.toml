@@ -1,5 +1,5 @@
 [package]
-name = "gadget-testing-utils"
+name = "blueprint-testing-utils"
 version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
@@ -11,13 +11,13 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-gadget-core-testing-utils = { workspace = true }
-gadget-anvil-testing-utils = { workspace = true, optional = true }
-gadget-tangle-testing-utils = { workspace = true, optional = true }
-gadget-eigenlayer-testing-utils = { workspace = true, optional = true }
+blueprint-core-testing-utils = { workspace = true }
+blueprint-anvil-testing-utils = { workspace = true, optional = true }
+blueprint-tangle-testing-utils = { workspace = true, optional = true }
+blueprint-eigenlayer-testing-utils = { workspace = true, optional = true }
 
 [features]
 default = []
-anvil = ["gadget-anvil-testing-utils"]
-tangle = ["gadget-tangle-testing-utils"]
-eigenlayer = ["gadget-eigenlayer-testing-utils"]
+anvil = ["blueprint-anvil-testing-utils"]
+tangle = ["blueprint-tangle-testing-utils"]
+eigenlayer = ["blueprint-eigenlayer-testing-utils"]

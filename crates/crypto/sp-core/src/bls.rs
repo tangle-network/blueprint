@@ -1,5 +1,5 @@
-use gadget_crypto_core::BytesEncoding;
-use gadget_std::{
+use blueprint_crypto_core::BytesEncoding;
+use blueprint_std::{
     hash::Hash,
     string::{String, ToString},
     vec::Vec,
@@ -31,19 +31,19 @@ macro_rules! impl_sp_core_bls_pair_public {
             impl Eq for [<Sp $key_type Pair>] {}
 
             impl PartialOrd for [<Sp $key_type Pair>] {
-                fn partial_cmp(&self, other: &Self) -> Option<gadget_std::cmp::Ordering> {
+                fn partial_cmp(&self, other: &Self) -> Option<blueprint_std::cmp::Ordering> {
                     Some(self.cmp(other))
                 }
             }
 
             impl Ord for [<Sp $key_type Pair>] {
-                fn cmp(&self, other: &Self) -> gadget_std::cmp::Ordering {
+                fn cmp(&self, other: &Self) -> blueprint_std::cmp::Ordering {
                     self.to_bytes().cmp(&other.to_bytes())
                 }
             }
 
-            impl gadget_std::fmt::Debug for [<Sp $key_type Pair>] {
-                fn fmt(&self, f: &mut gadget_std::fmt::Formatter<'_>) -> gadget_std::fmt::Result {
+            impl blueprint_std::fmt::Debug for [<Sp $key_type Pair>] {
+                fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
                     write!(f, "{:?}", self.to_bytes())
                 }
             }
@@ -100,7 +100,7 @@ macro_rules! impl_sp_core_bls_pair_public {
             }
 
             impl Hash for [<Sp $key_type Public>]{
-                fn hash<H: gadget_std::hash::Hasher>(&self, state: &mut H) {
+                fn hash<H: blueprint_std::hash::Hasher>(&self, state: &mut H) {
                     self.0.hash(state);
                 }
             }
@@ -108,19 +108,19 @@ macro_rules! impl_sp_core_bls_pair_public {
             impl Eq for [<Sp $key_type Public>]{}
 
             impl PartialOrd for [<Sp $key_type Public>]{
-                fn partial_cmp(&self, other: &Self) -> Option<gadget_std::cmp::Ordering> {
+                fn partial_cmp(&self, other: &Self) -> Option<blueprint_std::cmp::Ordering> {
                     Some(self.cmp(other))
                 }
             }
 
             impl Ord for [<Sp $key_type Public>]{
-                fn cmp(&self, other: &Self) -> gadget_std::cmp::Ordering {
+                fn cmp(&self, other: &Self) -> blueprint_std::cmp::Ordering {
                     self.to_bytes().cmp(&other.to_bytes())
                 }
             }
 
-            impl gadget_std::fmt::Debug for [<Sp $key_type Public>]{
-                fn fmt(&self, f: &mut gadget_std::fmt::Formatter<'_>) -> gadget_std::fmt::Result {
+            impl blueprint_std::fmt::Debug for [<Sp $key_type Public>]{
+                fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
                     write!(f, "{:?}", self.to_bytes())
                 }
             }
@@ -147,21 +147,21 @@ macro_rules! impl_sp_core_bls_signature {
             pub struct [<Sp $key_type Signature>](pub $signature);
 
             impl PartialOrd for [<Sp $key_type Signature>] {
-                fn partial_cmp(&self, other: &Self) -> Option<gadget_std::cmp::Ordering> {
+                fn partial_cmp(&self, other: &Self) -> Option<blueprint_std::cmp::Ordering> {
                     Some(self.cmp(other))
                 }
             }
 
             impl Ord for [<Sp $key_type Signature>] {
-                fn cmp(&self, other: &Self) -> gadget_std::cmp::Ordering {
+                fn cmp(&self, other: &Self) -> blueprint_std::cmp::Ordering {
                     let self_bytes: &[u8] = self.0.as_ref();
                     let other_bytes: &[u8] = other.0.as_ref();
                     self_bytes.cmp(other_bytes)
                 }
             }
 
-            impl gadget_std::fmt::Debug for [<Sp $key_type Signature>] {
-                fn fmt(&self, f: &mut gadget_std::fmt::Formatter<'_>) -> gadget_std::fmt::Result {
+            impl blueprint_std::fmt::Debug for [<Sp $key_type Signature>] {
+                fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
                     let bytes: &[u8] = self.0.as_ref();
                     write!(f, "{:?}", bytes)
                 }
@@ -190,14 +190,14 @@ macro_rules! impl_sp_core_bls_key_type {
             #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
             pub struct [<Sp $key_type>];
 
-            impl gadget_crypto_core::KeyType for [<Sp $key_type>] {
+            impl blueprint_crypto_core::KeyType for [<Sp $key_type>] {
                 type Public = [<Sp $key_type Public>];
                 type Secret = [<Sp $key_type Pair>];
                 type Signature = [<Sp $key_type Signature>];
                 type Error = $crate::error::SpCoreError;
 
-                fn key_type_id() -> gadget_crypto_core::KeyTypeId {
-                    gadget_crypto_core::KeyTypeId::$key_type
+                fn key_type_id() -> blueprint_crypto_core::KeyTypeId {
+                    blueprint_crypto_core::KeyTypeId::$key_type
                 }
 
                 fn generate_with_seed(seed: Option<&[u8]>) -> $crate::error::Result<Self::Secret> {
@@ -212,7 +212,7 @@ macro_rules! impl_sp_core_bls_key_type {
                             })
                         }
                         None => {
-                            use gadget_std::Rng;
+                            use blueprint_std::Rng;
                             let mut seed = Self::get_test_rng().r#gen::<[u8; 32]>();
                             let pair = <$pair_type>::from_seed_slice(&mut seed)
                                     .map_err($crate::error::SecretStringErrorWrapper)
@@ -258,7 +258,7 @@ macro_rules! impl_sp_core_bls_key_type {
                 }
             }
 
-            impl gadget_std::ops::Deref for [<Sp $key_type Pair>] {
+            impl blueprint_std::ops::Deref for [<Sp $key_type Pair>] {
                 type Target = $pair_type;
 
                 fn deref(&self) -> &Self::Target {
@@ -266,7 +266,7 @@ macro_rules! impl_sp_core_bls_key_type {
                 }
             }
 
-            impl gadget_std::ops::DerefMut for [<Sp $key_type Pair>] {
+            impl blueprint_std::ops::DerefMut for [<Sp $key_type Pair>] {
                 fn deref_mut(&mut self) -> &mut Self::Target {
                     &mut self.pair
                 }

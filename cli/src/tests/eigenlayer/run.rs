@@ -1,13 +1,13 @@
+use blueprint_chain_setup::anvil::start_default_anvil_testnet;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::SupportedChains;
 use blueprint_runner::config::{ContextConfig, Protocol, ProtocolSettings};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
+use blueprint_std::collections::HashMap;
+use blueprint_std::fs;
+use blueprint_std::process::Command;
+use blueprint_testing_utils::setup_log;
 use color_eyre::eyre::Result;
-use gadget_chain_setup::anvil::start_default_anvil_testnet;
-use gadget_std::collections::HashMap;
-use gadget_std::fs;
-use gadget_std::process::Command;
-use gadget_testing_utils::setup_log;
 use tempfile::TempDir;
 
 use crate::command::deploy::eigenlayer::EigenlayerDeployOpts;
@@ -60,15 +60,12 @@ src = 'src'
 out = '{}'
 libs = ['lib']
 evm_version = 'shanghai'",
-        contract_out_dir
-            .strip_prefix(temp_dir.path())
-            .unwrap()
-            .display()
+        contract_out_dir.strip_prefix(temp_dir.path())?.display()
     );
     fs::write(temp_dir.path().join("foundry.toml"), foundry_content)?;
 
     // Start the local Anvil testnet
-    let (_container, http_endpoint, ws_endpoint) = start_default_anvil_testnet(false).await;
+    let testnet = start_default_anvil_testnet(false).await;
 
     // Set up deployment options with temporary directory path and constructor arguments
     let mut constructor_args = HashMap::new();
@@ -82,7 +79,7 @@ evm_version = 'shanghai'",
 
     // Deploy the contract
     let opts = EigenlayerDeployOpts {
-        rpc_url: http_endpoint.clone(),
+        rpc_url: testnet.http_endpoint.clone(),
         contracts_path: contract_dir.to_string_lossy().to_string(),
         constructor_args: Some(constructor_args),
         ordered_deployment: false,
@@ -248,8 +245,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
 
     // Run the binary using the run command
     let config = ContextConfig::create_config(
-        http_endpoint.parse().unwrap(),
-        ws_endpoint.parse().unwrap(),
+        testnet.http_endpoint.parse()?,
+        testnet.ws_endpoint.parse()?,
         keystore_path.to_string_lossy().to_string(),
         None,
         SupportedChains::LocalTestnet,

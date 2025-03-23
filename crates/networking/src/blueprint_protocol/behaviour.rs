@@ -5,10 +5,10 @@ use crate::discovery::peers::VerificationIdentifierKey;
 use crate::discovery::utils::get_address_from_compressed_pubkey;
 use crate::types::ProtocolMessage;
 use bincode;
+use blueprint_crypto::BytesEncoding;
+use blueprint_crypto::KeyType;
 use crossbeam_channel::Sender;
 use dashmap::DashMap;
-use gadget_crypto::BytesEncoding;
-use gadget_crypto::KeyType;
 use libp2p::{
     Multiaddr, PeerId, StreamProtocol,
     core::transport::PortUse,

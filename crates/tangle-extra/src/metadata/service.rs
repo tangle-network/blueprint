@@ -8,7 +8,7 @@
 //! # Examples
 //!
 //! ```
-//! use gadget_blueprint_serde::new_bounded_string;
+//! use blueprint_tangle_extra::serde::new_bounded_string;
 //! use blueprint_tangle_extra::metadata::IntoServiceMetadata;
 //! use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::ServiceMetadata;
 //!

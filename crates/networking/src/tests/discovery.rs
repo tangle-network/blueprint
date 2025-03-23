@@ -1,8 +1,9 @@
 use crate::service::AllowedKeys;
-use crate::test_utils::{
-    TestNode, create_whitelisted_nodes, setup_log, wait_for_peer_discovery, wait_for_peer_info,
-};
-use gadget_crypto::sp_core::SpEcdsa;
+
+use super::TestNode;
+use super::{create_whitelisted_nodes, init_tracing};
+use super::{wait_for_peer_discovery, wait_for_peer_info};
+use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 use tracing::info;

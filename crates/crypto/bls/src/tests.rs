@@ -3,8 +3,8 @@ use crate::{
     bls377::{W3fBls377, W3fBls377Public, W3fBls377Secret},
     bls381::{W3fBls381, W3fBls381Public, W3fBls381Secret},
 };
-use gadget_crypto_core::KeyType;
-use gadget_std::string::ToString;
+use blueprint_crypto_core::KeyType;
+use blueprint_std::string::ToString;
 
 // Helper function to generate test message
 fn test_message() -> Vec<u8> {
@@ -13,12 +13,12 @@ fn test_message() -> Vec<u8> {
 
 mod bls377_crypto_tests {
     use super::bls377::{W3fBls377, W3fBls377Secret, W3fBls377Signature};
-    gadget_crypto_core::impl_crypto_tests!(W3fBls377, W3fBls377Secret, W3fBls377Signature);
+    blueprint_crypto_core::impl_crypto_tests!(W3fBls377, W3fBls377Secret, W3fBls377Signature);
 }
 
 mod bls381_crypto_tests {
     use super::bls381::{W3fBls381, W3fBls381Secret, W3fBls381Signature};
-    gadget_crypto_core::impl_crypto_tests!(W3fBls381, W3fBls381Secret, W3fBls381Signature);
+    blueprint_crypto_core::impl_crypto_tests!(W3fBls381, W3fBls381Secret, W3fBls381Signature);
 }
 
 mod bls377_tests {
@@ -238,8 +238,8 @@ mod bls381_tests {
 
     use super::*;
     use ::tnt_bls::SerializableToBytes;
-    use gadget_crypto_core::aggregation::AggregatableSignature;
-    use gadget_crypto_hashing::sha2_256;
+    use blueprint_crypto_core::aggregation::AggregatableSignature;
+    use blueprint_crypto_hashing::sha2_256;
 
     #[test]
     fn test_key_generation() {

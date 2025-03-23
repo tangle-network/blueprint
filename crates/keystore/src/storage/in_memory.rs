@@ -1,7 +1,7 @@
 use super::RawStorage;
 use crate::error::Result;
-use gadget_crypto::KeyTypeId;
-use gadget_std::{boxed::Box, collections::BTreeMap, vec::Vec};
+use blueprint_crypto::KeyTypeId;
+use blueprint_std::{boxed::Box, collections::BTreeMap, vec::Vec};
 use parking_lot::RwLock;
 
 type StorageMap = BTreeMap<KeyTypeId, BTreeMap<Vec<u8>, Vec<u8>>>;
@@ -17,14 +17,14 @@ impl InMemoryStorage {
     /// # Examples
     ///
     /// ```rust
-    /// use gadget_keystore::Keystore;
-    /// use gadget_keystore::backends::{Backend, BackendConfig};
-    /// use gadget_keystore::crypto::IntoCryptoError;
-    /// use gadget_keystore::crypto::KeyType;
-    /// use gadget_keystore::crypto::k256::K256Ecdsa;
-    /// use gadget_keystore::storage::{InMemoryStorage, TypedStorage};
+    /// use blueprint_keystore::Keystore;
+    /// use blueprint_keystore::backends::{Backend, BackendConfig};
+    /// use blueprint_keystore::crypto::IntoCryptoError;
+    /// use blueprint_keystore::crypto::KeyType;
+    /// use blueprint_keystore::crypto::k256::K256Ecdsa;
+    /// use blueprint_keystore::storage::{InMemoryStorage, TypedStorage};
     ///
-    /// # fn main() -> gadget_keystore::Result<()> {
+    /// # fn main() -> blueprint_keystore::Result<()> {
     /// // Create the storage
     /// let storage = InMemoryStorage::new();
     /// let storage = TypedStorage::new(storage);
@@ -107,7 +107,7 @@ impl RawStorage for InMemoryStorage {
 
 #[cfg(test)]
 mod tests {
-    use gadget_crypto::{IntoCryptoError, KeyType, k256::K256Ecdsa};
+    use blueprint_crypto::{IntoCryptoError, KeyType, k256::K256Ecdsa};
 
     use super::*;
     use crate::storage::TypedStorage;

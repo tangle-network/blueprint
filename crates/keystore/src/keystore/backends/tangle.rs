@@ -1,11 +1,11 @@
 use crate::backends::Backend;
 use crate::error::{Error, Result};
 use crate::keystore::Keystore;
-use gadget_crypto::sp_core::{
+use blueprint_crypto::sp_core::{
     SpEcdsa, SpEcdsaPair, SpEd25519, SpEd25519Pair, SpSr25519, SpSr25519Pair,
 };
-use gadget_crypto::tangle_pair_signer::TanglePairSigner;
-use gadget_crypto::{BytesEncoding, KeyTypeId};
+use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+use blueprint_crypto::{BytesEncoding, KeyTypeId};
 use sp_core::Pair;
 use sp_core::{ecdsa, ed25519, sr25519};
 
@@ -173,8 +173,8 @@ pub mod bls {
     use crate::error::{Error, Result};
     use crate::keystore::Keystore;
     use crate::keystore::backends::tangle::TangleBackend;
-    use gadget_crypto::sp_core::{SpBls377Pair, SpBls381Pair};
-    use gadget_crypto::{BytesEncoding, KeyTypeId};
+    use blueprint_crypto::sp_core::{SpBls377Pair, SpBls381Pair};
+    use blueprint_crypto::{BytesEncoding, KeyTypeId};
     use sp_core::Pair;
 
     pub trait TangleBlsBackend: TangleBackend {
@@ -260,8 +260,8 @@ pub mod bls {
         use super::*;
         use crate::KeystoreConfig;
         use crate::backends::Backend;
-        use gadget_crypto::KeyType;
-        use gadget_crypto::sp_core::{SpBls377, SpBls377Public, SpBls381, SpBls381Public};
+        use blueprint_crypto::KeyType;
+        use blueprint_crypto::sp_core::{SpBls377, SpBls377Public, SpBls381, SpBls381Public};
         use sp_core::ByteArray;
 
         #[test]

@@ -1,8 +1,8 @@
 use crate::error::Error;
 use crate::testnet::{SubstrateNode, TANGLE_NODE_ENV};
-use gadget_std::fs;
-use gadget_std::io::Write;
-use gadget_std::path::PathBuf;
+use blueprint_std::fs;
+use blueprint_std::io::Write;
+use blueprint_std::path::PathBuf;
 use tangle_subxt::subxt::utils::AccountId32;
 
 pub mod deploy;

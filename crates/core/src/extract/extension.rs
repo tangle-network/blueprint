@@ -27,6 +27,8 @@ crate::__impl_deref!(Extension);
 crate::__define_rejection! {
     #[body = "Extension not found"]
     /// Rejection type used when the extension is not found in the current [`JobCall`].
+    ///
+    /// [`JobCall`]: crate::JobCall
     pub struct ExtensionNotFound(Error);
 }
 

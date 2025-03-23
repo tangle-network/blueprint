@@ -1,16 +1,16 @@
 use color_eyre::Result;
 use dialoguer::console::style;
-use gadget_clients::tangle::client::OnlineClient;
-use gadget_crypto::sp_core::SpSr25519;
-use gadget_crypto::tangle_pair_signer::TanglePairSigner;
-use gadget_keystore::{Keystore, KeystoreConfig};
+use blueprint_clients::tangle::client::OnlineClient;
+use blueprint_crypto::sp_core::SpSr25519;
+use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+use blueprint_keystore::{Keystore, KeystoreConfig};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::sp_arithmetic::per_things::Percent;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{
     Asset, AssetSecurityRequirement, MembershipModel,
 };
 use crate::wait_for_in_block_success;
 use tangle_subxt::subxt::utils::AccountId32;
-use gadget_keystore::backends::Backend;
+use blueprint_keystore::backends::Backend;
 
 /// Requests a service from the Tangle Network.
 ///

@@ -1,5 +1,5 @@
 [package]
-name = "gadget-crypto-sp-core"
+name = "blueprint-crypto-sp-core"
 version = "0.1.0"
 description = "sp-core crypto primitives for Tangle Blueprints"
 authors.workspace = true
@@ -9,8 +9,8 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gadget-std = { workspace = true }
-gadget-crypto-core = { workspace = true, features = ["tangle"] }
+blueprint-std = { workspace = true }
+blueprint-crypto-core = { workspace = true, features = ["tangle"] }
 sp-core = { workspace = true, features = ["serde", "full_crypto"] }
 hex = { workspace = true, features = ["alloc"] }
 paste = { workspace = true }
@@ -21,20 +21,20 @@ thiserror = { workspace = true }
 ark-ec = { workspace = true, optional = true }
 ark-ff = { workspace = true, optional = true }
 ark-serialize = { workspace = true, optional = true }
-gadget-crypto-bls = { workspace = true, optional = true }
+blueprint-crypto-bls = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 tnt-bls = { workspace = true, optional = true }
 
 [dev-dependencies]
-gadget-crypto-sp-core = { path = ".", features = ["std", "bls"] }
+blueprint-crypto-sp-core = { path = ".", features = ["std", "bls"] }
 serde_json = { workspace = true, features = ["alloc"] }
 
 [features]
 default = ["std", "aggregation"]
 std = [
-	"gadget-crypto-bls?/std",
-	"gadget-crypto-core/std",
-	"gadget-std/std",
+	"blueprint-crypto-bls/std",
+	"blueprint-crypto-core/std",
+	"blueprint-std/std",
 	"ark-ec?/std",
 	"ark-ff?/std",
 	"ark-serialize?/std",
@@ -44,4 +44,12 @@ std = [
 	"tnt-bls?/std",
 ]
 bls = ["sp-core/bls-experimental"]
-aggregation = ["gadget-crypto-bls", "bls", "dep:ark-ec", "dep:ark-ff", "dep:ark-serialize", "dep:tnt-bls", "dep:sha2"]
+aggregation = [
+	"blueprint-crypto-bls",
+	"bls",
+	"dep:ark-ec",
+	"dep:ark-ff",
+	"dep:ark-serialize",
+	"dep:tnt-bls",
+	"dep:sha2",
+]

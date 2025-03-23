@@ -1,4 +1,4 @@
-use gadget_std::string::String;
+use blueprint_std::string::String;
 use sp_core::crypto::SecretStringError;
 use thiserror::Error;
 
@@ -19,8 +19,8 @@ pub enum SpCoreError {
 #[derive(Debug, Clone)]
 pub struct SecretStringErrorWrapper(pub SecretStringError);
 
-impl gadget_std::fmt::Display for SecretStringErrorWrapper {
-    fn fmt(&self, f: &mut gadget_std::fmt::Formatter<'_>) -> gadget_std::fmt::Result {
+impl blueprint_std::fmt::Display for SecretStringErrorWrapper {
+    fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
         match &self.0 {
             SecretStringError::InvalidFormat(err) => write!(f, "Invalid format: {err}"),
             SecretStringError::InvalidPhrase => write!(f, "Invalid phrase"),
@@ -44,4 +44,4 @@ impl From<SecretStringErrorWrapper> for SpCoreError {
     }
 }
 
-pub type Result<T> = gadget_std::result::Result<T, SpCoreError>;
+pub type Result<T> = blueprint_std::result::Result<T, SpCoreError>;

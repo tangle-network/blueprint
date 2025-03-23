@@ -1,8 +1,8 @@
-use gadget_crypto::sp_core::SpEcdsa;
-use gadget_keystore::Result;
-use gadget_keystore::backends::Backend;
-use gadget_keystore::backends::tangle::TangleBackend;
-use gadget_keystore::{Keystore, KeystoreConfig};
+use blueprint_crypto::sp_core::SpEcdsa;
+use blueprint_keystore::Result;
+use blueprint_keystore::backends::Backend;
+use blueprint_keystore::backends::tangle::TangleBackend;
+use blueprint_keystore::{Keystore, KeystoreConfig};
 
 #[test]
 fn fs_keystore() -> Result<()> {

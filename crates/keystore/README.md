@@ -115,13 +115,13 @@ Enable the features you need in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gadget-keystore = { version = "0.1", features = ["std", "ecdsa", "remote", "aws-signer"] }
+blueprint-keystore = { version = "0.1", features = ["std", "ecdsa", "remote", "aws-signer"] }
 ```
 
 For full functionality:
 
 ```toml
-gadget-keystore = { version = "0.1", features = ["std", "tangle-full", "eigenlayer-full", "all-remote-signers"] }
+blueprint-keystore = { version = "0.1", features = ["std", "tangle-full", "eigenlayer-full", "all-remote-signers"] }
 ```
 
 ## Feature Dependencies

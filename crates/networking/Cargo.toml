@@ -1,5 +1,5 @@
 [package]
-name = "gadget-networking"
+name = "blueprint-networking"
 version = "0.1.0"
 description = "Networking utilities for Tangle Blueprints"
 authors.workspace = true
@@ -13,7 +13,7 @@ workspace = true
 
 [dependencies]
 # Internal deps
-gadget-std = { workspace = true }
+blueprint-std = { workspace = true }
 
 # Core dependencies
 alloy-primitives = { workspace = true }
@@ -41,8 +41,8 @@ crossbeam-channel = { workspace = true }
 libsecp256k1 = { workspace = true, features = ["static-context"] }
 
 # Crypto dependencies
-gadget-crypto = { workspace = true, features = ["k256", "hashing"] }
-gadget-crypto-core = { workspace = true, features = ["k256"] }
+blueprint-crypto = { workspace = true, features = ["k256", "hashing"] }
+blueprint-crypto-core = { workspace = true, features = ["k256"] }
 k256 = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies.libp2p]
@@ -70,9 +70,9 @@ features = [
 ]
 
 [dev-dependencies]
-gadget-networking = { workspace = true, features = ["testing"] }
-gadget-crypto = { workspace = true, features = ["sp-core"] }
-gadget-crypto-core = { workspace = true, features = ["tangle"] }
+blueprint-networking = { workspace = true, features = ["testing"] }
+blueprint-crypto = { workspace = true, features = ["sp-core"] }
+blueprint-crypto-core = { workspace = true, features = ["tangle"] }
 tracing-subscriber = { workspace = true }
 lazy_static = { workspace = true }
 fastrand = "2.0"
@@ -80,8 +80,8 @@ fastrand = "2.0"
 [features]
 default = ["std", "testing"]
 std = [
-	"gadget-crypto/std",
-	"gadget-std/std",
+	"blueprint-crypto/std",
+	"blueprint-std/std",
 	"k256/std",
 	"tokio/full",
 	"serde/std",

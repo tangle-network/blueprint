@@ -1,25 +1,25 @@
 use bip39::{Language, Mnemonic};
-use blueprint_runner::config::Protocol;
-use color_eyre::eyre::Result;
-use dialoguer::{Input, Select};
-use gadget_crypto::bn254::{ArkBlsBn254Public, ArkBlsBn254Secret};
-use gadget_crypto::k256::{K256Ecdsa, K256SigningKey};
-use gadget_crypto::sp_core::{
+use blueprint_crypto::bn254::{ArkBlsBn254Public, ArkBlsBn254Secret};
+use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
+use blueprint_crypto::sp_core::{
     SpBls377, SpBls377Pair, SpBls377Public, SpBls381, SpBls381Pair, SpBls381Public, SpEcdsa,
     SpEcdsaPair, SpEcdsaPublic, SpEd25519, SpEd25519Pair, SpEd25519Public, SpSr25519,
     SpSr25519Pair, SpSr25519Public,
 };
-use gadget_crypto::{KeyTypeId, bn254::ArkBlsBn254};
-use gadget_crypto_core::{BytesEncoding, KeyType};
-use gadget_keystore::{Keystore, KeystoreConfig, backends::Backend};
-use gadget_std::path::Path;
+use blueprint_crypto::{KeyTypeId, bn254::ArkBlsBn254};
+use blueprint_crypto_core::{BytesEncoding, KeyType};
+use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
+use blueprint_runner::config::Protocol;
+use blueprint_std::path::Path;
+use color_eyre::eyre::Result;
+use dialoguer::{Input, Select};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Unknown key type: {0}")]
     UnknownKeyType(String),
     #[error("Keystore error: {0}")]
-    KeystoreError(#[from] gadget_keystore::error::Error),
+    KeystoreError(#[from] blueprint_keystore::error::Error),
     #[error("Invalid key format: {0}")]
     InvalidKeyFormat(String),
     #[error("Invalid mnemonic word count: {0}. Must be 12, 15, 18, 21, or 24")]

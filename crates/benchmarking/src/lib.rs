@@ -5,7 +5,7 @@ pub trait Runtime {
     /// Runs the given future to completion on the runtime.
     fn block_on<F>(&self, future: F) -> F::Output
     where
-        F: gadget_std::future::Future;
+        F: blueprint_std::future::Future;
 }
 
 /// The [`tokio`](https://crates.io/crates/tokio) runtime.
@@ -17,7 +17,7 @@ pub struct TokioRuntime;
 impl Runtime for TokioRuntime {
     fn block_on<F>(&self, future: F) -> F::Output
     where
-        F: gadget_std::future::Future,
+        F: blueprint_std::future::Future,
     {
         let rt = tokio::runtime::Handle::current();
         rt.block_on(future)
@@ -31,7 +31,7 @@ pub struct Bencher<R> {
     /// The runtime to use for running benchmarks.
     runtime: R,
     /// The time at which the benchmark started.
-    started_at: gadget_std::time::Instant,
+    started_at: blueprint_std::time::Instant,
     /// The max number of cores for this benchmark.
     cores: usize,
 }
@@ -46,7 +46,7 @@ pub struct BenchmarkSummary {
     /// The job identifier.
     pub job_id: u8,
     /// The duration of the benchmark.
-    pub elapsed: gadget_std::time::Duration,
+    pub elapsed: blueprint_std::time::Duration,
     /// The number of cores the benchmark was run with.
     pub cores: usize,
     /// The amount of memory used by the benchmark (in bytes).
@@ -59,7 +59,7 @@ impl<R: Runtime> Bencher<R> {
     /// # Examples
     ///
     /// ```
-    /// use gadget_benchmarking::{Bencher, TokioRuntime};
+    /// use blueprint_benchmarking::{Bencher, TokioRuntime};
     ///
     /// const THREADS: usize = 4;
     ///
@@ -68,7 +68,7 @@ impl<R: Runtime> Bencher<R> {
     pub fn new(threads: usize, runtime: R) -> Self {
         Self {
             runtime,
-            started_at: gadget_std::time::Instant::now(),
+            started_at: blueprint_std::time::Instant::now(),
             cores: threads,
         }
     }
@@ -78,7 +78,7 @@ impl<R: Runtime> Bencher<R> {
     /// # Examples
     ///
     /// ```no_run
-    /// use gadget_benchmarking::{Bencher, TokioRuntime};
+    /// use blueprint_benchmarking::{Bencher, TokioRuntime};
     ///
     /// const THREADS: usize = 4;
     ///
@@ -89,7 +89,7 @@ impl<R: Runtime> Bencher<R> {
     /// ```
     pub fn block_on<F>(&self, future: F) -> F::Output
     where
-        F: gadget_std::future::Future,
+        F: blueprint_std::future::Future,
     {
         self.runtime.block_on(future)
     }
@@ -103,7 +103,7 @@ impl<R: Runtime> Bencher<R> {
     /// # Examples
     ///
     /// ```no_run
-    /// use gadget_benchmarking::{Bencher, TokioRuntime};
+    /// use blueprint_benchmarking::{Bencher, TokioRuntime};
     /// const THREADS: usize = 4;
     ///
     /// let bencher = Bencher::new(THREADS, TokioRuntime);
@@ -133,9 +133,9 @@ impl<R: Runtime> Bencher<R> {
     }
 }
 
-impl gadget_std::fmt::Display for BenchmarkSummary {
+impl blueprint_std::fmt::Display for BenchmarkSummary {
     #[allow(clippy::cast_precision_loss)]
-    fn fmt(&self, f: &mut gadget_std::fmt::Formatter<'_>) -> gadget_std::fmt::Result {
+    fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
         const KB: f32 = 1024.00;
         const MB: f32 = 1024.00 * KB;
         const GB: f32 = 1024.00 * MB;

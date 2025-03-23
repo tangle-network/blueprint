@@ -9,9 +9,9 @@ workspace = true
 [dependencies]
 blueprint-core.workspace = true
 blueprint-router.workspace = true
-gadget-std.workspace = true
-gadget-keystore = { workspace = true }
-gadget-crypto = { workspace = true }
+blueprint-std.workspace = true
+blueprint-keystore = { workspace = true }
+blueprint-crypto = { workspace = true }
 futures-core.workspace = true
 futures-util.workspace = true
 tower.workspace = true
@@ -27,7 +27,7 @@ document-features = { workspace = true }
 
 # Networking
 crossbeam-channel = { workspace = true, optional = true }
-gadget-networking = { workspace = true, optional = true }
+blueprint-networking = { workspace = true, optional = true }
 libp2p = { workspace = true, optional = true }
 
 # Tangle
@@ -55,13 +55,13 @@ default = ["std", "networking"]
 std = [
     "blueprint-tangle-extra?/std",
     "blueprint-evm-extra?/std",
-    "gadget-keystore/std",
-    "gadget-std/std",
+    "blueprint-keystore/std",
+    "blueprint-std/std",
 ]
 
 ## Enable networking support for [`BlueprintEnvironment`](crate::config::BlueprintEnvironment)
 networking = [
-    "dep:gadget-networking",
+    "dep:blueprint-networking",
     "dep:crossbeam-channel",
     "dep:libp2p",
 ]
@@ -75,8 +75,8 @@ tangle = [
     "dep:tangle-subxt",
     "dep:blueprint-tangle-extra",
     "dep:k256",
-    "gadget-crypto/sp-core",
-    "gadget-crypto/tangle-pair-signer"
+    "blueprint-crypto/sp-core",
+    "blueprint-crypto/tangle-pair-signer"
 ]
 
 ## Enable [Eigenlayer] support

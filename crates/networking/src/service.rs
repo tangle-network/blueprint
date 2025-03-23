@@ -10,9 +10,9 @@ use crate::{
     types::ProtocolMessage,
 };
 use alloy_primitives::Address;
+use blueprint_crypto::KeyType;
 use crossbeam_channel::{self, Receiver, SendError, Sender};
 use futures::StreamExt;
-use gadget_crypto::KeyType;
 use libp2p::{
     Multiaddr, PeerId, Swarm, SwarmBuilder, identify,
     identity::Keypair,
@@ -103,7 +103,7 @@ pub enum NetworkEventSendError<K: KeyType> {
 }
 
 impl<K: KeyType> Display for NetworkEventSendError<K> {
-    fn fmt(&self, f: &mut gadget_std::fmt::Formatter<'_>) -> gadget_std::fmt::Result {
+    fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
         match self {
             NetworkEventSendError::PeerConnected(peer) => {
                 write!(f, "Error sending Peer connected event: {}", peer)
@@ -233,8 +233,8 @@ pub struct NetworkService<K: KeyType> {
 }
 
 pub enum AllowedKeys<K: KeyType> {
-    EvmAddresses(gadget_std::collections::HashSet<Address>),
-    InstancePublicKeys(gadget_std::collections::HashSet<K::Public>),
+    EvmAddresses(blueprint_std::collections::HashSet<Address>),
+    InstancePublicKeys(blueprint_std::collections::HashSet<K::Public>),
 }
 
 impl<K: KeyType> NetworkService<K> {

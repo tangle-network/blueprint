@@ -1,12 +1,12 @@
-use color_eyre::eyre::Result;
-use dialoguer::console::style;
-use gadget_std::{
+use blueprint_std::{
     collections::VecDeque,
     io::{BufRead, BufReader},
     process::{Command, Stdio},
     sync::mpsc,
     thread,
 };
+use color_eyre::eyre::Result;
+use dialoguer::console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 
 pub struct FoundryToolchain {

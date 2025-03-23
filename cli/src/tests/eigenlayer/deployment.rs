@@ -1,12 +1,12 @@
 use alloy_provider::RootProvider;
+use blueprint_chain_setup::anvil::start_default_anvil_testnet;
 use blueprint_evm_extra::util::get_provider_http;
 use blueprint_runner::config::SupportedChains;
+use blueprint_std::collections::HashMap;
+use blueprint_std::fs;
+use blueprint_std::process::Command;
+use blueprint_testing_utils::setup_log;
 use color_eyre::eyre::Result;
-use gadget_chain_setup::anvil::start_default_anvil_testnet;
-use gadget_std::collections::HashMap;
-use gadget_std::fs;
-use gadget_std::process::Command;
-use gadget_testing_utils::setup_log;
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -95,7 +95,7 @@ evm_version = 'shanghai'",
     fs::write(temp_dir.path().join("foundry.toml"), foundry_content)?;
 
     // Start the local Anvil testnet
-    let (_container, http_endpoint, _ws_endpoint) = start_default_anvil_testnet(false).await;
+    let testnet = start_default_anvil_testnet(false).await;
 
     // Set up deployment options with temporary directory path and constructor arguments
     let mut constructor_args = HashMap::new();
@@ -113,7 +113,7 @@ evm_version = 'shanghai'",
 
     // Create the deployment options for the test
     let opts = EigenlayerDeployOpts {
-        rpc_url: http_endpoint.clone(),
+        rpc_url: testnet.http_endpoint.clone(),
         contracts_path: contract_dir.to_string_lossy().to_string(),
         constructor_args: Some(constructor_args),
         ordered_deployment: false,
@@ -158,10 +158,10 @@ evm_version = 'shanghai'",
     let json_content = fs::read_to_string(json_path)?;
     let json: Value = serde_json::from_str(&json_content)?;
     let abi = json["abi"].to_string();
-    let abi = alloy_json_abi::JsonAbi::from_json_str(&abi).unwrap();
+    let abi = alloy_json_abi::JsonAbi::from_json_str(&abi)?;
 
     // Create a provider
-    let provider = get_provider_http(&http_endpoint);
+    let provider = get_provider_http(&testnet.http_endpoint);
 
     // Create a contract instance
     let test_contract =
@@ -175,12 +175,7 @@ evm_version = 'shanghai'",
     let value = alloy_dyn_abi::DynSolValue::from(alloy_primitives::U256::from(123));
 
     // Test the getValue function and ensure it returns the correct value
-    let get_result = test_contract
-        .function("getValue", &[])
-        .unwrap()
-        .call()
-        .await
-        .unwrap();
+    let get_result = test_contract.function("getValue", &[])?.call().await?;
     let get_result_value: alloy_primitives::U256 =
         if let alloy_dyn_abi::DynSolValue::Uint(val, 256) = get_result[0] {
             val
@@ -197,20 +192,13 @@ evm_version = 'shanghai'",
         .function("setValue", &[value])
         .unwrap()
         .send()
-        .await
-        .unwrap()
+        .await?
         .get_receipt()
-        .await
-        .unwrap();
+        .await?;
     assert!(set_result.status());
 
     // Test the getValue function and ensure it returns the newly set value
-    let get_result = test_contract
-        .function("getValue", &[])
-        .unwrap()
-        .call()
-        .await
-        .unwrap();
+    let get_result = test_contract.function("getValue", &[])?.call().await?;
     let get_result_value: alloy_primitives::U256 =
         if let alloy_dyn_abi::DynSolValue::Uint(val, 256) = get_result[0] {
             val
@@ -226,10 +214,10 @@ evm_version = 'shanghai'",
     let json_content = fs::read_to_string(json_path)?;
     let json: Value = serde_json::from_str(&json_content)?;
     let abi = json["abi"].to_string();
-    let abi = alloy_json_abi::JsonAbi::from_json_str(&abi).unwrap();
+    let abi = alloy_json_abi::JsonAbi::from_json_str(&abi)?;
 
     // Create a provider
-    let provider = get_provider_http(&http_endpoint);
+    let provider = get_provider_http(&testnet.http_endpoint);
 
     // Create a contract instance
     let simple_storage_contract =
@@ -240,12 +228,7 @@ evm_version = 'shanghai'",
         );
 
     // Verify the contract data
-    let get_result = simple_storage_contract
-        .function("get", &[])
-        .unwrap()
-        .call()
-        .await
-        .unwrap();
+    let get_result = simple_storage_contract.function("get", &[])?.call().await?;
     let get_result_value: String =
         if let alloy_dyn_abi::DynSolValue::String(val) = get_result[0].clone() {
             val

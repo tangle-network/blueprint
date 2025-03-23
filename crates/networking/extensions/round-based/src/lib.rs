@@ -1,11 +1,11 @@
-use dashmap::DashMap;
-use futures::{Sink, Stream};
-use gadget_crypto::KeyType;
-use gadget_networking::{
+use blueprint_crypto::KeyType;
+use blueprint_networking::{
     discovery::peers::VerificationIdentifierKey,
     service_handle::NetworkServiceHandle,
     types::{ParticipantInfo, ProtocolMessage},
 };
+use dashmap::DashMap;
+use futures::{Sink, Stream};
 use round_based::{Delivery, Incoming, MessageDestination, MessageType, Outgoing, PartyIndex};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
@@ -137,15 +137,15 @@ where
 
         let protocol_message = ProtocolMessage {
             protocol: format!("{}/{}", this.protocol_id, round),
-            routing: gadget_networking::types::MessageRouting {
+            routing: blueprint_networking::types::MessageRouting {
                 message_id: msg_id,
                 round_id: round,
                 sender: ParticipantInfo {
-                    id: gadget_networking::types::ParticipantId(this.party_index),
+                    id: blueprint_networking::types::ParticipantId(this.party_index),
                     verification_id_key: this.parties.get(&this.party_index).map(|k| k.clone()),
                 },
                 recipient: recipient.map(|p| ParticipantInfo {
-                    id: gadget_networking::types::ParticipantId(p),
+                    id: blueprint_networking::types::ParticipantId(p),
                     verification_id_key: recipient_key,
                 }),
             },

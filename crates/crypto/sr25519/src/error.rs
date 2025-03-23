@@ -1,4 +1,4 @@
-use gadget_std::string::String;
+use blueprint_std::string::String;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -23,4 +23,4 @@ impl From<hex::FromHexError> for Sr25519Error {
     }
 }
 
-pub type Result<T> = gadget_std::result::Result<T, Sr25519Error>;
+pub type Result<T> = blueprint_std::result::Result<T, Sr25519Error>;

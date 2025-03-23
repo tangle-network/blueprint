@@ -1,5 +1,5 @@
 #[cfg(feature = "std")]
-pub use gadget_std::io::{Error, ErrorKind, Result};
+pub use blueprint_std::io::{Error, ErrorKind, Result};
 
 #[cfg(not(feature = "std"))]
 pub use no_std::*;
@@ -158,7 +158,7 @@ mod no_std {
         /// # Examples
         ///
         /// ```
-        /// use gadget_std::io::{Error, ErrorKind};
+        /// use blueprint_std::io::{Error, ErrorKind};
         ///
         /// let not_found = ErrorKind::NotFound;
         /// let error = Error::from(not_found);
@@ -183,7 +183,7 @@ mod no_std {
         /// # Examples
         ///
         /// ```
-        /// use gadget_std::io::{Error, ErrorKind};
+        /// use blueprint_std::io::{Error, ErrorKind};
         ///
         /// // errors can be created from strings
         /// let custom_error = Error::new(ErrorKind::Other, "oh no!");

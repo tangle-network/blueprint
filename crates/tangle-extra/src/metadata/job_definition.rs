@@ -29,7 +29,7 @@
 //!
 //! [`Job`]: blueprint_core::Job
 
-use gadget_blueprint_serde::{BoundedVec, new_bounded_string};
+use crate::serde::{BoundedVec, new_bounded_string};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::{
     JobDefinition, JobMetadata,
@@ -78,6 +78,15 @@ pub trait IntoTangleFieldTypes {
     ///
     /// A vector of [`FieldType`] values.
     fn into_tangle_fields() -> Vec<FieldType>;
+}
+
+/// Implementation for [`Void`] type.
+///
+/// [Void]: blueprint_core::job_result::Void
+impl IntoTangleFieldTypes for blueprint_core::job_result::Void {
+    fn into_tangle_fields() -> Vec<FieldType> {
+        Vec::from([FieldType::Void])
+    }
 }
 
 /// Implementation for functions with no arguments.

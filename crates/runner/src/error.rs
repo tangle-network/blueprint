@@ -7,11 +7,11 @@ pub enum RunnerError {
     InvalidProtocol(String),
 
     #[error("Keystore error: {0}")]
-    Keystore(#[from] gadget_keystore::Error),
+    Keystore(#[from] blueprint_keystore::Error),
 
     #[cfg(feature = "networking")]
     #[error("Networking error: {0}")]
-    Networking(#[from] gadget_networking::error::Error),
+    Networking(#[from] blueprint_networking::error::Error),
 
     #[error("Signature error: {0}")]
     SignatureError(String),
@@ -94,7 +94,7 @@ pub enum ConfigError {
     UnsupportedProtocol(String),
     /// Attempting to load the [`ProtocolSettings`] of a protocol differing from the target
     ///
-    /// [`ProtocolSettings`]: crate::ProtocolSettings
+    /// [`ProtocolSettings`]: crate::config::ProtocolSettings
     #[error("Unexpect protocol, expected {0}")]
     UnexpectedProtocol(&'static str),
     /// No Sr25519 keypair found in the keystore.

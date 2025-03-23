@@ -8,7 +8,7 @@ pub mod error;
 mod tests;
 
 pub use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use gadget_std::vec::Vec;
+use blueprint_std::vec::Vec;
 
 /// Serialize this to a vector of bytes.
 pub fn to_bytes<T: CanonicalSerialize>(elt: T) -> Vec<u8> {
@@ -40,25 +40,25 @@ macro_rules! impl_w3f_serde {
         impl Eq for $name {}
 
         impl PartialOrd for $name {
-            fn partial_cmp(&self, other: &Self) -> Option<gadget_std::cmp::Ordering> {
+            fn partial_cmp(&self, other: &Self) -> Option<blueprint_std::cmp::Ordering> {
                 Some(self.cmp(other))
             }
         }
 
-        impl gadget_std::hash::Hash for $name {
+        impl blueprint_std::hash::Hash for $name {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
                 self.to_bytes().hash(state);
             }
         }
 
         impl Ord for $name {
-            fn cmp(&self, other: &Self) -> gadget_std::cmp::Ordering {
+            fn cmp(&self, other: &Self) -> blueprint_std::cmp::Ordering {
                 self.to_bytes().cmp(&other.to_bytes())
             }
         }
 
-        impl gadget_std::fmt::Debug for $name {
-            fn fmt(&self, f: &mut gadget_std::fmt::Formatter<'_>) -> gadget_std::fmt::Result {
+        impl blueprint_std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
                 write!(f, "{:?}", self.to_bytes())
             }
         }
@@ -107,8 +107,8 @@ macro_rules! define_bls_key {
             pub mod [<$ty:lower>] {
                 use crate::error::{BlsError, Result};
                 use crate::from_bytes;
-                use gadget_crypto_core::{KeyType, KeyTypeId, BytesEncoding};
-                use gadget_std::{UniformRand, string::{String, ToString}};
+                use blueprint_crypto_core::{KeyType, KeyTypeId, BytesEncoding};
+                use blueprint_std::{UniformRand, string::{String, ToString}};
                 use tnt_bls::{Message, PublicKey, SecretKey, SerializableToBytes, Signature, [<Tiny $ty:upper>]};
 
                 #[doc = $ty:upper]
@@ -135,7 +135,7 @@ macro_rules! define_bls_key {
                             Ok([<W3f $ty Secret>](SecretKey::from_seed(seed)))
                         } else {
                             // Should only be used for testing. Pass a seed in production.
-                            let mut rng = gadget_std::test_rng();
+                            let mut rng = blueprint_std::test_rng();
                             let rand_bytes = <[u8; 32]>::rand(&mut rng);
                             Ok([<W3f $ty Secret>](SecretKey::from_seed(&rand_bytes)))
                         }

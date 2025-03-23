@@ -1,5 +1,5 @@
 [package]
-name = "gadget-networking-agg-sig-gossip"
+name = "blueprint-networking-agg-sig-gossip"
 version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
@@ -9,9 +9,9 @@ repository.workspace = true
 
 [dependencies]
 blueprint-core = { workspace = true }
-gadget-crypto = { workspace = true }
-gadget-networking = { workspace = true }
-gadget-std = { workspace = true }
+blueprint-crypto = { workspace = true }
+blueprint-networking = { workspace = true }
+blueprint-std = { workspace = true }
 bincode = { workspace = true }
 bitvec = { workspace = true, features = ["serde"] }
 tokio = { workspace = true }
@@ -45,9 +45,9 @@ libp2p = { workspace = true, features = [
   "autonat",
   "upnp",
 ] }
-gadget-crypto = { workspace = true, features = ["sp-core", "bn254"] }
-gadget-crypto-core = { workspace = true, features = ["tangle", "bn254"] }
-gadget-networking = { workspace = true, features = ["testing"] }
+blueprint-crypto = { workspace = true, features = ["sp-core", "bn254"] }
+blueprint-crypto-core = { workspace = true, features = ["tangle", "bn254"] }
+blueprint-networking = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 sha2 = { workspace = true }
@@ -62,4 +62,4 @@ workspace = true
 
 [features]
 default = ["std"]
-std = ["bitvec/std", "gadget-crypto/std", "gadget-networking/std", "gadget-std/std"]
+std = ["bitvec/std", "blueprint-crypto/std", "blueprint-networking/std", "blueprint-std/std"]

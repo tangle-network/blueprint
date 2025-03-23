@@ -2,11 +2,11 @@ use crate::Error;
 use crate::env::{EigenlayerTestEnvironment, setup_eigenlayer_test_environment};
 use alloy_primitives::Address;
 use alloy_provider::RootProvider;
+use blueprint_chain_setup::anvil::keys::{ANVIL_PRIVATE_KEYS, inject_anvil_key};
+use blueprint_chain_setup::anvil::{Container, start_default_anvil_testnet};
 use blueprint_evm_extra::util::get_provider_http;
 use blueprint_runner::config::{BlueprintEnvironment, ContextConfig, SupportedChains};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
-use gadget_chain_setup::anvil::keys::{ANVIL_PRIVATE_KEYS, inject_anvil_key};
-use gadget_chain_setup::anvil::{Container, start_default_anvil_testnet};
 use std::marker::PhantomData;
 use tempfile::TempDir;
 use url::Url;
@@ -59,7 +59,7 @@ where
     /// * TODO
     pub async fn setup_with_context(test_dir: TempDir, _context: Ctx) -> Result<Self, Error> {
         // Start local Anvil testnet
-        let (container, http_endpoint, ws_endpoint) = start_default_anvil_testnet(true).await;
+        let testnet = start_default_anvil_testnet(true).await;
 
         // Setup Eigenlayer test environment
         let EigenlayerTestEnvironment {
@@ -67,7 +67,7 @@ where
             http_endpoint,
             ws_endpoint,
             eigenlayer_contract_addresses,
-        } = setup_eigenlayer_test_environment(&http_endpoint, &ws_endpoint).await;
+        } = setup_eigenlayer_test_environment(&testnet.http_endpoint, &testnet.ws_endpoint).await;
 
         // Setup temporary testing keystore
         let test_dir_path = test_dir.path().to_string_lossy().into_owned();
@@ -102,7 +102,7 @@ where
             accounts,
             eigenlayer_contract_addresses,
             _temp_dir: test_dir,
-            _container: container,
+            _container: testnet.container,
             _phantom: core::marker::PhantomData,
         })
     }

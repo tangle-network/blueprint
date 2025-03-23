@@ -7,11 +7,11 @@ mod tests;
 
 use crate::error::{K256Error, Result};
 use alloy_signer_local::LocalSigner;
-use gadget_crypto_core::BytesEncoding;
-use gadget_crypto_core::{KeyType, KeyTypeId};
-use gadget_std::UniformRand;
-use gadget_std::hash::{Hash, Hasher};
-use gadget_std::string::{String, ToString};
+use blueprint_crypto_core::BytesEncoding;
+use blueprint_crypto_core::{KeyType, KeyTypeId};
+use blueprint_std::UniformRand;
+use blueprint_std::hash::{Hash, Hasher};
+use blueprint_std::string::{String, ToString};
 use k256::ecdsa::signature::SignerMut;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
@@ -26,13 +26,13 @@ macro_rules! impl_serde_bytes {
         pub struct $wrapper(pub $inner);
 
         impl PartialOrd for $wrapper {
-            fn partial_cmp(&self, other: &Self) -> Option<gadget_std::cmp::Ordering> {
+            fn partial_cmp(&self, other: &Self) -> Option<blueprint_std::cmp::Ordering> {
                 Some(self.cmp(other))
             }
         }
 
         impl Ord for $wrapper {
-            fn cmp(&self, other: &Self) -> gadget_std::cmp::Ordering {
+            fn cmp(&self, other: &Self) -> blueprint_std::cmp::Ordering {
                 self.to_bytes().cmp(&other.to_bytes())
             }
         }
@@ -70,8 +70,8 @@ macro_rules! impl_serde_bytes {
             }
         }
 
-        impl gadget_std::fmt::Display for $wrapper {
-            fn fmt(&self, f: &mut gadget_std::fmt::Formatter<'_>) -> gadget_std::fmt::Result {
+        impl blueprint_std::fmt::Display for $wrapper {
+            fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
                 write!(f, "{}", hex::encode(self.to_bytes()))
             }
         }

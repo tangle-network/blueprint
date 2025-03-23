@@ -8,8 +8,8 @@ use crate::{
         config::DiscoveryConfig,
     },
 };
+use blueprint_crypto::KeyType;
 use crossbeam_channel::Sender;
-use gadget_crypto::KeyType;
 use libp2p::{
     Multiaddr, PeerId,
     connection_limits::{self, ConnectionLimits},

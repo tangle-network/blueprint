@@ -7,8 +7,8 @@ use alloy_provider::{
 use alloy_rpc_types::serde_helpers::WithOtherFields;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::{SolConstructor, sol};
+use blueprint_clients::tangle::client::{TangleClient as TestClient, TangleConfig};
 use blueprint_core::{error, info};
-use gadget_clients::tangle::client::{TangleClient as TestClient, TangleConfig};
 use sp_core::H160;
 use tangle_subxt::subxt::{
     Config,
@@ -32,6 +32,7 @@ use tangle_subxt::tangle_testnet_runtime::api::{
             call::{Args, Job},
             create_blueprint::Blueprint,
             register::{Preferences, RegistrationArgs},
+            request::RequestArgs,
         },
         events::{JobCalled, JobResultSubmitted, MasterBlueprintServiceManagerRevised},
     },
@@ -264,6 +265,7 @@ pub async fn request_service<T: Signer<TangleConfig>>(
     user: &T,
     blueprint_id: u64,
     test_nodes: Vec<AccountId32>,
+    request_args: RequestArgs,
     value: u128,
     optional_assets: Option<Vec<AssetSecurityRequirement<AssetId>>>,
 ) -> Result<(), TransactionError> {
@@ -281,7 +283,7 @@ pub async fn request_service<T: Signer<TangleConfig>>(
         blueprint_id,
         Vec::new(),
         test_nodes,
-        Vec::new(),
+        request_args,
         security_requirements,
         1000,
         Asset::Custom(0),
@@ -442,6 +444,8 @@ pub async fn setup_operator_and_service_multiple<T: Signer<TangleConfig>>(
     sr25519_signers: &[T],
     blueprint_id: u64,
     preferences: &[Preferences],
+    registration_args: &[RegistrationArgs],
+    request_args: RequestArgs,
     _exit_after_registration: bool,
 ) -> Result<u64, TransactionError> {
     let alice_signer = sr25519_signers
@@ -452,7 +456,12 @@ pub async fn setup_operator_and_service_multiple<T: Signer<TangleConfig>>(
         .first()
         .ok_or(TransactionError::Other("No client".to_string()))?;
 
-    for ((operator, client), preferences) in sr25519_signers.iter().zip(clients).zip(preferences) {
+    for (((operator, client), preferences), registration_arg) in sr25519_signers
+        .iter()
+        .zip(clients)
+        .zip(preferences)
+        .zip(registration_args)
+    {
         join_operators(client, operator).await?;
         // Register for blueprint
         register_for_blueprint(
@@ -460,7 +469,7 @@ pub async fn setup_operator_and_service_multiple<T: Signer<TangleConfig>>(
             operator,
             blueprint_id,
             preferences.clone(),
-            RegistrationArgs::new(),
+            registration_arg.clone(),
             0,
         )
         .await?;
@@ -473,7 +482,16 @@ pub async fn setup_operator_and_service_multiple<T: Signer<TangleConfig>>(
         .iter()
         .map(Signer::account_id)
         .collect::<Vec<_>>();
-    request_service(alice_client, alice_signer, blueprint_id, accounts, 0, None).await?;
+    request_service(
+        alice_client,
+        alice_signer,
+        blueprint_id,
+        accounts,
+        request_args,
+        0,
+        None,
+    )
+    .await?;
 
     // Approve the service request and wait for completion
     let request_id = get_next_request_id(alice_client).await?.saturating_sub(1);

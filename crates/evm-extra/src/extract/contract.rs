@@ -3,7 +3,7 @@
 //! This simple extractor is used to extract the contract address from the current job call.
 //! This could be useful when you are using the [`MatchesContract`] filter.
 //!
-//! [`MatchesContract`]: crate::filters::MatchesContract
+//! [`MatchesContract`]: crate::filters::contract::MatchesContract
 
 use alloy_primitives::Address;
 

@@ -1,10 +1,10 @@
 use crate::command::keys::generate_key;
+use blueprint_crypto::bn254::ArkBlsBn254;
+use blueprint_crypto::sp_core::{SpBls381, SpEcdsa, SpEd25519, SpSr25519};
+use blueprint_crypto_core::KeyTypeId;
+use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_runner::config::Protocol;
 use color_eyre::eyre::Result;
-use gadget_crypto::bn254::ArkBlsBn254;
-use gadget_crypto::sp_core::{SpBls381, SpEcdsa, SpEd25519, SpSr25519};
-use gadget_crypto_core::KeyTypeId;
-use gadget_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use std::path::PathBuf;
 use tempfile::tempdir;
 

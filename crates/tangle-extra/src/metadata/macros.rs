@@ -240,6 +240,9 @@ fn generate_gadget_for_current_crate() -> Result<Gadget<'static>, Error> {
 /// * `manager`: The name of the smart contract that will manage the service (likely the UpperCamelCase version of your crate name)
 /// * `master_manager_revision`: The revision of the Master Blueprint Service Manager (MBSM), as a string
 /// * `supported_membership_models`: A list of the supported [`MembershipModelType`] variants
+///
+/// [`FieldType`]: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::Field
+/// [`MembershipModelType`]: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::MembershipModelType
 #[macro_export]
 macro_rules! blueprint {
     ($($tt:tt)*) => {{
@@ -354,12 +357,20 @@ macro_rules! blueprint_inner {
         }
         $crate::blueprint_inner!(@__CONSTRUCT $object $($rest)*);
     }};
-    (@__CONSTRUCT $object:ident registration_params: [$($registration_params:expr),* $(,)?] , $($rest:tt)*) => {
-        // TODO(serial): Generate registration params
+    (@__CONSTRUCT $object:ident registration_params: $registration_params:ty , $($rest:tt)*) => {
+        let registration_params = <$registration_params as $crate::metadata::IntoTangleFieldTypes>::into_tangle_fields();
+        $object.insert(
+            String::from("registration_params"),
+            $crate::metadata::macros::ext::serde_json::to_value(registration_params).expect("should serialize"),
+        );
         $crate::blueprint_inner!(@__CONSTRUCT $object $($rest)*)
     };
-    (@__CONSTRUCT $object:ident request_params: [$($request_params:expr),* $(,)?] , $($rest:tt)*) => {
-        // TODO(serial): Generate request params
+    (@__CONSTRUCT $object:ident request_params: $request_params:ty , $($rest:tt)*) => {
+        let request_params = <$request_params as $crate::metadata::IntoTangleFieldTypes>::into_tangle_fields();
+        $object.insert(
+            String::from("request_params"),
+            $crate::metadata::macros::ext::serde_json::to_value(request_params).expect("should serialize"),
+        );
         $crate::blueprint_inner!(@__CONSTRUCT $object $($rest)*)
     };
     (@__CONSTRUCT $object:ident manager: { $variant:ident = $value:literal } , $($rest:tt)*) => {{
@@ -396,9 +407,21 @@ macro_rules! blueprint_inner {
 #[cfg(test)]
 mod tests {
     use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
+    use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
     use super::*;
-    use crate::extract::{TangleArg, TangleResult};
+    use crate::extract::{List, TangleArg, TangleArgs2, TangleResult, Optional};
     use crate::metadata::types::job::JobMetadata;
+
+    #[derive(Default, serde::Deserialize, serde::Serialize)]
+    struct MyCustomType {
+        value: u8,
+        optional: Optional<u64>,
+        list: List<u64>,
+        bytes: List<u8>,
+        x: u64,
+        y: u64,
+        z: u64,
+    }
 
     #[test]
     fn info_test() {
@@ -485,6 +508,86 @@ mod tests {
                     result: vec![FieldType::Uint64],
                 }
             ]
+        );
+    }
+
+    #[test]
+    fn with_request_params() {
+        type MyRequestParams = TangleArgs2<u64, u32>;
+        let blueprint = blueprint! {
+            name: "test",
+            master_manager_revision: "Latest",
+            manager: { Evm = "TestBlueprint" },
+            request_params: MyRequestParams,
+        }
+        .unwrap();
+
+        assert_eq!(
+            blueprint.request_params,
+            vec![FieldType::Uint64, FieldType::Uint32]
+        );
+
+        type MyRequestParams2 = TangleArg<MyCustomType>;
+
+        let blueprint = blueprint! {
+            name: "test",
+            master_manager_revision: "Latest",
+            manager: { Evm = "TestBlueprint" },
+            request_params: MyRequestParams2,
+        }
+        .unwrap();
+
+        assert_eq!(
+            blueprint.request_params,
+            vec![FieldType::Struct(Box::new(BoundedVec(vec![
+                FieldType::Uint8,
+                FieldType::Optional(Box::new(FieldType::Uint64)),
+                FieldType::List(Box::new(FieldType::Uint64)),
+                FieldType::List(Box::new(FieldType::Uint8)),
+                FieldType::Uint64,
+                FieldType::Uint64,
+                FieldType::Uint64,
+            ])))]
+        );
+    }
+
+    #[test]
+    fn with_registration_params() {
+        type MyRegistrationParams = TangleArgs2<u64, u32>;
+        let blueprint = blueprint! {
+            name: "test",
+            master_manager_revision: "Latest",
+            manager: { Evm = "TestBlueprint" },
+            registration_params: MyRegistrationParams,
+        }
+        .unwrap();
+
+        assert_eq!(
+            blueprint.registration_params,
+            vec![FieldType::Uint64, FieldType::Uint32]
+        );
+
+        type MyRegistrationParams2 = TangleArg<MyCustomType>;
+
+        let blueprint = blueprint! {
+            name: "test",
+            master_manager_revision: "Latest",
+            manager: { Evm = "TestBlueprint" },
+            registration_params: MyRegistrationParams2,
+        }
+        .unwrap();
+
+        assert_eq!(
+            blueprint.registration_params,
+            vec![FieldType::Struct(Box::new(BoundedVec(vec![
+                FieldType::Uint8,
+                FieldType::Optional(Box::new(FieldType::Uint64)),
+                FieldType::List(Box::new(FieldType::Uint64)),
+                FieldType::List(Box::new(FieldType::Uint8)),
+                FieldType::Uint64,
+                FieldType::Uint64,
+                FieldType::Uint64,
+            ])))]
         );
     }
 

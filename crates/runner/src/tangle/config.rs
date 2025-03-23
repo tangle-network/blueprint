@@ -2,12 +2,12 @@ use crate::BlueprintConfig;
 use crate::config::{BlueprintEnvironment, BlueprintSettings, ProtocolSettingsT};
 use crate::error::{ConfigError, RunnerError};
 use crate::tangle::error::TangleError;
+use blueprint_keystore::backends::Backend;
+use blueprint_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
+use blueprint_keystore::crypto::tangle_pair_signer::pair_signer::PairSigner;
+use blueprint_keystore::crypto::tangle_pair_signer::sp_core;
+use blueprint_keystore::{Keystore, KeystoreConfig};
 use futures_util::future::select_ok;
-use gadget_keystore::backends::Backend;
-use gadget_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
-use gadget_keystore::crypto::tangle_pair_signer::pair_signer::PairSigner;
-use gadget_keystore::crypto::tangle_pair_signer::sp_core;
-use gadget_keystore::{Keystore, KeystoreConfig};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -53,7 +53,7 @@ impl ProtocolSettingsT for TangleProtocolSettings {
 ///
 /// This provides a [`Default`] impl for a zeroed-out [`PriceTargets`].
 ///
-/// [`PriceTargets`]: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::PriceTargets
+/// [`PriceTargets`]: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::PriceTargets
 #[derive(Clone, Debug)]
 pub struct PriceTargets(pub TanglePriceTargets);
 

@@ -1,4 +1,4 @@
-use gadget_crypto_sp_core::error::SecretStringErrorWrapper;
+use blueprint_crypto_sp_core::error::SecretStringErrorWrapper;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -10,4 +10,4 @@ pub enum TanglePairSignerError {
     EcdsaError(#[from] k256::ecdsa::Error),
 }
 
-pub type Result<T> = gadget_std::result::Result<T, TanglePairSignerError>;
+pub type Result<T> = blueprint_std::result::Result<T, TanglePairSignerError>;

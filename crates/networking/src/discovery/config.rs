@@ -3,7 +3,7 @@ use super::{
     new_kademlia,
 };
 use crate::error::Error;
-use gadget_crypto::KeyType;
+use blueprint_crypto::KeyType;
 use libp2p::{
     Multiaddr, PeerId, StreamProtocol, autonat, identify, identity::PublicKey, mdns, relay, upnp,
 };
@@ -37,7 +37,7 @@ pub struct DiscoveryConfig<K: KeyType> {
     /// Protocol version string that uniquely identifies your P2P service.
     protocol_version: String,
     /// Phantom key type
-    _marker: gadget_std::marker::PhantomData<K>,
+    _marker: blueprint_std::marker::PhantomData<K>,
 }
 
 impl<K: KeyType> DiscoveryConfig<K> {
@@ -55,7 +55,7 @@ impl<K: KeyType> DiscoveryConfig<K> {
             enable_relay: true,    // Enable by default for relay functionality
             network_name: network_name.into(),
             protocol_version: String::from("gadget/1.0.0"), // Default version
-            _marker: gadget_std::marker::PhantomData,
+            _marker: blueprint_std::marker::PhantomData,
         }
     }
 
@@ -187,7 +187,7 @@ impl<K: KeyType> DiscoveryConfig<K> {
             pending_events: VecDeque::new(),
             n_node_connected: 0,
             pending_dial_opts: VecDeque::new(),
-            _marker: gadget_std::marker::PhantomData,
+            _marker: blueprint_std::marker::PhantomData,
         })
     }
 }

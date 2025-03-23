@@ -4,11 +4,11 @@ use std::path::PathBuf;
 
 use crate::error::ConfigError;
 use alloc::string::{String, ToString};
+#[cfg(feature = "std")]
+use blueprint_keystore::{Keystore, KeystoreConfig};
 use clap::Parser;
 use core::fmt::{Debug, Display};
 use core::str::FromStr;
-#[cfg(feature = "std")]
-use gadget_keystore::{Keystore, KeystoreConfig};
 #[cfg(feature = "networking")]
 pub use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
@@ -53,7 +53,7 @@ impl Protocol {
     ///
     /// # Errors
     ///
-    /// * [`Error::UnsupportedProtocol`] if the protocol is unknown. See [`Protocol`].
+    /// * [`ConfigError::UnsupportedProtocol`] if the protocol is unknown. See [`Protocol`].
     pub fn from_env() -> Result<Option<Self>, ConfigError> {
         if let Ok(protocol) = std::env::var("PROTOCOL") {
             return protocol.to_ascii_lowercase().parse::<Protocol>().map(Some);
@@ -160,11 +160,13 @@ impl ProtocolSettingsT for ProtocolSettings {
 }
 
 impl ProtocolSettings {
-    /// Attempt to extract the [`TangleInstanceSettings`]
+    /// Attempt to extract the [`TangleProtocolSettings`]
     ///
     /// # Errors
     ///
     /// `self` is not [`ProtocolSettings::Tangle`]
+    ///
+    /// [`TangleProtocolSettings`]: crate::tangle::config::TangleProtocolSettings
     #[cfg(feature = "tangle")]
     #[allow(clippy::match_wildcard_for_single_variants)]
     pub fn tangle(&self) -> Result<&crate::tangle::config::TangleProtocolSettings, ConfigError> {
@@ -179,6 +181,8 @@ impl ProtocolSettings {
     /// # Errors
     ///
     /// `self` is not [`ProtocolSettings::Eigenlayer`]
+    ///
+    /// [`EigenlayerProtocolSettings`]: crate::eigenlayer::config::EigenlayerProtocolSettings
     #[cfg(feature = "eigenlayer")]
     #[allow(clippy::match_wildcard_for_single_variants)]
     pub fn eigenlayer(
@@ -190,16 +194,19 @@ impl ProtocolSettings {
         }
     }
 
-    /// Attempt to extract the [`SymbioticContractAddresses`]
-    ///
-    /// # Errors
-    ///
-    /// `self` is not [`ProtocolSettings::Symbiotic`]
-    #[cfg(feature = "symbiotic")]
-    #[allow(clippy::match_wildcard_for_single_variants)]
-    pub fn symbiotic(&self) -> Result<(), ConfigError> {
-        todo!()
-    }
+    // TODO
+    // /// Attempt to extract the [`SymbioticContractAddresses`]
+    // ///
+    // /// # Errors
+    // ///
+    // /// `self` is not [`ProtocolSettings::Symbiotic`]
+    // ///
+    // /// [`SymbioticContractAddresses`]: crate::symbiotic::config::SymbioticContractAddresses
+    // #[cfg(feature = "symbiotic")]
+    // #[allow(clippy::match_wildcard_for_single_variants)]
+    // pub fn symbiotic(&self) -> Result<(), ConfigError> {
+    //     todo!()
+    // }
 }
 
 /// Description of the environment in which the blueprint is running
@@ -319,17 +326,22 @@ impl BlueprintEnvironment {
     ///
     /// See [`NetworkService::new()`]
     ///
-    /// [`NetworkService::new()`]: gadget_networking::NetworkService::new
+    /// [`NetworkService::new()`]: blueprint_networking::NetworkService::new
     #[cfg(feature = "networking")]
-    pub fn libp2p_start_network<K: gadget_crypto::KeyType>(
+    pub fn libp2p_start_network<K: blueprint_crypto::KeyType>(
         &self,
-        network_config: gadget_networking::NetworkConfig<K>,
-        allowed_keys: gadget_networking::service::AllowedKeys<K>,
-        allowed_keys_rx: crossbeam_channel::Receiver<gadget_networking::AllowedKeys<K>>,
-    ) -> Result<gadget_networking::service_handle::NetworkServiceHandle<K>, crate::error::RunnerError>
-    {
-        let networking_service =
-            gadget_networking::NetworkService::new(network_config, allowed_keys, allowed_keys_rx)?;
+        network_config: blueprint_networking::NetworkConfig<K>,
+        allowed_keys: blueprint_networking::service::AllowedKeys<K>,
+        allowed_keys_rx: crossbeam_channel::Receiver<blueprint_networking::AllowedKeys<K>>,
+    ) -> Result<
+        blueprint_networking::service_handle::NetworkServiceHandle<K>,
+        crate::error::RunnerError,
+    > {
+        let networking_service = blueprint_networking::NetworkService::new(
+            network_config,
+            allowed_keys,
+            allowed_keys_rx,
+        )?;
 
         let handle = networking_service.start();
 
@@ -346,16 +358,16 @@ impl BlueprintEnvironment {
     /// * `ECDSA`
     #[cfg(feature = "networking")]
     #[allow(clippy::missing_panics_doc)] // Known good Multiaddr
-    pub fn libp2p_network_config<K: gadget_crypto::KeyType>(
+    pub fn libp2p_network_config<K: blueprint_crypto::KeyType>(
         &self,
         network_name: impl Into<String>,
         using_evm_address_for_handshake_verification: bool,
-    ) -> Result<gadget_networking::NetworkConfig<K>, crate::error::RunnerError> {
-        use gadget_keystore::backends::Backend;
-        use gadget_keystore::crypto::sp_core::SpEd25519 as LibP2PKeyType;
+    ) -> Result<blueprint_networking::NetworkConfig<K>, crate::error::RunnerError> {
+        use blueprint_keystore::backends::Backend;
+        use blueprint_keystore::crypto::sp_core::SpEd25519 as LibP2PKeyType;
 
-        let keystore_config = gadget_keystore::KeystoreConfig::new().fs_root(&self.keystore_uri);
-        let keystore = gadget_keystore::Keystore::new(keystore_config)?;
+        let keystore_config = blueprint_keystore::KeystoreConfig::new().fs_root(&self.keystore_uri);
+        let keystore = blueprint_keystore::Keystore::new(keystore_config)?;
         let ed25519_pub_key = keystore.first_local::<LibP2PKeyType>()?;
         let ed25519_pair = keystore.get_secret::<LibP2PKeyType>(&ed25519_pub_key)?;
         let network_identity = libp2p::identity::Keypair::ed25519_from_bytes(ed25519_pair.seed())
@@ -369,7 +381,7 @@ impl BlueprintEnvironment {
             .expect("valid multiaddr; qed");
 
         let network_name: String = network_name.into();
-        let network_config = gadget_networking::NetworkConfig {
+        let network_config = blueprint_networking::NetworkConfig {
             instance_id: network_name.clone(),
             network_name,
             instance_key_pair: ecdsa_pair,
@@ -404,10 +416,7 @@ impl ContextConfig {
     /// - `keystore_uri`: The keystore URI as a string
     /// - `chain`: The [`chain`](SupportedChains)
     /// - `protocol`: The [`Protocol`]
-    /// - `eigenlayer_contract_addresses`: The [`contract addresses`](EigenlayerContractAddresses) for the necessary EigenLayer contracts
-    /// - `symbiotic_contract_addresses`: The [`contract addresses`](SymbioticContractAddresses) for the necessary Symbiotic contracts
-    /// - `blueprint_id`: The blueprint ID - only required for Tangle
-    /// - `service_id`: The service ID - only required for Tangle
+    /// - `protocol_settings`: The protocol-specific settings
     #[allow(
         clippy::too_many_arguments,
         clippy::too_many_lines,
@@ -637,7 +646,7 @@ pub struct BlueprintSettings {
     // NETWORKING
     // ========
     #[cfg(feature = "networking")]
-    #[arg(long, value_parser = <Multiaddr as gadget_std::str::FromStr>::from_str, action = clap::ArgAction::Append, env)]
+    #[arg(long, value_parser = <Multiaddr as blueprint_std::str::FromStr>::from_str, action = clap::ArgAction::Append, env)]
     #[serde(default)]
     bootnodes: Option<Vec<Multiaddr>>,
     #[cfg(feature = "networking")]
