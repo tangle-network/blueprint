@@ -1,13 +1,20 @@
 use std::net::AddrParseError;
 
-use eigensdk::services_blsaggregation::bls_aggregation_service_error::BlsAggregationServiceError;
+use eigensdk::{
+    services_blsaggregation::bls_aggregation_service_error::BlsAggregationServiceError,
+    types::operator::OperatorTypesError,
+};
 
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum TaskError {
+    #[error("Blueprint SDK: {0}")]
+    BlueprintSDK(#[from] blueprint_sdk::Error),
     #[error(transparent)]
     SolType(#[from] alloy_sol_types::Error),
     #[error(transparent)]
     BlsAggregationService(#[from] BlsAggregationServiceError),
+    #[error(transparent)]
+    OperatorTypesError(#[from] OperatorTypesError),
     #[error("Aggregated response receiver closed")]
     AggregatedResponseReceiverClosed,
     #[error("Context: {0}")]

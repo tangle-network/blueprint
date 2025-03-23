@@ -14,7 +14,7 @@ use blueprint_sdk::keystore::backends::Backend;
 use blueprint_sdk::keystore::backends::bn254::Bn254Backend;
 use blueprint_sdk::{error, info};
 use eigensdk::crypto_bls::BlsKeyPair;
-use eigensdk::crypto_bls::OperatorId;
+use eigensdk::types::operator::operator_id_from_g1_pub_key;
 
 pub const XSQUARE_JOB_ID: u32 = 0;
 
@@ -78,7 +78,7 @@ pub async fn xsquare_eigen(
                 )));
             }
         };
-        let operator_id = operator_id_from_key(bls_key_pair.clone());
+        let operator_id = operator_id_from_g1_pub_key(bls_key_pair.public_key())?;
 
         // Sign the Hashed Message and send it to the BLS Aggregator
         let msg_hash = keccak256(<TaskResponse as SolType>::abi_encode(&task_response));
@@ -102,18 +102,4 @@ pub async fn xsquare_eigen(
     }
 
     Ok(())
-}
-
-/// Generate the Operator ID from the BLS Keypair
-pub fn operator_id_from_key(key: BlsKeyPair) -> OperatorId {
-    let pub_key = key.public_key();
-    let pub_key_affine = pub_key.g1();
-
-    let x_int: num_bigint::BigUint = pub_key_affine.x.into();
-    let y_int: num_bigint::BigUint = pub_key_affine.y.into();
-
-    let x_bytes = x_int.to_bytes_be();
-    let y_bytes = y_int.to_bytes_be();
-
-    keccak256([x_bytes, y_bytes].concat())
 }
