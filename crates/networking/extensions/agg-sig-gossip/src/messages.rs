@@ -1,5 +1,5 @@
-use gadget_crypto::aggregation::AggregatableSignature;
-use gadget_networking::types::ParticipantId;
+use blueprint_crypto::aggregation::AggregatableSignature;
+use blueprint_networking::types::ParticipantId;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;

@@ -7,11 +7,11 @@ use crate::{
     signature_weight::SignatureWeight,
 };
 use blueprint_core::{error, info, warn};
-use gadget_crypto::{
+use blueprint_crypto::{
     aggregation::AggregatableSignature,
     hashing::{blake3_256, keccak_256},
 };
-use gadget_networking::{
+use blueprint_networking::{
     service_handle::NetworkServiceHandle,
     types::{MessageRouting, ParticipantId, ParticipantInfo, ProtocolMessage},
 };

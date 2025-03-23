@@ -1,5 +1,5 @@
 use bitvec::prelude::*;
-use gadget_networking::types::ParticipantId;
+use blueprint_networking::types::ParticipantId;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 

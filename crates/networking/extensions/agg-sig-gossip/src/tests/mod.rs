@@ -5,8 +5,8 @@ use crate::{
     signature_weight::{EqualWeight, SignatureWeight},
 };
 use blueprint_core::info;
-use gadget_crypto::aggregation::AggregatableSignature;
-use gadget_networking::{
+use blueprint_crypto::aggregation::AggregatableSignature;
+use blueprint_networking::{
     service_handle::NetworkServiceHandle,
     test_utils::{create_whitelisted_nodes, setup_log, wait_for_all_handshakes},
     types::ParticipantId,
@@ -244,7 +244,7 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
 // BLS Tests
 mod bls_tests {
     use super::*;
-    use gadget_crypto::{
+    use blueprint_crypto::{
         KeyType,
         sp_core::{SpBls381, SpBls381Pair},
     };
@@ -284,8 +284,8 @@ mod bls_tests {
 // BN254 Tests
 mod bn254_tests {
     use super::*;
-    use gadget_crypto::KeyType;
-    use gadget_crypto::bn254::{ArkBlsBn254, ArkBlsBn254Secret};
+    use blueprint_crypto::KeyType;
+    use blueprint_crypto::bn254::{ArkBlsBn254, ArkBlsBn254Secret};
 
     fn generate_bn254_test_keys(num_keys: usize) -> Vec<ArkBlsBn254Secret> {
         let mut keys = Vec::with_capacity(num_keys);

@@ -1,7 +1,7 @@
 use crate::{ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Signature, error::Bn254Error};
 use ark_bn254::{G1Affine, G2Affine};
 use ark_ec::AffineRepr;
-use gadget_crypto_core::{KeyType, aggregation::AggregatableSignature};
+use blueprint_crypto_core::{KeyType, aggregation::AggregatableSignature};
 
 impl AggregatableSignature for ArkBlsBn254 {
     type AggregatedSignature = ArkBlsBn254Signature;

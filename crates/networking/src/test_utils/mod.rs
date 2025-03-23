@@ -1,7 +1,7 @@
 use crate::{
     NetworkConfig, NetworkService, service::AllowedKeys, service_handle::NetworkServiceHandle,
 };
-use gadget_crypto::KeyType;
+use blueprint_crypto::KeyType;
 use libp2p::{
     Multiaddr, PeerId,
     identity::{self, Keypair},
@@ -57,6 +57,24 @@ impl<K: KeyType> TestNode<K> {
     }
 
     /// Create a new test node with specified keys
+    ///
+    /// # Arguments
+    ///
+    /// * `network_name` - The name of the network
+    /// * `instance_id` - The instance ID of the node
+    /// * `allowed_keys` - The allowed keys for the node
+    /// * `bootstrap_peers` - The bootstrap peers for the node
+    /// * `instance_key_pair` - The instance key pair for the node
+    /// * `local_key` - The local key for the node
+    /// * `using_evm_address_for_handshake_verification` - Whether to use the EVM address for handshake verification
+    ///
+    /// # Returns
+    ///
+    /// Returns a new test node
+    ///
+    /// # Panics
+    ///
+    /// Panics if the local key is not provided and cannot be generated
     pub fn new_with_keys(
         network_name: &str,
         instance_id: &str,
@@ -104,6 +122,10 @@ impl<K: KeyType> TestNode<K> {
     }
 
     /// Start the node and wait for it to be fully initialized
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service is already started
     pub async fn start(&mut self) -> Result<NetworkServiceHandle<K>, &'static str> {
         // Take ownership of the service
         let service = self.service.take().ok_or("Service already started")?;
@@ -183,6 +205,15 @@ impl<K: KeyType> TestNode<K> {
 }
 
 /// Wait for a condition with timeout
+///
+/// # Arguments
+///
+/// * `timeout` - The timeout for the wait
+/// * `condition` - The condition to wait for
+///
+/// # Errors
+///
+/// Returns an error if the condition timed out
 pub async fn wait_for_condition<F>(timeout: Duration, mut condition: F) -> Result<(), &'static str>
 where
     F: FnMut() -> bool,
@@ -198,6 +229,15 @@ where
 }
 
 /// Wait for peers to discover each other
+///
+/// # Arguments
+///
+/// * `handles` - The handles to wait for peer discovery
+/// * `timeout` - The timeout for the wait
+///
+/// # Errors
+///
+/// Returns an error if the peer discovery timed out
 pub async fn wait_for_peer_discovery<K: KeyType>(
     handles: &[&NetworkServiceHandle<K>],
     timeout: Duration,
@@ -207,12 +247,7 @@ pub async fn wait_for_peer_discovery<K: KeyType>(
     wait_for_condition(timeout, || {
         for (i, handle1) in handles.iter().enumerate() {
             for (j, handle2) in handles.iter().enumerate() {
-                if i != j
-                    && !handle1
-                        .peers()
-                        .iter()
-                        .any(|id| *id == handle2.local_peer_id)
-                {
+                if i != j && !handle1.peers().contains(&handle2.local_peer_id) {
                     return false;
                 }
             }
@@ -223,6 +258,16 @@ pub async fn wait_for_peer_discovery<K: KeyType>(
 }
 
 /// Wait for peer info to be updated
+///
+/// # Arguments
+///
+/// * `handle1` - The first handle
+/// * `handle2` - The second handle
+/// * `timeout` - The timeout for the wait
+///
+/// # Panics
+///
+/// Panics if the peer info timed out
 pub async fn wait_for_peer_info<K: KeyType>(
     handle1: &NetworkServiceHandle<K>,
     handle2: &NetworkServiceHandle<K>,
@@ -256,7 +301,16 @@ pub async fn wait_for_peer_info<K: KeyType>(
     }
 }
 
-// Helper to wait for handshake completion between multiple nodes
+/// Helper to wait for handshake completion between multiple nodes
+///
+/// # Arguments
+///
+/// * `handles` - The handles to wait for handshake completion
+/// * `timeout_length` - The timeout for the wait
+///
+/// # Panics
+///
+/// Panics if the handshake verification timed out
 pub async fn wait_for_all_handshakes<K: KeyType>(
     handles: &[&mut NetworkServiceHandle<K>],
     timeout_length: Duration,
@@ -293,7 +347,17 @@ pub async fn wait_for_all_handshakes<K: KeyType>(
     .expect("Handshake verification timed out");
 }
 
-// Helper to wait for handshake completion between two nodes
+/// Helper to wait for handshake completion between two nodes
+///
+/// # Arguments
+///
+/// * `handle1` - The first handle
+/// * `handle2` - The second handle
+/// * `timeout_length` - The timeout for the wait
+///
+/// # Panics
+///
+/// Panics if the handshake verification timed out
 pub async fn wait_for_handshake_completion<K: KeyType>(
     handle1: &NetworkServiceHandle<K>,
     handle2: &NetworkServiceHandle<K>,
@@ -317,7 +381,19 @@ pub async fn wait_for_handshake_completion<K: KeyType>(
     .expect("Handshake verification timed out");
 }
 
-// Helper to create a whitelisted test node
+/// Helper to create a whitelisted test node
+///
+/// # Arguments
+///
+/// * `network` - The network name
+/// * `instance` - The instance ID
+/// * `allowed_keys` - The allowed keys for the node
+/// * `key_pair` - The key pair for the node
+/// * `using_evm_address_for_handshake_verification` - Whether to use the EVM address for handshake verification
+///
+/// # Returns
+///
+/// Returns a new test node
 pub fn create_node_with_keys<K: KeyType>(
     network: &str,
     instance: &str,
@@ -336,7 +412,20 @@ pub fn create_node_with_keys<K: KeyType>(
     )
 }
 
-// Helper to create a set of nodes with whitelisted keys
+/// Helper to create a set of nodes with whitelisted keys
+///
+/// # Arguments
+///
+/// * `count` - The number of nodes to create
+/// * `using_evm_address_for_handshake_verification` - Whether to use the EVM address for handshake verification
+///
+/// # Returns
+///
+/// Returns a vector of test nodes
+///
+/// # Panics
+///
+/// Panics if the local key is not provided and cannot be generated
 pub async fn create_whitelisted_nodes<K: KeyType>(
     count: usize,
     using_evm_address_for_handshake_verification: bool,

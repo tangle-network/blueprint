@@ -26,8 +26,8 @@ mod bls377_tests {
 
     use super::*;
     use ::tnt_bls::SerializableToBytes;
-    use gadget_crypto_core::aggregation::AggregatableSignature;
-    use gadget_crypto_hashing::sha2_256;
+    use blueprint_crypto_core::aggregation::AggregatableSignature;
+    use blueprint_crypto_hashing::sha2_256;
 
     #[test]
     fn test_key_generation() {
@@ -118,10 +118,8 @@ mod bls377_tests {
         let secrets: Vec<W3fBls377Secret> = (0..3)
             .map(|i| W3fBls377::generate_with_seed(Some(&[i as u8; 32])).unwrap())
             .collect();
-        let publics: Vec<W3fBls377Public> = secrets
-            .iter()
-            .map(|s| W3fBls377::public_from_secret(s))
-            .collect();
+        let publics: Vec<W3fBls377Public> =
+            secrets.iter().map(W3fBls377::public_from_secret).collect();
 
         // Create individual signatures
         let signatures: Vec<W3fBls377Signature> = secrets
@@ -154,10 +152,8 @@ mod bls377_tests {
             W3fBls377::generate_with_seed(Some(&[3u8; 32])).unwrap(),
         ];
 
-        let publics: Vec<W3fBls377Public> = secrets
-            .iter()
-            .map(|s| W3fBls377::public_from_secret(s))
-            .collect();
+        let publics: Vec<W3fBls377Public> =
+            secrets.iter().map(W3fBls377::public_from_secret).collect();
 
         // Create two valid signatures for original message
         let mut valid_signatures: Vec<W3fBls377Signature> = secrets[0..2]
@@ -194,7 +190,7 @@ mod bls377_tests {
             .collect::<Vec<_>>();
         let valid_publics = valid_secrets
             .iter()
-            .map(|s| W3fBls377::public_from_secret(s))
+            .map(W3fBls377::public_from_secret)
             .collect::<Vec<_>>();
 
         // Generate unrelated key
@@ -331,10 +327,8 @@ mod bls381_tests {
         let secrets: Vec<W3fBls381Secret> = (0..3)
             .map(|i| W3fBls381::generate_with_seed(Some(&[i as u8; 32])).unwrap())
             .collect();
-        let publics: Vec<W3fBls381Public> = secrets
-            .iter()
-            .map(|s| W3fBls381::public_from_secret(s))
-            .collect();
+        let publics: Vec<W3fBls381Public> =
+            secrets.iter().map(W3fBls381::public_from_secret).collect();
 
         // Create individual signatures
         let signatures: Vec<W3fBls381Signature> = secrets
@@ -367,10 +361,8 @@ mod bls381_tests {
             W3fBls381::generate_with_seed(Some(&[3u8; 32])).unwrap(),
         ];
 
-        let publics: Vec<W3fBls381Public> = secrets
-            .iter()
-            .map(|s| W3fBls381::public_from_secret(s))
-            .collect();
+        let publics: Vec<W3fBls381Public> =
+            secrets.iter().map(W3fBls381::public_from_secret).collect();
 
         // Create two valid signatures and one invalid
         let mut signatures: Vec<W3fBls381Signature> = secrets[0..2]
@@ -407,7 +399,7 @@ mod bls381_tests {
             .collect::<Vec<_>>();
         let valid_publics = valid_secrets
             .iter()
-            .map(|s| W3fBls381::public_from_secret(s))
+            .map(W3fBls381::public_from_secret)
             .collect::<Vec<_>>();
 
         // Generate unrelated key

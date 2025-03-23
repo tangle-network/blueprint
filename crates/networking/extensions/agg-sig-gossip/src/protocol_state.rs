@@ -1,7 +1,7 @@
 use crate::{AggregationResult, participants::ParticipantSet};
-use gadget_crypto::aggregation::AggregatableSignature;
-use gadget_networking::types::ParticipantId;
-use gadget_std::{
+use blueprint_crypto::aggregation::AggregatableSignature;
+use blueprint_networking::types::ParticipantId;
+use blueprint_std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Formatter, Result as FmtResult},
 };

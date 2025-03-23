@@ -276,7 +276,7 @@ fn test_signature_aggregation_success() {
         .collect();
     let publics: Vec<ArkBlsBn254Public> = secrets
         .iter()
-        .map(|s| ArkBlsBn254::public_from_secret(s))
+        .map(ArkBlsBn254::public_from_secret)
         .collect();
 
     // Create individual signatures
@@ -302,7 +302,7 @@ fn test_signature_aggregation_failure() {
     let different_message = b"completely different message".to_vec();
 
     // Generate 3 valid keys
-    let secrets = vec![
+    let secrets = [
         ArkBlsBn254::generate_with_seed(Some(&[1u8; 32])).unwrap(),
         ArkBlsBn254::generate_with_seed(Some(&[2u8; 32])).unwrap(),
         ArkBlsBn254::generate_with_seed(Some(&[3u8; 32])).unwrap(),
@@ -310,7 +310,7 @@ fn test_signature_aggregation_failure() {
 
     let publics: Vec<ArkBlsBn254Public> = secrets
         .iter()
-        .map(|s| ArkBlsBn254::public_from_secret(s))
+        .map(ArkBlsBn254::public_from_secret)
         .collect();
 
     // Create two valid signatures for the original message
@@ -346,7 +346,7 @@ fn test_aggregation_with_mismatched_keys() {
         .collect::<Vec<_>>();
     let valid_publics = valid_secrets
         .iter()
-        .map(|s| ArkBlsBn254::public_from_secret(s))
+        .map(ArkBlsBn254::public_from_secret)
         .collect::<Vec<_>>();
 
     // Generate unrelated key

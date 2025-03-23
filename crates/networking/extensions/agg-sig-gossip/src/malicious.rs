@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{AggregationError, SignatureAggregationProtocol, SignatureWeight};
-use gadget_crypto::{aggregation::AggregatableSignature, hashing::blake3_256};
-use gadget_networking::types::ParticipantId;
+use blueprint_crypto::{aggregation::AggregatableSignature, hashing::blake3_256};
+use blueprint_networking::types::ParticipantId;
 use serde::{Deserialize, Serialize};
 
 /// Evidence of malicious behavior

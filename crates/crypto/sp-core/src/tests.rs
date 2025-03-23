@@ -1,4 +1,4 @@
-use gadget_crypto_core::{KeyType, aggregation::AggregatableSignature};
+use blueprint_crypto_core::{KeyType, aggregation::AggregatableSignature};
 
 use crate::error::SpCoreError;
 
@@ -23,7 +23,7 @@ mod bls381_tests {
     use crate::error::SpCoreError;
 
     use super::*;
-    use gadget_crypto_core::{KeyType, aggregation::AggregatableSignature};
+    use blueprint_crypto_core::{KeyType, aggregation::AggregatableSignature};
     use sp_core::Pair;
 
     #[test]
@@ -119,10 +119,8 @@ mod bls381_tests {
         let secrets: Vec<SpBls381Pair> = (0..3)
             .map(|i| SpBls381::generate_with_seed(Some(&[i as u8; 32])).unwrap())
             .collect();
-        let publics: Vec<SpBls381Public> = secrets
-            .iter()
-            .map(|s| SpBls381::public_from_secret(s))
-            .collect();
+        let publics: Vec<SpBls381Public> =
+            secrets.iter().map(SpBls381::public_from_secret).collect();
 
         // Create individual signatures
         let signatures: Vec<SpBls381Signature> = secrets
@@ -156,10 +154,8 @@ mod bls381_tests {
             SpBls381::generate_with_seed(Some(&[3u8; 32])).unwrap(),
         ];
 
-        let publics: Vec<SpBls381Public> = secrets
-            .iter()
-            .map(|s| SpBls381::public_from_secret(s))
-            .collect();
+        let publics: Vec<SpBls381Public> =
+            secrets.iter().map(SpBls381::public_from_secret).collect();
 
         // Create two valid signatures and one invalid
         let mut signatures: Vec<SpBls381Signature> = secrets[0..2]
@@ -194,7 +190,7 @@ mod bls381_tests {
             .collect::<Vec<_>>();
         let valid_publics = valid_secrets
             .iter()
-            .map(|s| SpBls381::public_from_secret(s))
+            .map(SpBls381::public_from_secret)
             .collect::<Vec<_>>();
 
         // Generate unrelated key
@@ -235,7 +231,7 @@ mod bls381_tests {
 
 mod bls377_tests {
     use super::*;
-    use gadget_crypto_core::KeyType;
+    use blueprint_crypto_core::KeyType;
     use sp_core::Pair;
 
     #[test]
@@ -331,7 +327,7 @@ fn test_bls377_signature_aggregation() {
         .collect::<Vec<_>>();
     let publics = secrets
         .iter()
-        .map(|s| SpBls377::public_from_secret(s))
+        .map(SpBls377::public_from_secret)
         .collect::<Vec<_>>();
 
     // Generate signatures
@@ -356,7 +352,7 @@ fn test_bls377_aggregation_with_invalid_signature() {
         .collect::<Vec<_>>();
     let publics = secrets
         .iter()
-        .map(|s| SpBls377::public_from_secret(s))
+        .map(SpBls377::public_from_secret)
         .collect::<Vec<_>>();
 
     // Generate one valid and one invalid signature
@@ -393,7 +389,7 @@ fn test_bls377_aggregation_with_mismatched_keys() {
         .collect::<Vec<_>>();
     let valid_publics = valid_secrets
         .iter()
-        .map(|s| SpBls377::public_from_secret(s))
+        .map(SpBls377::public_from_secret)
         .collect::<Vec<_>>();
 
     // Generate unrelated key

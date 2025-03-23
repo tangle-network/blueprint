@@ -3,8 +3,8 @@ use crate::{
     bls381::{W3fBls381, W3fBls381Public, W3fBls381Signature},
     error::BlsError,
 };
-use gadget_crypto_core::{KeyType, aggregation::AggregatableSignature};
-use gadget_std::Zero;
+use blueprint_crypto_core::{KeyType, aggregation::AggregatableSignature};
+use blueprint_std::Zero;
 use tnt_bls::{PublicKey, Signature, TinyBLS377, TinyBLS381};
 
 macro_rules! impl_aggregatable_bls {

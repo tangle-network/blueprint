@@ -1,7 +1,7 @@
 use blueprint_core::{debug, error, warn};
-use gadget_crypto::{BytesEncoding, aggregation::AggregatableSignature};
-use gadget_networking::types::ParticipantId;
-use gadget_std::{
+use blueprint_crypto::{BytesEncoding, aggregation::AggregatableSignature};
+use blueprint_networking::types::ParticipantId;
+use blueprint_std::{
     collections::HashMap,
     collections::HashSet,
     hash::{Hash, Hasher},

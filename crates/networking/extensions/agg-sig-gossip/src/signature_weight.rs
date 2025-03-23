@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::hash::Hash;
 use std::marker::PhantomData;
 
-use gadget_networking::types::ParticipantId;
+use blueprint_networking::types::ParticipantId;
 
 use crate::participants::ParticipantSet;
 

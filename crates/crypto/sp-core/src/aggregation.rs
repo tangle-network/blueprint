@@ -1,8 +1,8 @@
 use crate::{bls::*, error::SpCoreError};
-use gadget_crypto_bls::bls377::{W3fBls377Public, W3fBls377Signature};
-use gadget_crypto_bls::bls381::{W3fBls381Public, W3fBls381Signature};
-use gadget_crypto_core::aggregation::AggregatableSignature;
-use gadget_std::Zero;
+use blueprint_crypto_bls::bls377::{W3fBls377Public, W3fBls377Signature};
+use blueprint_crypto_bls::bls381::{W3fBls381Public, W3fBls381Signature};
+use blueprint_crypto_core::aggregation::AggregatableSignature;
+use blueprint_std::Zero;
 use tnt_bls::{
     EngineBLS, Message, PublicKey, SerializableToBytes, Signature, TinyBLS377, TinyBLS381,
 };
