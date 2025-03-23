@@ -1,8 +1,7 @@
-use std::collections::HashMap;
-
 use crate::{AggregationError, SignatureAggregationProtocol, SignatureWeight};
-use blueprint_crypto::{aggregation::AggregatableSignature, hashing::blake3_256};
+use blueprint_crypto::aggregation::AggregatableSignature;
 use blueprint_networking::types::ParticipantId;
+use blueprint_std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 /// Evidence of malicious behavior
@@ -11,8 +10,6 @@ use serde::{Deserialize, Serialize};
 pub enum MaliciousEvidence<S: AggregatableSignature> {
     /// Invalid signature that doesn't verify
     InvalidSignature {
-        /// The signer's ID
-        signer_id: ParticipantId,
         /// Signature
         signature: S::Signature,
         /// Message being signed
@@ -58,14 +55,10 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
         public_keys: &HashMap<ParticipantId, S::Public>,
     ) -> Result<bool, AggregationError> {
         match evidence {
-            MaliciousEvidence::InvalidSignature {
-                signature,
-                message,
-                signer_id,
-            } => {
-                let operator_key = public_keys.get(&operator).ok_or_else(|| {
-                    AggregationError::Protocol(format!("Missing public key for {}", operator.0))
-                })?;
+            MaliciousEvidence::InvalidSignature { signature, message } => {
+                let operator_key = public_keys
+                    .get(&operator)
+                    .ok_or_else(|| AggregationError::KeyNotFound)?;
 
                 // Verify the signature is invalid - handle the Result properly
                 let is_valid = S::verify(operator_key, message, signature);
@@ -78,9 +71,9 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
                 message1,
                 message2,
             } => {
-                let operator_key = public_keys.get(&operator).ok_or_else(|| {
-                    AggregationError::Protocol(format!("Missing public key for {}", operator.0))
-                })?;
+                let operator_key = public_keys
+                    .get(&operator)
+                    .ok_or_else(|| AggregationError::KeyNotFound)?;
 
                 // Messages must be different - signing the same message multiple times is allowed
                 if message1 == message2 {

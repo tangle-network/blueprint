@@ -1,10 +1,5 @@
-use std::collections::HashSet;
-use std::hash::Hash;
-use std::marker::PhantomData;
-
-use blueprint_networking::types::ParticipantId;
-
 use crate::participants::ParticipantSet;
+use blueprint_networking::types::ParticipantId;
 
 /// Trait for weighting of participants in signature aggregation
 pub trait SignatureWeight {

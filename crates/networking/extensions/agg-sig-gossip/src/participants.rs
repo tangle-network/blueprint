@@ -1,7 +1,7 @@
 use bitvec::prelude::*;
 use blueprint_networking::types::ParticipantId;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 /// Efficient representation of participants using bitvec
 #[derive(Clone, Debug, Serialize, Deserialize)]

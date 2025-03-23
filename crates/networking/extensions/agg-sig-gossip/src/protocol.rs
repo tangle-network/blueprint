@@ -7,19 +7,14 @@ use crate::{
     signature_weight::SignatureWeight,
 };
 use blueprint_core::{error, info, warn};
-use blueprint_crypto::{
-    aggregation::AggregatableSignature,
-    hashing::{blake3_256, keccak_256},
-};
+use blueprint_crypto::{aggregation::AggregatableSignature, hashing::blake3_256};
 use blueprint_networking::{
     service_handle::NetworkServiceHandle,
     types::{MessageRouting, ParticipantId, ParticipantInfo, ProtocolMessage},
 };
-use std::{
+use blueprint_std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
-    result,
-    sync::Arc,
     time::{Duration, Instant},
 };
 use thiserror::Error;
@@ -28,17 +23,8 @@ use tracing::debug;
 /// Error types for the aggregation protocol
 #[derive(Debug, Error)]
 pub enum AggregationError {
-    #[error("Invalid signature from participant {0}")]
-    InvalidSignature(ParticipantId),
-
-    #[error("Duplicate different signature from participant {0}")]
-    DuplicateSignature(ParticipantId),
-
     #[error("Threshold not met: got {0}, need {1}")]
     ThresholdNotMet(usize, usize),
-
-    #[error("Aggregation error: {0}")]
-    AggregationError(String),
 
     #[error("Serialization error: {0}")]
     SerializationError(#[from] bincode::Error),
@@ -55,14 +41,8 @@ pub enum AggregationError {
     #[error("Timeout")]
     Timeout,
 
-    #[error("Invalid message content")]
-    InvalidMessage,
-
     #[error("Signing error: {0}")]
     SigningError(String),
-
-    #[error("Protocol operation interrupted")]
-    Interrupted,
 
     #[error("Missing data")]
     MissingData,
@@ -209,7 +189,6 @@ where
                 MaliciousEvidence::InvalidSignature {
                     message: message.clone(),
                     signature,
-                    signer_id,
                 },
                 network_handle,
             )
@@ -554,30 +533,6 @@ where
         network_handle
             .send(routing, payload)
             .map_err(|e| AggregationError::NetworkError(format!("Failed to send message: {}", e)))
-    }
-
-    /// Resend our own signature if progress stalls
-    async fn resend_local_signature(
-        &self,
-        network_handle: &NetworkServiceHandle<S>,
-    ) -> Result<(), AggregationError> {
-        // Only resend if we have a local message
-        if self.state.local_message.is_empty() {
-            return Ok(());
-        }
-
-        let my_signature = self.state.seen_signatures.get(&self.config.local_id);
-        if let Some((signature, message)) = my_signature {
-            let msg = AggSigMessage::SignatureShare {
-                signer_id: self.config.local_id,
-                signature: signature.clone(),
-                message: message.clone(),
-            };
-
-            self.send_message(msg, None, network_handle).await?;
-        }
-
-        Ok(())
     }
 
     /// Sign a message and broadcast the signature
