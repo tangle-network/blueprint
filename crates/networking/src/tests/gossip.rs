@@ -14,6 +14,8 @@ use tokio::time::timeout;
 use tracing::info;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(10);
+const NETWORK_NAME: &str = "gossip";
+const INSTANCE_NAME: &str = "1.0.0";
 const PROTOCOL_NAME: &str = "/gossip/1.0.0";
 
 #[tokio::test]
@@ -22,7 +24,7 @@ async fn test_gossip_between_verified_peers() {
     info!("Starting gossip test between verified peers");
 
     // Create nodes with whitelisted keys
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, false).await;
+    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, NETWORK_NAME, INSTANCE_NAME, false);
     let mut node2 = nodes.pop().unwrap();
     let mut node1 = nodes.pop().unwrap();
 
@@ -90,7 +92,7 @@ async fn test_multi_node_gossip() {
     info!("Starting multi-node gossip test");
 
     // Create three nodes with all keys whitelisted
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(3, false).await;
+    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(3, NETWORK_NAME, INSTANCE_NAME, false);
 
     info!("Starting all nodes");
     let mut handles: Vec<_> = Vec::new();

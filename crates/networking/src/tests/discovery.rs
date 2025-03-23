@@ -1,7 +1,8 @@
 use crate::service::AllowedKeys;
+use crate::test_utils::setup_log;
 
 use super::TestNode;
-use super::{create_whitelisted_nodes, init_tracing};
+use super::create_whitelisted_nodes;
 use super::{wait_for_peer_discovery, wait_for_peer_info};
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
