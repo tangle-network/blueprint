@@ -5,7 +5,7 @@ use crate::{
     signature_weight::{EqualWeight, SignatureWeight},
 };
 use blueprint_core::info;
-use blueprint_crypto::aggregation::AggregatableSignature;
+use blueprint_crypto::{KeyType, aggregation::AggregatableSignature};
 use blueprint_networking::{
     service_handle::NetworkServiceHandle,
     test_utils::{create_whitelisted_nodes, setup_log, wait_for_all_handshakes},
@@ -205,22 +205,19 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     info!("Signature aggregation test completed successfully");
 }
 
+fn generate_test_keys<K: KeyType>(num_keys: usize) -> Vec<K::Secret> {
+    let mut keys = Vec::with_capacity(num_keys);
+    for i in 0..num_keys {
+        let seed = [i as u8; 32];
+        keys.push(K::generate_with_seed(Some(&seed)).unwrap());
+    }
+    keys
+}
+
 // BLS Tests
 mod bls_tests {
     use super::*;
-    use blueprint_crypto::{
-        KeyType,
-        sp_core::{SpBls381, SpBls381Pair},
-    };
-
-    fn generate_bls_test_keys(num_keys: usize) -> Vec<SpBls381Pair> {
-        let mut keys = Vec::with_capacity(num_keys);
-        for i in 0..num_keys {
-            let seed = [i as u8; 32];
-            keys.push(SpBls381::generate_with_seed(Some(&seed)).unwrap());
-        }
-        keys
-    }
+    use blueprint_crypto::{sp_core::SpBls377, sp_core::SpBls381};
 
     #[tokio::test]
     async fn test_bls381_basic_aggregation() {
@@ -229,7 +226,19 @@ mod bls_tests {
             67, // 67% threshold (2 out of 3)
             "basic_bls381_aggregation",
             "1.0.0",
-            generate_bls_test_keys,
+            generate_test_keys::<SpBls381>,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_bls377_basic_aggregation() {
+        run_signature_aggregation_test::<SpBls377>(
+            3,  // 3 nodes
+            67, // 67% threshold (2 out of 3)
+            "basic_bls377_aggregation",
+            "1.0.0",
+            generate_test_keys::<SpBls377>,
         )
         .await;
     }
@@ -241,15 +250,6 @@ mod bn254_tests {
     use blueprint_crypto::KeyType;
     use blueprint_crypto::bn254::{ArkBlsBn254, ArkBlsBn254Secret};
 
-    fn generate_bn254_test_keys(num_keys: usize) -> Vec<ArkBlsBn254Secret> {
-        let mut keys = Vec::with_capacity(num_keys);
-        for i in 0..num_keys {
-            let seed = [i as u8; 32];
-            keys.push(ArkBlsBn254::generate_with_seed(Some(&seed)).unwrap());
-        }
-        keys
-    }
-
     #[tokio::test]
     async fn test_bn254_basic_aggregation() {
         run_signature_aggregation_test::<ArkBlsBn254>(
@@ -257,7 +257,36 @@ mod bn254_tests {
             67, // 67% threshold (2 out of 3)
             "basic_bn254_aggregation",
             "1.0.0",
-            generate_bn254_test_keys,
+            generate_test_keys::<ArkBlsBn254>,
+        )
+        .await;
+    }
+}
+
+mod w3f_bls_tests {
+    use super::*;
+    use blueprint_crypto::bls::{bls377::W3fBls377, bls381::W3fBls381};
+
+    #[tokio::test]
+    async fn test_w3f_bls381_basic_aggregation() {
+        run_signature_aggregation_test::<W3fBls381>(
+            3,  // 3 nodes
+            67, // 67% threshold (2 out of 3),
+            "basic_w3f_bls381_aggregation",
+            "1.0.0",
+            generate_test_keys::<W3fBls381>,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_w3f_bls377_basic_aggregation() {
+        run_signature_aggregation_test::<W3fBls377>(
+            3,  // 3 nodes
+            67, // 67% threshold (2 out of 3),
+            "basic_w3f_bls377_aggregation",
+            "1.0.0",
+            generate_test_keys::<W3fBls377>,
         )
         .await;
     }

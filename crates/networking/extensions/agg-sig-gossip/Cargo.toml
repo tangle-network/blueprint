@@ -45,7 +45,7 @@ libp2p = { workspace = true, features = [
   "autonat",
   "upnp",
 ] }
-blueprint-crypto = { workspace = true, features = ["sp-core", "bn254"] }
+blueprint-crypto = { workspace = true, features = ["sp-core", "bn254", "bls"] }
 blueprint-crypto-core = { workspace = true, features = ["tangle", "bn254"] }
 blueprint-networking = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["full"] }
