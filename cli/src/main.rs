@@ -635,7 +635,10 @@ async fn main() -> color_eyre::Result<()> {
                 eprintln!("Generated {:?} key:", key_type);
                 eprintln!("Public key: {}", public);
                 if show_secret || output.is_none() {
-                    eprintln!("Private key: {}", secret.expect("Should exist"));
+                    eprintln!(
+                        "Private key: {}",
+                        secret.expect("Failed to find secret key")
+                    );
                 }
             }
             KeyCommands::Import {
