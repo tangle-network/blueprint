@@ -27,7 +27,7 @@ pub const PERMISSION_CONTROLLER_ADDR: Address =
 pub const REGISTRY_COORDINATOR_ADDR: Address = address!("7969c5ed335650692bc04293b07f5bf2e7a673c0");
 /// The default Rewards Coordinator address on our testnet
 pub const REWARDS_COORDINATOR_ADDR: Address = address!("0dcd1bf9a1b36ce34237eeafef220932846bcd82");
-/// The default Service Manager address on our testnet (Depends on AVS)
+/// The default Service Manager address on our testnet (Depends on AVS, this is the proxy)
 pub const SERVICE_MANAGER_ADDR: Address = address!("b7278a61aa25c888815afc32ad3cc52ff24fe575");
 /// The default Strategy Manager address on our testnet
 pub const STRATEGY_MANAGER_ADDR: Address = address!("a513e6e4b8f2a923d98304ec87f64353c4d5c853");

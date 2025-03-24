@@ -12,3 +12,44 @@ sol!(
     SquaringTask,
     "contracts/out/SquaringTask.sol/SquaringTask.json"
 );
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    SquaringServiceManager,
+    "contracts/out/SquaringServiceManager.sol/SquaringServiceManager.json"
+);
+
+pub use proxy::IServiceManager;
+pub use proxy::TransparentUpgradeableProxy;
+pub use proxy::ProxyAdmin;
+
+mod proxy {
+use crate::contracts::sol;
+use serde::{Deserialize, Serialize};
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    IServiceManager,
+    "contracts/out/IServiceManager.sol/IServiceManager.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    TransparentUpgradeableProxy,
+    "contracts/out/TransparentUpgradeableProxy.sol/TransparentUpgradeableProxy.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    ProxyAdmin,
+    "contracts/out/ProxyAdmin.sol/ProxyAdmin.json"
+);
+}

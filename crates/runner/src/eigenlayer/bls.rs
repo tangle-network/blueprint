@@ -6,6 +6,7 @@ use eigensdk::crypto_bls::BlsKeyPair;
 use eigensdk::logging::get_test_logger;
 use eigensdk::testing_utils::transaction::wait_transaction;
 use eigensdk::types::operator::Operator;
+use eigensdk::utils::slashing::middleware::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
 
 use super::error::EigenlayerError;
 use crate::BlueprintConfig;
