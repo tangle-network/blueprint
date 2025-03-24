@@ -1,28 +1,36 @@
-use crate::constants::{AGGREGATOR_PRIVATE_KEY, TASK_MANAGER_ADDRESS};
+use std::str::FromStr;
+
+use crate::constants::AGGREGATOR_PRIVATE_KEY;
 use crate::contexts::aggregator::AggregatorContext;
 use crate::contexts::client::AggregatorClient;
+use crate::contexts::combined::CombinedContext;
 use crate::contexts::x_square::EigenSquareContext;
-use crate::jobs::compute_x_square::XsquareEigenEventHandler;
-use crate::jobs::initialize_task::InitializeBlsTaskEventHandler;
-use crate::IncredibleSquaringTaskManager;
+use crate::contracts::SquaringTask;
+use crate::jobs::compute_x_square::{XSQUARE_JOB_ID, xsquare_eigen};
+use crate::jobs::initialize_task::{INITIALIZE_TASK_JOB_ID, initialize_bls_task};
 use alloy_network::EthereumWallet;
-use alloy_primitives::{Address, Bytes, U256};
+use alloy_primitives::{Address, Bytes, FixedBytes, U256};
 use alloy_provider::Provider;
-use alloy_signer_local::PrivateKeySigner;
+use alloy_signer_local::{LocalSigner, PrivateKeySigner};
 use alloy_sol_types::sol;
-use blueprint_sdk::{error, info, setup_log};
-use blueprint_sdk::runners::eigenlayer::bls::EigenlayerBLSConfig;
-use blueprint_sdk::testing::utils::anvil::anvil::*;
-use blueprint_sdk::testing::utils::eigenlayer::runner::EigenlayerBLSTestEnv;
-use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
-use blueprint_sdk::testing::utils::harness::TestHarness;
-use blueprint_sdk::testing::utils::runner::TestEnv;
-use blueprint_sdk::utils::evm::{get_provider_http, get_provider_ws, get_wallet_provider_http};
-use futures::StreamExt;
-use std::{
+use blueprint_sdk::evm::producer::{PollingConfig, PollingProducer};
+use blueprint_sdk::evm::util::get_provider_http;
+use blueprint_sdk::evm::util::get_provider_ws;
+use blueprint_sdk::evm::util::get_wallet_provider_http;
+use blueprint_sdk::runner::BlueprintRunner;
+use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
+use blueprint_sdk::std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
+use blueprint_sdk::testing::utils::anvil::wait_for_responses;
+use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
+use blueprint_sdk::testing::utils::setup_log;
+use blueprint_sdk::{Router, error, info};
+use color_eyre::eyre;
+use futures::StreamExt;
+use tokio::sync::oneshot;
 
 sol!(
     #[allow(missing_docs, clippy::too_many_arguments)]
@@ -34,12 +42,12 @@ sol!(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_eigenlayer_incredible_squaring_blueprint() {
-    run_eigenlayer_incredible_squaring_test(true, 1).await;
+    run_eigenlayer_incredible_squaring_test(false, 1).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_eigenlayer_pre_register_incredible_squaring_blueprint() {
-    run_eigenlayer_incredible_squaring_test(false, 1).await;
+    run_eigenlayer_incredible_squaring_test(true, 1).await;
 }
 
 async fn run_eigenlayer_incredible_squaring_test(
@@ -58,18 +66,49 @@ async fn run_eigenlayer_incredible_squaring_test(
     // Deploy Task Manager
     let task_manager_address = deploy_task_manager(&harness).await;
 
+    // Extract necessary data from harness before moving it
+    let ws_endpoint = harness.ws_endpoint.to_string();
+    let registry_coordinator_address = harness
+        .eigenlayer_contract_addresses
+        .registry_coordinator_address;
+    let accounts = harness.accounts().to_vec();
+    let task_generator_address = harness.task_generator_account();
+
+    // let total_delegated_quorum_create_tx_hash = create_total_delegated_stake_quorum(
+    //     erc20_mock_strategy_address,
+    //     registry_coordinator_address,
+    //     operator_pvt_key,
+    //     ecdsa_keystore_path,
+    //     ecdsa_keystore_password,
+    //     &rpc_url,
+    // )
+    // .await.unwrap();
+
     // Spawn Task Spawner and Task Response Listener
     let successful_responses = Arc::new(Mutex::new(0));
     let successful_responses_clone = successful_responses.clone();
-    let response_listener_address =
-        setup_task_response_listener(&harness, task_manager_address, successful_responses.clone())
-            .await;
-    let task_spawner = setup_task_spawner(&harness, task_manager_address).await;
+
+    // Create task response listener
+    let response_listener = setup_task_response_listener(
+        ws_endpoint,
+        task_manager_address,
+        successful_responses.clone(),
+    );
+
+    // Create task spawner
+    let task_spawner = setup_task_spawner(
+        http_endpoint.clone(),
+        registry_coordinator_address,
+        task_generator_address,
+        accounts,
+        task_manager_address,
+    );
+
     tokio::spawn(async move {
         task_spawner.await;
     });
     tokio::spawn(async move {
-        response_listener_address.await;
+        response_listener.await;
     });
 
     info!("Starting Blueprint Execution...");
@@ -79,48 +118,69 @@ async fn run_eigenlayer_incredible_squaring_test(
     let wallet = EthereumWallet::from(signer);
     let provider = get_wallet_provider_http(&http_endpoint, wallet.clone());
 
-    // Create aggregator
+    // Create aggregator client context
     let server_address = format!("{}:{}", "127.0.0.1", 8081);
     let eigen_client_context = EigenSquareContext {
         client: AggregatorClient::new(&server_address).unwrap(),
         std_config: env.clone(),
     };
+
+    // Create the aggregator context
     let aggregator_context =
-        AggregatorContext::new(server_address, *TASK_MANAGER_ADDRESS, wallet, env.clone())
+        AggregatorContext::new(server_address, task_manager_address, wallet, env.clone())
             .await
             .unwrap();
     let aggregator_context_clone = aggregator_context.clone();
 
-    // Create jobs
-    let contract = IncredibleSquaringTaskManager::IncredibleSquaringTaskManagerInstance::new(
-        task_manager_address,
-        provider,
-    );
-    let initialize_task =
-        InitializeBlsTaskEventHandler::new(contract.clone(), aggregator_context.clone());
-    let x_square_eigen = XsquareEigenEventHandler::new(contract.clone(), eigen_client_context);
-
-    let mut test_env = EigenlayerBLSTestEnv::new(
-        EigenlayerBLSConfig::new(Default::default(), Default::default())
-            .with_exit_after_register(exit_after_registration),
+    // Create the combined context for both tasks
+    let combined_context = CombinedContext::new(
+        eigen_client_context,
+        Some(aggregator_context.clone()),
         env.clone(),
-    )
-    .unwrap();
-    test_env.add_job(initialize_task);
-    test_env.add_job(x_square_eigen);
-    test_env.add_background_service(aggregator_context);
+    );
 
-    if exit_after_registration {
-        // Run the runner once to register, since pre-registration is enabled
-        test_env.run_runner().await.unwrap();
-    }
+    // Create task producer
+    let client = Arc::new(provider);
+    let task_producer = PollingProducer::new(
+        client.clone(),
+        PollingConfig {
+            poll_interval: Duration::from_secs(1),
+            ..Default::default()
+        },
+    );
 
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    info!("Setting up Blueprint Runner...");
+    let eigen_config = EigenlayerBLSConfig::new(Address::default(), Address::default())
+        .with_exit_after_register(exit_after_registration);
 
-    test_env.run_runner().await.unwrap();
+    info!("Created Eigenlayer BLS config");
+
+    // Create and run the blueprint runner
+    let (shutdown_tx, _shutdown_rx) = oneshot::channel();
+    let runner_handle = tokio::spawn(async move {
+        let result = BlueprintRunner::builder(eigen_config, env.clone())
+            .router(
+                Router::new()
+                    .route(XSQUARE_JOB_ID, xsquare_eigen)
+                    .route(INITIALIZE_TASK_JOB_ID, initialize_bls_task)
+                    .with_context(combined_context),
+            )
+            .producer(task_producer)
+            .background_service(aggregator_context)
+            .with_shutdown_handler(async {
+                info!("Shutting down task manager service");
+            })
+            .run()
+            .await;
+
+        let _ = shutdown_tx.send(result);
+    });
+
+    info!("Built Blueprint Runner");
 
     // Wait for the process to complete or timeout
     let timeout_duration = Duration::from_secs(300);
+    info!("Waiting for responses...");
     let result = wait_for_responses(
         successful_responses.clone(),
         expected_responses,
@@ -128,8 +188,13 @@ async fn run_eigenlayer_incredible_squaring_test(
     )
     .await;
 
-    // // Start the shutdown/cleanup process
+    info!("Responses found, shutting down...");
+
+    // Start the shutdown/cleanup process
     aggregator_context_clone.shutdown().await;
+
+    // Abort the runner
+    runner_handle.abort();
 
     // Clean up the ./db directory
     let _ = std::fs::remove_dir_all("./db");
@@ -148,7 +213,10 @@ async fn run_eigenlayer_incredible_squaring_test(
     }
 }
 
-pub async fn deploy_task_manager(harness: &EigenlayerTestHarness) -> Address {
+pub async fn deploy_task_manager<Ctx>(harness: &EigenlayerTestHarness<Ctx>) -> Address
+where
+    Ctx: Clone + Send + Sync + 'static,
+{
     let env = harness.env().clone();
     let http_endpoint = &env.http_rpc_endpoint;
     let registry_coordinator_address = harness
@@ -156,13 +224,11 @@ pub async fn deploy_task_manager(harness: &EigenlayerTestHarness) -> Address {
         .registry_coordinator_address;
     let owner_address = harness.owner_account();
     let aggregator_address = harness.aggregator_account();
+    let task_generator_address = harness.task_generator_account();
 
     let provider = get_provider_http(http_endpoint);
-    let deploy_call = IncredibleSquaringTaskManager::deploy_builder(
-        provider.clone(),
-        registry_coordinator_address,
-        10u32,
-    );
+    let deploy_call =
+        SquaringTask::deploy_builder(provider.clone(), registry_coordinator_address, 10u32);
     info!("Deploying Incredible Squaring Task Manager");
     let task_manager_address = match get_receipt(deploy_call).await {
         Ok(receipt) => match receipt.contract_address {
@@ -181,12 +247,13 @@ pub async fn deploy_task_manager(harness: &EigenlayerTestHarness) -> Address {
         "Deployed Incredible Squaring Task Manager at {}",
         task_manager_address
     );
-    std::env::set_var("TASK_MANAGER_ADDRESS", task_manager_address.to_string());
+    // std::env::set_var("TASK_MANAGER_ADDRESS", task_manager_address.to_string());
 
-    let task_manager = IncredibleSquaringTaskManager::new(task_manager_address, provider.clone());
+    let task_manager = SquaringTask::new(task_manager_address, provider.clone());
     // Initialize the Incredible Squaring Task Manager
     info!("Initializing Incredible Squaring Task Manager");
-    let init_call = task_manager.initialize(owner_address, aggregator_address);
+    let init_call =
+        task_manager.initialize(aggregator_address, task_generator_address, owner_address);
     let init_receipt = get_receipt(init_call).await.unwrap();
     assert!(init_receipt.status());
     info!("Initialized Incredible Squaring Task Manager");
@@ -194,19 +261,17 @@ pub async fn deploy_task_manager(harness: &EigenlayerTestHarness) -> Address {
     task_manager_address
 }
 
-pub async fn setup_task_spawner(
-    harness: &EigenlayerTestHarness,
+pub fn setup_task_spawner(
+    http_endpoint: String,
+    registry_coordinator_address: Address,
+    task_generator_address: Address,
+    accounts: Vec<Address>,
     task_manager_address: Address,
 ) -> impl std::future::Future<Output = ()> {
-    let registry_coordinator_address = harness
-        .eigenlayer_contract_addresses
-        .registry_coordinator_address;
-    let task_generator_address = harness.task_generator_account();
-    let accounts = harness.accounts().to_vec();
-    let http_endpoint = harness.http_endpoint.to_string();
-
-    let provider = get_provider_http(http_endpoint.as_str());
-    let task_manager = IncredibleSquaringTaskManager::new(task_manager_address, provider.clone());
+    setup_log();
+    info!("Setting up task spawner...");
+    let provider = get_provider_http(&http_endpoint);
+    let task_manager = SquaringTask::new(task_manager_address, provider.clone());
     let registry_coordinator =
         RegistryCoordinator::new(registry_coordinator_address, provider.clone());
 
@@ -220,7 +285,7 @@ pub async fn setup_task_spawner(
             info!("Creating a new task...");
             if get_receipt(
                 task_manager
-                    .createNewTask(U256::from(2), 100u32, quorums.clone())
+                    .createSquaringTask(U256::from(2), 100u32, quorums.clone())
                     .from(task_generator_address),
             )
             .await
@@ -257,19 +322,16 @@ pub async fn setup_task_spawner(
     }
 }
 
-pub async fn setup_task_response_listener(
-    harness: &EigenlayerTestHarness,
+pub fn setup_task_response_listener(
+    ws_endpoint: String,
     task_manager_address: Address,
     successful_responses: Arc<Mutex<usize>>,
 ) -> impl std::future::Future<Output = ()> {
-    let ws_endpoint = harness.ws_endpoint.to_string();
-
-    let task_manager = IncredibleSquaringTaskManager::new(
-        task_manager_address,
-        get_provider_ws(ws_endpoint.as_str()).await,
-    );
-
     async move {
+        setup_log();
+        let task_manager =
+            SquaringTask::new(task_manager_address, get_provider_ws(&ws_endpoint).await);
+        info!("Setting up task response listener...");
         let filter = task_manager.TaskResponded_filter().filter;
         let mut event_stream = match task_manager.provider().subscribe_logs(&filter).await {
             Ok(stream) => stream.into_stream(),
@@ -279,10 +341,10 @@ pub async fn setup_task_response_listener(
             }
         };
         while let Some(event) = event_stream.next().await {
-            let IncredibleSquaringTaskManager::TaskResponded {
+            let SquaringTask::TaskResponded {
                 taskResponse: _, ..
             } = event
-                .log_decode::<IncredibleSquaringTaskManager::TaskResponded>()
+                .log_decode::<SquaringTask::TaskResponded>()
                 .unwrap()
                 .inner
                 .data;
@@ -297,3 +359,66 @@ pub async fn setup_task_response_listener(
         }
     }
 }
+
+// /// Creates Total Delegated stake
+// #[allow(clippy::too_many_arguments)]
+// pub async fn create_total_delegated_stake_quorum(
+//     strategy_address: Address,
+//     registry_coordinator_address: Address,
+//     operator_pvt_key: Option<String>,
+//     ecdsa_keystore_path: String,
+//     ecdsa_keystore_password: String,
+//     rpc_url: &str,
+// ) -> eyre::Result<FixedBytes<32>> {
+//     let signer;
+//     if let Some(operator_key) = operator_pvt_key {
+//         signer = PrivateKeySigner::from_str(&operator_key)?;
+//     } else {
+//         signer = LocalSigner::decrypt_keystore(ecdsa_keystore_path, ecdsa_keystore_password)?;
+//     }
+//     let s = signer.to_field_bytes();
+//     let pvt_key = hex::encode(s).to_string();
+
+//     let registry_coordinator_instance =
+//         RegistryCoordinator::new(registry_coordinator_address, get_signer(&pvt_key, rpc_url));
+
+//     let operator_set_param = OperatorSetParam {
+//         maxOperatorCount: 3,
+//         kickBIPsOfOperatorStake: 100,
+//         kickBIPsOfTotalStake: 1000,
+//     };
+//     let minimum_stake: U96 = U96::from(0);
+//     let strategy_params = vec![StrategyParams {
+//         strategy: strategy_address,
+//         multiplier: U96::from(1),
+//     }];
+//     let s = registry_coordinator_instance
+//         .createTotalDelegatedStakeQuorum(operator_set_param, minimum_stake, strategy_params)
+//         .send()
+//         .await
+//         .unwrap()
+//         .get_receipt()
+//         .await
+//         .unwrap()
+//         .transaction_hash;
+//     Ok(s)
+// }
+
+// /// Deposit into strategy
+// ///
+// /// # Arguments
+// ///
+// /// * `strategy_address` - The address of the strategy
+// /// * `amount` - The amount to deposit
+// /// * `el_reader` - The EL chain reader
+// /// * `el_writer` - The EL chain writer
+// pub async fn deposit_into_strategy(
+//     strategy_address: Address,
+//     amount: U256,
+//     el_writer: ELChainWriter,
+// ) -> Result<(), ElContractsError> {
+//     el_writer
+//         .deposit_erc20_into_strategy(strategy_address, amount)
+//         .await?;
+//     Ok(())
+// }

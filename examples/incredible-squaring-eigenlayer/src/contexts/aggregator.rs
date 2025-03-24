@@ -1,9 +1,10 @@
-use crate::BN254::G1Point;
-use crate::BN254::G2Point;
-use crate::IBLSSignatureCheckerTypes::NonSignerStakesAndSignature;
-use crate::IIncredibleSquaringTaskManager::Task;
-use crate::IIncredibleSquaringTaskManager::TaskResponse;
-use crate::{Error, IncredibleSquaringTaskManager, contexts::client::SignedTaskResponse};
+use crate::contracts::BN254::{G1Point, G2Point};
+use crate::contracts::IBLSSignatureChecker::NonSignerStakesAndSignature;
+use crate::contracts::TaskManager::{Task, TaskResponse};
+use crate::error::TaskError as Error;
+use crate::{
+    contexts::client::SignedTaskResponse, contracts::SquaringTask as IncredibleSquaringTaskManager,
+};
 use alloy_network::{Ethereum, NetworkWallet};
 use alloy_primitives::{Address, keccak256};
 use alloy_sol_types::SolType;
@@ -16,11 +17,11 @@ use tokio::time::interval;
 
 use alloy_network::EthereumWallet;
 use blueprint_sdk::contexts::eigenlayer::EigenlayerContext;
-use blueprint_sdk::{debug, error, info};
 use blueprint_sdk::macros::context::{EigenlayerContext, KeystoreContext};
+use blueprint_sdk::runner::BackgroundService;
 use blueprint_sdk::runner::config::BlueprintEnvironment;
 use blueprint_sdk::runner::error::RunnerError;
-use blueprint_sdk::runner::BackgroundService;
+use blueprint_sdk::{debug, error, info};
 use eigensdk::client_avsregistry::reader::AvsRegistryChainReader;
 use eigensdk::common::get_provider;
 use eigensdk::crypto_bls::{BlsG1Point, BlsG2Point, convert_to_g1_point, convert_to_g2_point};
@@ -342,12 +343,7 @@ impl AggregatorContext {
 
         self.service_handle
             .as_ref()
-            .ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "BLS Aggregation Service not initialized",
-                )
-            })
+            .ok_or_else(|| std::io::Error::other("BLS Aggregation Service not initialized"))
             .map_err(|e| Error::Context(e.to_string()))?
             .lock()
             .await
@@ -367,12 +363,7 @@ impl AggregatorContext {
         let aggregated_response = self
             .aggregate_receiver
             .as_ref()
-            .ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "BLS Aggregation Service not initialized",
-                )
-            })
+            .ok_or_else(|| std::io::Error::other("BLS Aggregation Service not initialized"))
             .map_err(|e| Error::Context(e.to_string()))?
             .lock()
             .await
@@ -429,7 +420,7 @@ impl AggregatorContext {
             IncredibleSquaringTaskManager::new(self.task_manager_address, provider.clone());
 
         let _ = task_manager
-            .respondToTask(
+            .respondToSquaringTask(
                 task.clone(),
                 task_response.clone(),
                 non_signer_stakes_and_signature,

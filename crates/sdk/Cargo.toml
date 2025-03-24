@@ -140,6 +140,7 @@ eigenlayer = [
     "dep:eigensdk",
     "blueprint-contexts/eigenlayer",
     "blueprint-clients/eigenlayer",
+    "blueprint-testing-utils?/eigenlayer",
     "evm",
 ]
 
