@@ -483,9 +483,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-pubsub"
-version = "0.12.5"
+version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1cf194abddb88b034d22ab41449ed8532e5113e58699cd055bf21d98a0991ab"
+checksum = "721aca709a9231815ad5903a2d284042cc77e7d9d382696451b30c9ee0950001"
 dependencies = [
  "alloy-json-rpc",
  "alloy-primitives 0.8.23",
