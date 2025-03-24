@@ -178,6 +178,7 @@ mod tests {
     use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
     use blueprint_networking::discovery::peers::VerificationIdentifierKey;
     use blueprint_networking::service::AllowedKeys;
+    use blueprint_networking::test_utils::{TestNode, wait_for_peer_discovery};
     use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
     use round_based::MpcParty;
     use tracing::{debug, info};

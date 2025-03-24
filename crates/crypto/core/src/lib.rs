@@ -6,6 +6,8 @@ use blueprint_std::string::String;
 use blueprint_std::vec::Vec;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
+pub mod aggregation;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum KeyTypeId {
     #[cfg(feature = "bn254")]

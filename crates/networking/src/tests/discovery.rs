@@ -1,7 +1,8 @@
 use crate::service::AllowedKeys;
+use crate::test_utils::setup_log;
 
 use super::TestNode;
-use super::{create_whitelisted_nodes, init_tracing};
+use super::create_whitelisted_nodes;
 use super::{wait_for_peer_discovery, wait_for_peer_info};
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
@@ -10,7 +11,7 @@ use tracing::info;
 
 #[tokio::test]
 async fn test_peer_discovery_mdns() {
-    init_tracing();
+    setup_log();
 
     let network_name = "test-network";
     let instance_id = "test-instance";
@@ -44,7 +45,7 @@ async fn test_peer_discovery_mdns() {
 
 #[tokio::test]
 async fn test_peer_discovery_kademlia() {
-    init_tracing();
+    setup_log();
 
     let network_name = "test-network";
     let instance_id = "test-instance";
@@ -112,7 +113,7 @@ async fn test_peer_discovery_kademlia() {
 
 #[tokio::test]
 async fn test_peer_info_updates() {
-    init_tracing();
+    setup_log();
 
     info!("Creating test nodes...");
     // Create nodes with whitelisted keys

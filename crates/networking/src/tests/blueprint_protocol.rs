@@ -5,7 +5,8 @@ use crate::{
     service::AllowedKeys,
     service_handle::NetworkServiceHandle,
     tests::{
-        TestNode, create_whitelisted_nodes, wait_for_all_handshakes, wait_for_handshake_completion,
+        TestNode, create_whitelisted_nodes, init_tracing, wait_for_all_handshakes,
+        wait_for_handshake_completion,
     },
     types::{MessageRouting, ParticipantId, ParticipantInfo, ProtocolMessage},
 };
@@ -61,7 +62,7 @@ fn extract_sum_from_verification<K: KeyType>(msg: &ProtocolMessage<K>) -> u64 {
 
 #[tokio::test]
 async fn test_summation_protocol_basic() {
-    super::init_tracing();
+    init_tracing();
     info!("Starting summation protocol test");
 
     // Create nodes with whitelisted keys
@@ -260,7 +261,7 @@ async fn test_summation_protocol_basic() {
 
 #[tokio::test]
 async fn test_summation_protocol_multi_node() {
-    super::init_tracing();
+    init_tracing();
     info!("Starting multi-node summation protocol test");
 
     // Create 3 nodes with whitelisted keys

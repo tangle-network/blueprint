@@ -1,9 +1,11 @@
-use super::{TestNode, init_tracing, wait_for_handshake_completion};
 use crate::{
     discovery::peers::VerificationIdentifierKey,
     service::AllowedKeys,
     service_handle::NetworkServiceHandle,
-    tests::{create_whitelisted_nodes, wait_for_all_handshakes},
+    test_utils::{
+        TestNode, create_whitelisted_nodes, setup_log, wait_for_all_handshakes,
+        wait_for_handshake_completion,
+    },
     types::{MessageRouting, ParticipantId, ParticipantInfo},
 };
 use blueprint_crypto::sp_core::SpEcdsa;
@@ -12,15 +14,17 @@ use tokio::time::timeout;
 use tracing::info;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(10);
-const PROTOCOL_NAME: &str = "/test-net/sum-test";
+const NETWORK_NAME: &str = "gossip";
+const INSTANCE_NAME: &str = "1.0.0";
+const PROTOCOL_NAME: &str = "/gossip/1.0.0";
 
 #[tokio::test]
 async fn test_gossip_between_verified_peers() {
-    init_tracing();
+    setup_log();
     info!("Starting gossip test between verified peers");
 
     // Create nodes with whitelisted keys
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, false).await;
+    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, NETWORK_NAME, INSTANCE_NAME, false);
     let mut node2 = nodes.pop().unwrap();
     let mut node1 = nodes.pop().unwrap();
 
@@ -84,11 +88,11 @@ async fn test_gossip_between_verified_peers() {
 
 #[tokio::test]
 async fn test_multi_node_gossip() {
-    init_tracing();
+    setup_log();
     info!("Starting multi-node gossip test");
 
     // Create three nodes with all keys whitelisted
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(3, false).await;
+    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(3, NETWORK_NAME, INSTANCE_NAME, false);
 
     info!("Starting all nodes");
     let mut handles: Vec<_> = Vec::new();
@@ -155,7 +159,7 @@ async fn test_multi_node_gossip() {
 
 #[tokio::test]
 async fn test_unverified_peer_gossip() {
-    init_tracing();
+    setup_log();
     info!("Starting unverified peer gossip test");
 
     // Create two nodes with no whitelisted keys

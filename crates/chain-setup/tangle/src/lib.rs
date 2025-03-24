@@ -128,7 +128,7 @@ macro_rules! tangle_blueprint_test_template {
     ($N:tt, $test_logic:expr, $node_config:expr,) => {
         use $crate::test_ext::new_test_ext_blueprint_manager;
 
-        #[::gadget_sdk::tokio::test(flavor = "multi_thread", crate = "::gadget_sdk::tokio")]
+        #[::blueprint_sdk::tokio::test(flavor = "multi_thread", crate = "::blueprint_sdk::tokio")]
         async fn test_blueprint() {
             ::blueprint_test_utils::setup_log();
 
@@ -165,7 +165,7 @@ macro_rules! test_tangle_blueprint {
                 let selected_service = &blueprint.services[0];
                 let service_id = selected_service.id;
 
-                ::gadget_sdk::info!(
+                ::blueprint_sdk::info!(
                     "Submitting job {} with service ID {service_id}", $job_id
                 );
 
@@ -184,7 +184,7 @@ macro_rules! test_tangle_blueprint {
 
                 let call_id = job.call_id;
 
-                ::gadget_sdk::info!(
+                ::blueprint_sdk::info!(
                     "Submitted job {} with service ID {service_id} has call id {call_id}", $job_id
                 );
 
@@ -197,7 +197,7 @@ macro_rules! test_tangle_blueprint {
 
                 let expected_outputs = vec![$($expected_output),*];
                 if expected_outputs.is_empty() {
-                    ::gadget_sdk::info!("No expected outputs specified, skipping verification");
+                    ::blueprint_sdk::info!("No expected outputs specified, skipping verification");
                     return
                 }
 
