@@ -29,7 +29,8 @@ use error::RunnerError as Error;
 use futures::{Future, Sink};
 use futures_core::Stream;
 use futures_util::{SinkExt, StreamExt, TryStreamExt, stream};
-use tokio::sync::oneshot;
+use std::sync::Arc;
+use tokio::sync::{Mutex, oneshot};
 use tower::Service;
 
 /// Configuration for the blueprint registration procedure
@@ -74,8 +75,9 @@ pub trait BackgroundService: Send + Sync {
 unsafe impl Send for DynBackgroundService<'_> {}
 unsafe impl Sync for DynBackgroundService<'_> {}
 
-type Producer = Box<dyn Stream<Item = Result<JobCall, BoxError>> + Send + Sync + Unpin + 'static>;
-type Consumer = Box<dyn Sink<JobResult, Error = BoxError> + Send + Sync + Unpin + 'static>;
+type Producer =
+    Arc<Mutex<Box<dyn Stream<Item = Result<JobCall, BoxError>> + Send + Unpin + 'static>>>;
+type Consumer = Arc<Mutex<Box<dyn Sink<JobResult, Error = BoxError> + Send + Unpin + 'static>>>;
 
 /// A builder for a [`BlueprintRunner`]
 pub struct BlueprintRunnerBuilder<F> {
@@ -107,12 +109,13 @@ where
     #[must_use]
     pub fn producer<E>(
         mut self,
-        producer: impl Stream<Item = Result<JobCall, E>> + Send + Sync + Unpin + 'static,
+        producer: impl Stream<Item = Result<JobCall, E>> + Send + Unpin + 'static,
     ) -> Self
     where
         E: Into<BoxError> + 'static,
     {
-        self.producers.push(Box::new(producer.map_err(Into::into)));
+        let producer: Producer = Arc::new(Mutex::new(Box::new(producer.map_err(Into::into))));
+        self.producers.push(producer);
         self
     }
 
@@ -122,13 +125,13 @@ where
     #[must_use]
     pub fn consumer<E>(
         mut self,
-        consumer: impl Sink<JobResult, Error = E> + Send + Sync + Unpin + 'static,
+        consumer: impl Sink<JobResult, Error = E> + Send + Unpin + 'static,
     ) -> Self
     where
         E: Into<BoxError> + 'static,
     {
-        self.consumers
-            .push(Box::new(consumer.sink_map_err(Into::into)));
+        let consumer: Consumer = Arc::new(Mutex::new(Box::new(consumer.sink_map_err(Into::into))));
+        self.consumers.push(consumer);
         self
     }
 
@@ -382,6 +385,17 @@ where
 
         poll_fn(|ctx| router.poll_ready(ctx)).await.unwrap_or(());
 
+        let producers = producers.into_iter().map(|producer| {
+            futures::stream::unfold(producer, |producer| async move {
+                let result;
+                {
+                    let mut guard = producer.lock().await;
+                    result = guard.next().await;
+                }
+                result.map(|job_call| (job_call, producer))
+            })
+            .boxed()
+        });
         let mut producer_stream = futures::stream::select_all(producers);
 
         let mut background_services = if background_futures.is_empty() {
@@ -409,7 +423,8 @@ where
                                     let send_futures = consumers.iter_mut().map(|consumer| {
                                         let mut stream_clone = result_stream.clone();
                                         async move {
-                                            consumer.send_all(&mut stream_clone).await
+                                            let mut guard = consumer.lock().await;
+                                            guard.send_all(&mut stream_clone).await
                                         }
                                     });
 
