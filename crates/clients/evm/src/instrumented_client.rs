@@ -3,7 +3,6 @@
 use crate::client::BackendClient;
 use alloy_consensus::TxEnvelope;
 use alloy_json_rpc::{RpcRecv, RpcSend};
-use alloy_network::Ethereum;
 use alloy_primitives::{Address, B256, BlockHash, BlockNumber, Bytes, ChainId, U64, U256};
 use alloy_provider::{Provider, ProviderBuilder, RootProvider, WsConnect};
 use alloy_pubsub::Subscription;
@@ -52,10 +51,9 @@ pub enum InstrumentedClientError {
 }
 
 impl Provider for InstrumentedClient {
-    fn root(&self) -> &RootProvider<Ethereum> {
+    fn root(&self) -> &RootProvider {
         match &self.inner {
-            ProviderInner::Http(provider) => provider,
-            ProviderInner::Ws(provider) => provider,
+            ProviderInner::Http(provider) | ProviderInner::Ws(provider) => provider,
         }
     }
 }
