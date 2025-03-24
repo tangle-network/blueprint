@@ -1,4 +1,5 @@
 use alloy_primitives::{Address, Bytes, FixedBytes, U256, hex};
+use blueprint_evm_extra::util::get_provider_http;
 use blueprint_std::time::{SystemTime, UNIX_EPOCH};
 use eigensdk::client_avsregistry::writer::AvsRegistryChainWriter;
 use eigensdk::client_elcontracts::{reader::ELChainReader, writer::ELChainWriter};
@@ -7,6 +8,7 @@ use eigensdk::logging::get_test_logger;
 use eigensdk::testing_utils::transaction::wait_transaction;
 use eigensdk::types::operator::Operator;
 use eigensdk::utils::slashing::middleware::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
+use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordinator;
 
 use super::error::EigenlayerError;
 use crate::BlueprintConfig;
@@ -95,6 +97,7 @@ async fn register_bls_impl(
     let avs_directory_address = contract_addresses.avs_directory_address;
     let permission_controller_address = contract_addresses.permission_controller_address;
     let service_manager_address = contract_addresses.service_manager_address;
+    let registry_coordinator_address = contract_addresses.registry_coordinator_address;
 
     info!("Eigenlayer BLS Registration: Fetching ECDSA Keys");
     let ecdsa_public = env.keystore().first_local::<K256Ecdsa>()?;
@@ -202,6 +205,19 @@ async fn register_bls_impl(
         return Err(RunnerError::Other("Operator registration failed".into()));
     }
 
+    // info!("DEBUGGING::::");
+
+    // let provider = get_provider_http(&env.http_rpc_endpoint);
+    // let registry_coordinator = RegistryCoordinator::new(
+    //     registry_coordinator_address,
+    //     provider,
+    // );
+
+    // let service_address = registry_coordinator.serviceManager().call().await.unwrap();
+    // warn!("Service address: {:?}", service_address._0);
+
+    info!("Registering to AVS");
+
     let tx_hash = avs_registry_writer
         .register_operator_in_quorum_with_avs_registry_coordinator(
             operator_bls_key,
@@ -212,6 +228,8 @@ async fn register_bls_impl(
         )
         .await
         .map_err(EigenlayerError::AvsRegistry)?;
+
+    info!("Waiting for AVS registration to complete");
     let avs_registration_receipt = wait_transaction(&env.http_rpc_endpoint, tx_hash)
         .await
         .map_err(|e| {

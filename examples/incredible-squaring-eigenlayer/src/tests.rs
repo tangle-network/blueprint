@@ -512,6 +512,45 @@ where
         service_manager_impl_address
     );
     
+    // Step 2: Update the registry coordinator to point to the new service manager
+    info!("Updating registry coordinator to point to the new service manager");
+    let registry_coordinator = RegistryCoordinator::new(registry_coordinator_address, provider.clone());
+
+    let upgrade_call = RegistryCoordinator::initializeCall{
+        initialOwner: owner_address,
+        churnApprover: owner_address,
+        ejector: owner_address,
+        initialPausedStatus: U256::from(0),
+        avs: task_manager_address,
+    };
+
+    let new_registry_coordinator = RegistryCoordinator::deploy_builder(provider, params)
+
+    
+    // First check if the service manager is already set correctly
+    let current_service_manager = registry_coordinator.serviceManager().call().await.unwrap();
+    debug!("Current service manager in registry coordinator: {:?}", current_service_manager._0);
+    
+    if current_service_manager._0 != existing_service_manager_proxy {
+        // If it's not set correctly, update it
+        let update_call = registry_coordinator.updateServiceManager(existing_service_manager_proxy);
+        match get_receipt(update_call).await {
+            Ok(receipt) => {
+                if receipt.status() {
+                    info!("Successfully updated registry coordinator to point to service manager proxy");
+                } else {
+                    warn!("Failed to update registry coordinator - transaction reverted");
+                }
+            },
+            Err(e) => {
+                warn!("Failed to update registry coordinator: {:?}", e);
+            }
+        }
+    } else {
+        info!("Registry coordinator already points to the correct service manager proxy");
+    }
+    
+    // Step 3: Upgrade the proxy to use the new implementation
     info!("Upgrading proxy to use new implementation");
     let proxy_admin = ProxyAdmin::new(proxy_admin_address, provider.clone());
     let upgrade_call = proxy_admin.upgrade(
@@ -550,8 +589,8 @@ where
     let owner = service_manager.owner().call().await.unwrap();
     debug!("SquaringServiceManager owner: {:?}", owner._0);
 
-    let test = service_manager.rewardsInitiator().call().await.unwrap();
-    debug!("SquaringServiceManager rewardsInitiator: {:?}", test._0);
+    let rewards_initiator = service_manager.rewardsInitiator().call().await.unwrap();
+    debug!("SquaringServiceManager rewardsInitiator: {:?}", rewards_initiator._0);
     
     existing_service_manager_proxy
 }
@@ -574,8 +613,9 @@ pub fn setup_task_spawner(
     let quorums = Bytes::from(vec![0]);
     async move {
         loop {
+            continue;
             // Delay to allow for proper task initialization
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
             info!("Creating a new task...");
             if get_receipt(
