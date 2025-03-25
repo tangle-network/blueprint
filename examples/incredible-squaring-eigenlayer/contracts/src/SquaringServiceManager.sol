@@ -29,9 +29,11 @@ contract SquaringServiceManager is ServiceManagerBase {
         IRegistryCoordinator _registryCoordinator,
         IStakeRegistry _stakeRegistry,
         address rewardsCoordinator,
-        TaskManager _squaringTaskManager
+        TaskManager _squaringTaskManager,
+        IPermissionController _permissionController,
+        IAllocationManager _allocationManager
     )
-        ServiceManagerBase(_avsDirectory, IRewardsCoordinator(rewardsCoordinator), _registryCoordinator, _stakeRegistry)
+        ServiceManagerBase(_avsDirectory, IRewardsCoordinator(rewardsCoordinator), _registryCoordinator, _stakeRegistry, _permissionController, _allocationManager)
     {
         squaringTaskManager = _squaringTaskManager;
     }

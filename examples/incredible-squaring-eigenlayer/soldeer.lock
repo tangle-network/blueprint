@@ -9,7 +9,7 @@ integrity = "aa86dfb5e769bb48d1c95e6e940f683161aa1081dbc0bb7421f340d0bda1eafe"
 name = "eigenlayer-middleware"
 version = "0.5.4"
 git = "https://github.com/Layr-Labs/eigenlayer-middleware"
-rev = "2475ab8b8c7698e69bb18f3a19e0c518381f24df"
+rev = "4d63f27247587607beb67f96fdabec4b2c1321ef"
 
 [[dependencies]]
 name = "forge-std"

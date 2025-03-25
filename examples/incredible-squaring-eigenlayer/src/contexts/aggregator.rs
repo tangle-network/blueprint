@@ -1,5 +1,5 @@
 use crate::contracts::BN254::{G1Point, G2Point};
-use crate::contracts::IBLSSignatureChecker::NonSignerStakesAndSignature;
+use crate::contracts::IBLSSignatureCheckerTypes::NonSignerStakesAndSignature;
 use crate::contracts::TaskManager::{Task, TaskResponse};
 use crate::error::TaskError as Error;
 use crate::{

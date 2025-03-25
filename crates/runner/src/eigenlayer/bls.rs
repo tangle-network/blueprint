@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, Bytes, FixedBytes, U256, hex};
+use alloy_primitives::{Address, Bytes, FixedBytes, U256, address, hex};
 use blueprint_evm_extra::util::get_provider_http;
 use blueprint_std::time::{SystemTime, UNIX_EPOCH};
 use eigensdk::client_avsregistry::writer::AvsRegistryChainWriter;
@@ -7,6 +7,7 @@ use eigensdk::crypto_bls::BlsKeyPair;
 use eigensdk::logging::get_test_logger;
 use eigensdk::testing_utils::transaction::wait_transaction;
 use eigensdk::types::operator::Operator;
+use eigensdk::utils::slashing::core::avsdirectory::AVSDirectory;
 use eigensdk::utils::slashing::middleware::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
 use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordinator;
 
@@ -159,6 +160,31 @@ async fn register_bls_impl(
         env.http_rpc_endpoint.clone(),
     );
 
+    let set_count = el_chain_reader
+        .get_num_operator_sets_for_operator(operator_address)
+        .await
+        .unwrap();
+    warn!("Set count: {:?}", set_count);
+
+    let avs_directory = AVSDirectory::new(
+        avs_directory_address,
+        get_provider_http(&env.http_rpc_endpoint),
+    );
+
+    let owner = avs_directory.owner().call().await.unwrap();
+    warn!("Owner: {:?}", owner._0);
+
+    let hash = el_chain_reader
+        .calculate_operator_avs_registration_digest_hash(
+            operator_address,
+            service_manager_address,
+            digest_hash,
+            expiry,
+        )
+        .await
+        .unwrap();
+    warn!("Hash: {:?}", hash);
+
     info!("Eigenlayer BLS Registration: Creating EL Chain Writer");
     let el_writer = ELChainWriter::new(
         strategy_manager_address,
@@ -205,19 +231,7 @@ async fn register_bls_impl(
         return Err(RunnerError::Other("Operator registration failed".into()));
     }
 
-    // info!("DEBUGGING::::");
-
-    // let provider = get_provider_http(&env.http_rpc_endpoint);
-    // let registry_coordinator = RegistryCoordinator::new(
-    //     registry_coordinator_address,
-    //     provider,
-    // );
-
-    // let service_address = registry_coordinator.serviceManager().call().await.unwrap();
-    // warn!("Service address: {:?}", service_address._0);
-
     info!("Registering to AVS");
-
     let tx_hash = avs_registry_writer
         .register_operator_in_quorum_with_avs_registry_coordinator(
             operator_bls_key,
@@ -227,7 +241,7 @@ async fn register_bls_impl(
             env.http_rpc_endpoint.clone(),
         )
         .await
-        .map_err(EigenlayerError::AvsRegistry)?;
+        .unwrap();
 
     info!("Waiting for AVS registration to complete");
     let avs_registration_receipt = wait_transaction(&env.http_rpc_endpoint, tx_hash)

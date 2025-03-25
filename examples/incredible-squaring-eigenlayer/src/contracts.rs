@@ -22,34 +22,34 @@ sol!(
 );
 
 pub use proxy::IServiceManager;
-pub use proxy::TransparentUpgradeableProxy;
 pub use proxy::ProxyAdmin;
+pub use proxy::TransparentUpgradeableProxy;
 
 mod proxy {
-use crate::contracts::sol;
-use serde::{Deserialize, Serialize};
+    use crate::contracts::sol;
+    use serde::{Deserialize, Serialize};
 
-sol!(
-    #[allow(missing_docs)]
-    #[sol(rpc)]
-    #[derive(Debug, Serialize, Deserialize)]
-    IServiceManager,
-    "contracts/out/IServiceManager.sol/IServiceManager.json"
-);
+    sol!(
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug, Serialize, Deserialize)]
+        IServiceManager,
+        "contracts/out/IServiceManager.sol/IServiceManager.json"
+    );
 
-sol!(
-    #[allow(missing_docs)]
-    #[sol(rpc)]
-    #[derive(Debug, Serialize, Deserialize)]
-    TransparentUpgradeableProxy,
-    "contracts/out/TransparentUpgradeableProxy.sol/TransparentUpgradeableProxy.json"
-);
+    sol!(
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug, Serialize, Deserialize)]
+        TransparentUpgradeableProxy,
+        "contracts/out/TransparentUpgradeableProxy.sol/TransparentUpgradeableProxy.json"
+    );
 
-sol!(
-    #[allow(missing_docs)]
-    #[sol(rpc)]
-    #[derive(Debug, Serialize, Deserialize)]
-    ProxyAdmin,
-    "contracts/out/ProxyAdmin.sol/ProxyAdmin.json"
-);
+    sol!(
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug, Serialize, Deserialize)]
+        ProxyAdmin,
+        "contracts/out/ProxyAdmin.sol/ProxyAdmin.json"
+    );
 }
