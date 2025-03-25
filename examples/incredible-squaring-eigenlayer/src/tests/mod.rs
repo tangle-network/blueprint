@@ -1,2 +1,2 @@
-pub mod full;
 pub mod deploy;
+pub mod full;

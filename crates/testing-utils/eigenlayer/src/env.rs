@@ -12,45 +12,55 @@ use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordina
 /// The default AVS Directory address on our testnet
 pub const AVS_DIRECTORY_ADDR: Address = address!("0165878A594ca255338adfa4d48449f69242Eb8F");
 /// The default AVS Directory Implementation address on our testnet
-pub const AVS_DIRECTORY_IMPLEMENTATION_ADDR: Address = address!("9A676e781A523b5d0C0e43731313A708CB607508");
+pub const AVS_DIRECTORY_IMPLEMENTATION_ADDR: Address =
+    address!("9A676e781A523b5d0C0e43731313A708CB607508");
 /// The default Base Strategy Implementation address on our testnet
-pub const BASE_STRATEGY_IMPLEMENTATION_ADDR: Address = address!("a85233C63b9Ee964Add6F2cffe00Fd84eb32338f");
+pub const BASE_STRATEGY_IMPLEMENTATION_ADDR: Address =
+    address!("a85233C63b9Ee964Add6F2cffe00Fd84eb32338f");
 /// The default Delayed Withdrawal Router address on our testnet
-pub const DELAYED_WITHDRAWAL_ROUTER_ADDR: Address = address!("8A791620dd6260079BF849Dc5567aDC3F2FdC318");
+pub const DELAYED_WITHDRAWAL_ROUTER_ADDR: Address =
+    address!("8A791620dd6260079BF849Dc5567aDC3F2FdC318");
 /// The default Delayed Withdrawal Router Implementation address on our testnet
-pub const DELAYED_WITHDRAWAL_ROUTER_IMPLEMENTATION_ADDR: Address = address!("9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE");
+pub const DELAYED_WITHDRAWAL_ROUTER_IMPLEMENTATION_ADDR: Address =
+    address!("9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE");
 /// The default Delegation address on our testnet
 pub const DELEGATION_MANAGER_ADDR: Address = address!("Dc64a140Aa3E981100a9becA4E685f962f0cF6C9");
 /// The default Delegation Implementation address on our testnet
-pub const DELEGATION_IMPLEMENTATION_ADDR: Address = address!("A51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0");
+pub const DELEGATION_IMPLEMENTATION_ADDR: Address =
+    address!("A51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0");
 /// The default EigenLayer Pauser Reg address on our testnet
-pub const EIGEN_LAYER_PAUSER_REG_ADDR: Address = address!("9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0");
+pub const EIGEN_LAYER_PAUSER_REG_ADDR: Address =
+    address!("9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0");
 /// The default EigenLayer Proxy Admin address on our testnet
-pub const EIGEN_LAYER_PROXY_ADMIN_ADDR: Address = address!("e7f1725E7734CE288F8367e1Bb143E90bb3F0512");
+pub const EIGEN_LAYER_PROXY_ADMIN_ADDR: Address =
+    address!("e7f1725E7734CE288F8367e1Bb143E90bb3F0512");
 /// The default EigenPod Beacon address on our testnet
 pub const EIGEN_POD_BEACON_ADDR: Address = address!("B7f8BC63BbcaD18155201308C8f3540b07f84F5e");
 /// The default EigenPod Implementation address on our testnet
-pub const EIGEN_POD_IMPLEMENTATION_ADDR: Address = address!("610178dA211FEF7D417bC0e6FeD39F05609AD788");
+pub const EIGEN_POD_IMPLEMENTATION_ADDR: Address =
+    address!("610178dA211FEF7D417bC0e6FeD39F05609AD788");
 /// The default EigenPod Manager address on our testnet
 pub const EIGEN_POD_MANAGER_ADDR: Address = address!("2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6");
 /// The default EigenPod Manager Implementation address on our testnet
-pub const EIGEN_POD_MANAGER_IMPLEMENTATION_ADDR: Address = address!("959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1");
+pub const EIGEN_POD_MANAGER_IMPLEMENTATION_ADDR: Address =
+    address!("959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1");
 /// The default Empty Contract address on our testnet
 pub const EMPTY_CONTRACT_ADDR: Address = address!("Cf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9");
 /// The default Slasher address on our testnet
 pub const SLASHER_ADDR: Address = address!("a513E6E4b8f2a923D98304ec87F64353C4D5C853");
 /// The default Slasher Implementation address on our testnet
-pub const SLASHER_IMPLEMENTATION_ADDR: Address = address!("0B306BF915C4d645ff596e518fAf3F9669b97016");
+pub const SLASHER_IMPLEMENTATION_ADDR: Address =
+    address!("0B306BF915C4d645ff596e518fAf3F9669b97016");
 /// The default Strategy Manager address on our testnet
 pub const STRATEGY_MANAGER_ADDR: Address = address!("5FC8d32690cc91D4c39d9d3abcBD16989F875707");
 /// The default Strategy Manager Implementation address on our testnet
-pub const STRATEGY_MANAGER_IMPLEMENTATION_ADDR: Address = address!("0DCd1Bf9A1b36cE34237eEaFef220932846BCD82");
+pub const STRATEGY_MANAGER_IMPLEMENTATION_ADDR: Address =
+    address!("0DCd1Bf9A1b36cE34237eEaFef220932846BCD82");
 
 /// The default ERC20 Mock address on our testnet
 pub const ERC20_MOCK_ADDR: Address = address!("82e01223d51Eb87e16A03E24687EDF0F294da6f1");
 /// The default ERC20 Mock Strategy address on our testnet
 pub const ERC20_MOCK_STRATEGY_ADDR: Address = address!("7969c5eD335650692Bc04293B07F5BF2e7A673C0");
-
 
 /// The default Operator State Retriever address on our testnet
 pub const OPERATOR_STATE_RETRIEVER_ADDR: Address =

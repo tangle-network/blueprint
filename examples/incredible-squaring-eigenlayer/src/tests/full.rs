@@ -23,6 +23,7 @@ use blueprint_sdk::std::{
 use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
 use blueprint_sdk::testing::utils::anvil::wait_for_responses;
 use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
+use blueprint_sdk::testing::utils::eigenlayer::env::EIGEN_LAYER_PAUSER_REG_ADDR;
 use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::{Router, debug, error, info, warn};
 use eigensdk::utils::slashing::core::avsdirectory::AVSDirectory;
@@ -62,7 +63,13 @@ async fn run_eigenlayer_incredible_squaring_test(
     // let service_manager_address = avs_contracts.service_manager_address;
 
     let aggregator_private_key = AGGREGATOR_PRIVATE_KEY.to_string();
-    let delegation_manager_address = harness.;
+    let contract_addresses = harness.eigenlayer_contract_addresses;
+    let delegation_manager_address = contract_addresses.delegation_manager_address;
+    let permission_controller_address = contract_addresses.permission_controller_address;
+    let allocation_manager_address = contract_addresses.allocation_manager_address;
+    let avs_directory_addr = contract_addresses.avs_directory_address;
+    let rewards_coordinator_addr = contract_addresses.rewards_coordinator_address;
+    let pauser_registry_addr = EIGEN_LAYER_PAUSER_REG_ADDR;
 
     let avs_contracts = crate::tests::deploy::deploy_avs_contracts(
         &env.http_rpc_endpoint,
@@ -70,16 +77,22 @@ async fn run_eigenlayer_incredible_squaring_test(
         harness.owner_account(),
         1,
         vec![10],
-        harness.delegation_manager_address(),
-        harness.permission_controller_address(),
-        harness.allocation_manager_address(),
+        harness.owner_account(),
+        permission_controller_address,
+        allocation_manager_address,
+        avs_directory_addr,
+        delegation_manager_address,
+        pauser_registry_addr,
+        rewards_coordinator_addr,
         harness.task_generator_account(),
         harness.aggregator_account(),
         10,
-        harness.eigenlayer_contract_addresses(),
-    ).await;
+    )
+    .await
+    .unwrap();
 
-
+    let service_manager_address = avs_contracts.squaring_service_manager;
+    let task_manager_address = avs_contracts.squaring_task_manager;
 
     // Ensure we have the correct Service Manager Address
     let env_service_manager = harness
