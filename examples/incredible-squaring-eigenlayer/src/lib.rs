@@ -7,4 +7,4 @@ pub mod error;
 pub mod jobs;
 
 #[cfg(test)]
-mod tests;
+pub mod tests;

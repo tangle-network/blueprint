@@ -21,8 +21,8 @@ remappings_location = "txt"
 remappings_version = false
 
 [dependencies]
-# eigenlayer-middleware = { version = "0.5.4", git = "https://github.com/Layr-Labs/eigenlayer-middleware", rev = "2475ab8b8c7698e69bb18f3a19e0c518381f24df" }
-eigenlayer-middleware = { version = "0.5.4", git = "https://github.com/Layr-Labs/eigenlayer-middleware" }
+eigenlayer-middleware = { version = "0.5.4", git = "https://github.com/Layr-Labs/eigenlayer-middleware", rev = "4d63f27247587607beb67f96fdabec4b2c1321ef" }
+# eigenlayer-middleware = { version = "0.5.4", git = "https://github.com/Layr-Labs/eigenlayer-middleware" }
 forge-std = "1.9.6"
 "@openzeppelin-contracts" = "4.7.0"
 

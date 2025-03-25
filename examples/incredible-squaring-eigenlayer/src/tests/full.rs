@@ -3,14 +3,13 @@ use crate::contexts::aggregator::AggregatorContext;
 use crate::contexts::client::AggregatorClient;
 use crate::contexts::combined::CombinedContext;
 use crate::contexts::x_square::EigenSquareContext;
-use crate::contracts::{IServiceManager, ProxyAdmin, SquaringServiceManager, SquaringTask};
+use crate::contracts::{ProxyAdmin, SquaringServiceManager, SquaringTask};
 use crate::jobs::compute_x_square::{XSQUARE_JOB_ID, xsquare_eigen};
 use crate::jobs::initialize_task::{INITIALIZE_TASK_JOB_ID, initialize_bls_task};
 use alloy_network::EthereumWallet;
-use alloy_primitives::{Address, Bytes, FixedBytes, U256, address};
+use alloy_primitives::{Address, Bytes, U256, address};
 use alloy_provider::Provider;
-use alloy_signer_local::{LocalSigner, PrivateKeySigner};
-use alloy_sol_types::sol;
+use alloy_signer_local::PrivateKeySigner;
 use blueprint_sdk::evm::producer::{PollingConfig, PollingProducer};
 use blueprint_sdk::evm::util::get_provider_http;
 use blueprint_sdk::evm::util::get_provider_ws;
@@ -26,8 +25,6 @@ use blueprint_sdk::testing::utils::anvil::wait_for_responses;
 use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
 use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::{Router, debug, error, info, warn};
-use color_eyre::eyre;
-use eigensdk::utils::slashing::core::allocationmanager::IAllocationManagerTypes::SlashingParams;
 use eigensdk::utils::slashing::core::avsdirectory::AVSDirectory;
 use eigensdk::utils::slashing::middleware::registrycoordinator::IRegistryCoordinatorTypes::{
     RegistryCoordinatorParams, SlashingRegistryParams,
@@ -59,10 +56,30 @@ async fn run_eigenlayer_incredible_squaring_test(
     let env = harness.env().clone();
     let http_endpoint = harness.http_endpoint.to_string();
 
-    // Deploy Task Manager
-    let avs_contracts = deploy_avs_contracts(&harness).await;
-    let task_manager_address = avs_contracts.task_manager_address;
-    let service_manager_address = avs_contracts.service_manager_address;
+    // // Deploy Task Manager
+    // let avs_contracts = deploy_avs_contracts(&harness).await;
+    // let task_manager_address = avs_contracts.task_manager_address;
+    // let service_manager_address = avs_contracts.service_manager_address;
+
+    let aggregator_private_key = AGGREGATOR_PRIVATE_KEY.to_string();
+    let delegation_manager_address = harness.;
+
+    let avs_contracts = crate::tests::deploy::deploy_avs_contracts(
+        &env.http_rpc_endpoint,
+        &aggregator_private_key,
+        harness.owner_account(),
+        1,
+        vec![10],
+        harness.delegation_manager_address(),
+        harness.permission_controller_address(),
+        harness.allocation_manager_address(),
+        harness.task_generator_account(),
+        harness.aggregator_account(),
+        10,
+        harness.eigenlayer_contract_addresses(),
+    ).await;
+
+
 
     // Ensure we have the correct Service Manager Address
     let env_service_manager = harness
@@ -534,8 +551,8 @@ where
         stake_registry_address,
         rewards_coordinator_address,
         task_manager_address,
+        owner_address,
         permission_controller_address,
-        allocation_manager_address,
     );
 
     let service_manager_impl_address = match get_receipt(service_manager_deploy_call).await {
