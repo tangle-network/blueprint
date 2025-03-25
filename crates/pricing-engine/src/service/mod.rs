@@ -42,7 +42,7 @@ enum ServiceCommand {
 }
 
 /// Configuration for the pricing engine service
-pub struct ServiceConfig {
+pub struct ServiceConfig<K: KeyType> {
     /// RPC server address
     pub rpc_addr: SocketAddr,
     /// Substrate node websocket URL
@@ -55,12 +55,14 @@ pub struct ServiceConfig {
     pub operator_description: Option<String>,
     /// Operator public key (on-chain identity)
     pub operator_public_key: String,
+    /// Supported blueprints
+    pub supported_blueprints: Vec<ServiceCategory>,
     /// Network service handle for RFQ functionality
-    pub network_handle: Option<Arc<NetworkServiceHandle<crate::rfq::KeyType>>>,
+    pub network_handle: Option<Arc<NetworkServiceHandle<K>>>,
 }
 
 /// The main pricing engine service
-pub struct Service<K: KeyType = crate::rfq::KeyType> {
+pub struct Service<K: KeyType> {
     /// Current state of the service
     state: ServiceState,
 
@@ -96,7 +98,7 @@ impl<K: KeyType> Service<K> {
             id: "".to_string(),
             name: "".to_string(),
             description: None,
-            supported_categories: vec![],
+            supported_blueprints: vec![],
         };
 
         Self {
@@ -113,23 +115,14 @@ impl<K: KeyType> Service<K> {
     }
 
     /// Start the pricing engine service
-    pub async fn start(&mut self, config: ServiceConfig) -> Result<()> {
+    pub async fn start(&mut self, config: ServiceConfig<K>) -> Result<()> {
         info!("Starting Tangle Cloud Pricing Engine");
-
-        // Set up operator info
-        let supported_categories = self
-            .pricing_models
-            .iter()
-            .map(|m| m.category)
-            .collect::<blueprint_std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
 
         self.operator_info = OperatorInfo {
             id: config.operator_public_key.clone(),
             name: config.operator_name.clone(),
             description: config.operator_description.clone(),
-            supported_categories,
+            supported_blueprints: config.supported_blueprints.clone(),
         };
 
         // Start the blockchain event listener
@@ -177,9 +170,6 @@ impl<K: KeyType> Service<K> {
                 pricing_models: self.pricing_models.clone(),
                 ..Default::default()
             };
-
-            // TODO: In a real implementation, we'd load the key pair from the keystore
-            let key_pair = blueprint_crypto::KeyType::generate();
 
             // Create and start the RFQ processor
             let rfq_processor =
@@ -275,55 +265,30 @@ impl<K: KeyType> Service<K> {
 
             // Process events based on their type
             match &event {
-                BlockchainEvent::PricingUpdated {
-                    provider_id,
-                    models,
-                } => {
-                    info!("Pricing models updated for provider {}", provider_id);
-                    // Update pricing models in the storage if this is for our operator
+                BlockchainEvent::Registered(registered) => {
+                    // TODO: Update operator info
                 }
-                BlockchainEvent::ServiceRequested {
-                    request_id,
-                    user_id,
-                    category,
-                    requirements,
-                    max_price,
-                } => {
-                    info!(
-                        "Service request received: {} from user {}",
-                        request_id, user_id
-                    );
-                    // Process the service request:
-                    // 1. Check if we support this service category
-                    // 2. Calculate price based on requirements
-                    // 3. If it's below max_price (if specified), approve the request
-                    // 4. Otherwise, reject or ignore
+                BlockchainEvent::Unregistered(unregistered) => {
+                    // TODO: Update operator info
                 }
-                BlockchainEvent::ServiceStarted {
-                    service_id,
-                    user_id,
-                    provider_id,
-                    ..
-                } => {
-                    info!(
-                        "Service started: {} for user {} by provider {}",
-                        service_id, user_id, provider_id
-                    );
-                    // Track active services
+                BlockchainEvent::PriceTargetsUpdated(price_targets_updated) => {
+                    // TODO: Update pricing models
                 }
-                BlockchainEvent::ServiceTerminated {
-                    service_id,
-                    reason,
-                    final_cost,
-                } => {
-                    info!(
-                        "Service terminated: {} with reason: {}, final cost: {}",
-                        service_id, reason, final_cost
-                    );
-                    // Clean up any tracking data for this service
+                BlockchainEvent::ServiceRequested(service_requested) => {
+                    // TODO: Process service request
                 }
-                // Handle other events as needed
-                _ => {}
+                BlockchainEvent::ServiceRequestApproved(service_request_approved) => {
+                    // TODO: Process service request approval
+                }
+                BlockchainEvent::ServiceRequestRejected(service_request_rejected) => {
+                    // TODO: Process service request rejection
+                }
+                BlockchainEvent::ServiceTerminated(service_terminated) => {
+                    // TODO: Process service termination
+                }
+                BlockchainEvent::ServiceInitiated(service_initiated) => {
+                    // TODO: Process service initiation
+                }
             }
         }
     }
@@ -350,14 +315,14 @@ impl<K: KeyType> Service<K> {
         }
 
         // Update supported categories in operator info
-        let supported_categories = self
+        let supported_blueprints = self
             .pricing_models
             .iter()
-            .map(|m| m.category)
+            .map(|m| m.blueprint_id.clone())
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .collect();
 
-        self.operator_info.supported_categories = supported_categories;
+        self.operator_info.supported_blueprints = supported_blueprints;
     }
 }

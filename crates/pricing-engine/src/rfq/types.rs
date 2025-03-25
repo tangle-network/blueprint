@@ -3,8 +3,9 @@
 //! This module defines the core data types used for the request-for-quote system.
 
 use crate::models::PricingModel;
-use crate::types::{Price, ResourceRequirement, ServiceCategory, TimePeriod};
+use crate::types::{Price, ResourceRequirement, TimePeriod};
 use blueprint_crypto::KeyType;
+use blueprint_crypto::hashing::blake3_256;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
@@ -80,38 +81,33 @@ impl Default for QuoteRequestId {
     }
 }
 
-/// Request for a price quote
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, TypeInfo)]
+/// A request for price quotes from service operators
+#[derive(Debug, Clone, Encode, Decode, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct QuoteRequest {
-    /// Unique identifier for this request
+    /// ID of the request
     pub id: QuoteRequestId,
-
-    /// Sender's identity key (used for encrypting responses)
-    pub sender_id: Vec<u8>,
-
-    /// Target category for the service
-    pub category: ServiceCategory,
-
-    /// Resource requirements for the service
+    /// Public key of the requester
+    pub requester_id: Vec<u8>,
+    /// Blueprint ID for which the request is made
+    pub blueprint_id: String,
+    /// Resource requirements
     pub requirements: Vec<ResourceRequirement>,
-
-    /// Optional filters to limit which operators should respond
-    pub filters: Option<RequestFilters>,
-
-    /// Timestamp when this request was created
-    pub timestamp: u64,
-
-    /// Expiration time for this request
+    /// Optional maximum price willing to pay
+    pub max_price: Option<Price>,
+    /// When the request was created
+    pub created_at: u64,
+    /// When the request expires
     pub expires_at: u64,
 }
 
 impl QuoteRequest {
     /// Create a new quote request
     pub fn new(
-        sender_id: Vec<u8>,
-        category: ServiceCategory,
+        requester_id: Vec<u8>,
+        blueprint_id: impl Into<String>,
         requirements: Vec<ResourceRequirement>,
-        filters: Option<RequestFilters>,
+        max_price: Option<Price>,
         ttl: Duration,
     ) -> Self {
         let now = SystemTime::now()
@@ -119,18 +115,21 @@ impl QuoteRequest {
             .unwrap_or_default()
             .as_secs();
 
+        let expires_at = now + ttl.as_secs();
+        let id = QuoteRequestId::new();
+
         Self {
-            id: QuoteRequestId::new(),
-            sender_id,
-            category,
+            id,
+            requester_id,
+            blueprint_id: blueprint_id.into(),
             requirements,
-            filters,
-            timestamp: now,
-            expires_at: now + ttl.as_secs(),
+            max_price,
+            created_at: now,
+            expires_at,
         }
     }
 
-    /// Check if this request has expired
+    /// Check if the request is expired
     pub fn is_expired(&self) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -246,15 +245,18 @@ pub struct SignedPriceQuote<K: KeyType> {
 
 impl<K: KeyType> SignedPriceQuote<K> {
     /// Create a new signed price quote
-    pub fn new(quote: PriceQuote, key_pair: &K::Pair) -> RfqResult<Self>
+    pub fn new(quote: PriceQuote, key_pair: &K::Secret) -> RfqResult<Self>
     where
-        K::Pair: Pair<Public = K::Public, Signature = K::Signature>,
+        K::Secret: Pair<Public = K::Public, Signature = K::Signature>,
     {
         // Serialize the quote to bytes for signing
         let quote_bytes = bincode::serialize(&quote)?;
 
+        // Hash the quote
+        let quote_hash = blake3_256(&quote_bytes);
+
         // Sign the quote
-        let signature = key_pair.sign(&quote_bytes);
+        let signature = key_pair.sign(&quote_hash);
 
         Ok(Self { quote, signature })
     }
@@ -267,9 +269,13 @@ impl<K: KeyType> SignedPriceQuote<K> {
         // Serialize the quote to bytes for verification
         let quote_bytes = bincode::serialize(&self.quote)?;
 
+        // Hash the quote
+        let quote_hash = blake3_256(&quote_bytes);
+
         // Verify using the public key
-        // This would need to match the specific signature verification method for the key type
-        Ok(true) // Placeholder for actual verification logic
+        let verified = K::verify(public_key, &quote_hash, &self.signature);
+
+        Ok(verified)
     }
 }
 

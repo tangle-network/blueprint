@@ -26,7 +26,7 @@ pub use error::{Error, PricingError, Result};
 pub use models::PricingModel;
 #[cfg(feature = "std")]
 pub use service::{Service, ServiceConfig, ServiceState};
-pub use types::{Price, ResourceRequirement, ServiceCategory, TimePeriod};
+pub use types::{Price, ResourceRequirement, TimePeriod};
 
 // Make tangle-subxt available in our crate for blockchain integration
 #[cfg(feature = "std")]

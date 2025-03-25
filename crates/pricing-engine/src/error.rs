@@ -8,7 +8,10 @@ use {
     thiserror::Error,
 };
 
-use jsonrpsee::types::ErrorObjectOwned;
+use jsonrpsee::{
+    core::{RegisterMethodError, StringError},
+    types::ErrorObjectOwned,
+};
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
@@ -16,7 +19,7 @@ use scale_info::TypeInfo;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Pricing engine errors
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[cfg_attr(feature = "std", derive(Error))]
 pub enum Error {
     /// Pricing calculation error
@@ -39,6 +42,10 @@ pub enum Error {
     #[cfg_attr(feature = "std", error("RPC error: {0}"))]
     Rpc(#[from] ErrorObjectOwned),
 
+    /// Register method error
+    #[cfg_attr(feature = "std", error("Register method error: {0}"))]
+    RegisterMethod(#[from] RegisterMethodError),
+
     /// Codec error from parity-scale-codec
     #[cfg_attr(feature = "std", error("Codec error: {0}"))]
     Codec(#[from] parity_scale_codec::Error),
@@ -49,7 +56,7 @@ pub enum Error {
 
     /// Other error
     #[cfg_attr(feature = "std", error("{0}"))]
-    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
+    Other(String),
 }
 
 #[cfg(not(feature = "std"))]

@@ -3,22 +3,24 @@
 //! This module provides a JSON-RPC server that allows users to query
 //! pricing information and obtain signed price quotes from the operator.
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{fmt, net::SocketAddr, sync::Arc};
 
+use blueprint_crypto::KeyType;
 use jsonrpsee::{
-    core::{Error as JsonRpseeError, RpcResult},
+    core::RpcResult,
     server::{RpcModule, ServerBuilder, ServerHandle},
+    types::error::{ErrorObject, ErrorObjectOwned},
 };
 use parity_scale_codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info};
 
 use crate::{
-    calculation::calculate_service_price,
-    error::Result,
+    calculation::{self, PricingContext, calculate_service_price},
+    error::{Error, PricingError, Result},
     models::PricingModel,
-    rfq::{QuoteRequest, QuoteRequestId, RfqMessage, RfqMessageType, RfqProcessor},
-    types::{PricingContext, ResourceRequirement, ServiceCategory},
+    rfq::RfqProcessor,
+    types::{Price, ResourceRequirement},
 };
 
 /// RPC API trait for the pricing engine
@@ -54,8 +56,8 @@ pub struct OperatorInfo {
     pub name: String,
     /// Operator description
     pub description: Option<String>,
-    /// Supported service categories
-    pub supported_categories: Vec<ServiceCategory>,
+    /// Supported blueprint IDs
+    pub supported_blueprints: Vec<String>,
 }
 
 /// Pricing model information returned by the RPC API
@@ -67,8 +69,8 @@ pub struct PricingModelInfo {
     pub name: String,
     /// Model description
     pub description: Option<String>,
-    /// Service category this model applies to
-    pub category: ServiceCategory,
+    /// Blueprint ID this model applies to
+    pub blueprint_id: String,
     /// Whether this model is currently active
     pub active: bool,
 }
@@ -79,9 +81,7 @@ pub struct PriceCalculationRequest {
     /// Blueprint ID for the service
     pub blueprint_id: String,
     /// Requirements for the service
-    pub requirements: ResourceRequirement,
-    /// Service category
-    pub category: ServiceCategory,
+    pub requirements: Vec<ResourceRequirement>,
     /// Duration of the service in seconds (optional)
     pub duration: Option<u64>,
 }
@@ -91,7 +91,7 @@ pub struct PriceCalculationRequest {
 pub struct PriceQuote {
     /// The calculated price
     pub price: u64,
-    /// The currency of the price (e.g., "TNGL")
+    /// The currency of the price (e.g., "TNT")
     pub currency: String,
     /// The pricing model used
     pub model_id: String,
@@ -104,8 +104,8 @@ pub struct PriceQuote {
 /// Request for RFQ (Request for Quote) via RPC
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RfqRequest {
-    /// Service category
-    pub category: ServiceCategory,
+    /// Blueprint ID for the service
+    pub blueprint_id: String,
     /// Resource requirements
     pub requirements: Vec<ResourceRequirement>,
     /// Optional maximum price willing to pay
@@ -156,18 +156,18 @@ pub struct RfqQuoteInfo {
 }
 
 /// RPC server for the pricing engine
-pub struct RpcServer {
+pub struct RpcServer<K: KeyType> {
     /// Operator information
     operator_info: OperatorInfo,
     /// Available pricing models
     pricing_models: Vec<PricingModel>,
     /// RFQ processor for handling RFQ requests
-    rfq_processor: Option<Arc<RfqProcessor>>,
+    rfq_processor: Option<Arc<RfqProcessor<K>>>,
     /// Pending RFQ requests
     pending_rfqs: Arc<std::sync::Mutex<std::collections::HashMap<String, RfqRequestStatus>>>,
 }
 
-impl RpcServer {
+impl<K: KeyType> RpcServer<K> {
     /// Create a new RPC server
     pub fn new(operator_info: OperatorInfo, pricing_models: Vec<PricingModel>) -> Self {
         Self {
@@ -179,207 +179,170 @@ impl RpcServer {
     }
 
     /// Set the RFQ processor
-    pub fn with_rfq_processor(mut self, processor: Arc<RfqProcessor>) -> Self {
+    pub fn with_rfq_processor(mut self, processor: Arc<RfqProcessor<K>>) -> Self {
         self.rfq_processor = Some(processor);
         self
     }
 
+    /// Create a JSON-RPC error object with the given code and message
+    fn create_error(code: i32, message: String) -> ErrorObjectOwned {
+        ErrorObject::owned(code, message, None::<()>)
+    }
+
     /// Start the RPC server
-    pub async fn start(self, addr: SocketAddr) -> Result<ServerHandle, JsonRpseeError> {
-        let server = ServerBuilder::default().build(addr).await?;
+    pub async fn start(self, addr: SocketAddr) -> Result<ServerHandle> {
+        let server = ServerBuilder::default()
+            .build(addr)
+            .await
+            .map_err(|e| Error::Other(format!("Failed to build RPC server: {}", e)))?;
+
         let mut module = RpcModule::new(());
 
         // Register the RPC methods
         let operator_info = self.operator_info.clone();
         module.register_async_method("pricing_getOperatorInfo", move |_, _, _| {
             let info = operator_info.clone();
-            async move { Ok::<_, JsonRpseeError>(info) }
+            async move { Ok::<_, ErrorObjectOwned>(info) }
         })?;
 
         let pricing_models = self.pricing_models.clone();
         module.register_async_method("pricing_getPricingModels", move |_, _, _| {
             let models = pricing_models.clone();
-            async move {
-                let model_infos = models
-                    .iter()
-                    .map(|model| PricingModelInfo {
-                        id: format!("model_{}", model.name.to_lowercase().replace(" ", "_")),
-                        name: model.name.clone(),
-                        description: model.description.clone(),
-                        category: model.category,
-                        active: true,
-                    })
-                    .collect();
+            let model_infos = models
+                .iter()
+                .map(|m| PricingModelInfo {
+                    id: m.name.clone(),
+                    name: m.name.clone(),
+                    description: m.description.clone(),
+                    blueprint_id: m.blueprint_id.clone(),
+                    active: true,
+                })
+                .collect::<Vec<_>>();
 
-                Ok::<_, JsonRpseeError>(model_infos)
-            }
+            async move { Ok::<_, ErrorObjectOwned>(model_infos) }
         })?;
 
-        let pricing_models_for_calc = self.pricing_models.clone();
-        let operator_id = self.operator_info.id.clone();
+        let pricing_models = self.pricing_models.clone();
         module.register_async_method("pricing_calculatePrice", move |params, _, _| {
-            let models = pricing_models_for_calc.clone();
-            let provider_id = operator_id.clone();
+            let pricing_models = pricing_models.clone();
 
             async move {
-                let request: PriceCalculationRequest = params.parse()?;
+                let request = params.parse::<PriceCalculationRequest>().map_err(|e| {
+                    Self::create_error(100, format!("Failed to parse parameters: {}", e))
+                })?;
 
-                // Find models that match the category
-                let matching_models = models
+                let models = pricing_models;
+
+                // Find applicable model
+                let model = models
                     .iter()
-                    .filter(|m| m.category == request.category)
-                    .collect::<Vec<_>>();
+                    .find(|m| m.blueprint_id == request.blueprint_id)
+                    .ok_or_else(|| {
+                        Self::create_error(
+                            101,
+                            format!(
+                                "No pricing model available for blueprint {}",
+                                request.blueprint_id
+                            ),
+                        )
+                    })?;
 
-                if matching_models.is_empty() {
-                    return Err(JsonRpseeError::Custom(format!(
-                        "No pricing models available for category {:?}",
-                        request.category
-                    )));
-                }
-
-                // Find the best price
-                let mut best_price = u64::MAX;
-                let mut best_model_id = None;
-
-                // Context for price calculation
+                // Calculate price
                 let context = PricingContext {
-                    provider_id: provider_id.clone(),
+                    provider_id: "local_operator".to_string(),
                 };
 
-                // Calculate price for each matching model
-                for model in matching_models {
-                    match calculate_service_price(&request.requirements, model, &context) {
-                        Ok(price) => {
-                            if price < best_price {
-                                best_price = price;
-                                best_model_id = Some(format!(
-                                    "model_{}",
-                                    model.name.to_lowercase().replace(" ", "_")
-                                ));
-                            }
-                        }
-                        Err(e) => {
-                            debug!("Error calculating price with model {}: {}", model.name, e);
-                        }
-                    }
-                }
+                let price_result = calculate_service_price(&request.requirements, model, &context)
+                    .map_err(|e| {
+                        Self::create_error(102, format!("Price calculation error: {}", e))
+                    })?;
 
-                // Return the price quote
-                if let Some(model_id) = best_model_id {
-                    // Current timestamp plus 10 minutes (example expiration)
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
+                // Create the price quote
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
 
-                    let expires_at = now + 10 * 60; // 10 minutes from now
-
-                    // In a real implementation, we would sign the price quote here
-                    // using the operator's key
-                    let signature = None; // Placeholder for actual signature
-
-                    Ok(PriceQuote {
-                        price: best_price,
-                        currency: "TNGL".to_string(),
-                        model_id,
-                        expires_at,
-                        signature,
-                    })
-                } else {
-                    Err(JsonRpseeError::Custom(
-                        "Failed to calculate price".to_string(),
-                    ))
-                }
+                Ok::<_, ErrorObjectOwned>(PriceQuote {
+                    price: price_result.value as u64,
+                    currency: price_result.token,
+                    model_id: model.name.clone(),
+                    expires_at: now + 3600, // 1 hour validity
+                    signature: None,        // No signature in this simple calculation
+                })
             }
         })?;
 
-        // Register RFQ methods if RFQ processor is available
-        if let Some(rfq_processor) = self.rfq_processor.clone() {
-            let pending_rfqs = self.pending_rfqs.clone();
+        let rfq_processor = self.rfq_processor.clone();
+        let pending_rfqs = self.pending_rfqs.clone();
+        module.register_async_method("pricing_requestForQuote", move |params, _, _| {
+            let processor = rfq_processor.clone();
+            let pending = pending_rfqs.clone();
 
-            module.register_async_method("pricing_requestForQuote", move |params, _, _| {
-                let rfq = rfq_processor.clone();
-                let pending = pending_rfqs.clone();
+            async move {
+                let request = params.parse::<RfqRequest>().map_err(|e| {
+                    Self::create_error(200, format!("Failed to parse parameters: {}", e))
+                })?;
 
-                async move {
-                    let request: RfqRequest = params.parse()?;
+                let processor = processor.ok_or_else(|| {
+                    Self::create_error(201, "RFQ processor not configured".to_string())
+                })?;
 
-                    // Generate a request ID
-                    let request_id = uuid::Uuid::new_v4().to_string();
+                // Convert the RPC request to an RFQ request
+                processor
+                    .send_request(request.blueprint_id, request.requirements)
+                    .await
+                    .map_err(|e| Self::create_error(202, format!("RFQ error: {}", e)))?;
 
-                    // Store as pending
-                    {
-                        let mut pending = pending.lock().unwrap();
-                        pending.insert(request_id.clone(), RfqRequestStatus::Pending);
-                    }
+                let request_id = format!("rfq_{}", uuid::Uuid::new_v4());
 
-                    // Start request processing in background
-                    let req_id = request_id.clone();
-                    let pending_clone = pending.clone();
+                // Store the pending request
+                pending
+                    .lock()
+                    .unwrap()
+                    .insert(request_id.clone(), RfqRequestStatus::Pending);
 
-                    tokio::spawn(async move {
-                        // Convert timeout if provided
-                        let timeout = request
-                            .timeout_seconds
-                            .map(|secs| std::time::Duration::from_secs(secs));
+                Ok::<_, ErrorObjectOwned>(request_id)
+            }
+        })?;
 
-                        // Send the RFQ request
-                        match rfq
-                            .send_request(request.category, request.requirements)
-                            .await
-                        {
-                            Ok(quotes) => {
-                                // Update status to completed
-                                let mut pending = pending_clone.lock().unwrap();
-                                pending.insert(req_id, RfqRequestStatus::Completed);
-                            }
-                            Err(e) => {
-                                // Update status to failed
-                                let mut pending = pending_clone.lock().unwrap();
-                                pending.insert(req_id, RfqRequestStatus::Failed(e.to_string()));
-                            }
-                        }
-                    });
+        let pending_rfqs = self.pending_rfqs.clone();
+        module.register_async_method("pricing_getRfqResults", move |params, _, _| {
+            let pending = pending_rfqs.clone();
 
-                    // Return the request ID
-                    Ok(request_id)
-                }
-            })?;
+            async move {
+                let request_id = params.parse::<String>().map_err(|e| {
+                    Self::create_error(300, format!("Failed to parse parameters: {}", e))
+                })?;
 
-            let pending_rfqs = self.pending_rfqs.clone();
-            module.register_async_method("pricing_getRfqResults", move |params, _, _| {
-                let pending = pending_rfqs.clone();
+                // Check if request exists and get status
+                let status = {
+                    let pending_guard = pending.lock().unwrap();
+                    pending_guard
+                        .get(&request_id)
+                        .cloned()
+                        .unwrap_or(RfqRequestStatus::Failed("Request not found".to_string()))
+                };
 
-                async move {
-                    let request_id: String = params.parse()?;
+                // In a real implementation, we'd retrieve the actual quotes
+                // For now, return an empty response with the correct status
+                let response = RfqResponse {
+                    request_id: request_id.clone(),
+                    quotes: Vec::new(),
+                    status,
+                };
 
-                    // Check if request exists and get status
-                    let status = {
-                        let pending = pending.lock().unwrap();
-                        pending
-                            .get(&request_id)
-                            .cloned()
-                            .unwrap_or(RfqRequestStatus::Failed("Request not found".to_string()))
-                    };
+                Ok::<_, ErrorObjectOwned>(response)
+            }
+        })?;
 
-                    // TODO: In a full implementation, we'd retrieve the actual quotes
-                    // from storage or the RFQ processor
+        // Start the server
+        let server_handle = server.start(module);
 
-                    Ok(RfqResponse {
-                        request_id,
-                        quotes: Vec::new(), // Placeholder for actual quotes
-                        status,
-                    })
-                }
-            })?;
-        }
-
-        info!("Starting RPC server at {}", addr);
-        let server_handle = server.start(module)?;
-
+        info!("RPC server started on {}", addr);
         Ok(server_handle)
     }
 }
 
-/// Service request handler to process signed price quotes and handle on-chain submission
+/// Service request handler for the pricing engine
 pub struct ServiceRequestHandler {}
