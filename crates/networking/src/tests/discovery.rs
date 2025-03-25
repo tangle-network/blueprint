@@ -1,4 +1,4 @@
-use crate::service::AllowedKeys;
+use crate::discovery::peers::WhitelistedKeys;
 
 use super::TestNode;
 use super::{create_whitelisted_nodes, init_tracing};
@@ -19,14 +19,14 @@ async fn test_peer_discovery_mdns() {
     let mut node1 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         vec![],
         false,
     );
     let mut node2 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         vec![],
         false,
     );
@@ -53,7 +53,7 @@ async fn test_peer_discovery_kademlia() {
     let mut node1 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         vec![],
         false,
     );
@@ -67,14 +67,14 @@ async fn test_peer_discovery_kademlia() {
     let mut node2 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         bootstrap_peers.clone(),
         false,
     );
     let mut node3 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         bootstrap_peers.clone(),
         false,
     );

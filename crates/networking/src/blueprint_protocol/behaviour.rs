@@ -80,7 +80,7 @@ pub struct BlueprintProtocolBehaviour<K: KeyType> {
     pub(crate) response_channels:
         DashMap<OutboundRequestId, ResponseChannel<InstanceMessageResponse<K>>>,
     /// Protocol message sender
-    pub(crate) protocol_message_sender: Sender<ProtocolMessage<K>>,
+    pub(crate) protocol_message_sender: Sender<ProtocolMessage>,
     /// Flag for using addresses for whitelisting and handshake verification
     pub(crate) use_address_for_handshake_verification: bool,
 }
@@ -94,7 +94,7 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
         instance_key_pair: &K::Secret,
         peer_manager: Arc<PeerManager<K>>,
         blueprint_protocol_name: &str,
-        protocol_message_sender: Sender<ProtocolMessage<K>>,
+        protocol_message_sender: Sender<ProtocolMessage>,
         use_address_for_handshake_verification: bool,
     ) -> Self {
         let blueprint_protocol_name = blueprint_protocol_name.to_string();
@@ -211,6 +211,12 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
         self.blueprint_protocol.gossipsub.subscribe(&topic)
     }
 
+    /// Unsubscribe from a gossip topic
+    pub fn unsubscribe(&mut self, topic: &str) -> bool {
+        let topic = Sha256Topic::new(topic);
+        self.blueprint_protocol.gossipsub.unsubscribe(&topic)
+    }
+
     /// Publish a message to a gossip topic
     ///
     /// # Errors
@@ -317,8 +323,7 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
                 debug!(%propagation_source, "Received gossip message");
 
                 // Deserialize the protocol message
-                let Ok(protocol_message) =
-                    bincode::deserialize::<ProtocolMessage<K>>(&message.data)
+                let Ok(protocol_message) = bincode::deserialize::<ProtocolMessage>(&message.data)
                 else {
                     warn!(%propagation_source, "Failed to deserialize gossip message");
                     return;

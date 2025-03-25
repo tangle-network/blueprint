@@ -1,10 +1,9 @@
 use super::{TestNode, init_tracing, wait_for_handshake_completion};
 use crate::{
-    discovery::peers::VerificationIdentifierKey,
-    service::AllowedKeys,
+    discovery::peers::WhitelistedKeys,
     service_handle::NetworkServiceHandle,
     tests::{create_whitelisted_nodes, wait_for_all_handshakes},
-    types::{MessageRouting, ParticipantId, ParticipantInfo},
+    types::MessageRouting,
 };
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
@@ -38,12 +37,7 @@ async fn test_gossip_between_verified_peers() {
     let routing = MessageRouting {
         message_id: 1,
         round_id: 0,
-        sender: ParticipantInfo {
-            id: ParticipantId(1),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                node1.instance_key_pair.public(),
-            )),
-        },
+        sender: handle1.local_peer_id,
         recipient: None, // No specific recipient for gossip
     };
 
@@ -71,12 +65,6 @@ async fn test_gossip_between_verified_peers() {
     assert_eq!(received_message.protocol, PROTOCOL_NAME);
     assert_eq!(received_message.routing.message_id, 1);
     assert_eq!(received_message.routing.round_id, 0);
-    assert_eq!(
-        received_message.routing.sender.verification_id_key,
-        Some(VerificationIdentifierKey::InstancePublicKey(
-            node1.instance_key_pair.public()
-        ))
-    );
     assert!(received_message.routing.recipient.is_none());
 
     info!("Gossip test completed successfully");
@@ -105,12 +93,7 @@ async fn test_multi_node_gossip() {
     let routing = MessageRouting {
         message_id: 1,
         round_id: 0,
-        sender: ParticipantInfo {
-            id: ParticipantId(0),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                nodes[0].instance_key_pair.public(),
-            )),
-        },
+        sender: handles[0].local_peer_id,
         recipient: None,
     };
 
@@ -138,12 +121,6 @@ async fn test_multi_node_gossip() {
                 i
             );
             assert_eq!(received.protocol, PROTOCOL_NAME);
-            assert_eq!(
-                received.routing.sender.verification_id_key,
-                Some(VerificationIdentifierKey::InstancePublicKey(
-                    nodes[0].instance_key_pair.public()
-                ))
-            );
             info!("Node {} received the gossip message correctly", i);
         }
     })
@@ -162,14 +139,14 @@ async fn test_unverified_peer_gossip() {
     let mut node1 = TestNode::<SpEcdsa>::new(
         "test-net",
         "gossip-test",
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         vec![],
         false,
     );
     let mut node2 = TestNode::<SpEcdsa>::new(
         "test-net",
         "gossip-test",
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         vec![],
         false,
     );
@@ -183,12 +160,7 @@ async fn test_unverified_peer_gossip() {
     let routing = MessageRouting {
         message_id: 1,
         round_id: 0,
-        sender: ParticipantInfo {
-            id: ParticipantId(1),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                node1.instance_key_pair.public(),
-            )),
-        },
+        sender: handle1.local_peer_id,
         recipient: None,
     };
 

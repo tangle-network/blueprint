@@ -4,12 +4,12 @@ use crate::{
     discovery::{
         PeerInfo, PeerManager,
         behaviour::{DerivedDiscoveryBehaviourEvent, DiscoveryEvent},
+        peers::WhitelistedKeys,
     },
     error::Error,
     service_handle::NetworkServiceHandle,
     types::ProtocolMessage,
 };
-use alloy_primitives::Address;
 use blueprint_crypto::KeyType;
 use crossbeam_channel::{self, Receiver, SendError, Sender};
 use futures::StreamExt;
@@ -173,7 +173,7 @@ impl<K: KeyType> Display for NetworkEventSendError<K> {
 
 /// Network message types
 #[derive(Debug)]
-pub enum NetworkMessage<K: KeyType> {
+pub enum NetworkCommandMessage<K: KeyType> {
     InstanceRequest {
         peer: PeerId,
         request: InstanceMessageRequest<K>,
@@ -183,6 +183,8 @@ pub enum NetworkMessage<K: KeyType> {
         topic: String,
         message: Vec<u8>,
     },
+    SubscribeToTopic(String),
+    UnsubscribeFromTopic(String),
 }
 
 /// Configuration for the network service
@@ -216,11 +218,11 @@ pub struct NetworkService<K: KeyType> {
     /// Peer manager for tracking peer states
     pub(crate) peer_manager: Arc<PeerManager<K>>,
     /// Channel for sending messages to the network service
-    network_sender: Sender<NetworkMessage<K>>,
+    network_sender: Sender<NetworkCommandMessage<K>>,
     /// Channel for receiving messages from the network service
-    network_receiver: Receiver<NetworkMessage<K>>,
+    network_receiver: Receiver<NetworkCommandMessage<K>>,
     /// Channel for receiving messages from the network service
-    protocol_message_receiver: Receiver<ProtocolMessage<K>>,
+    protocol_message_receiver: Receiver<ProtocolMessage>,
     /// Channel for sending events to the network service
     event_sender: Sender<NetworkEvent<K>>,
     /// Channel for receiving events from the network service
@@ -228,13 +230,8 @@ pub struct NetworkService<K: KeyType> {
     event_receiver: Receiver<NetworkEvent<K>>,
     /// Bootstrap peers
     bootstrap_peers: HashSet<Multiaddr>,
-    /// Channel for receiving allowed keys updates
-    allowed_keys_rx: Receiver<AllowedKeys<K>>,
-}
-
-pub enum AllowedKeys<K: KeyType> {
-    EvmAddresses(blueprint_std::collections::HashSet<Address>),
-    InstancePublicKeys(blueprint_std::collections::HashSet<K::Public>),
+    /// Channel for receiving whitelisted keys
+    whitelist_rx: Receiver<WhitelistedKeys<K>>,
 }
 
 impl<K: KeyType> NetworkService<K> {
@@ -247,8 +244,8 @@ impl<K: KeyType> NetworkService<K> {
     #[allow(clippy::missing_panics_doc)] // Unwrapping an Infallible
     pub fn new(
         config: NetworkConfig<K>,
-        allowed_keys: AllowedKeys<K>,
-        allowed_keys_rx: Receiver<AllowedKeys<K>>,
+        whitelist: WhitelistedKeys<K>,
+        whitelist_rx: Receiver<WhitelistedKeys<K>>,
     ) -> Result<Self, Error> {
         let NetworkConfig::<K> {
             network_name,
@@ -264,7 +261,7 @@ impl<K: KeyType> NetworkService<K> {
             ..
         } = config;
 
-        let peer_manager = Arc::new(PeerManager::new(allowed_keys));
+        let peer_manager = Arc::new(PeerManager::new(whitelist));
         let blueprint_protocol_name = format!("/{network_name}/{instance_id}");
 
         let (network_sender, network_receiver) = crossbeam_channel::unbounded();
@@ -318,12 +315,12 @@ impl<K: KeyType> NetworkService<K> {
             event_sender,
             event_receiver,
             bootstrap_peers,
-            allowed_keys_rx,
+            whitelist_rx,
         })
     }
 
     /// Get a sender to send messages to the network service
-    pub fn network_sender(&self) -> Sender<NetworkMessage<K>> {
+    pub fn network_sender(&self) -> Sender<NetworkCommandMessage<K>> {
         self.network_sender.clone()
     }
 
@@ -352,12 +349,10 @@ impl<K: KeyType> NetworkService<K> {
         }
         self.peer_manager.update_peer(local_peer_id, info);
 
-        // Start allowed keys updater
-        let peer_manager = self.peer_manager.clone();
-        let allowed_keys_rx = self.allowed_keys_rx.clone();
-        tokio::spawn(async move {
-            peer_manager.run_allowed_keys_updater(&allowed_keys_rx);
-        });
+        // Spawn whitelist update task - clone the peer_manager first to avoid partial move
+        let peer_manager_clone = self.peer_manager.clone();
+        let whitelist_rx = self.whitelist_rx.clone();
+        peer_manager_clone.spawn_whitelist_updater(whitelist_rx);
 
         // Spawn background task
         tokio::spawn(async move {
@@ -420,6 +415,10 @@ impl<K: KeyType> NetworkService<K> {
                     {
                         warn!("Failed to handle network message: {}", e);
                     }
+                }
+                Ok(whitelist_update) = async { self.whitelist_rx.try_recv() } => {
+                    debug!("Received whitelist update");
+                    self.peer_manager.update_whitelist(whitelist_update);
                 }
                 else => break,
             }
@@ -663,12 +662,12 @@ fn handle_ping_event<K: KeyType>(
 /// Handle a network message
 fn handle_network_message<K: KeyType>(
     swarm: &mut Swarm<GadgetBehaviour<K>>,
-    msg: NetworkMessage<K>,
+    msg: NetworkCommandMessage<K>,
     peer_manager: &Arc<PeerManager<K>>,
     event_sender: &Sender<NetworkEvent<K>>,
 ) -> Result<(), Error> {
     match msg {
-        NetworkMessage::InstanceRequest { peer, request } => {
+        NetworkCommandMessage::InstanceRequest { peer, request } => {
             // Only send requests to verified peers
             if !peer_manager.is_peer_verified(&peer) {
                 warn!(%peer, "Attempted to send request to unverified peer");
@@ -692,7 +691,7 @@ fn handle_network_message<K: KeyType>(
                     )
                 })?;
         }
-        NetworkMessage::GossipMessage {
+        NetworkCommandMessage::GossipMessage {
             source,
             topic,
             message,
@@ -714,6 +713,12 @@ fn handle_network_message<K: KeyType>(
                 .map_err(|_| {
                     SendError(NetworkEventSendError::<K>::GossipSent { topic, message }.to_string())
                 })?;
+        }
+        NetworkCommandMessage::SubscribeToTopic(topic) => {
+            swarm.behaviour_mut().blueprint_protocol.subscribe(&topic)?;
+        }
+        NetworkCommandMessage::UnsubscribeFromTopic(topic) => {
+            swarm.behaviour_mut().blueprint_protocol.unsubscribe(&topic);
         }
     }
 

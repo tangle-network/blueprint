@@ -8,8 +8,8 @@ pub mod service;
 pub mod service_handle;
 pub mod types;
 
-#[cfg(test)]
+#[cfg(feature = "testing")]
 mod tests;
 
 pub use blueprint_crypto::KeyType;
-pub use service::{AllowedKeys, NetworkConfig, NetworkEvent, NetworkService};
+pub use service::{NetworkConfig, NetworkEvent, NetworkService};

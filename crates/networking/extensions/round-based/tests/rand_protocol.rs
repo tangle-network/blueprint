@@ -1,7 +1,5 @@
 //! Simple protocol in which parties cooperate to generate randomness
 
-mod common;
-
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, digest::Output};
 
@@ -171,13 +169,12 @@ pub struct Blame {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashSet;
     use std::time::Duration;
 
     use super::common::*;
     use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
-    use blueprint_networking::discovery::peers::VerificationIdentifierKey;
-    use blueprint_networking::service::AllowedKeys;
+    use blueprint_networking::discovery::peers::{VerificationIdentifierKey, WhitelistedKeys};
     use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
     use round_based::MpcParty;
     use tracing::{debug, info};
@@ -226,25 +223,29 @@ mod tests {
 
         // Generate node2's key pair first
         let instance_key_pair2 = SpEcdsa::generate_with_seed(None).unwrap();
-        let mut allowed_keys1 = HashSet::new();
-        allowed_keys1.insert(instance_key_pair2.public());
+        let mut whitelist1 = HashSet::new();
+        whitelist1.insert(VerificationIdentifierKey::InstancePublicKey(
+            instance_key_pair2.public(),
+        ));
 
         // Create node1 with node2's key whitelisted
         let mut node1 = TestNode::<SpEcdsa>::new(
             network_name,
             instance_id,
-            AllowedKeys::InstancePublicKeys(allowed_keys1),
+            WhitelistedKeys::new_from_hashset(whitelist1),
             vec![],
             false,
         );
 
         // Create node2 with node1's key whitelisted and pre-generated key
-        let mut allowed_keys2 = HashSet::new();
-        allowed_keys2.insert(node1.instance_key_pair.public());
+        let mut whitelist2 = HashSet::new();
+        whitelist2.insert(VerificationIdentifierKey::InstancePublicKey(
+            node1.instance_key_pair.public(),
+        ));
         let mut node2 = TestNode::<SpEcdsa>::new_with_keys(
             network_name,
             instance_id,
-            AllowedKeys::InstancePublicKeys(allowed_keys2),
+            WhitelistedKeys::new_from_hashset(whitelist2),
             vec![],
             Some(instance_key_pair2),
             None,
@@ -256,24 +257,17 @@ mod tests {
         let handle1 = node1.start().await.expect("Failed to start node1");
         let handle2 = node2.start().await.expect("Failed to start node2");
 
-        wait_for_peer_discovery(&[&handle1, &handle2], Duration::from_secs(5))
-            .await
-            .unwrap();
+        wait_for_peer_discovery(
+            &[&handle1.clone(), &handle2.clone()],
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
 
-        let parties = HashMap::from_iter([
-            (
-                0,
-                VerificationIdentifierKey::InstancePublicKey(node1.instance_key_pair.public()),
-            ),
-            (
-                1,
-                VerificationIdentifierKey::InstancePublicKey(node2.instance_key_pair.public()),
-            ),
-        ]);
-
-        let node1_network = RoundBasedNetworkAdapter::new(handle1, 0, parties.clone(), instance_id);
-        let node2_network = RoundBasedNetworkAdapter::new(handle2, 1, parties, instance_id);
-
+        let node1_network =
+            RoundBasedNetworkAdapter::new(handle1.clone(), 0, handle1.peer_manager, instance_id);
+        let node2_network =
+            RoundBasedNetworkAdapter::new(handle2.clone(), 1, handle2.peer_manager, instance_id);
         let mut tasks = vec![];
         tasks.push(tokio::spawn(async move {
             let mut rng = rand_dev::DevRng::new();

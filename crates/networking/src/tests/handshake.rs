@@ -1,4 +1,5 @@
-use crate::service::AllowedKeys;
+use crate::discovery::peers::VerificationIdentifierKey;
+use crate::discovery::peers::WhitelistedKeys;
 use crate::tests::TestNode;
 use crate::tests::create_whitelisted_nodes;
 use blueprint_crypto::sp_core::SpEcdsa;
@@ -79,18 +80,20 @@ async fn test_handshake_with_invalid_peer() {
     let mut node1 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         vec![],
         false,
     );
 
     // Create node2 with node1's key whitelisted (but node2's key is not whitelisted by node1)
     let mut allowed_keys2 = HashSet::new();
-    allowed_keys2.insert(node1.instance_key_pair.public());
+    allowed_keys2.insert(VerificationIdentifierKey::InstancePublicKey(
+        node1.instance_key_pair.public(),
+    ));
     let mut node2 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(allowed_keys2),
+        WhitelistedKeys::new_from_hashset(allowed_keys2),
         vec![],
         false,
     );

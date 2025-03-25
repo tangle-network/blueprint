@@ -1,15 +1,11 @@
+use blueprint_core::warn;
 use blueprint_crypto::KeyType;
 use blueprint_networking::{
-    discovery::peers::VerificationIdentifierKey,
+    discovery::PeerManager,
     service_handle::NetworkServiceHandle,
-    types::{ParticipantInfo, ProtocolMessage},
+    types::{ParticipantId, ProtocolMessage},
 };
-use dashmap::DashMap;
-use futures::{Sink, Stream};
-use round_based::{Delivery, Incoming, MessageDestination, MessageType, Outgoing, PartyIndex};
-use serde::{Serialize, de::DeserializeOwned};
-use std::{
-    collections::HashMap,
+use blueprint_std::{
     pin::Pin,
     sync::{
         Arc,
@@ -17,6 +13,9 @@ use std::{
     },
     task::{Context, Poll},
 };
+use futures::{Sink, Stream};
+use round_based::{Delivery, Incoming, MessageDestination, MessageType, Outgoing, PartyIndex};
+use serde::{Serialize, de::DeserializeOwned};
 
 /// Wrapper to adapt [`NetworkServiceHandle`] to round-based protocols
 pub struct RoundBasedNetworkAdapter<M, K: KeyType> {
@@ -24,8 +23,8 @@ pub struct RoundBasedNetworkAdapter<M, K: KeyType> {
     handle: NetworkServiceHandle<K>,
     /// Current party's index
     party_index: PartyIndex,
-    /// Mapping of party indices to their public keys
-    parties: Arc<DashMap<PartyIndex, VerificationIdentifierKey<K>>>,
+    /// Peer manager
+    peer_manager: Arc<PeerManager<K>>,
     /// Counter for message IDs
     next_msg_id: Arc<AtomicU64>,
     /// Protocol identifier
@@ -42,13 +41,13 @@ where
     pub fn new(
         handle: NetworkServiceHandle<K>,
         party_index: PartyIndex,
-        parties: HashMap<PartyIndex, VerificationIdentifierKey<K>>,
+        peer_manager: Arc<PeerManager<K>>,
         protocol_id: impl Into<String>,
     ) -> Self {
         Self {
             handle,
             party_index,
-            parties: Arc::new(DashMap::from_iter(parties)),
+            peer_manager,
             next_msg_id: Arc::new(AtomicU64::new(0)),
             protocol_id: protocol_id.into(),
             _phantom: std::marker::PhantomData,
@@ -72,7 +71,7 @@ where
         let RoundBasedNetworkAdapter {
             handle,
             party_index,
-            parties,
+            peer_manager,
             next_msg_id,
             protocol_id,
             ..
@@ -81,7 +80,7 @@ where
         let sender = RoundBasedSender {
             handle: handle.clone(),
             party_index,
-            parties: parties.clone(),
+            peer_manager: peer_manager.clone(),
             next_msg_id: next_msg_id.clone(),
             protocol_id: protocol_id.clone(),
             _phantom: std::marker::PhantomData,
@@ -96,7 +95,7 @@ where
 pub struct RoundBasedSender<M, K: KeyType> {
     handle: NetworkServiceHandle<K>,
     party_index: PartyIndex,
-    parties: Arc<DashMap<PartyIndex, VerificationIdentifierKey<K>>>,
+    peer_manager: Arc<PeerManager<K>>,
     next_msg_id: Arc<AtomicU64>,
     protocol_id: String,
     _phantom: std::marker::PhantomData<M>,
@@ -127,27 +126,23 @@ where
             "Sending message",
         );
 
-        let (recipient, recipient_key) = match outgoing.recipient {
-            MessageDestination::AllParties => (None, None),
+        let recipient = match outgoing.recipient {
+            MessageDestination::AllParties => None,
             MessageDestination::OneParty(p) => {
-                let key = this.parties.get(&p).map(|k| k.clone());
-                (Some(p), key)
+                let key = this
+                    .peer_manager
+                    .get_peer_id_from_party_index(&ParticipantId(p));
+                key
             }
         };
 
         let protocol_message = ProtocolMessage {
             protocol: format!("{}/{}", this.protocol_id, round),
             routing: blueprint_networking::types::MessageRouting {
+                sender: this.handle.local_peer_id,
                 message_id: msg_id,
                 round_id: round,
-                sender: ParticipantInfo {
-                    id: blueprint_networking::types::ParticipantId(this.party_index),
-                    verification_id_key: this.parties.get(&this.party_index).map(|k| k.clone()),
-                },
-                recipient: recipient.map(|p| ParticipantInfo {
-                    id: blueprint_networking::types::ParticipantId(p),
-                    verification_id_key: recipient_key,
-                }),
+                recipient,
             },
             payload: serde_json::to_vec(&outgoing.msg).map_err(NetworkError::Serialization)?,
         };
@@ -209,12 +204,25 @@ where
                     MessageType::Broadcast
                 };
 
-                let sender = protocol_message.routing.sender.id.0;
+                let sender_peer_id = protocol_message.routing.sender;
+                let sender_party_index = match this
+                    .handle
+                    .peer_manager
+                    .get_party_index_from_peer_id(&sender_peer_id)
+                {
+                    Some(sender_party_index) => sender_party_index.0,
+                    None => {
+                        warn!("Received message from unknown peer: {}", sender_peer_id);
+                        return Poll::Ready(Some(Err(NetworkError::UnknownPeer(
+                            sender_peer_id.to_string(),
+                        ))));
+                    }
+                };
                 let id = protocol_message.routing.message_id;
 
                 tracing::trace!(
                     i = %this.party_index,
-                    sender = ?sender,
+                    sender = ?sender_party_index,
                     %id,
                     protocol_id = %protocol_message.protocol,
                     ?msg_type,
@@ -224,7 +232,7 @@ where
                 match serde_json::from_slice(&protocol_message.payload) {
                     Ok(msg) => Poll::Ready(Some(Ok(Incoming {
                         msg,
-                        sender,
+                        sender: sender_party_index,
                         id,
                         msg_type,
                     }))),
@@ -247,4 +255,6 @@ pub enum NetworkError {
     Serialization(#[from] serde_json::Error),
     #[error("Network error: {0}")]
     Send(String),
+    #[error("Unknown peer: {0}")]
+    UnknownPeer(String),
 }

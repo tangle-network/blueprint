@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 
 use crate::{
-    NetworkConfig, NetworkService, service::AllowedKeys, service_handle::NetworkServiceHandle,
+    NetworkConfig, NetworkService,
+    discovery::peers::{VerificationIdentifierKey, WhitelistedKeys},
+    service_handle::NetworkServiceHandle,
 };
 use blueprint_crypto::KeyType;
 use libp2p::{
@@ -12,9 +14,16 @@ use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 use tracing::info;
 
+#[cfg(test)]
 mod blueprint_protocol;
+
+#[cfg(test)]
 mod discovery;
+
+#[cfg(test)]
 mod gossip;
+
+#[cfg(test)]
 mod handshake;
 
 fn init_tracing() {
@@ -42,14 +51,14 @@ impl<K: KeyType> TestNode<K> {
     pub fn new(
         network_name: &str,
         instance_id: &str,
-        allowed_keys: AllowedKeys<K>,
+        whitelist: WhitelistedKeys<K>,
         bootstrap_peers: Vec<Multiaddr>,
         using_evm_address_for_handshake_verification: bool,
     ) -> Self {
         Self::new_with_keys(
             network_name,
             instance_id,
-            allowed_keys,
+            whitelist,
             bootstrap_peers,
             None,
             None,
@@ -61,7 +70,7 @@ impl<K: KeyType> TestNode<K> {
     pub fn new_with_keys(
         network_name: &str,
         instance_id: &str,
-        allowed_keys: AllowedKeys<K>,
+        whitelist: WhitelistedKeys<K>,
         bootstrap_peers: Vec<Multiaddr>,
         instance_key_pair: Option<K::Secret>,
         local_key: Option<Keypair>,
@@ -91,7 +100,7 @@ impl<K: KeyType> TestNode<K> {
         };
 
         let (_, allowed_keys_rx) = crossbeam_channel::unbounded();
-        let service = NetworkService::new(config, allowed_keys, allowed_keys_rx)
+        let service = NetworkService::new(config, whitelist, allowed_keys_rx)
             .expect("Failed to create network service");
 
         Self {
@@ -173,13 +182,6 @@ impl<K: KeyType> TestNode<K> {
     /// Get the actual listening address
     pub fn get_listen_addr(&self) -> Option<Multiaddr> {
         self.listen_addr.clone()
-    }
-
-    /// Update the allowed keys for this node
-    pub fn update_allowed_keys(&self, allowed_keys: AllowedKeys<K>) {
-        if let Some(service) = &self.service {
-            service.peer_manager.update_whitelisted_keys(allowed_keys);
-        }
     }
 }
 
@@ -317,14 +319,14 @@ async fn wait_for_handshake_completion<K: KeyType>(
 fn create_node_with_keys<K: KeyType>(
     network: &str,
     instance: &str,
-    allowed_keys: AllowedKeys<K>,
+    whitelist: WhitelistedKeys<K>,
     key_pair: Option<K::Secret>,
     using_evm_address_for_handshake_verification: bool,
 ) -> TestNode<K> {
     TestNode::new_with_keys(
         network,
         instance,
-        allowed_keys,
+        whitelist,
         vec![],
         key_pair,
         None,
@@ -339,13 +341,15 @@ async fn create_whitelisted_nodes<K: KeyType>(
 ) -> Vec<TestNode<K>> {
     let mut nodes = Vec::with_capacity(count);
     let mut key_pairs = Vec::with_capacity(count);
-    let mut allowed_keys = HashSet::new();
+    let mut whitelisted_keys = HashSet::new();
 
     // Generate all key pairs first
     for _ in 0..count {
         let key_pair = K::generate_with_seed(None).unwrap();
         key_pairs.push(key_pair.clone());
-        allowed_keys.insert(K::public_from_secret(&key_pair));
+        whitelisted_keys.insert(VerificationIdentifierKey::InstancePublicKey(
+            K::public_from_secret(&key_pair),
+        ));
     }
 
     // Create nodes with whitelisted keys
@@ -353,7 +357,7 @@ async fn create_whitelisted_nodes<K: KeyType>(
         nodes.push(create_node_with_keys(
             "test-net",
             "sum-test",
-            AllowedKeys::InstancePublicKeys(allowed_keys.clone()),
+            WhitelistedKeys::new_from_hashset(whitelisted_keys.clone()),
             Some(key_pair),
             using_evm_address_for_handshake_verification,
         ));

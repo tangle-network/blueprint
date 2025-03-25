@@ -1,5 +1,3 @@
-use crate::discovery::peers::VerificationIdentifierKey;
-use blueprint_crypto::KeyType;
 use libp2p::{PeerId, gossipsub::IdentTopic};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -34,36 +32,24 @@ pub enum MessageDelivery {
 
 /// Message routing information
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "K: KeyType")]
-pub struct MessageRouting<K: KeyType> {
+pub struct MessageRouting {
     /// Unique identifier for this message
     pub message_id: u64,
     /// The round/sequence number this message belongs to
     pub round_id: u16,
-    /// The sender's information
-    pub sender: ParticipantInfo<K>,
+    /// The sender of the message
+    pub sender: PeerId,
     /// Optional recipient information for direct messages
-    pub recipient: Option<ParticipantInfo<K>>,
-}
-
-/// Information about a participant in the network
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "K: KeyType")]
-pub struct ParticipantInfo<K: KeyType> {
-    /// The participant's unique ID
-    pub id: ParticipantId,
-    /// The participant's verification ID key (if known)
-    pub verification_id_key: Option<VerificationIdentifierKey<K>>,
+    pub recipient: Option<PeerId>,
 }
 
 /// A protocol message that can be sent over the network
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "K: KeyType")]
-pub struct ProtocolMessage<K: KeyType> {
+pub struct ProtocolMessage {
     /// The protocol name
     pub protocol: String,
     /// Routing information for the message
-    pub routing: MessageRouting<K>,
+    pub routing: MessageRouting,
     /// The actual message payload
     pub payload: Vec<u8>,
 }
@@ -74,35 +60,22 @@ impl Display for ParticipantId {
     }
 }
 
-impl<K: KeyType> Display for MessageRouting<K> {
+impl Display for MessageRouting {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "msg={} round={} from={} to={:?}",
+            "msg={} round={} to={:?}",
             self.message_id,
             self.round_id,
-            self.sender.id,
-            self.recipient.as_ref().map(|r| r.id)
+            self.recipient
+                .as_ref()
+                .map(|r| r.to_string())
+                .unwrap_or("broadcast".to_string())
         )
     }
 }
 
-impl<K: KeyType> Display for ParticipantInfo<K> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} key={}",
-            self.id,
-            if self.verification_id_key.is_some() {
-                "yes"
-            } else {
-                "no"
-            }
-        )
-    }
-}
-
-impl<K: KeyType> Display for ProtocolMessage<K> {
+impl Display for ProtocolMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} payload_size={}", self.routing, self.payload.len())
     }
