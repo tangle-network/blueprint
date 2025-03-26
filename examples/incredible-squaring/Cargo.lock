@@ -5162,8 +5162,8 @@ dependencies = [
 
 [[package]]
 name = "eigen-client-avsregistry"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "ark-ff 0.5.0",
@@ -5181,8 +5181,8 @@ dependencies = [
 
 [[package]]
 name = "eigen-client-elcontracts"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "eigen-common",
@@ -5196,8 +5196,8 @@ dependencies = [
 
 [[package]]
 name = "eigen-common"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "url",
@@ -5205,8 +5205,8 @@ dependencies = [
 
 [[package]]
 name = "eigen-crypto-bls"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "ark-bn254",
@@ -5222,8 +5222,8 @@ dependencies = [
 
 [[package]]
 name = "eigen-crypto-bn254"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "ark-bn254",
  "ark-ec 0.5.0",
@@ -5233,8 +5233,8 @@ dependencies = [
 
 [[package]]
 name = "eigen-logging"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "ctor",
  "once_cell",
@@ -5244,8 +5244,8 @@ dependencies = [
 
 [[package]]
 name = "eigen-services-avsregistry"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "ark-bn254",
@@ -5260,8 +5260,8 @@ dependencies = [
 
 [[package]]
 name = "eigen-services-blsaggregation"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "ark-bn254",
@@ -5282,8 +5282,8 @@ dependencies = [
 
 [[package]]
 name = "eigen-services-operatorsinfo"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "async-trait",
@@ -5303,8 +5303,8 @@ dependencies = [
 
 [[package]]
 name = "eigen-signer"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "async-trait",
@@ -5317,8 +5317,8 @@ dependencies = [
 
 [[package]]
 name = "eigen-types"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "ark-ff 0.5.0",
@@ -5331,14 +5331,13 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
- "tokio",
  "url",
 ]
 
 [[package]]
 name = "eigen-utils"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "regex",
@@ -5347,8 +5346,8 @@ dependencies = [
 
 [[package]]
 name = "eigensdk"
-version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/eigensdk-rs.git?branch=alloy-update#47b5051ce55d65474f6072a1db35eaa82df23dbd"
+version = "0.5.0"
+source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "eigen-client-avsregistry",
  "eigen-client-elcontracts",
