@@ -81,13 +81,13 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
 impl Default for EigenlayerProtocolSettings {
     fn default() -> Self {
         Self {
-            allocation_manager_address: address!("8a791620dd6260079bf849dc5567adc3f2fdc318"),
-            registry_coordinator_address: address!("7969c5ed335650692bc04293b07f5bf2e7a673c0"),
-            operator_state_retriever_address: address!("1429859428c0abc9c2c47c8ee9fbaf82cfa0f20f"),
-            delegation_manager_address: address!("cf7ed3acca5a467e9e704c703e8d87f634fb0fc9"),
-            service_manager_address: address!("b7278a61aa25c888815afc32ad3cc52ff24fe575"), // Depends on AVS
-            stake_registry_address: address!("82e01223d51eb87e16a03e24687edf0f294da6f1"), // Differs when using ECDSA Base
-            strategy_manager_address: address!("a513e6e4b8f2a923d98304ec87f64353c4d5c853"),
+            allocation_manager_address: address!("8A791620dd6260079BF849Dc5567aDC3F2FdC318"),
+            registry_coordinator_address: address!("a7c59f010700930003b33ab25a7a0679c860f29c"),
+            operator_state_retriever_address: address!("e3011a37a904ab90c8881a99bd1f6e21401f1522"),
+            delegation_manager_address: address!("Dc64a140Aa3E981100a9becA4E685f962f0cF6C9"),
+            service_manager_address: address!("c0f115a19107322cfbf1cdbc7ea011c19ebdb4f8"), // Depends on AVS
+            stake_registry_address: address!("34b40ba116d5dec75548a9e9a8f15411461e8c70"), // Differs when using ECDSA Base
+            strategy_manager_address: address!("5FC8d32690cc91D4c39d9d3abcBD16989F875707"),
             avs_directory_address: address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e"),
             rewards_coordinator_address: address!("0dcd1bf9a1b36ce34237eeafef220932846bcd82"),
             permission_controller_address: address!("322813fd9a801c5507c9de605d63cea4f2ce6c44"),

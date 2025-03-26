@@ -91,6 +91,8 @@ async fn run_eigenlayer_incredible_squaring_test(
     .await
     .unwrap();
 
+    info!("AVS Contracts deployed at: {:?}", avs_contracts);
+
     let service_manager_address = avs_contracts.squaring_service_manager;
     let task_manager_address = avs_contracts.squaring_task_manager;
 
@@ -733,9 +735,8 @@ pub fn setup_task_spawner(
     let quorums = Bytes::from(vec![0]);
     async move {
         loop {
-            continue;
             // Delay to allow for proper task initialization
-            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
             info!("Creating a new task...");
             if get_receipt(
