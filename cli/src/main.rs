@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use cargo_tangle::command::create;
+use cargo_tangle::command::{create, deploy};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, ProtocolSettings, SupportedChains};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use blueprint_runner::error::ConfigError;
@@ -305,6 +305,18 @@ pub enum BlueprintCommands {
         /// Whether to wait for the job to complete
         #[arg(long)]
         watcher: bool,
+    },
+
+    /// Deploy a Master Blueprint Service Manager (MBSM) contract to the Tangle Network
+    #[command(visible_alias = "mbsm")]
+    DeployMBSM {
+        /// The HTTP RPC URL to use
+        #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:9944", env)]
+        http_rpc_url: String,
+
+        /// Force deployment even if the contract is already deployed
+        #[arg(short, long, value_name = "VALUE", default_value_t = false)]
+        force: bool,
     },
 }
 
@@ -619,6 +631,12 @@ async fn main() -> color_eyre::Result<()> {
                     watcher,
                 )
                 .await?;
+            }
+            BlueprintCommands::DeployMBSM {
+                http_rpc_url,
+                force,
+            } => {
+                deploy::mbsm::deploy_mbsm(http_rpc_url, force).await?;
             }
         },
         Commands::Key { command } => match command {
