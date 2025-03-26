@@ -379,7 +379,7 @@ where
         let (mut shutdown_tx, shutdown_rx) = oneshot::channel();
         tokio::spawn(async move {
             let _ = shutdown_rx.await;
-            blueprint_core::info!("Received graceful shutdown signal. Calling shutdown handler");
+            blueprint_core::info!(target: "blueprint-runner", "Received graceful shutdown signal. Calling shutdown handler");
             shutdown_handler.await;
         });
 
@@ -411,9 +411,16 @@ where
                 producer_result = producer_stream.next() => {
                     match producer_result {
                         Some(Ok(job_call)) => {
+                            blueprint_core::trace!(
+                                target: "blueprint-runner",
+                                ?job_call,
+                                "Received a job call"
+                            );
+
                             match router.call(job_call).await {
                                 Ok(Some(results)) => {
                                     blueprint_core::trace!(
+                                        target: "blueprint-runner",
                                         count = %results.len(),
                                         "Job call(s) was processed by router"
                                     );
@@ -430,6 +437,7 @@ where
 
                                     let result = futures::future::try_join_all(send_futures).await;
                                     blueprint_core::trace!(
+                                        target: "blueprint-runner",
                                         results = ?result.as_ref().map(|_| "success"),
                                         "Job call results were broadcasted to consumers"
                                     );
@@ -439,22 +447,22 @@ where
                                     }
                                 },
                                 Ok(None) => {
-                                    blueprint_core::debug!("Job call was ignored by router");
+                                    blueprint_core::debug!(target: "blueprint-runner", "Job call was ignored by router");
                                 },
                                 Err(e) => {
-                                    blueprint_core::error!("Job call failed: {:?}", e);
+                                    blueprint_core::error!(target: "blueprint-runner", "Job call failed: {:?}", e);
                                     let _ = shutdown_tx.send(true);
                                     return Err(Error::JobCall(e.to_string()));
                                 },
                             }
                         }
                         Some(Err(e)) => {
-                            blueprint_core::error!("Producer error: {:?}", e);
+                            blueprint_core::error!(target: "blueprint-runner", "Producer error: {:?}", e);
                             let _ = shutdown_tx.send(true);
                             return Err(Error::JobCall(e.to_string()));
                         }
                         None => {
-                            blueprint_core::error!("Producer stream ended unexpectedly");
+                            blueprint_core::error!(target: "blueprint-runner", "Producer stream ended unexpectedly");
                             let _ = shutdown_tx.send(true);
                             return Err(Error::JobCall("Producer stream ended".into()));
                         }
@@ -465,11 +473,11 @@ where
                     match result {
                         Ok(()) => {
                             if has_background_services {
-                                blueprint_core::warn!("A background service has finished running");
+                                blueprint_core::warn!(target: "blueprint-runner", "A background service has finished running");
                             }
                         },
                         Err(e) => {
-                            blueprint_core::error!("A background service failed: {:?}", e);
+                            blueprint_core::error!(target: "blueprint-runner", "A background service failed: {:?}", e);
                             let _ = shutdown_tx.send(true);
                             return Err(e);
                         }
@@ -477,7 +485,7 @@ where
 
                     if remaining_background_services.is_empty() {
                         if has_background_services {
-                            blueprint_core::warn!("All background services have ended");
+                            blueprint_core::warn!(target: "blueprint-runner", "All background services have ended");
                         }
                         continue;
                     }

@@ -78,7 +78,7 @@ where
     fn start_send(self: Pin<&mut Self>, item: JobResult) -> Result<(), Self::Error> {
         let JobResult::Ok { head, body } = &item else {
             // We don't care about errors here
-            blueprint_core::trace!("Discarding job result with error");
+            blueprint_core::trace!(target: "tangle-consumer", "Discarding job result with error");
             return Ok(());
         };
 
@@ -87,11 +87,11 @@ where
             head.metadata.get(extract::ServiceId::METADATA_KEY),
         ) else {
             // Not a tangle job result
-            blueprint_core::trace!("Discarding job result with missing metadata");
+            blueprint_core::trace!(target: "tangle-consumer", "Discarding job result with missing metadata");
             return Ok(());
         };
 
-        blueprint_core::debug!(result = ?item, "Received job result, handling...");
+        blueprint_core::debug!(target: "tangle-consumer", result = ?item, "Received job result, handling...");
 
         let call_id: CallId = call_id_raw.try_into().map_err(|_| InvalidCallId)?;
         let service_id: ServiceId = service_id_raw.try_into().map_err(|_| InvalidServiceId)?;
