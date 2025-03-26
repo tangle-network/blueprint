@@ -11,8 +11,8 @@ use tracing::info;
 async fn test_peer_discovery_mdns() {
     init_tracing();
 
-    let network_name = "test-network";
-    let instance_id = "test-instance";
+    let network_name = "peer-discovery-mdns";
+    let instance_id = "v1.0.0";
 
     // Create two nodes
     let mut node1 = TestNode::<SpEcdsa>::new(
@@ -45,8 +45,8 @@ async fn test_peer_discovery_mdns() {
 async fn test_peer_discovery_kademlia() {
     init_tracing();
 
-    let network_name = "test-network";
-    let instance_id = "test-instance";
+    let network_name = "peer-discovery-kademlia";
+    let instance_id = "v1.0.0";
 
     // Create the first node (bootstrap node)
     let mut node1 = TestNode::<SpEcdsa>::new(
@@ -113,9 +113,12 @@ async fn test_peer_discovery_kademlia() {
 async fn test_peer_info_updates() {
     init_tracing();
 
+    let network_name = "peer-info-updates";
+    let instance_id = "v1.0.0";
+
     info!("Creating test nodes...");
     // Create nodes with whitelisted keys
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, false).await;
+    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, network_name, instance_id, false).await;
     let mut node2 = nodes.pop().unwrap();
     let mut node1 = nodes.pop().unwrap();
 

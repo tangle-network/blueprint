@@ -25,8 +25,11 @@ async fn test_automatic_handshake() {
     init_tracing();
     info!("Starting automatic handshake test");
 
+    let network_name = "handshake-test";
+    let instance_id = "v1.0.0";
+
     // Create nodes with whitelisted keys
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, false).await;
+    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, network_name, instance_id, false).await;
     let mut node2 = nodes.pop().unwrap();
     let mut node1 = nodes.pop().unwrap();
 

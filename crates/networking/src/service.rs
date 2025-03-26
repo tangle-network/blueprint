@@ -379,7 +379,19 @@ impl<K: KeyType> NetworkService<K> {
             }
         }
 
+        // Track when we last attempted to retry handshakes
+        let mut last_handshake_retry = tokio::time::Instant::now();
+        // Retry unverified handshakes every 5 seconds
+        const HANDSHAKE_RETRY_INTERVAL: Duration = Duration::from_secs(3);
+
         loop {
+            // Check if we should retry handshakes for unverified peers
+            let now = tokio::time::Instant::now();
+            if now.duration_since(last_handshake_retry) >= HANDSHAKE_RETRY_INTERVAL {
+                self.retry_unverified_handshakes();
+                last_handshake_retry = now;
+            }
+
             tokio::select! {
                 swarm_event = self.swarm.select_next_some() => {
                     match swarm_event {
@@ -419,12 +431,38 @@ impl<K: KeyType> NetworkService<K> {
                 Ok(whitelist_update) = async { self.whitelist_rx.try_recv() } => {
                     debug!("Received whitelist update");
                     self.peer_manager.update_whitelist(whitelist_update);
+                    // Attempt to handshake with any unverified peers after whitelist update
+                    self.retry_unverified_handshakes();
                 }
+                // Add a short timeout to ensure we don't miss the handshake retry check
+                _ = tokio::time::sleep(Duration::from_millis(100)) => {}
                 else => break,
             }
         }
 
         info!("Network service stopped");
+    }
+
+    /// Attempts to initiate handshakes with connected but unverified peers
+    fn retry_unverified_handshakes(&mut self) {
+        let connected_peers = self.swarm.behaviour().discovery.get_peers().clone();
+        for peer_id in connected_peers {
+            // Skip peers that are already verified or banned
+            if self.peer_manager.is_peer_verified(&peer_id) || self.peer_manager.is_banned(&peer_id)
+            {
+                continue;
+            }
+
+            debug!("Retrying handshake with unverified peer: {}", peer_id);
+            if let Err(e) = self
+                .swarm
+                .behaviour_mut()
+                .blueprint_protocol
+                .send_handshake(&peer_id)
+            {
+                debug!("Failed to retry handshake with peer {}: {:?}", peer_id, e);
+            }
+        }
     }
 
     /// Get the current listening address

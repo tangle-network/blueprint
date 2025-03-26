@@ -323,6 +323,8 @@ pub fn create_node_with_keys<K: KeyType>(
 // Helper to create a set of nodes with whitelisted keys
 pub async fn create_whitelisted_nodes<K: KeyType>(
     count: usize,
+    network_name: &str,
+    instance_id: &str,
     using_evm_address_for_handshake_verification: bool,
 ) -> Vec<TestNode<K>> {
     let mut nodes = Vec::with_capacity(count);
@@ -341,8 +343,8 @@ pub async fn create_whitelisted_nodes<K: KeyType>(
     // Create nodes with whitelisted keys
     for key_pair in key_pairs {
         nodes.push(create_node_with_keys(
-            "test-net",
-            "sum-test",
+            network_name,
+            instance_id,
             WhitelistedKeys::new_from_hashset(whitelisted_keys.clone()),
             Some(key_pair),
             using_evm_address_for_handshake_verification,

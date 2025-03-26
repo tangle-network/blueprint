@@ -74,7 +74,7 @@ blueprint-networking = { workspace = true }
 blueprint-crypto = { workspace = true, features = ["sp-core"] }
 blueprint-crypto-core = { workspace = true, features = ["tangle"] }
 lazy_static = { workspace = true }
-fastrand = "2.0"
+serial_test = { workspace = true }
 
 [features]
 default = ["std", "testing"]

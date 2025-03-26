@@ -13,15 +13,17 @@ use tokio::time::timeout;
 use tracing::info;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(10);
-const PROTOCOL_NAME: &str = "/test-net/sum-test";
 
 #[tokio::test]
 async fn test_gossip_between_verified_peers() {
     init_tracing();
     info!("Starting gossip test between verified peers");
 
+    let network_name = "gossip-test";
+    let instance_id = "v1.0.0";
+
     // Create nodes with whitelisted keys
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, false).await;
+    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, network_name, instance_id, false).await;
     let mut node2 = nodes.pop().unwrap();
     let mut node1 = nodes.pop().unwrap();
 
@@ -52,7 +54,7 @@ async fn test_gossip_between_verified_peers() {
     let received_message = timeout(TEST_TIMEOUT, async {
         loop {
             if let Some(msg) = handle2.next_protocol_message() {
-                if msg.protocol == PROTOCOL_NAME {
+                if msg.protocol == format!("/{network_name}/{instance_id}") {
                     return msg;
                 }
             }
@@ -64,7 +66,10 @@ async fn test_gossip_between_verified_peers() {
 
     // Verify message contents
     assert_eq!(received_message.payload, test_payload);
-    assert_eq!(received_message.protocol, PROTOCOL_NAME);
+    assert_eq!(
+        received_message.protocol,
+        format!("/{network_name}/{instance_id}")
+    );
     assert_eq!(received_message.routing.message_id, 1);
     assert_eq!(received_message.routing.round_id, 0);
     assert!(received_message.routing.recipient.is_none());
@@ -73,12 +78,16 @@ async fn test_gossip_between_verified_peers() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn test_multi_node_gossip() {
     init_tracing();
     info!("Starting multi-node gossip test");
 
+    let network_name = "gossip-test";
+    let instance_id = "v1.0.1";
+
     // Create three nodes with all keys whitelisted
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(3, false).await;
+    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(3, network_name, instance_id, false).await;
 
     info!("Starting all nodes");
     let mut handles: Vec<_> = Vec::new();
@@ -110,7 +119,7 @@ async fn test_multi_node_gossip() {
         for (i, handle) in handles.iter_mut().enumerate().skip(1) {
             let received = loop {
                 if let Some(msg) = handle.next_protocol_message() {
-                    if msg.protocol == PROTOCOL_NAME {
+                    if msg.protocol == format!("/{network_name}/{instance_id}") {
                         break msg;
                     }
                 }
@@ -122,7 +131,7 @@ async fn test_multi_node_gossip() {
                 "Node {} received wrong payload",
                 i
             );
-            assert_eq!(received.protocol, PROTOCOL_NAME);
+            assert_eq!(received.protocol, format!("/{network_name}/{instance_id}"));
             info!("Node {} received the gossip message correctly", i);
         }
     })
@@ -137,17 +146,20 @@ async fn test_unverified_peer_gossip() {
     init_tracing();
     info!("Starting unverified peer gossip test");
 
+    let network_name = "gossip-test";
+    let instance_id = "v1.0.2";
+
     // Create two nodes with no whitelisted keys
     let mut node1 = TestNode::<SpEcdsa>::new(
-        "test-net",
-        "gossip-test",
+        network_name,
+        instance_id,
         WhitelistedKeys::new_from_hashset(HashSet::new()),
         vec![],
         false,
     );
     let mut node2 = TestNode::<SpEcdsa>::new(
-        "test-net",
-        "gossip-test",
+        network_name,
+        instance_id,
         WhitelistedKeys::new_from_hashset(HashSet::new()),
         vec![],
         false,
