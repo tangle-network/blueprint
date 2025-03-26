@@ -457,6 +457,23 @@ mod maps {
         let err = to_field(&map).unwrap_err();
         assert!(matches!(err, Error::BadMapKey));
     }
+
+    #[test]
+    fn test_ser_nested_map() {
+        let mut map = HashMap::new();
+        map.insert("key", HashMap::<String, String>::new());
+        let field = to_field(&map).unwrap();
+        assert_eq!(
+            field,
+            Field::Struct(
+                new_bounded_string(""),
+                Box::new(BoundedVec(vec![(
+                    new_bounded_string("key"),
+                    Field::Struct(new_bounded_string(""), Box::new(BoundedVec(vec![])))
+                )]))
+            )
+        );
+    }
 }
 
 mod primitives {
