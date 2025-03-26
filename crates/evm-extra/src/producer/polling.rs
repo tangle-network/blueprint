@@ -111,6 +111,7 @@ impl<P: Provider> PollingProducer<P> {
             .to_block(initial_start_block + config.step);
 
         blueprint_core::trace!(
+            target: "evm-polling-producer",
             start_block = initial_start_block,
             step = config.step,
             confirmations = config.confirmations,
@@ -147,7 +148,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                     Poll::Ready(()) => {
                         // Transition to fetching block number
                         blueprint_core::trace!(
-                            "Polling interval elapsed, fetching current block number"
+                            target: "evm-polling-producer", "Polling interval elapsed, fetching current block number"
                         );
                         let fut = get_block_number(this.provider.clone());
                         this.state = PollingState::FetchingBlockNumber(Box::pin(fut));
@@ -169,6 +170,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                         let next_to_block = proposed_to_block.min(safe_block);
 
                         blueprint_core::trace!(
+                            target: "evm-polling-producer",
                             current_block,
                             safe_block,
                             next_from_block,
@@ -179,7 +181,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                         // Check if we have new blocks to process
                         if next_from_block > safe_block {
                             blueprint_core::trace!(
-                                "No new blocks to process yet, waiting for next interval"
+                                target: "evm-polling-producer", "No new blocks to process yet, waiting for next interval"
                             );
                             this.state = PollingState::Idle(Box::pin(tokio::time::sleep(
                                 this.config.poll_interval,
@@ -205,6 +207,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                     }
                     Poll::Ready(Err(e)) => {
                         blueprint_core::error!(
+                            target: "evm-polling-producer",
                             error = ?e,
                             "Failed to fetch current block number, retrying after interval"
                         );
@@ -218,6 +221,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                 PollingState::FetchingLogs(ref mut fut) => match fut.as_mut().poll(cx) {
                     Poll::Ready(Ok(logs)) => {
                         blueprint_core::trace!(
+                            target: "evm-polling-producer",
                             logs_count = logs.len(),
                             from_block = ?this.filter.get_from_block(),
                             to_block = ?this.filter.get_to_block(),
@@ -235,6 +239,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                     }
                     Poll::Ready(Err(e)) => {
                         blueprint_core::error!(
+                            target: "evm-polling-producer",
                             error = ?e,
                             from_block = ?this.filter.get_from_block(),
                             to_block = ?this.filter.get_to_block(),
@@ -260,12 +265,14 @@ async fn get_block_number<P: Provider>(provider: P) -> Result<u64, TransportErro
 /// Fetches logs from the provider for the specified filter range
 async fn get_logs<P: Provider>(provider: P, filter: Filter) -> Result<Vec<Log>, TransportError> {
     blueprint_core::trace!(
+        target: "evm-polling-producer",
         from_block = ?filter.get_from_block(),
         to_block = ?filter.get_to_block(),
         "Fetching logs from provider"
     );
     let logs = provider.get_logs(&filter).await?;
     blueprint_core::trace!(
+        target: "evm-polling-producer",
         from_block = ?filter.get_from_block(),
         to_block = ?filter.get_to_block(),
         logs_count = logs.len(),
