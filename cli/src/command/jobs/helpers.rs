@@ -1,6 +1,7 @@
 use blueprint_chain_setup::tangle::InputValue;
-use blueprint_tangle_extra::serde::{BoundedVec, Field, from_field, new_bounded_string};
+use blueprint_tangle_extra::serde::{BoundedVec, Field, from_field, new_bounded_string, to_field};
 use color_eyre::Result;
+use color_eyre::eyre::bail;
 use dialoguer::console::style;
 use serde_json;
 use std::str::FromStr;
@@ -151,111 +152,12 @@ pub(crate) fn load_job_args_from_file(
     // Parse each argument according to the expected parameter type
     let mut input_values = Vec::new();
     for (i, (arg, param_type)) in args.iter().zip(param_types.iter()).enumerate() {
-        let input_value = match param_type {
-            FieldType::Uint8 => {
-                let value = arg.as_u64().ok_or_else(|| {
-                    color_eyre::eyre::eyre!("Argument {} must be a u8 integer", i)
-                })?;
-                if value > u64::from(u8::MAX) {
-                    return Err(color_eyre::eyre::eyre!("Argument {} exceeds u8 range", i));
-                }
-                InputValue::Uint8(
-                    u8::try_from(value)
-                        .map_err(|_| color_eyre::eyre::eyre!("Failed to convert to u8"))?,
-                )
-            }
-            FieldType::Uint16 => {
-                let value = arg.as_u64().ok_or_else(|| {
-                    color_eyre::eyre::eyre!("Argument {} must be a u16 integer", i)
-                })?;
-                if value > u64::from(u16::MAX) {
-                    return Err(color_eyre::eyre::eyre!("Argument {} exceeds u16 range", i));
-                }
-                InputValue::Uint16(
-                    u16::try_from(value)
-                        .map_err(|_| color_eyre::eyre::eyre!("Failed to convert to u16"))?,
-                )
-            }
-            FieldType::Uint32 => {
-                let value = arg.as_u64().ok_or_else(|| {
-                    color_eyre::eyre::eyre!("Argument {} must be a u32 integer", i)
-                })?;
-                if value > u64::from(u32::MAX) {
-                    return Err(color_eyre::eyre::eyre!("Argument {} exceeds u32 range", i));
-                }
-                InputValue::Uint32(
-                    u32::try_from(value)
-                        .map_err(|_| color_eyre::eyre::eyre!("Failed to convert to u32"))?,
-                )
-            }
-            FieldType::Uint64 => {
-                let value = arg.as_u64().ok_or_else(|| {
-                    color_eyre::eyre::eyre!("Argument {} must be a u64 integer", i)
-                })?;
-                InputValue::Uint64(value)
-            }
-            FieldType::Int8 => {
-                let value = arg.as_i64().ok_or_else(|| {
-                    color_eyre::eyre::eyre!("Argument {} must be an i8 integer", i)
-                })?;
-                if value < i64::from(i8::MIN) || value > i64::from(i8::MAX) {
-                    return Err(color_eyre::eyre::eyre!("Argument {} exceeds i8 range", i));
-                }
-                InputValue::Int8(
-                    i8::try_from(value)
-                        .map_err(|_| color_eyre::eyre::eyre!("Failed to convert to i8"))?,
-                )
-            }
-            FieldType::Int16 => {
-                let value = arg.as_i64().ok_or_else(|| {
-                    color_eyre::eyre::eyre!("Argument {} must be an i16 integer", i)
-                })?;
-                if value < i64::from(i16::MIN) || value > i64::from(i16::MAX) {
-                    return Err(color_eyre::eyre::eyre!("Argument {} exceeds i16 range", i));
-                }
-                InputValue::Int16(
-                    i16::try_from(value)
-                        .map_err(|_| color_eyre::eyre::eyre!("Failed to convert to i16"))?,
-                )
-            }
-            FieldType::Int32 => {
-                let value = arg.as_i64().ok_or_else(|| {
-                    color_eyre::eyre::eyre!("Argument {} must be an i32 integer", i)
-                })?;
-                if value < i64::from(i32::MIN) || value > i64::from(i32::MAX) {
-                    return Err(color_eyre::eyre::eyre!("Argument {} exceeds i32 range", i));
-                }
-                InputValue::Int32(
-                    i32::try_from(value)
-                        .map_err(|_| color_eyre::eyre::eyre!("Failed to convert to i32"))?,
-                )
-            }
-            FieldType::Int64 => {
-                let value = arg.as_i64().ok_or_else(|| {
-                    color_eyre::eyre::eyre!("Argument {} must be an i64 integer", i)
-                })?;
-                InputValue::Int64(value)
-            }
-            FieldType::Bool => {
-                let value = arg
-                    .as_bool()
-                    .ok_or_else(|| color_eyre::eyre::eyre!("Argument {} must be a boolean", i))?;
-                InputValue::Bool(value)
-            }
-            FieldType::String => {
-                let value = arg
-                    .as_str()
-                    .ok_or_else(|| color_eyre::eyre::eyre!("Argument {} must be a string", i))?;
-                InputValue::String(new_bounded_string(value.to_string()))
-            }
-            _ => {
-                return Err(color_eyre::eyre::eyre!(
-                    "Unsupported parameter type: {:?}",
-                    param_type
-                ));
+        let input_value = match to_field(arg.clone()) {
+            Ok(value) => value,
+            Err(e) => {
+                bail!("Error parsing argument at position {i} of type {param_type:?}: {e}");
             }
         };
-
         input_values.push(input_value);
     }
 
