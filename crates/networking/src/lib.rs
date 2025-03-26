@@ -9,6 +9,9 @@ pub mod service_handle;
 pub mod types;
 
 #[cfg(feature = "testing")]
+pub mod test_utils;
+
+#[cfg(test)]
 mod tests;
 
 pub use blueprint_crypto::KeyType;

@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use alloy_primitives::Address;
 use blueprint_crypto::{BytesEncoding, KeyType, hashing::keccak_256};
 use libp2p::{PeerId, request_response};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::blueprint_protocol::HandshakeMessage;
 use crate::discovery::peers::VerificationIdentifierKey;
@@ -58,11 +58,12 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
                 // Verify the handshake
                 match self.verify_handshake(&msg, &verification_id_key, &signature) {
                     Ok(()) => {
+                        info!(%peer, ?verification_id_key, "Handshake verified successfully");
                         // Store the handshake request
                         self.inbound_handshakes.insert(peer, Instant::now());
                         self.peer_manager
                             .link_peer_id_to_verification_id_key(&peer, &verification_id_key);
-
+                        info!(%peer, ?verification_id_key, "Linked peer id to verification id key");
                         // Send handshake response
                         let mut key_pair = self.instance_key_pair.clone();
                         let public_key = K::public_from_secret(&key_pair);
@@ -80,11 +81,12 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
                         let Some(signature) =
                             self.sign_handshake(&mut key_pair, &peer, &handshake_msg)
                         else {
+                            warn!(%peer, "Failed to sign handshake");
                             return;
                         };
 
                         let response = InstanceMessageResponse::Handshake {
-                            verification_id_key: self_verification_id_key,
+                            verification_id_key: self_verification_id_key.clone(),
                             signature,
                             msg: handshake_msg,
                         };
@@ -93,6 +95,8 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
                             warn!(%peer, "Failed to send handshake response: {:?}", e);
                             return;
                         }
+
+                        info!(%peer, ?self_verification_id_key, "Sent handshake response");
                     }
                     Err(e) => {
                         warn!(%peer, "Invalid handshake request: {:?}", e);
@@ -137,6 +141,7 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
                 // Verify the handshake
                 match self.verify_handshake(&msg, &verification_id_key, &signature) {
                     Ok(()) => {
+                        info!(%peer, ?verification_id_key, "Handshake verified successfully");
                         // Mark handshake as completed
                         self.complete_handshake(&peer, &verification_id_key);
                     }

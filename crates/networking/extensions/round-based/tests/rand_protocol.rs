@@ -169,17 +169,17 @@ pub struct Blame {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-    use std::time::Duration;
-
-    use super::common::*;
+    use super::protocol_of_random_generation;
     use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
-    use blueprint_networking::discovery::peers::{VerificationIdentifierKey, WhitelistedKeys};
+    use blueprint_networking::{
+        discovery::peers::{VerificationIdentifierKey, WhitelistedKeys},
+        test_utils::{TestNode, init_tracing, wait_for_peer_discovery},
+    };
     use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
     use round_based::MpcParty;
+    use std::collections::HashSet;
+    use std::time::Duration;
     use tracing::{debug, info};
-
-    use super::protocol_of_random_generation;
 
     #[test]
     fn simulation() {

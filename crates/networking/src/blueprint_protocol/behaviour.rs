@@ -25,7 +25,7 @@ use std::{
     task::Poll,
     time::{Duration, Instant},
 };
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(NetworkBehaviour)]
 pub struct DerivedBlueprintProtocolBehaviour<K: KeyType> {
@@ -253,7 +253,7 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
         let msg_bytes = msg.to_bytes(&self.local_peer_id);
         let hex_msg = hex::encode(msg_bytes.clone());
 
-        debug!(%hex_msg, ?verification_id_key, ?signature, "verifying handshake");
+        info!(%hex_msg, ?verification_id_key, ?signature, "verifying handshake");
 
         let valid = verification_id_key
             .verify(&msg_bytes, signature.to_bytes().as_ref())
@@ -270,7 +270,6 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
             });
         }
 
-        trace!(%msg.sender, "Handshake signature verified successfully");
         Ok(())
     }
 

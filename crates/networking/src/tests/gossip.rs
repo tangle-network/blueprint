@@ -1,8 +1,10 @@
-use super::{TestNode, init_tracing, wait_for_handshake_completion};
 use crate::{
     discovery::peers::WhitelistedKeys,
     service_handle::NetworkServiceHandle,
-    tests::{create_whitelisted_nodes, wait_for_all_handshakes},
+    test_utils::{
+        TestNode, create_whitelisted_nodes, init_tracing, wait_for_all_handshakes,
+        wait_for_handshake_completion,
+    },
     types::MessageRouting,
 };
 use blueprint_crypto::sp_core::SpEcdsa;

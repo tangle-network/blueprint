@@ -1,7 +1,7 @@
 use crate::discovery::peers::VerificationIdentifierKey;
 use crate::discovery::peers::WhitelistedKeys;
-use crate::tests::TestNode;
-use crate::tests::create_whitelisted_nodes;
+use crate::test_utils::TestNode;
+use crate::test_utils::create_whitelisted_nodes;
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;

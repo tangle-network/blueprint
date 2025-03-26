@@ -385,24 +385,6 @@ impl<K: KeyType> PeerManager<K> {
         self.banned_peers.contains_key(peer_id)
     }
 
-    /// Log a successful interaction with a peer
-    pub fn log_success(&self, peer_id: &PeerId, duration: Duration) {
-        if let Some(mut info) = self.peers.get_mut(peer_id) {
-            info.successes += 1;
-            update_average_time(&mut info, duration);
-            self.update_peer(*peer_id, info.clone());
-        }
-    }
-
-    /// Log a failed interaction with a peer
-    pub fn log_failure(&self, peer_id: &PeerId, duration: Duration) {
-        if let Some(mut info) = self.peers.get_mut(peer_id) {
-            info.failures += 1;
-            update_average_time(&mut info, duration);
-            self.update_peer(*peer_id, info.clone());
-        }
-    }
-
     /// Get peer information
     #[must_use]
     pub fn get_peer_info(&self, peer_id: &PeerId) -> Option<PeerInfo> {
@@ -456,9 +438,6 @@ impl<K: KeyType> PeerManager<K> {
             .insert(verification_id_key.clone(), *peer_id);
         self.peer_ids_to_verification_id_keys
             .insert(*peer_id, verification_id_key.clone());
-        if let Some(info) = self.peers.get_mut(peer_id) {
-            self.update_peer(*peer_id, info.clone());
-        }
     }
 
     /// Remove a peer id from the public key to peer id map
@@ -500,20 +479,5 @@ impl<K: KeyType> PeerManager<K> {
                     .unwrap();
                 ParticipantId(p_index as u16)
             })
-    }
-}
-
-/// Update the average response time for a peer
-fn update_average_time(info: &mut PeerInfo, duration: Duration) {
-    const ALPHA: u32 = 5; // Smoothing factor for the moving average
-
-    if info.average_response_time.is_none() {
-        info.average_response_time = Some(duration);
-    } else if duration < info.average_response_time.unwrap() {
-        let delta = (info.average_response_time.unwrap() - duration) / ALPHA;
-        info.average_response_time = Some(info.average_response_time.unwrap() - delta);
-    } else {
-        let delta = (duration - info.average_response_time.unwrap()) / ALPHA;
-        info.average_response_time = Some(info.average_response_time.unwrap() + delta);
     }
 }
