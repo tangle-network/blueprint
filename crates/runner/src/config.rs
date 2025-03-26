@@ -648,23 +648,23 @@ pub struct BlueprintSettings {
     #[cfg(feature = "networking")]
     #[arg(long, value_parser = <Multiaddr as blueprint_std::str::FromStr>::from_str, action = clap::ArgAction::Append, env)]
     #[serde(default)]
-    bootnodes: Option<Vec<Multiaddr>>,
+    pub bootnodes: Option<Vec<Multiaddr>>,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    network_bind_port: Option<u16>,
+    pub network_bind_port: Option<u16>,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    enable_mdns: bool,
+    pub enable_mdns: bool,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    enable_kademlia: bool,
+    pub enable_kademlia: bool,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    target_peer_count: Option<u32>,
+    pub target_peer_count: Option<u32>,
 
     // =======
     // TANGLE
