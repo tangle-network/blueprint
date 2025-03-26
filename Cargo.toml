@@ -54,7 +54,7 @@ incredible-squaring-blueprint = { version = "0.1.1", path = "./examples/incredib
 incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./examples/incredible-squaring-eigenlayer", default-features = false }
 
 # Blueprint utils
-blueprint-manager = { version = "0.2.2", path = "./crates/manager", default-features = false }
+blueprint-manager = { version = "0.2.3", path = "./crates/manager", default-features = false }
 blueprint-build-utils = { version = "0.1.0", path = "./crates/build-utils", default-features = false }
 
 # Chain Setup
