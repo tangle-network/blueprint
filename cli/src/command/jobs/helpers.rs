@@ -5,6 +5,7 @@ use color_eyre::eyre::bail;
 use dialoguer::console::style;
 use serde_json;
 use std::str::FromStr;
+use tangle_subxt::FieldExt;
 use tangle_subxt::subxt::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
 
@@ -158,6 +159,10 @@ pub(crate) fn load_job_args_from_file(
                 bail!("Error parsing argument at position {i} of type {param_type:?}: {e}");
             }
         };
+        let input_ty = input_value.field_type();
+        if &input_ty != param_type {
+            bail!("Argument at position {i} has type {input_ty:?} but expected {param_type:?}");
+        }
         input_values.push(input_value);
     }
 
