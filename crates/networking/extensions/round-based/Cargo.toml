@@ -11,6 +11,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+blueprint-std = { workspace = true }
+blueprint-core = { workspace = true }
 blueprint-crypto = { workspace = true }
 blueprint-networking = { workspace = true }
 round-based = { workspace = true }
@@ -48,7 +50,7 @@ libp2p = { workspace = true, features = [
 ] }
 blueprint-crypto = { workspace = true, features = ["sp-core"] }
 blueprint-crypto-core = { workspace = true, features = ["tangle"] }
-
+blueprint-networking = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 sha2 = { workspace = true }
@@ -60,7 +62,4 @@ generic-array = { version = "0.14", features = ["serde"] }
 
 [features]
 default = ["std"]
-std = [
-  "blueprint-crypto/std",
-	"blueprint-networking/std",
-]
+std = ["blueprint-crypto/std", "blueprint-networking/std", "blueprint-std/std", "blueprint-core/std"]

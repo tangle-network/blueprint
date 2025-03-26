@@ -1,15 +1,16 @@
 #![allow(clippy::too_many_lines)]
 
 use crate::{
-    discovery::peers::VerificationIdentifierKey,
-    service::AllowedKeys,
+    discovery::peers::{VerificationIdentifierKey, WhitelistedKeys},
     service_handle::NetworkServiceHandle,
-    tests::{
-        TestNode, create_whitelisted_nodes, wait_for_all_handshakes, wait_for_handshake_completion,
+    test_utils::{
+        TestNode, create_whitelisted_nodes, init_tracing, wait_for_all_handshakes,
+        wait_for_handshake_completion,
     },
-    types::{MessageRouting, ParticipantId, ParticipantInfo, ProtocolMessage},
+    types::{MessageRouting, ProtocolMessage},
 };
 use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
@@ -22,29 +23,29 @@ const PROTOCOL_NAME: &str = "summation/1.0.0";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum SummationMessage {
     Number(u64),
-    Verification { sum: u64 },
+    Verification { sum: u128 },
 }
 
 // Helper to create a protocol message
-fn create_protocol_message<K: KeyType, T: Serialize>(
+fn create_protocol_message<T: Serialize>(
     message: T,
     message_id: u64,
     round_id: u16,
-    sender: ParticipantInfo<K>,
-    target_peer: Option<ParticipantInfo<K>>,
-) -> (MessageRouting<K>, Vec<u8>) {
+    sender_peer_id: PeerId,
+    target_peer: Option<PeerId>,
+) -> (MessageRouting, Vec<u8>) {
     let payload = bincode::serialize(&message).expect("Failed to serialize message");
     let routing = MessageRouting {
         message_id,
         round_id,
-        sender,
+        sender: sender_peer_id,
         recipient: target_peer,
     };
     (routing, payload)
 }
 
 // Helper to extract number from message
-fn extract_number_from_message<K: KeyType>(msg: &ProtocolMessage<K>) -> u64 {
+fn extract_number_from_message(msg: &ProtocolMessage) -> u64 {
     match bincode::deserialize::<SummationMessage>(&msg.payload).expect("Failed to deserialize") {
         SummationMessage::Number(n) => n,
         SummationMessage::Verification { .. } => panic!("Expected number message"),
@@ -52,7 +53,7 @@ fn extract_number_from_message<K: KeyType>(msg: &ProtocolMessage<K>) -> u64 {
 }
 
 // Helper to extract sum from verification message
-fn extract_sum_from_verification<K: KeyType>(msg: &ProtocolMessage<K>) -> u64 {
+fn extract_sum_from_verification(msg: &ProtocolMessage) -> u128 {
     match bincode::deserialize::<SummationMessage>(&msg.payload).expect("Failed to deserialize") {
         SummationMessage::Verification { sum } => sum,
         SummationMessage::Number(_) => panic!("Expected verification message"),
@@ -60,29 +61,34 @@ fn extract_sum_from_verification<K: KeyType>(msg: &ProtocolMessage<K>) -> u64 {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn test_summation_protocol_basic() {
-    super::init_tracing();
+    init_tracing();
     info!("Starting summation protocol test");
 
     // Create nodes with whitelisted keys
     let instance_key_pair2 = SpEcdsa::generate_with_seed(None).unwrap();
     let mut allowed_keys1 = HashSet::new();
-    allowed_keys1.insert(instance_key_pair2.public());
+    allowed_keys1.insert(VerificationIdentifierKey::InstancePublicKey(
+        instance_key_pair2.public(),
+    ));
 
     let mut node1 = TestNode::<SpEcdsa>::new(
-        "test-net",
-        "sum-test",
-        AllowedKeys::InstancePublicKeys(allowed_keys1),
+        "summation-basic",
+        "v1.0.0",
+        WhitelistedKeys::new_from_hashset(allowed_keys1),
         vec![],
         false,
     );
 
     let mut allowed_keys2 = HashSet::new();
-    allowed_keys2.insert(node1.instance_key_pair.public());
+    allowed_keys2.insert(VerificationIdentifierKey::InstancePublicKey(
+        node1.instance_key_pair.public(),
+    ));
     let mut node2 = TestNode::<SpEcdsa>::new_with_keys(
-        "test-net",
-        "sum-test",
-        AllowedKeys::InstancePublicKeys(allowed_keys2),
+        "summation-basic",
+        "v1.0.0",
+        WhitelistedKeys::new_from_hashset(allowed_keys2),
         vec![],
         Some(instance_key_pair2),
         None,
@@ -112,12 +118,7 @@ async fn test_summation_protocol_basic() {
         SummationMessage::Number(num1),
         message_id,
         round_id,
-        ParticipantInfo {
-            id: ParticipantId(1),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                node1.instance_key_pair.public(),
-            )),
-        },
+        handle1.local_peer_id,
         None,
     );
     handle1
@@ -129,12 +130,7 @@ async fn test_summation_protocol_basic() {
         SummationMessage::Number(num2),
         message_id,
         round_id,
-        ParticipantInfo {
-            id: ParticipantId(2),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                node2.instance_key_pair.public(),
-            )),
-        },
+        handle2.local_peer_id,
         None,
     );
     handle2
@@ -184,42 +180,22 @@ async fn test_summation_protocol_basic() {
     info!("Verifying sums via P2P messages");
     // Verify sums via P2P messages
     let (routing, payload) = create_protocol_message(
-        SummationMessage::Verification { sum: sum1 },
+        SummationMessage::Verification { sum: sum1 as u128 },
         message_id,
         round_id,
-        ParticipantInfo {
-            id: ParticipantId(1),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                node1.instance_key_pair.public(),
-            )),
-        },
-        Some(ParticipantInfo {
-            id: ParticipantId(2),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                node2.instance_key_pair.public(),
-            )),
-        }),
+        handle1.local_peer_id,
+        Some(handle2.local_peer_id),
     );
     handle1
         .send(routing, payload)
         .expect("Failed to send verification from node1");
 
     let (routing, payload) = create_protocol_message(
-        SummationMessage::Verification { sum: sum2 },
+        SummationMessage::Verification { sum: sum2 as u128 },
         message_id,
         round_id,
-        ParticipantInfo {
-            id: ParticipantId(2),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                node2.instance_key_pair.public(),
-            )),
-        },
-        Some(ParticipantInfo {
-            id: ParticipantId(1),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                node1.instance_key_pair.public(),
-            )),
-        }),
+        handle2.local_peer_id,
+        Some(handle1.local_peer_id),
     );
     handle2
         .send(routing, payload)
@@ -235,13 +211,13 @@ async fn test_summation_protocol_basic() {
             // Process verification messages
             if let Some(msg) = handle1.next_protocol_message() {
                 if !node1_verified {
-                    assert_eq!(extract_sum_from_verification(&msg), expected_sum);
+                    assert_eq!(extract_sum_from_verification(&msg), expected_sum as u128);
                     node1_verified = true;
                 }
             }
             if let Some(msg) = handle2.next_protocol_message() {
                 if !node2_verified {
-                    assert_eq!(extract_sum_from_verification(&msg), expected_sum);
+                    assert_eq!(extract_sum_from_verification(&msg), expected_sum as u128);
                     node2_verified = true;
                 }
             }
@@ -259,13 +235,17 @@ async fn test_summation_protocol_basic() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn test_summation_protocol_multi_node() {
-    super::init_tracing();
+    init_tracing();
     info!("Starting multi-node summation protocol test");
+
+    let network_name = "summation-multi-node";
+    let instance_id = "v1.0.0";
 
     // Create 3 nodes with whitelisted keys
     info!("Creating whitelisted nodes");
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(3, false).await;
+    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(3, network_name, instance_id, false).await;
     info!("Created {} nodes successfully", nodes.len());
 
     // Start all nodes
@@ -313,12 +293,7 @@ async fn test_summation_protocol_multi_node() {
             SummationMessage::Number(numbers[i]),
             message_id,
             round_id,
-            ParticipantInfo {
-                id: ParticipantId(u16::try_from(i).unwrap()),
-                verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                    nodes[i].instance_key_pair.public(),
-                )),
-            },
+            handle.local_peer_id,
             None,
         );
         handle
@@ -384,21 +359,13 @@ async fn test_summation_protocol_multi_node() {
                     i, sums[i], j
                 );
                 let (routing, payload) = create_protocol_message(
-                    SummationMessage::Verification { sum: sums[i] },
+                    SummationMessage::Verification {
+                        sum: sums[i] as u128,
+                    },
                     message_id,
                     round_id,
-                    ParticipantInfo {
-                        id: ParticipantId(u16::try_from(i).unwrap()),
-                        verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                            nodes[i].instance_key_pair.public(),
-                        )),
-                    },
-                    Some(ParticipantInfo {
-                        id: ParticipantId(u16::try_from(j).unwrap()),
-                        verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                            nodes[j].instance_key_pair.public(),
-                        )),
-                    }),
+                    sender.local_peer_id,
+                    Some(handles[j].local_peer_id),
                 );
                 sender
                     .send(routing, payload)
@@ -420,7 +387,7 @@ async fn test_summation_protocol_multi_node() {
                             "Node {} received verification sum {}, expected {}",
                             i, sum, expected_sum
                         );
-                        assert_eq!(sum, expected_sum);
+                        assert_eq!(sum, expected_sum as u128);
                         verified[i] += 1;
                         info!("Node {} verification count: {}", i, verified[i]);
                     }

@@ -35,9 +35,10 @@ parking_lot = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 crossbeam-channel = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 # TODO: Can be optional with proper flag. Used for p2p w/ evm addresses
-libsecp256k1 = { workspace = true }
+libsecp256k1 = { workspace = true, features = ["static-context"] }
 
 # Crypto dependencies
 blueprint-crypto = { workspace = true, features = ["k256", "hashing"] }
@@ -72,12 +73,11 @@ features = [
 blueprint-networking = { workspace = true }
 blueprint-crypto = { workspace = true, features = ["sp-core"] }
 blueprint-crypto-core = { workspace = true, features = ["tangle"] }
-tracing-subscriber = { workspace = true }
 lazy_static = { workspace = true }
-fastrand = "2.0"
+serial_test = { workspace = true }
 
 [features]
-default = ["std"]
+default = ["std", "testing"]
 std = [
 	"blueprint-crypto/std",
 	"blueprint-std/std",
@@ -87,3 +87,4 @@ std = [
 	"serde_json/std",
 	"libsecp256k1/std",
 ]
+testing = []

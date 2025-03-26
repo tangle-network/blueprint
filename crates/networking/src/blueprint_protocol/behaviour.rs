@@ -25,7 +25,7 @@ use std::{
     task::Poll,
     time::{Duration, Instant},
 };
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(NetworkBehaviour)]
 pub struct DerivedBlueprintProtocolBehaviour<K: KeyType> {
@@ -80,7 +80,7 @@ pub struct BlueprintProtocolBehaviour<K: KeyType> {
     pub(crate) response_channels:
         DashMap<OutboundRequestId, ResponseChannel<InstanceMessageResponse<K>>>,
     /// Protocol message sender
-    pub(crate) protocol_message_sender: Sender<ProtocolMessage<K>>,
+    pub(crate) protocol_message_sender: Sender<ProtocolMessage>,
     /// Flag for using addresses for whitelisting and handshake verification
     pub(crate) use_address_for_handshake_verification: bool,
 }
@@ -94,7 +94,7 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
         instance_key_pair: &K::Secret,
         peer_manager: Arc<PeerManager<K>>,
         blueprint_protocol_name: &str,
-        protocol_message_sender: Sender<ProtocolMessage<K>>,
+        protocol_message_sender: Sender<ProtocolMessage>,
         use_address_for_handshake_verification: bool,
     ) -> Self {
         let blueprint_protocol_name = blueprint_protocol_name.to_string();
@@ -211,6 +211,12 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
         self.blueprint_protocol.gossipsub.subscribe(&topic)
     }
 
+    /// Unsubscribe from a gossip topic
+    pub fn unsubscribe(&mut self, topic: &str) -> bool {
+        let topic = Sha256Topic::new(topic);
+        self.blueprint_protocol.gossipsub.unsubscribe(&topic)
+    }
+
     /// Publish a message to a gossip topic
     ///
     /// # Errors
@@ -223,6 +229,37 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
     ) -> Result<MessageId, gossipsub::PublishError> {
         let topic = Sha256Topic::new(topic);
         self.blueprint_protocol.gossipsub.publish(topic, data)
+    }
+
+    /// Send a handshake to a peer
+    ///
+    /// # Errors
+    ///
+    /// See [`Self::send_request()`]
+    pub fn send_handshake(&mut self, peer: &PeerId) -> Result<(), InstanceMessageResponse<K>> {
+        let public_key = K::public_from_secret(&self.instance_key_pair);
+        let handshake_msg = HandshakeMessage::new(self.local_peer_id);
+        let signature =
+            self.sign_handshake(&mut self.instance_key_pair.clone(), peer, &handshake_msg);
+
+        if let Some(signature) = signature {
+            self.send_request(
+                peer,
+                InstanceMessageRequest::Handshake {
+                    verification_id_key: if self.use_address_for_handshake_verification {
+                        VerificationIdentifierKey::EvmAddress(get_address_from_compressed_pubkey(
+                            &public_key.to_bytes(),
+                        ))
+                    } else {
+                        VerificationIdentifierKey::InstancePublicKey(public_key)
+                    },
+                    signature,
+                    msg: handshake_msg,
+                },
+            );
+        }
+
+        Ok(())
     }
 
     /// Verify and handle a handshake with a peer
@@ -247,7 +284,7 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
         let msg_bytes = msg.to_bytes(&self.local_peer_id);
         let hex_msg = hex::encode(msg_bytes.clone());
 
-        debug!(%hex_msg, ?verification_id_key, ?signature, "verifying handshake");
+        info!(%hex_msg, ?verification_id_key, ?signature, "verifying handshake");
 
         let valid = verification_id_key
             .verify(&msg_bytes, signature.to_bytes().as_ref())
@@ -264,7 +301,6 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
             });
         }
 
-        trace!(%msg.sender, "Handshake signature verified successfully");
         Ok(())
     }
 
@@ -317,8 +353,7 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
                 debug!(%propagation_source, "Received gossip message");
 
                 // Deserialize the protocol message
-                let Ok(protocol_message) =
-                    bincode::deserialize::<ProtocolMessage<K>>(&message.data)
+                let Ok(protocol_message) = bincode::deserialize::<ProtocolMessage>(&message.data)
                 else {
                     warn!(%propagation_source, "Failed to deserialize gossip message");
                     return;
@@ -416,45 +451,29 @@ impl<K: KeyType> NetworkBehaviour for BlueprintProtocolBehaviour<K> {
 
     fn on_swarm_event(&mut self, event: FromSwarm<'_>) {
         match &event {
-            FromSwarm::ConnectionEstablished(e) if e.other_established == 0 => {
+            FromSwarm::ConnectionEstablished(conn) if conn.other_established == 0 => {
                 // Start handshake if this peer is not verified
-                if !self.peer_manager.is_peer_verified(&e.peer_id) {
+                if !self.peer_manager.is_peer_verified(&conn.peer_id) {
                     debug!(
                         "Established connection with unverified peer {:?}, sending handshake",
-                        e.peer_id
-                    );
-                    let mut key_pair = self.instance_key_pair.clone();
-
-                    let handshake_msg = HandshakeMessage::new(self.local_peer_id);
-                    let Some(signature) =
-                        self.sign_handshake(&mut key_pair, &e.peer_id, &handshake_msg)
-                    else {
-                        return;
-                    };
-
-                    let public_key = K::public_from_secret(&key_pair);
-                    self.send_request(
-                        &e.peer_id,
-                        InstanceMessageRequest::Handshake {
-                            verification_id_key: if self.use_address_for_handshake_verification {
-                                VerificationIdentifierKey::EvmAddress(
-                                    get_address_from_compressed_pubkey(&public_key.to_bytes()),
-                                )
-                            } else {
-                                VerificationIdentifierKey::InstancePublicKey(public_key)
-                            },
-                            signature,
-                            msg: handshake_msg,
-                        },
+                        conn.peer_id
                     );
 
-                    debug!(%e.peer_id, "Sent handshake request");
-                    self.outbound_handshakes.insert(e.peer_id, Instant::now());
+                    match self.send_handshake(&conn.peer_id) {
+                        Ok(_) => {
+                            debug!(%conn.peer_id, "Sent handshake request");
+                            self.outbound_handshakes
+                                .insert(conn.peer_id, Instant::now());
+                        }
+                        Err(e) => {
+                            warn!(%conn.peer_id, "Failed to send handshake: {e:?}");
+                        }
+                    }
                 }
 
                 self.blueprint_protocol
                     .gossipsub
-                    .add_explicit_peer(&e.peer_id);
+                    .add_explicit_peer(&conn.peer_id);
             }
             FromSwarm::ConnectionClosed(e) if e.remaining_established == 0 => {
                 if self.inbound_handshakes.contains_key(&e.peer_id) {

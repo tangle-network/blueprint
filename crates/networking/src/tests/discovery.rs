@@ -1,8 +1,7 @@
-use crate::service::AllowedKeys;
-
-use super::TestNode;
-use super::{create_whitelisted_nodes, init_tracing};
-use super::{wait_for_peer_discovery, wait_for_peer_info};
+use crate::discovery::peers::WhitelistedKeys;
+use crate::test_utils::{
+    TestNode, create_whitelisted_nodes, init_tracing, wait_for_peer_discovery, wait_for_peer_info,
+};
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
@@ -12,21 +11,21 @@ use tracing::info;
 async fn test_peer_discovery_mdns() {
     init_tracing();
 
-    let network_name = "test-network";
-    let instance_id = "test-instance";
+    let network_name = "peer-discovery-mdns";
+    let instance_id = "v1.0.0";
 
     // Create two nodes
     let mut node1 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         vec![],
         false,
     );
     let mut node2 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         vec![],
         false,
     );
@@ -46,14 +45,14 @@ async fn test_peer_discovery_mdns() {
 async fn test_peer_discovery_kademlia() {
     init_tracing();
 
-    let network_name = "test-network";
-    let instance_id = "test-instance";
+    let network_name = "peer-discovery-kademlia";
+    let instance_id = "v1.0.0";
 
     // Create the first node (bootstrap node)
     let mut node1 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         vec![],
         false,
     );
@@ -67,14 +66,14 @@ async fn test_peer_discovery_kademlia() {
     let mut node2 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         bootstrap_peers.clone(),
         false,
     );
     let mut node3 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
-        AllowedKeys::InstancePublicKeys(HashSet::new()),
+        WhitelistedKeys::new_from_hashset(HashSet::new()),
         bootstrap_peers.clone(),
         false,
     );
@@ -114,9 +113,12 @@ async fn test_peer_discovery_kademlia() {
 async fn test_peer_info_updates() {
     init_tracing();
 
+    let network_name = "peer-info-updates";
+    let instance_id = "v1.0.0";
+
     info!("Creating test nodes...");
     // Create nodes with whitelisted keys
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, false).await;
+    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, network_name, instance_id, false).await;
     let mut node2 = nodes.pop().unwrap();
     let mut node1 = nodes.pop().unwrap();
 
