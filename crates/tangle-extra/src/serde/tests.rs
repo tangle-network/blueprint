@@ -400,20 +400,23 @@ mod enums {
 }
 
 mod maps {
-    use std::collections::HashMap;
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_ser_map_empty() {
         let map: HashMap<String, String> = HashMap::new();
         let field = to_field(&map).unwrap();
-        assert_eq!(field, Field::Struct(new_bounded_string(""), Box::new(BoundedVec(vec![]))));
+        assert_eq!(
+            field,
+            Field::Struct(new_bounded_string(""), Box::new(BoundedVec(vec![])))
+        );
     }
 
     #[test]
     fn test_de_map_empty() {
         let field = Field::Struct(new_bounded_string(""), Box::new(BoundedVec(vec![])));
-        let res  = from_field::<HashMap<String, String>>(field);
+        let res = from_field::<HashMap<String, String>>(field);
         assert!(res.is_err(), "direct map deserialization should fail");
     }
 
@@ -422,16 +425,27 @@ mod maps {
         let mut map = HashMap::new();
         map.insert("key".to_string(), "value".to_string());
         let field = to_field(&map).unwrap();
-        assert_eq!(field, Field::Struct(new_bounded_string(""), Box::new(BoundedVec(vec![
-            (new_bounded_string("key"), Field::String(new_bounded_string("value"))),
-        ]))));
+        assert_eq!(
+            field,
+            Field::Struct(
+                new_bounded_string(""),
+                Box::new(BoundedVec(vec![(
+                    new_bounded_string("key"),
+                    Field::String(new_bounded_string("value"))
+                ),]))
+            )
+        );
     }
 
     #[test]
     fn test_de_map() {
-        let field = Field::Struct(new_bounded_string(""), Box::new(BoundedVec(vec![
-            (new_bounded_string("key"), Field::String(new_bounded_string("value"))),
-        ])));
+        let field = Field::Struct(
+            new_bounded_string(""),
+            Box::new(BoundedVec(vec![(
+                new_bounded_string("key"),
+                Field::String(new_bounded_string("value")),
+            )])),
+        );
         let res = from_field::<HashMap<String, String>>(field);
         assert!(res.is_err(), "direct map deserialization should fail");
     }

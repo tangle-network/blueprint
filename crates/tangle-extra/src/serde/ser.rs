@@ -368,7 +368,11 @@ pub struct SerializeMap<'a> {
 
 impl<'a> SerializeMap<'a> {
     fn new(ser: &'a mut Serializer) -> Self {
-        Self { ser, keys: Vec::new(), values: Vec::new() }
+        Self {
+            ser,
+            keys: Vec::new(),
+            values: Vec::new(),
+        }
     }
 }
 
@@ -382,7 +386,7 @@ impl ser::SerializeMap for SerializeMap<'_> {
     {
         let key = key.serialize(&mut *self.ser)?;
         let Field::String(string) = key else {
-            return Err(super::error::Error::BadMapKey)
+            return Err(super::error::Error::BadMapKey);
         };
 
         self.keys.push(string);
@@ -399,10 +403,15 @@ impl ser::SerializeMap for SerializeMap<'_> {
     }
 
     fn end(self) -> Result<Self::Ok> {
-        let fields = self.keys.into_iter().zip(self.values.into_iter()).collect::<Vec<_>>();
-        Ok(Field::Struct(new_bounded_string(""), Box::new(BoundedVec(
-            fields
-        ))))
+        let fields = self
+            .keys
+            .into_iter()
+            .zip(self.values.into_iter())
+            .collect::<Vec<_>>();
+        Ok(Field::Struct(
+            new_bounded_string(""),
+            Box::new(BoundedVec(fields)),
+        ))
     }
 }
 
