@@ -399,6 +399,83 @@ mod enums {
     }
 }
 
+mod maps {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_ser_map_empty() {
+        let map: HashMap<String, String> = HashMap::new();
+        let field = to_field(&map).unwrap();
+        assert_eq!(
+            field,
+            Field::Struct(new_bounded_string(""), Box::new(BoundedVec(vec![])))
+        );
+    }
+
+    #[test]
+    fn test_de_map_empty() {
+        let field = Field::Struct(new_bounded_string(""), Box::new(BoundedVec(vec![])));
+        let res = from_field::<HashMap<String, String>>(field);
+        assert!(res.is_err(), "direct map deserialization should fail");
+    }
+
+    #[test]
+    fn test_ser_map() {
+        let mut map = HashMap::new();
+        map.insert("key".to_string(), "value".to_string());
+        let field = to_field(&map).unwrap();
+        assert_eq!(
+            field,
+            Field::Struct(
+                new_bounded_string(""),
+                Box::new(BoundedVec(vec![(
+                    new_bounded_string("key"),
+                    Field::String(new_bounded_string("value"))
+                ),]))
+            )
+        );
+    }
+
+    #[test]
+    fn test_de_map() {
+        let field = Field::Struct(
+            new_bounded_string(""),
+            Box::new(BoundedVec(vec![(
+                new_bounded_string("key"),
+                Field::String(new_bounded_string("value")),
+            )])),
+        );
+        let res = from_field::<HashMap<String, String>>(field);
+        assert!(res.is_err(), "direct map deserialization should fail");
+    }
+
+    #[test]
+    fn test_ser_non_string_key() {
+        let mut map = HashMap::new();
+        map.insert(1, "value".to_string());
+        let err = to_field(&map).unwrap_err();
+        assert!(matches!(err, Error::BadMapKey));
+    }
+
+    #[test]
+    fn test_ser_nested_map() {
+        let mut map = HashMap::new();
+        map.insert("key", HashMap::<String, String>::new());
+        let field = to_field(&map).unwrap();
+        assert_eq!(
+            field,
+            Field::Struct(
+                new_bounded_string(""),
+                Box::new(BoundedVec(vec![(
+                    new_bounded_string("key"),
+                    Field::Struct(new_bounded_string(""), Box::new(BoundedVec(vec![])))
+                )]))
+            )
+        );
+    }
+}
+
 mod primitives {
     use super::*;
 
