@@ -8,8 +8,6 @@ use eigensdk::logging::get_test_logger;
 use eigensdk::testing_utils::transaction::wait_transaction;
 use eigensdk::types::operator::Operator;
 use eigensdk::utils::slashing::core::avsdirectory::AVSDirectory;
-use eigensdk::utils::slashing::middleware::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
-use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordinator;
 
 use super::error::EigenlayerError;
 use crate::BlueprintConfig;
@@ -241,49 +239,49 @@ async fn register_bls_impl(
 
     info!("Token address: {:?}", token_address);
 
-    let avs_deposit_hash = el_writer
-        .deposit_erc20_into_strategy(strategy_addr, amount)
-        .await
-        .unwrap();
-    // .map_err(EigenlayerError::ElContracts)?;
-
-    info!("Deposit hash: {:?}", avs_deposit_hash);
-    let avs_deposit_receipt = wait_transaction(&env.http_rpc_endpoint, avs_deposit_hash)
-        .await
-        .map_err(|e| {
-            EigenlayerError::Registration(format!("AVS deposit error: {}", e.to_string()))
-        })?;
-    if avs_deposit_receipt.status() {
-        info!("Deposited into strategy {} for Eigenlayer", strategy_addr);
-    } else {
-        error!("AVS deposit failed for strategy {}", strategy_addr);
-        return Err(RunnerError::Other("AVS deposit failed".into()));
-    }
-
-    // info!("Registering to AVS");
-    // let tx_hash = avs_registry_writer
-    //     .register_operator_in_quorum_with_avs_registry_coordinator(
-    //         operator_bls_key,
-    //         digest_hash,
-    //         expiry,
-    //         quorum_nums,
-    //         env.http_rpc_endpoint.clone(),
-    //     )
+    // let avs_deposit_hash = el_writer
+    //     .deposit_erc20_into_strategy(strategy_addr, amount)
     //     .await
     //     .unwrap();
+    // // .map_err(EigenlayerError::ElContracts)?;
 
-    // info!("Waiting for AVS registration to complete");
-    // let avs_registration_receipt = wait_transaction(&env.http_rpc_endpoint, tx_hash)
+    // info!("Deposit hash: {:?}", avs_deposit_hash);
+    // let avs_deposit_receipt = wait_transaction(&env.http_rpc_endpoint, avs_deposit_hash)
     //     .await
     //     .map_err(|e| {
-    //         EigenlayerError::Registration(format!("AVS registration error: {}", e.to_string()))
+    //         EigenlayerError::Registration(format!("AVS deposit error: {}", e.to_string()))
     //     })?;
-    // if avs_registration_receipt.status() {
-    //     info!("Registered operator {} to AVS", operator_address);
+    // if avs_deposit_receipt.status() {
+    //     info!("Deposited into strategy {} for Eigenlayer", strategy_addr);
     // } else {
-    //     error!("AVS registration failed for operator {}", operator_address);
-    //     return Err(RunnerError::Other("AVS registration failed".into()));
+    //     error!("AVS deposit failed for strategy {}", strategy_addr);
+    //     return Err(RunnerError::Other("AVS deposit failed".into()));
     // }
+
+    info!("Registering to AVS");
+    let tx_hash = avs_registry_writer
+        .register_operator_in_quorum_with_avs_registry_coordinator(
+            operator_bls_key,
+            digest_hash,
+            expiry,
+            quorum_nums,
+            env.http_rpc_endpoint.clone(),
+        )
+        .await
+        .unwrap();
+
+    info!("Waiting for AVS registration to complete");
+    let avs_registration_receipt = wait_transaction(&env.http_rpc_endpoint, tx_hash)
+        .await
+        .map_err(|e| {
+            EigenlayerError::Registration(format!("AVS registration error: {}", e.to_string()))
+        })?;
+    if avs_registration_receipt.status() {
+        info!("Registered operator {} to AVS", operator_address);
+    } else {
+        error!("AVS registration failed for operator {}", operator_address);
+        return Err(RunnerError::Other("AVS registration failed".into()));
+    }
 
     info!("If the terminal exits, you should re-run the runner to continue execution.");
     Ok(())

@@ -81,27 +81,16 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
 impl Default for EigenlayerProtocolSettings {
     fn default() -> Self {
         Self {
-            allocation_manager_address: address!("8A791620dd6260079BF849Dc5567aDC3F2FdC318"),
-            registry_coordinator_address: address!("a7c59f010700930003b33ab25a7a0679c860f29c"),
-            operator_state_retriever_address: address!("e3011a37a904ab90c8881a99bd1f6e21401f1522"),
-            delegation_manager_address: address!("Dc64a140Aa3E981100a9becA4E685f962f0cF6C9"),
-            service_manager_address: address!("c0f115a19107322cfbf1cdbc7ea011c19ebdb4f8"), // Depends on AVS
-            stake_registry_address: address!("34b40ba116d5dec75548a9e9a8f15411461e8c70"), // Differs when using ECDSA Base
-            strategy_manager_address: address!("5FC8d32690cc91D4c39d9d3abcBD16989F875707"),
+            allocation_manager_address: address!("8a791620dd6260079bf849dc5567adc3f2fdc318"),
+            registry_coordinator_address: address!("22753e4264fddc6181dc7cce468904a80a363e44"),
+            operator_state_retriever_address: address!("ab16a69a5a8c12c732e0deff4be56a70bb64c926"),
+            delegation_manager_address: address!("cf7ed3acca5a467e9e704c703e8d87f634fb0fc9"),
+            service_manager_address: address!("f8e31cb472bc70500f08cd84917e5a1912ec8397"), // Depends on AVS
+            stake_registry_address: address!("c96304e3c037f81da488ed9dea1d8f2a48278a75"), // Differs when using ECDSA Base
+            strategy_manager_address: address!("a513e6e4b8f2a923d98304ec87f64353c4d5c853"),
             avs_directory_address: address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e"),
             rewards_coordinator_address: address!("0dcd1bf9a1b36ce34237eeafef220932846bcd82"),
-            permission_controller_address: address!("322813fd9a801c5507c9de605d63cea4f2ce6c44"),
+            permission_controller_address: address!("4ed7c70f96b99c776995fb64377f0d4ab3b0e1c1"),
         }
     }
 }
-
-//             allocation_manager_address: address!("8A791620dd6260079BF849Dc5567aDC3F2FdC318"),
-//             registry_coordinator_address: address!("faaddc93baf78e89dcf37ba67943e1be8f37bb8c"),
-//             operator_state_retriever_address: address!("1f10f3ba7acb61b2f50b9d6ddcf91a6f787c0e82"),
-//             delegation_manager_address: address!("Dc64a140Aa3E981100a9becA4E685f962f0cF6C9"),
-//             service_manager_address: address!("c96304e3c037f81da488ed9dea1d8f2a48278a75"), // Depends on AVS
-//             stake_registry_address: address!("d0141e899a65c95a556fe2b27e5982a6de7fdd7a"), // Differs when using ECDSA Base
-//             strategy_manager_address: address!("5FC8d32690cc91D4c39d9d3abcBD16989F875707"),
-//             avs_directory_address: address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e"),
-//             rewards_coordinator_address: address!("0dcd1bf9a1b36ce34237eeafef220932846bcd82"),
-//             permission_controller_address: address!("322813fd9a801c5507c9de605d63cea4f2ce6c44"),

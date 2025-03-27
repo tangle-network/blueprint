@@ -6,7 +6,9 @@ use alloy_sol_types::sol;
 use blueprint_sdk::evm::util::get_provider_from_signer;
 use blueprint_sdk::info;
 use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
-use blueprint_sdk::testing::utils::eigenlayer::env::STRATEGY_FACTORY_ADDR;
+use blueprint_sdk::testing::utils::eigenlayer::env::{
+    STRATEGY_ADDR, STRATEGY_MANAGER_ADDR, TOKEN_ADDR,
+};
 use color_eyre::eyre::eyre;
 use eigensdk::utils::slashing::core::istrategy::IStrategy;
 use eigensdk::utils::slashing::middleware::blsapkregistry::BLSApkRegistry;
@@ -90,13 +92,13 @@ sol!(
     "dependencies/eigenlayer-middleware-0.5.4/out/StrategyManager.sol/StrategyManager.json"
 );
 
-sol!(
-    #[allow(missing_docs)]
-    #[sol(rpc)]
-    #[derive(Debug, Serialize, Deserialize)]
-    StrategyBeacon,
-    "dependencies/eigenlayer-middleware-0.5.4/out/IBeacon.sol/IBeacon.json"
-);
+// sol!(
+//     #[allow(missing_docs)]
+//     #[sol(rpc)]
+//     #[derive(Debug, Serialize, Deserialize)]
+//     StrategyBeacon,
+//     "dependencies/eigenlayer-middleware-0.5.4/out/IBeacon.sol/IBeacon.json"
+// );
 
 // sol!(
 //     #[allow(missing_docs)]
@@ -175,7 +177,7 @@ pub async fn deploy_avs_contracts(
     allocation_manager_address: Address,
     avs_directory_addr: Address,
     delegation_manager_addr: Address,
-    eigen_layer_pauser_reg_addr: Address,
+    pauser_registry_addr: Address,
     rewards_coordinator_addr: Address,
     task_generator_addr: Address,
     aggregator_addr: Address,
@@ -187,18 +189,13 @@ pub async fn deploy_avs_contracts(
 
     info!("Deployer address: {}", deployer_address);
 
-    // Deploy MockERC20 token
-    // info!("Deploying MockERC20 token...");
-    // let mock_erc20 = MockERC20::deploy(&wallet).await?;
+    // let mock_erc20_addr = ERC20_MOCK_ADDR;
+    // info!("Initializing token...");
+    // let mock_erc20 = MockERC20::deploy(wallet.clone()).await?;
     // let &mock_erc20_addr = mock_erc20.address();
-    // info!("MockERC20 deployed at: {}", mock_erc20_addr);
-    let mock_erc20_addr = address!("8f86403a4de0bb5791fa46b8e795c547942fe4cf");
+    // let token = mock_erc20;
+    let token = MockERC20::new(TOKEN_ADDR, wallet.clone());
 
-    info!("Initializing token...");
-    // let token = MockERC20::new(mock_erc20_addr, wallet.clone());
-    let token = MockERC20::new(mock_erc20_addr, wallet.clone());
-
-    // Try to mint tokens directly instead of initializing
     let mint_call = token.mint(deployer_address, U256::from(1000000000000000000u64));
     let mint_receipt = get_receipt(mint_call).await?;
     info!("Token mint receipt: {:?}", mint_receipt);
@@ -215,14 +212,11 @@ pub async fn deploy_avs_contracts(
     }
     info!("Minted tokens to task generator: {}", task_generator_addr);
 
-    // Check balance
     let balance = token.balanceOf(deployer_address).call().await?._0;
     info!("Deployer token balance: {}", balance);
+    let balance = token.balanceOf(task_generator_addr).call().await?._0;
+    info!("Task generator token balance: {}", balance);
 
-    // let strategy_factory = StrategyFactory::new(STRATEGY_FACTORY_ADDR, wallet.clone());
-    // info!("Token name: {}, symbol: {}, decimals: {}", token_name, token_symbol, token_decimals);
-
-    // Check token total supply
     let token_total_supply = token.totalSupply().call().await?._0;
     info!("Token total supply: {}", token_total_supply);
 
@@ -239,7 +233,7 @@ pub async fn deploy_avs_contracts(
 
     // let strategy_factory = StrategyFactory::new(STRATEGY_FACTORY_ADDR, wallet.clone());
 
-    // // Check the strategy manager address
+    // Check the strategy manager address
     // let strategy_manager_addr = strategy_factory.strategyManager().call().await?._0;
     // info!("StrategyManager address: {}", strategy_manager_addr);
 
@@ -271,7 +265,7 @@ pub async fn deploy_avs_contracts(
     // let new_strategy_receipt = get_receipt(new_strategy_call).await?;
     // info!("Strategy deployed with receipt: {:?}", new_strategy_receipt);
     // let strategy_addr = new_strategy_receipt.contract_address.unwrap();
-    // let squaring_strategy = IStrategy::new(strategy_addr, wallet.clone());
+    let squaring_strategy = IStrategy::new(STRATEGY_ADDR, wallet.clone());
 
     // let deployed_strategies = vec![squaring_strategy];
     // let num_strategies = deployed_strategies.len();
@@ -282,12 +276,12 @@ pub async fn deploy_avs_contracts(
     let &proxy_admin_addr = proxy_admin.address();
     info!("ProxyAdmin deployed at: {}", proxy_admin_addr);
 
-    // Deploy PauserRegistry
-    info!("Deploying PauserRegistry...");
-    let pausers = vec![deployer_address];
-    let pauser_registry = PauserRegistry::deploy(&wallet, pausers, deployer_address).await?;
-    let &pauser_registry_addr = pauser_registry.address();
-    info!("PauserRegistry deployed at: {}", pauser_registry_addr);
+    // // Deploy PauserRegistry
+    // info!("Deploying PauserRegistry...");
+    // let pausers = vec![deployer_address];
+    // let pauser_registry = PauserRegistry::deploy(&wallet, pausers, deployer_address).await?;
+    // let &pauser_registry_addr = pauser_registry.address();
+    // info!("PauserRegistry deployed at: {}", pauser_registry_addr);
 
     // First, deploy all empty proxies
     info!("Deploying empty proxies...");
@@ -295,12 +289,12 @@ pub async fn deploy_avs_contracts(
         deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
     let stake_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
     let squaring_task_manager_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
-    let registry_coordinator_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
+    let slashing_registry_coordinator_proxy =
+        deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
     let bls_apk_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
     let index_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
     let socket_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
     let instant_slasher_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
-    // let strategy_factory_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
 
     // Deploy OperatorStateRetriever
     info!("Deploying OperatorStateRetriever...");
@@ -317,7 +311,7 @@ pub async fn deploy_avs_contracts(
     // Deploy StakeRegistry implementation
     let stake_registry_impl = StakeRegistry::deploy(
         &wallet,
-        registry_coordinator_proxy,
+        slashing_registry_coordinator_proxy,
         delegation_manager_addr,
         avs_directory_addr,
         allocation_manager_address,
@@ -330,7 +324,8 @@ pub async fn deploy_avs_contracts(
     );
 
     // Deploy BLSApkRegistry implementation
-    let bls_apk_registry_impl = BLSApkRegistry::deploy(&wallet, registry_coordinator_proxy).await?;
+    let bls_apk_registry_impl =
+        BLSApkRegistry::deploy(&wallet, slashing_registry_coordinator_proxy).await?;
     let &bls_apk_registry_impl_addr = bls_apk_registry_impl.address();
     info!(
         "BLSApkRegistry implementation deployed at: {}",
@@ -338,7 +333,8 @@ pub async fn deploy_avs_contracts(
     );
 
     // Deploy IndexRegistry implementation
-    let index_registry_impl = IndexRegistry::deploy(&wallet, registry_coordinator_proxy).await?;
+    let index_registry_impl =
+        IndexRegistry::deploy(&wallet, slashing_registry_coordinator_proxy).await?;
     let &index_registry_impl_addr = index_registry_impl.address();
     info!(
         "IndexRegistry implementation deployed at: {}",
@@ -349,7 +345,7 @@ pub async fn deploy_avs_contracts(
     let instant_slasher_impl = InstantSlasher::deploy(
         &wallet,
         allocation_manager_address,
-        registry_coordinator_proxy,
+        slashing_registry_coordinator_proxy,
         squaring_task_manager_proxy,
     )
     .await?;
@@ -367,23 +363,61 @@ pub async fn deploy_avs_contracts(
         index_registry_proxy,
         socket_registry_proxy,
         allocation_manager_address,
-        eigen_layer_pauser_reg_addr,
-        "v1.4.0-tangle-testnet".to_string(),
+        pauser_registry_addr,
+        "v1.4.0-testnet-holesky".to_string(),
     )
     .await?;
     let &registry_coordinator_impl_addr = registry_coordinator_impl.address();
     info!(
-        "RegistryCoordinator implementation deployed at: {}",
+        "Registry Coordinator implementation deployed at: {}",
         registry_coordinator_impl_addr
     );
 
-    // Deploy SocketRegistry implementation
-    let socket_registry_impl = SocketRegistry::deploy(&wallet, registry_coordinator_proxy).await?;
-    let &socket_registry_impl_addr = socket_registry_impl.address();
-    info!(
-        "SocketRegistry implementation deployed at: {}",
-        socket_registry_impl_addr
-    );
+    let pausers = vec![deployer_address, deployer_address];
+    let pauser_registry = PauserRegistry::deploy(&wallet, pausers, deployer_address).await?;
+    let &pauser_registry_addr = pauser_registry.address();
+    info!("Pauser Registry deployed at: {}", pauser_registry_addr);
+
+    let mut quorums_operator_set_params = Vec::with_capacity(num_quorums as usize);
+
+    let mut quorums_strategy_params = Vec::with_capacity(num_quorums as usize);
+    let deployed_strategies = vec![squaring_strategy];
+    let num_strategies = deployed_strategies.len();
+
+    for _i in 0..num_quorums {
+        let quorum_operator_set_param =
+            interfaces::ISlashingRegistryCoordinatorTypes::OperatorSetParam {
+                maxOperatorCount: 10000u32,
+                kickBIPsOfOperatorStake: 15000u16,
+                kickBIPsOfTotalStake: 100u16,
+            };
+        quorums_operator_set_params.push(quorum_operator_set_param);
+
+        let mut quorum_strategy_param = Vec::with_capacity(num_strategies);
+        let multiplier = alloy_primitives::Uint::<96, 2>::from(1u64);
+        for j in 0..num_strategies {
+            let strategy_param = interfaces::IStakeRegistryTypes::StrategyParams {
+                strategy: deployed_strategies[j].address().clone(),
+                multiplier,
+            };
+            quorum_strategy_param.push(strategy_param);
+        }
+        quorums_strategy_params.push(quorum_strategy_param);
+    }
+
+    let stake_type = vec![IStakeRegistryTypes::StakeType::from(1u8)];
+    let look_ahead_period = vec![0u32];
+
+    // Initialize RegistryCoordinator
+    let registry_coordinator_init_data = SlashingRegistryCoordinator::initializeCall {
+        initialOwner: deployer_address,
+        churnApprover: deployer_address,
+        ejector: deployer_address,
+        initialPausedStatus: U256::from(0),
+        avs: squaring_service_manager_proxy,
+    }
+    .abi_encode()
+    .into();
 
     // Upgrade proxies with implementations
     info!("Upgrading proxies with implementations...");
@@ -421,22 +455,11 @@ pub async fn deploy_avs_contracts(
     .await?;
     info!("IndexRegistry proxy upgraded");
 
-    // Initialize RegistryCoordinator
-    let registry_coordinator_init_data = SlashingRegistryCoordinator::initializeCall {
-        initialOwner: deployer_address,
-        churnApprover: deployer_address,
-        ejector: deployer_address,
-        initialPausedStatus: U256::from(0),
-        avs: squaring_service_manager_proxy,
-    }
-    .abi_encode()
-    .into();
-
     // Upgrade RegistryCoordinator with initialization
     upgrade_proxy(
         &wallet,
         proxy_admin_addr,
-        registry_coordinator_proxy,
+        slashing_registry_coordinator_proxy,
         registry_coordinator_impl_addr,
         registry_coordinator_init_data,
     )
@@ -447,7 +470,7 @@ pub async fn deploy_avs_contracts(
     let squaring_service_manager_impl = SquaringServiceManager::deploy(
         &wallet,
         avs_directory_addr,
-        registry_coordinator_proxy,
+        slashing_registry_coordinator_proxy,
         stake_registry_proxy,
         rewards_coordinator_addr,
         squaring_task_manager_proxy,
@@ -464,7 +487,7 @@ pub async fn deploy_avs_contracts(
     // Deploy SquaringTask implementation
     let squaring_task_impl = SquaringTask::deploy(
         &wallet,
-        registry_coordinator_proxy,
+        slashing_registry_coordinator_proxy,
         task_response_window_block,
     )
     .await?;
@@ -493,28 +516,6 @@ pub async fn deploy_avs_contracts(
     .await?;
     info!("SquaringServiceManager proxy upgraded and initialized");
 
-    // Upgrade SocketRegistry
-    upgrade_proxy(
-        &wallet,
-        proxy_admin_addr,
-        socket_registry_proxy,
-        socket_registry_impl_addr,
-        alloy_primitives::Bytes::new(),
-    )
-    .await?;
-    info!("SocketRegistry proxy upgraded");
-
-    // Upgrade InstantSlasher
-    upgrade_proxy(
-        &wallet,
-        proxy_admin_addr,
-        instant_slasher_proxy,
-        instant_slasher_impl_addr,
-        alloy_primitives::Bytes::new(),
-    )
-    .await?;
-    info!("InstantSlasher proxy upgraded");
-
     // Initialize SquaringTask
     let task_manager_init_data = SquaringTask::initializeCall {
         _aggregator: aggregator_addr,
@@ -535,43 +536,36 @@ pub async fn deploy_avs_contracts(
     .await?;
     info!("SquaringTask proxy upgraded and initialized");
 
-    let mut quorums_operator_set_params = Vec::with_capacity(num_quorums as usize);
+    // Upgrade InstantSlasher
+    upgrade_proxy(
+        &wallet,
+        proxy_admin_addr,
+        instant_slasher_proxy,
+        instant_slasher_impl_addr,
+        alloy_primitives::Bytes::new(),
+    )
+    .await?;
+    info!("InstantSlasher proxy upgraded");
 
-    for _i in 0..num_quorums {
-        quorums_operator_set_params.push(
-            interfaces::ISlashingRegistryCoordinatorTypes::OperatorSetParam {
-                maxOperatorCount: 100u32,
-                kickBIPsOfOperatorStake: 100u16,
-                kickBIPsOfTotalStake: 100u16,
-            },
-        );
-    }
+    // Deploy SocketRegistry implementation
+    let socket_registry_impl =
+        SocketRegistry::deploy(&wallet, slashing_registry_coordinator_proxy).await?;
+    let &socket_registry_impl_addr = socket_registry_impl.address();
+    info!(
+        "SocketRegistry implementation deployed at: {}",
+        socket_registry_impl_addr
+    );
 
-    let mut quorums_strategy_params = Vec::with_capacity(num_quorums as usize);
-    let deployed_strategies = vec![address!("5e3d0fde6f793b3115a9e7f5ebc195bbeed35d6c")];
-    let num_strategies = deployed_strategies.len();
-
-    for i in 0..num_quorums {
-        let operator_param = num_quorums;
-        let quorum_operator_set_param =
-            interfaces::ISlashingRegistryCoordinatorTypes::OperatorSetParam {
-                maxOperatorCount: operator_param as u32,
-                kickBIPsOfOperatorStake: operator_params[i as usize] as u16,
-                kickBIPsOfTotalStake: operator_params[i as usize] as u16,
-            };
-        quorums_operator_set_params.push(quorum_operator_set_param);
-
-        let mut quorum_strategy_param = Vec::with_capacity(num_strategies);
-        let multiplier = alloy_primitives::Uint::<96, 2>::from(1u64);
-        for j in 0..num_strategies {
-            let strategy_param = interfaces::IStakeRegistryTypes::StrategyParams {
-                strategy: deployed_strategies[j],
-                multiplier,
-            };
-            quorum_strategy_param.push(strategy_param);
-        }
-        quorums_strategy_params.push(quorum_strategy_param);
-    }
+    // Upgrade SocketRegistry
+    upgrade_proxy(
+        &wallet,
+        proxy_admin_addr,
+        socket_registry_proxy,
+        socket_registry_impl_addr,
+        alloy_primitives::Bytes::new(),
+    )
+    .await?;
+    info!("SocketRegistry proxy upgraded");
 
     info!("AVS deployment completed successfully!");
 
@@ -581,14 +575,14 @@ pub async fn deploy_avs_contracts(
         squaring_service_manager: squaring_service_manager_proxy,
         squaring_service_manager_impl: squaring_service_manager_impl_addr,
         squaring_task_manager: squaring_task_manager_proxy,
-        registry_coordinator: registry_coordinator_proxy,
+        registry_coordinator: slashing_registry_coordinator_proxy,
         bls_apk_registry: bls_apk_registry_proxy,
         index_registry: index_registry_proxy,
         stake_registry: stake_registry_proxy,
         operator_state_retriever: operator_state_retriever_addr,
-        strategy: deployed_strategies[0],
+        strategy: *deployed_strategies[0].address(),
         pauser_registry: pauser_registry_addr,
-        token: mock_erc20_addr,
+        token: *token.address(),
         instant_slasher: instant_slasher_proxy,
         socket_registry: socket_registry_proxy,
     };

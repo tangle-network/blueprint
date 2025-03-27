@@ -3,17 +3,21 @@ use crate::contexts::aggregator::AggregatorContext;
 use crate::contexts::client::AggregatorClient;
 use crate::contexts::combined::CombinedContext;
 use crate::contexts::x_square::EigenSquareContext;
-use crate::contracts::{ProxyAdmin, SquaringServiceManager, SquaringTask};
-use crate::jobs::compute_x_square::{XSQUARE_JOB_ID, xsquare_eigen};
-use crate::jobs::initialize_task::{INITIALIZE_TASK_JOB_ID, initialize_bls_task};
+use crate::contracts::SquaringTask;
+use crate::jobs::compute_x_square::xsquare_eigen;
+use crate::jobs::initialize_task::initialize_bls_task;
+use crate::tests::deploy::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
+use crate::tests::deploy::IStakeRegistryTypes::StrategyParams;
+use crate::tests::deploy::SlashingRegistryCoordinator;
 use alloy_network::EthereumWallet;
-use alloy_primitives::{Address, Bytes, U256, address};
+use alloy_primitives::aliases::U96;
+use alloy_primitives::{Address, Bytes, U256};
 use alloy_provider::Provider;
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_sdk::evm::producer::{PollingConfig, PollingProducer};
-use blueprint_sdk::evm::util::get_provider_http;
 use blueprint_sdk::evm::util::get_provider_ws;
 use blueprint_sdk::evm::util::get_wallet_provider_http;
+use blueprint_sdk::evm::util::{get_provider_from_signer, get_provider_http};
 use blueprint_sdk::runner::BlueprintRunner;
 use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
 use blueprint_sdk::std::{
@@ -23,14 +27,9 @@ use blueprint_sdk::std::{
 use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
 use blueprint_sdk::testing::utils::anvil::wait_for_responses;
 use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
-use blueprint_sdk::testing::utils::eigenlayer::env::EIGEN_LAYER_PAUSER_REG_ADDR;
+use blueprint_sdk::testing::utils::eigenlayer::env::{PAUSER_REGISTRY_ADDR, STRATEGY_ADDR};
 use blueprint_sdk::testing::utils::setup_log;
-use blueprint_sdk::{Router, debug, error, info, warn};
-use eigensdk::utils::slashing::core::avsdirectory::AVSDirectory;
-use eigensdk::utils::slashing::middleware::registrycoordinator::IRegistryCoordinatorTypes::{
-    RegistryCoordinatorParams, SlashingRegistryParams,
-};
-use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordinator;
+use blueprint_sdk::{Router, error, info, warn};
 use futures::StreamExt;
 use tokio::sync::oneshot;
 
@@ -57,11 +56,6 @@ async fn run_eigenlayer_incredible_squaring_test(
     let env = harness.env().clone();
     let http_endpoint = harness.http_endpoint.to_string();
 
-    // // Deploy Task Manager
-    // let avs_contracts = deploy_avs_contracts(&harness).await;
-    // let task_manager_address = avs_contracts.task_manager_address;
-    // let service_manager_address = avs_contracts.service_manager_address;
-
     let aggregator_private_key = AGGREGATOR_PRIVATE_KEY.to_string();
     let private_key = PRIVATE_KEY.to_string();
     let contract_addresses = harness.eigenlayer_contract_addresses;
@@ -70,7 +64,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     let allocation_manager_address = contract_addresses.allocation_manager_address;
     let avs_directory_addr = contract_addresses.avs_directory_address;
     let rewards_coordinator_addr = contract_addresses.rewards_coordinator_address;
-    let pauser_registry_addr = EIGEN_LAYER_PAUSER_REG_ADDR;
+    let pauser_registry_addr = PAUSER_REGISTRY_ADDR;
     let strategy_manager_addr = contract_addresses.strategy_manager_address;
 
     let avs_contracts = crate::tests::deploy::deploy_avs_contracts(
@@ -111,16 +105,93 @@ async fn run_eigenlayer_incredible_squaring_test(
         .registry_coordinator_address;
     let accounts = harness.accounts().to_vec();
     let task_generator_address = harness.task_generator_account();
+    let signer: PrivateKeySigner = AGGREGATOR_PRIVATE_KEY
+        .parse()
+        .expect("failed to generate wallet ");
+    warn!("Private key: {}", private_key);
+    let signer_wallet = get_provider_from_signer(&private_key, &http_endpoint);
+    let wallet = EthereumWallet::from(signer);
+    let provider = get_wallet_provider_http(&http_endpoint, wallet.clone());
 
-    // let total_delegated_quorum_create_tx_hash = create_total_delegated_stake_quorum(
-    //     erc20_mock_strategy_address,
-    //     registry_coordinator_address,
-    //     operator_pvt_key,
-    //     ecdsa_keystore_path,
-    //     ecdsa_keystore_password,
-    //     &rpc_url,
-    // )
-    // .await.unwrap();
+    let registry_coordinator =
+        SlashingRegistryCoordinator::new(registry_coordinator_address, signer_wallet.clone());
+    let registry_owner = registry_coordinator.owner().call().await.unwrap();
+    error!("Registry owner: {}", registry_owner._0);
+    // assert_eq!(registry_owner._0, harness.owner_account());
+
+    // Check if the AVS is properly set
+    let avs_address = registry_coordinator.avs().call().await.unwrap();
+    error!("AVS address: {}", avs_address._0);
+
+    // Check if the strategy is valid
+    let strategy_addr = STRATEGY_ADDR;
+    let strategy_registry = registry_coordinator.stakeRegistry().call().await.unwrap();
+    error!("Stake Registry address: {}", strategy_registry._0);
+
+    // Check if there's already a quorum
+    let quorum_count = registry_coordinator.quorumCount().call().await.unwrap();
+    error!("Current quorum count: {}", quorum_count._0);
+
+    // Ensure the AVS is set correctly before creating the quorum
+    if avs_address._0 == Address::ZERO {
+        error!("AVS address is not set, setting it now");
+        let set_avs_result = registry_coordinator
+            .setAVS(service_manager_address)
+            .send()
+            .await;
+        match set_avs_result {
+            Ok(receipt) => {
+                let tx_receipt = receipt.get_receipt().await.unwrap();
+                error!("Set AVS transaction: {:?}", tx_receipt.transaction_hash);
+            }
+            Err(e) => error!("Failed to set AVS: {}", e),
+        }
+    }
+
+    // Try with simpler parameters
+    let operator_set_param = OperatorSetParam {
+        maxOperatorCount: 10,
+        kickBIPsOfOperatorStake: 150,
+        kickBIPsOfTotalStake: 100,
+    };
+    let minimum_stake: U96 = U96::from(0);
+
+    // Use a different strategy approach
+    let strategy_params = vec![StrategyParams {
+        strategy: strategy_addr,
+        multiplier: U96::from(1),
+    }];
+
+    error!(
+        "Attempting to create quorum with strategy: {}",
+        strategy_addr
+    );
+
+    // Try to create the quorum with error handling
+    let stake_quorum_result = registry_coordinator
+        .createTotalDelegatedStakeQuorum(operator_set_param, minimum_stake, strategy_params)
+        .send()
+        .await;
+
+    match stake_quorum_result {
+        Ok(receipt) => {
+            let tx_receipt = receipt.get_receipt().await.unwrap();
+            info!(
+                "Total Delegated Stake Quorum created: {:?}",
+                tx_receipt.transaction_hash
+            );
+        }
+        Err(e) => {
+            error!("Failed to create quorum: {}", e);
+
+            // If there's already a quorum, we can skip this step and continue
+            if quorum_count._0 > 0 {
+                info!("Quorum already exists, continuing with existing quorum");
+            } else {
+                panic!("Failed to create quorum and no existing quorum found");
+            }
+        }
+    }
 
     // Spawn Task Spawner and Task Response Listener
     let successful_responses = Arc::new(Mutex::new(0));
@@ -150,12 +221,6 @@ async fn run_eigenlayer_incredible_squaring_test(
     });
 
     info!("Starting Blueprint Execution...");
-    let signer: PrivateKeySigner = AGGREGATOR_PRIVATE_KEY
-        .parse()
-        .expect("failed to generate wallet ");
-    let wallet = EthereumWallet::from(signer);
-    let provider = get_wallet_provider_http(&http_endpoint, wallet.clone());
-
     // Create aggregator client context
     let server_address = format!("{}:{}", "127.0.0.1", 8081);
     let eigen_client_context = EigenSquareContext {
@@ -183,7 +248,9 @@ async fn run_eigenlayer_incredible_squaring_test(
         client.clone(),
         PollingConfig {
             poll_interval: Duration::from_secs(1),
-            ..Default::default()
+            start_block: 235,
+            confirmations: 1,
+            step: 1,
         },
     );
 
@@ -199,8 +266,8 @@ async fn run_eigenlayer_incredible_squaring_test(
         let result = BlueprintRunner::builder(eigen_config, env.clone())
             .router(
                 Router::new()
-                    .route(XSQUARE_JOB_ID, xsquare_eigen)
-                    .route(INITIALIZE_TASK_JOB_ID, initialize_bls_task)
+                    .always(xsquare_eigen)
+                    .always(initialize_bls_task)
                     .with_context(combined_context),
             )
             .producer(task_producer)
@@ -254,469 +321,6 @@ async fn run_eigenlayer_incredible_squaring_test(
 pub struct SquaringAvsContracts {
     pub task_manager_address: Address,
     pub service_manager_address: Address,
-}
-
-// pub async fn deploy_avs_contracts_with_proxy<Ctx>(harness: &EigenlayerTestHarness<Ctx>) -> SquaringAvsContracts
-// where
-//     Ctx: Clone + Send + Sync + 'static,
-// {
-//     use alloy_primitives::U256;
-//     use alloy_primitives::bytes::Bytes;
-
-//     let env = harness.env().clone();
-//     let http_endpoint = &env.http_rpc_endpoint;
-//     let contract_addresses = harness.eigenlayer_contract_addresses;
-//     let avs_directory_address = contract_addresses.avs_directory_address;
-//     let registry_coordinator_address = contract_addresses.registry_coordinator_address;
-//     let rewards_coordinator_address = contract_addresses.rewards_coordinator_address;
-//     let stake_registry_address = contract_addresses.stake_registry_address;
-
-//     let owner_address = harness.owner_account();
-//     let aggregator_address = harness.aggregator_account();
-//     let task_generator_address = harness.task_generator_account();
-
-//     let provider = get_provider_http(http_endpoint);
-
-//     // Step 1: Deploy ProxyAdmin
-//     info!("Deploying ProxyAdmin");
-//     let proxy_admin_deploy_call = ProxyAdmin::deploy_builder(
-//         provider.clone(),
-//         owner_address, // owner
-//     );
-
-//     let proxy_admin_address = match get_receipt(proxy_admin_deploy_call).await {
-//         Ok(receipt) => match receipt.contract_address {
-//             Some(address) => address,
-//             None => {
-//                 error!("Failed to get contract address from receipt");
-//                 panic!("Failed to get contract address from receipt");
-//             }
-//         },
-//         Err(e) => {
-//             error!("Failed to get receipt: {:?}", e);
-//             panic!("Failed to get contract address from receipt");
-//         }
-//     };
-//     info!("Deployed ProxyAdmin at {}", proxy_admin_address);
-
-//     // Step 2: Deploy SquaringTask (TaskManager) implementation
-//     info!("Deploying Incredible Squaring Task Manager implementation");
-//     let task_manager_deploy_call =
-//         SquaringTask::deploy_builder(provider.clone(), registry_coordinator_address, 10u32);
-
-//     let task_manager_impl_address = match get_receipt(task_manager_deploy_call).await {
-//         Ok(receipt) => match receipt.contract_address {
-//             Some(address) => address,
-//             None => {
-//                 error!("Failed to get contract address from receipt");
-//                 panic!("Failed to get contract address from receipt");
-//             }
-//         },
-//         Err(e) => {
-//             error!("Failed to get receipt: {:?}", e);
-//             panic!("Failed to get contract address from receipt");
-//         }
-//     };
-//     info!(
-//         "Deployed Incredible Squaring Task Manager implementation at {}",
-//         task_manager_impl_address
-//     );
-
-//     // Step 3: Create initialization data for SquaringTask
-//     let task_manager_init_data = SquaringTask::initialize_call_builder(
-//         aggregator_address,
-//         task_generator_address,
-//         owner_address
-//     ).calldata().unwrap();
-
-//     // Step 4: Deploy TransparentUpgradeableProxy for SquaringTask
-//     info!("Deploying TransparentUpgradeableProxy for SquaringTask");
-//     let task_manager_proxy_deploy_call = TransparentUpgradeableProxy::deploy_builder(
-//         provider.clone(),
-//         task_manager_impl_address, // logic implementation address
-//         proxy_admin_address,       // admin address
-//         Bytes::from(task_manager_init_data), // initialization data
-//     );
-
-//     let task_manager_address = match get_receipt(task_manager_proxy_deploy_call).await {
-//         Ok(receipt) => match receipt.contract_address {
-//             Some(address) => address,
-//             None => {
-//                 error!("Failed to get contract address from receipt");
-//                 panic!("Failed to get contract address from receipt");
-//             }
-//         },
-//         Err(e) => {
-//             error!("Failed to get receipt: {:?}", e);
-//             panic!("Failed to get contract address from receipt");
-//         }
-//     };
-//     info!(
-//         "Deployed TransparentUpgradeableProxy for SquaringTask at {}",
-//         task_manager_address
-//     );
-
-//     // Step 5: Deploy SquaringServiceManager implementation
-//     info!("Deploying Incredible Squaring Service Manager implementation");
-//     let service_manager_deploy_call = SquaringServiceManager::deploy_builder(
-//         provider.clone(),
-//         avs_directory_address,
-//         registry_coordinator_address,
-//         stake_registry_address,
-//         rewards_coordinator_address,
-//         task_manager_address,  // Using the proxy address here
-//     );
-
-//     let service_manager_impl_address = match get_receipt(service_manager_deploy_call).await {
-//         Ok(receipt) => match receipt.contract_address {
-//             Some(address) => address,
-//             None => {
-//                 error!("Failed to get contract address from receipt");
-//                 panic!("Failed to get contract address from receipt");
-//             }
-//         },
-//         Err(e) => {
-//             error!("Failed to get receipt: {:?}", e);
-//             panic!("Failed to get contract address from receipt");
-//         }
-//     };
-//     info!(
-//         "Deployed Incredible Squaring Service Manager implementation at {}",
-//         service_manager_impl_address
-//     );
-
-//     // Step 6: Create initialization data for SquaringServiceManager
-//     // Now we need to create initialization data since we're no longer initializing in the constructor
-//     let service_manager_init_data = SquaringServiceManager::initializeCall {
-//         initialOwner: owner_address,
-//         rewardsInitiator: owner_address
-//     };
-
-//     // Step 7: Deploy TransparentUpgradeableProxy for SquaringServiceManager
-//     info!("Deploying TransparentUpgradeableProxy for SquaringServiceManager");
-//     let service_manager_proxy_deploy_call = TransparentUpgradeableProxy::deploy_builder(
-//         provider.clone(),
-//         service_manager_impl_address, // logic implementation address
-//         proxy_admin_address,          // admin address
-//         service_manager_init_data,    // initialization data with owner and rewards initiator
-//     );
-
-//     let service_manager_address = match get_receipt(service_manager_proxy_deploy_call).await {
-//         Ok(receipt) => match receipt.contract_address {
-//             Some(address) => address,
-//             None => {
-//                 error!("Failed to get contract address from receipt");
-//                 panic!("Failed to get contract address from receipt");
-//             }
-//         },
-//         Err(e) => {
-//             error!("Failed to get receipt: {:?}", e);
-//             panic!("Failed to get contract address from receipt");
-//         }
-//     };
-//     info!(
-//         "Deployed TransparentUpgradeableProxy for SquaringServiceManager at {}",
-//         service_manager_address
-//     );
-
-//     // Step 8: Verify deployment
-//     info!("Verifying deployment");
-
-//     // Verify SquaringTask through proxy
-//     let task_manager = SquaringTask::new(task_manager_address, provider.clone());
-//     let task_generator = task_manager.generator().call().await.unwrap();
-//     let aggregator = task_manager.aggregator().call().await.unwrap();
-
-//     info!("SquaringTask task_generator: {:?}", task_generator._0);
-//     info!("SquaringTask aggregator: {:?}", aggregator._0);
-
-//     assert_eq!(task_generator._0, task_generator_address, "Task generator address mismatch");
-//     assert_eq!(aggregator._0, aggregator_address, "Aggregator address mismatch");
-
-//     // Verify SquaringServiceManager through proxy
-//     let service_manager = SquaringServiceManager::new(service_manager_address, provider.clone());
-//     let task_manager_from_service = service_manager.squaringTaskManager().call().await.unwrap();
-
-//     info!("SquaringServiceManager task_manager: {:?}", task_manager_from_service._0);
-
-//     assert_eq!(task_manager_from_service._0, task_manager_address, "Task manager address mismatch");
-
-//     SquaringAvsContracts {
-//         task_manager_address,
-//         service_manager_address,
-//     }
-// }
-
-pub async fn deploy_avs_contracts<Ctx>(harness: &EigenlayerTestHarness<Ctx>) -> SquaringAvsContracts
-where
-    Ctx: Clone + Send + Sync + 'static,
-{
-    let env = harness.env().clone();
-    let http_endpoint = &env.http_rpc_endpoint;
-    let contract_addresses = harness.eigenlayer_contract_addresses;
-    // let avs_directory_address = contract_addresses.avs_directory_address;
-    let registry_coordinator_address = contract_addresses.registry_coordinator_address;
-    // let rewards_coordinator_address = contract_addresses.rewards_coordinator_address;
-    // let stake_registry_address = contract_addresses.stake_registry_address;
-    let delegation_manager_address = contract_addresses.delegation_manager_address;
-
-    let owner_address = harness.owner_account();
-    let aggregator_address = harness.aggregator_account();
-    let task_generator_address = harness.task_generator_account();
-
-    let provider = get_provider_http(http_endpoint);
-
-    info!("Deploying new AVS Directory");
-    let pauser_registry_address = address!("9a9f2ccfde556a7e9ff0848998aa4a0cfd8863ae");
-    let deploy_call = AVSDirectory::deploy_builder(
-        provider.clone(),
-        delegation_manager_address,
-        pauser_registry_address,
-        "0.1".into(),
-    );
-    let avs_directory_address = match get_receipt(deploy_call).await {
-        Ok(receipt) => match receipt.contract_address {
-            Some(address) => address,
-            None => {
-                error!("Failed to get contract address from receipt");
-                panic!("Failed to get contract address from receipt");
-            }
-        },
-        Err(e) => {
-            error!("Failed to get receipt: {:?}", e);
-            panic!("Failed to get contract address from receipt");
-        }
-    };
-    info!("Deployed new AVS Directory at {}", avs_directory_address);
-
-    let deploy_call =
-        SquaringTask::deploy_builder(provider.clone(), registry_coordinator_address, 10u32);
-    info!("Deploying Incredible Squaring Task Manager");
-    let task_manager_address = match get_receipt(deploy_call).await {
-        Ok(receipt) => match receipt.contract_address {
-            Some(address) => address,
-            None => {
-                error!("Failed to get contract address from receipt");
-                panic!("Failed to get contract address from receipt");
-            }
-        },
-        Err(e) => {
-            error!("Failed to get receipt: {:?}", e);
-            panic!("Failed to get contract address from receipt");
-        }
-    };
-    info!(
-        "Deployed Incredible Squaring Task Manager at {}",
-        task_manager_address
-    );
-    // std::env::set_var("TASK_MANAGER_ADDRESS", task_manager_address.to_string());
-
-    let task_manager = SquaringTask::new(task_manager_address, provider.clone());
-    // Initialize the Incredible Squaring Task Manager
-    info!("Initializing Incredible Squaring Task Manager");
-    let init_call =
-        task_manager.initialize(aggregator_address, task_generator_address, owner_address);
-    let init_receipt = get_receipt(init_call).await.unwrap();
-    assert!(init_receipt.status());
-    info!("Initialized Incredible Squaring Task Manager");
-
-    let proxy_admin_address = address!("5eb3bc0a489c5a8288765d2336659ebca68fcd00");
-    let existing_service_manager_proxy = address!("b7278a61aa25c888815afc32ad3cc52ff24fe575");
-    let service_manager_address = upgrade_service_manager(
-        harness,
-        existing_service_manager_proxy,
-        task_manager_address,
-        proxy_admin_address,
-    )
-    .await;
-
-    SquaringAvsContracts {
-        task_manager_address,
-        service_manager_address,
-    }
-}
-
-pub async fn upgrade_service_manager<Ctx>(
-    harness: &EigenlayerTestHarness<Ctx>,
-    existing_service_manager_proxy: Address,
-    task_manager_address: Address,
-    proxy_admin_address: Address,
-) -> Address
-where
-    Ctx: Clone + Send + Sync + 'static,
-{
-    let env = harness.env().clone();
-    let http_endpoint = &env.http_rpc_endpoint;
-    let contract_addresses = harness.eigenlayer_contract_addresses;
-    let avs_directory_address = contract_addresses.avs_directory_address;
-    let registry_coordinator_address = contract_addresses.registry_coordinator_address;
-    let rewards_coordinator_address = contract_addresses.rewards_coordinator_address;
-    let stake_registry_address = contract_addresses.stake_registry_address;
-    let owner_address = harness.owner_account();
-    let allocation_manager_address = contract_addresses.allocation_manager_address;
-    let permission_controller_address = contract_addresses.permission_controller_address;
-
-    let provider = get_provider_http(http_endpoint);
-
-    let proxy_admin = ProxyAdmin::new(proxy_admin_address, provider.clone());
-
-    info!("Deploying new SquaringServiceManager implementation");
-    let service_manager_deploy_call = SquaringServiceManager::deploy_builder(
-        provider.clone(),
-        avs_directory_address,
-        registry_coordinator_address,
-        stake_registry_address,
-        rewards_coordinator_address,
-        task_manager_address,
-        owner_address,
-        permission_controller_address,
-    );
-
-    let service_manager_impl_address = match get_receipt(service_manager_deploy_call).await {
-        Ok(receipt) => match receipt.contract_address {
-            Some(address) => address,
-            None => {
-                error!("Failed to get contract address from receipt");
-                panic!("Failed to get contract address from receipt");
-            }
-        },
-        Err(e) => {
-            error!("Failed to get receipt: {:?}", e);
-            panic!("Failed to get contract address from receipt");
-        }
-    };
-    info!(
-        "Deployed new SquaringServiceManager implementation at {}",
-        service_manager_impl_address
-    );
-
-    let slashing_params = SlashingRegistryParams {
-        allocationManager: allocation_manager_address,
-        blsApkRegistry: address!("c351628eb244ec633d5f21fbd6621e1a683b1181"),
-        indexRegistry: address!("cbeaf3bde82155f56486fb5a1072cb8baaf547cc"),
-        socketRegistry: address!("82e01223d51eb87e16a03e24687edf0f294da6f1"),
-        stakeRegistry: address!("82e01223d51eb87e16a03e24687edf0f294da6f1"),
-        pauserRegistry: address!("9a9f2ccfde556a7e9ff0848998aa4a0cfd8863ae"),
-    };
-    let registry_coordinator_params = RegistryCoordinatorParams {
-        serviceManager: existing_service_manager_proxy,
-        slashingParams: slashing_params,
-    };
-    let new_registry_coordinator =
-        RegistryCoordinator::deploy_builder(provider.clone(), registry_coordinator_params);
-    let new_registry_coordinator_address = match get_receipt(new_registry_coordinator).await {
-        Ok(receipt) => match receipt.contract_address {
-            Some(address) => address,
-            None => {
-                error!("Failed to get contract address from receipt");
-                panic!("Failed to get contract address from receipt");
-            }
-        },
-        Err(e) => {
-            error!("Failed to get receipt: {:?}", e);
-            panic!("Failed to get contract address from receipt");
-        }
-    };
-
-    info!("Upgrading Registry Coordinator to use new implementation");
-    let upgrade_call = proxy_admin.upgrade(
-        registry_coordinator_address,
-        new_registry_coordinator_address,
-    );
-
-    let upgrade_receipt = get_receipt(upgrade_call).await.unwrap();
-    assert!(upgrade_receipt.status(), "Upgrade transaction failed");
-
-    info!(
-        "Successfully upgraded RegistryCoordinator proxy at {} to use implementation at {}",
-        registry_coordinator_address, new_registry_coordinator_address
-    );
-
-    let registry_coordinator =
-        RegistryCoordinator::new(new_registry_coordinator_address, provider.clone());
-
-    let init_call = registry_coordinator.initialize(
-        owner_address,
-        owner_address,
-        owner_address,
-        U256::from(0),
-        existing_service_manager_proxy,
-    );
-
-    match get_receipt(init_call).await {
-        Ok(receipt) => {
-            if receipt.status() {
-                info!("Successfully initialized upgraded RegistryCoordinator");
-            } else {
-                warn!("Failed to initialize RegistryCoordinator - it may already be initialized");
-            }
-        }
-        Err(e) => {
-            warn!(
-                "Failed to initialize RegistryCoordinator - it may already be initialized: {:?}",
-                e
-            );
-        }
-    }
-
-    let test_sm = registry_coordinator
-        .serviceManager()
-        .call()
-        .await
-        .unwrap()
-        ._0;
-    // registry_coordinator.
-    assert_eq!(test_sm, existing_service_manager_proxy);
-
-    info!("Upgrading Service Manager proxy to use new implementation");
-    let upgrade_call =
-        proxy_admin.upgrade(existing_service_manager_proxy, service_manager_impl_address);
-
-    let upgrade_receipt = get_receipt(upgrade_call).await.unwrap();
-    assert!(upgrade_receipt.status(), "Upgrade transaction failed");
-
-    info!(
-        "Successfully upgraded ServiceManager proxy at {} to use implementation at {}",
-        existing_service_manager_proxy, service_manager_impl_address
-    );
-
-    let service_manager =
-        SquaringServiceManager::new(existing_service_manager_proxy, provider.clone());
-
-    let init_call = service_manager.initialize(owner_address, owner_address);
-
-    match get_receipt(init_call).await {
-        Ok(receipt) => {
-            if receipt.status() {
-                info!("Successfully initialized upgraded ServiceManager");
-            } else {
-                warn!("Failed to initialize ServiceManager - it may already be initialized");
-            }
-        }
-        Err(e) => {
-            warn!(
-                "Failed to initialize ServiceManager - it may already be initialized: {:?}",
-                e
-            );
-        }
-    }
-
-    let task_manager_from_service = service_manager.squaringTaskManager().call().await.unwrap();
-    debug!(
-        "SquaringServiceManager task_manager: {:?}",
-        task_manager_from_service._0
-    );
-
-    let owner = service_manager.owner().call().await.unwrap();
-    debug!("SquaringServiceManager owner: {:?}", owner._0);
-
-    let rewards_initiator = service_manager.rewardsInitiator().call().await.unwrap();
-    debug!(
-        "SquaringServiceManager rewardsInitiator: {:?}",
-        rewards_initiator._0
-    );
-
-    existing_service_manager_proxy
 }
 
 pub fn setup_task_spawner(
@@ -804,66 +408,3 @@ pub fn setup_task_response_listener(
         }
     }
 }
-
-// /// Creates Total Delegated stake
-// #[allow(clippy::too_many_arguments)]
-// pub async fn create_total_delegated_stake_quorum(
-//     strategy_address: Address,
-//     registry_coordinator_address: Address,
-//     operator_pvt_key: Option<String>,
-//     ecdsa_keystore_path: String,
-//     ecdsa_keystore_password: String,
-//     rpc_url: &str,
-// ) -> eyre::Result<FixedBytes<32>> {
-//     let signer;
-//     if let Some(operator_key) = operator_pvt_key {
-//         signer = PrivateKeySigner::from_str(&operator_key)?;
-//     } else {
-//         signer = LocalSigner::decrypt_keystore(ecdsa_keystore_path, ecdsa_keystore_password)?;
-//     }
-//     let s = signer.to_field_bytes();
-//     let pvt_key = hex::encode(s).to_string();
-
-//     let registry_coordinator_instance =
-//         RegistryCoordinator::new(registry_coordinator_address, get_signer(&pvt_key, rpc_url));
-
-//     let operator_set_param = OperatorSetParam {
-//         maxOperatorCount: 3,
-//         kickBIPsOfOperatorStake: 100,
-//         kickBIPsOfTotalStake: 1000,
-//     };
-//     let minimum_stake: U96 = U96::from(0);
-//     let strategy_params = vec![StrategyParams {
-//         strategy: strategy_address,
-//         multiplier: U96::from(1),
-//     }];
-//     let s = registry_coordinator_instance
-//         .createTotalDelegatedStakeQuorum(operator_set_param, minimum_stake, strategy_params)
-//         .send()
-//         .await
-//         .unwrap()
-//         .get_receipt()
-//         .await
-//         .unwrap()
-//         .transaction_hash;
-//     Ok(s)
-// }
-
-// /// Deposit into strategy
-// ///
-// /// # Arguments
-// ///
-// /// * `strategy_address` - The address of the strategy
-// /// * `amount` - The amount to deposit
-// /// * `el_reader` - The EL chain reader
-// /// * `el_writer` - The EL chain writer
-// pub async fn deposit_into_strategy(
-//     strategy_address: Address,
-//     amount: U256,
-//     el_writer: ELChainWriter,
-// ) -> Result<(), ElContractsError> {
-//     el_writer
-//         .deposit_erc20_into_strategy(strategy_address, amount)
-//         .await?;
-//     Ok(())
-// }
