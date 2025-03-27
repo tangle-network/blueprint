@@ -10,7 +10,7 @@ use eigensdk::utils::slashing::middleware::registrycoordinator::IStakeRegistryTy
 use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordinator;
 
 /// The default Allocation Manager address on our testnet
-pub const ALLOCATION_MANAGER_ADDR: Address = address!("8A791620dd6260079BF849Dc5567aDC3F2FdC318");
+pub const ALLOCATION_MANAGER_ADDR: Address = address!("8a791620dd6260079bf849dc5567adc3f2fdc318");
 /// The default AVS Directory address on our testnet
 pub const AVS_DIRECTORY_ADDR: Address = address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e");
 /// The default AVS Directory Implementation address on our testnet
@@ -42,7 +42,7 @@ pub const EIGEN_POD_BEACON_ADDR: Address = address!("B7f8BC63BbcaD18155201308C8f
 pub const EIGEN_POD_IMPLEMENTATION_ADDR: Address =
     address!("610178dA211FEF7D417bC0e6FeD39F05609AD788");
 /// The default EigenPod Manager address on our testnet
-pub const EIGEN_POD_MANAGER_ADDR: Address = address!("2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6");
+pub const EIGEN_POD_MANAGER_ADDR: Address = address!("59b670e9fa9d0a427751af201d676719a970857b");
 /// The default EigenPod Manager Implementation address on our testnet
 pub const EIGEN_POD_MANAGER_IMPLEMENTATION_ADDR: Address =
     address!("959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1");
@@ -57,7 +57,9 @@ pub const SLASHER_IMPLEMENTATION_ADDR: Address =
 pub const STRATEGY_MANAGER_ADDR: Address = address!("5FC8d32690cc91D4c39d9d3abcBD16989F875707");
 /// The default Strategy Manager Implementation address on our testnet
 pub const STRATEGY_MANAGER_IMPLEMENTATION_ADDR: Address =
-    address!("0DCd1Bf9A1b36cE34237eEaFef220932846BCD82");
+    address!("09635f643e140090a9a8dcd712ed6285858cebef");
+/// The default Strategy Factory address on our testnet
+pub const STRATEGY_FACTORY_ADDR: Address = address!("68b1d87f95878fe05b998f19b66f4baba5de1aed");
 
 /// The default ERC20 Mock address on our testnet
 pub const ERC20_MOCK_ADDR: Address = address!("82e01223d51Eb87e16A03E24687EDF0F294da6f1");
@@ -78,6 +80,31 @@ pub const REWARDS_COORDINATOR_ADDR: Address = address!("0dcd1bf9a1b36ce34237eeaf
 pub const SERVICE_MANAGER_ADDR: Address = address!("c0f115a19107322cfbf1cdbc7ea011c19ebdb4f8");
 /// The default Stake Registry address on our testnet (Differs when using ECDSA Base)
 pub const STAKE_REGISTRY_ADDR: Address = address!("34b40ba116d5dec75548a9e9a8f15411461e8c70");
+
+// pub const STRATEGY_MANAGER_IMPLEMENTATION_ADDR: Address =
+//     address!("09635f643e140090a9a8dcd712ed6285858cebef");
+// /// The default Strategy Factory address on our testnet
+// pub const STRATEGY_FACTORY_ADDR: Address = address!("68b1d87f95878fe05b998f19b66f4baba5de1aed");
+
+// /// The default ERC20 Mock address on our testnet
+// pub const ERC20_MOCK_ADDR: Address = address!("82e01223d51Eb87e16A03E24687EDF0F294da6f1");
+// /// The default ERC20 Mock Strategy address on our testnet
+// pub const ERC20_MOCK_STRATEGY_ADDR: Address = address!("7969c5eD335650692Bc04293B07F5BF2e7A673C0");
+
+// /// The default Operator State Retriever address on our testnet
+// pub const OPERATOR_STATE_RETRIEVER_ADDR: Address =
+//     address!("1f10f3ba7acb61b2f50b9d6ddcf91a6f787c0e82");
+// /// The default Permission Controller address on our testnet
+// pub const PERMISSION_CONTROLLER_ADDR: Address =
+//     address!("322813fd9a801c5507c9de605d63cea4f2ce6c44");
+// /// The default Registry Coordinator address on our testnet
+// pub const REGISTRY_COORDINATOR_ADDR: Address = address!("faaddc93baf78e89dcf37ba67943e1be8f37bb8c");
+// /// The default Rewards Coordinator address on our testnet
+// pub const REWARDS_COORDINATOR_ADDR: Address = address!("0dcd1bf9a1b36ce34237eeafef220932846bcd82");
+// /// The default Service Manager address on our testnet (Depends on AVS, this is the proxy)
+// pub const SERVICE_MANAGER_ADDR: Address = address!("c96304e3c037f81da488ed9dea1d8f2a48278a75");
+// /// The default Stake Registry address on our testnet (Differs when using ECDSA Base)
+// pub const STAKE_REGISTRY_ADDR: Address = address!("d0141e899a65c95a556fe2b27e5982a6de7fdd7a");
 
 pub struct EigenlayerTestEnvironment {
     pub http_endpoint: String,

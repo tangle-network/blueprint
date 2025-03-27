@@ -94,3 +94,14 @@ impl Default for EigenlayerProtocolSettings {
         }
     }
 }
+
+//             allocation_manager_address: address!("8A791620dd6260079BF849Dc5567aDC3F2FdC318"),
+//             registry_coordinator_address: address!("faaddc93baf78e89dcf37ba67943e1be8f37bb8c"),
+//             operator_state_retriever_address: address!("1f10f3ba7acb61b2f50b9d6ddcf91a6f787c0e82"),
+//             delegation_manager_address: address!("Dc64a140Aa3E981100a9becA4E685f962f0cF6C9"),
+//             service_manager_address: address!("c96304e3c037f81da488ed9dea1d8f2a48278a75"), // Depends on AVS
+//             stake_registry_address: address!("d0141e899a65c95a556fe2b27e5982a6de7fdd7a"), // Differs when using ECDSA Base
+//             strategy_manager_address: address!("5FC8d32690cc91D4c39d9d3abcBD16989F875707"),
+//             avs_directory_address: address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e"),
+//             rewards_coordinator_address: address!("0dcd1bf9a1b36ce34237eeafef220932846bcd82"),
+//             permission_controller_address: address!("322813fd9a801c5507c9de605d63cea4f2ce6c44"),

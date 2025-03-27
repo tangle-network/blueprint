@@ -1,4 +1,4 @@
-use crate::constants::AGGREGATOR_PRIVATE_KEY;
+use crate::constants::{AGGREGATOR_PRIVATE_KEY, PRIVATE_KEY};
 use crate::contexts::aggregator::AggregatorContext;
 use crate::contexts::client::AggregatorClient;
 use crate::contexts::combined::CombinedContext;
@@ -63,6 +63,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     // let service_manager_address = avs_contracts.service_manager_address;
 
     let aggregator_private_key = AGGREGATOR_PRIVATE_KEY.to_string();
+    let private_key = PRIVATE_KEY.to_string();
     let contract_addresses = harness.eigenlayer_contract_addresses;
     let delegation_manager_address = contract_addresses.delegation_manager_address;
     let permission_controller_address = contract_addresses.permission_controller_address;
@@ -70,10 +71,11 @@ async fn run_eigenlayer_incredible_squaring_test(
     let avs_directory_addr = contract_addresses.avs_directory_address;
     let rewards_coordinator_addr = contract_addresses.rewards_coordinator_address;
     let pauser_registry_addr = EIGEN_LAYER_PAUSER_REG_ADDR;
+    let strategy_manager_addr = contract_addresses.strategy_manager_address;
 
     let avs_contracts = crate::tests::deploy::deploy_avs_contracts(
         &env.http_rpc_endpoint,
-        &aggregator_private_key,
+        &private_key,
         harness.owner_account(),
         1,
         vec![10],
@@ -719,19 +721,16 @@ where
 
 pub fn setup_task_spawner(
     http_endpoint: String,
-    registry_coordinator_address: Address,
+    _registry_coordinator_address: Address,
     task_generator_address: Address,
-    accounts: Vec<Address>,
+    _accounts: Vec<Address>,
     task_manager_address: Address,
 ) -> impl std::future::Future<Output = ()> {
     setup_log();
     info!("Setting up task spawner...");
     let provider = get_provider_http(&http_endpoint);
     let task_manager = SquaringTask::new(task_manager_address, provider.clone());
-    let registry_coordinator =
-        RegistryCoordinator::new(registry_coordinator_address, provider.clone());
 
-    let operators = vec![vec![accounts[0]]];
     let quorums = Bytes::from(vec![0]);
     async move {
         loop {
@@ -749,16 +748,6 @@ pub fn setup_task_spawner(
             .status()
             {
                 info!("Created a new task...");
-            }
-
-            if get_receipt(
-                registry_coordinator.updateOperatorsForQuorum(operators.clone(), quorums.clone()),
-            )
-            .await
-            .unwrap()
-            .status()
-            {
-                info!("Updated operators for quorum...");
             }
 
             // Wait for task initialization to complete

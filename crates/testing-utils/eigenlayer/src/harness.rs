@@ -148,7 +148,7 @@ impl<Ctx> EigenlayerTestHarness<Ctx> {
     /// Gets the owner account (first account)
     #[must_use]
     pub fn owner_account(&self) -> Address {
-        self.accounts[1]
+        self.accounts[0]
     }
 
     /// Gets the aggregator account (ninth account)

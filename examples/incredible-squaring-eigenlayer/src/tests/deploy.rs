@@ -1,11 +1,12 @@
+use alloy_primitives::address;
 use alloy_primitives::{Address, U256};
 use alloy_provider::RootProvider;
 use alloy_sol_types::SolCall;
 use alloy_sol_types::sol;
 use blueprint_sdk::evm::util::get_provider_from_signer;
-use blueprint_sdk::evm::util::get_provider_http;
 use blueprint_sdk::info;
 use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
+use blueprint_sdk::testing::utils::eigenlayer::env::STRATEGY_FACTORY_ADDR;
 use color_eyre::eyre::eyre;
 use eigensdk::utils::slashing::core::istrategy::IStrategy;
 use eigensdk::utils::slashing::middleware::blsapkregistry::BLSApkRegistry;
@@ -14,7 +15,6 @@ use eigensdk::utils::slashing::middleware::operatorstateretriever::OperatorState
 use eigensdk::utils::slashing::middleware::stakeregistry::StakeRegistry;
 use eigensdk::utils::slashing::sdk::mockerc20::MockERC20;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::contracts::{
     ProxyAdmin, SquaringServiceManager, SquaringTask, TransparentUpgradeableProxy,
@@ -28,38 +28,6 @@ sol!(
     PauserRegistry,
     "dependencies/eigenlayer-middleware-0.5.4/out/PauserRegistry.sol/PauserRegistry.json"
 );
-
-// sol!(
-//     #[allow(missing_docs)]
-//     #[sol(rpc)]
-//     #[derive(Debug, Serialize, Deserialize)]
-//     IAVSDirectory,
-//     "contracts/out/IAVSDirectory.sol/IAVSDirectory.json"
-// );
-
-// sol!(
-//     #[allow(missing_docs)]
-//     #[sol(rpc)]
-//     #[derive(Debug, Serialize, Deserialize)]
-//     IDelegationManager,
-//     "contracts/out/IDelegationManager.sol/IDelegationManager.json"
-// );
-
-// sol!(
-//     #[allow(missing_docs)]
-//     #[sol(rpc)]
-//     #[derive(Debug, Serialize, Deserialize)]
-//     IStrategyManager,
-//     "contracts/out/IStrategyManager.sol/IStrategyManager.json"
-// );
-
-// sol!(
-//     #[allow(missing_docs)]
-//     #[sol(rpc)]
-//     #[derive(Debug, Serialize, Deserialize)]
-//     IRegistryCoordinator,
-//     "contracts/out/IRegistryCoordinator.sol/IRegistryCoordinator.json"
-// );
 
 sol!(
     #[allow(missing_docs)]
@@ -90,38 +58,6 @@ mod interfaces {
     );
 }
 
-// sol!(
-//     #[allow(missing_docs)]
-//     #[sol(rpc)]
-//     #[derive(Debug, Serialize, Deserialize)]
-//     BLSApkRegistry,
-//     "contracts/out/BLSApkRegistry.sol/BLSApkRegistry.json"
-// );
-
-// sol!(
-//     #[allow(missing_docs)]
-//     #[sol(rpc)]
-//     #[derive(Debug, Serialize, Deserialize)]
-//     IIndexRegistry,
-//     "contracts/out/IIndexRegistry.sol/IIndexRegistry.json"
-// );
-
-// sol!(
-//     #[allow(missing_docs)]
-//     #[sol(rpc)]
-//     #[derive(Debug, Serialize, Deserialize)]
-//     IStakeRegistry,
-//     "contracts/out/IStakeRegistry.sol/IStakeRegistry.json"
-// );
-
-// sol!(
-//     #[allow(missing_docs)]
-//     #[sol(rpc)]
-//     #[derive(Debug, Serialize, Deserialize)]
-//     OperatorStateRetriever,
-//     "contracts/out/OperatorStateRetriever.sol/OperatorStateRetriever.json"
-// );
-
 sol!(
     #[allow(missing_docs)]
     #[sol(rpc)]
@@ -138,12 +74,36 @@ sol!(
     "dependencies/eigenlayer-middleware-0.5.4/out/SocketRegistry.sol/SocketRegistry.json"
 );
 
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    StrategyFactory,
+    "dependencies/eigenlayer-middleware-0.5.4/out/StrategyFactory.sol/StrategyFactory.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    StrategyManager,
+    "dependencies/eigenlayer-middleware-0.5.4/out/StrategyManager.sol/StrategyManager.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    StrategyBeacon,
+    "dependencies/eigenlayer-middleware-0.5.4/out/IBeacon.sol/IBeacon.json"
+);
+
 // sol!(
 //     #[allow(missing_docs)]
 //     #[sol(rpc)]
 //     #[derive(Debug, Serialize, Deserialize)]
 //     MockERC20,
-//     "contracts/out/MockERC20.sol/MockERC20.json"
+//     "dependencies/eigenlayer-middleware-0.5.4/out/MockERC20.sol/MockERC20.json"
 // );
 
 /// Data structure to hold deployed contract addresses
@@ -191,14 +151,15 @@ pub struct DeployedContracts {
 /// * `num_quorums` - Number of quorums
 /// * `operator_params` - Operator parameters for each quorum
 /// * `operator_addr` - Address of the operator
-/// * `operator_2_addr` - Address of the second operator
-/// * `contracts_registry_addr` - Address of the contracts registry
+/// * `permission_controller_address` - Address of the permission controller
+/// * `allocation_manager_address` - Address of the allocation manager
+/// * `avs_directory_addr` - Address of the AVS directory
+/// * `delegation_manager_addr` - Address of the delegation manager
+/// * `eigen_layer_pauser_reg_addr` - Address of the EigenLayer pauser registry
+/// * `rewards_coordinator_addr` - Address of the rewards coordinator
 /// * `task_generator_addr` - Address of the task generator
 /// * `aggregator_addr` - Address of the aggregator
-/// * `rewards_owner_addr` - Address of the rewards owner
-/// * `rewards_initiator_addr` - Address of the rewards initiator
 /// * `task_response_window_block` - Task response window in blocks
-/// * `eigenlayer_addresses` - Map of EigenLayer contract addresses
 ///
 /// # Returns
 ///
@@ -222,17 +183,98 @@ pub async fn deploy_avs_contracts(
 ) -> color_eyre::eyre::Result<DeployedContracts> {
     info!("Starting AVS deployment...");
 
-    let provider = get_provider_http(http_endpoint);
-
     let wallet = get_provider_from_signer(private_key, http_endpoint);
 
     info!("Deployer address: {}", deployer_address);
 
     // Deploy MockERC20 token
-    info!("Deploying MockERC20 token...");
-    let mock_erc20 = MockERC20::deploy(&wallet).await?;
-    let &mock_erc20_addr = mock_erc20.address();
-    info!("MockERC20 deployed at: {}", mock_erc20_addr);
+    // info!("Deploying MockERC20 token...");
+    // let mock_erc20 = MockERC20::deploy(&wallet).await?;
+    // let &mock_erc20_addr = mock_erc20.address();
+    // info!("MockERC20 deployed at: {}", mock_erc20_addr);
+    let mock_erc20_addr = address!("8f86403a4de0bb5791fa46b8e795c547942fe4cf");
+
+    info!("Initializing token...");
+    // let token = MockERC20::new(mock_erc20_addr, wallet.clone());
+    let token = MockERC20::new(mock_erc20_addr, wallet.clone());
+
+    // Try to mint tokens directly instead of initializing
+    let mint_call = token.mint(deployer_address, U256::from(1000000000000000000u64));
+    let mint_receipt = get_receipt(mint_call).await?;
+    info!("Token mint receipt: {:?}", mint_receipt);
+    if !mint_receipt.status() {
+        return Err(eyre!("Failed to mint tokens to deployer"));
+    }
+    info!("Minted tokens to deployer: {}", deployer_address);
+
+    let mint_call = token.mint(task_generator_addr, U256::from(1000000000000000000u64));
+    let mint_receipt = get_receipt(mint_call).await?;
+    info!("Token mint receipt: {:?}", mint_receipt);
+    if !mint_receipt.status() {
+        return Err(eyre!("Failed to mint tokens to task generator"));
+    }
+    info!("Minted tokens to task generator: {}", task_generator_addr);
+
+    // Check balance
+    let balance = token.balanceOf(deployer_address).call().await?._0;
+    info!("Deployer token balance: {}", balance);
+
+    // let strategy_factory = StrategyFactory::new(STRATEGY_FACTORY_ADDR, wallet.clone());
+    // info!("Token name: {}, symbol: {}, decimals: {}", token_name, token_symbol, token_decimals);
+
+    // Check token total supply
+    let token_total_supply = token.totalSupply().call().await?._0;
+    info!("Token total supply: {}", token_total_supply);
+
+    // // Mint tokens to operator
+    // let mint_call = token.mint(operator_addr, U256::from(1000000000000000000u64));
+    // let mint_receipt = get_receipt(mint_call).await?;
+    // if !mint_receipt.status() {
+    //     return Err(eyre!(
+    //         "Failed to mint tokens to operator: {}",
+    //         operator_addr
+    //     ));
+    // }
+    // info!("Minted tokens to operator: {}", operator_addr);
+
+    // let strategy_factory = StrategyFactory::new(STRATEGY_FACTORY_ADDR, wallet.clone());
+
+    // // Check the strategy manager address
+    // let strategy_manager_addr = strategy_factory.strategyManager().call().await?._0;
+    // info!("StrategyManager address: {}", strategy_manager_addr);
+
+    // // Check if the deployer is the owner of the strategy manager
+    // let strategy_manager = StrategyManager::new(strategy_manager_addr, wallet.clone());
+    // let strategy_manager_owner = strategy_manager.owner().call().await?._0;
+    // info!("StrategyManager owner: {}", strategy_manager_owner);
+    // info!("Deployer address: {}", deployer_address);
+
+    // // Check if the strategy factory is allowed to add strategies
+    // let can_add_strategies = strategy_manager_owner == deployer_address
+    //     || strategy_manager_owner == STRATEGY_FACTORY_ADDR;
+    // info!("Can add strategies: {}", can_add_strategies);
+
+    // let is_paused = strategy_factory.paused_0(0).call().await?._0;
+    // info!("StrategyFactory paused status: {}", is_paused);
+
+    // let beacon = strategy_factory.strategyBeacon().call().await?._0;
+    // info!("StrategyFactory beacon: {}", beacon);
+
+    // let strategy_beacon = StrategyBeacon::new(beacon, wallet.clone());
+    // let strategy_beacon_addr = strategy_beacon.implementation().call().await?._0;
+    // info!("StrategyBeacon checked at: {}", strategy_beacon_addr);
+
+    // let owner = strategy_factory.owner().call().await?._0;
+    // info!("StrategyFactory owner: {}", owner);
+
+    // let new_strategy_call = strategy_factory.deployNewStrategy(token.address().clone());
+    // let new_strategy_receipt = get_receipt(new_strategy_call).await?;
+    // info!("Strategy deployed with receipt: {:?}", new_strategy_receipt);
+    // let strategy_addr = new_strategy_receipt.contract_address.unwrap();
+    // let squaring_strategy = IStrategy::new(strategy_addr, wallet.clone());
+
+    // let deployed_strategies = vec![squaring_strategy];
+    // let num_strategies = deployed_strategies.len();
 
     // Deploy ProxyAdmin
     info!("Deploying ProxyAdmin...");
@@ -258,6 +300,7 @@ pub async fn deploy_avs_contracts(
     let index_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
     let socket_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
     let instant_slasher_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
+    // let strategy_factory_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
 
     // Deploy OperatorStateRetriever
     info!("Deploying OperatorStateRetriever...");
@@ -492,17 +535,6 @@ pub async fn deploy_avs_contracts(
     .await?;
     info!("SquaringTask proxy upgraded and initialized");
 
-    // Create quorums
-    info!("Creating quorums...");
-    // let registry_coordinator =
-    // SlashingRegistryCoordinator::new(registry_coordinator_proxy, wallet.clone());
-
-    let strategy = IStrategy::deploy(wallet.clone()).await?;
-    // let strategy_addr = strategy.address().clone();
-
-    let deployed_strategies = vec![strategy];
-    let num_strategies = deployed_strategies.len();
-
     let mut quorums_operator_set_params = Vec::with_capacity(num_quorums as usize);
 
     for _i in 0..num_quorums {
@@ -516,6 +548,8 @@ pub async fn deploy_avs_contracts(
     }
 
     let mut quorums_strategy_params = Vec::with_capacity(num_quorums as usize);
+    let deployed_strategies = vec![address!("5e3d0fde6f793b3115a9e7f5ebc195bbeed35d6c")];
+    let num_strategies = deployed_strategies.len();
 
     for i in 0..num_quorums {
         let operator_param = num_quorums;
@@ -531,28 +565,13 @@ pub async fn deploy_avs_contracts(
         let multiplier = alloy_primitives::Uint::<96, 2>::from(1u64);
         for j in 0..num_strategies {
             let strategy_param = interfaces::IStakeRegistryTypes::StrategyParams {
-                strategy: deployed_strategies[j].address().clone(),
+                strategy: deployed_strategies[j],
                 multiplier,
             };
             quorum_strategy_param.push(strategy_param);
         }
         quorums_strategy_params.push(quorum_strategy_param);
     }
-
-    // Fund operators with tokens
-    info!("Funding operators with tokens...");
-    let token = MockERC20::new(mock_erc20_addr, wallet);
-
-    // Mint tokens to operator
-    let mint_call = token.mint(operator_addr, U256::from(1000000000000000000u64));
-    let mint_receipt = get_receipt(mint_call).await?;
-    if !mint_receipt.status() {
-        return Err(eyre!(
-            "Failed to mint tokens to operator: {}",
-            operator_addr
-        ));
-    }
-    info!("Minted tokens to operator: {}", operator_addr);
 
     info!("AVS deployment completed successfully!");
 
@@ -567,7 +586,7 @@ pub async fn deploy_avs_contracts(
         index_registry: index_registry_proxy,
         stake_registry: stake_registry_proxy,
         operator_state_retriever: operator_state_retriever_addr,
-        strategy: mock_erc20_addr,
+        strategy: deployed_strategies[0],
         pauser_registry: pauser_registry_addr,
         token: mock_erc20_addr,
         instant_slasher: instant_slasher_proxy,

@@ -192,7 +192,7 @@ async fn register_bls_impl(
         Some(permission_controller_address),
         Some(allocation_manager_address),
         registry_coordinator_address,
-        el_chain_reader,
+        el_chain_reader.clone(),
         env.http_rpc_endpoint.clone(),
         operator_private_key,
     );
@@ -231,12 +231,23 @@ async fn register_bls_impl(
         return Err(RunnerError::Other("Operator registration failed".into()));
     }
 
-    let strategy_addr = address!("4b6ab5f819a515382b0deb6935d793817bb4af28");
-    let amount = U256::from(100);
+    let strategy_addr = address!("5e3d0fde6f793b3115a9e7f5ebc195bbeed35d6c");
+    let amount = U256::from(10);
+
+    let (_strategy, token_address) = el_chain_reader
+        .get_strategy_and_underlying_token(strategy_addr)
+        .await
+        .unwrap();
+
+    info!("Token address: {:?}", token_address);
+
     let avs_deposit_hash = el_writer
         .deposit_erc20_into_strategy(strategy_addr, amount)
         .await
-        .map_err(EigenlayerError::ElContracts)?;
+        .unwrap();
+    // .map_err(EigenlayerError::ElContracts)?;
+
+    info!("Deposit hash: {:?}", avs_deposit_hash);
     let avs_deposit_receipt = wait_transaction(&env.http_rpc_endpoint, avs_deposit_hash)
         .await
         .map_err(|e| {
