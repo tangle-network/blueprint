@@ -23,7 +23,10 @@ macro_rules! __log_rejection {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __log_rejection {
-    (rejection_type = $ty:ident,body_text = $body_text:expr) => {};
+    (rejection_type = $ty:ident,body_text = $body_text:expr) => {{
+        let _ = $ty;
+        let _ = $body_text;
+    }};
 }
 
 #[rustfmt::skip]
