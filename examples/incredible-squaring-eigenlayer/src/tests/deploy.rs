@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::contracts::{
     ProxyAdmin, SquaringServiceManager, SquaringTask, TransparentUpgradeableProxy,
 };
+use crate::tests::helpers::{deploy_empty_proxy, upgrade_proxy};
 
 // Import EigenLayer contracts using the sol! macro
 sol!(
@@ -588,45 +589,4 @@ pub async fn deploy_avs_contracts(
     };
 
     Ok(deployed_contracts)
-}
-
-/// Helper function to deploy an empty proxy
-async fn deploy_empty_proxy(
-    wallet: &RootProvider,
-    proxy_admin: Address,
-) -> color_eyre::eyre::Result<Address> {
-    let data = alloy_primitives::Bytes::new();
-
-    let empty_contract = EmptyContract::deploy(wallet).await?;
-    let &empty_contract_addr = empty_contract.address();
-
-    let proxy =
-        TransparentUpgradeableProxy::deploy(wallet, empty_contract_addr, proxy_admin, data).await?;
-
-    Ok(proxy.address().clone())
-}
-
-/// Helper function to upgrade a proxy with an implementation
-async fn upgrade_proxy(
-    wallet: &RootProvider,
-    proxy_admin_addr: Address,
-    proxy_addr: Address,
-    implementation_addr: Address,
-    data: alloy_primitives::Bytes,
-) -> color_eyre::eyre::Result<()> {
-    let proxy_admin = ProxyAdmin::new(proxy_admin_addr, wallet.clone());
-
-    let receipt = if data.is_empty() {
-        let call = proxy_admin.upgrade(proxy_addr, implementation_addr);
-        get_receipt(call).await?
-    } else {
-        let call = proxy_admin.upgradeAndCall(proxy_addr, implementation_addr, data);
-        get_receipt(call).await?
-    };
-
-    if !receipt.status() {
-        return Err(color_eyre::eyre::eyre!("Failed to upgrade proxy"));
-    }
-
-    Ok(())
 }
