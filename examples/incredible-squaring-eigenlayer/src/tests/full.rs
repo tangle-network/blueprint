@@ -209,100 +209,18 @@ async fn run_eigenlayer_incredible_squaring_test(
 
     let registry_coordinator =
         RegistryCoordinator::new(registry_coordinator_address, signer_wallet.clone());
-    // let registry_owner = registry_coordinator.owner().call().await.unwrap();
-    // error!("Registry owner: {}", registry_owner._0);
-    // // assert_eq!(registry_owner._0, harness.owner_account());
 
-    // // Check if the AVS is properly set
-    // let avs_address = registry_coordinator.avs().call().await.unwrap()._0;
-    // error!("AVS address: {}", avs_address);
-    // assert_eq!(avs_address, service_manager_address);
-
-    // // Check if the strategy is valid
-    // let strategy_addr = STRATEGY_ADDR;
-    // let strategy_registry = registry_coordinator.stakeRegistry().call().await.unwrap();
-    // error!("Stake Registry address: {}", strategy_registry._0);
-
-    // // Check if there's already a quorum
-    // let quorum_count = registry_coordinator.quorumCount().call().await.unwrap();
-    // error!("Current quorum count: {}", quorum_count._0);
-
-    // // ============= ALLOCATION DEBUGGING
-    // // Check if the AVS is properly set
-    // let avs_address = registry_coordinator.avs().call().await.unwrap()._0;
-    // error!("AVS address: {}", avs_address);
-    // assert_eq!(avs_address, service_manager_address);
-
-    // // Get the AllocationManager address from the registry coordinator
-    // let allocation_manager_address = registry_coordinator
-    //     .allocationManager()
-    //     .call()
-    //     .await
-    //     .unwrap()
-    //     ._0;
-    // error!("AllocationManager address: {}", allocation_manager_address);
-
-    // let allocation_manager =
-    //     AllocationManager::new(allocation_manager_address, signer_wallet.clone());
-
-    // Try with simpler parameters
     let operator_set_param = OperatorSetParam {
         maxOperatorCount: 3,
         kickBIPsOfOperatorStake: 100,
         kickBIPsOfTotalStake: 100,
     };
 
-    // // Verify the strategy address exists before using it
-    // info!("Verifying strategy address: {}", strategy_address);
-
-    // // Check if the strategy is a valid contract
-    // let code_at_strategy = provider.get_code_at(strategy_address).await;
-    // match code_at_strategy {
-    //     Ok(code) => {
-    //         if code.is_empty() {
-    //             error!("Strategy address does not contain code: {}", strategy_address);
-    //             panic!("Strategy address is not a valid contract");
-    //         }
-    //         info!("Strategy address contains code, proceeding with quorum creation");
-    //     },
-    //     Err(e) => {
-    //         error!("Failed to check code at strategy address: {}", e);
-    //         panic!("Failed to verify strategy address: {}", e);
-    //     }
-    // }
-
-    // Create a new strategy instance to check if it implements the required interfaces
-    // let strategy = IStrategy::new(strategy_address, provider.clone());
-
-    // // Try to get the strategy's name to verify it's a valid EigenLayer strategy
-    // match strategy.name().call().await {
-    //     Ok(name) => {
-    //         info!("Strategy name: {:?}", name);
-    //     },
-    //     Err(e) => {
-    //         error!("Failed to get strategy name, it may not be a valid EigenLayer strategy: {}", e);
-    //         // Continue anyway, but this is a warning sign
-    //     }
-    // }
-
-    // // Check if the strategy is properly initialized
-    // match strategy.initialize().call().await {
-    //     Ok(_) => {
-    //         info!("Strategy is already initialized");
-    //     },
-    //     Err(e) => {
-    //         info!("Strategy initialization check: {}", e);
-    //         // This is expected to fail if already initialized, which is fine
-    //     }
-    // }
-
-    // Use a simpler multiplier (1) for the strategy
     let strategy_params = StrategyParams {
         strategy: strategy_address,
         multiplier: U96::from(1),
     };
 
-    // Use zero minimum stake to avoid any stake-related validation issues
     let minimum_stake = U96::from(0);
 
     info!(
@@ -310,7 +228,6 @@ async fn run_eigenlayer_incredible_squaring_test(
         strategy_address
     );
 
-    // Try to create the quorum with error handling
     let create_quorum_call = registry_coordinator.createTotalDelegatedStakeQuorum(
         operator_set_param.clone(),
         minimum_stake,
@@ -323,42 +240,8 @@ async fn run_eigenlayer_incredible_squaring_test(
     match create_quorum_receipt {
         Ok(receipt) => {
             if !receipt.status() {
-                // Try to get more detailed error information
                 error!("Failed to create quorum: {:?}", receipt);
-
-                // Check for revert reason in logs or transaction data
-                if let Ok(tx) = provider
-                    .get_transaction_by_hash(receipt.transaction_hash)
-                    .await
-                {
-                    info!("Transaction data: {:?}", tx);
-
-                    // Try to decode the error if possible
-                    // info!("Transaction input data: 0x{}", hex::encode(tx.as_ref().unwrap().input()));
-                }
-
-                // Try an alternative approach - create a quorum with no strategies
-                info!("Attempting to create quorum with no strategies as fallback");
-                let create_quorum_no_strategies = registry_coordinator
-                    .createTotalDelegatedStakeQuorum(operator_set_param, minimum_stake, vec![]);
-
-                match get_receipt(create_quorum_no_strategies).await {
-                    Ok(alt_receipt) => {
-                        if alt_receipt.status() {
-                            info!("Successfully created quorum with no strategies");
-                        } else {
-                            error!(
-                                "Failed to create quorum with no strategies: {:?}",
-                                alt_receipt
-                            );
-                            panic!("Failed to create quorum with all attempted approaches");
-                        }
-                    }
-                    Err(e) => {
-                        error!("Error creating quorum with no strategies: {}", e);
-                        panic!("Failed to create quorum: {}", e);
-                    }
-                }
+                panic!("Failed to create quorum: {:?}", receipt);
             } else {
                 info!(
                     "Quorum created with transaction hash: {:?}",
