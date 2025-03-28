@@ -1,14 +1,11 @@
 use crate::tests::helpers::{deploy_empty_proxy, upgrade_proxy};
 use alloy_primitives::{Address, Bytes, U256};
-use alloy_provider::RootProvider;
 use alloy_sol_types::{SolCall, sol};
 use blueprint_sdk::evm::util::get_provider_from_signer;
 use blueprint_sdk::info;
-use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
-use color_eyre::eyre::eyre;
 use serde::{Deserialize, Serialize};
 
-use crate::contracts::{ProxyAdmin, TransparentUpgradeableProxy};
+use crate::contracts::ProxyAdmin;
 
 pub const MIDDLEWARE_VERSION: &str = "v1.4.0-testnet-holesky";
 

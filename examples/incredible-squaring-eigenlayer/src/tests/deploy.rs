@@ -1,25 +1,15 @@
-use alloy_primitives::address;
 use alloy_primitives::{Address, U256};
-use alloy_provider::RootProvider;
 use alloy_sol_types::SolCall;
 use alloy_sol_types::sol;
 use blueprint_sdk::evm::util::get_provider_from_signer;
 use blueprint_sdk::info;
 use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
-use blueprint_sdk::testing::utils::eigenlayer::env::{
-    STRATEGY_ADDR, STRATEGY_MANAGER_ADDR, TOKEN_ADDR,
-};
 use color_eyre::eyre::eyre;
-use eigensdk::utils::slashing::core::istrategy::IStrategy;
-use eigensdk::utils::slashing::middleware::blsapkregistry::BLSApkRegistry;
-use eigensdk::utils::slashing::middleware::indexregistry::IndexRegistry;
-use eigensdk::utils::slashing::middleware::operatorstateretriever::OperatorStateRetriever;
-use eigensdk::utils::slashing::middleware::stakeregistry::StakeRegistry;
 use eigensdk::utils::slashing::sdk::mockerc20::MockERC20;
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::{
-    ProxyAdmin, SquaringServiceManager, SquaringTask, TransparentUpgradeableProxy,
+    ProxyAdmin, SquaringServiceManager, SquaringTask,
 };
 use crate::tests::helpers::{deploy_empty_proxy, upgrade_proxy};
 
@@ -47,6 +37,19 @@ sol!(
     SlashingRegistryCoordinator,
     "contracts/out/SlashingRegistryCoordinator.sol/SlashingRegistryCoordinator.json"
 );
+
+pub mod registry_coordinator {
+    use super::sol;
+    use super::{Deserialize, Serialize};
+
+    sol!(
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug, Serialize, Deserialize)]
+        RegistryCoordinator,
+        "contracts/out/RegistryCoordinator.sol/RegistryCoordinator.json"
+    );
+}
 
 mod interfaces {
     use super::sol;
@@ -91,6 +94,55 @@ sol!(
     #[derive(Debug, Serialize, Deserialize)]
     StrategyManager,
     "dependencies/eigenlayer-middleware-0.5.4/out/StrategyManager.sol/StrategyManager.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    IStrategy,
+    "dependencies/eigenlayer-middleware-0.5.4/out/IStrategy.sol/IStrategy.json"
+);
+
+pub mod stake_registry {
+    use super::sol;
+    use super::{Deserialize, Serialize};
+
+    sol!(
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug, Serialize, Deserialize)]
+        StakeRegistry,
+        "dependencies/eigenlayer-middleware-0.5.4/out/StakeRegistry.sol/StakeRegistry.json"
+    );
+}
+
+pub mod bls_apk_registry {
+    use super::sol;
+    use super::{Deserialize, Serialize};
+
+    sol!(
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug, Serialize, Deserialize)]
+    BLSApkRegistry,
+    "dependencies/eigenlayer-middleware-0.5.4/out/BLSApkRegistry.sol/BLSApkRegistry.json"
+);
+}
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    IndexRegistry,
+    "dependencies/eigenlayer-middleware-0.5.4/out/IndexRegistry.sol/IndexRegistry.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    OperatorStateRetriever,
+    "dependencies/eigenlayer-middleware-0.5.4/out/OperatorStateRetriever.sol/OperatorStateRetriever.json"
 );
 
 // sol!(
@@ -315,7 +367,7 @@ pub async fn deploy_avs_contracts(
     info!("Deploying implementation contracts...");
 
     // Deploy StakeRegistry implementation
-    let stake_registry_impl = StakeRegistry::deploy(
+    let stake_registry_impl = stake_registry::StakeRegistry::deploy(
         &wallet,
         slashing_registry_coordinator_proxy,
         delegation_manager_addr,
@@ -331,7 +383,7 @@ pub async fn deploy_avs_contracts(
 
     // Deploy BLSApkRegistry implementation
     let bls_apk_registry_impl =
-        BLSApkRegistry::deploy(&wallet, slashing_registry_coordinator_proxy).await?;
+        bls_apk_registry::BLSApkRegistry::deploy(&wallet, slashing_registry_coordinator_proxy).await?;
     let &bls_apk_registry_impl_addr = bls_apk_registry_impl.address();
     info!(
         "BLSApkRegistry implementation deployed at: {}",
