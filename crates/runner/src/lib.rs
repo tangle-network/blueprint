@@ -420,7 +420,7 @@ where
                                 ?job_call,
                                 "Received a job call"
                             );
-                            pending_jobs.push(router.call(job_call));
+                            pending_jobs.push(tokio::task::spawn(router.call(job_call)));
                         },
                         Some(Err(e)) => {
                             blueprint_core::error!(target: "blueprint-runner", "Producer error: {:?}", e);
@@ -438,7 +438,7 @@ where
                 // Job call finished
                 Some(job_result) = pending_jobs.next() => {
                     match job_result {
-                        Ok(Some(results)) => {
+                        Ok(Ok(Some(results))) => {
                             blueprint_core::trace!(
                                 target: "blueprint-runner",
                                 count = %results.len(),
@@ -466,8 +466,12 @@ where
                                 return Err(Error::Consumer(e));
                             }
                         },
-                        Ok(None) => {
+                        Ok(Ok(None)) => {
                             blueprint_core::debug!(target: "blueprint-runner", "Job call was ignored by router");
+                        },
+                        Ok(Err(e)) => {
+                            blueprint_core::error!(target: "blueprint-runner", "Job call task failed: {:?}", e);
+                            return Err(Error::JobCall(e.to_string()));
                         },
                         Err(e) => {
                             blueprint_core::error!(target: "blueprint-runner", "Job call failed: {:?}", e);
