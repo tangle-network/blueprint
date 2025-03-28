@@ -115,7 +115,6 @@ pub(crate) fn print_job_results(result_types: &[FieldType], i: usize, field: Fie
 /// * JSON is not an array
 /// * Number of arguments doesn't match expected parameters
 /// * Arguments don't match expected types
-#[allow(clippy::too_many_lines)]
 pub(crate) fn load_job_args_from_file(
     file_path: &str,
     param_types: &[FieldType],
@@ -170,7 +169,6 @@ pub(crate) fn load_job_args_from_file(
 }
 
 /// Prompt the user for job parameters based on the parameter types
-#[allow(clippy::too_many_lines)]
 pub(crate) fn prompt_for_job_params(param_types: &[FieldType]) -> Result<Vec<InputValue>> {
     use dialoguer::Input;
 

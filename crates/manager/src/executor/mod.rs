@@ -149,7 +149,7 @@ impl Future for BlueprintManagerHandle {
 /// # Panics
 ///
 /// * If the SR25519 or ECDSA keypair cannot be found
-#[allow(clippy::too_many_lines, clippy::used_underscore_binding)]
+#[allow(clippy::used_underscore_binding)]
 pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
     blueprint_manager_config: BlueprintManagerConfig,
     env: BlueprintEnvironment,

@@ -82,7 +82,6 @@ fn write_and_display_settings(
 
 /// Start an Anvil container for testing with contract state loaded.
 #[allow(clippy::missing_panics_doc)] // TODO(serial): Return an error, no panics
-#[allow(clippy::too_many_lines)]
 pub async fn start_anvil_container(
     state_json: &str,
     include_logs: bool,

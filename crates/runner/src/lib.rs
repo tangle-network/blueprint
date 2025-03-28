@@ -335,7 +335,7 @@ impl<F> FinalizedBlueprintRunner<F>
 where
     F: Future<Output = ()> + Send + 'static,
 {
-    #[allow(trivial_casts, clippy::too_many_lines)]
+    #[allow(trivial_casts)]
     async fn run(self) -> Result<(), Error> {
         if self.config.requires_registration(&self.env).await? {
             self.config.register(&self.env).await?;
