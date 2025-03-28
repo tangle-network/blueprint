@@ -8,9 +8,7 @@ use color_eyre::eyre::eyre;
 use eigensdk::utils::slashing::sdk::mockerc20::MockERC20;
 use serde::{Deserialize, Serialize};
 
-use crate::contracts::{
-    ProxyAdmin, SquaringServiceManager, SquaringTask,
-};
+use crate::contracts::{ProxyAdmin, SquaringServiceManager, SquaringTask};
 use crate::tests::helpers::{deploy_empty_proxy, upgrade_proxy};
 
 // Import EigenLayer contracts using the sol! macro
@@ -125,9 +123,9 @@ pub mod bls_apk_registry {
         #[allow(missing_docs)]
         #[sol(rpc)]
         #[derive(Debug, Serialize, Deserialize)]
-    BLSApkRegistry,
-    "dependencies/eigenlayer-middleware-0.5.4/out/BLSApkRegistry.sol/BLSApkRegistry.json"
-);
+        BLSApkRegistry,
+        "dependencies/eigenlayer-middleware-0.5.4/out/BLSApkRegistry.sol/BLSApkRegistry.json"
+    );
 }
 sol!(
     #[allow(missing_docs)]
@@ -383,7 +381,8 @@ pub async fn deploy_avs_contracts(
 
     // Deploy BLSApkRegistry implementation
     let bls_apk_registry_impl =
-        bls_apk_registry::BLSApkRegistry::deploy(&wallet, slashing_registry_coordinator_proxy).await?;
+        bls_apk_registry::BLSApkRegistry::deploy(&wallet, slashing_registry_coordinator_proxy)
+            .await?;
     let &bls_apk_registry_impl_addr = bls_apk_registry_impl.address();
     info!(
         "BLSApkRegistry implementation deployed at: {}",

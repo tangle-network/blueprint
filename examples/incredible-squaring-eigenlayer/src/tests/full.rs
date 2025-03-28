@@ -7,9 +7,8 @@ use crate::contracts::SquaringTask;
 use crate::jobs::compute_x_square::xsquare_eigen;
 use crate::jobs::initialize_task::initialize_bls_task;
 use crate::tests::core::{
-    DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData,
-    EigenPodManagerConfig, RewardsCoordinatorConfig, StrategyFactoryConfig,
-    StrategyManagerConfig,
+    DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData, EigenPodManagerConfig,
+    RewardsCoordinatorConfig, StrategyFactoryConfig, StrategyManagerConfig,
 };
 use crate::tests::deploy::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
 use crate::tests::deploy::registry_coordinator::IStakeRegistryTypes::StrategyParams;
@@ -255,7 +254,7 @@ async fn run_eigenlayer_incredible_squaring_test(
 
     // // Verify the strategy address exists before using it
     // info!("Verifying strategy address: {}", strategy_address);
-    
+
     // // Check if the strategy is a valid contract
     // let code_at_strategy = provider.get_code_at(strategy_address).await;
     // match code_at_strategy {
@@ -274,7 +273,7 @@ async fn run_eigenlayer_incredible_squaring_test(
 
     // Create a new strategy instance to check if it implements the required interfaces
     // let strategy = IStrategy::new(strategy_address, provider.clone());
-    
+
     // // Try to get the strategy's name to verify it's a valid EigenLayer strategy
     // match strategy.name().call().await {
     //     Ok(name) => {
@@ -312,40 +311,49 @@ async fn run_eigenlayer_incredible_squaring_test(
     );
 
     // Try to create the quorum with error handling
-    let create_quorum_call = registry_coordinator
-        .createTotalDelegatedStakeQuorum(operator_set_param.clone(), minimum_stake, vec![strategy_params]);
-    
+    let create_quorum_call = registry_coordinator.createTotalDelegatedStakeQuorum(
+        operator_set_param.clone(),
+        minimum_stake,
+        vec![strategy_params],
+    );
+
     info!("Sent createTotalDelegatedStakeQuorum transaction");
-    
+
     let create_quorum_receipt = get_receipt(create_quorum_call).await;
     match create_quorum_receipt {
         Ok(receipt) => {
             if !receipt.status() {
                 // Try to get more detailed error information
                 error!("Failed to create quorum: {:?}", receipt);
-                
+
                 // Check for revert reason in logs or transaction data
-                if let Ok(tx) = provider.get_transaction_by_hash(receipt.transaction_hash).await {
+                if let Ok(tx) = provider
+                    .get_transaction_by_hash(receipt.transaction_hash)
+                    .await
+                {
                     info!("Transaction data: {:?}", tx);
-                    
+
                     // Try to decode the error if possible
                     // info!("Transaction input data: 0x{}", hex::encode(tx.as_ref().unwrap().input()));
                 }
-                
+
                 // Try an alternative approach - create a quorum with no strategies
                 info!("Attempting to create quorum with no strategies as fallback");
                 let create_quorum_no_strategies = registry_coordinator
                     .createTotalDelegatedStakeQuorum(operator_set_param, minimum_stake, vec![]);
-                
+
                 match get_receipt(create_quorum_no_strategies).await {
                     Ok(alt_receipt) => {
                         if alt_receipt.status() {
                             info!("Successfully created quorum with no strategies");
                         } else {
-                            error!("Failed to create quorum with no strategies: {:?}", alt_receipt);
+                            error!(
+                                "Failed to create quorum with no strategies: {:?}",
+                                alt_receipt
+                            );
                             panic!("Failed to create quorum with all attempted approaches");
                         }
-                    },
+                    }
                     Err(e) => {
                         error!("Error creating quorum with no strategies: {}", e);
                         panic!("Failed to create quorum: {}", e);
