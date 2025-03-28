@@ -147,7 +147,7 @@ impl ResourceRequirement {
 }
 
 /// Time period for recurring pricing
-#[derive(Debug, Clone, PartialEq, Encode, Decode, TypeInfo)]
+#[derive(Debug, Copy, Clone, PartialEq, Encode, Decode, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum TimePeriod {
     /// Second

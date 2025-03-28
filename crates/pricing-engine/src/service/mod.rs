@@ -6,21 +6,18 @@
 pub mod blockchain;
 pub mod rpc;
 
-use std::{net::SocketAddr, sync::Arc};
-
-use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, error, info};
-
 use crate::{
     error::{Error, Result},
     models::PricingModel,
     rfq::{RfqProcessor, RfqProcessorConfig},
-    types::ServiceCategory,
 };
 use blockchain::{event::BlockchainEvent, listener::EventListener};
 use blueprint_crypto::KeyType;
 use blueprint_networking::service_handle::NetworkServiceHandle;
-use rpc::server::{OperatorInfo, RpcServer};
+use rpc::{OperatorInfo, server::RpcServer};
+use std::{net::SocketAddr, sync::Arc};
+use tokio::sync::{mpsc, oneshot};
+use tracing::{debug, error, info};
 
 /// Service state enum for lifecycle management
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,7 +43,7 @@ pub struct ServiceConfig<K: KeyType> {
     /// RPC server address
     pub rpc_addr: SocketAddr,
     /// Substrate node websocket URL
-    pub node_url: String,
+    pub node_url: Option<String>,
     /// Path to the keystore for signing transactions
     pub keystore_path: Option<String>,
     /// Operator name
@@ -54,20 +51,23 @@ pub struct ServiceConfig<K: KeyType> {
     /// Operator description
     pub operator_description: Option<String>,
     /// Operator public key (on-chain identity)
-    pub operator_public_key: String,
+    pub operator_public_key: K::Public,
     /// Supported blueprints
-    pub supported_blueprints: Vec<ServiceCategory>,
+    pub supported_blueprints: Vec<String>,
     /// Network service handle for RFQ functionality
     pub network_handle: Option<Arc<NetworkServiceHandle<K>>>,
 }
 
 /// The main pricing engine service
 pub struct Service<K: KeyType> {
+    /// The signing key for the operator
+    signing_key: K::Secret,
+
     /// Current state of the service
     state: ServiceState,
 
     /// The operator information
-    operator_info: OperatorInfo,
+    operator_info: OperatorInfo<K>,
 
     /// Available pricing models
     pricing_models: Vec<PricingModel>,
@@ -76,7 +76,10 @@ pub struct Service<K: KeyType> {
     event_listener: Option<Arc<EventListener>>,
 
     /// The RFQ processor for handling quote requests
-    rfq_processor: Option<RfqProcessor<K>>,
+    rfq_processor: Option<Arc<RfqProcessor<K>>>,
+
+    /// RPC server handle
+    rpc_server: Option<jsonrpsee::server::ServerHandle>,
 
     /// Command channel for service control
     command_tx: mpsc::Sender<ServiceCommand>,
@@ -85,49 +88,70 @@ pub struct Service<K: KeyType> {
     /// Channel for blockchain events
     event_tx: mpsc::Sender<BlockchainEvent>,
     event_rx: Option<mpsc::Receiver<BlockchainEvent>>,
+
+    /// Service configuration
+    config: ServiceConfig<K>,
 }
 
 impl<K: KeyType> Service<K> {
     /// Create a new pricing engine service
-    pub fn new(initial_models: Vec<PricingModel>) -> Self {
+    pub fn new(
+        config: ServiceConfig<K>,
+        initial_models: Vec<PricingModel>,
+        signing_key: K::Secret,
+    ) -> Self {
         let (command_tx, command_rx) = mpsc::channel(32);
         let (event_tx, event_rx) = mpsc::channel(128);
 
-        // Create a default operator info that will be updated during start
-        let operator_info = OperatorInfo {
-            id: "".to_string(),
-            name: "".to_string(),
-            description: None,
-            supported_blueprints: vec![],
-        };
-
-        Self {
-            state: ServiceState::Initializing,
-            operator_info,
-            pricing_models: initial_models,
-            event_listener: None,
-            rfq_processor: None,
-            command_tx,
-            command_rx: Some(command_rx),
-            event_tx,
-            event_rx: Some(event_rx),
-        }
-    }
-
-    /// Start the pricing engine service
-    pub async fn start(&mut self, config: ServiceConfig<K>) -> Result<()> {
-        info!("Starting Tangle Cloud Pricing Engine");
-
-        self.operator_info = OperatorInfo {
-            id: config.operator_public_key.clone(),
+        // Create operator info directly from config
+        let operator_info = OperatorInfo::<K> {
+            public_key: K::public_from_secret(&signing_key),
             name: config.operator_name.clone(),
             description: config.operator_description.clone(),
             supported_blueprints: config.supported_blueprints.clone(),
         };
 
-        // Start the blockchain event listener
-        info!("Starting blockchain event listener");
-        let event_listener = EventListener::new(config.node_url.clone(), self.event_tx.clone())
+        Self {
+            signing_key,
+            state: ServiceState::Initializing,
+            operator_info,
+            pricing_models: initial_models,
+            event_listener: None,
+            rfq_processor: None,
+            rpc_server: None,
+            command_tx,
+            command_rx: Some(command_rx),
+            event_tx,
+            event_rx: Some(event_rx),
+            config,
+        }
+    }
+
+    /// Start the blockchain event listener component
+    ///
+    /// This method establishes a connection to the blockchain node and starts
+    /// listening for relevant events.
+    ///
+    /// # Returns
+    /// `Ok(())` if the blockchain listener was started successfully, or
+    /// an error if the connection failed.
+    pub async fn start_blockchain_listener(&mut self) -> Result<()> {
+        if self.event_listener.is_some() {
+            // Already started
+            info!("Blockchain listener already running");
+            return Ok(());
+        }
+
+        // Ensure we have a node URL to connect to
+        let node_url = match &self.config.node_url {
+            Some(url) => url.clone(),
+            None => return Err(Error::Other("No blockchain node URL provided".to_string())),
+        };
+
+        info!("Starting blockchain event listener for node: {}", node_url);
+
+        // Create and initialize the event listener
+        let event_listener = EventListener::new(node_url, self.event_tx.clone())
             .await
             .map_err(|e| Error::ChainConnection(e.to_string()))?;
 
@@ -141,55 +165,111 @@ impl<K: KeyType> Service<K> {
         });
 
         self.event_listener = Some(event_listener);
+        info!("Blockchain event listener started successfully");
 
-        // Start the RPC server
-        info!("Starting RPC server at {}", config.rpc_addr);
-        let rpc_server = RpcServer::new(self.operator_info.clone(), self.pricing_models.clone());
+        // Start the event handler for processing blockchain events
+        if let Some(event_rx) = self.event_rx.take() {
+            tokio::spawn(async move {
+                Self::handle_events(event_rx).await;
+            });
+            info!("Blockchain event processor started");
+        }
 
-        tokio::spawn(async move {
-            match rpc_server.start(config.rpc_addr).await {
-                Ok(handle) => {
-                    info!("RPC server started");
-                    let _ = handle.stopped().await;
-                    info!("RPC server stopped");
-                }
-                Err(e) => {
-                    error!("Failed to start RPC server: {}", e);
-                }
-            }
-        });
+        Ok(())
+    }
 
-        // Initialize and start the RFQ processor if network handle is provided
-        if let Some(network_handle) = config.network_handle {
+    /// Start the server components (RPC and networking)
+    ///
+    /// This method starts the RPC server and initializes the RFQ processor
+    /// for handling quote requests.
+    ///
+    /// # Returns
+    /// `Ok(())` if the server components were started successfully, or
+    /// an error if any component failed to start.
+    pub async fn start_server(&mut self) -> Result<()> {
+        // Initialize and start the RFQ processor first if network handle is provided
+        if let Some(network_handle) = &self.config.network_handle {
             info!("Initializing RFQ processor");
+
+            // Get the public key from the signing key
+            let public_key = K::public_from_secret(&self.signing_key);
 
             // Configure the RFQ processor
             let rfq_config = RfqProcessorConfig {
                 local_peer_id: network_handle.local_peer_id,
-                operator_name: config.operator_name,
+                operator_name: self.config.operator_name.clone(),
                 pricing_models: self.pricing_models.clone(),
+                provider_public_key: Some(public_key), // Set the public key explicitly
                 ..Default::default()
             };
 
-            // Create and start the RFQ processor
+            // Create the RFQ processor with the network handle
+            // The network handle is cloned and wrapped in an Arc inside RfqProcessor::new
+            let handle_clone = (**network_handle).clone();
             let rfq_processor =
-                RfqProcessor::new(rfq_config, key_pair).start_with_network_handle(*network_handle);
+                RfqProcessor::new(rfq_config, self.signing_key.clone(), handle_clone);
 
-            self.rfq_processor = Some(rfq_processor);
-            info!("RFQ processor started");
+            // Store the processor wrapped in an Arc
+            let processor_arc = Arc::new(rfq_processor);
+            self.rfq_processor = Some(processor_arc);
+
+            info!("RFQ processor started with network handle");
         } else {
             info!("No network handle provided, RFQ functionality disabled");
         }
 
-        // Start the event handler
-        let event_rx = self.event_rx.take().unwrap();
-        tokio::spawn(async move {
-            Self::handle_events(event_rx).await;
-        });
+        // Start the RPC server with the RFQ processor
+        info!("Starting RPC server at {}", self.config.rpc_addr);
+        let mut rpc_server =
+            RpcServer::new(self.operator_info.clone(), self.pricing_models.clone());
+
+        // Connect the RFQ processor to the RPC server if available
+        if let Some(rfq_processor) = &self.rfq_processor {
+            rpc_server = rpc_server.with_rfq_processor(rfq_processor.clone());
+        }
+
+        // Bind the server to the specified address
+        let server_handle = rpc_server.start(self.config.rpc_addr).await?;
+        self.rpc_server = Some(server_handle);
+
+        info!("RPC server started successfully");
+        self.state = ServiceState::Running;
+
+        Ok(())
+    }
+
+    /// Start the complete pricing engine service
+    ///
+    /// This method starts both the server components and attempts to start
+    /// the blockchain listener. If the blockchain listener fails to start,
+    /// the service will continue to operate in offline mode.
+    ///
+    /// # Returns
+    /// `Ok(())` if the service started successfully (even in offline mode),
+    /// or an error if the server components failed to start.
+    pub async fn start(&mut self) -> Result<()> {
+        info!("Starting Tangle Cloud Pricing Engine");
+
+        // Always start the server components (RPC and networking)
+        self.start_server().await?;
+
+        // Attempt to start the blockchain listener if a node URL is provided
+        if self.config.node_url.is_some() {
+            match self.start_blockchain_listener().await {
+                Ok(_) => info!("Service running with blockchain integration"),
+                Err(e) => info!("Service running in offline mode: {}", e),
+            }
+        } else {
+            info!("Service running in offline mode (no blockchain node URL provided)");
+
+            // Since we're not starting the blockchain listener, we need to
+            // discard the event receiver to avoid resource leaks
+            self.event_rx.take();
+        }
 
         // Mark the service as running
         self.state = ServiceState::Running;
-        info!("Tangle Cloud Pricing Engine started");
+        info!("Tangle Cloud Pricing Engine started successfully");
 
         Ok(())
     }
@@ -241,11 +321,11 @@ impl<K: KeyType> Service<K> {
     /// Send a request for quotes
     pub async fn send_rfq_request(
         &self,
-        category: ServiceCategory,
+        blueprint_id: String,
         requirements: Vec<crate::types::ResourceRequirement>,
     ) -> Result<Vec<crate::rfq::SignedPriceQuote<K>>> {
         if let Some(rfq) = &self.rfq_processor {
-            rfq.send_request(category, requirements)
+            rfq.send_request(blueprint_id, requirements)
                 .await
                 .map_err(|e| Error::Other(format!("RFQ error: {}", e)))
         } else {
@@ -254,7 +334,7 @@ impl<K: KeyType> Service<K> {
     }
 
     /// Get the RFQ processor
-    pub fn rfq_processor(&self) -> Option<&RfqProcessor<K>> {
+    pub fn rfq_processor(&self) -> Option<&Arc<RfqProcessor<K>>> {
         self.rfq_processor.as_ref()
     }
 
@@ -265,28 +345,28 @@ impl<K: KeyType> Service<K> {
 
             // Process events based on their type
             match &event {
-                BlockchainEvent::Registered(registered) => {
+                BlockchainEvent::Registered(_registered) => {
                     // TODO: Update operator info
                 }
-                BlockchainEvent::Unregistered(unregistered) => {
+                BlockchainEvent::Unregistered(_unregistered) => {
                     // TODO: Update operator info
                 }
-                BlockchainEvent::PriceTargetsUpdated(price_targets_updated) => {
+                BlockchainEvent::PriceTargetsUpdated(_price_targets_updated) => {
                     // TODO: Update pricing models
                 }
-                BlockchainEvent::ServiceRequested(service_requested) => {
+                BlockchainEvent::ServiceRequested(_service_requested) => {
                     // TODO: Process service request
                 }
-                BlockchainEvent::ServiceRequestApproved(service_request_approved) => {
+                BlockchainEvent::ServiceRequestApproved(_service_request_approved) => {
                     // TODO: Process service request approval
                 }
-                BlockchainEvent::ServiceRequestRejected(service_request_rejected) => {
+                BlockchainEvent::ServiceRequestRejected(_service_request_rejected) => {
                     // TODO: Process service request rejection
                 }
-                BlockchainEvent::ServiceTerminated(service_terminated) => {
+                BlockchainEvent::ServiceTerminated(_service_terminated) => {
                     // TODO: Process service termination
                 }
-                BlockchainEvent::ServiceInitiated(service_initiated) => {
+                BlockchainEvent::ServiceInitiated(_service_initiated) => {
                     // TODO: Process service initiation
                 }
             }
@@ -296,6 +376,14 @@ impl<K: KeyType> Service<K> {
     /// Get the current service state
     pub fn state(&self) -> ServiceState {
         self.state
+    }
+
+    /// Get the pricing models
+    ///
+    /// # Returns
+    /// A clone of the current pricing models vector
+    pub fn get_pricing_models(&self) -> Vec<PricingModel> {
+        self.pricing_models.clone()
     }
 
     /// Add or update a pricing model

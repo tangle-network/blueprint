@@ -3,8 +3,14 @@
 //! This module provides a JSON-RPC server that allows users to query
 //! pricing information and obtain signed price quotes from the operator.
 
-use std::{fmt, net::SocketAddr, sync::Arc};
-
+use super::OperatorInfo;
+use crate::{
+    calculation::calculate_service_price,
+    error::{Error, Result},
+    models::PricingModel,
+    rfq::{RfqProcessor, SignedPriceQuote},
+    types::ResourceRequirement,
+};
 use blueprint_crypto::KeyType;
 use jsonrpsee::{
     core::RpcResult,
@@ -13,22 +19,15 @@ use jsonrpsee::{
 };
 use parity_scale_codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
+use std::{net::SocketAddr, sync::Arc};
 use tracing::{debug, error, info};
-
-use crate::{
-    calculation::{self, PricingContext, calculate_service_price},
-    error::{Error, PricingError, Result},
-    models::PricingModel,
-    rfq::RfqProcessor,
-    types::{Price, ResourceRequirement},
-};
 
 /// RPC API trait for the pricing engine
 #[jsonrpsee::proc_macros::rpc(server)]
-pub trait PricingApi {
+pub trait PricingApi<K: KeyType> {
     /// Get operator information
     #[method(name = "pricing_getOperatorInfo")]
-    fn get_operator_info(&self) -> RpcResult<OperatorInfo>;
+    fn get_operator_info(&self) -> RpcResult<OperatorInfo<K>>;
 
     /// Get available pricing models for the operator
     #[method(name = "pricing_getPricingModels")]
@@ -44,20 +43,7 @@ pub trait PricingApi {
 
     /// Get results from a previously submitted RFQ request
     #[method(name = "pricing_getRfqResults")]
-    fn get_rfq_results(&self, request_id: String) -> RpcResult<RfqResponse>;
-}
-
-/// Operator information returned by the RPC API
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OperatorInfo {
-    /// Operator identifier (public key)
-    pub id: String,
-    /// Operator name
-    pub name: String,
-    /// Operator description
-    pub description: Option<String>,
-    /// Supported blueprint IDs
-    pub supported_blueprints: Vec<String>,
+    fn get_rfq_results(&self, request_id: String) -> RpcResult<RfqResponse<K>>;
 }
 
 /// Pricing model information returned by the RPC API
@@ -116,22 +102,26 @@ pub struct RfqRequest {
 
 /// Response for an RFQ request
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RfqResponse {
+#[serde(bound = "K: KeyType")]
+pub struct RfqResponse<K: KeyType> {
     /// Request ID
     pub request_id: String,
     /// List of quotes received
-    pub quotes: Vec<RfqQuoteInfo>,
+    pub quotes: Vec<RfqQuoteInfo<K>>,
     /// Status of the request
-    pub status: RfqRequestStatus,
+    pub status: RfqRequestStatus<K>,
 }
 
 /// Status of an RFQ request
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RfqRequestStatus {
+#[serde(bound = "K: KeyType")]
+pub enum RfqRequestStatus<K: KeyType> {
     /// Request is pending
     Pending,
-    /// Request completed successfully
+    /// Request completed successfully (no quotes stored)
     Completed,
+    /// Request completed successfully with stored quotes
+    CompletedWithQuotes(Vec<SignedPriceQuote<K>>),
     /// Request timed out
     TimedOut,
     /// Request failed
@@ -140,9 +130,10 @@ pub enum RfqRequestStatus {
 
 /// Quote information from an RFQ response
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RfqQuoteInfo {
+#[serde(bound = "K: KeyType")]
+pub struct RfqQuoteInfo<K: KeyType> {
     /// Provider ID
-    pub provider_id: String,
+    pub provider_id: K::Public,
     /// Provider name
     pub provider_name: String,
     /// Price amount
@@ -158,18 +149,18 @@ pub struct RfqQuoteInfo {
 /// RPC server for the pricing engine
 pub struct RpcServer<K: KeyType> {
     /// Operator information
-    operator_info: OperatorInfo,
+    operator_info: OperatorInfo<K>,
     /// Available pricing models
     pricing_models: Vec<PricingModel>,
     /// RFQ processor for handling RFQ requests
     rfq_processor: Option<Arc<RfqProcessor<K>>>,
     /// Pending RFQ requests
-    pending_rfqs: Arc<std::sync::Mutex<std::collections::HashMap<String, RfqRequestStatus>>>,
+    pending_rfqs: Arc<std::sync::Mutex<std::collections::HashMap<String, RfqRequestStatus<K>>>>,
 }
 
 impl<K: KeyType> RpcServer<K> {
     /// Create a new RPC server
-    pub fn new(operator_info: OperatorInfo, pricing_models: Vec<PricingModel>) -> Self {
+    pub fn new(operator_info: OperatorInfo<K>, pricing_models: Vec<PricingModel>) -> Self {
         Self {
             operator_info,
             pricing_models,
@@ -247,13 +238,8 @@ impl<K: KeyType> RpcServer<K> {
                         )
                     })?;
 
-                // Calculate price
-                let context = PricingContext {
-                    provider_id: "local_operator".to_string(),
-                };
-
-                let price_result = calculate_service_price(&request.requirements, model, &context)
-                    .map_err(|e| {
+                let price_result =
+                    calculate_service_price(&request.requirements, model).map_err(|e| {
                         Self::create_error(102, format!("Price calculation error: {}", e))
                     })?;
 
@@ -280,28 +266,71 @@ impl<K: KeyType> RpcServer<K> {
             let pending = pending_rfqs.clone();
 
             async move {
+                // Log the raw params for debugging
+                debug!("Received RFQ params: {:?}", params);
+
+                // Try to parse as JSON Value first to see the structure
+                let raw_json_value = params.parse::<serde_json::Value>().ok();
+                debug!("Raw JSON value: {:?}", raw_json_value);
+
                 let request = params.parse::<RfqRequest>().map_err(|e| {
+                    // Log detailed error information
+                    error!("Failed to parse RFQ request parameters: {}", e);
                     Self::create_error(200, format!("Failed to parse parameters: {}", e))
                 })?;
 
+                debug!(
+                    "Successfully parsed RFQ request: blueprint={}, requirements={:?}",
+                    request.blueprint_id, request.requirements
+                );
+
+                // Ensure processor is available
                 let processor = processor.ok_or_else(|| {
                     Self::create_error(201, "RFQ processor not configured".to_string())
                 })?;
 
-                // Convert the RPC request to an RFQ request
-                processor
-                    .send_request(request.blueprint_id, request.requirements)
-                    .await
-                    .map_err(|e| Self::create_error(202, format!("RFQ error: {}", e)))?;
-
+                // Generate a unique request ID
                 let request_id = format!("rfq_{}", uuid::Uuid::new_v4());
 
-                // Store the pending request
+                // Store the pending request with initial status
                 pending
                     .lock()
                     .unwrap()
                     .insert(request_id.clone(), RfqRequestStatus::Pending);
 
+                debug!("Creating RFQ for blueprint {}", request.blueprint_id);
+
+                // Convert the RPC request to resource requirements
+                // Create a background task to handle the RFQ to avoid blocking the RPC call
+                let local_request_id = request_id.clone();
+                let local_pending = pending.clone();
+                tokio::spawn(async move {
+                    // Send the RFQ and collect quotes
+                    let result = processor
+                        .send_request(request.blueprint_id, request.requirements)
+                        .await;
+
+                    // Update the request status based on the result
+                    let mut pending_guard = local_pending.lock().unwrap();
+                    match result {
+                        Ok(quotes) => {
+                            *pending_guard.get_mut(&local_request_id).unwrap() =
+                                RfqRequestStatus::CompletedWithQuotes(quotes);
+                        }
+                        Err(e) => match e {
+                            crate::rfq::RfqError::Timeout => {
+                                *pending_guard.get_mut(&local_request_id).unwrap() =
+                                    RfqRequestStatus::TimedOut;
+                            }
+                            _ => {
+                                *pending_guard.get_mut(&local_request_id).unwrap() =
+                                    RfqRequestStatus::Failed(e.to_string());
+                            }
+                        },
+                    }
+                });
+
+                // Return the request ID immediately
                 Ok::<_, ErrorObjectOwned>(request_id)
             }
         })?;
@@ -311,27 +340,97 @@ impl<K: KeyType> RpcServer<K> {
             let pending = pending_rfqs.clone();
 
             async move {
-                let request_id = params.parse::<String>().map_err(|e| {
-                    Self::create_error(300, format!("Failed to parse parameters: {}", e))
-                })?;
+                // Try to parse as JSON Value first to see the structure
+                let raw_json_value = params.parse::<serde_json::Value>().ok();
+                debug!("Raw JSON value: {:?}", raw_json_value);
 
-                // Check if request exists and get status
-                let status = {
-                    let pending_guard = pending.lock().unwrap();
-                    pending_guard
-                        .get(&request_id)
-                        .cloned()
-                        .unwrap_or(RfqRequestStatus::Failed("Request not found".to_string()))
+                // Enhanced parameter parsing to handle both direct string and array formats
+                let request_id = match raw_json_value {
+                    Some(serde_json::Value::String(id)) => {
+                        // Case: parameter is a direct string
+                        debug!("Received request_id as direct string: {}", id);
+                        id
+                    }
+                    Some(serde_json::Value::Array(array)) if !array.is_empty() => {
+                        // Case: parameter is an array [string]
+                        match &array[0] {
+                            serde_json::Value::String(id) => {
+                                debug!("Received request_id as array element: {}", id);
+                                id.clone()
+                            }
+                            _ => {
+                                error!("Invalid request_id format in array");
+                                return Err(Self::create_error(
+                                    200,
+                                    "Invalid request_id format in array".to_string(),
+                                ));
+                            }
+                        }
+                    }
+                    _ => {
+                        // Fallback to standard parsing for backward compatibility
+                        // This will likely fail but provides the same error as before
+                        params.parse::<String>().map_err(|e| {
+                            error!("Failed to parse RFQ request parameters: {}", e);
+                            Self::create_error(200, format!("Failed to parse parameters: {}", e))
+                        })?
+                    }
                 };
 
-                // In a real implementation, we'd retrieve the actual quotes
-                // For now, return an empty response with the correct status
+                // Check if request exists and get status
+                let (status, quotes) = {
+                    let pending_guard = pending.lock().unwrap();
+                    match pending_guard.get(&request_id) {
+                        Some(RfqRequestStatus::CompletedWithQuotes(stored_quotes)) => {
+                            (RfqRequestStatus::Completed, stored_quotes.clone())
+                        }
+                        Some(status @ RfqRequestStatus::Pending) => {
+                            // Return a pending status but don't try to access quotes yet
+                            (status.clone(), Vec::new())
+                        }
+                        Some(status @ RfqRequestStatus::TimedOut) => {
+                            // Return a timed out status
+                            (status.clone(), Vec::new())
+                        }
+                        Some(status @ RfqRequestStatus::Failed(_)) => {
+                            // Return a failed status
+                            (status.clone(), Vec::new())
+                        }
+                        Some(status @ RfqRequestStatus::Completed) => {
+                            // Return a completed status but quotes may be elsewhere
+                            (status.clone(), Vec::new())
+                        }
+                        None => (
+                            RfqRequestStatus::Failed("Request not found".to_string()),
+                            Vec::new(),
+                        ),
+                    }
+                };
+
+                // Convert quotes to the RPC response format
+                let rpc_quotes = quotes
+                    .into_iter()
+                    .map(|quote| RfqQuoteInfo {
+                        provider_id: quote.quote.provider_id,
+                        provider_name: quote.quote.provider_name.clone(),
+                        price: quote.quote.price.value as u64,
+                        currency: quote.quote.price.token.clone(),
+                        model_id: quote.quote.model_id.clone(),
+                        expires_at: quote.quote.expires_at,
+                    })
+                    .collect();
+
+                // Build the response
                 let response = RfqResponse {
-                    request_id: request_id.clone(),
-                    quotes: Vec::new(),
+                    request_id,
+                    quotes: rpc_quotes,
                     status,
                 };
 
+                debug!(
+                    "Returning RFQ response with {} quotes",
+                    response.quotes.len()
+                );
                 Ok::<_, ErrorObjectOwned>(response)
             }
         })?;

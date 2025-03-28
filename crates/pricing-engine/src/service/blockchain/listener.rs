@@ -11,8 +11,7 @@ use super::{
     event::BlockchainEvent,
     types::{SubxtError, TangleClient},
 };
-use crossbeam_channel::Sender;
-use futures::stream::StreamExt;
+use tokio::sync::mpsc::Sender;
 use tracing::{debug, error, info, warn};
 
 use tangle_subxt::subxt::{OnlineClient, PolkadotConfig};
@@ -64,7 +63,7 @@ impl EventListener {
                         Ok(events) => {
                             let blockchain_events = handle_events(events).await;
                             for event in blockchain_events {
-                                if let Err(e) = self.event_tx.send(event) {
+                                if let Err(e) = self.event_tx.send(event).await {
                                     error!("Failed to send event: {}", e);
                                 }
                             }

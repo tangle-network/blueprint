@@ -161,10 +161,7 @@ impl<K: KeyType> NetworkServiceHandle<K> {
         Ok(())
     }
 
-    pub(crate) fn send_network_message(
-        &self,
-        message: NetworkCommandMessage<K>,
-    ) -> Result<(), String> {
+    pub fn send_network_message(&self, message: NetworkCommandMessage<K>) -> Result<(), String> {
         self.sender.send_message(message)
     }
 

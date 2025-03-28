@@ -331,17 +331,16 @@ impl BlueprintEnvironment {
     pub fn libp2p_start_network<K: blueprint_crypto::KeyType>(
         &self,
         network_config: blueprint_networking::NetworkConfig<K>,
-        allowed_keys: blueprint_networking::service::AllowedKeys<K>,
-        allowed_keys_rx: crossbeam_channel::Receiver<blueprint_networking::AllowedKeys<K>>,
+        whitelist: blueprint_networking::discovery::peers::WhitelistedKeys<K>,
+        whitelist_rx: crossbeam_channel::Receiver<
+            blueprint_networking::discovery::peers::WhitelistedKeys<K>,
+        >,
     ) -> Result<
         blueprint_networking::service_handle::NetworkServiceHandle<K>,
         crate::error::RunnerError,
     > {
-        let networking_service = blueprint_networking::NetworkService::new(
-            network_config,
-            allowed_keys,
-            allowed_keys_rx,
-        )?;
+        let networking_service =
+            blueprint_networking::NetworkService::new(network_config, whitelist, whitelist_rx)?;
 
         let handle = networking_service.start();
 

@@ -2,29 +2,14 @@
 //!
 //! This module implements the core price calculation algorithms for various pricing models.
 
-use parity_scale_codec::{Decode, Encode};
-use scale_info::TypeInfo;
-
-#[cfg(feature = "std")]
-use serde::{Deserialize, Serialize};
-
 use crate::error::{PricingError, Result};
 use crate::models::{PricingModel, PricingModelType};
 use crate::types::{Price, ResourceRequirement};
-
-/// Context for price calculation
-#[derive(Debug, Clone, Encode, Decode, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct PricingContext {
-    /// Provider identifier
-    pub provider_id: String,
-}
 
 /// Calculate service price based on resource requirements and pricing model
 pub fn calculate_service_price(
     requirements: &[ResourceRequirement],
     model: &PricingModel,
-    context: &PricingContext,
 ) -> Result<Price> {
     match model.model_type {
         PricingModelType::Fixed => {

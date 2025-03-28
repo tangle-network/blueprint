@@ -8,10 +8,7 @@ use {
     thiserror::Error,
 };
 
-use jsonrpsee::{
-    core::{RegisterMethodError, StringError},
-    types::ErrorObjectOwned,
-};
+use jsonrpsee::{core::RegisterMethodError, types::ErrorObjectOwned};
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
@@ -42,6 +39,10 @@ pub enum Error {
     #[cfg_attr(feature = "std", error("RPC error: {0}"))]
     Rpc(#[from] ErrorObjectOwned),
 
+    /// RPC client error
+    #[cfg_attr(feature = "std", error("RPC client error: {0}"))]
+    RpcClient(String),
+
     /// Register method error
     #[cfg_attr(feature = "std", error("Register method error: {0}"))]
     RegisterMethod(#[from] RegisterMethodError),
@@ -68,6 +69,7 @@ impl core::fmt::Display for Error {
             Error::ServiceShutdown(msg) => write!(f, "Service shutdown error: {}", msg),
             Error::ChainConnection(msg) => write!(f, "Chain connection error: {}", msg),
             Error::Rpc(msg) => write!(f, "RPC error: {}", msg),
+            Error::RpcClient(msg) => write!(f, "RPC client error: {}", msg),
             Error::Codec(msg) => write!(f, "Codec error: {}", msg),
             Error::Io(msg) => write!(f, "IO error: {}", msg),
             Error::Other(msg) => write!(f, "{}", msg),

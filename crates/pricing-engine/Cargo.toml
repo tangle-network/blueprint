@@ -8,30 +8,39 @@ homepage.workspace = true
 repository.workspace = true
 description = "Tangle Cloud Pricing Engine for service offerings"
 
+[[bin]]
+name = "pricing-service"
+path = "bin/pricing-service.rs"
+
 [dependencies]
 # Blueprint dependencies
 blueprint-core = { workspace = true }
-blueprint-std = { workspace = true }
 blueprint-crypto = { workspace = true }
+blueprint-crypto-core = { workspace = true }
+blueprint-keystore = { workspace = true, features = ["sp-core"] }
 blueprint-networking = { workspace = true }
+blueprint-runner = { workspace = true, features = ["std"] }
+blueprint-std = { workspace = true }
 
 # Misc dependencies
-serde = { workspace = true, features = ["derive"], optional = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 log = { workspace = true }
 scale-info = { workspace = true, features = ["derive"] }
 parity-scale-codec = { workspace = true, features = ["derive"] }
-uuid = { version = "1.3", features = ["v4"] }
-once_cell = "1.17"
+uuid = { workspace = true, features = ["v4"] }
+once_cell = { workspace = true }
 
 # Substrate RPC and runtime API dependencies
-jsonrpsee = { workspace = true, features = ["server", "macros"] }
+jsonrpsee = { workspace = true, features = ["server", "macros", "http-client"] }
 
 # Use tangle-subxt for blockchain interaction
 tangle-subxt = { workspace = true, features = ["std"] }
 
 # Substrate chain
-sp-core = { workspace = true }
+sp-core = { workspace = true, features = ["serde"] }
 
 # Async
 futures = { workspace = true, features = ["thread-pool"] }
@@ -39,22 +48,24 @@ tokio = { workspace = true, features = ["full"] }
 async-trait = { workspace = true }
 
 # Networking
-rand = "0.8.5"
-bincode = "1.3.3"
-tracing = "0.1.37"
-crossbeam-channel = "0.5.8"
+rand = { workspace = true }
+bincode = { workspace = true }
+tracing = { workspace = true }
+crossbeam-channel = { workspace = true }
 
 # P2P networking for RFQ and gossip
-libp2p = { version = "0.52", features = ["gossipsub", "identify", "kad", "noise", "yamux", "tcp", "tokio", "dns"] }
-base64 = "0.21"
-ed25519-dalek = "2.0"
-sha2 = "0.10"
-asynchronous-codec = "0.6"
-unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
-bs58 = "0.5"
+libp2p = { workspace = true, features = ["gossipsub", "identify", "kad", "noise", "yamux", "tcp", "tokio", "dns"] }
+serde_with = "3.12.0"
+
+# Logging
+tracing-subscriber = { workspace = true }
+time = "0.3.41"
 
 [dev-dependencies]
-simple_logger = "4.2"
+chrono = { workspace = true }
+hex = { workspace = true }
+serial_test = { workspace = true, features = ["async"] }
+blueprint-networking = { workspace = true, features = ["testing"] }
 
 [features]
 default = ["std"]
@@ -63,7 +74,10 @@ std = [
     "serde/std",
     "scale-info/std",
     "parity-scale-codec/std",
+    "sp-core/std",
     "blueprint-std/std",
     "blueprint-crypto/std",
+    "blueprint-crypto-core/std",
     "blueprint-networking/std",
+    "blueprint-keystore/std",
 ]

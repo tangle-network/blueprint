@@ -217,6 +217,64 @@ impl PricingModel {
         self.billing_period = Some(period);
         self
     }
+
+    /// Calculate price for resources based on this pricing model
+    pub fn calculate_price(
+        &self,
+        requirements: &[ResourceRequirement],
+    ) -> Result<Price, PricingError> {
+        match self.model_type {
+            PricingModelType::Fixed => {
+                // For fixed pricing, we simply return the base price
+                if let Some(base_price) = &self.base_price {
+                    Ok(base_price.clone())
+                } else {
+                    Err(PricingError::CalculationError(
+                        "Fixed pricing model must have a base price".to_string(),
+                    ))
+                }
+            }
+            PricingModelType::Usage | PricingModelType::Tiered => {
+                // Start with base price if any
+                let mut total = if let Some(base_price) = &self.base_price {
+                    base_price.clone()
+                } else {
+                    // Default to zero with TNT token
+                    Price {
+                        value: 0,
+                        token: "TNT".to_string(),
+                    }
+                };
+
+                // Handle resource requirements
+                for req in requirements {
+                    // Find matching resource pricing
+                    let pricing = self.resource_pricing.iter().find(|p| p.unit == req.unit);
+
+                    if let Some(pricing) = pricing {
+                        // Calculate price for this resource
+                        let price = pricing.calculate_price(req.quantity as u128)?;
+
+                        // Add to total
+                        if price.token == total.token {
+                            total.value = total.value.saturating_add(price.value);
+                        } else {
+                            // Different tokens, can't add directly
+                            return Err(PricingError::TokenMismatch(
+                                total.token.clone(),
+                                price.token.clone(),
+                            ));
+                        }
+                    } else {
+                        // Resource not priced, just skip it
+                        continue;
+                    }
+                }
+
+                Ok(total)
+            }
+        }
+    }
 }
 
 /// Trait for pricing strategies

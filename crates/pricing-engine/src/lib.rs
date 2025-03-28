@@ -20,8 +20,11 @@ pub mod service;
 #[cfg(feature = "std")]
 pub mod rfq;
 
+#[cfg(test)]
+mod tests;
+
 // Re-exports
-pub use calculation::{PricingContext, calculate_service_price};
+pub use calculation::calculate_service_price;
 pub use error::{Error, PricingError, Result};
 pub use models::PricingModel;
 #[cfg(feature = "std")]
