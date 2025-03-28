@@ -1,0 +1,22 @@
+{
+  "proxy_admin": "0x18e317a7d70d8fbf8e6e893616b52390ebbdb629",
+  "delegation_manager": "0xcace1b78160ae76398f486c8a18044da0d66d86d",
+  "delegation_manager_impl": "0xe3011a37a904ab90c8881a99bd1f6e21401f1522",
+  "avs_directory": "0xf8e31cb472bc70500f08cd84917e5a1912ec8397",
+  "avs_directory_impl": "0x457ccf29090fe5a24c19c1bc95f492168c0eafdb",
+  "strategy_manager": "0xc96304e3c037f81da488ed9dea1d8f2a48278a75",
+  "strategy_manager_impl": "0x525c7063e7c20997baae9bda922159152d0e8417",
+  "eigen_pod_manager": "0x5bf5b11053e734690269c6b9d438f8c9d48f528a",
+  "eigen_pod_manager_impl": "0xb82008565fdc7e44609fa118a4a681e92581e680",
+  "allocation_manager": "0xd0141e899a65c95a556fe2b27e5982a6de7fdd7a",
+  "allocation_manager_impl": "0x5fc748f1feb28d7b76fa1c6b07d8ba2d5535177c",
+  "rewards_coordinator": "0x22753e4264fddc6181dc7cce468904a80a363e44",
+  "rewards_coordinator_impl": "0x2a810409872afc346f9b5b26571fd6ec42ea4849",
+  "eigen_pod_beacon": "0xfaaddc93baf78e89dcf37ba67943e1be8f37bb8c",
+  "pauser_registry": "0xab16a69a5a8c12c732e0deff4be56a70bb64c926",
+  "strategy_factory": "0x3347b4d90ebe72befb30444c9966b2b990ae9fcb",
+  "strategy_factory_impl": "0x38a024c0b412b9d1db8bc398140d00f5af3093d4",
+  "strategy_beacon": "0x40918ba7f132e0acba2ce4de4c4baf9bd2d7d849",
+  "permission_controller": "0x3aade2dcd2df6a8cac689ee797591b2913658659",
+  "permission_controller_impl": "0x1f10f3ba7acb61b2f50b9d6ddcf91a6f787c0e82"
+}

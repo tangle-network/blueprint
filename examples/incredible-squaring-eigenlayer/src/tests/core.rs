@@ -49,6 +49,19 @@ mod delegation_manager {
     );
 }
 
+pub mod iallocation_manager {
+    use super::AllocationManager::OperatorSet;
+    use super::sol;
+    use super::{Deserialize, Serialize};
+    sol!(
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug, Serialize, Deserialize)]
+        IAllocationManager,
+        "dependencies/eigenlayer-middleware-0.5.4/out/IAllocationManager.sol/IAllocationManager.json"
+    );
+}
+
 use AllocationManager::OperatorSet;
 
 sol!(
@@ -287,12 +300,8 @@ pub async fn deploy_core_contracts(
     let permission_controller_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
 
     // Deploy PauserRegistry
-    let pauser_registry = PauserRegistry::deploy(
-        &wallet,
-        Vec::<Address>::new(), // Empty array for pausers
-        proxy_admin_addr,      // ProxyAdmin as the unpauser
-    )
-    .await?;
+    let pauser_registry =
+        PauserRegistry::deploy(&wallet, Vec::<Address>::new(), proxy_admin_addr).await?;
     let pauser_registry_addr = pauser_registry.address().clone();
     info!("PauserRegistry deployed at: {}", pauser_registry_addr);
 

@@ -180,6 +180,7 @@ pub async fn deploy_avs_contracts(
     delegation_manager_addr: Address,
     pauser_registry_addr: Address,
     rewards_coordinator_addr: Address,
+    strategy_factory_addr: Address,
     task_generator_addr: Address,
     aggregator_addr: Address,
     task_response_window_block: u32,
@@ -190,12 +191,11 @@ pub async fn deploy_avs_contracts(
 
     info!("Deployer address: {}", deployer_address);
 
-    // let mock_erc20_addr = ERC20_MOCK_ADDR;
-    // info!("Initializing token...");
-    // let mock_erc20 = MockERC20::deploy(wallet.clone()).await?;
+    info!("Initializing token...");
+    let mock_erc20 = MockERC20::deploy(wallet.clone()).await?;
     // let &mock_erc20_addr = mock_erc20.address();
-    // let token = mock_erc20;
-    let token = MockERC20::new(TOKEN_ADDR, wallet.clone());
+    let token = mock_erc20;
+    // let token = MockERC20::new(TOKEN_ADDR, wallet.clone());
 
     let mint_call = token.mint(deployer_address, U256::from(1000000000000000000u64));
     let mint_receipt = get_receipt(mint_call).await?;
@@ -232,9 +232,9 @@ pub async fn deploy_avs_contracts(
     // }
     // info!("Minted tokens to operator: {}", operator_addr);
 
-    // let strategy_factory = StrategyFactory::new(STRATEGY_FACTORY_ADDR, wallet.clone());
+    let strategy_factory = StrategyFactory::new(strategy_factory_addr, wallet.clone());
 
-    // Check the strategy manager address
+    // // Check the strategy manager address
     // let strategy_manager_addr = strategy_factory.strategyManager().call().await?._0;
     // info!("StrategyManager address: {}", strategy_manager_addr);
 
@@ -246,7 +246,7 @@ pub async fn deploy_avs_contracts(
 
     // // Check if the strategy factory is allowed to add strategies
     // let can_add_strategies = strategy_manager_owner == deployer_address
-    //     || strategy_manager_owner == STRATEGY_FACTORY_ADDR;
+    //     || strategy_manager_owner == strategy_factory_addr;
     // info!("Can add strategies: {}", can_add_strategies);
 
     // let is_paused = strategy_factory.paused_0(0).call().await?._0;
@@ -255,21 +255,26 @@ pub async fn deploy_avs_contracts(
     // let beacon = strategy_factory.strategyBeacon().call().await?._0;
     // info!("StrategyFactory beacon: {}", beacon);
 
-    // let strategy_beacon = StrategyBeacon::new(beacon, wallet.clone());
-    // let strategy_beacon_addr = strategy_beacon.implementation().call().await?._0;
-    // info!("StrategyBeacon checked at: {}", strategy_beacon_addr);
-
     // let owner = strategy_factory.owner().call().await?._0;
     // info!("StrategyFactory owner: {}", owner);
 
-    // let new_strategy_call = strategy_factory.deployNewStrategy(token.address().clone());
-    // let new_strategy_receipt = get_receipt(new_strategy_call).await?;
-    // info!("Strategy deployed with receipt: {:?}", new_strategy_receipt);
-    // let strategy_addr = new_strategy_receipt.contract_address.unwrap();
-    let squaring_strategy = IStrategy::new(STRATEGY_ADDR, wallet.clone());
-
-    // let deployed_strategies = vec![squaring_strategy];
-    // let num_strategies = deployed_strategies.len();
+    let new_strategy_call = strategy_factory.deployNewStrategy(token.address().clone());
+    let new_strategy_receipt = get_receipt(new_strategy_call).await?;
+    let strategy_addr = if let Some(last_log) = new_strategy_receipt.logs().last() {
+        let data = last_log.data().data.clone();
+        if data.len() >= 32 {
+            // The address is in the last 20 bytes of the 32-byte data field
+            let mut addr_bytes = [0u8; 20];
+            addr_bytes.copy_from_slice(&data[12..32]);
+            Address::from_slice(&addr_bytes)
+        } else {
+            return Err(color_eyre::eyre::eyre!("Invalid log data format").into());
+        }
+    } else {
+        return Err(eyre!("Failed to get strategy address from receipt"));
+    };
+    info!("Strategy deployed at: {}", strategy_addr);
+    let squaring_strategy = IStrategy::new(strategy_addr, wallet.clone());
 
     // Deploy ProxyAdmin
     info!("Deploying ProxyAdmin...");

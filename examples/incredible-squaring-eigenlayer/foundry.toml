@@ -1,5 +1,13 @@
 [profile.default]
 evm_version = "shanghai"
+solc_version = "0.8.27"
+gas_limit = 5000000000
+deny_warnings = false
+via_ir = false
+optimizer = true
+optimizer_runs = 100
+
+
 src = "contracts/src"
 test = "contracts/test"
 out = "contracts/out"
@@ -25,5 +33,3 @@ eigenlayer-middleware = { version = "0.5.4", git = "https://github.com/Layr-Labs
 # eigenlayer-middleware = { version = "0.5.4", git = "https://github.com/Layr-Labs/eigenlayer-middleware" }
 forge-std = "1.9.6"
 "@openzeppelin-contracts" = "4.7.0"
-
-# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

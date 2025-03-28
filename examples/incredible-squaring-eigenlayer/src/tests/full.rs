@@ -6,12 +6,19 @@ use crate::contexts::x_square::EigenSquareContext;
 use crate::contracts::SquaringTask;
 use crate::jobs::compute_x_square::xsquare_eigen;
 use crate::jobs::initialize_task::initialize_bls_task;
+use crate::tests::core::IAllocationManagerTypes::CreateSetParams;
+use crate::tests::core::{
+    AllocationManager, DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData,
+    EigenPodManagerConfig, PermissionController, RewardsCoordinatorConfig, StrategyFactoryConfig,
+    StrategyManagerConfig,
+};
 use crate::tests::deploy::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
 use crate::tests::deploy::IStakeRegistryTypes::StrategyParams;
-use crate::tests::deploy::SlashingRegistryCoordinator;
+use crate::tests::deploy::{DeployedContracts, SlashingRegistryCoordinator};
+use crate::tests::permissions::setup_avs_permissions;
 use alloy_network::EthereumWallet;
 use alloy_primitives::aliases::U96;
-use alloy_primitives::{Address, Bytes, U256};
+use alloy_primitives::{Address, Bytes, U256, address};
 use alloy_provider::Provider;
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_sdk::evm::producer::{PollingConfig, PollingProducer};
@@ -58,14 +65,79 @@ async fn run_eigenlayer_incredible_squaring_test(
 
     let aggregator_private_key = AGGREGATOR_PRIVATE_KEY.to_string();
     let private_key = PRIVATE_KEY.to_string();
-    let contract_addresses = harness.eigenlayer_contract_addresses;
-    let delegation_manager_address = contract_addresses.delegation_manager_address;
-    let permission_controller_address = contract_addresses.permission_controller_address;
-    let allocation_manager_address = contract_addresses.allocation_manager_address;
-    let avs_directory_addr = contract_addresses.avs_directory_address;
-    let rewards_coordinator_addr = contract_addresses.rewards_coordinator_address;
-    let pauser_registry_addr = PAUSER_REGISTRY_ADDR;
-    let strategy_manager_addr = contract_addresses.strategy_manager_address;
+    // let contract_addresses = harness.eigenlayer_contract_addresses;
+    // let delegation_manager_address = contract_addresses.delegation_manager_address;
+    // let permission_controller_address = contract_addresses.permission_controller_address;
+    // let allocation_manager_address = contract_addresses.allocation_manager_address;
+    // let avs_directory_addr = contract_addresses.avs_directory_address;
+    // let rewards_coordinator_addr = contract_addresses.rewards_coordinator_address;
+    // let pauser_registry_addr = PAUSER_REGISTRY_ADDR;
+    // let strategy_manager_addr = contract_addresses.strategy_manager_address;
+
+    let core_config = DeploymentConfigData {
+        strategy_manager: StrategyManagerConfig {
+            init_paused_status: U256::from(0),
+            init_withdrawal_delay_blocks: 1u32,
+        },
+        delegation_manager: DelegationManagerConfig {
+            init_paused_status: U256::from(0),
+            withdrawal_delay_blocks: 0u32,
+        },
+        eigen_pod_manager: EigenPodManagerConfig {
+            init_paused_status: U256::from(0),
+        },
+        rewards_coordinator: RewardsCoordinatorConfig {
+            init_paused_status: U256::from(0),
+            max_rewards_duration: 864000u32,
+            max_retroactive_length: 432000u32,
+            max_future_length: 86400u32,
+            genesis_rewards_timestamp: 1672531200u32,
+            updater: harness.owner_account(),
+            activation_delay: 0u32,
+            calculation_interval_seconds: 86400u32,
+            global_operator_commission_bips: 1000u16,
+        },
+        strategy_factory: StrategyFactoryConfig {
+            init_paused_status: U256::from(0),
+        },
+    };
+
+    let core_contracts = crate::tests::core::deploy_core_contracts(
+        &http_endpoint,
+        &private_key,
+        harness.owner_account(),
+        core_config,
+        Some(address!("00000000219ab540356cBB839Cbe05303d7705Fa")),
+        Some(1_564_000),
+    )
+    .await
+    .unwrap();
+
+    let DeployedCoreContracts {
+        proxy_admin: proxy_admin_address,
+        delegation_manager: delegation_manager_address,
+        delegation_manager_impl: delegation_manager_impl_address,
+        avs_directory: avs_directory_address,
+        avs_directory_impl: avs_directory_impl_address,
+        strategy_manager: strategy_manager_address,
+        strategy_manager_impl: strategy_manager_impl_address,
+        eigen_pod_manager: eigen_pod_manager_address,
+        eigen_pod_manager_impl: eigen_pod_manager_impl_address,
+        allocation_manager: allocation_manager_address,
+        allocation_manager_impl: allocation_manager_impl_address,
+        rewards_coordinator: rewards_coordinator_address,
+        rewards_coordinator_impl: rewards_coordinator_impl_address,
+        eigen_pod_beacon: eigen_pod_beacon_address,
+        pauser_registry: pauser_registry_address,
+        strategy_factory: strategy_factory_address,
+        strategy_factory_impl: strategy_factory_impl_address,
+        strategy_beacon: strategy_beacon_address,
+        permission_controller: permission_controller_address,
+        permission_controller_impl: permission_controller_impl_address,
+    } = core_contracts;
+
+    let core_contracts_json = serde_json::to_string_pretty(&core_contracts).unwrap();
+    std::fs::write("core_contracts.json", core_contracts_json).unwrap();
 
     let avs_contracts = crate::tests::deploy::deploy_avs_contracts(
         &env.http_rpc_endpoint,
@@ -76,10 +148,11 @@ async fn run_eigenlayer_incredible_squaring_test(
         harness.owner_account(),
         permission_controller_address,
         allocation_manager_address,
-        avs_directory_addr,
+        avs_directory_address,
         delegation_manager_address,
-        pauser_registry_addr,
-        rewards_coordinator_addr,
+        pauser_registry_address,
+        rewards_coordinator_address,
+        strategy_factory_address,
         harness.task_generator_account(),
         harness.aggregator_account(),
         10,
@@ -87,22 +160,30 @@ async fn run_eigenlayer_incredible_squaring_test(
     .await
     .unwrap();
 
+    let DeployedContracts {
+        proxy_admin: proxy_admin_address,
+        squaring_service_manager: service_manager_address,
+        squaring_task_manager: task_manager_address,
+        squaring_service_manager_impl: service_manager_impl_address,
+        registry_coordinator: registry_coordinator_address,
+        bls_apk_registry: bls_apk_registry_address,
+        index_registry: index_registry_address,
+        stake_registry: stake_registry_address,
+        operator_state_retriever: operator_state_retriever_address,
+        strategy: strategy_address,
+        pauser_registry: pauser_registry_address,
+        token: token_address,
+        instant_slasher: instant_slasher_address,
+        socket_registry: socket_registry_address,
+    } = avs_contracts;
+
+    let avs_contracts_json = serde_json::to_string_pretty(&avs_contracts).unwrap();
+    std::fs::write("avs_contracts.json", avs_contracts_json).unwrap();
     info!("AVS Contracts deployed at: {:?}", avs_contracts);
 
-    let service_manager_address = avs_contracts.squaring_service_manager;
-    let task_manager_address = avs_contracts.squaring_task_manager;
-
-    // Ensure we have the correct Service Manager Address
-    let env_service_manager = harness
-        .eigenlayer_contract_addresses
-        .service_manager_address;
-    assert_eq!(env_service_manager, service_manager_address);
-
+    info!("Setting AVS permissions and Metadata...");
     // Extract necessary data from harness before moving it
     let ws_endpoint = harness.ws_endpoint.to_string();
-    let registry_coordinator_address = harness
-        .eigenlayer_contract_addresses
-        .registry_coordinator_address;
     let accounts = harness.accounts().to_vec();
     let task_generator_address = harness.task_generator_account();
     let signer: PrivateKeySigner = AGGREGATOR_PRIVATE_KEY
@@ -113,40 +194,59 @@ async fn run_eigenlayer_incredible_squaring_test(
     let wallet = EthereumWallet::from(signer);
     let provider = get_wallet_provider_http(&http_endpoint, wallet.clone());
 
+    match setup_avs_permissions(
+        &core_contracts,
+        &avs_contracts,
+        &signer_wallet,
+        harness.owner_account(),
+        "https://github.com/tangle-network/avs/blob/main/metadata.json".to_string(),
+    )
+    .await
+    {
+        Ok(_) => info!("Successfully set up AVS permissions"),
+        Err(e) => {
+            error!("Failed to set up AVS permissions: {}", e);
+            panic!("Failed to set up AVS permissions: {}", e);
+        },
+    }
+
     let registry_coordinator =
         SlashingRegistryCoordinator::new(registry_coordinator_address, signer_wallet.clone());
-    let registry_owner = registry_coordinator.owner().call().await.unwrap();
-    error!("Registry owner: {}", registry_owner._0);
-    // assert_eq!(registry_owner._0, harness.owner_account());
+    // let registry_owner = registry_coordinator.owner().call().await.unwrap();
+    // error!("Registry owner: {}", registry_owner._0);
+    // // assert_eq!(registry_owner._0, harness.owner_account());
 
-    // Check if the AVS is properly set
-    let avs_address = registry_coordinator.avs().call().await.unwrap();
-    error!("AVS address: {}", avs_address._0);
+    // // Check if the AVS is properly set
+    // let avs_address = registry_coordinator.avs().call().await.unwrap()._0;
+    // error!("AVS address: {}", avs_address);
+    // assert_eq!(avs_address, service_manager_address);
 
-    // Check if the strategy is valid
-    let strategy_addr = STRATEGY_ADDR;
-    let strategy_registry = registry_coordinator.stakeRegistry().call().await.unwrap();
-    error!("Stake Registry address: {}", strategy_registry._0);
+    // // Check if the strategy is valid
+    // let strategy_addr = STRATEGY_ADDR;
+    // let strategy_registry = registry_coordinator.stakeRegistry().call().await.unwrap();
+    // error!("Stake Registry address: {}", strategy_registry._0);
 
-    // Check if there's already a quorum
-    let quorum_count = registry_coordinator.quorumCount().call().await.unwrap();
-    error!("Current quorum count: {}", quorum_count._0);
+    // // Check if there's already a quorum
+    // let quorum_count = registry_coordinator.quorumCount().call().await.unwrap();
+    // error!("Current quorum count: {}", quorum_count._0);
 
-    // Ensure the AVS is set correctly before creating the quorum
-    if avs_address._0 == Address::ZERO {
-        error!("AVS address is not set, setting it now");
-        let set_avs_result = registry_coordinator
-            .setAVS(service_manager_address)
-            .send()
-            .await;
-        match set_avs_result {
-            Ok(receipt) => {
-                let tx_receipt = receipt.get_receipt().await.unwrap();
-                error!("Set AVS transaction: {:?}", tx_receipt.transaction_hash);
-            }
-            Err(e) => error!("Failed to set AVS: {}", e),
-        }
-    }
+    // // ============= ALLOCATION DEBUGGING
+    // // Check if the AVS is properly set
+    // let avs_address = registry_coordinator.avs().call().await.unwrap()._0;
+    // error!("AVS address: {}", avs_address);
+    // assert_eq!(avs_address, service_manager_address);
+
+    // // Get the AllocationManager address from the registry coordinator
+    // let allocation_manager_address = registry_coordinator
+    //     .allocationManager()
+    //     .call()
+    //     .await
+    //     .unwrap()
+    //     ._0;
+    // error!("AllocationManager address: {}", allocation_manager_address);
+
+    // let allocation_manager =
+    //     AllocationManager::new(allocation_manager_address, signer_wallet.clone());
 
     // Try with simpler parameters
     let operator_set_param = OperatorSetParam {
@@ -154,42 +254,37 @@ async fn run_eigenlayer_incredible_squaring_test(
         kickBIPsOfOperatorStake: 150,
         kickBIPsOfTotalStake: 100,
     };
-    let minimum_stake: U96 = U96::from(0);
 
-    // Use a different strategy approach
-    let strategy_params = vec![StrategyParams {
-        strategy: strategy_addr,
+    let strategy_params = StrategyParams {
+        strategy: strategy_address,
         multiplier: U96::from(1),
-    }];
+    };
 
-    error!(
+    let minimum_stake = U96::from(0);
+
+    info!(
         "Attempting to create quorum with strategy: {}",
-        strategy_addr
+        strategy_address
     );
 
     // Try to create the quorum with error handling
-    let stake_quorum_result = registry_coordinator
-        .createTotalDelegatedStakeQuorum(operator_set_param, minimum_stake, strategy_params)
-        .send()
-        .await;
-
-    match stake_quorum_result {
+    let create_quorum_call = registry_coordinator
+        .createTotalDelegatedStakeQuorum(operator_set_param, minimum_stake, vec![strategy_params]);
+    let create_quorum_receipt = get_receipt(create_quorum_call).await;
+    match create_quorum_receipt {
         Ok(receipt) => {
-            let tx_receipt = receipt.get_receipt().await.unwrap();
+            if !receipt.status() {
+                error!("Failed to create quorum: {:?}", receipt);
+                panic!("Failed to create quorum");
+            }
             info!(
-                "Total Delegated Stake Quorum created: {:?}",
-                tx_receipt.transaction_hash
+                "Quorum created with transaction hash: {:?}",
+                receipt.transaction_hash
             );
         }
         Err(e) => {
             error!("Failed to create quorum: {}", e);
-
-            // If there's already a quorum, we can skip this step and continue
-            if quorum_count._0 > 0 {
-                info!("Quorum already exists, continuing with existing quorum");
-            } else {
-                panic!("Failed to create quorum and no existing quorum found");
-            }
+            panic!("Failed to create quorum: {}", e);
         }
     }
 

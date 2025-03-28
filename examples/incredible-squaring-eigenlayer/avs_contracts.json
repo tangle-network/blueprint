@@ -1,0 +1,16 @@
+{
+  "proxy_admin": "0x01c1def3b91672704716159c9041aeca392ddffb",
+  "squaring_service_manager": "0x638a246f0ec8883ef68280293ffe8cfbabe61b44",
+  "squaring_service_manager_impl": "0x5d42ebdbba61412295d7b0302d6f50ac449ddb4f",
+  "squaring_task_manager": "0x5302e909d1e93e30f05b5d6eea766363d14f9892",
+  "registry_coordinator": "0x4bf010f1b9beda5450a8dd702ed602a104ff65ee",
+  "bls_apk_registry": "0x96f3ce39ad2bfdcf92c0f6e2c2cabf83874660fc",
+  "index_registry": "0xde2bd2ffea002b8e84adea96e5976af664115e2c",
+  "stake_registry": "0xfd6f7a6a5c21a3f503ebae7a473639974379c351",
+  "operator_state_retriever": "0xc582bc0317dbb0908203541971a358c44b1f3766",
+  "strategy": "0xf8a8b047683062b5bbbbe9d104c9177d6b6cc086",
+  "pauser_registry": "0xefab0beb0a557e452b398035ea964948c750b2fd",
+  "token": "0xd42912755319665397ff090fbb63b1a31ae87cee",
+  "instant_slasher": "0xe1fd27f4390dcbe165f4d60dbf821e4b9bb02ded",
+  "socket_registry": "0x870526b7973b56163a6997bb7c886f5e4ea53638"
+}

@@ -81,16 +81,16 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
 impl Default for EigenlayerProtocolSettings {
     fn default() -> Self {
         Self {
-            allocation_manager_address: address!("8a791620dd6260079bf849dc5567adc3f2fdc318"),
-            registry_coordinator_address: address!("22753e4264fddc6181dc7cce468904a80a363e44"),
-            operator_state_retriever_address: address!("ab16a69a5a8c12c732e0deff4be56a70bb64c926"),
-            delegation_manager_address: address!("cf7ed3acca5a467e9e704c703e8d87f634fb0fc9"),
-            service_manager_address: address!("f8e31cb472bc70500f08cd84917e5a1912ec8397"), // Depends on AVS
-            stake_registry_address: address!("c96304e3c037f81da488ed9dea1d8f2a48278a75"), // Differs when using ECDSA Base
-            strategy_manager_address: address!("a513e6e4b8f2a923d98304ec87f64353c4d5c853"),
-            avs_directory_address: address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e"),
-            rewards_coordinator_address: address!("0dcd1bf9a1b36ce34237eeafef220932846bcd82"),
-            permission_controller_address: address!("4ed7c70f96b99c776995fb64377f0d4ab3b0e1c1"),
+            allocation_manager_address: address!("d0141e899a65c95a556fe2b27e5982a6de7fdd7a"),
+            registry_coordinator_address: address!("4bf010f1b9beda5450a8dd702ed602a104ff65ee"),
+            operator_state_retriever_address: address!("c582bc0317dbb0908203541971a358c44b1f3766"),
+            delegation_manager_address: address!("cace1b78160ae76398f486c8a18044da0d66d86d"),
+            service_manager_address: address!("638a246f0ec8883ef68280293ffe8cfbabe61b44"), // Depends on AVS
+            stake_registry_address: address!("fd6f7a6a5c21a3f503ebae7a473639974379c351"), // Differs when using ECDSA Base
+            strategy_manager_address: address!("c96304e3c037f81da488ed9dea1d8f2a48278a75"),
+            avs_directory_address: address!("f8e31cb472bc70500f08cd84917e5a1912ec8397"),
+            rewards_coordinator_address: address!("22753e4264fddc6181dc7cce468904a80a363e44"),
+            permission_controller_address: address!("3aade2dcd2df6a8cac689ee797591b2913658659"),
         }
     }
 }
