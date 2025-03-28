@@ -97,6 +97,7 @@ async fn register_bls_impl(
     let permission_controller_address = contract_addresses.permission_controller_address;
     let service_manager_address = contract_addresses.service_manager_address;
     let registry_coordinator_address = contract_addresses.registry_coordinator_address;
+    let strategy_address = contract_addresses.strategy_address;
 
     info!("Eigenlayer BLS Registration: Fetching ECDSA Keys");
     let ecdsa_public = env.keystore().first_local::<K256Ecdsa>()?;
@@ -158,31 +159,6 @@ async fn register_bls_impl(
         env.http_rpc_endpoint.clone(),
     );
 
-    let set_count = el_chain_reader
-        .get_num_operator_sets_for_operator(operator_address)
-        .await
-        .unwrap();
-    warn!("Set count: {:?}", set_count);
-
-    let avs_directory = AVSDirectory::new(
-        avs_directory_address,
-        get_provider_http(&env.http_rpc_endpoint),
-    );
-
-    let owner = avs_directory.owner().call().await.unwrap();
-    warn!("Owner: {:?}", owner._0);
-
-    let hash = el_chain_reader
-        .calculate_operator_avs_registration_digest_hash(
-            operator_address,
-            service_manager_address,
-            digest_hash,
-            expiry,
-        )
-        .await
-        .unwrap();
-    warn!("Hash: {:?}", hash);
-
     info!("Eigenlayer BLS Registration: Creating EL Chain Writer");
     let el_writer = ELChainWriter::new(
         strategy_manager_address,
@@ -205,8 +181,12 @@ async fn register_bls_impl(
         staker_opt_out_window_blocks: Some(staker_opt_out_window_blocks),
     };
 
+    // let tx_hash = el_writer
+    //     .register_as_operator_preslashing(operator_details)
+    //     .await
+    //     .map_err(EigenlayerError::ElContracts)?;
     let tx_hash = el_writer
-        .register_as_operator_preslashing(operator_details)
+        .register_as_operator(operator_details)
         .await
         .map_err(EigenlayerError::ElContracts)?;
     let registration_receipt = wait_transaction(&env.http_rpc_endpoint, tx_hash)
@@ -229,59 +209,44 @@ async fn register_bls_impl(
         return Err(RunnerError::Other("Operator registration failed".into()));
     }
 
-    let strategy_addr = address!("5e3d0fde6f793b3115a9e7f5ebc195bbeed35d6c");
     let amount = U256::from(10);
 
-    let (_strategy, token_address) = el_chain_reader
-        .get_strategy_and_underlying_token(strategy_addr)
+    let avs_deposit_hash = el_writer
+        .deposit_erc20_into_strategy(strategy_address, amount)
         .await
-        .unwrap();
+        .map_err(EigenlayerError::ElContracts)?;
 
-    info!("Token address: {:?}", token_address);
+    info!("Deposit hash: {:?}", avs_deposit_hash);
+    let avs_deposit_receipt = wait_transaction(&env.http_rpc_endpoint, avs_deposit_hash)
+        .await
+        .map_err(|e| {
+            EigenlayerError::Registration(format!("AVS deposit error: {}", e.to_string()))
+        })?;
+    if avs_deposit_receipt.status() {
+        info!(
+            "Deposited into strategy {} for Eigenlayer",
+            strategy_address
+        );
+    } else {
+        error!("AVS deposit failed for strategy {}", strategy_address);
+        return Err(RunnerError::Other("AVS deposit failed".into()));
+    }
 
-    // let avs_deposit_hash = el_writer
-    //     .deposit_erc20_into_strategy(strategy_addr, amount)
-    //     .await
-    //     .unwrap();
-    // // .map_err(EigenlayerError::ElContracts)?;
+    // tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
-    // info!("Deposit hash: {:?}", avs_deposit_hash);
-    // let avs_deposit_receipt = wait_transaction(&env.http_rpc_endpoint, avs_deposit_hash)
-    //     .await
-    //     .map_err(|e| {
-    //         EigenlayerError::Registration(format!("AVS deposit error: {}", e.to_string()))
-    //     })?;
-    // if avs_deposit_receipt.status() {
-    //     info!("Deposited into strategy {} for Eigenlayer", strategy_addr);
-    // } else {
-    //     error!("AVS deposit failed for strategy {}", strategy_addr);
-    //     return Err(RunnerError::Other("AVS deposit failed".into()));
-    // }
-
-    info!("Registering to AVS");
-    let tx_hash = avs_registry_writer
-        .register_operator_in_quorum_with_avs_registry_coordinator(
+    // Register to Operator Sets
+    info!("Registering to operator sets");
+    el_writer
+        .register_for_operator_sets(
+            operator_address,
+            service_manager_address,
+            vec![0u32],
             operator_bls_key,
-            digest_hash,
-            expiry,
-            quorum_nums,
-            env.http_rpc_endpoint.clone(),
+            "incredible",
         )
         .await
         .unwrap();
-
-    info!("Waiting for AVS registration to complete");
-    let avs_registration_receipt = wait_transaction(&env.http_rpc_endpoint, tx_hash)
-        .await
-        .map_err(|e| {
-            EigenlayerError::Registration(format!("AVS registration error: {}", e.to_string()))
-        })?;
-    if avs_registration_receipt.status() {
-        info!("Registered operator {} to AVS", operator_address);
-    } else {
-        error!("AVS registration failed for operator {}", operator_address);
-        return Err(RunnerError::Other("AVS registration failed".into()));
-    }
+    // .map_err(EigenlayerError::ElContracts)?;
 
     info!("If the terminal exits, you should re-run the runner to continue execution.");
     Ok(())

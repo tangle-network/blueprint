@@ -29,6 +29,8 @@ pub struct EigenlayerProtocolSettings {
     pub rewards_coordinator_address: Address,
     /// The address of the permission controller contract
     pub permission_controller_address: Address,
+    /// The address of the strategy contract
+    pub strategy_address: Address,
 }
 
 impl ProtocolSettingsT for EigenlayerProtocolSettings {
@@ -66,6 +68,9 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
             permission_controller_address: settings
                 .permission_controller
                 .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
+            strategy_address: settings
+                .strategy
+                .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
         })
     }
 
@@ -91,6 +96,7 @@ impl Default for EigenlayerProtocolSettings {
             avs_directory_address: address!("f8e31cb472bc70500f08cd84917e5a1912ec8397"),
             rewards_coordinator_address: address!("22753e4264fddc6181dc7cce468904a80a363e44"),
             permission_controller_address: address!("3aade2dcd2df6a8cac689ee797591b2913658659"),
+            strategy_address: address!("f8a8b047683062b5bbbbe9d104c9177d6b6cc086"),
         }
     }
 }

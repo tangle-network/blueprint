@@ -310,7 +310,7 @@ async fn run_eigenlayer_incredible_squaring_test(
         client.clone(),
         PollingConfig {
             poll_interval: Duration::from_secs(1),
-            start_block: 235,
+            start_block: 285,
             confirmations: 1,
             step: 1,
         },

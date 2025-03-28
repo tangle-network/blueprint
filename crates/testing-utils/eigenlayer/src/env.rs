@@ -144,6 +144,7 @@ pub async fn setup_eigenlayer_test_environment(
             avs_directory_address: AVS_DIRECTORY_ADDR,
             rewards_coordinator_address: REWARDS_COORDINATOR_ADDR,
             permission_controller_address: PERMISSION_CONTROLLER_ADDR,
+            strategy_address: STRATEGY_ADDR,
         },
     }
 }
