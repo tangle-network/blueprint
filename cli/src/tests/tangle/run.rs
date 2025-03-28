@@ -23,7 +23,6 @@ use crate::tests::tangle::blueprint::create_test_blueprint;
 use blueprint_chain_setup::tangle::deploy::{Opts as DeployOpts, deploy_to_tangle};
 
 #[tokio::test]
-#[allow(clippy::too_many_lines)]
 async fn test_run_blueprint() -> Result<()> {
     color_eyre::install()?;
     setup_log();

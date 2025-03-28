@@ -417,11 +417,7 @@ impl ContextConfig {
     /// - `chain`: The [`chain`](SupportedChains)
     /// - `protocol`: The [`Protocol`]
     /// - `protocol_settings`: The protocol-specific settings
-    #[allow(
-        clippy::too_many_arguments,
-        clippy::too_many_lines,
-        clippy::match_wildcard_for_single_variants
-    )]
+    #[allow(clippy::too_many_arguments, clippy::match_wildcard_for_single_variants)]
     #[must_use]
     pub fn create_config(
         http_rpc_url: Url,

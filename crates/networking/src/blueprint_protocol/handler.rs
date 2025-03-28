@@ -15,7 +15,6 @@ const INBOUND_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 const OUTBOUND_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl<K: KeyType> BlueprintProtocolBehaviour<K> {
-    #[allow(clippy::too_many_lines)]
     pub fn handle_request_response_event(
         &mut self,
         event: request_response::Event<InstanceMessageRequest<K>, InstanceMessageResponse<K>>,

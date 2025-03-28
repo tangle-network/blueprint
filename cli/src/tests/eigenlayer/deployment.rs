@@ -13,7 +13,6 @@ use tempfile::TempDir;
 use crate::command::deploy::eigenlayer::{EigenlayerDeployOpts, deploy_avs_contracts};
 
 #[tokio::test]
-#[allow(clippy::too_many_lines)]
 async fn test_deploy_local_on_anvil() -> Result<()> {
     setup_log();
 

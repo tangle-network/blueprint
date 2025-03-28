@@ -225,7 +225,6 @@ pub(crate) fn check_blueprint_events(
     result
 }
 
-#[allow(clippy::too_many_lines)]
 pub(crate) async fn handle_tangle_event(
     event: &TangleEvent,
     blueprints: &[RpcServicesWithBlueprint],
