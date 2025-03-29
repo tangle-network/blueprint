@@ -86,17 +86,17 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
 impl Default for EigenlayerProtocolSettings {
     fn default() -> Self {
         Self {
-            allocation_manager_address: address!("d0141e899a65c95a556fe2b27e5982a6de7fdd7a"),
-            registry_coordinator_address: address!("4bf010f1b9beda5450a8dd702ed602a104ff65ee"),
-            operator_state_retriever_address: address!("c582bc0317dbb0908203541971a358c44b1f3766"),
-            delegation_manager_address: address!("cace1b78160ae76398f486c8a18044da0d66d86d"),
-            service_manager_address: address!("638a246f0ec8883ef68280293ffe8cfbabe61b44"), // Depends on AVS
-            stake_registry_address: address!("fd6f7a6a5c21a3f503ebae7a473639974379c351"), // Differs when using ECDSA Base
-            strategy_manager_address: address!("c96304e3c037f81da488ed9dea1d8f2a48278a75"),
-            avs_directory_address: address!("f8e31cb472bc70500f08cd84917e5a1912ec8397"),
-            rewards_coordinator_address: address!("22753e4264fddc6181dc7cce468904a80a363e44"),
-            permission_controller_address: address!("3aade2dcd2df6a8cac689ee797591b2913658659"),
-            strategy_address: address!("f8a8b047683062b5bbbbe9d104c9177d6b6cc086"),
+            allocation_manager_address: address!("8a791620dd6260079bf849dc5567adc3f2fdc318"),
+            registry_coordinator_address: address!("cd8a1c3ba11cf5ecfa6267617243239504a98d90"),
+            operator_state_retriever_address: address!("b0d4afd8879ed9f52b28595d31b441d079b2ca07"),
+            delegation_manager_address: address!("cf7ed3acca5a467e9e704c703e8d87f634fb0fc9"),
+            service_manager_address: address!("36c02da8a0983159322a80ffe9f24b1acff8b570"), // Squaring service manager
+            stake_registry_address: address!("4c5859f0f772848b2d91f1d83e2fe57935348029"),
+            strategy_manager_address: address!("a513e6e4b8f2a923d98304ec87f64353c4d5c853"),
+            avs_directory_address: address!("5fc8d32690cc91d4c39d9d3abcbd16989f875707"),
+            rewards_coordinator_address: address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e"),
+            permission_controller_address: address!("3aa5ebb10dc797cac828524e59a333d0a371443c"),
+            strategy_address: address!("524f04724632eed237cba3c37272e018b3a7967e"),
         }
     }
 }

@@ -1,19 +1,15 @@
-use alloy_primitives::{Address, Bytes, FixedBytes, U256, address, hex};
-use blueprint_evm_extra::util::get_provider_http;
-use blueprint_std::time::{SystemTime, UNIX_EPOCH};
-use eigensdk::client_avsregistry::writer::AvsRegistryChainWriter;
+use alloy_primitives::{Address, U256, hex};
 use eigensdk::client_elcontracts::{reader::ELChainReader, writer::ELChainWriter};
 use eigensdk::crypto_bls::BlsKeyPair;
 use eigensdk::logging::get_test_logger;
 use eigensdk::testing_utils::transaction::wait_transaction;
 use eigensdk::types::operator::Operator;
-use eigensdk::utils::slashing::core::avsdirectory::AVSDirectory;
 
 use super::error::EigenlayerError;
 use crate::BlueprintConfig;
 use crate::config::BlueprintEnvironment;
 use crate::error::RunnerError;
-use blueprint_core::{error, info, warn};
+use blueprint_core::{error, info};
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::backends::bn254::Bn254Backend;
 use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
@@ -89,7 +85,6 @@ async fn register_bls_impl(
     info!("Eigenlayer BLS Registration: Fetching Contract Addresses");
     let contract_addresses = env.protocol_settings.eigenlayer()?;
     let allocation_manager_address = contract_addresses.allocation_manager_address;
-    let registry_coordinator_address = contract_addresses.registry_coordinator_address;
     let delegation_manager_address = contract_addresses.delegation_manager_address;
     let strategy_manager_address = contract_addresses.strategy_manager_address;
     let rewards_coordinator_address = contract_addresses.rewards_coordinator_address;
@@ -113,15 +108,6 @@ async fn register_bls_impl(
 
     info!("Eigenlayer BLS Registration: Creating AVS Registry Writer");
     let logger = get_test_logger();
-    let avs_registry_writer = AvsRegistryChainWriter::build_avs_registry_chain_writer(
-        logger.clone(),
-        env.http_rpc_endpoint.clone(),
-        operator_private_key.clone(),
-        registry_coordinator_address,
-        service_manager_address,
-    )
-    .await
-    .map_err(EigenlayerError::AvsRegistry)?;
 
     info!("Eigenlayer BLS Registration: Fetching BLS BN254 Keys");
     let bn254_public = env.keystore().iter_bls_bn254().next().unwrap();
@@ -134,19 +120,6 @@ async fn register_bls_impl(
         ))?;
     let operator_bls_key = BlsKeyPair::new(bn254_secret.0.to_string())
         .map_err(|e| EigenlayerError::Keystore(e.to_string()))?;
-
-    let digest_hash: FixedBytes<32> = operator_address.into_word();
-
-    let now = SystemTime::now();
-    let mut expiry: U256 = U256::from(0);
-    if let Ok(duration_since_epoch) = now.duration_since(UNIX_EPOCH) {
-        let seconds = duration_since_epoch.as_secs();
-        expiry = U256::from(seconds) + U256::from(10000);
-    } else {
-        warn!("System time seems to be before the UNIX epoch.");
-    }
-
-    let quorum_nums = Bytes::from(vec![0]);
 
     info!("Eigenlayer BLS Registration: Creating EL Chain Reader");
     let el_chain_reader = ELChainReader::new(
@@ -181,10 +154,6 @@ async fn register_bls_impl(
         staker_opt_out_window_blocks: Some(staker_opt_out_window_blocks),
     };
 
-    // let tx_hash = el_writer
-    //     .register_as_operator_preslashing(operator_details)
-    //     .await
-    //     .map_err(EigenlayerError::ElContracts)?;
     let tx_hash = el_writer
         .register_as_operator(operator_details)
         .await
@@ -232,11 +201,11 @@ async fn register_bls_impl(
         return Err(RunnerError::Other("AVS deposit failed".into()));
     }
 
-    // tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    info!("Operator BLS key pair: {:?}", operator_bls_key);
 
     // Register to Operator Sets
     info!("Registering to operator sets");
-    el_writer
+    let registration_hash = el_writer
         .register_for_operator_sets(
             operator_address,
             service_manager_address,
@@ -245,8 +214,22 @@ async fn register_bls_impl(
             "incredible",
         )
         .await
-        .unwrap();
-    // .map_err(EigenlayerError::ElContracts)?;
+        .map_err(EigenlayerError::ElContracts)?;
+
+    let registration_receipt = wait_transaction(&env.http_rpc_endpoint, registration_hash)
+        .await
+        .map_err(|e| {
+            EigenlayerError::Registration(format!(
+                "Operator sets registration error: {}",
+                e.to_string()
+            ))
+        })?;
+    if registration_receipt.status() {
+        info!("Registered to operator sets for Eigenlayer");
+    } else {
+        error!("Registration failed for operator sets");
+        return Err(RunnerError::Other("Registration failed".into()));
+    }
 
     info!("If the terminal exits, you should re-run the runner to continue execution.");
     Ok(())

@@ -34,15 +34,15 @@ pub async fn start_anvil_container(
         .with_wait_for(WaitFor::message_on_stdout("Listening on"))
         .with_exposed_port(8545.tcp())
         .with_entrypoint("anvil")
-        .with_mount(testcontainers::core::Mount::bind_mount(
-            state_path.to_str().unwrap(),
-            "/state.json",
-        ))
+        // .with_mount(testcontainers::core::Mount::bind_mount(
+        //     state_path.to_str().unwrap(),
+        //     "/state.json",
+        // ))
         .with_cmd([
             "--host",
             "0.0.0.0",
-            "--load-state",
-            "/state.json",
+            // "--load-state",
+            // "/state.json",
             "--base-fee",
             "0",
             "--gas-price",

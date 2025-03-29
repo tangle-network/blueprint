@@ -11,54 +11,41 @@ use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordina
 
 // ================= Core Eigenlayer Deployment Addresses =================
 /// The default Allocation Manager address on our testnet
-pub const ALLOCATION_MANAGER_ADDR: Address = address!("d0141e899a65c95a556fe2b27e5982a6de7fdd7a");
+pub const ALLOCATION_MANAGER_ADDR: Address = address!("8a791620dd6260079bf849dc5567adc3f2fdc318");
 /// The default AVS Directory address on our testnet
-pub const AVS_DIRECTORY_ADDR: Address = address!("f8e31cb472bc70500f08cd84917e5a1912ec8397");
+pub const AVS_DIRECTORY_ADDR: Address = address!("5fc8d32690cc91d4c39d9d3abcbd16989f875707");
 /// The default Delegation address on our testnet
-pub const DELEGATION_MANAGER_ADDR: Address = address!("cace1b78160ae76398f486c8a18044da0d66d86d");
+pub const DELEGATION_MANAGER_ADDR: Address = address!("cf7ed3acca5a467e9e704c703e8d87f634fb0fc9");
 /// The default Strategy Manager address on our testnet
-pub const STRATEGY_MANAGER_ADDR: Address = address!("c96304e3c037f81da488ed9dea1d8f2a48278a75");
+pub const STRATEGY_MANAGER_ADDR: Address = address!("a513e6e4b8f2a923d98304ec87f64353c4d5c853");
 /// The default Strategy Factory address on our testnet
-pub const STRATEGY_FACTORY_ADDR: Address = address!("3347b4d90ebe72befb30444c9966b2b990ae9fcb");
+pub const STRATEGY_FACTORY_ADDR: Address = address!("0b306bf915c4d645ff596e518faf3f9669b97016");
 /// The default Rewards Coordinator address on our testnet
-pub const REWARDS_COORDINATOR_ADDR: Address = address!("22753e4264fddc6181dc7cce468904a80a363e44");
+pub const REWARDS_COORDINATOR_ADDR: Address = address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e");
 /// The default Pauser Registry address on our testnet
-pub const PAUSER_REGISTRY_ADDR: Address = address!("efab0beb0a557e452b398035ea964948c750b2fd");
+pub const PAUSER_REGISTRY_ADDR: Address = address!("c6e7df5e7b4f2a278906862b61205850344d4e7d");
 /// The default Strategy Beacon address on our testnet
-pub const STRATEGY_BEACON_ADDR: Address = address!("40918ba7f132e0acba2ce4de4c4baf9bd2d7d849");
+pub const STRATEGY_BEACON_ADDR: Address = address!("c3e53f4d16ae77db1c982e75a937b9f60fe63690");
 /// The default Permission Controller address on our testnet
 pub const PERMISSION_CONTROLLER_ADDR: Address =
-    address!("3aade2dcd2df6a8cac689ee797591b2913658659");
+    address!("3aa5ebb10dc797cac828524e59a333d0a371443c");
 /// The default Strategy address for our Squaring Example
-pub const STRATEGY_ADDR: Address = address!("f8a8b047683062b5bbbbe9d104c9177d6b6cc086");
+pub const STRATEGY_ADDR: Address = address!("524f04724632eed237cba3c37272e018b3a7967e");
 /// The default Token address for our Squaring Example
-pub const TOKEN_ADDR: Address = address!("d42912755319665397ff090fbb63b1a31ae87cee");
+pub const TOKEN_ADDR: Address = address!("4826533b4897376654bb4d4ad88b7fafd0c98528");
 /// The default Stake Registry address on our testnet (Differs when using ECDSA Base)
-pub const STAKE_REGISTRY_ADDR: Address = address!("fd6f7a6a5c21a3f503ebae7a473639974379c351");
+pub const STAKE_REGISTRY_ADDR: Address = address!("4c5859f0f772848b2d91f1d83e2fe57935348029");
 
 // ================= Incredible Squaring Deployment Addresses =================
 /// The default Operator State Retriever address on our testnet
 pub const OPERATOR_STATE_RETRIEVER_ADDR: Address =
-    address!("c582bc0317dbb0908203541971a358c44b1f3766");
+    address!("b0d4afd8879ed9f52b28595d31b441d079b2ca07");
 /// The default Registry Coordinator address on our testnet
-pub const REGISTRY_COORDINATOR_ADDR: Address = address!("4bf010f1b9beda5450a8dd702ed602a104ff65ee");
+pub const REGISTRY_COORDINATOR_ADDR: Address = address!("cd8a1c3ba11cf5ecfa6267617243239504a98d90");
 /// The default Service Manager address on our testnet (Depends on AVS, this is the proxy)
-pub const SERVICE_MANAGER_ADDR: Address = address!("638a246f0ec8883ef68280293ffe8cfbabe61b44");
+pub const SERVICE_MANAGER_ADDR: Address = address!("36c02da8a0983159322a80ffe9f24b1acff8b570");
 /// The default Slasher address on our testnet
-pub const SLASHER_ADDR: Address = address!("e1fd27f4390dcbe165f4d60dbf821e4b9bb02ded");
-
-// /// The default Empty Contract address on our testnet
-// pub const EMPTY_CONTRACT_ADDR: Address = address!("Cf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9");
-// /// The default Slasher Implementation address on our testnet
-// pub const SLASHER_IMPLEMENTATION_ADDR: Address =
-//     address!("0B306BF915C4d645ff596e518fAf3F9669b97016");
-// /// The default Strategy Manager Implementation address on our testnet
-// pub const STRATEGY_MANAGER_IMPLEMENTATION_ADDR: Address =
-//     address!("7a2088a1bfc9d81c55368ae168c2c02570cb814f");
-// /// The default ERC20 Mock address on our testnet
-// pub const ERC20_MOCK_ADDR: Address = address!("8f86403a4de0bb5791fa46b8e795c547942fe4cf");
-// /// The default ERC20 Mock Strategy address on our testnet
-// pub const ERC20_MOCK_STRATEGY_ADDR: Address = address!("7969c5eD335650692Bc04293B07F5BF2e7A673C0");
+pub const SLASHER_ADDR: Address = address!("1429859428c0abc9c2c47c8ee9fbaf82cfa0f20f");
 
 pub struct EigenlayerTestEnvironment {
     pub http_endpoint: String,

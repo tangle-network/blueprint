@@ -41,6 +41,7 @@ pub async fn xsquare_eigen(
 
         let message_bytes = task.message;
         let number_to_be_squared = U256::from_be_slice(&message_bytes.0);
+        info!("Number to be squared: {}", number_to_be_squared);
         let message = number_to_be_squared
             .saturating_pow(U256::from(2u32))
             .to_string()
@@ -78,6 +79,7 @@ pub async fn xsquare_eigen(
                 )));
             }
         };
+        info!("TASK BLS KEY PAIR: {:?}", bls_key_pair);
         let operator_id = operator_id_from_g1_pub_key(bls_key_pair.public_key())?;
 
         // Sign the Hashed Message and send it to the BLS Aggregator

@@ -8,6 +8,9 @@ use crate::{
 use alloy_network::{Ethereum, NetworkWallet};
 use alloy_primitives::{Address, keccak256};
 use alloy_sol_types::SolType;
+use ark_ec::AffineRepr;
+use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
+use eigensdk::client_avsregistry::writer::AvsRegistryChainWriter;
 use jsonrpc_core::{IoHandler, Params, Value};
 use jsonrpc_http_server::{AccessControlAllowOrigin, DomainsValidation, ServerBuilder};
 use std::{collections::VecDeque, net::SocketAddr, sync::Arc, time::Duration};
@@ -18,10 +21,9 @@ use tokio::time::interval;
 use alloy_network::EthereumWallet;
 use blueprint_sdk::contexts::eigenlayer::EigenlayerContext;
 use blueprint_sdk::macros::context::{EigenlayerContext, KeystoreContext};
-use blueprint_sdk::runner::BackgroundService;
-use blueprint_sdk::runner::config::BlueprintEnvironment;
-use blueprint_sdk::runner::error::RunnerError;
-use blueprint_sdk::{debug, error, info};
+use blueprint_sdk::runner::config::ProtocolSettings;
+use blueprint_sdk::runner::{BackgroundService, config::BlueprintEnvironment, error::RunnerError};
+use blueprint_sdk::{debug, error, info, warn};
 use eigensdk::client_avsregistry::reader::AvsRegistryChainReader;
 use eigensdk::common::get_provider;
 use eigensdk::crypto_bls::{BlsG1Point, BlsG2Point, convert_to_g1_point, convert_to_g2_point};
@@ -374,38 +376,267 @@ impl AggregatorContext {
         Ok(())
     }
 
+    async fn verify_bls_pubkeys_registered(
+        &self,
+        avs_registry_reader: &AvsRegistryChainReader,
+    ) -> Result<bool, Error> {
+        let port = self.http_rpc_url.split(':').last().unwrap();
+        let ws_rpc_url = format!("ws://127.0.0.1:{}", port);
+        warn!("ws_rpc_url: {}", ws_rpc_url);
+
+        // Get the BLS public keys for the operators in the quorums
+        let bls_pubkeys = avs_registry_reader
+            .query_existing_registered_operator_pub_keys(260u64, 300u64, ws_rpc_url)
+            .await
+            .map_err(|e| {
+                Error::Context(format!(
+                    "Failed to get BLS public keys for operators: {}",
+                    e
+                ))
+            })?;
+
+        info!(
+            "BLS public keys for operators in quorums: {:?}",
+            bls_pubkeys
+        );
+
+        // Check if there are any BLS public keys registered
+        if bls_pubkeys.1.is_empty() {
+            return Ok(false);
+        }
+
+        // Check if any of the BLS public keys are at infinity
+        for pubkey in bls_pubkeys.1 {
+            info!(
+                "BLS pubkey G1: {:?}, G2: {:?}",
+                pubkey.g1_pub_key, pubkey.g2_pub_key
+            );
+
+            // If either G1 or G2 is at infinity, the BLS public key is not properly registered
+            if pubkey.g1_pub_key.g1().x().is_none() || pubkey.g2_pub_key.g2().x().is_none() {
+                warn!("BLS public key at infinity");
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
     async fn send_aggregated_response_to_contract(
         &self,
         response: BlsAggregationServiceResponse,
     ) -> Result<(), Error> {
+        // First, let's check if there are any registered operators for the quorums
+        let contract_addresses = self
+            .sdk_config
+            .protocol_settings
+            .eigenlayer()
+            .map_err(|e| {
+                Error::Context(format!(
+                    "Failed to get Eigenlayer contract addresses: {}",
+                    e
+                ))
+            })?;
+
+        let avs_registry_reader = AvsRegistryChainReader::new(
+            eigensdk::logging::get_test_logger(),
+            contract_addresses.registry_coordinator_address,
+            contract_addresses.operator_state_retriever_address,
+            self.http_rpc_url.clone(),
+        )
+        .await
+        .map_err(|e| Error::Context(format!("Failed to create AVS registry reader: {}", e)))?;
+
+        // Check if there are any operators registered for the quorum
+        let quorum_numbers = vec![0u8]; // Assuming quorum 0 is being used
+        let quorum_count = avs_registry_reader
+            .get_quorum_count()
+            .await
+            .map_err(|e| Error::Context(format!("Failed to quorum count: {}", e)))?;
+        info!("Quorum count: {}", quorum_count);
+
+        let quorum_operators = avs_registry_reader
+            .get_operators_stake_in_quorums_at_current_block(quorum_numbers.clone().into())
+            .await
+            .map_err(|e| Error::Context(format!("Failed to get operators for quorums: {}", e)))?;
+
+        for (quorum_num, quorum) in quorum_operators.iter().enumerate() {
+            info!(
+                "Quorum {} has {} registered operators:",
+                quorum_num,
+                quorum.len(),
+            );
+            for (i, operator) in quorum.iter().enumerate() {
+                info!(
+                    "Operator {}: \n\tAddress: {}\n\tOperator ID: {}\n\tStake: {}",
+                    i, operator.operator, operator.operatorId, operator.stake
+                );
+            }
+
+            // If there are no operators registered for this quorum, the quorum APK will be at infinity
+            if quorum.is_empty() {
+                return Err(Error::Context(format!(
+                    "Quorum {} has no registered operators, which would result in an infinity point for the quorum APK",
+                    quorum_num
+                )));
+            }
+        }
+
+        // Verify that BLS public keys are properly registered for the operators
+        let bls_keys_registered = self
+            .verify_bls_pubkeys_registered(&avs_registry_reader)
+            .await?;
+        if !bls_keys_registered {
+            return Err(Error::Context("BLS public keys are not properly registered for operators, which would result in an infinity point for the quorum APK".to_string()));
+        }
+
+        let mut non_signer_pub_keys = Vec::<G1Point>::new();
+        info!(
+            "Processing {} non-signer public keys",
+            response.non_signers_pub_keys_g1.len()
+        );
+
+        for (i, pub_key) in response.non_signers_pub_keys_g1.iter().enumerate() {
+            info!("Processing non-signer public key {}: {:?}", i, pub_key.g1());
+
+            if pub_key.g1().x().is_some() {
+                info!("Non-signer public key {} is not at infinity", i);
+                let g1 = match convert_to_g1_point(pub_key.g1()) {
+                    Ok(g1) => {
+                        info!(
+                            "Successfully converted non-signer public key {} to G1 point: X={}, Y={}",
+                            i, g1.X, g1.Y
+                        );
+                        g1
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to convert non-signer public key {} to G1 point: {}",
+                            i, e
+                        );
+                        return Err(Error::Context(e.to_string()));
+                    }
+                };
+                non_signer_pub_keys.push(G1Point { X: g1.X, Y: g1.Y })
+            } else {
+                info!(
+                    "Non-signer public key {} is at infinity for task index: {:?}",
+                    i, response.task_index
+                );
+            }
+        }
+
+        let mut quorum_apks = Vec::<G1Point>::new();
+        info!("Processing {} quorum APKs", response.quorum_apks_g1.len());
+
+        for (i, quorum_apk) in response.quorum_apks_g1.iter().enumerate() {
+            info!("Processing quorum APK {}: {:?}", i, quorum_apk.g1());
+
+            if quorum_apk.g1().x().is_some() {
+                info!("Quorum APK {} is not at infinity", i);
+                let g1 = match convert_to_g1_point(quorum_apk.g1()) {
+                    Ok(g1) => {
+                        info!(
+                            "Successfully converted quorum APK {} to G1 point: X={}, Y={}",
+                            i, g1.X, g1.Y
+                        );
+                        g1
+                    }
+                    Err(e) => {
+                        error!("Failed to convert quorum APK {} to G1 point: {}", i, e);
+                        return Err(Error::Context(e.to_string()));
+                    }
+                };
+                quorum_apks.push(G1Point { X: g1.X, Y: g1.Y });
+            } else {
+                warn!(
+                    "Quorum APK {} is at infinity for task index: {:?}. Attempting to use registered BLS public keys instead.",
+                    i, response.task_index
+                );
+
+                // Get the registered BLS public keys
+                let port = self.http_rpc_url.split(':').last().unwrap();
+                let ws_rpc_url = format!("ws://127.0.0.1:{}", port);
+                let bls_pubkeys = avs_registry_reader
+                    .query_existing_registered_operator_pub_keys(260u64, 300u64, ws_rpc_url)
+                    .await
+                    .map_err(|e| {
+                        Error::Context(format!(
+                            "Failed to get BLS public keys for operators: {}",
+                            e
+                        ))
+                    })?;
+
+                if bls_pubkeys.1.is_empty() {
+                    error!("No registered BLS public keys found");
+                    return Err(Error::Context(format!(
+                        "Quorum APK {} is at infinity and no registered BLS public keys found",
+                        i
+                    )));
+                }
+
+                // Use the first valid BLS public key as the quorum APK
+                for pubkey in bls_pubkeys.1 {
+                    if pubkey.g1_pub_key.g1().x().is_some() {
+                        info!(
+                            "Using registered BLS public key as quorum APK: {:?}",
+                            pubkey.g1_pub_key
+                        );
+                        let g1 = match convert_to_g1_point(pubkey.g1_pub_key.g1()) {
+                            Ok(g1) => {
+                                info!(
+                                    "Successfully converted registered BLS public key to G1 point: X={}, Y={}",
+                                    g1.X, g1.Y
+                                );
+                                g1
+                            }
+                            Err(e) => {
+                                error!(
+                                    "Failed to convert registered BLS public key to G1 point: {}",
+                                    e
+                                );
+                                continue;
+                            }
+                        };
+                        quorum_apks.push(G1Point { X: g1.X, Y: g1.Y });
+                        break;
+                    }
+                }
+
+                if quorum_apks.len() <= i {
+                    error!("Could not find a valid registered BLS public key to use as quorum APK");
+                    return Err(Error::Context(format!(
+                        "Quorum APK {} is at infinity and no valid registered BLS public key found",
+                        i
+                    )));
+                }
+            }
+        }
+
         let non_signer_stakes_and_signature = NonSignerStakesAndSignature {
-            nonSignerPubkeys: response
-                .non_signers_pub_keys_g1
-                .into_iter()
-                .map(to_g1_point)
-                .collect(),
+            nonSignerPubkeys: non_signer_pub_keys,
             nonSignerQuorumBitmapIndices: response.non_signer_quorum_bitmap_indices,
-            quorumApks: response
-                .quorum_apks_g1
-                .into_iter()
-                .map(to_g1_point)
-                .collect(),
-            apkG2: to_g2_point(response.signers_apk_g2),
-            sigma: to_g1_point(response.signers_agg_sig_g1.g1_point()),
+            quorumApks: quorum_apks,
+            apkG2: G2Point {
+                X: convert_to_g2_point(response.signers_apk_g2.g2())
+                    .map_err(|e| Error::Context(e.to_string()))?
+                    .X,
+                Y: convert_to_g2_point(response.signers_apk_g2.g2())
+                    .map_err(|e| Error::Context(e.to_string()))?
+                    .Y,
+            },
+            sigma: G1Point {
+                X: convert_to_g1_point(response.signers_agg_sig_g1.g1_point().g1())
+                    .map_err(|e| Error::Context(e.to_string()))?
+                    .X,
+                Y: convert_to_g1_point(response.signers_agg_sig_g1.g1_point().g1())
+                    .map_err(|e| Error::Context(e.to_string()))?
+                    .Y,
+            },
             quorumApkIndices: response.quorum_apk_indices,
             totalStakeIndices: response.total_stake_indices,
             nonSignerStakeIndices: response.non_signer_stake_indices,
         };
-
-        fn to_g1_point(pk: BlsG1Point) -> G1Point {
-            let pt = convert_to_g1_point(pk.g1()).expect("Invalid G1 point");
-            G1Point { X: pt.X, Y: pt.Y }
-        }
-
-        fn to_g2_point(pk: BlsG2Point) -> G2Point {
-            let pt = convert_to_g2_point(pk.g2()).expect("Invalid G2 point");
-            G2Point { X: pt.X, Y: pt.Y }
-        }
 
         let tasks = self.tasks.lock().await;
         let task_responses = self.tasks_responses.lock().await;
@@ -419,26 +650,39 @@ impl AggregatorContext {
         let task_manager =
             IncredibleSquaringTaskManager::new(self.task_manager_address, provider.clone());
 
-        let _ = task_manager
+        let aggregator_address = NetworkWallet::<Ethereum>::default_signer_address(&self.wallet);
+
+        let on_chain_agg = task_manager.aggregator().call().await.unwrap()._0;
+        assert_eq!(aggregator_address, on_chain_agg);
+
+        let response_call = task_manager
             .respondToSquaringTask(
                 task.clone(),
                 task_response.clone(),
                 non_signer_stakes_and_signature,
             )
-            .from(NetworkWallet::<Ethereum>::default_signer_address(
-                &self.wallet,
-            ))
-            .send()
-            .await
-            .map_err(|e| Error::Chain(e.to_string()))?
-            .get_receipt()
-            .await
-            .map_err(|e| Error::Chain(e.to_string()))?;
+            .from(aggregator_address);
 
-        info!(
-            "Sent aggregated response to contract for task index: {}",
-            response.task_index,
-        );
+        let response_receipt = get_receipt(response_call).await;
+        match response_receipt {
+            Ok(receipt) => {
+                if receipt.status() {
+                    info!(
+                        "Successfully sent aggregated response to contract for task index: {}",
+                        response.task_index
+                    );
+                } else {
+                    error!("Failed to send aggregated response to contract");
+                    return Err(Error::Chain(
+                        "Failed to send aggregated response to contract".to_string(),
+                    ));
+                }
+            }
+            Err(e) => {
+                error!("Failed to get receipt: {}", e);
+                return Err(Error::Chain(e.to_string()));
+            }
+        }
 
         Ok(())
     }

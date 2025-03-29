@@ -187,6 +187,10 @@ async fn run_eigenlayer_incredible_squaring_test(
         .parse()
         .expect("failed to generate wallet ");
     warn!("Private key: {}", private_key);
+    warn!(
+        "Aggregator private key: {}",
+        AGGREGATOR_PRIVATE_KEY.as_str()
+    );
     let signer_wallet = get_provider_from_signer(&private_key, &http_endpoint);
     let wallet = EthereumWallet::from(signer);
     let provider = get_wallet_provider_http(&http_endpoint, wallet.clone());
@@ -239,6 +243,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     let create_quorum_receipt = get_receipt(create_quorum_call).await;
     match create_quorum_receipt {
         Ok(receipt) => {
+            info!("Quorum created with receipt: {:?}", receipt);
             if !receipt.status() {
                 error!("Failed to create quorum: {:?}", receipt);
                 panic!("Failed to create quorum: {:?}", receipt);
@@ -310,7 +315,7 @@ async fn run_eigenlayer_incredible_squaring_test(
         client.clone(),
         PollingConfig {
             poll_interval: Duration::from_secs(1),
-            start_block: 285,
+            start_block: 290,
             confirmations: 1,
             step: 1,
         },
@@ -387,16 +392,19 @@ pub struct SquaringAvsContracts {
 
 pub fn setup_task_spawner(
     http_endpoint: String,
-    _registry_coordinator_address: Address,
+    registry_coordinator_address: Address,
     task_generator_address: Address,
-    _accounts: Vec<Address>,
+    accounts: Vec<Address>,
     task_manager_address: Address,
 ) -> impl std::future::Future<Output = ()> {
     setup_log();
     info!("Setting up task spawner...");
     let provider = get_provider_http(&http_endpoint);
     let task_manager = SquaringTask::new(task_manager_address, provider.clone());
+    let registry_coordinator =
+        RegistryCoordinator::new(registry_coordinator_address, provider.clone());
 
+    let operators = vec![vec![accounts[0]]];
     let quorums = Bytes::from(vec![0]);
     async move {
         loop {
@@ -414,6 +422,16 @@ pub fn setup_task_spawner(
             .status()
             {
                 info!("Created a new task...");
+            }
+
+            if get_receipt(
+                registry_coordinator.updateOperatorsForQuorum(operators.clone(), quorums.clone()),
+            )
+            .await
+            .unwrap()
+            .status()
+            {
+                info!("Updated operators for quorum...");
             }
 
             // Wait for task initialization to complete
