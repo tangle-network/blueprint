@@ -197,7 +197,7 @@ parking_lot = { version = "0.12.3", default-features = false }
 sysinfo = { version = "0.31.2", default-features = false }
 tempfile = { version = "3.13.0", default-features = false }
 uuid = { version = "1.16.0", default-features = false }
-blake3 = { version = "1.5.5", default-features = false }
+blake3 = { version = "1.8.0", default-features = false }
 chrono = { version = "0.4.40", default-features = false }
 
 # Development & Testing
