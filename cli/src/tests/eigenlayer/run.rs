@@ -15,7 +15,6 @@ use crate::command::deploy::eigenlayer::deploy_avs_contracts;
 use crate::command::run::run_eigenlayer_avs;
 
 #[tokio::test]
-#[allow(clippy::too_many_lines)]
 async fn test_run_eigenlayer_avs() -> Result<()> {
     setup_log();
 

@@ -376,7 +376,7 @@ pub enum DeployTarget {
 }
 
 #[tokio::main]
-#[allow(clippy::needless_return, clippy::too_many_lines)]
+#[allow(clippy::needless_return)]
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     init_tracing_subscriber();

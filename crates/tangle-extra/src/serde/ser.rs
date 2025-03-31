@@ -403,11 +403,7 @@ impl ser::SerializeMap for SerializeMap<'_> {
     }
 
     fn end(self) -> Result<Self::Ok> {
-        let fields = self
-            .keys
-            .into_iter()
-            .zip(self.values.into_iter())
-            .collect::<Vec<_>>();
+        let fields = self.keys.into_iter().zip(self.values).collect::<Vec<_>>();
         Ok(Field::Struct(
             new_bounded_string(""),
             Box::new(BoundedVec(fields)),

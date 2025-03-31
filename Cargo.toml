@@ -30,6 +30,7 @@ assigning_clones = "allow"
 transmute_ptr_to_ptr = "allow"
 items_after_statements = "allow"
 match_wildcard_for_single_variants = "allow"
+too_many_lines = "allow"
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"

@@ -45,7 +45,6 @@ use crate::decode_bounded_string;
 /// * Failed to create keystore
 /// * Failed to get keys from keystore
 /// * Job was not called successfully
-#[allow(clippy::too_many_lines)]
 pub async fn submit_job(
     ws_rpc_url: String,
     service_id: Option<u64>,
