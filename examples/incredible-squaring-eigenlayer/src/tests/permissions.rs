@@ -41,8 +41,7 @@ pub async fn setup_avs_permissions(
         error!("Failed to set deployer as appointee for setAVSRegistrar on AllocationManager");
         return Err(color_eyre::eyre::eyre!(
             "Failed to set deployer as appointee for setAVSRegistrar on AllocationManager"
-        )
-        .into());
+        ));
     }
 
     // Set AVS Registrar
@@ -54,7 +53,7 @@ pub async fn setup_avs_permissions(
     let set_avs_registrar_receipt = get_receipt(set_avs_registrar_call).await?;
     if !set_avs_registrar_receipt.status() {
         error!("Failed to set AVS registrar");
-        return Err(color_eyre::eyre::eyre!("Failed to set AVS registrar").into());
+        return Err(color_eyre::eyre::eyre!("Failed to set AVS registrar"));
     }
 
     // Set Deployer Account as appointee for createOperatorSets on AllocationManager
@@ -69,8 +68,7 @@ pub async fn setup_avs_permissions(
         error!("Failed to set deployer as appointee for createOperatorSets on AllocationManager");
         return Err(color_eyre::eyre::eyre!(
             "Failed to set deployer as appointee for createOperatorSets on AllocationManager"
-        )
-        .into());
+        ));
     }
 
     // Set Registry Coordinator as appointee for createOperatorSets on AllocationManager
@@ -85,7 +83,9 @@ pub async fn setup_avs_permissions(
         error!(
             "Failed to set registry coordinator as appointee for createOperatorSets on AllocationManager"
         );
-        return Err(color_eyre::eyre::eyre!("Failed to set registry coordinator as appointee for createOperatorSets on AllocationManager").into());
+        return Err(color_eyre::eyre::eyre!(
+            "Failed to set registry coordinator as appointee for createOperatorSets on AllocationManager"
+        ));
     }
 
     // Set Instant Slasher as appointee for slashOperator on AllocationManager
@@ -100,8 +100,7 @@ pub async fn setup_avs_permissions(
         error!("Failed to set slasher as appointee for slashOperator on AllocationManager");
         return Err(color_eyre::eyre::eyre!(
             "Failed to set slasher as appointee for slashOperator on AllocationManager"
-        )
-        .into());
+        ));
     }
 
     // Set Deployer Account as appointee for updateAVSMetadataURI on AllocationManager
@@ -116,8 +115,7 @@ pub async fn setup_avs_permissions(
         error!("Failed to set deployer as appointee for updateAVSMetadataURI on AllocationManager");
         return Err(color_eyre::eyre::eyre!(
             "Failed to set deployer as appointee for updateAVSMetadataURI on AllocationManager"
-        )
-        .into());
+        ));
     }
 
     // Update AVS Metadata URI
@@ -127,7 +125,7 @@ pub async fn setup_avs_permissions(
     let update_avs_metadata_uri_receipt = get_receipt(update_avs_metadata_uri_call).await?;
     if !update_avs_metadata_uri_receipt.status() {
         error!("Failed to update AVS metadata URI");
-        return Err(color_eyre::eyre::eyre!("Failed to update AVS metadata URI").into());
+        return Err(color_eyre::eyre::eyre!("Failed to update AVS metadata URI"));
     }
 
     Ok(())

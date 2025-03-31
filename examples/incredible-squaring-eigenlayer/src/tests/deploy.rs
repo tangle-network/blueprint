@@ -202,8 +202,6 @@ pub struct DeployedContracts {
 /// * `http_endpoint` - HTTP endpoint for the RPC provider
 /// * `private_key` - Private key for the deployer account
 /// * `num_quorums` - Number of quorums
-/// * `operator_params` - Operator parameters for each quorum
-/// * `operator_addr` - Address of the operator
 /// * `permission_controller_address` - Address of the permission controller
 /// * `allocation_manager_address` - Address of the allocation manager
 /// * `avs_directory_addr` - Address of the AVS directory
@@ -217,13 +215,12 @@ pub struct DeployedContracts {
 /// # Returns
 ///
 /// * `Result<DeployedContracts>` - The deployed contract addresses
+#[allow(clippy::too_many_arguments)]
 pub async fn deploy_avs_contracts(
     http_endpoint: &str,
     private_key: &str,
     deployer_address: Address,
     num_quorums: u32,
-    operator_params: Vec<u32>,
-    operator_addr: Address,
     permission_controller_address: Address,
     allocation_manager_address: Address,
     avs_directory_addr: Address,
@@ -271,44 +268,9 @@ pub async fn deploy_avs_contracts(
     let token_total_supply = token.totalSupply().call().await?._0;
     info!("Token total supply: {}", token_total_supply);
 
-    // // Mint tokens to operator
-    // let mint_call = token.mint(operator_addr, U256::from(1000000000000000000u64));
-    // let mint_receipt = get_receipt(mint_call).await?;
-    // if !mint_receipt.status() {
-    //     return Err(eyre!(
-    //         "Failed to mint tokens to operator: {}",
-    //         operator_addr
-    //     ));
-    // }
-    // info!("Minted tokens to operator: {}", operator_addr);
-
     let strategy_factory = StrategyFactory::new(strategy_factory_addr, wallet.clone());
 
-    // // Check the strategy manager address
-    // let strategy_manager_addr = strategy_factory.strategyManager().call().await?._0;
-    // info!("StrategyManager address: {}", strategy_manager_addr);
-
-    // // Check if the deployer is the owner of the strategy manager
-    // let strategy_manager = StrategyManager::new(strategy_manager_addr, wallet.clone());
-    // let strategy_manager_owner = strategy_manager.owner().call().await?._0;
-    // info!("StrategyManager owner: {}", strategy_manager_owner);
-    // info!("Deployer address: {}", deployer_address);
-
-    // // Check if the strategy factory is allowed to add strategies
-    // let can_add_strategies = strategy_manager_owner == deployer_address
-    //     || strategy_manager_owner == strategy_factory_addr;
-    // info!("Can add strategies: {}", can_add_strategies);
-
-    // let is_paused = strategy_factory.paused_0(0).call().await?._0;
-    // info!("StrategyFactory paused status: {}", is_paused);
-
-    // let beacon = strategy_factory.strategyBeacon().call().await?._0;
-    // info!("StrategyFactory beacon: {}", beacon);
-
-    // let owner = strategy_factory.owner().call().await?._0;
-    // info!("StrategyFactory owner: {}", owner);
-
-    let new_strategy_call = strategy_factory.deployNewStrategy(token.address().clone());
+    let new_strategy_call = strategy_factory.deployNewStrategy(*token.address());
     let new_strategy_receipt = get_receipt(new_strategy_call).await?;
     let strategy_addr = if let Some(last_log) = new_strategy_receipt.logs().last() {
         let data = last_log.data().data.clone();
@@ -318,7 +280,7 @@ pub async fn deploy_avs_contracts(
             addr_bytes.copy_from_slice(&data[12..32]);
             Address::from_slice(&addr_bytes)
         } else {
-            return Err(color_eyre::eyre::eyre!("Invalid log data format").into());
+            return Err(color_eyre::eyre::eyre!("Invalid log data format"));
         }
     } else {
         return Err(eyre!("Failed to get strategy address from receipt"));
@@ -331,13 +293,6 @@ pub async fn deploy_avs_contracts(
     let proxy_admin = ProxyAdmin::deploy(&wallet).await?;
     let &proxy_admin_addr = proxy_admin.address();
     info!("ProxyAdmin deployed at: {}", proxy_admin_addr);
-
-    // // Deploy PauserRegistry
-    // info!("Deploying PauserRegistry...");
-    // let pausers = vec![deployer_address];
-    // let pauser_registry = PauserRegistry::deploy(&wallet, pausers, deployer_address).await?;
-    // let &pauser_registry_addr = pauser_registry.address();
-    // info!("PauserRegistry deployed at: {}", pauser_registry_addr);
 
     // First, deploy all empty proxies
     info!("Deploying empty proxies...");
@@ -438,7 +393,7 @@ pub async fn deploy_avs_contracts(
     let mut quorums_operator_set_params = Vec::with_capacity(num_quorums as usize);
 
     let mut quorums_strategy_params = Vec::with_capacity(num_quorums as usize);
-    let deployed_strategies = vec![squaring_strategy];
+    let deployed_strategies = [squaring_strategy];
     let num_strategies = deployed_strategies.len();
 
     for _i in 0..num_quorums {
@@ -452,18 +407,15 @@ pub async fn deploy_avs_contracts(
 
         let mut quorum_strategy_param = Vec::with_capacity(num_strategies);
         let multiplier = alloy_primitives::Uint::<96, 2>::from(1u64);
-        for j in 0..num_strategies {
+        for j in deployed_strategies.iter().take(num_strategies) {
             let strategy_param = interfaces::IStakeRegistryTypes::StrategyParams {
-                strategy: deployed_strategies[j].address().clone(),
+                strategy: *j.address(),
                 multiplier,
             };
             quorum_strategy_param.push(strategy_param);
         }
         quorums_strategy_params.push(quorum_strategy_param);
     }
-
-    let stake_type = vec![IStakeRegistryTypes::StakeType::from(1u8)];
-    let look_ahead_period = vec![0u32];
 
     // Initialize RegistryCoordinator
     let registry_coordinator_init_data = SlashingRegistryCoordinator::initializeCall {

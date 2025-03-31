@@ -34,8 +34,6 @@ use blueprint_sdk::testing::utils::anvil::wait_for_responses;
 use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
 use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::{Router, error, info, warn};
-use eigensdk::client_avsregistry::writer::AvsRegistryChainWriter;
-use eigensdk::logging::get_test_logger;
 use futures::StreamExt;
 use tokio::sync::oneshot;
 
@@ -62,16 +60,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     let env = harness.env().clone();
     let http_endpoint = harness.http_endpoint.to_string();
 
-    let aggregator_private_key = AGGREGATOR_PRIVATE_KEY.to_string();
     let private_key = PRIVATE_KEY.to_string();
-    // let contract_addresses = harness.eigenlayer_contract_addresses;
-    // let delegation_manager_address = contract_addresses.delegation_manager_address;
-    // let permission_controller_address = contract_addresses.permission_controller_address;
-    // let allocation_manager_address = contract_addresses.allocation_manager_address;
-    // let avs_directory_addr = contract_addresses.avs_directory_address;
-    // let rewards_coordinator_addr = contract_addresses.rewards_coordinator_address;
-    // let pauser_registry_addr = PAUSER_REGISTRY_ADDR;
-    // let strategy_manager_addr = contract_addresses.strategy_manager_address;
 
     let core_config = DeploymentConfigData {
         strategy_manager: StrategyManagerConfig {
@@ -113,26 +102,14 @@ async fn run_eigenlayer_incredible_squaring_test(
     .unwrap();
 
     let DeployedCoreContracts {
-        proxy_admin: proxy_admin_address,
         delegation_manager: delegation_manager_address,
-        delegation_manager_impl: delegation_manager_impl_address,
         avs_directory: avs_directory_address,
-        avs_directory_impl: avs_directory_impl_address,
-        strategy_manager: strategy_manager_address,
-        strategy_manager_impl: strategy_manager_impl_address,
-        eigen_pod_manager: eigen_pod_manager_address,
-        eigen_pod_manager_impl: eigen_pod_manager_impl_address,
         allocation_manager: allocation_manager_address,
-        allocation_manager_impl: allocation_manager_impl_address,
         rewards_coordinator: rewards_coordinator_address,
-        rewards_coordinator_impl: rewards_coordinator_impl_address,
-        eigen_pod_beacon: eigen_pod_beacon_address,
         pauser_registry: pauser_registry_address,
         strategy_factory: strategy_factory_address,
-        strategy_factory_impl: strategy_factory_impl_address,
-        strategy_beacon: strategy_beacon_address,
         permission_controller: permission_controller_address,
-        permission_controller_impl: permission_controller_impl_address,
+        ..
     } = core_contracts;
 
     let core_contracts_json = serde_json::to_string_pretty(&core_contracts).unwrap();
@@ -143,8 +120,6 @@ async fn run_eigenlayer_incredible_squaring_test(
         &private_key,
         harness.owner_account(),
         1,
-        vec![10],
-        harness.owner_account(),
         permission_controller_address,
         allocation_manager_address,
         avs_directory_address,
@@ -160,20 +135,10 @@ async fn run_eigenlayer_incredible_squaring_test(
     .unwrap();
 
     let DeployedContracts {
-        proxy_admin: proxy_admin_address,
-        squaring_service_manager: service_manager_address,
         squaring_task_manager: task_manager_address,
-        squaring_service_manager_impl: service_manager_impl_address,
         registry_coordinator: registry_coordinator_address,
-        bls_apk_registry: bls_apk_registry_address,
-        index_registry: index_registry_address,
-        stake_registry: stake_registry_address,
-        operator_state_retriever: operator_state_retriever_address,
         strategy: strategy_address,
-        pauser_registry: pauser_registry_address,
-        token: token_address,
-        instant_slasher: instant_slasher_address,
-        socket_registry: socket_registry_address,
+        ..
     } = avs_contracts;
 
     let avs_contracts_json = serde_json::to_string_pretty(&avs_contracts).unwrap();
@@ -262,28 +227,10 @@ async fn run_eigenlayer_incredible_squaring_test(
         }
     }
 
-    // let avs_writer = AvsRegistryChainWriter::build_avs_registry_chain_writer(
-    //     get_test_logger(),
-    //     env.http_rpc_endpoint.clone(),
-    //     private_key,
-    //     registry_coordinator_address,
-    //     operator_state_retriever_address,
-    // )
-    // .await
-    // .unwrap();
-
-    // avs_writer.
-
     // Spawn Task Spawner and Task Response Listener
     let successful_responses = Arc::new(Mutex::new(0));
     let successful_responses_clone = successful_responses.clone();
-
-    // Create task response listener
-    let response_listener = setup_task_response_listener(
-        ws_endpoint,
-        task_manager_address,
-        successful_responses.clone(),
-    );
+    let successful_responses_listener_clone = successful_responses.clone();
 
     // Create task spawner
     let task_spawner = setup_task_spawner(
@@ -298,7 +245,12 @@ async fn run_eigenlayer_incredible_squaring_test(
         task_spawner.await;
     });
     tokio::spawn(async move {
-        response_listener.await;
+        setup_task_response_listener(
+            ws_endpoint,
+            task_manager_address,
+            successful_responses_listener_clone,
+        )
+        .await;
     });
 
     info!("Starting Blueprint Execution...");
@@ -467,40 +419,37 @@ pub fn setup_task_spawner(
     }
 }
 
-pub fn setup_task_response_listener(
+pub async fn setup_task_response_listener(
     ws_endpoint: String,
     task_manager_address: Address,
     successful_responses: Arc<Mutex<usize>>,
-) -> impl std::future::Future<Output = ()> {
-    async move {
-        setup_log();
-        let task_manager =
-            SquaringTask::new(task_manager_address, get_provider_ws(&ws_endpoint).await);
-        info!("Setting up task response listener...");
-        let filter = task_manager.TaskResponded_filter().filter;
-        let mut event_stream = match task_manager.provider().subscribe_logs(&filter).await {
-            Ok(stream) => stream.into_stream(),
+) {
+    setup_log();
+    let task_manager = SquaringTask::new(task_manager_address, get_provider_ws(&ws_endpoint).await);
+    info!("Setting up task response listener...");
+    let filter = task_manager.TaskResponded_filter().filter;
+    let mut event_stream = match task_manager.provider().subscribe_logs(&filter).await {
+        Ok(stream) => stream.into_stream(),
+        Err(e) => {
+            error!("Failed to subscribe to logs: {:?}", e);
+            return;
+        }
+    };
+    while let Some(event) = event_stream.next().await {
+        let SquaringTask::TaskResponded {
+            taskResponse: _, ..
+        } = event
+            .log_decode::<SquaringTask::TaskResponded>()
+            .unwrap()
+            .inner
+            .data;
+        let mut counter = match successful_responses.lock() {
+            Ok(guard) => guard,
             Err(e) => {
-                error!("Failed to subscribe to logs: {:?}", e);
+                error!("Failed to lock successful_responses: {}", e);
                 return;
             }
         };
-        while let Some(event) = event_stream.next().await {
-            let SquaringTask::TaskResponded {
-                taskResponse: _, ..
-            } = event
-                .log_decode::<SquaringTask::TaskResponded>()
-                .unwrap()
-                .inner
-                .data;
-            let mut counter = match successful_responses.lock() {
-                Ok(guard) => guard,
-                Err(e) => {
-                    error!("Failed to lock successful_responses: {}", e);
-                    return;
-                }
-            };
-            *counter += 1;
-        }
+        *counter += 1;
     }
 }

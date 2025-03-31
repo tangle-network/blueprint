@@ -1,6 +1,5 @@
 use alloy_primitives::{Address, U256, hex};
 use blueprint_evm_extra::util::get_provider_http;
-use eigensdk::client_avsregistry::writer::AvsRegistryChainWriter;
 use eigensdk::client_elcontracts::{reader::ELChainReader, writer::ELChainWriter};
 use eigensdk::crypto_bls::BlsKeyPair;
 use eigensdk::logging::get_test_logger;
@@ -81,6 +80,7 @@ async fn requires_registration_bls_impl(env: &BlueprintEnvironment) -> Result<bo
     is_operator_registered(env).await
 }
 
+#[allow(clippy::too_many_lines)]
 async fn register_bls_impl(
     env: &BlueprintEnvironment,
     earnings_receiver_address: Address,
@@ -164,9 +164,7 @@ async fn register_bls_impl(
         .map_err(EigenlayerError::ElContracts)?;
     let registration_receipt = wait_transaction(&env.http_rpc_endpoint, tx_hash)
         .await
-        .map_err(|e| {
-            EigenlayerError::Registration(format!("AVS registration error: {}", e.to_string()))
-        })?;
+        .map_err(|e| EigenlayerError::Registration(format!("AVS registration error: {}", e)))?;
     if registration_receipt.status() {
         info!("Registered as operator {} for Eigenlayer", operator_address);
     } else if is_operator_registered(env).await? {
@@ -182,7 +180,7 @@ async fn register_bls_impl(
         return Err(RunnerError::Other("Operator registration failed".into()));
     }
 
-    let amount = U256::from(5000000000000000000000u128); // TODO: Make deposit amount configurable
+    let amount = U256::from(5_000_000_000_000_000_000_000u128); // TODO: Make deposit amount configurable
 
     let avs_deposit_hash = el_writer
         .deposit_erc20_into_strategy(strategy_address, amount)
@@ -192,9 +190,7 @@ async fn register_bls_impl(
     info!("Deposit hash: {:?}", avs_deposit_hash);
     let avs_deposit_receipt = wait_transaction(&env.http_rpc_endpoint, avs_deposit_hash)
         .await
-        .map_err(|e| {
-            EigenlayerError::Registration(format!("AVS deposit error: {}", e.to_string()))
-        })?;
+        .map_err(|e| EigenlayerError::Registration(format!("AVS deposit error: {}", e)))?;
     if avs_deposit_receipt.status() {
         info!(
             "Deposited into strategy {} for Eigenlayer",
@@ -212,14 +208,10 @@ async fn register_bls_impl(
         .setAllocationDelay(operator_address, allocation_delay)
         .send()
         .await
-        .map_err(|e| {
-            EigenlayerError::Registration(format!("Allocation delay set error: {}", e.to_string()))
-        })?
+        .map_err(|e| EigenlayerError::Registration(format!("Allocation delay set error: {}", e)))?
         .get_receipt()
         .await
-        .map_err(|e| {
-            EigenlayerError::Registration(format!("Allocation delay set error: {}", e.to_string()))
-        })?;
+        .map_err(|e| EigenlayerError::Registration(format!("Allocation delay set error: {}", e)))?;
     if allocation_delay_receipt.status() {
         info!(
             "Successfully set allocation delay to {} for operator {}",
@@ -236,7 +228,7 @@ async fn register_bls_impl(
     }
 
     // Stake tokens to the quorum
-    let stake_amount = 1000000000000000000u64;
+    let stake_amount = 1_000_000_000_000_000_000u64;
     let operator_sets = vec![0u32];
 
     info!(
@@ -260,9 +252,7 @@ async fn register_bls_impl(
 
     let stake_receipt = wait_transaction(&env.http_rpc_endpoint, stake_hash)
         .await
-        .map_err(|e| {
-            EigenlayerError::Registration(format!("Quorum staking error: {}", e.to_string()))
-        })?;
+        .map_err(|e| EigenlayerError::Registration(format!("Quorum staking error: {}", e)))?;
 
     if stake_receipt.status() {
         info!("Successfully staked tokens to quorums {:?}", operator_sets);
@@ -289,10 +279,7 @@ async fn register_bls_impl(
     let registration_receipt = wait_transaction(&env.http_rpc_endpoint, registration_hash)
         .await
         .map_err(|e| {
-            EigenlayerError::Registration(format!(
-                "Operator sets registration error: {}",
-                e.to_string()
-            ))
+            EigenlayerError::Registration(format!("Operator sets registration error: {}", e))
         })?;
     if registration_receipt.status() {
         info!("Registered to operator sets for Eigenlayer");

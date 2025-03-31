@@ -281,7 +281,7 @@ pub async fn deploy_core_contracts(
 
     // Deploy ProxyAdmin
     let proxy_admin = ProxyAdmin::deploy(&wallet).await?;
-    let proxy_admin_addr = proxy_admin.address().clone();
+    let &proxy_admin_addr = proxy_admin.address();
     info!("ProxyAdmin deployed at: {}", proxy_admin_addr);
 
     // Deploy empty proxies
@@ -299,7 +299,7 @@ pub async fn deploy_core_contracts(
     // Deploy PauserRegistry
     let pauser_registry =
         PauserRegistry::deploy(&wallet, Vec::<Address>::new(), proxy_admin_addr).await?;
-    let pauser_registry_addr = pauser_registry.address().clone();
+    let &pauser_registry_addr = pauser_registry.address();
     info!("PauserRegistry deployed at: {}", pauser_registry_addr);
 
     // Deploy implementation contracts
@@ -317,7 +317,7 @@ pub async fn deploy_core_contracts(
         MIDDLEWARE_VERSION.to_string(),
     )
     .await?;
-    let delegation_manager_impl_addr = delegation_manager_impl.address().clone();
+    let &delegation_manager_impl_addr = delegation_manager_impl.address();
     info!(
         "DelegationManager implementation deployed at: {}",
         delegation_manager_impl_addr
@@ -326,7 +326,7 @@ pub async fn deploy_core_contracts(
     // Deploy PermissionController implementation
     let permission_controller_impl =
         PermissionController::deploy(&wallet, MIDDLEWARE_VERSION.to_string()).await?;
-    let permission_controller_impl_addr = permission_controller_impl.address().clone();
+    let &permission_controller_impl_addr = permission_controller_impl.address();
     info!(
         "PermissionController implementation deployed at: {}",
         permission_controller_impl_addr
@@ -340,7 +340,7 @@ pub async fn deploy_core_contracts(
         MIDDLEWARE_VERSION.to_string(),
     )
     .await?;
-    let avs_directory_impl_addr = avs_directory_impl.address().clone();
+    let &avs_directory_impl_addr = avs_directory_impl.address();
     info!(
         "AVSDirectory implementation deployed at: {}",
         avs_directory_impl_addr
@@ -354,7 +354,7 @@ pub async fn deploy_core_contracts(
         MIDDLEWARE_VERSION.to_string(),
     )
     .await?;
-    let strategy_manager_impl_addr = strategy_manager_impl.address().clone();
+    let &strategy_manager_impl_addr = strategy_manager_impl.address();
     info!(
         "StrategyManager implementation deployed at: {}",
         strategy_manager_impl_addr
@@ -368,7 +368,7 @@ pub async fn deploy_core_contracts(
         MIDDLEWARE_VERSION.to_string(),
     )
     .await?;
-    let strategy_factory_impl_addr = strategy_factory_impl.address().clone();
+    let &strategy_factory_impl_addr = strategy_factory_impl.address();
     info!(
         "StrategyFactory implementation deployed at: {}",
         strategy_factory_impl_addr
@@ -385,7 +385,7 @@ pub async fn deploy_core_contracts(
         MIDDLEWARE_VERSION.to_string(),
     )
     .await?;
-    let allocation_manager_impl_addr = allocation_manager_impl.address().clone();
+    let &allocation_manager_impl_addr = allocation_manager_impl.address();
     info!(
         "AllocationManager implementation deployed at: {}",
         allocation_manager_impl_addr
@@ -411,7 +411,7 @@ pub async fn deploy_core_contracts(
         MIDDLEWARE_VERSION.to_string(),
     )
     .await?;
-    let eigen_pod_manager_impl_addr = eigen_pod_manager_impl.address().clone();
+    let &eigen_pod_manager_impl_addr = eigen_pod_manager_impl.address();
     info!(
         "EigenPodManager implementation deployed at: {}",
         eigen_pod_manager_impl_addr
@@ -442,7 +442,7 @@ pub async fn deploy_core_contracts(
         },
     )
     .await?;
-    let rewards_coordinator_impl_addr = rewards_coordinator_impl.address().clone();
+    let &rewards_coordinator_impl_addr = rewards_coordinator_impl.address();
     info!(
         "RewardsCoordinator implementation deployed at: {}",
         rewards_coordinator_impl_addr
@@ -460,7 +460,7 @@ pub async fn deploy_core_contracts(
         MIDDLEWARE_VERSION.to_string(),
     )
     .await?;
-    let eigen_pod_impl_addr = eigen_pod_impl.address().clone();
+    let &eigen_pod_impl_addr = eigen_pod_impl.address();
     info!(
         "EigenPod implementation deployed at: {}",
         eigen_pod_impl_addr
@@ -474,7 +474,7 @@ pub async fn deploy_core_contracts(
         MIDDLEWARE_VERSION.to_string(),
     )
     .await?;
-    let base_strategy_impl_addr = base_strategy_impl.address().clone();
+    let &base_strategy_impl_addr = base_strategy_impl.address();
     info!(
         "StrategyBase implementation deployed at: {}",
         base_strategy_impl_addr
@@ -482,7 +482,7 @@ pub async fn deploy_core_contracts(
 
     // Deploy and configure the strategy beacon
     let strategy_beacon = UpgradeableBeacon::deploy(&wallet, base_strategy_impl_addr).await?;
-    let strategy_beacon_addr = strategy_beacon.address().clone();
+    let &strategy_beacon_addr = strategy_beacon.address();
     info!("StrategyBeacon deployed at: {}", strategy_beacon_addr);
 
     // Upgrade contracts with implementations and initialize them

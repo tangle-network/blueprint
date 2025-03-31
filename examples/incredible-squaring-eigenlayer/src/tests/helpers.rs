@@ -14,12 +14,12 @@ pub async fn deploy_empty_proxy(
     let data = Bytes::new();
 
     let empty_contract = EmptyContract::deploy(wallet).await?;
-    let empty_contract_addr = empty_contract.address().clone();
+    let &empty_contract_addr = empty_contract.address();
 
     let proxy =
         TransparentUpgradeableProxy::deploy(wallet, empty_contract_addr, proxy_admin, data).await?;
 
-    Ok(proxy.address().clone())
+    Ok(*proxy.address())
 }
 
 /// Helper function to upgrade a proxy with an implementation
