@@ -1,9 +1,13 @@
 use alloy_primitives::{Address, U256, hex};
+use blueprint_evm_extra::util::get_provider_http;
+use eigensdk::client_avsregistry::writer::AvsRegistryChainWriter;
 use eigensdk::client_elcontracts::{reader::ELChainReader, writer::ELChainWriter};
 use eigensdk::crypto_bls::BlsKeyPair;
 use eigensdk::logging::get_test_logger;
 use eigensdk::testing_utils::transaction::wait_transaction;
 use eigensdk::types::operator::Operator;
+use eigensdk::utils::slashing::core::allocationmanager::AllocationManager::{self, OperatorSet};
+use eigensdk::utils::slashing::core::allocationmanager::IAllocationManagerTypes::AllocateParams;
 
 use super::error::EigenlayerError;
 use crate::BlueprintConfig;
@@ -141,7 +145,7 @@ async fn register_bls_impl(
         registry_coordinator_address,
         el_chain_reader.clone(),
         env.http_rpc_endpoint.clone(),
-        operator_private_key,
+        operator_private_key.clone(),
     );
 
     let staker_opt_out_window_blocks = 50400u32;
@@ -149,7 +153,7 @@ async fn register_bls_impl(
         address: operator_address,
         delegation_approver_address,
         metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
-        allocation_delay: Some(30), // TODO: Make allocation delay configurable
+        allocation_delay: Some(0), // TODO: Make allocation delay configurable
         _deprecated_earnings_receiver_address: Some(earnings_receiver_address),
         staker_opt_out_window_blocks: Some(staker_opt_out_window_blocks),
     };
@@ -178,7 +182,7 @@ async fn register_bls_impl(
         return Err(RunnerError::Other("Operator registration failed".into()));
     }
 
-    let amount = U256::from(10);
+    let amount = U256::from(5000000000000000000000u128); // TODO: Make deposit amount configurable
 
     let avs_deposit_hash = el_writer
         .deposit_erc20_into_strategy(strategy_address, amount)
@@ -199,6 +203,72 @@ async fn register_bls_impl(
     } else {
         error!("AVS deposit failed for strategy {}", strategy_address);
         return Err(RunnerError::Other("AVS deposit failed".into()));
+    }
+
+    let allocation_delay = 0u32; // TODO: User-defined allocation delay 
+    let provider = get_provider_http(&env.http_rpc_endpoint);
+    let allocation_manager = AllocationManager::new(allocation_manager_address, provider);
+    let allocation_delay_receipt = allocation_manager
+        .setAllocationDelay(operator_address, allocation_delay)
+        .send()
+        .await
+        .map_err(|e| {
+            EigenlayerError::Registration(format!("Allocation delay set error: {}", e.to_string()))
+        })?
+        .get_receipt()
+        .await
+        .map_err(|e| {
+            EigenlayerError::Registration(format!("Allocation delay set error: {}", e.to_string()))
+        })?;
+    if allocation_delay_receipt.status() {
+        info!(
+            "Successfully set allocation delay to {} for operator {}",
+            allocation_delay, operator_address
+        );
+    } else {
+        error!(
+            "Failed to set allocation delay for operator {}",
+            operator_address
+        );
+        return Err(RunnerError::Other(
+            "Allocation Manager setAllocationDelay call failed".into(),
+        ));
+    }
+
+    // Stake tokens to the quorum
+    let stake_amount = 1000000000000000000u64;
+    let operator_sets = vec![0u32];
+
+    info!(
+        "Staking {} tokens to quorums {:?}",
+        stake_amount, operator_sets
+    );
+    let stake_hash = el_writer
+        .modify_allocations(
+            operator_address,
+            vec![AllocateParams {
+                operatorSet: OperatorSet {
+                    avs: service_manager_address,
+                    id: operator_sets[0],
+                },
+                strategies: vec![strategy_address],
+                newMagnitudes: vec![stake_amount],
+            }],
+        )
+        .await
+        .map_err(|e| EigenlayerError::Registration(e.to_string()))?;
+
+    let stake_receipt = wait_transaction(&env.http_rpc_endpoint, stake_hash)
+        .await
+        .map_err(|e| {
+            EigenlayerError::Registration(format!("Quorum staking error: {}", e.to_string()))
+        })?;
+
+    if stake_receipt.status() {
+        info!("Successfully staked tokens to quorums {:?}", operator_sets);
+    } else {
+        error!("Failed to stake tokens to quorums");
+        return Err(RunnerError::Other("Quorum staking failed".into()));
     }
 
     info!("Operator BLS key pair: {:?}", operator_bls_key);

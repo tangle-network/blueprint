@@ -247,7 +247,7 @@ pub async fn deploy_avs_contracts(
     let token = mock_erc20;
     // let token = MockERC20::new(TOKEN_ADDR, wallet.clone());
 
-    let mint_call = token.mint(deployer_address, U256::from(1000000000000000000u64));
+    let mint_call = token.mint(deployer_address, U256::from(15000000000000000000000u128));
     let mint_receipt = get_receipt(mint_call).await?;
     info!("Token mint receipt: {:?}", mint_receipt);
     if !mint_receipt.status() {
@@ -255,7 +255,7 @@ pub async fn deploy_avs_contracts(
     }
     info!("Minted tokens to deployer: {}", deployer_address);
 
-    let mint_call = token.mint(task_generator_addr, U256::from(1000000000000000000u64));
+    let mint_call = token.mint(task_generator_addr, U256::from(30000000000000000000000u128));
     let mint_receipt = get_receipt(mint_call).await?;
     info!("Token mint receipt: {:?}", mint_receipt);
     if !mint_receipt.status() {

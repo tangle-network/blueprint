@@ -5,7 +5,7 @@ use crate::contracts::SquaringTask::NewTaskCreated;
 use crate::contracts::TaskManager::TaskResponse;
 use crate::error::TaskError;
 use alloy_primitives::{U256, keccak256};
-use alloy_sol_types::{SolEvent, SolType};
+use alloy_sol_types::{SolEvent, SolType, SolValue};
 use blueprint_sdk::contexts::keystore::KeystoreContext;
 use blueprint_sdk::crypto::bn254::ArkBlsBn254;
 use blueprint_sdk::evm::extract::BlockEvents;
@@ -42,15 +42,18 @@ pub async fn xsquare_eigen(
         let message_bytes = task.message;
         let number_to_be_squared = U256::from_be_slice(&message_bytes.0);
         info!("Number to be squared: {}", number_to_be_squared);
-        let message = number_to_be_squared
-            .saturating_pow(U256::from(2u32))
-            .to_string()
-            .into();
+
+        // Calculate the square
+        let squared_result = number_to_be_squared.saturating_pow(U256::from(2u32));
+        info!("Squared result: {}", squared_result);
+
+        // Properly encode the result as a uint256 instead of a string
+        let message = SolValue::abi_encode(&squared_result);
 
         // Calculate our response to job
         let task_response = TaskResponse {
             referenceTaskIndex: task_index,
-            message,
+            message: message.into(),
         };
 
         let bn254_public = ctx.keystore().first_local::<ArkBlsBn254>().unwrap();
@@ -79,7 +82,6 @@ pub async fn xsquare_eigen(
                 )));
             }
         };
-        info!("TASK BLS KEY PAIR: {:?}", bls_key_pair);
         let operator_id = operator_id_from_g1_pub_key(bls_key_pair.public_key())?;
 
         // Sign the Hashed Message and send it to the BLS Aggregator

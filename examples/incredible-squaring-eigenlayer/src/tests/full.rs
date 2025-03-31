@@ -34,6 +34,8 @@ use blueprint_sdk::testing::utils::anvil::wait_for_responses;
 use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
 use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::{Router, error, info, warn};
+use eigensdk::client_avsregistry::writer::AvsRegistryChainWriter;
+use eigensdk::logging::get_test_logger;
 use futures::StreamExt;
 use tokio::sync::oneshot;
 
@@ -260,6 +262,18 @@ async fn run_eigenlayer_incredible_squaring_test(
         }
     }
 
+    // let avs_writer = AvsRegistryChainWriter::build_avs_registry_chain_writer(
+    //     get_test_logger(),
+    //     env.http_rpc_endpoint.clone(),
+    //     private_key,
+    //     registry_coordinator_address,
+    //     operator_state_retriever_address,
+    // )
+    // .await
+    // .unwrap();
+
+    // avs_writer.
+
     // Spawn Task Spawner and Task Response Listener
     let successful_responses = Arc::new(Mutex::new(0));
     let successful_responses_clone = successful_responses.clone();
@@ -309,13 +323,15 @@ async fn run_eigenlayer_incredible_squaring_test(
         env.clone(),
     );
 
+    let current_block_number = provider.get_block_number().await.unwrap();
+
     // Create task producer
     let client = Arc::new(provider);
     let task_producer = PollingProducer::new(
         client.clone(),
         PollingConfig {
             poll_interval: Duration::from_secs(1),
-            start_block: 290,
+            start_block: current_block_number,
             confirmations: 1,
             step: 1,
         },
