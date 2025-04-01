@@ -7486,7 +7486,7 @@ dependencies = [
 
 [[package]]
 name = "incredible-squaring-blueprint-bin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "blueprint-sdk",
  "incredible-squaring-blueprint-lib",
@@ -7498,7 +7498,7 @@ dependencies = [
 
 [[package]]
 name = "incredible-squaring-blueprint-lib"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "blueprint-sdk",
  "color-eyre",

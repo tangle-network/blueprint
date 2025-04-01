@@ -6,6 +6,7 @@ members = ["incredible-squaring-lib", "incredible-squaring-bin"]
 version = "0.1.1"
 description = "An experimental blueprint"
 edition = "2024"
+rust-version = "1.85"
 
 [workspace.dependencies]
 incredible-squaring-blueprint-lib = { path = "incredible-squaring-lib" }

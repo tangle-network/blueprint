@@ -1,4 +1,4 @@
 [toolchain]
-channel = "nightly"
+channel = "1.85" # Update the workspace rust-version as well
 components = ["rustfmt", "clippy", "rust-src"]
 profile = "minimal"
