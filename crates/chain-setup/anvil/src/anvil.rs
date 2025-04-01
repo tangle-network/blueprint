@@ -39,6 +39,8 @@ pub async fn start_anvil_container(
         //     "/state.json",
         // ))
         .with_cmd([
+            // "--dump-state",
+            // "./test-state.json",
             "--host",
             "0.0.0.0",
             // "--load-state",
