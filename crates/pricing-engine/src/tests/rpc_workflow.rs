@@ -31,7 +31,6 @@ use super::utils::{create_test_key_pair, create_test_pricing_models, create_test
 /// 4. Quotes are gathered and returned to client
 #[tokio::test]
 #[serial_test::serial]
-#[ignore = "Requires blueprint_networking::test_utils"]
 async fn test_rpc_workflow_with_real_networking() {
     // Initialize tracing for better debugging
     init_tracing();

@@ -408,19 +408,48 @@ impl<K: KeyType> RfqProcessor<K> {
     /// # Returns
     /// Success if the processor was shutdown, error otherwise
     pub async fn shutdown(&self) -> RfqResult<()> {
+        info!("RFQ processor shutdown initiated");
         let (tx, rx) = oneshot::channel();
 
-        self.command_tx
+        // Send shutdown command
+        match self
+            .command_tx
             .send(RfqCommand::Shutdown {
                 response_channel: tx,
             })
             .await
-            .map_err(|_| RfqError::Other("Failed to send shutdown command".to_string()))?;
+        {
+            Ok(_) => info!("RFQ processor shutdown command sent"),
+            Err(e) => {
+                error!("Failed to send RFQ processor shutdown command: {}", e);
+                return Err(RfqError::Other(format!(
+                    "Failed to send shutdown command: {}",
+                    e
+                )));
+            }
+        }
 
-        rx.await
-            .map_err(|_| RfqError::Other("Shutdown response channel closed".to_string()))?;
-
-        Ok(())
+        // Wait for confirmation with timeout
+        match timeout(Duration::from_secs(5), rx).await {
+            Ok(result) => match result {
+                Ok(_) => {
+                    info!("RFQ processor shutdown confirmed");
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("RFQ processor shutdown response channel closed: {}", e);
+                    Err(RfqError::Other(format!(
+                        "Shutdown response channel closed: {}",
+                        e
+                    )))
+                }
+            },
+            Err(_) => {
+                error!("Timeout waiting for RFQ processor to shut down");
+                // Return success anyway to not block parent service shutdown
+                Ok(())
+            }
+        }
     }
 
     /// Background task for processing commands
@@ -506,8 +535,35 @@ impl<K: KeyType> RfqProcessor<K> {
                     debug!("Updated pricing models");
                 }
                 RfqCommand::Shutdown { response_channel } => {
-                    info!("Shutting down RFQ processor");
-                    let _ = response_channel.send(());
+                    info!("RFQ processor shutdown command received");
+
+                    // Complete any pending requests with a cancellation error
+                    {
+                        let mut state = state.lock().unwrap();
+                        let pending_requests = std::mem::take(&mut state.pending_requests);
+
+                        if !pending_requests.is_empty() {
+                            info!(
+                                "Canceling {} pending requests during shutdown",
+                                pending_requests.len()
+                            );
+
+                            for (id, request) in pending_requests {
+                                if let Some(channel) = request.response_channel {
+                                    debug!("Canceling request {:?}", id);
+                                    let _ = channel.send(Err(RfqError::Canceled));
+                                }
+                            }
+                        }
+                    }
+
+                    // Send confirmation
+                    if let Err(e) = response_channel.send(()) {
+                        error!("Failed to send shutdown confirmation: {:?}", e);
+                    } else {
+                        info!("Sent shutdown confirmation");
+                    }
+
                     break;
                 }
             }

@@ -14,10 +14,11 @@ use crate::{
 use blockchain::{event::BlockchainEvent, listener::EventListener};
 use blueprint_crypto::KeyType;
 use blueprint_networking::service_handle::NetworkServiceHandle;
+use core::fmt::{Debug, Display};
 use rpc::{OperatorInfo, server::RpcServer};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// Service state enum for lifecycle management
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,6 +40,7 @@ enum ServiceCommand {
 }
 
 /// Configuration for the pricing engine service
+#[derive(Clone)]
 pub struct ServiceConfig<K: KeyType> {
     /// RPC server address
     pub rpc_addr: SocketAddr,
@@ -56,6 +58,28 @@ pub struct ServiceConfig<K: KeyType> {
     pub supported_blueprints: Vec<String>,
     /// Network service handle for RFQ functionality
     pub network_handle: Option<Arc<NetworkServiceHandle<K>>>,
+}
+
+impl<K: KeyType> Display for ServiceConfig<K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ServiceConfig {{ rpc_addr: {}, node_url: {:?}, keystore_path: {:?}, operator_name: {}, operator_description: {:?}, operator_public_key: {:?}, supported_blueprints: {:?} }}",
+            self.rpc_addr,
+            self.node_url,
+            self.keystore_path,
+            self.operator_name,
+            self.operator_description,
+            self.operator_public_key,
+            self.supported_blueprints,
+        )
+    }
+}
+
+impl<K: KeyType> Debug for ServiceConfig<K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 /// The main pricing engine service
@@ -125,6 +149,42 @@ impl<K: KeyType> Service<K> {
             event_rx: Some(event_rx),
             config,
         }
+    }
+
+    /// Start the complete pricing engine service
+    ///
+    /// This method starts both the server components and attempts to start
+    /// the blockchain listener. If the blockchain listener fails to start,
+    /// the service will continue to operate in offline mode.
+    ///
+    /// # Returns
+    /// `Ok(())` if the service started successfully (even in offline mode),
+    /// or an error if the server components failed to start.
+    pub async fn start(&mut self) -> Result<()> {
+        info!("Starting Tangle Cloud Pricing Engine");
+
+        // Always start the server components (RPC and networking)
+        self.start_server().await?;
+
+        // Attempt to start the blockchain listener if a node URL is provided
+        if self.config.node_url.is_some() {
+            match self.start_blockchain_listener().await {
+                Ok(_) => info!("Service running with blockchain integration"),
+                Err(e) => info!("Service running in offline mode: {}", e),
+            }
+        } else {
+            info!("Service running in offline mode (no blockchain node URL provided)");
+
+            // Since we're not starting the blockchain listener, we need to
+            // discard the event receiver to avoid resource leaks
+            self.event_rx.take();
+        }
+
+        // Mark the service as running
+        self.state = ServiceState::Running;
+        info!("Tangle Cloud Pricing Engine started successfully");
+
+        Ok(())
     }
 
     /// Start the blockchain event listener component
@@ -238,104 +298,93 @@ impl<K: KeyType> Service<K> {
         Ok(())
     }
 
-    /// Start the complete pricing engine service
-    ///
-    /// This method starts both the server components and attempts to start
-    /// the blockchain listener. If the blockchain listener fails to start,
-    /// the service will continue to operate in offline mode.
-    ///
-    /// # Returns
-    /// `Ok(())` if the service started successfully (even in offline mode),
-    /// or an error if the server components failed to start.
-    pub async fn start(&mut self) -> Result<()> {
-        info!("Starting Tangle Cloud Pricing Engine");
-
-        // Always start the server components (RPC and networking)
-        self.start_server().await?;
-
-        // Attempt to start the blockchain listener if a node URL is provided
-        if self.config.node_url.is_some() {
-            match self.start_blockchain_listener().await {
-                Ok(_) => info!("Service running with blockchain integration"),
-                Err(e) => info!("Service running in offline mode: {}", e),
-            }
-        } else {
-            info!("Service running in offline mode (no blockchain node URL provided)");
-
-            // Since we're not starting the blockchain listener, we need to
-            // discard the event receiver to avoid resource leaks
-            self.event_rx.take();
-        }
-
-        // Mark the service as running
-        self.state = ServiceState::Running;
-        info!("Tangle Cloud Pricing Engine started successfully");
-
-        Ok(())
-    }
-
     /// Run the service until it is stopped
     pub async fn run_until_stopped(&mut self) -> Result<()> {
         // Wait for a stop command
         if let Some(mut command_rx) = self.command_rx.take() {
+            info!("Service running, waiting for stop command");
             while let Some(command) = command_rx.recv().await {
                 match command {
                     ServiceCommand::Stop(sender) => {
-                        info!("Stopping service");
+                        info!("Stop command received, beginning shutdown sequence");
                         self.state = ServiceState::ShuttingDown;
 
-                        // Clean up resources
+                        // Shutdown the RPC server first
+                        if let Some(server) = self.rpc_server.take() {
+                            info!("Stopping RPC server");
+                            // Stop method returns immediately, no need to await
+                            server.stop();
+                            info!("RPC server stopped");
+                        }
+
+                        // Shutdown the RFQ processor
                         if let Some(rfq_processor) = &self.rfq_processor {
-                            if let Err(e) = rfq_processor.shutdown().await {
-                                error!("Error shutting down RFQ processor: {}", e);
+                            info!("Stopping RFQ processor");
+                            match rfq_processor.shutdown().await {
+                                Ok(_) => info!("RFQ processor shutdown successfully"),
+                                Err(e) => error!("Error shutting down RFQ processor: {}", e),
                             }
                         }
 
+                        // Any additional resource cleanup would go here
+
+                        // Set final state
                         self.state = ServiceState::ShutDown;
-                        let _ = sender.send(());
+
+                        // Send confirmation
+                        if let Err(e) = sender.send(()) {
+                            error!("Failed to send shutdown confirmation: {}", e);
+                        } else {
+                            info!("Sent shutdown confirmation");
+                        }
+
                         break;
                     }
                 }
             }
+        } else {
+            warn!("Command receiver missing, service cannot be stopped via command channel");
         }
 
+        info!("Service run loop exited");
         Ok(())
     }
 
     /// Stop the service
     pub async fn stop(&self) -> Result<()> {
+        info!("Stopping service");
         let (tx, rx) = oneshot::channel();
-        self.command_tx
-            .send(ServiceCommand::Stop(tx))
-            .await
-            .map_err(|_| Error::ServiceShutdown("Failed to send stop command".to_string()))?;
 
-        rx.await.map_err(|_| {
-            Error::ServiceShutdown("Failed to receive stop confirmation".to_string())
-        })?;
+        // Try to send the stop command
+        match self.command_tx.send(ServiceCommand::Stop(tx)).await {
+            Ok(_) => info!("Stop command sent successfully"),
+            Err(e) => {
+                error!("Failed to send stop command: {}", e);
+                return Err(Error::ServiceShutdown(
+                    "Failed to send stop command".to_string(),
+                ));
+            }
+        }
+
+        // Wait for confirmation with a timeout to prevent hanging
+        match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+            Ok(result) => match result {
+                Ok(_) => info!("Received stop confirmation"),
+                Err(e) => {
+                    error!("Stop confirmation channel error: {}", e);
+                    return Err(Error::ServiceShutdown(
+                        "Failed to receive stop confirmation".to_string(),
+                    ));
+                }
+            },
+            Err(_) => {
+                error!("Timeout waiting for service to stop");
+                // Continue with shutdown even if we didn't get confirmation
+            }
+        }
 
         info!("Service stopped");
         Ok(())
-    }
-
-    /// Send a request for quotes
-    pub async fn send_rfq_request(
-        &self,
-        blueprint_id: String,
-        requirements: Vec<crate::types::ResourceRequirement>,
-    ) -> Result<Vec<crate::rfq::SignedPriceQuote<K>>> {
-        if let Some(rfq) = &self.rfq_processor {
-            rfq.send_request(blueprint_id, requirements)
-                .await
-                .map_err(|e| Error::Other(format!("RFQ error: {}", e)))
-        } else {
-            Err(Error::Other("RFQ functionality not enabled".to_string()))
-        }
-    }
-
-    /// Get the RFQ processor
-    pub fn rfq_processor(&self) -> Option<&Arc<RfqProcessor<K>>> {
-        self.rfq_processor.as_ref()
     }
 
     /// Handle blockchain events
@@ -371,19 +420,6 @@ impl<K: KeyType> Service<K> {
                 }
             }
         }
-    }
-
-    /// Get the current service state
-    pub fn state(&self) -> ServiceState {
-        self.state
-    }
-
-    /// Get the pricing models
-    ///
-    /// # Returns
-    /// A clone of the current pricing models vector
-    pub fn get_pricing_models(&self) -> Vec<PricingModel> {
-        self.pricing_models.clone()
     }
 
     /// Add or update a pricing model

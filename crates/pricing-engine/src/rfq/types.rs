@@ -55,6 +55,10 @@ pub enum RfqError {
     #[error("Timeout waiting for quotes")]
     Timeout,
 
+    /// Request was canceled
+    #[error("Request was canceled")]
+    Canceled,
+
     /// Other error
     #[error("{0}")]
     Other(String),

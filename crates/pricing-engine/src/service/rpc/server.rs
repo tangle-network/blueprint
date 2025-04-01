@@ -442,6 +442,3 @@ impl<K: KeyType> RpcServer<K> {
         Ok(server_handle)
     }
 }
-
-/// Service request handler for the pricing engine
-pub struct ServiceRequestHandler {}

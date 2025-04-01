@@ -10,7 +10,6 @@ pub mod server;
 
 // Re-exports
 pub use client::RpcClient;
-pub use server::ServiceRequestHandler;
 
 /// Operator information returned by the RPC API
 #[derive(Debug, Clone, Serialize, Deserialize)]

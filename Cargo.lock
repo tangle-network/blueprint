@@ -3306,6 +3306,7 @@ dependencies = [
  "blueprint-networking",
  "blueprint-runner",
  "blueprint-std",
+ "blueprint-testing-utils",
  "chrono",
  "clap",
  "crossbeam-channel",

@@ -107,7 +107,7 @@ pub fn create_test_service_config<K: KeyType>(
 ) -> ServiceConfig<K> {
     ServiceConfig {
         rpc_addr: "127.0.0.1:9000".parse().unwrap(),
-        node_url: Some("ws://127.0.0.1:9944".to_string()),
+        node_url: None,
         keystore_path: None,
         operator_name: "Test Operator".to_string(),
         operator_description: Some("For testing purposes".to_string()),

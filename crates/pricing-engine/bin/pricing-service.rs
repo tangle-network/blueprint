@@ -124,12 +124,6 @@ async fn main() -> Result<()> {
         exit(1);
     }
 
-    // Run the service until it's stopped
-    if let Err(e) = service.run_until_stopped().await {
-        error!("Service error: {}", e);
-        exit(1);
-    }
-
     info!("Service stopped");
     Ok(())
 }
