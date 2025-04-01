@@ -34,27 +34,86 @@ use core::{
 use futures::Stream;
 use tokio::time::Sleep;
 
+#[derive(Debug, Clone, Copy)]
+enum StartBlockSource {
+    Genesis,
+    Current(u64),
+    Custom(u64),
+}
+
+impl StartBlockSource {
+    fn number(&self) -> u64 {
+        match self {
+            StartBlockSource::Genesis => 0,
+            StartBlockSource::Current(block) | StartBlockSource::Custom(block) => *block,
+        }
+    }
+}
+
 /// Configuration parameters for the polling producer
+#[must_use]
 #[derive(Debug, Clone, Copy)]
 pub struct PollingConfig {
-    /// Starting block number for log collection
-    pub start_block: u64,
-    /// Interval between polling attempts
-    pub poll_interval: Duration,
-    /// Number of blocks to wait for finality
-    pub confirmations: u64,
-    /// Number of blocks to fetch in each polling cycle
-    pub step: u64,
+    start_block: StartBlockSource,
+    poll_interval: Duration,
+    confirmations: u64,
+    step: u64,
 }
 
 impl Default for PollingConfig {
     fn default() -> Self {
         Self {
-            start_block: 0,
+            start_block: StartBlockSource::Current(0),
             poll_interval: Duration::from_secs(1),
             confirmations: 12,
             step: 1,
         }
+    }
+}
+
+impl PollingConfig {
+    /// Start log collection at block 0
+    pub fn from_genesis() -> PollingConfig {
+        Self {
+            start_block: StartBlockSource::Genesis,
+            ..Default::default()
+        }
+    }
+
+    /// Start log collection at the current block
+    ///
+    /// NOTE: This is the default
+    pub fn from_current() -> PollingConfig {
+        Self {
+            start_block: StartBlockSource::Current(0),
+            ..Default::default()
+        }
+    }
+
+    /// Start log collection at a specific block
+    pub fn from_block(block: u64) -> PollingConfig {
+        Self {
+            start_block: StartBlockSource::Custom(block),
+            ..Default::default()
+        }
+    }
+
+    /// Interval between polling attempts
+    pub fn poll_interval(mut self, interval: Duration) -> Self {
+        self.poll_interval = interval;
+        self
+    }
+
+    /// Number of blocks to wait for finality
+    pub fn confirmations(mut self, confirmations: u64) -> Self {
+        self.confirmations = confirmations;
+        self
+    }
+
+    /// Number of blocks to fetch in each polling cycle
+    pub fn step(mut self, step: u64) -> Self {
+        self.step = step;
+        self
     }
 }
 
@@ -102,10 +161,21 @@ impl<P: Provider> PollingProducer<P> {
     /// # Arguments
     /// * `provider` - The EVM provider to use for fetching logs
     /// * `config` - Configuration parameters for the polling behavior
+    ///
+    /// # Errors
+    ///
+    /// If using [`PollingConfig::from_current()`], transport errors may occur when fetching the current block number.
     #[allow(clippy::cast_possible_truncation)]
-    pub fn new(provider: Arc<P>, config: PollingConfig) -> Self {
+    pub async fn new(provider: Arc<P>, mut config: PollingConfig) -> Result<Self, TransportError> {
+        if let StartBlockSource::Current(current_block) = &mut config.start_block {
+            *current_block = get_block_number(provider.clone()).await?;
+        }
+
         // Calculate initial block range accounting for confirmations
-        let initial_start_block = config.start_block.saturating_sub(config.confirmations);
+        let initial_start_block = config
+            .start_block
+            .number()
+            .saturating_sub(config.confirmations);
         let filter = Filter::new()
             .from_block(initial_start_block)
             .to_block(initial_start_block + config.step);
@@ -118,13 +188,13 @@ impl<P: Provider> PollingProducer<P> {
             "Initializing polling producer"
         );
 
-        Self {
+        Ok(Self {
             provider,
             config,
             filter,
             state: PollingState::Idle(Box::pin(tokio::time::sleep(Duration::from_micros(1)))),
             buffer: VecDeque::with_capacity(config.step as usize),
-        }
+        })
     }
 }
 
@@ -162,7 +232,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                         let last_queried = this
                             .filter
                             .get_to_block()
-                            .unwrap_or(this.config.start_block);
+                            .unwrap_or(this.config.start_block.number());
 
                         // Calculate next block range
                         let next_from_block = last_queried.saturating_add(1);
