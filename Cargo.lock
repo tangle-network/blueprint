@@ -3192,7 +3192,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "auto_impl",
  "blueprint-clients",
