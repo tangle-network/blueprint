@@ -6,19 +6,27 @@ use crate::contexts::x_square::EigenSquareContext;
 use crate::contracts::SquaringTask;
 use crate::jobs::compute_x_square::xsquare_eigen;
 use crate::jobs::initialize_task::initialize_bls_task;
-use crate::tests::core::{
-    DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData, EigenPodManagerConfig,
-    RewardsCoordinatorConfig, StrategyFactoryConfig, StrategyManagerConfig,
+use blueprint_contract_deployer::bindings::core::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
+use blueprint_contract_deployer::bindings::core::registrycoordinator::IStakeRegistryTypes::StrategyParams;
+use blueprint_contract_deployer::bindings::RegistryCoordinator;
+use blueprint_contract_deployer::core::{
+    deploy_core_contracts, DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData, EigenPodManagerConfig, RewardsCoordinatorConfig, StrategyFactoryConfig, StrategyManagerConfig
 };
-use crate::tests::deploy::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
-use crate::tests::deploy::registry_coordinator::IStakeRegistryTypes::StrategyParams;
-use crate::tests::deploy::{DeployedContracts, registry_coordinator::RegistryCoordinator};
-use crate::tests::permissions::setup_avs_permissions;
+// use crate::tests::core::{
+//     DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData, EigenPodManagerConfig,
+//     RewardsCoordinatorConfig, StrategyFactoryConfig, StrategyManagerConfig,
+// };
+// use crate::tests::deploy::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
+// use crate::tests::deploy::registry_coordinator::IStakeRegistryTypes::StrategyParams;
+// use crate::tests::deploy::{DeployedContracts, registry_coordinator::RegistryCoordinator};
+// use crate::tests::permissions::setup_avs_permissions;
 use alloy_network::EthereumWallet;
 use alloy_primitives::aliases::U96;
 use alloy_primitives::{Address, Bytes, U256, address};
 use alloy_provider::Provider;
 use alloy_signer_local::PrivateKeySigner;
+use blueprint_contract_deployer::deploy::{DeployedContracts, deploy_avs_contracts};
+use blueprint_contract_deployer::permissions::setup_avs_permissions;
 use blueprint_sdk::evm::producer::{PollingConfig, PollingProducer};
 use blueprint_sdk::evm::util::get_provider_ws;
 use blueprint_sdk::evm::util::get_wallet_provider_http;
@@ -90,7 +98,7 @@ async fn run_eigenlayer_incredible_squaring_test(
         },
     };
 
-    let core_contracts = crate::tests::core::deploy_core_contracts(
+    let core_contracts = deploy_core_contracts(
         &http_endpoint,
         &private_key,
         harness.owner_account(),
@@ -115,7 +123,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     let core_contracts_json = serde_json::to_string_pretty(&core_contracts).unwrap();
     std::fs::write("core_contracts.json", core_contracts_json).unwrap();
 
-    let avs_contracts = crate::tests::deploy::deploy_avs_contracts(
+    let avs_contracts = deploy_avs_contracts(
         &env.http_rpc_endpoint,
         &private_key,
         harness.owner_account(),

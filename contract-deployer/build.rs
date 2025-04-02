@@ -7,7 +7,11 @@ use std::process::Command;
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
-    let contract_dirs = vec!["./contracts", "./dependencies/eigenlayer-middleware-0.5.4"];
+    let contract_dirs = vec![
+        "./dependencies/eigenlayer-middleware-0.5.4/lib/eigenlayer-contracts",
+        "./dependencies/eigenlayer-middleware-0.5.4",
+        "./contracts",
+    ];
     blueprint_build_utils::soldeer_install();
     blueprint_build_utils::soldeer_update();
     blueprint_build_utils::build_contracts(contract_dirs);
@@ -65,6 +69,8 @@ fn main() {
         "bind",
         "--alloy",
         "--skip-build",
+        "--evm-version",
+        "shanghai",
         "--bindings-path",
         "src/bindings/deploy",
         "--overwrite",
@@ -93,6 +99,8 @@ fn main() {
         "bind",
         "--alloy",
         "--skip-build",
+        "--evm-version",
+        "shanghai",
         "--bindings-path",
         "src/bindings/core",
         "--overwrite",
@@ -206,7 +214,7 @@ fn add_imports_to_file(file_path: &str, contract: &str) {
 
     // Add the imports at the top
     let new_contents = format!(
-        "#![allow(clippy::all, clippy::pedantic, clippy::nursery, warnings, unknown_lints, rustdoc::all, elided_lifetimes_in_paths)]\nuse {}::*;\n\n{}",
+        "#![allow(clippy::all, clippy::pedantic, clippy::nursery, warnings, unknown_lints, rustdoc::all, elided_lifetimes_in_paths)]\nuse {}::*;\n\n{}\n",
         contract, contents
     );
 

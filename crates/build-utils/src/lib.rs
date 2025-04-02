@@ -39,6 +39,8 @@ pub fn build_contracts(contract_dirs: Vec<&str>) {
             let status = Command::new(&forge_executable)
                 .current_dir(&full_path)
                 .arg("build")
+                .arg("--evm-version")
+                .arg("shanghai")
                 .status()
                 .expect("Failed to execute Forge build");
 
