@@ -333,8 +333,6 @@ async fn run_eigenlayer_incredible_squaring_test(
     // Start the shutdown/cleanup process
     aggregator_context_clone.shutdown().await;
 
-    info!("Aggregator shutdown complete");
-
     // Abort the runner
     info!("Shutting down runner");
     runner_handle.abort();

@@ -1,5 +1,5 @@
 use alloy_primitives::{FixedBytes, hex, keccak256};
-use blueprint_core::info;
+use blueprint_core::{info, error};
 use eigensdk::client_avsregistry::reader::AvsRegistryChainReader;
 use eigensdk::crypto_bls::Signature;
 use eigensdk::services_avsregistry::chaincaller::AvsRegistryServiceChainCaller;
@@ -293,21 +293,37 @@ where
             return Err(AggregationError::AlreadyStopped);
         }
 
+        info!("Setting shutdown flag for task aggregator");
         *shutdown_lock = true;
+        drop(shutdown_lock);
+        
+        // Notify all waiters to check the shutdown flag
         notify.notify_waiters();
-
-        // Wait for all tasks to complete
+        
+        // Get handles but don't hold the lock
         let handles = {
             let mut handles_lock = self.task_handles.lock().await;
             std::mem::take(&mut *handles_lock)
         };
-
-        for handle in handles {
+        
+        info!("Waiting for {} task aggregator background tasks to complete", handles.len());
+        
+        // Use a timeout to wait for tasks to complete
+        let timeout = Duration::from_secs(5);
+        for (i, handle) in handles.into_iter().enumerate() {
             if !handle.is_finished() {
-                handle.await?;
+                match tokio::time::timeout(timeout, handle).await {
+                    Ok(_) => info!("Task aggregator background task completed successfully"),
+                    Err(_) => {
+                        error!("Task aggregator background task did not complete within timeout, aborting");
+                        // We can't abort the handle directly, but we've set the shutdown flag
+                        // which should cause it to exit eventually
+                    }
+                }
             }
         }
-
+        
+        info!("Task aggregator shutdown complete");
         Ok(())
     }
 

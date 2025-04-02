@@ -123,17 +123,22 @@ impl AggregatorContext {
     pub async fn shutdown(&self) {
         info!("Initiating aggregator shutdown");
 
-        // Stop the task aggregator
         if let Some(task_agg) = &self.task_aggregator {
-            if let Err(e) = task_agg.stop().await {
-                error!("Error stopping task aggregator: {}", e);
+            match tokio::time::timeout(Duration::from_secs(10), task_agg.stop()).await {
+                Ok(Ok(_)) => info!("Task aggregator stopped successfully"),
+                Ok(Err(e)) => error!("Error stopping task aggregator: {}", e),
+                Err(_) => error!("Timeout while stopping task aggregator"),
             }
+        } else {
+            info!("No task aggregator to stop");
         }
 
         // Set internal shutdown flag
         let (notify, is_shutdown) = &*self.shutdown;
         *is_shutdown.lock().await = true;
         notify.notify_waiters();
+        
+        debug!("Aggregator shutdown flag set");
     }
 
     async fn start_server(aggregator: Arc<Mutex<Self>>) -> Result<(), Error> {

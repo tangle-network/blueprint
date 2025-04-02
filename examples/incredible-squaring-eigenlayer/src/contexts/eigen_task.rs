@@ -2,8 +2,7 @@ use crate::contracts::BN254::{G1Point, G2Point};
 use crate::contracts::IBLSSignatureCheckerTypes::NonSignerStakesAndSignature;
 use crate::contracts::SquaringTask as IncredibleSquaringTaskManager;
 use crate::contracts::TaskManager::{Task, TaskResponse};
-use crate::error::TaskError;
-use alloy_primitives::{FixedBytes, address, keccak256};
+use alloy_primitives::address;
 use alloy_sol_types::SolType;
 use blueprint_sdk::eigenlayer::generic_task_aggregation::{
     EigenTask, ResponseSender, Result as AggResult, TaskResponse as GenericTaskResponse,
@@ -11,10 +10,9 @@ use blueprint_sdk::eigenlayer::generic_task_aggregation::{
 use blueprint_sdk::evm::util::get_provider_from_signer;
 use eigensdk::crypto_bls::{BlsG1Point, BlsG2Point, convert_to_g1_point, convert_to_g2_point};
 use eigensdk::services_blsaggregation::bls_aggregation_service_response::BlsAggregationServiceResponse;
-use eigensdk::types::avs::{TaskIndex, TaskResponseDigest};
+use eigensdk::types::avs::TaskIndex;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU32, Ordering};
 
 // Wrapper for Task that includes the task index
 #[derive(Clone)]
@@ -85,7 +83,7 @@ impl ResponseSender<IndexedTask, TaskResponse> for SquaringTaskResponseSender {
         let http_rpc_url = self.http_rpc_url.clone();
 
         Box::pin(async move {
-            let key = "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6";
+            let key = "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"; // Private key from our Aggregator Anvil account
             let provider = get_provider_from_signer(key, &http_rpc_url);
 
             let contract =
@@ -114,7 +112,7 @@ impl ResponseSender<IndexedTask, TaskResponse> for SquaringTaskResponseSender {
             // Send the response to the contract
             contract
                 .respondToSquaringTask(task_clone, response_clone, non_signer_stakes_and_signature)
-                .from(address!("a0Ee7A142d267C1f36714E4a8F75612F20a79720"))
+                .from(address!("a0Ee7A142d267C1f36714E4a8F75612F20a79720")) // Aggregator Anvil account address
                 .send()
                 .await
                 .map_err(|e| blueprint_sdk::eigenlayer::generic_task_aggregation::AggregationError::ContractError(e.to_string()))?
