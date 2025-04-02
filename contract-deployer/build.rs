@@ -206,7 +206,7 @@ fn add_imports_to_file(file_path: &str, contract: &str) {
 
     // Add the imports at the top
     let new_contents = format!(
-        "#![allow(clippy::all, elided_lifetimes_in_paths)]\nuse {}::*;\n\n{}",
+        "#![allow(clippy::all, clippy::pedantic, clippy::nursery, warnings, unknown_lints, rustdoc::all, elided_lifetimes_in_paths)]\nuse {}::*;\n\n{}",
         contract, contents
     );
 

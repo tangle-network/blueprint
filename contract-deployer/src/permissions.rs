@@ -10,6 +10,9 @@ use crate::deploy::DeployedContracts;
 use crate::bindings::{AllocationManager, IAllocationManager, IServiceManager};
 
 /// Sets permissions and metadata for the AVS at the service manager of the given deployed contracts
+///
+/// # Errors
+/// Returns an error if any of the permission setting operations fail or if any contract calls fail.
 pub async fn setup_avs_permissions(
     core_contracts: &DeployedCoreContracts,
     deployed_contracts: &DeployedContracts,

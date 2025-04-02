@@ -30,9 +30,9 @@ pub struct DeployedCoreContracts {
     pub strategy_manager: Address,
     /// Strategy manager implementation address
     pub strategy_manager_impl: Address,
-    /// EigenPod manager address
+    /// `EigenPod` manager address
     pub eigen_pod_manager: Address,
-    /// EigenPod manager implementation address
+    /// `EigenPod` manager implementation address
     pub eigen_pod_manager_impl: Address,
     /// Allocation manager address
     pub allocation_manager: Address,
@@ -42,7 +42,7 @@ pub struct DeployedCoreContracts {
     pub rewards_coordinator: Address,
     /// Rewards coordinator implementation address
     pub rewards_coordinator_impl: Address,
-    /// EigenPod beacon address
+    /// `EigenPod` beacon address
     pub eigen_pod_beacon: Address,
     /// Pauser registry address
     pub pauser_registry: Address,
@@ -76,7 +76,7 @@ pub struct DelegationManagerConfig {
     pub withdrawal_delay_blocks: u32,
 }
 
-/// Configuration for the EigenPod manager
+/// Configuration for the `EigenPod` manager
 #[derive(Debug, Clone)]
 pub struct EigenPodManagerConfig {
     /// Initial paused status
@@ -120,7 +120,7 @@ pub struct DeploymentConfigData {
     pub strategy_manager: StrategyManagerConfig,
     /// Delegation manager configuration
     pub delegation_manager: DelegationManagerConfig,
-    /// EigenPod manager configuration
+    /// `EigenPod` manager configuration
     pub eigen_pod_manager: EigenPodManagerConfig,
     /// Rewards coordinator configuration
     pub rewards_coordinator: RewardsCoordinatorConfig,
@@ -140,11 +140,11 @@ pub struct DeploymentConfigData {
 /// * `deployer_address` - Deployer address
 /// * `config_data` - Configuration data for the deployment
 /// * `eth_pos_deposit` - Address of the ETH POS deposit contract (optional, for mainnet)
-/// * `genesis_time` - Genesis time for the EigenPod (optional)
+/// * `genesis_time` - Genesis time for the `EigenPod` (optional)
 ///
-/// # Returns
-///
-/// * `Result<DeployedCoreContracts>` - The deployed contract addresses
+/// # Errors
+/// Returns an error if any of the contract deployments fail or if any of the contract calls fail.
+#[allow(clippy::too_many_lines)]
 pub async fn deploy_core_contracts(
     http_endpoint: &str,
     private_key: &str,

@@ -1,4 +1,3 @@
-use alloy_primitives::aliases::U96;
 use alloy_primitives::{Address, U256};
 use alloy_sol_types::SolCall;
 use blueprint_sdk::evm::util::get_provider_from_signer;
@@ -11,11 +10,9 @@ use serde::{Deserialize, Serialize};
 use crate::bindings::core::islashingregistrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
 use crate::bindings::core::slashingregistrycoordinator::IStakeRegistryTypes::StrategyParams;
 use crate::bindings::{
-    AllocationManager, BLSApkRegistry, DelegationManager, EigenPod, EigenPodManager,
-    ISlashingRegistryCoordinator, IStrategy, IndexRegistry, InstantSlasher, OperatorStateRetriever,
-    PauserRegistry, ProxyAdmin, RegistryCoordinator, SlashingRegistryCoordinator, SocketRegistry,
-    SquaringServiceManager, SquaringTask, StakeRegistry, StrategyBase, StrategyFactory,
-    StrategyManager, TransparentUpgradeableProxy, UpgradeableBeacon,
+    BLSApkRegistry, IStrategy, IndexRegistry, InstantSlasher, OperatorStateRetriever,
+    PauserRegistry, ProxyAdmin, SlashingRegistryCoordinator, SocketRegistry,
+    SquaringServiceManager, SquaringTask, StakeRegistry, StrategyFactory,
 };
 use crate::helpers::{deploy_empty_proxy, upgrade_proxy};
 
@@ -75,7 +72,11 @@ pub struct DeployedContracts {
 /// # Returns
 ///
 /// * `Result<DeployedContracts>` - The deployed contract addresses
-#[allow(clippy::too_many_arguments)]
+///
+/// # Errors
+///
+/// * `color_eyre::eyre::Error` - If any deployment or transaction fails
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub async fn deploy_avs_contracts(
     http_endpoint: &str,
     private_key: &str,
@@ -104,7 +105,10 @@ pub async fn deploy_avs_contracts(
     let token = mock_erc20;
     // let token = MockERC20::new(TOKEN_ADDR, wallet.clone());
 
-    let mint_call = token.mint(deployer_address, U256::from(15000000000000000000000u128));
+    let mint_call = token.mint(
+        deployer_address,
+        U256::from(15_000_000_000_000_000_000_000_u128),
+    );
     let mint_receipt = get_receipt(mint_call).await?;
     info!("Token mint receipt: {:?}", mint_receipt);
     if !mint_receipt.status() {
@@ -112,7 +116,10 @@ pub async fn deploy_avs_contracts(
     }
     info!("Minted tokens to deployer: {}", deployer_address);
 
-    let mint_call = token.mint(task_generator_addr, U256::from(30000000000000000000000u128));
+    let mint_call = token.mint(
+        task_generator_addr,
+        U256::from(30_000_000_000_000_000_000_000_u128),
+    );
     let mint_receipt = get_receipt(mint_call).await?;
     info!("Token mint receipt: {:?}", mint_receipt);
     if !mint_receipt.status() {
@@ -156,16 +163,14 @@ pub async fn deploy_avs_contracts(
 
     // First, deploy all empty proxies
     info!("Deploying empty proxies...");
-    let squaring_service_manager_proxy =
-        deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
-    let stake_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
-    let squaring_task_manager_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
-    let slashing_registry_coordinator_proxy =
-        deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
-    let bls_apk_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
-    let index_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
-    let socket_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
-    let instant_slasher_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await.unwrap();
+    let squaring_service_manager_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    let stake_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    let squaring_task_manager_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    let slashing_registry_coordinator_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    let bls_apk_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    let index_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    let socket_registry_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    let instant_slasher_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
 
     // Deploy OperatorStateRetriever
     info!("Deploying OperatorStateRetriever...");

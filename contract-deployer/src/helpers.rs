@@ -5,6 +5,9 @@ use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
 use color_eyre::eyre::eyre;
 
 /// Helper function to deploy an empty proxy
+///
+/// # Errors
+/// Returns an error if the deployment fails or if there are issues with the transaction receipt.
 pub async fn deploy_empty_proxy(
     wallet: &RootProvider,
     proxy_admin: Address,
@@ -21,6 +24,9 @@ pub async fn deploy_empty_proxy(
 }
 
 /// Helper function to upgrade a proxy with an implementation
+///
+/// # Errors
+/// Returns an error if the upgrade fails or if there are issues with the transaction receipt.
 pub async fn upgrade_proxy(
     wallet: &RootProvider,
     proxy_admin_addr: Address,

@@ -1,43 +1,24 @@
-use crate::contracts::BN254::{G1Point, G2Point};
-use crate::contracts::IBLSSignatureCheckerTypes::NonSignerStakesAndSignature;
 use crate::contracts::TaskManager::{Task, TaskResponse};
 use crate::error::TaskError as Error;
 use crate::{
     contexts::client::SignedTaskResponse,
     contexts::eigen_task::{IndexedTask, SquaringTaskResponseSender},
-    contracts::SquaringTask as IncredibleSquaringTaskManager,
 };
-use alloy_network::{Ethereum, NetworkWallet};
-use alloy_primitives::{Address, keccak256};
-use alloy_sol_types::SolType;
+use alloy_network::EthereumWallet;
+use alloy_primitives::Address;
+use blueprint_sdk::contexts::eigenlayer::EigenlayerContext;
+use blueprint_sdk::eigenlayer::generic_task_aggregation::{
+    AggregatorConfig, SignedTaskResponse as GenericSignedTaskResponse, TaskAggregator,
+};
+use blueprint_sdk::macros::context::{EigenlayerContext, KeystoreContext};
+use blueprint_sdk::runner::{BackgroundService, config::BlueprintEnvironment, error::RunnerError};
+use blueprint_sdk::{debug, error, info};
+use eigensdk::types::avs::TaskIndex;
 use jsonrpc_core::{IoHandler, Params, Value};
 use jsonrpc_http_server::{AccessControlAllowOrigin, DomainsValidation, ServerBuilder};
 use std::{collections::VecDeque, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, Notify, oneshot};
 use tokio::task::JoinHandle;
-use tokio::time::interval;
-
-use alloy_network::EthereumWallet;
-use blueprint_sdk::contexts::eigenlayer::EigenlayerContext;
-use blueprint_sdk::eigenlayer::generic_task_aggregation::{
-    AggregatorConfig, BlsAggServiceInMemory, Result as AggResult,
-    SignedTaskResponse as GenericSignedTaskResponse, TaskAggregator,
-};
-use blueprint_sdk::macros::context::{EigenlayerContext, KeystoreContext};
-use blueprint_sdk::runner::{BackgroundService, config::BlueprintEnvironment, error::RunnerError};
-use blueprint_sdk::{debug, error, info};
-use eigensdk::client_avsregistry::reader::AvsRegistryChainReader;
-use eigensdk::common::get_provider;
-use eigensdk::crypto_bls::{BlsG1Point, BlsG2Point, convert_to_g1_point, convert_to_g2_point};
-use eigensdk::services_avsregistry::chaincaller::AvsRegistryServiceChainCaller;
-use eigensdk::services_blsaggregation::bls_agg::TaskSignature;
-use eigensdk::services_blsaggregation::{
-    bls_agg, bls_agg::BlsAggregatorService,
-    bls_aggregation_service_response::BlsAggregationServiceResponse,
-};
-use eigensdk::services_operatorsinfo::operatorsinfo_inmemory::OperatorInfoServiceInMemory;
-use eigensdk::types::avs::{TaskIndex, TaskResponseDigest};
-use std::collections::HashMap;
 
 #[derive(Clone, EigenlayerContext, KeystoreContext)]
 pub struct AggregatorContext {
@@ -49,7 +30,6 @@ pub struct AggregatorContext {
     #[config]
     pub env: BlueprintEnvironment,
     shutdown: Arc<(Notify, Mutex<bool>)>,
-    // Generic task aggregator
     pub task_aggregator:
         Option<Arc<TaskAggregator<IndexedTask, TaskResponse, SquaringTaskResponseSender>>>,
 }
@@ -137,7 +117,7 @@ impl AggregatorContext {
         let (notify, is_shutdown) = &*self.shutdown;
         *is_shutdown.lock().await = true;
         notify.notify_waiters();
-        
+
         debug!("Aggregator shutdown flag set");
     }
 
@@ -286,7 +266,7 @@ impl BackgroundService for AggregatorContext {
         let (tx, rx) = oneshot::channel();
         let ctx = self.clone();
         tokio::spawn(async move {
-            let _ = ctx.start().await;
+            ctx.start().await;
             let _ = tx.send(Ok(()));
         });
         Ok(rx)

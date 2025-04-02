@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use crate::contexts::combined::CombinedContext;
 use crate::contracts::SquaringTask::NewTaskCreated;
 use crate::error::TaskError;
@@ -7,8 +5,6 @@ use alloy_sol_types::SolEvent;
 use blueprint_sdk::evm::extract::BlockEvents;
 use blueprint_sdk::extract::Context;
 use blueprint_sdk::{info, warn};
-use eigensdk::services_blsaggregation::bls_agg::TaskMetadata;
-// use eigensdk::types::avs::QuorumThresholdPercentage;
 
 const TASK_CHALLENGE_WINDOW_BLOCK: u32 = 100;
 const BLOCK_TIME_SECONDS: u32 = 12;
@@ -33,15 +29,6 @@ pub async fn initialize_bls_task(
         info!("Initializing task {} for BLS aggregation", task_index);
 
         if let Some(aggregator_ctx) = &ctx.aggregator_context {
-            let task_aggregator =
-                aggregator_ctx
-                    .task_aggregator
-                    .as_ref()
-                    .ok_or(TaskError::Aggregation(
-                        "Task aggregator not found".to_string(),
-                    ))?;
-
-            // Register the task with the task aggregator, passing both task_index and task
             aggregator_ctx
                 .register_task(task_index, task.clone())
                 .await
