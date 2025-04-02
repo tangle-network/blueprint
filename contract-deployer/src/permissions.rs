@@ -7,7 +7,7 @@ use color_eyre::eyre::Result;
 use crate::core::DeployedCoreContracts;
 use crate::deploy::DeployedContracts;
 
-use crate::bindings::AllocationManager;
+use crate::bindings::{AllocationManager, IAllocationManager, IServiceManager};
 
 /// Sets permissions and metadata for the AVS at the service manager of the given deployed contracts
 pub async fn setup_avs_permissions(
