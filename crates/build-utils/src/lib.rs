@@ -15,10 +15,10 @@ use blueprint_std::{
 /// - If the Cargo Manifest directory is not found.
 /// - If the `forge` executable is not found.
 pub fn build_contracts(contract_dirs: Vec<&str>) {
-    for dir in contract_dirs.clone() {
-        let dir = format!("{}/src", dir);
-        println!("cargo:rerun-if-changed={dir}");
-    }
+    // for dir in contract_dirs.clone() {
+    //     let dir = format!("{}/src", dir);
+    //     println!("cargo:rerun-if-changed={dir}");
+    // }
 
     // Get the project root directory
     let root = workspace_or_manifest_dir();

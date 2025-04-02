@@ -167,14 +167,23 @@ pub async fn deploy_core_contracts(
     // Deploy empty proxies
     info!("Deploying empty proxies...");
     let delegation_manager_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    info!("DelegationManager proxy deployed at: {}", delegation_manager_proxy);
     let avs_directory_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    info!("AVSDirectory proxy deployed at: {}", avs_directory_proxy);
     let strategy_manager_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    info!("StrategyManager proxy deployed at: {}", strategy_manager_proxy);
     let allocation_manager_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    info!("AllocationManager proxy deployed at: {}", allocation_manager_proxy);
     let rewards_coordinator_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    info!("RewardsCoordinator proxy deployed at: {}", rewards_coordinator_proxy);
     let eigen_pod_beacon_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    info!("EigenPodBeacon proxy deployed at: {}", eigen_pod_beacon_proxy);
     let strategy_factory_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    info!("StrategyFactory proxy deployed at: {}", strategy_factory_proxy);
     let eigen_pod_manager_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    info!("EigenPodManager proxy deployed at: {}", eigen_pod_manager_proxy);
     let permission_controller_proxy = deploy_empty_proxy(&wallet, proxy_admin_addr).await?;
+    info!("PermissionController proxy deployed at: {}", permission_controller_proxy);
 
     // Deploy PauserRegistry
     let pauser_registry =
