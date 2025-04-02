@@ -211,7 +211,8 @@ fn add_imports_to_file(file_path: &str, contract: &str) {
     );
 
     // Write back to the file
-    let mut file = fs::File::create(path).unwrap_or_else(|_| panic!("Failed to create {}", file_path));
+    let mut file =
+        fs::File::create(path).unwrap_or_else(|_| panic!("Failed to create {}", file_path));
     file.write_all(new_contents.as_bytes())
         .unwrap_or_else(|_| panic!("Failed to write to {}", file_path));
 }
