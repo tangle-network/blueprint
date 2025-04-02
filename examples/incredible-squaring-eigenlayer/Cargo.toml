@@ -10,7 +10,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-blueprint-sdk = { workspace = true, features = ["eigenlayer", "evm", "macros", "std"] }
+blueprint-sdk = { workspace = true, features = ["eigenlayer", "evm", "eigenlayer", "macros", "std"] }
 blueprint-contract-deployer = { workspace = true }
 futures = { workspace = true }
 

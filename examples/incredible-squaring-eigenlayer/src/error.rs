@@ -13,6 +13,8 @@ pub enum TaskError {
     SolType(#[from] alloy_sol_types::Error),
     #[error(transparent)]
     BlsAggregationService(#[from] BlsAggregationServiceError),
+    #[error("Aggregation: {0}")]
+    Aggregation(String),
     #[error(transparent)]
     OperatorTypesError(#[from] OperatorTypesError),
     #[error("Aggregated response receiver closed")]

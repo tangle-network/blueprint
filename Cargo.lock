@@ -3404,6 +3404,7 @@ dependencies = [
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-tangle-pair-signer",
+ "blueprint-eigenlayer-extra",
  "blueprint-evm-extra",
  "blueprint-keystore",
  "blueprint-macros",

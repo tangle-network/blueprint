@@ -5,6 +5,10 @@ use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
 use color_eyre::eyre::Result;
 use tracing::error;
 
+use crate::contracts::IServiceManager;
+use crate::tests::core::{
+    AllocationManager, DeployedCoreContracts, iallocation_manager::IAllocationManager,
+};
 use crate::tests::deploy::DeployedContracts;
 
 /// Sets permissions and metadata for the AVS at the service manager of the given deployed contracts

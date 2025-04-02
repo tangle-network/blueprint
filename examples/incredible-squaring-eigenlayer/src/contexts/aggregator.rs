@@ -1,372 +1,289 @@
+use crate::contracts::BN254::{G1Point, G2Point};
+use crate::contracts::IBLSSignatureCheckerTypes::NonSignerStakesAndSignature;
 use crate::contracts::TaskManager::{Task, TaskResponse};
 use crate::error::TaskError as Error;
 use crate::{
-    contexts::client::SignedTaskResponse, contracts::SquaringTask as IncredibleSquaringTaskManager,
-    error::TaskError,
+    contexts::client::SignedTaskResponse,
+    contexts::eigen_task::{IndexedTask, SquaringTaskResponseSender},
+    contracts::SquaringTask as IncredibleSquaringTaskManager,
 };
-use alloy_network::Ethereum;
-use alloy_primitives::{Address, FixedBytes, keccak256};
+use alloy_network::{Ethereum, NetworkWallet};
+use alloy_primitives::{Address, keccak256};
 use alloy_sol_types::SolType;
-use blueprint_sdk::evm::util::{get_provider_from_signer, get_provider_http};
-use blueprint_sdk::macros::context::KeystoreContext;
-use blueprint_sdk::runner::config::BlueprintEnvironment;
-use color_eyre::Result;
-use eigenlayer_extra::generic_task_aggregation::{
-    AggregationError, EigenTask, ResponseSender, TaskAggregator,
-    TaskResponse as GenericTaskResponse,
+use jsonrpc_core::{IoHandler, Params, Value};
+use jsonrpc_http_server::{AccessControlAllowOrigin, DomainsValidation, ServerBuilder};
+use std::{collections::VecDeque, net::SocketAddr, sync::Arc, time::Duration};
+use tokio::sync::{Mutex, Notify, oneshot};
+use tokio::task::JoinHandle;
+use tokio::time::interval;
+
+use alloy_network::EthereumWallet;
+use blueprint_sdk::contexts::eigenlayer::EigenlayerContext;
+use blueprint_sdk::eigenlayer::generic_task_aggregation::{
+    AggregatorConfig, BlsAggServiceInMemory, Result as AggResult,
+    SignedTaskResponse as GenericSignedTaskResponse, TaskAggregator,
 };
-use eigensdk::crypto_bls::{
-    BLSOperatorStateRetriever, BlsAggregationService, OperatorId, Signature, convert_to_g1_point,
-    convert_to_g2_point,
+use blueprint_sdk::macros::context::{EigenlayerContext, KeystoreContext};
+use blueprint_sdk::runner::{BackgroundService, config::BlueprintEnvironment, error::RunnerError};
+use blueprint_sdk::{debug, error, info};
+use eigensdk::client_avsregistry::reader::AvsRegistryChainReader;
+use eigensdk::common::get_provider;
+use eigensdk::crypto_bls::{BlsG1Point, BlsG2Point, convert_to_g1_point, convert_to_g2_point};
+use eigensdk::services_avsregistry::chaincaller::AvsRegistryServiceChainCaller;
+use eigensdk::services_blsaggregation::bls_agg::TaskSignature;
+use eigensdk::services_blsaggregation::{
+    bls_agg, bls_agg::BlsAggregatorService,
+    bls_aggregation_service_response::BlsAggregationServiceResponse,
 };
-use eigensdk::services_blsaggregation::bls_agg::{
-    BlsAggregationServiceConfig, BlsAggregationServiceError, TaskMetadata, TaskSignature,
-};
-use eigensdk::services_blsaggregation::bls_aggregation_service_response::BlsAggregationServiceResponse;
+use eigensdk::services_operatorsinfo::operatorsinfo_inmemory::OperatorInfoServiceInMemory;
 use eigensdk::types::avs::{TaskIndex, TaskResponseDigest};
-use eigensdk::types::operator::QuorumThresholdPercentage;
-use jsonrpsee::RpcModule;
-use jsonrpsee::core::async_trait;
-use jsonrpsee::proc_macros::rpc;
-use jsonrpsee::server::{ServerBuilder, ServerHandle};
-use jsonrpsee::types::ErrorObjectOwned;
-use serde_json::Value;
-use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use tracing::{debug, error, info, warn};
+use std::collections::HashMap;
 
-use crate::task_types::SquaringTaskResponseSender;
-
-#[rpc(server)]
-pub trait AggregatorRpc {
-    #[method(name = "process_signed_task_response")]
-    async fn process_signed_task_response(
-        &self,
-        params: SignedTaskResponse,
-    ) -> Result<bool, ErrorObjectOwned>;
-}
-
-/// Context for the Aggregator server
-#[derive(Clone, KeystoreContext)]
+#[derive(Clone, EigenlayerContext, KeystoreContext)]
 pub struct AggregatorContext {
     pub port_address: String,
     pub task_manager_address: Address,
-    pub tasks: Arc<Mutex<HashMap<TaskIndex, Task>>>,
-    pub tasks_responses: Arc<Mutex<HashMap<TaskIndex, HashMap<TaskResponseDigest, TaskResponse>>>>,
-    pub service_handle: Option<Arc<Mutex<BlsAggregationService>>>,
-    pub server_handle: Option<Arc<Mutex<ServerHandle>>>,
+    pub http_rpc_url: String,
+    pub wallet: EthereumWallet,
     pub response_cache: Arc<Mutex<VecDeque<SignedTaskResponse>>>,
-    pub task_aggregator:
-        Option<Arc<Mutex<TaskAggregator<Task, TaskResponse, SquaringTaskResponseSender>>>>,
     #[config]
-    pub std_config: BlueprintEnvironment,
+    pub env: BlueprintEnvironment,
+    shutdown: Arc<(Notify, Mutex<bool>)>,
+    // Generic task aggregator
+    pub task_aggregator:
+        Option<Arc<TaskAggregator<IndexedTask, TaskResponse, SquaringTaskResponseSender>>>,
 }
 
 impl AggregatorContext {
-    /// Creates a new AggregatorContext
-    pub fn new(
+    pub async fn new(
         port_address: String,
         task_manager_address: Address,
-        std_config: BlueprintEnvironment,
-    ) -> Self {
-        Self {
+        wallet: EthereumWallet,
+        env: BlueprintEnvironment,
+    ) -> Result<Self, Error> {
+        let mut aggregator_context = AggregatorContext {
             port_address,
             task_manager_address,
-            tasks: Arc::new(Mutex::new(HashMap::new())),
-            tasks_responses: Arc::new(Mutex::new(HashMap::new())),
-            service_handle: None,
-            server_handle: None,
+            http_rpc_url: env.http_rpc_endpoint.clone(),
+            wallet,
             response_cache: Arc::new(Mutex::new(VecDeque::new())),
+            env: env.clone(),
+            shutdown: Arc::new((Notify::new(), Mutex::new(false))),
             task_aggregator: None,
-            std_config,
-        }
+        };
+
+        // Initialize the bls registry service
+        let bls_service = aggregator_context
+            .eigenlayer_client()
+            .await
+            .map_err(|e| Error::Context(e.to_string()))?
+            .bls_aggregation_service_in_memory()
+            .await
+            .map_err(|e| Error::Context(e.to_string()))?;
+
+        // Create the response sender
+        let response_sender = SquaringTaskResponseSender {
+            task_manager_address,
+            http_rpc_url: env.http_rpc_endpoint.clone(),
+        };
+
+        // Create the task aggregator with default config
+        let task_aggregator =
+            TaskAggregator::new(bls_service, response_sender, AggregatorConfig::default());
+
+        aggregator_context.task_aggregator = Some(Arc::new(task_aggregator));
+
+        Ok(aggregator_context)
     }
 
-    /// Starts the aggregator server
-    pub async fn start_server(&mut self) -> Result<(), Error> {
-        // Create the BLS Aggregation Service
-        let bls_config = BlsAggregationServiceConfig {
-            avs_registry_coordinator_address: self.task_manager_address,
-            operator_state_retriever: Arc::new(BLSOperatorStateRetriever::new(
-                self.task_manager_address,
-                None,
-            )),
-        };
+    pub async fn start(self) -> JoinHandle<()> {
+        let aggregator = Arc::new(Mutex::new(self));
 
-        let bls_service = BlsAggregationService::new(bls_config)
-            .map_err(|e| Error::Task(format!("Failed to create BLS Aggregation Service: {}", e)))?;
+        tokio::spawn(async move {
+            info!("Starting aggregator RPC server");
 
-        self.service_handle = Some(Arc::new(Mutex::new(bls_service)));
+            // Start the task aggregator
+            if let Some(task_agg) = &aggregator.lock().await.task_aggregator {
+                info!("Starting task aggregator");
+                task_agg.start().await;
+            }
 
-        // Create the task aggregator
-        let response_sender = SquaringTaskResponseSender {
-            task_manager_address: self.task_manager_address,
-        };
+            let server_handle = tokio::spawn(Self::start_server(Arc::clone(&aggregator)));
 
-        let task_aggregator = TaskAggregator::new(
-            self.service_handle.as_ref().unwrap().clone(),
-            response_sender,
-        );
+            info!("Aggregator server started and running in the background");
+            // Wait for server task to complete
+            if let Err(e) = server_handle.await {
+                error!("Server task failed: {}", e);
+            }
 
-        self.task_aggregator = Some(Arc::new(Mutex::new(task_aggregator)));
+            info!("Aggregator shutdown complete");
+        })
+    }
 
-        // Start the server
-        let server = ServerBuilder::default()
-            .build(format!("0.0.0.0:{}", self.port_address))
-            .await
-            .map_err(|e| Error::Task(format!("Failed to build server: {}", e)))?;
+    pub async fn shutdown(&self) {
+        info!("Initiating aggregator shutdown");
 
-        let mut module = RpcModule::new(());
-        let ctx = self.clone();
-        module
-            .register_async_method("process_signed_task_response", move |params, _| {
-                let ctx = ctx.clone();
+        // Stop the task aggregator
+        if let Some(task_agg) = &self.task_aggregator {
+            if let Err(e) = task_agg.stop().await {
+                error!("Error stopping task aggregator: {}", e);
+            }
+        }
+
+        // Set internal shutdown flag
+        let (notify, is_shutdown) = &*self.shutdown;
+        *is_shutdown.lock().await = true;
+        notify.notify_waiters();
+    }
+
+    async fn start_server(aggregator: Arc<Mutex<Self>>) -> Result<(), Error> {
+        let mut io = IoHandler::new();
+        io.add_method("process_signed_task_response", {
+            let aggregator = Arc::clone(&aggregator);
+            move |params: Params| {
+                let aggregator = Arc::clone(&aggregator);
                 async move {
-                    debug!("Received RPC request: process_signed_task_response");
+                    // Parse the outer structure first
+                    let outer_params: Value = params.parse()?;
 
-                    // Extract the params from the request
-                    let params_value = match params.one::<Value>() {
-                        Ok(value) => value,
-                        Err(e) => {
-                            error!("Failed to parse params: {}", e);
-                            return Err(ErrorObjectOwned::owned(
-                                4001,
-                                "Invalid params",
-                                Some(format!("Failed to parse params: {}", e)),
-                            ));
-                        }
-                    };
-
-                    // Extract the inner params from the JSON-RPC request
-                    let inner_params = match params_value.get("params") {
-                        Some(inner_params) => inner_params,
-                        None => {
-                            error!("Missing 'params' field in request");
-                            return Err(ErrorObjectOwned::owned(
-                                4002,
-                                "Invalid request",
-                                Some("Missing 'params' field in request".to_string()),
-                            ));
-                        }
-                    };
+                    // Extract the inner "params" object
+                    let inner_params = outer_params.get("params").ok_or_else(|| {
+                        jsonrpc_core::Error::invalid_params("Missing 'params' field")
+                    })?;
 
                     // Now parse the inner params as SignedTaskResponse
                     let signed_task_response: SignedTaskResponse =
-                        match serde_json::from_value(inner_params.clone()) {
-                            Ok(response) => response,
-                            Err(e) => {
-                                error!("Invalid SignedTaskResponse: {}", e);
-                                return Err(ErrorObjectOwned::owned(
-                                    4003,
-                                    "Invalid SignedTaskResponse",
-                                    Some(format!("Failed to parse SignedTaskResponse: {}", e)),
-                                ));
-                            }
-                        };
+                        serde_json::from_value(inner_params.clone()).map_err(|e| {
+                            jsonrpc_core::Error::invalid_params(format!(
+                                "Invalid SignedTaskResponse: {}",
+                                e
+                            ))
+                        })?;
 
-                    // Process the signed task response
-                    match ctx.process_signed_task_response(signed_task_response).await {
-                        Ok(()) => Ok(true),
-                        Err(e) => {
-                            error!("Failed to process signed task response: {}", e);
-                            Ok(false)
-                        }
+                    aggregator
+                        .lock()
+                        .await
+                        .process_signed_task_response(signed_task_response)
+                        .await
+                        .map(|_| Value::Bool(true))
+                        .map_err(|e| jsonrpc_core::Error::invalid_params(e.to_string()))
+                }
+            }
+        });
+
+        let socket: SocketAddr = aggregator
+            .lock()
+            .await
+            .port_address
+            .parse()
+            .map_err(Error::Parse)?;
+        let server = ServerBuilder::new(io)
+            .cors(DomainsValidation::AllowOnly(vec![
+                AccessControlAllowOrigin::Any,
+            ]))
+            .start_http(&socket)
+            .map_err(|e| Error::Context(e.to_string()))?;
+
+        info!("Server running at {}", socket);
+
+        // Create a close handle before we move the server
+        let close_handle = server.close_handle();
+
+        // Get shutdown components
+        let shutdown = {
+            let agg = aggregator.lock().await;
+            agg.shutdown.clone()
+        };
+
+        // Create a channel to coordinate shutdown
+        let (server_tx, server_rx) = oneshot::channel();
+
+        // Spawn the server in a blocking task
+        let server_handle = tokio::task::spawn_blocking(move || {
+            server.wait();
+            let _ = server_tx.send(());
+        });
+
+        // Use tokio::select! to wait for either the server to finish or the shutdown signal
+        tokio::select! {
+            result = server_handle => {
+                info!("Server has stopped naturally");
+                result.map_err(|e| {
+                    error!("Server task failed: {}", e);
+                    Error::Runtime(e.to_string())
+                })?;
+            }
+            _ = server_rx => {
+                info!("Server has been shut down via close handle");
+            }
+            _ = async {
+                let (notify, is_shutdown) = &*shutdown;
+                loop {
+                    notify.notified().await;
+                    if *is_shutdown.lock().await {
+                        break;
                     }
                 }
-            })
-            .map_err(|e| Error::Task(format!("Failed to register RPC method: {}", e)))?;
-
-        let server_handle = server.start(module);
-        self.server_handle = Some(Arc::new(Mutex::new(server_handle)));
-
-        // Process any cached responses
-        let cached_responses = {
-            let mut cache = self.response_cache.lock().await;
-            let responses = cache.drain(..).collect::<Vec<_>>();
-            responses
-        };
-
-        for resp in cached_responses {
-            if let Err(e) = self.process_signed_task_response(resp).await {
-                warn!("Failed to process cached response: {}", e);
+            } => {
+                info!("Shutdown signal received, stopping server");
+                close_handle.close();
             }
         }
 
         Ok(())
     }
 
-    /// Processes a signed task response
     pub async fn process_signed_task_response(
-        &self,
+        &mut self,
         resp: SignedTaskResponse,
     ) -> Result<(), Error> {
-        // If we have a task aggregator, use it to process the response
-        if let Some(task_aggregator) = &self.task_aggregator {
-            let mut aggregator = task_aggregator.lock().await;
-
-            // Convert the SignedTaskResponse to the generic version
-            let generic_response =
-                eigenlayer_extra::generic_task_aggregation::SignedTaskResponse::from(resp);
-
-            // Process the response using the generic task aggregator
-            match aggregator.process_response(generic_response).await {
-                Ok(_) => {
-                    info!("Successfully processed response with generic task aggregator");
-                    return Ok(());
-                }
-                Err(AggregationError::TaskNotFound) => {
-                    // If the task is not found, cache the response for later processing
-                    let task_index = resp.task_response.referenceTaskIndex;
-                    info!(
-                        "Task {} not yet initialized, caching response for later processing",
-                        task_index
-                    );
-                    let mut cache = self.response_cache.lock().await;
-                    cache.push_back(resp);
-                    return Ok(());
-                }
-                Err(e) => {
-                    return Err(Error::Task(format!("Failed to process response: {}", e)));
-                }
-            }
-        } else {
-            // Fall back to the old implementation if the task aggregator is not available
-            self.process_response(resp).await
-        }
-    }
-
-    /// Processes a signed task response (legacy implementation)
-    async fn process_response(&mut self, resp: SignedTaskResponse) -> Result<(), Error> {
-        let SignedTaskResponse {
-            task_response,
-            signature,
-            operator_id,
-        } = resp;
-
-        let task_index = task_response.referenceTaskIndex;
-        let task_response_digest = keccak256(TaskResponse::abi_encode(&task_response));
-
-        // Check if the task exists
-        let tasks = self.tasks.lock().await;
-        if !tasks.contains_key(&task_index) {
-            info!(
-                "Task {} not yet initialized, caching response for later processing",
-                task_index
-            );
-            let mut cache = self.response_cache.lock().await;
-            cache.push_back(SignedTaskResponse {
-                task_response,
-                signature,
-                operator_id,
-            });
-            return Ok(());
-        }
-
-        // Check if the response has already been processed
-        let mut task_responses = self.tasks_responses.lock().await;
-        let task_response_map = task_responses.entry(task_index).or_insert(HashMap::new());
-
-        if task_response_map.contains_key(&task_response_digest) {
-            info!(
-                "Task response digest already processed for task index: {}",
-                task_index
-            );
-            return Ok(());
-        }
-
-        // Add the response to the map
-        task_response_map.insert(task_response_digest, task_response.clone());
-
-        // Register the signature with the BLS Aggregation Service
-        if let Some(service) = &self.service_handle {
-            let task_signature =
-                TaskSignature::new(task_index, task_response_digest, signature, operator_id);
-
-            service
-                .lock()
-                .await
-                .register_signature(task_signature)
-                .await
-                .map_err(|e| Error::Task(format!("Failed to register signature: {}", e)))?;
-        }
-
-        Ok(())
-    }
-
-    /// Stops the aggregator server
-    pub async fn stop_server(&mut self) -> Result<(), Error> {
-        if let Some(server_handle) = &self.server_handle {
-            let mut handle = server_handle.lock().await;
-            handle
-                .stop()
-                .map_err(|e| Error::Task(format!("Failed to stop server: {}", e)))?;
-        }
-        Ok(())
-    }
-
-    /// Checks if a task is ready to be aggregated and submitted
-    pub async fn check_aggregation_readiness(
-        &self,
-        response: BlsAggregationServiceResponse,
-    ) -> Result<(), Error> {
-        let tasks = self.tasks.lock().await;
-        let task = tasks.get(&response.task_index).expect("Task not found");
-
-        let task_responses = self.tasks_responses.lock().await;
-        let response_map = task_responses.get(&response.task_index).unwrap();
-        let task_response = response_map
-            .get(&response.task_response_digest)
-            .expect("Task response not found");
-
-        // Get the provider
-        let provider = get_provider_http(self.http_endpoint.clone());
-
-        // Create the contract instance
-        let task_manager =
-            IncredibleSquaringTaskManager::new(self.task_manager_address, provider.clone());
-
-        // Convert the aggregated signature to G1Point
-        let aggregated_signature = convert_to_g1_point(&response.agg_signature);
-        let agg_sig = IncredibleSquaringTaskManager::G1Point {
-            X: aggregated_signature.0,
-            Y: aggregated_signature.1,
+        // Convert the SignedTaskResponse to GenericSignedTaskResponse
+        let generic_signed_response = GenericSignedTaskResponse {
+            response: resp.task_response,
+            signature: resp.signature,
+            operator_id: resp.operator_id,
         };
 
-        // Convert the signing pub keys to G2Point
-        let signing_pub_keys = response
-            .signing_pub_keys
-            .iter()
-            .map(|pk| {
-                let g2_point = convert_to_g2_point(pk);
-                IncredibleSquaringTaskManager::G2Point {
-                    X: [g2_point.0, g2_point.1],
-                    Y: [g2_point.2, g2_point.3],
-                }
-            })
-            .collect::<Vec<_>>();
+        // Process the signed response using the generic task aggregator
+        if let Some(task_agg) = &self.task_aggregator {
+            task_agg
+                .process_signed_response(generic_signed_response)
+                .await;
+            Ok(())
+        } else {
+            Err(Error::Context(
+                "Task aggregator not initialized".to_string(),
+            ))
+        }
+    }
 
-        // Create the non-signer stakes and signature
-        let non_signer_stakes_and_sig =
-            IncredibleSquaringTaskManager::IBLSSignatureCheckerTypes::NonSignerStakesAndSignature {
-                nonSignerPubkeys: signing_pub_keys,
-                quorumApks: response.quorum_apks,
-                apkG1: response.apk_g1,
-                apkG2: response.apk_g2,
-                sigma: agg_sig,
-            };
+    // Register a task with the aggregator
+    pub async fn register_task(&self, task_index: TaskIndex, task: Task) -> Result<(), Error> {
+        if let Some(task_agg) = &self.task_aggregator {
+            // Create an indexed task with the task index
+            let indexed_task = IndexedTask::new(task, task_index);
 
-        // Send the response to the contract
-        task_manager
-            .respondToSquaringTask(
-                response.task_index,
-                response.task_response_digest,
-                non_signer_stakes_and_sig,
-            )
-            .send()
-            .await
-            .map_err(|e| Error::Task(format!("Failed to send response to contract: {}", e)))?;
+            // Register the task with the generic task aggregator
+            task_agg
+                .register_task(indexed_task)
+                .await
+                .map_err(|e| Error::Context(e.to_string()))
+        } else {
+            Err(Error::Context(
+                "Task aggregator not initialized".to_string(),
+            ))
+        }
+    }
+}
 
-        Ok(())
+impl BackgroundService for AggregatorContext {
+    async fn start(&self) -> Result<oneshot::Receiver<Result<(), RunnerError>>, RunnerError> {
+        let (tx, rx) = oneshot::channel();
+        let ctx = self.clone();
+        tokio::spawn(async move {
+            let _ = ctx.start().await;
+            let _ = tx.send(Ok(()));
+        });
+        Ok(rx)
     }
 }

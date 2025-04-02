@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use crate::contexts::combined::CombinedContext;
 use crate::contracts::SquaringTask::NewTaskCreated;
 use crate::error::TaskError;
@@ -6,7 +8,7 @@ use blueprint_sdk::evm::extract::BlockEvents;
 use blueprint_sdk::extract::Context;
 use blueprint_sdk::{info, warn};
 use eigensdk::services_blsaggregation::bls_agg::TaskMetadata;
-use eigensdk::types::operator::QuorumThresholdPercentage;
+// use eigensdk::types::avs::QuorumThresholdPercentage;
 
 const TASK_CHALLENGE_WINDOW_BLOCK: u32 = 100;
 const BLOCK_TIME_SECONDS: u32 = 12;
@@ -31,31 +33,24 @@ pub async fn initialize_bls_task(
         info!("Initializing task {} for BLS aggregation", task_index);
 
         if let Some(aggregator_ctx) = &ctx.aggregator_context {
-            let mut tasks = aggregator_ctx.tasks.lock().await;
-            tasks.insert(task_index, task.clone());
-            let time_to_expiry = std::time::Duration::from_secs(
-                (TASK_CHALLENGE_WINDOW_BLOCK * BLOCK_TIME_SECONDS).into(),
+            let task_aggregator =
+                aggregator_ctx
+                    .task_aggregator
+                    .as_ref()
+                    .ok_or(TaskError::Aggregation(
+                        "Task aggregator not found".to_string(),
+                    ))?;
+
+            // Register the task with the task aggregator, passing both task_index and task
+            aggregator_ctx
+                .register_task(task_index, task.clone())
+                .await
+                .map_err(|e| TaskError::Aggregation(e.to_string()))?;
+
+            info!(
+                "Successfully registered task {} with the task aggregator",
+                task_index
             );
-
-            let quorum_threshold_percentage =
-                vec![QuorumThresholdPercentage::try_from(task.quorumThresholdPercentage).unwrap()];
-
-            let task_metadata = TaskMetadata::new(
-                task_index,
-                task.taskCreatedBlock as u64,
-                task.quorumNumbers.0.to_vec(),
-                quorum_threshold_percentage,
-                time_to_expiry,
-            );
-
-            if let Some(service) = &aggregator_ctx.service_handle {
-                service
-                    .lock()
-                    .await
-                    .initialize_task(task_metadata)
-                    .await
-                    .unwrap()
-            }
         } else {
             warn!("Aggregator context not available, skipping task initialization");
         }

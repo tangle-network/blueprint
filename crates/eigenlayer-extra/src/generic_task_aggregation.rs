@@ -1,4 +1,5 @@
 use alloy_primitives::{FixedBytes, hex, keccak256};
+use blueprint_core::info;
 use eigensdk::client_avsregistry::reader::AvsRegistryChainReader;
 use eigensdk::crypto_bls::Signature;
 use eigensdk::services_avsregistry::chaincaller::AvsRegistryServiceChainCaller;
@@ -260,6 +261,7 @@ where
 
     /// Process a signed task response
     pub async fn process_signed_response(&self, signed_response: SignedTaskResponse<R>) {
+        info!("Caching signed response");
         // Add to cache for processing
         self.response_cache.lock().await.push_back(signed_response);
     }

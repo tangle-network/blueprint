@@ -1,5 +1,5 @@
-use crate::helpers::{deploy_empty_proxy, upgrade_proxy};
-use crate::{PauserRegistry, ProxyAdmin};
+use crate::contracts::ProxyAdmin;
+use crate::tests::helpers::{deploy_empty_proxy, upgrade_proxy};
 use alloy_primitives::{Address, Bytes, U256};
 use alloy_sol_types::{SolCall, sol};
 use blueprint_sdk::evm::util::get_provider_from_signer;
@@ -7,6 +7,132 @@ use blueprint_sdk::info;
 use serde::{Deserialize, Serialize};
 
 pub const MIDDLEWARE_VERSION: &str = "v1.4.0-testnet-holesky";
+
+use delegation_manager::DelegationManager;
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    PauserRegistry,
+    "dependencies/eigenlayer-middleware-0.5.4/out/PauserRegistry.sol/PauserRegistry.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    EmptyContract,
+    "dependencies/eigenlayer-middleware-0.5.4/out/EmptyContract.sol/EmptyContract.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    PermissionController,
+    "dependencies/eigenlayer-middleware-0.5.4/out/PermissionController.sol/PermissionController.json"
+);
+
+mod delegation_manager {
+    use super::sol;
+    use super::{Deserialize, Serialize};
+
+    sol!(
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug, Serialize, Deserialize)]
+        DelegationManager,
+        "dependencies/eigenlayer-middleware-0.5.4/out/DelegationManager.sol/DelegationManager.json"
+    );
+}
+
+pub mod iallocation_manager {
+    use super::AllocationManager::OperatorSet;
+    use super::sol;
+    use super::{Deserialize, Serialize};
+    sol!(
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug, Serialize, Deserialize)]
+        IAllocationManager,
+        "dependencies/eigenlayer-middleware-0.5.4/out/IAllocationManager.sol/IAllocationManager.json"
+    );
+}
+
+use AllocationManager::OperatorSet;
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    AllocationManager,
+    "dependencies/eigenlayer-middleware-0.5.4/out/AllocationManager.sol/AllocationManager.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    StrategyManager,
+    "dependencies/eigenlayer-middleware-0.5.4/out/StrategyManager.sol/StrategyManager.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    AVSDirectory,
+    "dependencies/eigenlayer-middleware-0.5.4/out/AVSDirectory.sol/AVSDirectory.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    EigenPodManager,
+    "dependencies/eigenlayer-middleware-0.5.4/out/EigenPodManager.sol/EigenPodManager.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    RewardsCoordinator,
+    "dependencies/eigenlayer-middleware-0.5.4/out/RewardsCoordinator.sol/RewardsCoordinator.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    StrategyBase,
+    "dependencies/eigenlayer-middleware-0.5.4/out/StrategyBase.sol/StrategyBase.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    EigenPod,
+    "dependencies/eigenlayer-middleware-0.5.4/out/EigenPod.sol/EigenPod.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    StrategyFactory,
+    "dependencies/eigenlayer-middleware-0.5.4/out/StrategyFactory.sol/StrategyFactory.json"
+);
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    #[derive(Debug, Serialize, Deserialize)]
+    UpgradeableBeacon,
+    "dependencies/eigenlayer-middleware-0.5.4/out/UpgradeableBeacon.sol/UpgradeableBeacon.json"
+);
 
 /// Contract Addresses of EigenLayer core contracts
 #[derive(Debug, Clone, Serialize, Deserialize)]
