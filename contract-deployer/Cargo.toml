@@ -12,8 +12,17 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+color-eyre = { workspace = true }
+eigensdk = { workspace = true, features = ["crypto-bls"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["alloc"] }
-alloy-sol-types = { workspace = true }
+alloy = { workspace = true }
+alloy-sol-types = { workspace = true, features = ["json"] }
 alloy-json-abi = { workspace = true, features = ["serde_json"] }
 alloy-contract = { workspace = true }
+alloy-provider = { workspace = true }
+blueprint-sdk = { workspace = true, features = ["eigenlayer", "evm", "macros", "std", "testing"] }
+alloy-primitives = { workspace = true }
+
+[build-dependencies]
+blueprint-build-utils = { workspace = true }

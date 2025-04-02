@@ -1,7 +1,12 @@
+use crate::bindings::core::rewardscoordinator::IRewardsCoordinatorTypes::RewardsCoordinatorConstructorParams;
+use crate::bindings::{
+    AVSDirectory, AllocationManager, DelegationManager, EigenPod, EigenPodManager, PauserRegistry,
+    PermissionController, ProxyAdmin, RewardsCoordinator, StrategyBase, StrategyFactory,
+    StrategyManager, UpgradeableBeacon,
+};
 use crate::helpers::{deploy_empty_proxy, upgrade_proxy};
-use crate::{PauserRegistry, ProxyAdmin};
 use alloy_primitives::{Address, Bytes, U256};
-use alloy_sol_types::{SolCall, sol};
+use alloy_sol_types::SolCall;
 use blueprint_sdk::evm::util::get_provider_from_signer;
 use blueprint_sdk::info;
 use serde::{Deserialize, Serialize};
@@ -302,7 +307,7 @@ pub async fn deploy_core_contracts(
     // Deploy RewardsCoordinator implementation
     let rewards_coordinator_impl = RewardsCoordinator::deploy(
         &wallet,
-        IRewardsCoordinatorTypes::RewardsCoordinatorConstructorParams {
+        RewardsCoordinatorConstructorParams {
             delegationManager: delegation_manager_proxy,
             strategyManager: strategy_manager_proxy,
             allocationManager: allocation_manager_proxy,

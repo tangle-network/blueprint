@@ -20,6 +20,8 @@ node_modules
 **/contracts/cache/
 **/dependencies/
 
+contract-deployer/src/bindings/
+
 blueprint.lock
 blueprint.json
 cache

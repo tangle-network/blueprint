@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cli", "crates/*", "examples/incredible-squaring-eigenlayer"]
+members = ["cli", "crates/*", "contract-deployer", "examples/incredible-squaring-eigenlayer"]
 
 [workspace.package]
 authors = ["Tangle Network"]
@@ -56,6 +56,9 @@ incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./exampl
 # Blueprint utils
 blueprint-manager = { version = "0.2.2", path = "./crates/manager", default-features = false }
 blueprint-build-utils = { version = "0.1.0", path = "./crates/build-utils", default-features = false }
+
+# Blueprint Contract Deployer
+blueprint-contract-deployer = { version = "0.1.0", path = "./contract-deployer", default-features = false }
 
 # Chain Setup
 blueprint-chain-setup = { version = "0.1.0", path = "./crates/chain-setup", default-features = false }

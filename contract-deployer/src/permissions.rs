@@ -1,11 +1,13 @@
 use alloy_primitives::Address;
 use alloy_sol_types::SolCall;
-use blueprint_sdk::info;
 use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
+use blueprint_sdk::{error, info};
 use color_eyre::eyre::Result;
-use tracing::error;
 
-use crate::tests::deploy::DeployedContracts;
+use crate::core::DeployedCoreContracts;
+use crate::deploy::DeployedContracts;
+
+use crate::bindings::AllocationManager;
 
 /// Sets permissions and metadata for the AVS at the service manager of the given deployed contracts
 pub async fn setup_avs_permissions(

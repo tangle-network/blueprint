@@ -11,6 +11,7 @@ publish = false
 
 [dependencies]
 blueprint-sdk = { workspace = true, features = ["eigenlayer", "evm", "macros", "std"] }
+blueprint-contract-deployer = { workspace = true }
 futures = { workspace = true }
 
 eigensdk = { workspace = true, features = ["crypto-bls", "services-blsaggregation"] }

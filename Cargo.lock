@@ -2886,6 +2886,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "blueprint-contract-deployer"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "alloy-contract",
+ "alloy-json-abi",
+ "alloy-primitives 0.8.23",
+ "alloy-provider",
+ "alloy-sol-types 0.8.23",
+ "blueprint-build-utils",
+ "blueprint-sdk",
+ "color-eyre",
+ "eigensdk",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "blueprint-core"
 version = "0.1.0"
 dependencies = [
@@ -8769,6 +8787,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "bip39",
  "blueprint-build-utils",
+ "blueprint-contract-deployer",
  "blueprint-sdk",
  "clap",
  "color-eyre",
