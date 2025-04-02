@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Command;
 
+#[allow(clippy::too_many_lines, clippy::format_push_string)]
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
@@ -81,9 +82,7 @@ fn main() {
         .status()
         .expect("Failed to execute forge bind command for contracts");
 
-    if !status.success() {
-        panic!("Failed to generate bindings for contracts");
-    }
+    assert!(status.success());
 
     // Generate bindings for middleware directory
     println!("Generating bindings for middleware...");
@@ -111,9 +110,7 @@ fn main() {
         .status()
         .expect("Failed to execute forge bind command for middleware");
 
-    if !status.success() {
-        panic!("Failed to generate bindings for middleware");
-    }
+    assert!(status.success());
 
     // Post-process the generated files to add the required imports
     println!("Post-processing generated files...");
@@ -136,16 +133,16 @@ fn main() {
     let mut contents = String::new();
     contents.push_str("pub mod core;\n");
     contents.push_str("pub mod deploy;\n");
-    contents.push_str("\n");
+    contents.push('\n');
 
-    for contract in contracts_contracts.iter() {
+    for contract in &contracts_contracts {
         let lower_contract = contract.to_lowercase();
         contents.push_str(&format!(
             "pub use deploy::{}::{};\n",
             lower_contract, contract
         ));
     }
-    for contract in middleware_contracts.iter() {
+    for contract in &middleware_contracts {
         let lower_contract = contract.to_lowercase();
         contents.push_str(&format!(
             "pub use core::{}::{};\n",
@@ -162,7 +159,7 @@ fn main() {
     core_mod_contents.push_str("// Do not edit manually\n\n");
 
     // Add all modules
-    for contract in middleware_contracts.iter() {
+    for contract in &middleware_contracts {
         let lower_contract = contract.to_lowercase();
         core_mod_contents.push_str(&format!("pub mod {};\n", lower_contract));
     }
@@ -181,7 +178,7 @@ fn main() {
     deploy_mod_contents.push_str("// Do not edit manually\n\n");
 
     // Add all modules
-    for contract in contracts_contracts.iter() {
+    for contract in &contracts_contracts {
         let lower_contract = contract.to_lowercase();
         deploy_mod_contents.push_str(&format!("pub mod {};\n", lower_contract));
     }
@@ -202,19 +199,19 @@ fn add_imports_to_file(file_path: &str, contract: &str) {
         return;
     }
 
-    let mut file = fs::File::open(path).expect(&format!("Failed to open {}", file_path));
+    let mut file = fs::File::open(path).unwrap_or_else(|_| panic!("Failed to open {}", file_path));
     let mut contents = String::new();
     file.read_to_string(&mut contents)
-        .expect(&format!("Failed to read {}", file_path));
+        .unwrap_or_else(|_| panic!("Failed to read {}", file_path));
 
     // Add the imports at the top
     let new_contents = format!(
-        "#![allow(elided_lifetimes_in_paths)]\nuse {}::*;\n\n{}",
+        "#![allow(clippy::all, elided_lifetimes_in_paths)]\nuse {}::*;\n\n{}",
         contract, contents
     );
 
     // Write back to the file
-    let mut file = fs::File::create(path).expect(&format!("Failed to create {}", file_path));
+    let mut file = fs::File::create(path).unwrap_or_else(|_| panic!("Failed to create {}", file_path));
     file.write_all(new_contents.as_bytes())
-        .expect(&format!("Failed to write to {}", file_path));
+        .unwrap_or_else(|_| panic!("Failed to write to {}", file_path));
 }
