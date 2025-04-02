@@ -12,8 +12,8 @@ fn main() {
         "./dependencies/eigenlayer-middleware-0.5.4",
         "./contracts",
     ];
-    // blueprint_build_utils::soldeer_install();
-    // blueprint_build_utils::soldeer_update();
+    blueprint_build_utils::soldeer_install();
+    blueprint_build_utils::soldeer_update();
     blueprint_build_utils::build_contracts(contract_dirs);
 
     // Create bindings directory

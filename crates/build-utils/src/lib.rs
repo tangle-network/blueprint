@@ -1,3 +1,5 @@
+use std::io::{Read, Write};
+
 use blueprint_std::{
     env, fs,
     path::{Path, PathBuf},
@@ -12,14 +14,11 @@ use blueprint_std::{
 /// modified by anything else in the build script (otherwise, the build will always rerun).
 ///
 /// # Panics
+///
 /// - If the Cargo Manifest directory is not found.
 /// - If the `forge` executable is not found.
+/// - If the `foundry.toml` file is not found in any of the specified directories
 pub fn build_contracts(contract_dirs: Vec<&str>) {
-    // for dir in contract_dirs.clone() {
-    //     let dir = format!("{}/src", dir);
-    //     println!("cargo:rerun-if-changed={dir}");
-    // }
-
     // Get the project root directory
     let root = workspace_or_manifest_dir();
 
@@ -36,11 +35,58 @@ pub fn build_contracts(contract_dirs: Vec<&str>) {
         });
 
         if full_path.exists() {
+            if full_path != root.join("./contracts") {
+                // Check if foundry.toml exists and add evm_version if needed
+                let foundry_toml_path = full_path.join("foundry.toml");
+
+                // We need to pin the evm_version of each foundry.toml with the same version so contracts are all consistent
+                if foundry_toml_path.exists() {
+                    // Read the existing foundry.toml
+                    let mut content = String::new();
+                    std::fs::File::open(&foundry_toml_path)
+                        .expect("Failed to open foundry.toml")
+                        .read_to_string(&mut content)
+                        .expect("Failed to read foundry.toml");
+
+                    // Only add evm_version if it's not already there
+                    if !content.contains("evm_version") {
+                        // Find the [profile.default] section
+                        if let Some(pos) = content.find("[profile.default]") {
+                            // Insert evm_version after the section header
+                            let mut new_content = content.clone();
+                            let insert_pos = content[pos..]
+                                .find('\n')
+                                .map(|p| p + pos + 1)
+                                .unwrap_or(content.len());
+                            new_content.insert_str(insert_pos, "    evm_version = \"shanghai\"\n");
+
+                            // Write the modified content back
+                            std::fs::write(&foundry_toml_path, new_content)
+                                .expect("Failed to write to foundry.toml");
+                        } else {
+                            // If [profile.default] section doesn't exist, append it
+                            let mut file = std::fs::OpenOptions::new()
+                                .append(true)
+                                .open(&foundry_toml_path)
+                                .expect("Failed to open foundry.toml for appending");
+
+                            file.write_all(b"\n[profile.default]\nevm_version = \"shanghai\"\n")
+                                .expect("Failed to append to foundry.toml");
+                        }
+                    }
+                } else {
+                    panic!("Failed to read dependency foundry.toml");
+                }
+            }
+
+            // Run forge build with explicit EVM version
             let status = Command::new(&forge_executable)
                 .current_dir(&full_path)
                 .arg("build")
                 .arg("--evm-version")
                 .arg("shanghai")
+                .arg("--use")
+                .arg("0.8.27")
                 .status()
                 .expect("Failed to execute Forge build");
 
@@ -50,7 +96,7 @@ pub fn build_contracts(contract_dirs: Vec<&str>) {
                 full_path.display()
             );
         } else {
-            println!(
+            panic!(
                 "Directory not found or does not exist: {}",
                 full_path.display()
             );
