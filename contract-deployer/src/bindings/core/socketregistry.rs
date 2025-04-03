@@ -1,12 +1,4 @@
-#![allow(
-    clippy::all,
-    clippy::pedantic,
-    clippy::nursery,
-    warnings,
-    unknown_lints,
-    rustdoc::all,
-    elided_lifetimes_in_paths
-)]
+#![allow(clippy::all, clippy::pedantic, clippy::nursery, warnings, unknown_lints, rustdoc::all, elided_lifetimes_in_paths)]
 use SocketRegistry::*;
 
 /**
@@ -146,9 +138,9 @@ pub mod SocketRegistry {
         b"`\x80`@R4\x80\x15a\0\x0FW__\xFD[P`\x046\x10a\0JW_5`\xE0\x1C\x80c\x10\xBE\xA0\xD7\x14a\0NW\x80c\xAFe\xFD\xFC\x14a\0wW\x80c\xCF\x1DkB\x14a\0\x8AW\x80c\xF0C6~\x14a\0\xC9W[__\xFD[a\0aa\0\\6`\x04a\x02yV[a\0\xDEV[`@Qa\0n\x91\x90a\x02\x90V[`@Q\x80\x91\x03\x90\xF3[a\0aa\0\x856`\x04a\x02yV[a\x01}V[a\0\xB1\x7F\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x81V[`@Q`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x81R` \x01a\0nV[a\0\xDCa\0\xD76`\x04a\x02\xEFV[a\x02\x14V[\0[_\x81\x81R` \x81\x90R`@\x90 \x80T``\x91\x90a\0\xFA\x90a\x03\xACV[\x80`\x1F\x01` \x80\x91\x04\x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80Ta\x01&\x90a\x03\xACV[\x80\x15a\x01qW\x80`\x1F\x10a\x01HWa\x01\0\x80\x83T\x04\x02\x83R\x91` \x01\x91a\x01qV[\x82\x01\x91\x90_R` _ \x90[\x81T\x81R\x90`\x01\x01\x90` \x01\x80\x83\x11a\x01TW\x82\x90\x03`\x1F\x16\x82\x01\x91[PPPPP\x90P\x91\x90PV[_` \x81\x90R\x90\x81R`@\x90 \x80Ta\x01\x95\x90a\x03\xACV[\x80`\x1F\x01` \x80\x91\x04\x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80Ta\x01\xC1\x90a\x03\xACV[\x80\x15a\x02\x0CW\x80`\x1F\x10a\x01\xE3Wa\x01\0\x80\x83T\x04\x02\x83R\x91` \x01\x91a\x02\x0CV[\x82\x01\x91\x90_R` _ \x90[\x81T\x81R\x90`\x01\x01\x90` \x01\x80\x83\x11a\x01\xEFW\x82\x90\x03`\x1F\x16\x82\x01\x91[PPPPP\x81V[3`\x01`\x01`\xA0\x1B\x03\x7F\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x16\x14a\x02]W`@Qc,\x01\xB2\x05`\xE2\x1B\x81R`\x04\x01`@Q\x80\x91\x03\x90\xFD[_\x82\x81R` \x81\x90R`@\x90 a\x02t\x82\x82a\x04/V[PPPV[_` \x82\x84\x03\x12\x15a\x02\x89W__\xFD[P5\x91\x90PV[` \x81R_\x82Q\x80` \x84\x01R_[\x81\x81\x10\x15a\x02\xBCW` \x81\x86\x01\x81\x01Q`@\x86\x84\x01\x01R\x01a\x02\x9FV[P_`@\x82\x85\x01\x01R`@`\x1F\x19`\x1F\x83\x01\x16\x84\x01\x01\x91PP\x92\x91PPV[cNH{q`\xE0\x1B_R`A`\x04R`$_\xFD[__`@\x83\x85\x03\x12\x15a\x03\0W__\xFD[\x825\x91P` \x83\x015g\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x81\x11\x15a\x03\x1DW__\xFD[\x83\x01`\x1F\x81\x01\x85\x13a\x03-W__\xFD[\x805g\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x81\x11\x15a\x03GWa\x03Ga\x02\xDBV[`@Q`\x1F\x82\x01`\x1F\x19\x90\x81\x16`?\x01\x16\x81\x01g\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x81\x11\x82\x82\x10\x17\x15a\x03vWa\x03va\x02\xDBV[`@R\x81\x81R\x82\x82\x01` \x01\x87\x10\x15a\x03\x8DW__\xFD[\x81` \x84\x01` \x83\x017_` \x83\x83\x01\x01R\x80\x93PPPP\x92P\x92\x90PV[`\x01\x81\x81\x1C\x90\x82\x16\x80a\x03\xC0W`\x7F\x82\x16\x91P[` \x82\x10\x81\x03a\x03\xDEWcNH{q`\xE0\x1B_R`\"`\x04R`$_\xFD[P\x91\x90PV[`\x1F\x82\x11\x15a\x02tW\x80_R` _ `\x1F\x84\x01`\x05\x1C\x81\x01` \x85\x10\x15a\x04\tWP\x80[`\x1F\x84\x01`\x05\x1C\x82\x01\x91P[\x81\x81\x10\x15a\x04(W_\x81U`\x01\x01a\x04\x15V[PPPPPV[\x81Qg\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x81\x11\x15a\x04IWa\x04Ia\x02\xDBV[a\x04]\x81a\x04W\x84Ta\x03\xACV[\x84a\x03\xE4V[` `\x1F\x82\x11`\x01\x81\x14a\x04\x8FW_\x83\x15a\x04xWP\x84\x82\x01Q[_\x19`\x03\x85\x90\x1B\x1C\x19\x16`\x01\x84\x90\x1B\x17\x84Ua\x04(V[_\x84\x81R` \x81 `\x1F\x19\x85\x16\x91[\x82\x81\x10\x15a\x04\xBEW\x87\x85\x01Q\x82U` \x94\x85\x01\x94`\x01\x90\x92\x01\x91\x01a\x04\x9EV[P\x84\x82\x10\x15a\x04\xDBW\x86\x84\x01Q_\x19`\x03\x87\x90\x1B`\xF8\x16\x1C\x19\x16\x81U[PPPP`\x01\x90\x81\x1B\x01\x90UPV\xFE\xA2dipfsX\"\x12 \x05%\t\xEC\x16H\xDC\x0E\x94\x8D2\xF8a\xF5\x8BT\xBD@\x96\xA6Z-j\x18\x98\xDE#T\xE5\x0B\x89\xFFdsolcC\0\x08\x1B\x003",
     );
     /**Custom error with signature `OnlySlashingRegistryCoordinator()` and selector `0xb006c814`.
-    ```solidity
-    error OnlySlashingRegistryCoordinator();
-    ```*/
+```solidity
+error OnlySlashingRegistryCoordinator();
+```*/
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct OnlySlashingRegistryCoordinator {}
@@ -166,7 +158,9 @@ pub mod SocketRegistry {
         type UnderlyingRustTuple<'a> = ();
         #[cfg(test)]
         #[allow(dead_code, unreachable_patterns)]
-        fn _type_assertion(_t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>) {
+        fn _type_assertion(
+            _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+        ) {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
@@ -175,14 +169,16 @@ pub mod SocketRegistry {
         }
         #[automatically_derived]
         #[doc(hidden)]
-        impl ::core::convert::From<OnlySlashingRegistryCoordinator> for UnderlyingRustTuple<'_> {
+        impl ::core::convert::From<OnlySlashingRegistryCoordinator>
+        for UnderlyingRustTuple<'_> {
             fn from(value: OnlySlashingRegistryCoordinator) -> Self {
                 ()
             }
         }
         #[automatically_derived]
         #[doc(hidden)]
-        impl ::core::convert::From<UnderlyingRustTuple<'_>> for OnlySlashingRegistryCoordinator {
+        impl ::core::convert::From<UnderlyingRustTuple<'_>>
+        for OnlySlashingRegistryCoordinator {
             fn from(tuple: UnderlyingRustTuple<'_>) -> Self {
                 Self {}
             }
@@ -190,7 +186,9 @@ pub mod SocketRegistry {
         #[automatically_derived]
         impl alloy_sol_types::SolError for OnlySlashingRegistryCoordinator {
             type Parameters<'a> = UnderlyingSolTuple<'a>;
-            type Token<'a> = <Self::Parameters<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type Token<'a> = <Self::Parameters<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             const SIGNATURE: &'static str = "OnlySlashingRegistryCoordinator()";
             const SELECTOR: [u8; 4] = [176u8, 6u8, 200u8, 20u8];
             #[inline]
@@ -206,9 +204,9 @@ pub mod SocketRegistry {
         }
     };
     /**Constructor`.
-    ```solidity
-    constructor(address _slashingRegistryCoordinator);
-    ```*/
+```solidity
+constructor(address _slashingRegistryCoordinator);
+```*/
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct constructorCall {
@@ -224,7 +222,9 @@ pub mod SocketRegistry {
             type UnderlyingRustTuple<'a> = (alloy::sol_types::private::Address,);
             #[cfg(test)]
             #[allow(dead_code, unreachable_patterns)]
-            fn _type_assertion(_t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>) {
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
@@ -251,7 +251,9 @@ pub mod SocketRegistry {
         #[automatically_derived]
         impl alloy_sol_types::SolConstructor for constructorCall {
             type Parameters<'a> = (alloy::sol_types::sol_data::Address,);
-            type Token<'a> = <Self::Parameters<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type Token<'a> = <Self::Parameters<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             #[inline]
             fn new<'a>(
                 tuple: <Self::Parameters<'a> as alloy_sol_types::SolType>::RustType,
@@ -269,9 +271,9 @@ pub mod SocketRegistry {
         }
     };
     /**Function with signature `getOperatorSocket(bytes32)` and selector `0x10bea0d7`.
-    ```solidity
-    function getOperatorSocket(bytes32 _operatorId) external view returns (string memory);
-    ```*/
+```solidity
+function getOperatorSocket(bytes32 _operatorId) external view returns (string memory);
+```*/
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct getOperatorSocketCall {
@@ -300,7 +302,9 @@ pub mod SocketRegistry {
             type UnderlyingRustTuple<'a> = (alloy::sol_types::private::FixedBytes<32>,);
             #[cfg(test)]
             #[allow(dead_code, unreachable_patterns)]
-            fn _type_assertion(_t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>) {
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
@@ -309,18 +313,18 @@ pub mod SocketRegistry {
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<getOperatorSocketCall> for UnderlyingRustTuple<'_> {
+            impl ::core::convert::From<getOperatorSocketCall>
+            for UnderlyingRustTuple<'_> {
                 fn from(value: getOperatorSocketCall) -> Self {
                     (value._operatorId,)
                 }
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<UnderlyingRustTuple<'_>> for getOperatorSocketCall {
+            impl ::core::convert::From<UnderlyingRustTuple<'_>>
+            for getOperatorSocketCall {
                 fn from(tuple: UnderlyingRustTuple<'_>) -> Self {
-                    Self {
-                        _operatorId: tuple.0,
-                    }
+                    Self { _operatorId: tuple.0 }
                 }
             }
         }
@@ -331,7 +335,9 @@ pub mod SocketRegistry {
             type UnderlyingRustTuple<'a> = (alloy::sol_types::private::String,);
             #[cfg(test)]
             #[allow(dead_code, unreachable_patterns)]
-            fn _type_assertion(_t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>) {
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
@@ -340,14 +346,16 @@ pub mod SocketRegistry {
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<getOperatorSocketReturn> for UnderlyingRustTuple<'_> {
+            impl ::core::convert::From<getOperatorSocketReturn>
+            for UnderlyingRustTuple<'_> {
                 fn from(value: getOperatorSocketReturn) -> Self {
                     (value._0,)
                 }
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<UnderlyingRustTuple<'_>> for getOperatorSocketReturn {
+            impl ::core::convert::From<UnderlyingRustTuple<'_>>
+            for getOperatorSocketReturn {
                 fn from(tuple: UnderlyingRustTuple<'_>) -> Self {
                     Self { _0: tuple.0 }
                 }
@@ -356,10 +364,14 @@ pub mod SocketRegistry {
         #[automatically_derived]
         impl alloy_sol_types::SolCall for getOperatorSocketCall {
             type Parameters<'a> = (alloy::sol_types::sol_data::FixedBytes<32>,);
-            type Token<'a> = <Self::Parameters<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type Token<'a> = <Self::Parameters<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             type Return = getOperatorSocketReturn;
             type ReturnTuple<'a> = (alloy::sol_types::sol_data::String,);
-            type ReturnToken<'a> = <Self::ReturnTuple<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type ReturnToken<'a> = <Self::ReturnTuple<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             const SIGNATURE: &'static str = "getOperatorSocket(bytes32)";
             const SELECTOR: [u8; 4] = [16u8, 190u8, 160u8, 215u8];
             #[inline]
@@ -381,17 +393,17 @@ pub mod SocketRegistry {
                 data: &[u8],
                 validate: bool,
             ) -> alloy_sol_types::Result<Self::Return> {
-                <Self::ReturnTuple<'_> as alloy_sol_types::SolType>::abi_decode_sequence(
-                    data, validate,
-                )
-                .map(Into::into)
+                <Self::ReturnTuple<
+                    '_,
+                > as alloy_sol_types::SolType>::abi_decode_sequence(data, validate)
+                    .map(Into::into)
             }
         }
     };
     /**Function with signature `operatorIdToSocket(bytes32)` and selector `0xaf65fdfc`.
-    ```solidity
-    function operatorIdToSocket(bytes32) external view returns (string memory);
-    ```*/
+```solidity
+function operatorIdToSocket(bytes32) external view returns (string memory);
+```*/
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct operatorIdToSocketCall {
@@ -420,7 +432,9 @@ pub mod SocketRegistry {
             type UnderlyingRustTuple<'a> = (alloy::sol_types::private::FixedBytes<32>,);
             #[cfg(test)]
             #[allow(dead_code, unreachable_patterns)]
-            fn _type_assertion(_t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>) {
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
@@ -429,14 +443,16 @@ pub mod SocketRegistry {
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<operatorIdToSocketCall> for UnderlyingRustTuple<'_> {
+            impl ::core::convert::From<operatorIdToSocketCall>
+            for UnderlyingRustTuple<'_> {
                 fn from(value: operatorIdToSocketCall) -> Self {
                     (value._0,)
                 }
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<UnderlyingRustTuple<'_>> for operatorIdToSocketCall {
+            impl ::core::convert::From<UnderlyingRustTuple<'_>>
+            for operatorIdToSocketCall {
                 fn from(tuple: UnderlyingRustTuple<'_>) -> Self {
                     Self { _0: tuple.0 }
                 }
@@ -449,7 +465,9 @@ pub mod SocketRegistry {
             type UnderlyingRustTuple<'a> = (alloy::sol_types::private::String,);
             #[cfg(test)]
             #[allow(dead_code, unreachable_patterns)]
-            fn _type_assertion(_t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>) {
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
@@ -458,14 +476,16 @@ pub mod SocketRegistry {
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<operatorIdToSocketReturn> for UnderlyingRustTuple<'_> {
+            impl ::core::convert::From<operatorIdToSocketReturn>
+            for UnderlyingRustTuple<'_> {
                 fn from(value: operatorIdToSocketReturn) -> Self {
                     (value._0,)
                 }
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<UnderlyingRustTuple<'_>> for operatorIdToSocketReturn {
+            impl ::core::convert::From<UnderlyingRustTuple<'_>>
+            for operatorIdToSocketReturn {
                 fn from(tuple: UnderlyingRustTuple<'_>) -> Self {
                     Self { _0: tuple.0 }
                 }
@@ -474,10 +494,14 @@ pub mod SocketRegistry {
         #[automatically_derived]
         impl alloy_sol_types::SolCall for operatorIdToSocketCall {
             type Parameters<'a> = (alloy::sol_types::sol_data::FixedBytes<32>,);
-            type Token<'a> = <Self::Parameters<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type Token<'a> = <Self::Parameters<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             type Return = operatorIdToSocketReturn;
             type ReturnTuple<'a> = (alloy::sol_types::sol_data::String,);
-            type ReturnToken<'a> = <Self::ReturnTuple<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type ReturnToken<'a> = <Self::ReturnTuple<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             const SIGNATURE: &'static str = "operatorIdToSocket(bytes32)";
             const SELECTOR: [u8; 4] = [175u8, 101u8, 253u8, 252u8];
             #[inline]
@@ -499,17 +523,17 @@ pub mod SocketRegistry {
                 data: &[u8],
                 validate: bool,
             ) -> alloy_sol_types::Result<Self::Return> {
-                <Self::ReturnTuple<'_> as alloy_sol_types::SolType>::abi_decode_sequence(
-                    data, validate,
-                )
-                .map(Into::into)
+                <Self::ReturnTuple<
+                    '_,
+                > as alloy_sol_types::SolType>::abi_decode_sequence(data, validate)
+                    .map(Into::into)
             }
         }
     };
     /**Function with signature `setOperatorSocket(bytes32,string)` and selector `0xf043367e`.
-    ```solidity
-    function setOperatorSocket(bytes32 _operatorId, string memory _socket) external;
-    ```*/
+```solidity
+function setOperatorSocket(bytes32 _operatorId, string memory _socket) external;
+```*/
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct setOperatorSocketCall {
@@ -543,7 +567,9 @@ pub mod SocketRegistry {
             );
             #[cfg(test)]
             #[allow(dead_code, unreachable_patterns)]
-            fn _type_assertion(_t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>) {
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
@@ -552,14 +578,16 @@ pub mod SocketRegistry {
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<setOperatorSocketCall> for UnderlyingRustTuple<'_> {
+            impl ::core::convert::From<setOperatorSocketCall>
+            for UnderlyingRustTuple<'_> {
                 fn from(value: setOperatorSocketCall) -> Self {
                     (value._operatorId, value._socket)
                 }
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<UnderlyingRustTuple<'_>> for setOperatorSocketCall {
+            impl ::core::convert::From<UnderlyingRustTuple<'_>>
+            for setOperatorSocketCall {
                 fn from(tuple: UnderlyingRustTuple<'_>) -> Self {
                     Self {
                         _operatorId: tuple.0,
@@ -575,7 +603,9 @@ pub mod SocketRegistry {
             type UnderlyingRustTuple<'a> = ();
             #[cfg(test)]
             #[allow(dead_code, unreachable_patterns)]
-            fn _type_assertion(_t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>) {
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
@@ -584,14 +614,16 @@ pub mod SocketRegistry {
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<setOperatorSocketReturn> for UnderlyingRustTuple<'_> {
+            impl ::core::convert::From<setOperatorSocketReturn>
+            for UnderlyingRustTuple<'_> {
                 fn from(value: setOperatorSocketReturn) -> Self {
                     ()
                 }
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<UnderlyingRustTuple<'_>> for setOperatorSocketReturn {
+            impl ::core::convert::From<UnderlyingRustTuple<'_>>
+            for setOperatorSocketReturn {
                 fn from(tuple: UnderlyingRustTuple<'_>) -> Self {
                     Self {}
                 }
@@ -603,10 +635,14 @@ pub mod SocketRegistry {
                 alloy::sol_types::sol_data::FixedBytes<32>,
                 alloy::sol_types::sol_data::String,
             );
-            type Token<'a> = <Self::Parameters<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type Token<'a> = <Self::Parameters<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             type Return = setOperatorSocketReturn;
             type ReturnTuple<'a> = ();
-            type ReturnToken<'a> = <Self::ReturnTuple<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type ReturnToken<'a> = <Self::ReturnTuple<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             const SIGNATURE: &'static str = "setOperatorSocket(bytes32,string)";
             const SELECTOR: [u8; 4] = [240u8, 67u8, 54u8, 126u8];
             #[inline]
@@ -631,17 +667,17 @@ pub mod SocketRegistry {
                 data: &[u8],
                 validate: bool,
             ) -> alloy_sol_types::Result<Self::Return> {
-                <Self::ReturnTuple<'_> as alloy_sol_types::SolType>::abi_decode_sequence(
-                    data, validate,
-                )
-                .map(Into::into)
+                <Self::ReturnTuple<
+                    '_,
+                > as alloy_sol_types::SolType>::abi_decode_sequence(data, validate)
+                    .map(Into::into)
             }
         }
     };
     /**Function with signature `slashingRegistryCoordinator()` and selector `0xcf1d6b42`.
-    ```solidity
-    function slashingRegistryCoordinator() external view returns (address);
-    ```*/
+```solidity
+function slashingRegistryCoordinator() external view returns (address);
+```*/
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct slashingRegistryCoordinatorCall {}
@@ -667,7 +703,9 @@ pub mod SocketRegistry {
             type UnderlyingRustTuple<'a> = ();
             #[cfg(test)]
             #[allow(dead_code, unreachable_patterns)]
-            fn _type_assertion(_t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>) {
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
@@ -676,14 +714,16 @@ pub mod SocketRegistry {
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<slashingRegistryCoordinatorCall> for UnderlyingRustTuple<'_> {
+            impl ::core::convert::From<slashingRegistryCoordinatorCall>
+            for UnderlyingRustTuple<'_> {
                 fn from(value: slashingRegistryCoordinatorCall) -> Self {
                     ()
                 }
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<UnderlyingRustTuple<'_>> for slashingRegistryCoordinatorCall {
+            impl ::core::convert::From<UnderlyingRustTuple<'_>>
+            for slashingRegistryCoordinatorCall {
                 fn from(tuple: UnderlyingRustTuple<'_>) -> Self {
                     Self {}
                 }
@@ -696,7 +736,9 @@ pub mod SocketRegistry {
             type UnderlyingRustTuple<'a> = (alloy::sol_types::private::Address,);
             #[cfg(test)]
             #[allow(dead_code, unreachable_patterns)]
-            fn _type_assertion(_t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>) {
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
@@ -705,14 +747,16 @@ pub mod SocketRegistry {
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<slashingRegistryCoordinatorReturn> for UnderlyingRustTuple<'_> {
+            impl ::core::convert::From<slashingRegistryCoordinatorReturn>
+            for UnderlyingRustTuple<'_> {
                 fn from(value: slashingRegistryCoordinatorReturn) -> Self {
                     (value._0,)
                 }
             }
             #[automatically_derived]
             #[doc(hidden)]
-            impl ::core::convert::From<UnderlyingRustTuple<'_>> for slashingRegistryCoordinatorReturn {
+            impl ::core::convert::From<UnderlyingRustTuple<'_>>
+            for slashingRegistryCoordinatorReturn {
                 fn from(tuple: UnderlyingRustTuple<'_>) -> Self {
                     Self { _0: tuple.0 }
                 }
@@ -721,10 +765,14 @@ pub mod SocketRegistry {
         #[automatically_derived]
         impl alloy_sol_types::SolCall for slashingRegistryCoordinatorCall {
             type Parameters<'a> = ();
-            type Token<'a> = <Self::Parameters<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type Token<'a> = <Self::Parameters<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             type Return = slashingRegistryCoordinatorReturn;
             type ReturnTuple<'a> = (alloy::sol_types::sol_data::Address,);
-            type ReturnToken<'a> = <Self::ReturnTuple<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type ReturnToken<'a> = <Self::ReturnTuple<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             const SIGNATURE: &'static str = "slashingRegistryCoordinator()";
             const SELECTOR: [u8; 4] = [207u8, 29u8, 107u8, 66u8];
             #[inline]
@@ -742,10 +790,10 @@ pub mod SocketRegistry {
                 data: &[u8],
                 validate: bool,
             ) -> alloy_sol_types::Result<Self::Return> {
-                <Self::ReturnTuple<'_> as alloy_sol_types::SolType>::abi_decode_sequence(
-                    data, validate,
-                )
-                .map(Into::into)
+                <Self::ReturnTuple<
+                    '_,
+                > as alloy_sol_types::SolType>::abi_decode_sequence(data, validate)
+                    .map(Into::into)
             }
         }
     };
@@ -815,17 +863,17 @@ pub mod SocketRegistry {
             static DECODE_SHIMS: &[fn(
                 &[u8],
                 bool,
-            )
-                -> alloy_sol_types::Result<SocketRegistryCalls>] = &[
+            ) -> alloy_sol_types::Result<SocketRegistryCalls>] = &[
                 {
                     fn getOperatorSocket(
                         data: &[u8],
                         validate: bool,
                     ) -> alloy_sol_types::Result<SocketRegistryCalls> {
                         <getOperatorSocketCall as alloy_sol_types::SolCall>::abi_decode_raw(
-                            data, validate,
-                        )
-                        .map(SocketRegistryCalls::getOperatorSocket)
+                                data,
+                                validate,
+                            )
+                            .map(SocketRegistryCalls::getOperatorSocket)
                     }
                     getOperatorSocket
                 },
@@ -835,9 +883,10 @@ pub mod SocketRegistry {
                         validate: bool,
                     ) -> alloy_sol_types::Result<SocketRegistryCalls> {
                         <operatorIdToSocketCall as alloy_sol_types::SolCall>::abi_decode_raw(
-                            data, validate,
-                        )
-                        .map(SocketRegistryCalls::operatorIdToSocket)
+                                data,
+                                validate,
+                            )
+                            .map(SocketRegistryCalls::operatorIdToSocket)
                     }
                     operatorIdToSocket
                 },
@@ -860,18 +909,21 @@ pub mod SocketRegistry {
                         validate: bool,
                     ) -> alloy_sol_types::Result<SocketRegistryCalls> {
                         <setOperatorSocketCall as alloy_sol_types::SolCall>::abi_decode_raw(
-                            data, validate,
-                        )
-                        .map(SocketRegistryCalls::setOperatorSocket)
+                                data,
+                                validate,
+                            )
+                            .map(SocketRegistryCalls::setOperatorSocket)
                     }
                     setOperatorSocket
                 },
             ];
             let Ok(idx) = Self::SELECTORS.binary_search(&selector) else {
-                return Err(alloy_sol_types::Error::unknown_selector(
-                    <Self as alloy_sol_types::SolInterface>::NAME,
-                    selector,
-                ));
+                return Err(
+                    alloy_sol_types::Error::unknown_selector(
+                        <Self as alloy_sol_types::SolInterface>::NAME,
+                        selector,
+                    ),
+                );
             };
             DECODE_SHIMS[idx](data, validate)
         }
@@ -879,13 +931,19 @@ pub mod SocketRegistry {
         fn abi_encoded_size(&self) -> usize {
             match self {
                 Self::getOperatorSocket(inner) => {
-                    <getOperatorSocketCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
+                    <getOperatorSocketCall as alloy_sol_types::SolCall>::abi_encoded_size(
+                        inner,
+                    )
                 }
                 Self::operatorIdToSocket(inner) => {
-                    <operatorIdToSocketCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
+                    <operatorIdToSocketCall as alloy_sol_types::SolCall>::abi_encoded_size(
+                        inner,
+                    )
                 }
                 Self::setOperatorSocket(inner) => {
-                    <setOperatorSocketCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
+                    <setOperatorSocketCall as alloy_sol_types::SolCall>::abi_encoded_size(
+                        inner,
+                    )
                 }
                 Self::slashingRegistryCoordinator(inner) => {
                     <slashingRegistryCoordinatorCall as alloy_sol_types::SolCall>::abi_encoded_size(
@@ -898,17 +956,27 @@ pub mod SocketRegistry {
         fn abi_encode_raw(&self, out: &mut alloy_sol_types::private::Vec<u8>) {
             match self {
                 Self::getOperatorSocket(inner) => {
-                    <getOperatorSocketCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
+                    <getOperatorSocketCall as alloy_sol_types::SolCall>::abi_encode_raw(
+                        inner,
+                        out,
+                    )
                 }
                 Self::operatorIdToSocket(inner) => {
-                    <operatorIdToSocketCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
+                    <operatorIdToSocketCall as alloy_sol_types::SolCall>::abi_encode_raw(
+                        inner,
+                        out,
+                    )
                 }
                 Self::setOperatorSocket(inner) => {
-                    <setOperatorSocketCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
+                    <setOperatorSocketCall as alloy_sol_types::SolCall>::abi_encode_raw(
+                        inner,
+                        out,
+                    )
                 }
                 Self::slashingRegistryCoordinator(inner) => {
                     <slashingRegistryCoordinatorCall as alloy_sol_types::SolCall>::abi_encode_raw(
-                        inner, out,
+                        inner,
+                        out,
                     )
                 }
             }
@@ -960,24 +1028,28 @@ pub mod SocketRegistry {
             static DECODE_SHIMS: &[fn(
                 &[u8],
                 bool,
-            )
-                -> alloy_sol_types::Result<SocketRegistryErrors>] = &[{
-                fn OnlySlashingRegistryCoordinator(
-                    data: &[u8],
-                    validate: bool,
-                ) -> alloy_sol_types::Result<SocketRegistryErrors> {
-                    <OnlySlashingRegistryCoordinator as alloy_sol_types::SolError>::abi_decode_raw(
-                        data, validate,
-                    )
-                    .map(SocketRegistryErrors::OnlySlashingRegistryCoordinator)
-                }
-                OnlySlashingRegistryCoordinator
-            }];
+            ) -> alloy_sol_types::Result<SocketRegistryErrors>] = &[
+                {
+                    fn OnlySlashingRegistryCoordinator(
+                        data: &[u8],
+                        validate: bool,
+                    ) -> alloy_sol_types::Result<SocketRegistryErrors> {
+                        <OnlySlashingRegistryCoordinator as alloy_sol_types::SolError>::abi_decode_raw(
+                                data,
+                                validate,
+                            )
+                            .map(SocketRegistryErrors::OnlySlashingRegistryCoordinator)
+                    }
+                    OnlySlashingRegistryCoordinator
+                },
+            ];
             let Ok(idx) = Self::SELECTORS.binary_search(&selector) else {
-                return Err(alloy_sol_types::Error::unknown_selector(
-                    <Self as alloy_sol_types::SolInterface>::NAME,
-                    selector,
-                ));
+                return Err(
+                    alloy_sol_types::Error::unknown_selector(
+                        <Self as alloy_sol_types::SolInterface>::NAME,
+                        selector,
+                    ),
+                );
             };
             DECODE_SHIMS[idx](data, validate)
         }
@@ -996,7 +1068,8 @@ pub mod SocketRegistry {
             match self {
                 Self::OnlySlashingRegistryCoordinator(inner) => {
                     <OnlySlashingRegistryCoordinator as alloy_sol_types::SolError>::abi_encode_raw(
-                        inner, out,
+                        inner,
+                        out,
                     )
                 }
             }
@@ -1005,7 +1078,7 @@ pub mod SocketRegistry {
     use alloy::contract as alloy_contract;
     /**Creates a new wrapper around an on-chain [`SocketRegistry`](self) contract instance.
 
-    See the [wrapper's documentation](`SocketRegistryInstance`) for more details.*/
+See the [wrapper's documentation](`SocketRegistryInstance`) for more details.*/
     #[inline]
     pub const fn new<
         T: alloy_contract::private::Transport + ::core::clone::Clone,
@@ -1019,9 +1092,9 @@ pub mod SocketRegistry {
     }
     /**Deploys this contract using the given `provider` and constructor arguments, if any.
 
-    Returns a new instance of the contract, if the deployment was successful.
+Returns a new instance of the contract, if the deployment was successful.
 
-    For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
+For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
     #[inline]
     pub fn deploy<
         T: alloy_contract::private::Transport + ::core::clone::Clone,
@@ -1030,15 +1103,16 @@ pub mod SocketRegistry {
     >(
         provider: P,
         _slashingRegistryCoordinator: alloy::sol_types::private::Address,
-    ) -> impl ::core::future::Future<Output = alloy_contract::Result<SocketRegistryInstance<T, P, N>>>
-    {
+    ) -> impl ::core::future::Future<
+        Output = alloy_contract::Result<SocketRegistryInstance<T, P, N>>,
+    > {
         SocketRegistryInstance::<T, P, N>::deploy(provider, _slashingRegistryCoordinator)
     }
     /**Creates a `RawCallBuilder` for deploying this contract using the given `provider`
-    and constructor arguments, if any.
+and constructor arguments, if any.
 
-    This is a simple wrapper around creating a `RawCallBuilder` with the data set to
-    the bytecode concatenated with the constructor's ABI-encoded arguments.*/
+This is a simple wrapper around creating a `RawCallBuilder` with the data set to
+the bytecode concatenated with the constructor's ABI-encoded arguments.*/
     #[inline]
     pub fn deploy_builder<
         T: alloy_contract::private::Transport + ::core::clone::Clone,
@@ -1048,19 +1122,23 @@ pub mod SocketRegistry {
         provider: P,
         _slashingRegistryCoordinator: alloy::sol_types::private::Address,
     ) -> alloy_contract::RawCallBuilder<T, P, N> {
-        SocketRegistryInstance::<T, P, N>::deploy_builder(provider, _slashingRegistryCoordinator)
+        SocketRegistryInstance::<
+            T,
+            P,
+            N,
+        >::deploy_builder(provider, _slashingRegistryCoordinator)
     }
     /**A [`SocketRegistry`](self) instance.
 
-    Contains type-safe methods for interacting with an on-chain instance of the
-    [`SocketRegistry`](self) contract located at a given `address`, using a given
-    provider `P`.
+Contains type-safe methods for interacting with an on-chain instance of the
+[`SocketRegistry`](self) contract located at a given `address`, using a given
+provider `P`.
 
-    If the contract bytecode is available (see the [`sol!`](alloy_sol_types::sol!)
-    documentation on how to provide it), the `deploy` and `deploy_builder` methods can
-    be used to deploy a new instance of the contract.
+If the contract bytecode is available (see the [`sol!`](alloy_sol_types::sol!)
+documentation on how to provide it), the `deploy` and `deploy_builder` methods can
+be used to deploy a new instance of the contract.
 
-    See the [module-level documentation](self) for all the available methods.*/
+See the [module-level documentation](self) for all the available methods.*/
     #[derive(Clone)]
     pub struct SocketRegistryInstance<T, P, N = alloy_contract::private::Ethereum> {
         address: alloy_sol_types::private::Address,
@@ -1071,9 +1149,7 @@ pub mod SocketRegistry {
     impl<T, P, N> ::core::fmt::Debug for SocketRegistryInstance<T, P, N> {
         #[inline]
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple("SocketRegistryInstance")
-                .field(&self.address)
-                .finish()
+            f.debug_tuple("SocketRegistryInstance").field(&self.address).finish()
         }
     }
     /// Instantiation and getters/setters.
@@ -1082,13 +1158,15 @@ pub mod SocketRegistry {
         T: alloy_contract::private::Transport + ::core::clone::Clone,
         P: alloy_contract::private::Provider<T, N>,
         N: alloy_contract::private::Network,
-    > SocketRegistryInstance<T, P, N>
-    {
+    > SocketRegistryInstance<T, P, N> {
         /**Creates a new wrapper around an on-chain [`SocketRegistry`](self) contract instance.
 
-        See the [wrapper's documentation](`SocketRegistryInstance`) for more details.*/
+See the [wrapper's documentation](`SocketRegistryInstance`) for more details.*/
         #[inline]
-        pub const fn new(address: alloy_sol_types::private::Address, provider: P) -> Self {
+        pub const fn new(
+            address: alloy_sol_types::private::Address,
+            provider: P,
+        ) -> Self {
             Self {
                 address,
                 provider,
@@ -1097,23 +1175,26 @@ pub mod SocketRegistry {
         }
         /**Deploys this contract using the given `provider` and constructor arguments, if any.
 
-        Returns a new instance of the contract, if the deployment was successful.
+Returns a new instance of the contract, if the deployment was successful.
 
-        For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
+For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
         #[inline]
         pub async fn deploy(
             provider: P,
             _slashingRegistryCoordinator: alloy::sol_types::private::Address,
         ) -> alloy_contract::Result<SocketRegistryInstance<T, P, N>> {
-            let call_builder = Self::deploy_builder(provider, _slashingRegistryCoordinator);
+            let call_builder = Self::deploy_builder(
+                provider,
+                _slashingRegistryCoordinator,
+            );
             let contract_address = call_builder.deploy().await?;
             Ok(Self::new(contract_address, call_builder.provider))
         }
         /**Creates a `RawCallBuilder` for deploying this contract using the given `provider`
-        and constructor arguments, if any.
+and constructor arguments, if any.
 
-        This is a simple wrapper around creating a `RawCallBuilder` with the data set to
-        the bytecode concatenated with the constructor's ABI-encoded arguments.*/
+This is a simple wrapper around creating a `RawCallBuilder` with the data set to
+the bytecode concatenated with the constructor's ABI-encoded arguments.*/
         #[inline]
         pub fn deploy_builder(
             provider: P,
@@ -1123,12 +1204,14 @@ pub mod SocketRegistry {
                 provider,
                 [
                     &BYTECODE[..],
-                    &alloy_sol_types::SolConstructor::abi_encode(&constructorCall {
-                        _slashingRegistryCoordinator,
-                    })[..],
+                    &alloy_sol_types::SolConstructor::abi_encode(
+                        &constructorCall {
+                            _slashingRegistryCoordinator,
+                        },
+                    )[..],
                 ]
-                .concat()
-                .into(),
+                    .concat()
+                    .into(),
             )
         }
         /// Returns a reference to the address.
@@ -1169,8 +1252,7 @@ pub mod SocketRegistry {
         T: alloy_contract::private::Transport + ::core::clone::Clone,
         P: alloy_contract::private::Provider<T, N>,
         N: alloy_contract::private::Network,
-    > SocketRegistryInstance<T, P, N>
-    {
+    > SocketRegistryInstance<T, P, N> {
         /// Creates a new call builder using this contract instance's provider and address.
         ///
         /// Note that the call can be any function call, not just those defined in this
@@ -1186,7 +1268,11 @@ pub mod SocketRegistry {
             &self,
             _operatorId: alloy::sol_types::private::FixedBytes<32>,
         ) -> alloy_contract::SolCallBuilder<T, &P, getOperatorSocketCall, N> {
-            self.call_builder(&getOperatorSocketCall { _operatorId })
+            self.call_builder(
+                &getOperatorSocketCall {
+                    _operatorId,
+                },
+            )
         }
         ///Creates a new call builder for the [`operatorIdToSocket`] function.
         pub fn operatorIdToSocket(
@@ -1201,10 +1287,12 @@ pub mod SocketRegistry {
             _operatorId: alloy::sol_types::private::FixedBytes<32>,
             _socket: alloy::sol_types::private::String,
         ) -> alloy_contract::SolCallBuilder<T, &P, setOperatorSocketCall, N> {
-            self.call_builder(&setOperatorSocketCall {
-                _operatorId,
-                _socket,
-            })
+            self.call_builder(
+                &setOperatorSocketCall {
+                    _operatorId,
+                    _socket,
+                },
+            )
         }
         ///Creates a new call builder for the [`slashingRegistryCoordinator`] function.
         pub fn slashingRegistryCoordinator(
@@ -1219,8 +1307,7 @@ pub mod SocketRegistry {
         T: alloy_contract::private::Transport + ::core::clone::Clone,
         P: alloy_contract::private::Provider<T, N>,
         N: alloy_contract::private::Network,
-    > SocketRegistryInstance<T, P, N>
-    {
+    > SocketRegistryInstance<T, P, N> {
         /// Creates a new event filter using this contract instance's provider and address.
         ///
         /// Note that the type can be any event, not just those defined in this contract.

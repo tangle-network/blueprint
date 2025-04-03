@@ -1,12 +1,4 @@
-#![allow(
-    clippy::all,
-    clippy::pedantic,
-    clippy::nursery,
-    warnings,
-    unknown_lints,
-    rustdoc::all,
-    elided_lifetimes_in_paths
-)]
+#![allow(clippy::all, clippy::pedantic, clippy::nursery, warnings, unknown_lints, rustdoc::all, elided_lifetimes_in_paths)]
 use TransparentUpgradeableProxy::*;
 
 /**
@@ -136,9 +128,9 @@ pub mod TransparentUpgradeableProxy {
         b"`\x80`@R6a\0\x13Wa\0\x11a\0\x17V[\0[a\0\x11[a\0\x1Fa\x01hV[`\x01`\x01`\xA0\x1B\x03\x163\x03a\x01^W```\x01`\x01`\xE0\x1B\x03\x19_5\x16cd\xD3\x18\r`\xE1\x1B\x81\x01a\0YWa\0Ra\x01\x9AV[\x91Pa\x01VV[cXp\x86\xBD`\xE1\x1B`\x01`\x01`\xE0\x1B\x03\x19\x82\x16\x01a\0yWa\0Ra\x01\xEDV[c\x07\r|i`\xE4\x1B`\x01`\x01`\xE0\x1B\x03\x19\x82\x16\x01a\0\x99Wa\0Ra\x021V[b\x1E\xB9o`\xE6\x1B`\x01`\x01`\xE0\x1B\x03\x19\x82\x16\x01a\0\xB8Wa\0Ra\x02aV[c\xA3\x9F%\xE5`\xE0\x1B`\x01`\x01`\xE0\x1B\x03\x19\x82\x16\x01a\0\xD8Wa\0Ra\x02\xA0V[`@QbF\x1B\xCD`\xE5\x1B\x81R` `\x04\x82\x01R`B`$\x82\x01R\x7FTransparentUpgradeableProxy: adm`D\x82\x01R\x7Fin cannot fallback to proxy targ`d\x82\x01Ra\x19]`\xF2\x1B`\x84\x82\x01R`\xA4\x01[`@Q\x80\x91\x03\x90\xFD[\x81Q` \x83\x01\xF3[a\x01fa\x02\xB3V[V[_\x7F\xB51'hJV\x8B1s\xAE\x13\xB9\xF8\xA6\x01n$>c\xB6\xE8\xEE\x11x\xD6\xA7\x17\x85\x0B]a\x03[T`\x01`\x01`\xA0\x1B\x03\x16\x91\x90PV[``a\x01\xA4a\x02\xC3V[_a\x01\xB26`\x04\x81\x84a\x06hV[\x81\x01\x90a\x01\xBF\x91\x90a\x06\xAAV[\x90Pa\x01\xDA\x81`@Q\x80` \x01`@R\x80_\x81RP_a\x02\xCDV[PP`@\x80Q` \x81\x01\x90\x91R_\x81R\x90V[``_\x80a\x01\xFE6`\x04\x81\x84a\x06hV[\x81\x01\x90a\x02\x0B\x91\x90a\x06\xD7V[\x91P\x91Pa\x02\x1B\x82\x82`\x01a\x02\xCDV[`@Q\x80` \x01`@R\x80_\x81RP\x92PPP\x90V[``a\x02;a\x02\xC3V[_a\x02I6`\x04\x81\x84a\x06hV[\x81\x01\x90a\x02V\x91\x90a\x06\xAAV[\x90Pa\x01\xDA\x81a\x02\xF8V[``a\x02ka\x02\xC3V[_a\x02ta\x01hV[`@\x80Q`\x01`\x01`\xA0\x1B\x03\x83\x16` \x82\x01R\x91\x92P\x01`@Q` \x81\x83\x03\x03\x81R\x90`@R\x91PP\x90V[``a\x02\xAAa\x02\xC3V[_a\x02ta\x03OV[a\x01fa\x02\xBEa\x03OV[a\x03]V[4\x15a\x01fW__\xFD[a\x02\xD6\x83a\x03{V[_\x82Q\x11\x80a\x02\xE2WP\x80[\x15a\x02\xF3Wa\x02\xF1\x83\x83a\x03\xBAV[P[PPPV[\x7F~dMyB/\x17\xC0\x1EH\x94\xB5\xF4\xF5\x88\xD31\xEB\xFA(e=B\xAE\x83-\xC5\x9E8\xC9y\x8Fa\x03!a\x01hV[`@\x80Q`\x01`\x01`\xA0\x1B\x03\x92\x83\x16\x81R\x91\x84\x16` \x83\x01R\x01`@Q\x80\x91\x03\x90\xA1a\x03L\x81a\x03\xE6V[PV[_a\x03Xa\x04\x8FV[\x90P\x90V[6__7__6_\x84Z\xF4=__>\x80\x80\x15a\x03wW=_\xF3[=_\xFD[a\x03\x84\x81a\x04\xB6V[`@Q`\x01`\x01`\xA0\x1B\x03\x82\x16\x90\x7F\xBC|\xD7Z \xEE'\xFD\x9A\xDE\xBA\xB3 A\xF7U!M\xBCk\xFF\xA9\x0C\xC0\"[9\xDA.\\-;\x90_\x90\xA2PV[``a\x03\xDF\x83\x83`@Q\x80``\x01`@R\x80`'\x81R` \x01a\x08\x0B`'\x919a\x05JV[\x93\x92PPPV[`\x01`\x01`\xA0\x1B\x03\x81\x16a\x04KW`@QbF\x1B\xCD`\xE5\x1B\x81R` `\x04\x82\x01R`&`$\x82\x01R\x7FERC1967: new admin is the zero a`D\x82\x01Reddress`\xD0\x1B`d\x82\x01R`\x84\x01a\x01MV[\x80\x7F\xB51'hJV\x8B1s\xAE\x13\xB9\xF8\xA6\x01n$>c\xB6\xE8\xEE\x11x\xD6\xA7\x17\x85\x0B]a\x03[\x80T`\x01`\x01`\xA0\x1B\x03\x19\x16`\x01`\x01`\xA0\x1B\x03\x92\x90\x92\x16\x91\x90\x91\x17\x90UPV[_\x7F6\x08\x94\xA1;\xA1\xA3!\x06g\xC8(I-\xB9\x8D\xCA> v\xCC75\xA9 \xA3\xCAP]8+\xBCa\x01\x8BV[`\x01`\x01`\xA0\x1B\x03\x81\x16;a\x05#W`@QbF\x1B\xCD`\xE5\x1B\x81R` `\x04\x82\x01R`-`$\x82\x01R\x7FERC1967: new implementation is n`D\x82\x01Rl\x1B\xDD\x08\x18H\x18\xDB\xDB\x9D\x1C\x98X\xDD`\x9A\x1B`d\x82\x01R`\x84\x01a\x01MV[\x80\x7F6\x08\x94\xA1;\xA1\xA3!\x06g\xC8(I-\xB9\x8D\xCA> v\xCC75\xA9 \xA3\xCAP]8+\xBCa\x04nV[``__\x85`\x01`\x01`\xA0\x1B\x03\x16\x85`@Qa\x05f\x91\x90a\x07\xBDV[_`@Q\x80\x83\x03\x81\x85Z\xF4\x91PP=\x80_\x81\x14a\x05\x9EW`@Q\x91P`\x1F\x19`?=\x01\x16\x82\x01`@R=\x82R=_` \x84\x01>a\x05\xA3V[``\x91P[P\x91P\x91Pa\x05\xB4\x86\x83\x83\x87a\x05\xBEV[\x96\x95PPPPPPV[``\x83\x15a\x06,W\x82Q_\x03a\x06%W`\x01`\x01`\xA0\x1B\x03\x85\x16;a\x06%W`@QbF\x1B\xCD`\xE5\x1B\x81R` `\x04\x82\x01R`\x1D`$\x82\x01R\x7FAddress: call to non-contract\0\0\0`D\x82\x01R`d\x01a\x01MV[P\x81a\x066V[a\x066\x83\x83a\x06>V[\x94\x93PPPPV[\x81Q\x15a\x06NW\x81Q\x80\x83` \x01\xFD[\x80`@QbF\x1B\xCD`\xE5\x1B\x81R`\x04\x01a\x01M\x91\x90a\x07\xD8V[__\x85\x85\x11\x15a\x06vW__\xFD[\x83\x86\x11\x15a\x06\x82W__\xFD[PP\x82\x01\x93\x91\x90\x92\x03\x91PV[\x805`\x01`\x01`\xA0\x1B\x03\x81\x16\x81\x14a\x06\xA5W__\xFD[\x91\x90PV[_` \x82\x84\x03\x12\x15a\x06\xBAW__\xFD[a\x03\xDF\x82a\x06\x8FV[cNH{q`\xE0\x1B_R`A`\x04R`$_\xFD[__`@\x83\x85\x03\x12\x15a\x06\xE8W__\xFD[a\x06\xF1\x83a\x06\x8FV[\x91P` \x83\x015g\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x81\x11\x15a\x07\x0CW__\xFD[\x83\x01`\x1F\x81\x01\x85\x13a\x07\x1CW__\xFD[\x805g\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x81\x11\x15a\x076Wa\x076a\x06\xC3V[`@Q`\x1F\x82\x01`\x1F\x19\x90\x81\x16`?\x01\x16\x81\x01g\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x81\x11\x82\x82\x10\x17\x15a\x07eWa\x07ea\x06\xC3V[`@R\x81\x81R\x82\x82\x01` \x01\x87\x10\x15a\x07|W__\xFD[\x81` \x84\x01` \x83\x017_` \x83\x83\x01\x01R\x80\x93PPPP\x92P\x92\x90PV[_[\x83\x81\x10\x15a\x07\xB5W\x81\x81\x01Q\x83\x82\x01R` \x01a\x07\x9DV[PP_\x91\x01RV[_\x82Qa\x07\xCE\x81\x84` \x87\x01a\x07\x9BV[\x91\x90\x91\x01\x92\x91PPV[` \x81R_\x82Q\x80` \x84\x01Ra\x07\xF6\x81`@\x85\x01` \x87\x01a\x07\x9BV[`\x1F\x01`\x1F\x19\x16\x91\x90\x91\x01`@\x01\x92\x91PPV\xFEAddress: low-level delegate call failed\xA2dipfsX\"\x12 \xEAq\xD5\xD4\xAD\xAD$0W\xEA\x89m\x7F\xF8\xE0\x17{>\x974\xD5%\xFB\x9F\xD5\xEAH\x9C\xCE\x82Q\xF3dsolcC\0\x08\x1B\x003",
     );
     /**Event with signature `AdminChanged(address,address)` and selector `0x7e644d79422f17c01e4894b5f4f588d331ebfa28653d42ae832dc59e38c9798f`.
-    ```solidity
-    event AdminChanged(address previousAdmin, address newAdmin);
-    ```*/
+```solidity
+event AdminChanged(address previousAdmin, address newAdmin);
+```*/
     #[allow(
         non_camel_case_types,
         non_snake_case,
@@ -166,15 +158,45 @@ pub mod TransparentUpgradeableProxy {
                 alloy::sol_types::sol_data::Address,
                 alloy::sol_types::sol_data::Address,
             );
-            type DataToken<'a> = <Self::DataTuple<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type DataToken<'a> = <Self::DataTuple<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             type TopicList = (alloy_sol_types::sol_data::FixedBytes<32>,);
             const SIGNATURE: &'static str = "AdminChanged(address,address)";
-            const SIGNATURE_HASH: alloy_sol_types::private::B256 =
-                alloy_sol_types::private::B256::new([
-                    126u8, 100u8, 77u8, 121u8, 66u8, 47u8, 23u8, 192u8, 30u8, 72u8, 148u8, 181u8,
-                    244u8, 245u8, 136u8, 211u8, 49u8, 235u8, 250u8, 40u8, 101u8, 61u8, 66u8, 174u8,
-                    131u8, 45u8, 197u8, 158u8, 56u8, 201u8, 121u8, 143u8,
-                ]);
+            const SIGNATURE_HASH: alloy_sol_types::private::B256 = alloy_sol_types::private::B256::new([
+                126u8,
+                100u8,
+                77u8,
+                121u8,
+                66u8,
+                47u8,
+                23u8,
+                192u8,
+                30u8,
+                72u8,
+                148u8,
+                181u8,
+                244u8,
+                245u8,
+                136u8,
+                211u8,
+                49u8,
+                235u8,
+                250u8,
+                40u8,
+                101u8,
+                61u8,
+                66u8,
+                174u8,
+                131u8,
+                45u8,
+                197u8,
+                158u8,
+                56u8,
+                201u8,
+                121u8,
+                143u8,
+            ]);
             const ANONYMOUS: bool = false;
             #[allow(unused_variables)]
             #[inline]
@@ -192,11 +214,13 @@ pub mod TransparentUpgradeableProxy {
                 topics: &<Self::TopicList as alloy_sol_types::SolType>::RustType,
             ) -> alloy_sol_types::Result<()> {
                 if topics.0 != Self::SIGNATURE_HASH {
-                    return Err(alloy_sol_types::Error::invalid_event_signature_hash(
-                        Self::SIGNATURE,
-                        topics.0,
-                        Self::SIGNATURE_HASH,
-                    ));
+                    return Err(
+                        alloy_sol_types::Error::invalid_event_signature_hash(
+                            Self::SIGNATURE,
+                            topics.0,
+                            Self::SIGNATURE_HASH,
+                        ),
+                    );
                 }
                 Ok(())
             }
@@ -223,7 +247,9 @@ pub mod TransparentUpgradeableProxy {
                 if out.len() < <Self::TopicList as alloy_sol_types::TopicList>::COUNT {
                     return Err(alloy_sol_types::Error::Overrun);
                 }
-                out[0usize] = alloy_sol_types::abi::token::WordToken(Self::SIGNATURE_HASH);
+                out[0usize] = alloy_sol_types::abi::token::WordToken(
+                    Self::SIGNATURE_HASH,
+                );
                 Ok(())
             }
         }
@@ -245,9 +271,9 @@ pub mod TransparentUpgradeableProxy {
         }
     };
     /**Event with signature `BeaconUpgraded(address)` and selector `0x1cf3b03a6cf19fa2baba4df148e9dcabedea7f8a5c07840e207e5c089be95d3e`.
-    ```solidity
-    event BeaconUpgraded(address indexed beacon);
-    ```*/
+```solidity
+event BeaconUpgraded(address indexed beacon);
+```*/
     #[allow(
         non_camel_case_types,
         non_snake_case,
@@ -270,18 +296,48 @@ pub mod TransparentUpgradeableProxy {
         #[automatically_derived]
         impl alloy_sol_types::SolEvent for BeaconUpgraded {
             type DataTuple<'a> = ();
-            type DataToken<'a> = <Self::DataTuple<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type DataToken<'a> = <Self::DataTuple<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             type TopicList = (
                 alloy_sol_types::sol_data::FixedBytes<32>,
                 alloy::sol_types::sol_data::Address,
             );
             const SIGNATURE: &'static str = "BeaconUpgraded(address)";
-            const SIGNATURE_HASH: alloy_sol_types::private::B256 =
-                alloy_sol_types::private::B256::new([
-                    28u8, 243u8, 176u8, 58u8, 108u8, 241u8, 159u8, 162u8, 186u8, 186u8, 77u8,
-                    241u8, 72u8, 233u8, 220u8, 171u8, 237u8, 234u8, 127u8, 138u8, 92u8, 7u8, 132u8,
-                    14u8, 32u8, 126u8, 92u8, 8u8, 155u8, 233u8, 93u8, 62u8,
-                ]);
+            const SIGNATURE_HASH: alloy_sol_types::private::B256 = alloy_sol_types::private::B256::new([
+                28u8,
+                243u8,
+                176u8,
+                58u8,
+                108u8,
+                241u8,
+                159u8,
+                162u8,
+                186u8,
+                186u8,
+                77u8,
+                241u8,
+                72u8,
+                233u8,
+                220u8,
+                171u8,
+                237u8,
+                234u8,
+                127u8,
+                138u8,
+                92u8,
+                7u8,
+                132u8,
+                14u8,
+                32u8,
+                126u8,
+                92u8,
+                8u8,
+                155u8,
+                233u8,
+                93u8,
+                62u8,
+            ]);
             const ANONYMOUS: bool = false;
             #[allow(unused_variables)]
             #[inline]
@@ -296,11 +352,13 @@ pub mod TransparentUpgradeableProxy {
                 topics: &<Self::TopicList as alloy_sol_types::SolType>::RustType,
             ) -> alloy_sol_types::Result<()> {
                 if topics.0 != Self::SIGNATURE_HASH {
-                    return Err(alloy_sol_types::Error::invalid_event_signature_hash(
-                        Self::SIGNATURE,
-                        topics.0,
-                        Self::SIGNATURE_HASH,
-                    ));
+                    return Err(
+                        alloy_sol_types::Error::invalid_event_signature_hash(
+                            Self::SIGNATURE,
+                            topics.0,
+                            Self::SIGNATURE_HASH,
+                        ),
+                    );
                 }
                 Ok(())
             }
@@ -320,7 +378,9 @@ pub mod TransparentUpgradeableProxy {
                 if out.len() < <Self::TopicList as alloy_sol_types::TopicList>::COUNT {
                     return Err(alloy_sol_types::Error::Overrun);
                 }
-                out[0usize] = alloy_sol_types::abi::token::WordToken(Self::SIGNATURE_HASH);
+                out[0usize] = alloy_sol_types::abi::token::WordToken(
+                    Self::SIGNATURE_HASH,
+                );
                 out[1usize] = <alloy::sol_types::sol_data::Address as alloy_sol_types::EventTopic>::encode_topic(
                     &self.beacon,
                 );
@@ -345,9 +405,9 @@ pub mod TransparentUpgradeableProxy {
         }
     };
     /**Event with signature `Upgraded(address)` and selector `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b`.
-    ```solidity
-    event Upgraded(address indexed implementation);
-    ```*/
+```solidity
+event Upgraded(address indexed implementation);
+```*/
     #[allow(
         non_camel_case_types,
         non_snake_case,
@@ -370,18 +430,48 @@ pub mod TransparentUpgradeableProxy {
         #[automatically_derived]
         impl alloy_sol_types::SolEvent for Upgraded {
             type DataTuple<'a> = ();
-            type DataToken<'a> = <Self::DataTuple<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type DataToken<'a> = <Self::DataTuple<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             type TopicList = (
                 alloy_sol_types::sol_data::FixedBytes<32>,
                 alloy::sol_types::sol_data::Address,
             );
             const SIGNATURE: &'static str = "Upgraded(address)";
-            const SIGNATURE_HASH: alloy_sol_types::private::B256 =
-                alloy_sol_types::private::B256::new([
-                    188u8, 124u8, 215u8, 90u8, 32u8, 238u8, 39u8, 253u8, 154u8, 222u8, 186u8,
-                    179u8, 32u8, 65u8, 247u8, 85u8, 33u8, 77u8, 188u8, 107u8, 255u8, 169u8, 12u8,
-                    192u8, 34u8, 91u8, 57u8, 218u8, 46u8, 92u8, 45u8, 59u8,
-                ]);
+            const SIGNATURE_HASH: alloy_sol_types::private::B256 = alloy_sol_types::private::B256::new([
+                188u8,
+                124u8,
+                215u8,
+                90u8,
+                32u8,
+                238u8,
+                39u8,
+                253u8,
+                154u8,
+                222u8,
+                186u8,
+                179u8,
+                32u8,
+                65u8,
+                247u8,
+                85u8,
+                33u8,
+                77u8,
+                188u8,
+                107u8,
+                255u8,
+                169u8,
+                12u8,
+                192u8,
+                34u8,
+                91u8,
+                57u8,
+                218u8,
+                46u8,
+                92u8,
+                45u8,
+                59u8,
+            ]);
             const ANONYMOUS: bool = false;
             #[allow(unused_variables)]
             #[inline]
@@ -389,20 +479,20 @@ pub mod TransparentUpgradeableProxy {
                 topics: <Self::TopicList as alloy_sol_types::SolType>::RustType,
                 data: <Self::DataTuple<'_> as alloy_sol_types::SolType>::RustType,
             ) -> Self {
-                Self {
-                    implementation: topics.1,
-                }
+                Self { implementation: topics.1 }
             }
             #[inline]
             fn check_signature(
                 topics: &<Self::TopicList as alloy_sol_types::SolType>::RustType,
             ) -> alloy_sol_types::Result<()> {
                 if topics.0 != Self::SIGNATURE_HASH {
-                    return Err(alloy_sol_types::Error::invalid_event_signature_hash(
-                        Self::SIGNATURE,
-                        topics.0,
-                        Self::SIGNATURE_HASH,
-                    ));
+                    return Err(
+                        alloy_sol_types::Error::invalid_event_signature_hash(
+                            Self::SIGNATURE,
+                            topics.0,
+                            Self::SIGNATURE_HASH,
+                        ),
+                    );
                 }
                 Ok(())
             }
@@ -422,7 +512,9 @@ pub mod TransparentUpgradeableProxy {
                 if out.len() < <Self::TopicList as alloy_sol_types::TopicList>::COUNT {
                     return Err(alloy_sol_types::Error::Overrun);
                 }
-                out[0usize] = alloy_sol_types::abi::token::WordToken(Self::SIGNATURE_HASH);
+                out[0usize] = alloy_sol_types::abi::token::WordToken(
+                    Self::SIGNATURE_HASH,
+                );
                 out[1usize] = <alloy::sol_types::sol_data::Address as alloy_sol_types::EventTopic>::encode_topic(
                     &self.implementation,
                 );
@@ -447,9 +539,9 @@ pub mod TransparentUpgradeableProxy {
         }
     };
     /**Constructor`.
-    ```solidity
-    constructor(address _logic, address admin_, bytes _data) payable;
-    ```*/
+```solidity
+constructor(address _logic, address admin_, bytes _data) payable;
+```*/
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct constructorCall {
@@ -477,7 +569,9 @@ pub mod TransparentUpgradeableProxy {
             );
             #[cfg(test)]
             #[allow(dead_code, unreachable_patterns)]
-            fn _type_assertion(_t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>) {
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
@@ -510,7 +604,9 @@ pub mod TransparentUpgradeableProxy {
                 alloy::sol_types::sol_data::Address,
                 alloy::sol_types::sol_data::Bytes,
             );
-            type Token<'a> = <Self::Parameters<'a> as alloy_sol_types::SolType>::Token<'a>;
+            type Token<'a> = <Self::Parameters<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
             #[inline]
             fn new<'a>(
                 tuple: <Self::Parameters<'a> as alloy_sol_types::SolType>::RustType,
@@ -552,19 +648,106 @@ pub mod TransparentUpgradeableProxy {
         /// Prefer using `SolInterface` methods instead.
         pub const SELECTORS: &'static [[u8; 32usize]] = &[
             [
-                28u8, 243u8, 176u8, 58u8, 108u8, 241u8, 159u8, 162u8, 186u8, 186u8, 77u8, 241u8,
-                72u8, 233u8, 220u8, 171u8, 237u8, 234u8, 127u8, 138u8, 92u8, 7u8, 132u8, 14u8,
-                32u8, 126u8, 92u8, 8u8, 155u8, 233u8, 93u8, 62u8,
+                28u8,
+                243u8,
+                176u8,
+                58u8,
+                108u8,
+                241u8,
+                159u8,
+                162u8,
+                186u8,
+                186u8,
+                77u8,
+                241u8,
+                72u8,
+                233u8,
+                220u8,
+                171u8,
+                237u8,
+                234u8,
+                127u8,
+                138u8,
+                92u8,
+                7u8,
+                132u8,
+                14u8,
+                32u8,
+                126u8,
+                92u8,
+                8u8,
+                155u8,
+                233u8,
+                93u8,
+                62u8,
             ],
             [
-                126u8, 100u8, 77u8, 121u8, 66u8, 47u8, 23u8, 192u8, 30u8, 72u8, 148u8, 181u8,
-                244u8, 245u8, 136u8, 211u8, 49u8, 235u8, 250u8, 40u8, 101u8, 61u8, 66u8, 174u8,
-                131u8, 45u8, 197u8, 158u8, 56u8, 201u8, 121u8, 143u8,
+                126u8,
+                100u8,
+                77u8,
+                121u8,
+                66u8,
+                47u8,
+                23u8,
+                192u8,
+                30u8,
+                72u8,
+                148u8,
+                181u8,
+                244u8,
+                245u8,
+                136u8,
+                211u8,
+                49u8,
+                235u8,
+                250u8,
+                40u8,
+                101u8,
+                61u8,
+                66u8,
+                174u8,
+                131u8,
+                45u8,
+                197u8,
+                158u8,
+                56u8,
+                201u8,
+                121u8,
+                143u8,
             ],
             [
-                188u8, 124u8, 215u8, 90u8, 32u8, 238u8, 39u8, 253u8, 154u8, 222u8, 186u8, 179u8,
-                32u8, 65u8, 247u8, 85u8, 33u8, 77u8, 188u8, 107u8, 255u8, 169u8, 12u8, 192u8, 34u8,
-                91u8, 57u8, 218u8, 46u8, 92u8, 45u8, 59u8,
+                188u8,
+                124u8,
+                215u8,
+                90u8,
+                32u8,
+                238u8,
+                39u8,
+                253u8,
+                154u8,
+                222u8,
+                186u8,
+                179u8,
+                32u8,
+                65u8,
+                247u8,
+                85u8,
+                33u8,
+                77u8,
+                188u8,
+                107u8,
+                255u8,
+                169u8,
+                12u8,
+                192u8,
+                34u8,
+                91u8,
+                57u8,
+                218u8,
+                46u8,
+                92u8,
+                45u8,
+                59u8,
             ],
         ];
     }
@@ -580,29 +763,39 @@ pub mod TransparentUpgradeableProxy {
             match topics.first().copied() {
                 Some(<AdminChanged as alloy_sol_types::SolEvent>::SIGNATURE_HASH) => {
                     <AdminChanged as alloy_sol_types::SolEvent>::decode_raw_log(
-                        topics, data, validate,
-                    )
-                    .map(Self::AdminChanged)
+                            topics,
+                            data,
+                            validate,
+                        )
+                        .map(Self::AdminChanged)
                 }
                 Some(<BeaconUpgraded as alloy_sol_types::SolEvent>::SIGNATURE_HASH) => {
                     <BeaconUpgraded as alloy_sol_types::SolEvent>::decode_raw_log(
-                        topics, data, validate,
-                    )
-                    .map(Self::BeaconUpgraded)
+                            topics,
+                            data,
+                            validate,
+                        )
+                        .map(Self::BeaconUpgraded)
                 }
                 Some(<Upgraded as alloy_sol_types::SolEvent>::SIGNATURE_HASH) => {
-                    <Upgraded as alloy_sol_types::SolEvent>::decode_raw_log(topics, data, validate)
+                    <Upgraded as alloy_sol_types::SolEvent>::decode_raw_log(
+                            topics,
+                            data,
+                            validate,
+                        )
                         .map(Self::Upgraded)
                 }
-                _ => alloy_sol_types::private::Err(alloy_sol_types::Error::InvalidLog {
-                    name: <Self as alloy_sol_types::SolEventInterface>::NAME,
-                    log: alloy_sol_types::private::Box::new(
-                        alloy_sol_types::private::LogData::new_unchecked(
-                            topics.to_vec(),
-                            data.to_vec().into(),
+                _ => {
+                    alloy_sol_types::private::Err(alloy_sol_types::Error::InvalidLog {
+                        name: <Self as alloy_sol_types::SolEventInterface>::NAME,
+                        log: alloy_sol_types::private::Box::new(
+                            alloy_sol_types::private::LogData::new_unchecked(
+                                topics.to_vec(),
+                                data.to_vec().into(),
+                            ),
                         ),
-                    ),
-                }),
+                    })
+                }
             }
         }
     }
@@ -616,7 +809,9 @@ pub mod TransparentUpgradeableProxy {
                 Self::BeaconUpgraded(inner) => {
                     alloy_sol_types::private::IntoLogData::to_log_data(inner)
                 }
-                Self::Upgraded(inner) => alloy_sol_types::private::IntoLogData::to_log_data(inner),
+                Self::Upgraded(inner) => {
+                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
+                }
             }
         }
         fn into_log_data(self) -> alloy_sol_types::private::LogData {
@@ -636,7 +831,7 @@ pub mod TransparentUpgradeableProxy {
     use alloy::contract as alloy_contract;
     /**Creates a new wrapper around an on-chain [`TransparentUpgradeableProxy`](self) contract instance.
 
-    See the [wrapper's documentation](`TransparentUpgradeableProxyInstance`) for more details.*/
+See the [wrapper's documentation](`TransparentUpgradeableProxyInstance`) for more details.*/
     #[inline]
     pub const fn new<
         T: alloy_contract::private::Transport + ::core::clone::Clone,
@@ -650,9 +845,9 @@ pub mod TransparentUpgradeableProxy {
     }
     /**Deploys this contract using the given `provider` and constructor arguments, if any.
 
-    Returns a new instance of the contract, if the deployment was successful.
+Returns a new instance of the contract, if the deployment was successful.
 
-    For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
+For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
     #[inline]
     pub fn deploy<
         T: alloy_contract::private::Transport + ::core::clone::Clone,
@@ -666,13 +861,17 @@ pub mod TransparentUpgradeableProxy {
     ) -> impl ::core::future::Future<
         Output = alloy_contract::Result<TransparentUpgradeableProxyInstance<T, P, N>>,
     > {
-        TransparentUpgradeableProxyInstance::<T, P, N>::deploy(provider, _logic, admin_, _data)
+        TransparentUpgradeableProxyInstance::<
+            T,
+            P,
+            N,
+        >::deploy(provider, _logic, admin_, _data)
     }
     /**Creates a `RawCallBuilder` for deploying this contract using the given `provider`
-    and constructor arguments, if any.
+and constructor arguments, if any.
 
-    This is a simple wrapper around creating a `RawCallBuilder` with the data set to
-    the bytecode concatenated with the constructor's ABI-encoded arguments.*/
+This is a simple wrapper around creating a `RawCallBuilder` with the data set to
+the bytecode concatenated with the constructor's ABI-encoded arguments.*/
     #[inline]
     pub fn deploy_builder<
         T: alloy_contract::private::Transport + ::core::clone::Clone,
@@ -684,23 +883,29 @@ pub mod TransparentUpgradeableProxy {
         admin_: alloy::sol_types::private::Address,
         _data: alloy::sol_types::private::Bytes,
     ) -> alloy_contract::RawCallBuilder<T, P, N> {
-        TransparentUpgradeableProxyInstance::<T, P, N>::deploy_builder(
-            provider, _logic, admin_, _data,
-        )
+        TransparentUpgradeableProxyInstance::<
+            T,
+            P,
+            N,
+        >::deploy_builder(provider, _logic, admin_, _data)
     }
     /**A [`TransparentUpgradeableProxy`](self) instance.
 
-    Contains type-safe methods for interacting with an on-chain instance of the
-    [`TransparentUpgradeableProxy`](self) contract located at a given `address`, using a given
-    provider `P`.
+Contains type-safe methods for interacting with an on-chain instance of the
+[`TransparentUpgradeableProxy`](self) contract located at a given `address`, using a given
+provider `P`.
 
-    If the contract bytecode is available (see the [`sol!`](alloy_sol_types::sol!)
-    documentation on how to provide it), the `deploy` and `deploy_builder` methods can
-    be used to deploy a new instance of the contract.
+If the contract bytecode is available (see the [`sol!`](alloy_sol_types::sol!)
+documentation on how to provide it), the `deploy` and `deploy_builder` methods can
+be used to deploy a new instance of the contract.
 
-    See the [module-level documentation](self) for all the available methods.*/
+See the [module-level documentation](self) for all the available methods.*/
     #[derive(Clone)]
-    pub struct TransparentUpgradeableProxyInstance<T, P, N = alloy_contract::private::Ethereum> {
+    pub struct TransparentUpgradeableProxyInstance<
+        T,
+        P,
+        N = alloy_contract::private::Ethereum,
+    > {
         address: alloy_sol_types::private::Address,
         provider: P,
         _network_transport: ::core::marker::PhantomData<(N, T)>,
@@ -720,13 +925,15 @@ pub mod TransparentUpgradeableProxy {
         T: alloy_contract::private::Transport + ::core::clone::Clone,
         P: alloy_contract::private::Provider<T, N>,
         N: alloy_contract::private::Network,
-    > TransparentUpgradeableProxyInstance<T, P, N>
-    {
+    > TransparentUpgradeableProxyInstance<T, P, N> {
         /**Creates a new wrapper around an on-chain [`TransparentUpgradeableProxy`](self) contract instance.
 
-        See the [wrapper's documentation](`TransparentUpgradeableProxyInstance`) for more details.*/
+See the [wrapper's documentation](`TransparentUpgradeableProxyInstance`) for more details.*/
         #[inline]
-        pub const fn new(address: alloy_sol_types::private::Address, provider: P) -> Self {
+        pub const fn new(
+            address: alloy_sol_types::private::Address,
+            provider: P,
+        ) -> Self {
             Self {
                 address,
                 provider,
@@ -735,9 +942,9 @@ pub mod TransparentUpgradeableProxy {
         }
         /**Deploys this contract using the given `provider` and constructor arguments, if any.
 
-        Returns a new instance of the contract, if the deployment was successful.
+Returns a new instance of the contract, if the deployment was successful.
 
-        For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
+For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
         #[inline]
         pub async fn deploy(
             provider: P,
@@ -750,10 +957,10 @@ pub mod TransparentUpgradeableProxy {
             Ok(Self::new(contract_address, call_builder.provider))
         }
         /**Creates a `RawCallBuilder` for deploying this contract using the given `provider`
-        and constructor arguments, if any.
+and constructor arguments, if any.
 
-        This is a simple wrapper around creating a `RawCallBuilder` with the data set to
-        the bytecode concatenated with the constructor's ABI-encoded arguments.*/
+This is a simple wrapper around creating a `RawCallBuilder` with the data set to
+the bytecode concatenated with the constructor's ABI-encoded arguments.*/
         #[inline]
         pub fn deploy_builder(
             provider: P,
@@ -765,14 +972,16 @@ pub mod TransparentUpgradeableProxy {
                 provider,
                 [
                     &BYTECODE[..],
-                    &alloy_sol_types::SolConstructor::abi_encode(&constructorCall {
-                        _logic,
-                        admin_,
-                        _data,
-                    })[..],
+                    &alloy_sol_types::SolConstructor::abi_encode(
+                        &constructorCall {
+                            _logic,
+                            admin_,
+                            _data,
+                        },
+                    )[..],
                 ]
-                .concat()
-                .into(),
+                    .concat()
+                    .into(),
             )
         }
         /// Returns a reference to the address.
@@ -799,7 +1008,9 @@ pub mod TransparentUpgradeableProxy {
     impl<T, P: ::core::clone::Clone, N> TransparentUpgradeableProxyInstance<T, &P, N> {
         /// Clones the provider and returns a new instance with the cloned provider.
         #[inline]
-        pub fn with_cloned_provider(self) -> TransparentUpgradeableProxyInstance<T, P, N> {
+        pub fn with_cloned_provider(
+            self,
+        ) -> TransparentUpgradeableProxyInstance<T, P, N> {
             TransparentUpgradeableProxyInstance {
                 address: self.address,
                 provider: ::core::clone::Clone::clone(&self.provider),
@@ -813,8 +1024,7 @@ pub mod TransparentUpgradeableProxy {
         T: alloy_contract::private::Transport + ::core::clone::Clone,
         P: alloy_contract::private::Provider<T, N>,
         N: alloy_contract::private::Network,
-    > TransparentUpgradeableProxyInstance<T, P, N>
-    {
+    > TransparentUpgradeableProxyInstance<T, P, N> {
         /// Creates a new call builder using this contract instance's provider and address.
         ///
         /// Note that the call can be any function call, not just those defined in this
@@ -832,8 +1042,7 @@ pub mod TransparentUpgradeableProxy {
         T: alloy_contract::private::Transport + ::core::clone::Clone,
         P: alloy_contract::private::Provider<T, N>,
         N: alloy_contract::private::Network,
-    > TransparentUpgradeableProxyInstance<T, P, N>
-    {
+    > TransparentUpgradeableProxyInstance<T, P, N> {
         /// Creates a new event filter using this contract instance's provider and address.
         ///
         /// Note that the type can be any event, not just those defined in this contract.
@@ -844,11 +1053,15 @@ pub mod TransparentUpgradeableProxy {
             alloy_contract::Event::new_sol(&self.provider, &self.address)
         }
         ///Creates a new event filter for the [`AdminChanged`] event.
-        pub fn AdminChanged_filter(&self) -> alloy_contract::Event<T, &P, AdminChanged, N> {
+        pub fn AdminChanged_filter(
+            &self,
+        ) -> alloy_contract::Event<T, &P, AdminChanged, N> {
             self.event_filter::<AdminChanged>()
         }
         ///Creates a new event filter for the [`BeaconUpgraded`] event.
-        pub fn BeaconUpgraded_filter(&self) -> alloy_contract::Event<T, &P, BeaconUpgraded, N> {
+        pub fn BeaconUpgraded_filter(
+            &self,
+        ) -> alloy_contract::Event<T, &P, BeaconUpgraded, N> {
             self.event_filter::<BeaconUpgraded>()
         }
         ///Creates a new event filter for the [`Upgraded`] event.
