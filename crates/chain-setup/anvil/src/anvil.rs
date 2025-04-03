@@ -35,7 +35,7 @@ pub async fn start_anvil_container(state_json: Option<&str>, include_logs: bool)
         let state_path = temp_dir.path().join("state.json");
         fs::write(&state_path, state_json).expect("Failed to write state file");
 
-        let container = GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
+        GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
             .with_wait_for(WaitFor::message_on_stdout("Listening on"))
             .with_exposed_port(8545.tcp())
             .with_entrypoint("anvil")
@@ -59,8 +59,7 @@ pub async fn start_anvil_container(state_json: Option<&str>, include_logs: bool)
             ])
             .start()
             .await
-            .expect("Error starting anvil container");
-        container
+            .expect("Error starting anvil container")
     } else {
         GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
             .with_wait_for(WaitFor::message_on_stdout("Listening on"))
