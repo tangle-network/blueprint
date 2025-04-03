@@ -92,6 +92,11 @@ pub fn get_provider_from_signer(key: &str, rpc_url: &str) -> RootProvider {
 /// # Returns
 ///
 /// A [`TransportResult`] containing the transaction hash.
+///
+/// # Errors
+///
+/// - [`TransportErrorKind::custom_str("Invalid RPC URL")`] - If the provided RPC URL is invalid.
+/// - [`PendingTransactionError`] - If the receipt cannot be retrieved.
 pub async fn wait_transaction(
     rpc_url: &str,
     tx_hash: FixedBytes<32>,
