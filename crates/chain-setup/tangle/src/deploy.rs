@@ -97,8 +97,6 @@ async fn generate_service_blueprint<P: Into<PathBuf>, T: AsRef<str>>(
 /// * If `signer` is not provided, see [`load_signer_from_env()`]
 /// * `ws_rpc_url` is invalid
 /// * No `BlueprintCreated` event found under `signer`
-///
-/// [`load_signer_from_env()`]: crate::signer::load_signer_from_env
 pub async fn deploy_to_tangle(
     Opts {
         pkg_name,

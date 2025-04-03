@@ -183,7 +183,7 @@ where
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use blueprint_core::extract::Context;
     /// use blueprint_tangle_testing_utils::TangleTestHarness;
     /// use tempfile::TempDir;
@@ -235,7 +235,7 @@ where
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use blueprint_core::extract::Context;
     /// use blueprint_tangle_testing_utils::TangleTestHarness;
     /// use tempfile::TempDir;

@@ -21,12 +21,12 @@ struct TestEnvironment {
 }
 
 async fn setup_test_environment() -> TestEnvironment {
-    let (container, http_endpoint, ws_endpoint) = start_default_anvil_testnet(false).await;
+    let testnet = start_default_anvil_testnet(false).await;
 
     // Create test configuration
     let context_config = ContextConfig::create_eigenlayer_config(
-        http_endpoint.parse().unwrap(),
-        ws_endpoint.parse().unwrap(),
+        testnet.http_endpoint.parse().unwrap(),
+        testnet.ws_endpoint.parse().unwrap(),
         String::new(),
         None,
         SupportedChains::LocalTestnet,
@@ -34,12 +34,12 @@ async fn setup_test_environment() -> TestEnvironment {
     );
     let config = BlueprintEnvironment::load_with_config(context_config).unwrap();
 
-    let env = setup_eigenlayer_test_environment(&http_endpoint, &ws_endpoint).await;
+    let env = setup_eigenlayer_test_environment(&testnet.http_endpoint, &testnet.ws_endpoint).await;
 
     TestEnvironment {
-        _container: container,
-        http_endpoint,
-        ws_endpoint,
+        _container: testnet.container,
+        http_endpoint: testnet.http_endpoint,
+        ws_endpoint: testnet.ws_endpoint,
         config,
         env,
     }

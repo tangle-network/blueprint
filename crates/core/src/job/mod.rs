@@ -131,7 +131,7 @@ pub trait Job<T, Ctx>: Clone + Send + Sync + Sized + 'static {
     /// This can be used to add additional processing to a request for a single
     /// job.
     ///
-    /// Note this differs from [`routing::Router::layer`](crate::routing::Router::layer)
+    /// Note this differs from [`routing::Router::layer`]
     /// which adds a middleware to a group of routes.
     ///
     /// If you're applying middleware that produces errors you have to handle the errors
@@ -156,6 +156,8 @@ pub trait Job<T, Ctx>: Clone + Send + Sync + Sized + 'static {
     /// let app = Router::new().route(MY_JOB_ID, layered_job);
     /// # let _: Router = app;
     /// ```
+    ///
+    /// [`routing::Router::layer`]: https://docs.rs/blueprint-sdk/latest/blueprint_sdk/struct.Router.html#method.layer
     fn layer<L>(self, layer: L) -> Layered<L, Self, T, Ctx>
     where
         L: Layer<JobService<Self, T, Ctx>> + Clone,

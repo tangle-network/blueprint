@@ -1,7 +1,8 @@
 [package]
 name = "incredible-squaring-blueprint-lib"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 blueprint-sdk = { workspace = true, features = ["std", "tangle", "macros"] }

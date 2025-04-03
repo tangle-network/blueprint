@@ -34,27 +34,86 @@ use core::{
 use futures::Stream;
 use tokio::time::Sleep;
 
+#[derive(Debug, Clone, Copy)]
+enum StartBlockSource {
+    Genesis,
+    Current(u64),
+    Custom(u64),
+}
+
+impl StartBlockSource {
+    fn number(&self) -> u64 {
+        match self {
+            StartBlockSource::Genesis => 0,
+            StartBlockSource::Current(block) | StartBlockSource::Custom(block) => *block,
+        }
+    }
+}
+
 /// Configuration parameters for the polling producer
+#[must_use]
 #[derive(Debug, Clone, Copy)]
 pub struct PollingConfig {
-    /// Starting block number for log collection
-    pub start_block: u64,
-    /// Interval between polling attempts
-    pub poll_interval: Duration,
-    /// Number of blocks to wait for finality
-    pub confirmations: u64,
-    /// Number of blocks to fetch in each polling cycle
-    pub step: u64,
+    start_block: StartBlockSource,
+    poll_interval: Duration,
+    confirmations: u64,
+    step: u64,
 }
 
 impl Default for PollingConfig {
     fn default() -> Self {
         Self {
-            start_block: 0,
+            start_block: StartBlockSource::Current(0),
             poll_interval: Duration::from_secs(1),
             confirmations: 12,
             step: 1,
         }
+    }
+}
+
+impl PollingConfig {
+    /// Start log collection at block 0
+    pub fn from_genesis() -> PollingConfig {
+        Self {
+            start_block: StartBlockSource::Genesis,
+            ..Default::default()
+        }
+    }
+
+    /// Start log collection at the current block
+    ///
+    /// NOTE: This is the default
+    pub fn from_current() -> PollingConfig {
+        Self {
+            start_block: StartBlockSource::Current(0),
+            ..Default::default()
+        }
+    }
+
+    /// Start log collection at a specific block
+    pub fn from_block(block: u64) -> PollingConfig {
+        Self {
+            start_block: StartBlockSource::Custom(block),
+            ..Default::default()
+        }
+    }
+
+    /// Interval between polling attempts
+    pub fn poll_interval(mut self, interval: Duration) -> Self {
+        self.poll_interval = interval;
+        self
+    }
+
+    /// Number of blocks to wait for finality
+    pub fn confirmations(mut self, confirmations: u64) -> Self {
+        self.confirmations = confirmations;
+        self
+    }
+
+    /// Number of blocks to fetch in each polling cycle
+    pub fn step(mut self, step: u64) -> Self {
+        self.step = step;
+        self
     }
 }
 
@@ -102,22 +161,34 @@ impl<P: Provider> PollingProducer<P> {
     /// # Arguments
     /// * `provider` - The EVM provider to use for fetching logs
     /// * `config` - Configuration parameters for the polling behavior
+    ///
+    /// # Errors
+    ///
+    /// If using [`PollingConfig::from_current()`], transport errors may occur when fetching the current block number.
     #[allow(clippy::cast_possible_truncation)]
-    pub fn new(provider: Arc<P>, config: PollingConfig) -> Self {
+    pub async fn new(provider: Arc<P>, mut config: PollingConfig) -> Result<Self, TransportError> {
+        if let StartBlockSource::Current(current_block) = &mut config.start_block {
+            *current_block = get_block_number(provider.clone()).await?;
+        }
+
         // Calculate initial block range accounting for confirmations
-        let initial_start_block = config.start_block.saturating_sub(config.confirmations);
+        let initial_start_block = config
+            .start_block
+            .number()
+            .saturating_sub(config.confirmations);
         let filter = Filter::new()
             .from_block(initial_start_block)
             .to_block(initial_start_block + config.step);
 
         blueprint_core::trace!(
+            target: "evm-polling-producer",
             start_block = initial_start_block,
             step = config.step,
             confirmations = config.confirmations,
             "Initializing polling producer"
         );
 
-        Self {
+        Ok(Self {
             provider,
             config,
             filter,
@@ -125,7 +196,7 @@ impl<P: Provider> PollingProducer<P> {
                 tokio::time::sleep(Duration::from_micros(1)),
             )))),
             buffer: VecDeque::with_capacity(config.step as usize),
-        }
+        })
     }
 }
 
@@ -150,7 +221,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                     Poll::Ready(()) => {
                         // Transition to fetching block number
                         blueprint_core::trace!(
-                            "Polling interval elapsed, fetching current block number"
+                            target: "evm-polling-producer", "Polling interval elapsed, fetching current block number"
                         );
                         let fut = get_block_number(this.provider.clone());
                         *state = PollingState::FetchingBlockNumber(Box::pin(fut));
@@ -164,7 +235,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                         let last_queried = this
                             .filter
                             .get_to_block()
-                            .unwrap_or(this.config.start_block);
+                            .unwrap_or(this.config.start_block.number());
 
                         // Calculate next block range
                         let next_from_block = last_queried.saturating_add(1);
@@ -172,6 +243,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                         let next_to_block = proposed_to_block.min(safe_block);
 
                         blueprint_core::trace!(
+                            target: "evm-polling-producer",
                             current_block,
                             safe_block,
                             next_from_block,
@@ -182,7 +254,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                         // Check if we have new blocks to process
                         if next_from_block > safe_block {
                             blueprint_core::trace!(
-                                "No new blocks to process yet, waiting for next interval"
+                                target: "evm-polling-producer", "No new blocks to process yet, waiting for next interval"
                             );
                             *state = PollingState::Idle(Box::pin(tokio::time::sleep(
                                 this.config.poll_interval,
@@ -208,6 +280,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                     }
                     Poll::Ready(Err(e)) => {
                         blueprint_core::error!(
+                            target: "evm-polling-producer",
                             error = ?e,
                             "Failed to fetch current block number, retrying after interval"
                         );
@@ -221,6 +294,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                 PollingState::FetchingLogs(ref mut fut) => match fut.as_mut().poll(cx) {
                     Poll::Ready(Ok(logs)) => {
                         blueprint_core::trace!(
+                            target: "evm-polling-producer",
                             logs_count = logs.len(),
                             from_block = ?this.filter.get_from_block(),
                             to_block = ?this.filter.get_to_block(),
@@ -238,6 +312,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                     }
                     Poll::Ready(Err(e)) => {
                         blueprint_core::error!(
+                            target: "evm-polling-producer",
                             error = ?e,
                             from_block = ?this.filter.get_from_block(),
                             to_block = ?this.filter.get_to_block(),
@@ -263,12 +338,14 @@ async fn get_block_number<P: Provider>(provider: P) -> Result<u64, TransportErro
 /// Fetches logs from the provider for the specified filter range
 async fn get_logs<P: Provider>(provider: P, filter: Filter) -> Result<Vec<Log>, TransportError> {
     blueprint_core::trace!(
+        target: "evm-polling-producer",
         from_block = ?filter.get_from_block(),
         to_block = ?filter.get_to_block(),
         "Fetching logs from provider"
     );
     let logs = provider.get_logs(&filter).await?;
     blueprint_core::trace!(
+        target: "evm-polling-producer",
         from_block = ?filter.get_from_block(),
         to_block = ?filter.get_to_block(),
         logs_count = logs.len(),

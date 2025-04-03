@@ -14,7 +14,7 @@ use core::{
 /// For accessing data derived from requests, such as authorization data, see [`Extension`].
 ///
 /// [context-from-middleware]: crate::middleware#accessing-context-in-middleware
-/// [`Extension`]: crate::Extension
+/// [`Extension`]: crate::extract::Extension
 ///
 /// # With `Router`
 ///
@@ -73,9 +73,9 @@ use core::{
 /// let job_with_context = job.with_context(context);
 /// ```
 ///
-/// # Substates
+/// # Sub-Contexts
 ///
-/// [`context`] only allows a single context type but you can use [`FromRef`] to extract "substates":
+/// [`Context`] only allows a single context type but you can use [`FromRef`] to extract "sub-contexts":
 ///
 /// ```
 /// use blueprint_sdk::Router;
@@ -208,7 +208,7 @@ use core::{
 /// # let _: Router = app;
 /// ```
 ///
-/// [global]: crate::Router::with_state
+/// [global]: https://docs.rs/blueprint-sdk/latest/blueprint_sdk/struct.Router.html#method.with_context
 /// [the tokio docs]: https://docs.rs/tokio/1.25.0/tokio/sync/struct.Mutex.html#which-kind-of-mutex-should-you-use
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Context<S>(pub S);

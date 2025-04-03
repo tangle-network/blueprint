@@ -9,7 +9,7 @@ use eigensdk::crypto_bls::{BlsKeyPair, OperatorId, error::BlsError};
 /// - [`Address`] - The allocation manager address
 ///
 /// # Errors
-/// - [`Error::AlloyContract`] - If the call to the contract fails (i.e. the contract doesn't exist at the given address)
+/// - [`Error::Contract`] - If the call to the contract fails (i.e. the contract doesn't exist at the given address)
 pub async fn get_allocation_manager_address(
     delegation_manager_addr: Address,
     http_endpoint: &str,

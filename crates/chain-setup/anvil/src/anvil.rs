@@ -19,12 +19,16 @@ pub type Container = ContainerAsync<GenericImage>;
 pub const ANVIL_IMAGE: &str = "ghcr.io/foundry-rs/foundry";
 pub const ANVIL_TAG: &str = "nightly-5b7e4cb3c882b28f3c32ba580de27ce7381f415a";
 
+pub struct AnvilTestnet {
+    pub container: Container,
+    pub http_endpoint: String,
+    pub ws_endpoint: String,
+    pub temp_dir: TempDir,
+}
+
 /// Start an Anvil container for testing with contract state loaded.
 #[allow(clippy::missing_panics_doc)] // TODO(serial): Return errors, not panics
-pub async fn start_anvil_container(
-    state_json: &str,
-    include_logs: bool,
-) -> (Container, String, String, TempDir) {
+pub async fn start_anvil_container(state_json: &str, include_logs: bool) -> AnvilTestnet {
     // Create a temporary directory and write the state file
     let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
     let state_path = temp_dir.path().join("state.json");
@@ -84,7 +88,12 @@ pub async fn start_anvil_container(
     let ws_endpoint = format!("ws://localhost:{}", port);
     println!("Anvil WS endpoint: {}", ws_endpoint);
 
-    (container, http_endpoint, ws_endpoint, temp_dir)
+    AnvilTestnet {
+        container,
+        http_endpoint,
+        ws_endpoint,
+        temp_dir,
+    }
 }
 
 /// Mine Anvil blocks.
@@ -105,16 +114,8 @@ pub async fn mine_anvil_blocks(container: &Container, n: u32) {
 ///
 /// # Arguments
 /// * `include_logs` - If true, testnet output will be printed to the console.
-///
-/// # Returns
-/// `(container, http_endpoint, ws_endpoint)`
-///    - `container` as a [`ContainerAsync`] - The Anvil container.
-///    - `http_endpoint` as a `String` - The Anvil HTTP endpoint.
-///    - `ws_endpoint` as a `String` - The Anvil WS endpoint.
-pub async fn start_default_anvil_testnet(include_logs: bool) -> (Container, String, String) {
-    let (container, http, ws, _) =
-        start_anvil_container(get_default_state_json(), include_logs).await;
-    (container, http, ws)
+pub async fn start_default_anvil_testnet(include_logs: bool) -> AnvilTestnet {
+    start_anvil_container(get_default_state_json(), include_logs).await
 }
 
 /// Starts an Anvil container for testing with custom state.
@@ -122,20 +123,13 @@ pub async fn start_default_anvil_testnet(include_logs: bool) -> (Container, Stri
 /// # Arguments
 /// * `state` - The state to load into Anvil.
 /// * `include_logs` - If true, testnet output will be printed to the console.
-///
-/// # Returns
-/// `(container, http_endpoint, ws_endpoint)`
-///    - `container` as a [`ContainerAsync`] - The Anvil container.
-///    - `http_endpoint` as a `String` - The Anvil HTTP endpoint.
-///    - `ws_endpoint` as a `String` - The Anvil WS endpoint.
 #[allow(clippy::missing_panics_doc)] // TODO(serial): Return errors, not panics
 pub async fn start_anvil_testnet_with_state(
     state: &AnvilState,
     include_logs: bool,
-) -> (Container, String, String) {
+) -> AnvilTestnet {
     let state_json = serde_json::to_string(state).expect("Failed to serialize state");
-    let (container, http, ws, _) = start_anvil_container(&state_json, include_logs).await;
-    (container, http, ws)
+    start_anvil_container(&state_json, include_logs).await
 }
 
 #[allow(clippy::missing_errors_doc)] // TODO: should this even be public?

@@ -8,6 +8,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 homepage = "https://tangle.tools"
 repository = "https://github.com/tangle-network/blueprint"
+rust-version = "1.85" # Update the rust-toolchain.toml as well
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "deny", priority = -1 }
@@ -30,6 +31,7 @@ assigning_clones = "allow"
 transmute_ptr_to_ptr = "allow"
 items_after_statements = "allow"
 match_wildcard_for_single_variants = "allow"
+too_many_lines = "allow"
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
@@ -142,7 +144,7 @@ async-stream = { version = "0.3.6", default-features = false }
 
 # CLI & Configuration
 cargo-generate = { version = "0.22.1", default-features = false }
-clap = { version = "4.5.16" }
+clap = { version = "4.5.34" }
 clap-cargo = { version = "0.14", default-features = false }
 toml = { version = "0.8.19", default-features = false }
 dialoguer = { version = "0.11.0", default-features = false }
@@ -199,7 +201,7 @@ parking_lot = { version = "0.12.3", default-features = false }
 sysinfo = { version = "0.31.2", default-features = false }
 tempfile = { version = "3.13.0", default-features = false }
 uuid = { version = "1.16.0", default-features = false }
-blake3 = { version = "1.5.5", default-features = false }
+blake3 = { version = "1.8.0", default-features = false }
 chrono = { version = "0.4.40", default-features = false }
 
 # Development & Testing
@@ -263,6 +265,7 @@ zeroize = { version = "1.8.1", default-features = false }
 
 # Eigenlayer
 eigensdk = { version = "0.5.0", default-features = false }
+#eigensdk = { git = "https://github.com/Tjemmmic/eigensdk-rs.git", branch = "reader-type-annotations", default-features = false }
 rust-bls-bn254 = { version = "0.2.1", default-features = false }
 testcontainers = { version = "0.23.1", default-features = false }
 

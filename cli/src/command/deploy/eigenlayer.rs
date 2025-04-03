@@ -757,13 +757,13 @@ pub async fn deploy_eigenlayer(
 
     if chain == SupportedChains::LocalTestnet && devnet {
         // Start local Anvil testnet
-        let (_container, http_endpoint, _ws_endpoint) = start_default_anvil_testnet(true).await;
+        let testnet = start_default_anvil_testnet(true).await;
 
         initialize_test_keystore()?;
 
         // Deploy to local devnet
         let opts = EigenlayerDeployOpts::new(
-            http_endpoint.clone(),
+            testnet.http_endpoint.clone(),
             contracts_path,
             ordered_deployment,
             chain,
@@ -772,7 +772,7 @@ pub async fn deploy_eigenlayer(
         deploy_to_eigenlayer(&opts)?;
 
         // Keep the process running and show helpful instructions
-        display_devnet_info(&http_endpoint);
+        display_devnet_info(&testnet.http_endpoint);
 
         // Wait for Ctrl+C to shut down
         signal::ctrl_c().await?;

@@ -117,7 +117,7 @@ where
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use blueprint_tangle_testing_utils::TangleTestHarness;
     /// use tempfile::TempDir;
     ///
@@ -331,7 +331,7 @@ where
     ///
     /// See [`deploy_to_tangle()`]
     ///
-    /// [`deploy_to_tangle()`]: cargo_tangle::deploy::tangle::deploy_to_tangle
+    /// [`deploy_to_tangle()`]: blueprint_chain_setup::tangle::deploy::deploy_to_tangle
     pub async fn deploy_blueprint(&self) -> Result<u64, Error> {
         let manifest_path = std::env::current_dir()?.join("Cargo.toml");
         let opts = self.create_deploy_opts(manifest_path)?;

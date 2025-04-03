@@ -59,7 +59,7 @@ where
     /// * TODO
     pub async fn setup_with_context(test_dir: TempDir, _context: Ctx) -> Result<Self, Error> {
         // Start local Anvil testnet
-        let (container, http_endpoint, ws_endpoint) = start_default_anvil_testnet(true).await;
+        let testnet = start_default_anvil_testnet(true).await;
 
         // Setup Eigenlayer test environment
         let EigenlayerTestEnvironment {
@@ -67,7 +67,7 @@ where
             http_endpoint,
             ws_endpoint,
             eigenlayer_contract_addresses,
-        } = setup_eigenlayer_test_environment(&http_endpoint, &ws_endpoint).await;
+        } = setup_eigenlayer_test_environment(&testnet.http_endpoint, &testnet.ws_endpoint).await;
 
         // Setup temporary testing keystore
         let test_dir_path = test_dir.path().to_string_lossy().into_owned();
@@ -102,7 +102,7 @@ where
             accounts,
             eigenlayer_contract_addresses,
             _temp_dir: test_dir,
-            _container: container,
+            _container: testnet.container,
             _phantom: core::marker::PhantomData,
         })
     }

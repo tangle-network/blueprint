@@ -195,6 +195,7 @@ where
         context: Ctx,
     ) -> Option<FuturesUnordered<RouteFuture<BoxError>>> {
         blueprint_core::trace!(
+            target: "blueprint-router",
             job_id = %call.job_id(),
             metadata = ?call.metadata(),
             body = ?call.body(),
@@ -203,6 +204,7 @@ where
         let (call, context) = match self.inner.job_id_router.call_with_context(call, context) {
             Ok(matched_call_future) => {
                 blueprint_core::trace!(
+                    target: "blueprint-router",
                     matched_calls = matched_call_future.len(),
                     "A route matched this job call"
                 );
@@ -213,6 +215,7 @@ where
 
         // At this point, no route matched the job ID, and there are no always routes
         blueprint_core::trace!(
+            target: "blueprint-router",
             ?call,
             "No explicit or always route caught this job call, passing to fallback"
         );
@@ -302,7 +305,7 @@ where
         Box::pin(async move {
             let mut results = Vec::with_capacity(futures.len());
             while let Some(item) = futures.next().await {
-                blueprint_core::trace!(outcome = ?item, "Job finished with outcome");
+                blueprint_core::trace!(target: "blueprint-router", outcome = ?item, "Job finished with outcome");
                 match item {
                     Ok(Some(job)) => results.push(job),
                     // Job produced nothing, and didn't error. Don't include it.

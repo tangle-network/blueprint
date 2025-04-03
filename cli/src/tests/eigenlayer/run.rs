@@ -15,7 +15,6 @@ use crate::command::deploy::eigenlayer::deploy_avs_contracts;
 use crate::command::run::run_eigenlayer_avs;
 
 #[tokio::test]
-#[allow(clippy::too_many_lines)]
 async fn test_run_eigenlayer_avs() -> Result<()> {
     setup_log();
 
@@ -60,15 +59,12 @@ src = 'src'
 out = '{}'
 libs = ['lib']
 evm_version = 'shanghai'",
-        contract_out_dir
-            .strip_prefix(temp_dir.path())
-            .unwrap()
-            .display()
+        contract_out_dir.strip_prefix(temp_dir.path())?.display()
     );
     fs::write(temp_dir.path().join("foundry.toml"), foundry_content)?;
 
     // Start the local Anvil testnet
-    let (_container, http_endpoint, ws_endpoint) = start_default_anvil_testnet(false).await;
+    let testnet = start_default_anvil_testnet(false).await;
 
     // Set up deployment options with temporary directory path and constructor arguments
     let mut constructor_args = HashMap::new();
@@ -82,7 +78,7 @@ evm_version = 'shanghai'",
 
     // Deploy the contract
     let opts = EigenlayerDeployOpts {
-        rpc_url: http_endpoint.clone(),
+        rpc_url: testnet.http_endpoint.clone(),
         contracts_path: contract_dir.to_string_lossy().to_string(),
         constructor_args: Some(constructor_args),
         ordered_deployment: false,
@@ -248,8 +244,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
 
     // Run the binary using the run command
     let config = ContextConfig::create_config(
-        http_endpoint.parse().unwrap(),
-        ws_endpoint.parse().unwrap(),
+        testnet.http_endpoint.parse()?,
+        testnet.ws_endpoint.parse()?,
         keystore_path.to_string_lossy().to_string(),
         None,
         SupportedChains::LocalTestnet,

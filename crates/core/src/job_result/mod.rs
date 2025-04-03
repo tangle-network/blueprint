@@ -12,6 +12,8 @@ pub use into_job_result_parts::JobResultParts;
 /// A special result type that indicates a job produced no result
 ///
 /// This is **not** the same as returning `None` or `()` from your [`Job`].
+///
+/// [`Job`]: crate::Job
 pub struct Void;
 
 #[derive(Debug, Clone)]

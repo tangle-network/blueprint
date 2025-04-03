@@ -9,7 +9,7 @@ macro_rules! __log_rejection {
     ) => {
         {
             $crate::__private::tracing::event!(
-                target: "gadget::rejection",
+                target: "blueprint-rejection",
                 $crate::__private::tracing::Level::TRACE,
                 body = $body_text,
                 rejection_type = ::core::any::type_name::<$ty>(),
@@ -23,7 +23,10 @@ macro_rules! __log_rejection {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __log_rejection {
-    (rejection_type = $ty:ident,body_text = $body_text:expr) => {};
+    (rejection_type = $ty:ident,body_text = $body_text:expr) => {{
+        let _ = $ty;
+        let _ = $body_text;
+    }};
 }
 
 #[rustfmt::skip]
@@ -234,7 +237,7 @@ macro_rules! __define_rejection {
                     rejection_type = $name,
                     body_text = $body
                 );
-                $body.into_job_result()
+                Some($crate::JobResult::Err($crate::error::Error::new(self)))
             }
         }
 
@@ -285,7 +288,7 @@ macro_rules! __define_rejection {
                     rejection_type = $name,
                     body_text = body_text
                 );
-                body_text.into_job_result()
+                Some($crate::JobResult::Err($crate::error::Error::new(self)))
             }
         }
 

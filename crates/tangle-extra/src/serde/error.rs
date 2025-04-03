@@ -5,7 +5,7 @@ use serde::{de, ser};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-/// Types that cannot be represented as a [`Field`](crate::Field)
+/// Types that cannot be represented as a [`Field`](super::Field)
 ///
 /// Attempting to de/serialize any of these types will cause an error.
 #[derive(Debug)]
@@ -45,8 +45,9 @@ pub enum UnsupportedType {
 
 #[derive(Debug)]
 pub enum Error {
+    BadMapKey,
     UnsupportedType(UnsupportedType),
-    /// Attempting to deserialize a [`char`] from a [`Field::String`](crate::Field::String)
+    /// Attempting to deserialize a [`char`] from a [`Field::String`](super::Field::String)
     BadCharLength(usize),
     HeterogeneousTuple,
     FromUtf8Error(alloc::string::FromUtf8Error),
@@ -74,6 +75,7 @@ impl From<alloc::string::FromUtf8Error> for Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
+            Error::BadMapKey => write!(f, "Map keys must be strings"),
             Error::UnsupportedType(unsupported_type) => {
                 write!(f, "Type `{:?}` unsupported", unsupported_type)
             }

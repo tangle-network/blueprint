@@ -44,10 +44,12 @@ impl EigenlayerClient {
         get_provider_http(&self.config.http_rpc_endpoint)
     }
 
-    /// Get the provider for this client's http endpoint with the specified [`Wallet`](EthereumWallet)
+    /// Get the provider for this client's http endpoint with the specified [`EthereumWallet`]
     ///
     /// # Returns
     /// - [`The HTTP wallet provider`](RootProvider)
+    ///
+    /// [`EthereumWallet`]: alloy_network::EthereumWallet
     #[must_use]
     pub fn get_wallet_provider_http(&self, wallet: alloy_network::EthereumWallet) -> RootProvider {
         get_wallet_provider_http(&self.config.http_rpc_endpoint, wallet)
@@ -229,7 +231,9 @@ impl EigenlayerClient {
     /// # Errors
     ///
     /// * See [`Self::avs_registry_reader()`]
-    /// * See [`AvsRegistryReader::get_operators_stake_in_quorums_at_block()`]
+    /// * See [`AvsRegistryChainReader::get_operators_stake_in_quorums_at_block()`]
+    ///
+    /// [`AvsRegistryChainReader::get_operators_stake_in_quorums_at_block()`]: eigensdk::client_avsregistry::reader::AvsRegistryChainReader::get_operators_stake_in_quorums_at_block
     pub async fn get_operator_stake_in_quorums_at_block(
         &self,
         block_number: u32,
@@ -247,7 +251,9 @@ impl EigenlayerClient {
     /// # Errors
     ///
     /// * See [`Self::avs_registry_reader()`]
-    /// * See [`AvsRegistryReader::get_operator_stake_in_quorums_of_operator_at_current_block()`]
+    /// * See [`AvsRegistryChainReader::get_operator_stake_in_quorums_of_operator_at_current_block()`]
+    ///
+    /// [`AvsRegistryChainReader::get_operator_stake_in_quorums_of_operator_at_current_block()`]: eigensdk::client_avsregistry::reader::AvsRegistryChainReader::get_operator_stake_in_quorums_of_operator_at_current_block
     pub async fn get_operator_stake_in_quorums_at_current_block(
         &self,
         operator_id: alloy_primitives::FixedBytes<32>,
@@ -396,7 +402,10 @@ impl EigenlayerClient {
     /// # Errors
     ///
     /// * See [`Self::avs_registry_reader()`]
-    /// * See [`AvsRegistryReader::get_operator_id()`]
+    /// * See [`AvsRegistryChainReader::get_operator_id()`]
+    ///
+    /// [`FixedBytes`]: alloy_primitives::FixedBytes
+    /// [`AvsRegistryChainReader::get_operator_id()`]: eigensdk::client_avsregistry::reader::AvsRegistryChainReader::get_operator_id
     pub async fn get_operator_id(
         &self,
         operator_addr: Address,
@@ -462,7 +471,9 @@ impl EigenlayerClient {
     /// # Errors
     ///
     /// * See [`Self::avs_registry_reader()`]
-    /// * See [`AvsRegistryReader::query_existing_registered_operator_pub_keys()`]
+    /// * See [`AvsRegistryChainReader::query_existing_registered_operator_pub_keys()`]
+    ///
+    /// [`AvsRegistryChainReader::query_existing_registered_operator_pub_keys()`]: eigensdk::client_avsregistry::reader::AvsRegistryChainReader::query_existing_registered_operator_pub_keys
     pub async fn query_existing_registered_operator_pub_keys(
         &self,
         start_block: u64,

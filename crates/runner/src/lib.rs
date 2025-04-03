@@ -28,8 +28,10 @@ use core::pin::Pin;
 use error::RunnerError as Error;
 use futures::{Future, Sink};
 use futures_core::Stream;
+use futures_util::stream::FuturesUnordered;
 use futures_util::{SinkExt, StreamExt, TryStreamExt, stream};
-use tokio::sync::oneshot;
+use std::sync::Arc;
+use tokio::sync::{Mutex, oneshot};
 use tower::Service;
 
 /// Configuration for the blueprint registration procedure
@@ -74,8 +76,9 @@ pub trait BackgroundService: Send + Sync {
 unsafe impl Send for DynBackgroundService<'_> {}
 unsafe impl Sync for DynBackgroundService<'_> {}
 
-type Producer = Box<dyn Stream<Item = Result<JobCall, BoxError>> + Send + Sync + Unpin + 'static>;
-type Consumer = Box<dyn Sink<JobResult, Error = BoxError> + Send + Sync + Unpin + 'static>;
+type Producer =
+    Arc<Mutex<Box<dyn Stream<Item = Result<JobCall, BoxError>> + Send + Unpin + 'static>>>;
+type Consumer = Arc<Mutex<Box<dyn Sink<JobResult, Error = BoxError> + Send + Unpin + 'static>>>;
 
 /// A builder for a [`BlueprintRunner`]
 pub struct BlueprintRunnerBuilder<F> {
@@ -107,12 +110,13 @@ where
     #[must_use]
     pub fn producer<E>(
         mut self,
-        producer: impl Stream<Item = Result<JobCall, E>> + Send + Sync + Unpin + 'static,
+        producer: impl Stream<Item = Result<JobCall, E>> + Send + Unpin + 'static,
     ) -> Self
     where
         E: Into<BoxError> + 'static,
     {
-        self.producers.push(Box::new(producer.map_err(Into::into)));
+        let producer: Producer = Arc::new(Mutex::new(Box::new(producer.map_err(Into::into))));
+        self.producers.push(producer);
         self
     }
 
@@ -122,13 +126,13 @@ where
     #[must_use]
     pub fn consumer<E>(
         mut self,
-        consumer: impl Sink<JobResult, Error = E> + Send + Sync + Unpin + 'static,
+        consumer: impl Sink<JobResult, Error = E> + Send + Unpin + 'static,
     ) -> Self
     where
         E: Into<BoxError> + 'static,
     {
-        self.consumers
-            .push(Box::new(consumer.sink_map_err(Into::into)));
+        let consumer: Consumer = Arc::new(Mutex::new(Box::new(consumer.sink_map_err(Into::into))));
+        self.consumers.push(consumer);
         self
     }
 
@@ -331,7 +335,7 @@ impl<F> FinalizedBlueprintRunner<F>
 where
     F: Future<Output = ()> + Send + 'static,
 {
-    #[allow(trivial_casts, clippy::too_many_lines)]
+    #[allow(trivial_casts)]
     async fn run(self) -> Result<(), Error> {
         if self.config.requires_registration(&self.env).await? {
             self.config.register(&self.env).await?;
@@ -376,12 +380,23 @@ where
         let (mut shutdown_tx, shutdown_rx) = oneshot::channel();
         tokio::spawn(async move {
             let _ = shutdown_rx.await;
-            blueprint_core::info!("Received graceful shutdown signal. Calling shutdown handler");
+            blueprint_core::info!(target: "blueprint-runner", "Received graceful shutdown signal. Calling shutdown handler");
             shutdown_handler.await;
         });
 
         poll_fn(|ctx| router.poll_ready(ctx)).await.unwrap_or(());
 
+        let producers = producers.into_iter().map(|producer| {
+            futures::stream::unfold(producer, |producer| async move {
+                let result;
+                {
+                    let mut guard = producer.lock().await;
+                    result = guard.next().await;
+                }
+                result.map(|job_call| (job_call, producer))
+            })
+            .boxed()
+        });
         let mut producer_stream = futures::stream::select_all(producers);
 
         let mut background_services = if background_futures.is_empty() {
@@ -391,70 +406,92 @@ where
             futures::future::select_all(background_futures)
         };
 
+        let mut pending_jobs = FuturesUnordered::new();
+
         // TODO: Stop using string errors
         loop {
             tokio::select! {
+                // Receive job calls from producer
                 producer_result = producer_stream.next() => {
                     match producer_result {
                         Some(Ok(job_call)) => {
-                            match router.call(job_call).await {
-                                Ok(Some(results)) => {
-                                    blueprint_core::trace!(
-                                        count = %results.len(),
-                                        "Job call(s) was processed by router"
-                                    );
-                                    let result_stream = stream::iter(results.into_iter().map(Ok));
-
-                                    // Broadcast results to all consumers
-                                    let send_futures = consumers.iter_mut().map(|consumer| {
-                                        let mut stream_clone = result_stream.clone();
-                                        async move {
-                                            consumer.send_all(&mut stream_clone).await
-                                        }
-                                    });
-
-                                    let result = futures::future::try_join_all(send_futures).await;
-                                    blueprint_core::trace!(
-                                        results = ?result.as_ref().map(|_| "success"),
-                                        "Job call results were broadcasted to consumers"
-                                    );
-                                    if let Err(e) = result {
-                                        let _ = shutdown_tx.send(true);
-                                        return Err(Error::Consumer(e));
-                                    }
-                                },
-                                Ok(None) => {
-                                    blueprint_core::debug!("Job call was ignored by router");
-                                },
-                                Err(e) => {
-                                    blueprint_core::error!("Job call failed: {:?}", e);
-                                    let _ = shutdown_tx.send(true);
-                                    return Err(Error::JobCall(e.to_string()));
-                                },
-                            }
-                        }
+                            blueprint_core::trace!(
+                                target: "blueprint-runner",
+                                ?job_call,
+                                "Received a job call"
+                            );
+                            pending_jobs.push(tokio::task::spawn(router.call(job_call)));
+                        },
                         Some(Err(e)) => {
-                            blueprint_core::error!("Producer error: {:?}", e);
+                            blueprint_core::error!(target: "blueprint-runner", "Producer error: {:?}", e);
                             let _ = shutdown_tx.send(true);
                             return Err(Error::JobCall(e.to_string()));
-                        }
+                        },
                         None => {
-                            blueprint_core::error!("Producer stream ended unexpectedly");
+                            blueprint_core::error!(target: "blueprint-runner", "Producer stream ended unexpectedly");
                             let _ = shutdown_tx.send(true);
                             return Err(Error::JobCall("Producer stream ended".into()));
                         }
                     }
+                },
+
+                // Job call finished
+                Some(job_result) = pending_jobs.next() => {
+                    match job_result {
+                        Ok(Ok(Some(results))) => {
+                            blueprint_core::trace!(
+                                target: "blueprint-runner",
+                                count = %results.len(),
+                                "Job call(s) processed by router"
+                            );
+                            let result_stream = stream::iter(results.into_iter().map(Ok));
+
+                            // Broadcast results to all consumers
+                            let send_futures = consumers.iter_mut().map(|consumer| {
+                                let mut stream_clone = result_stream.clone();
+                                async move {
+                                    let mut guard = consumer.lock().await;
+                                    guard.send_all(&mut stream_clone).await
+                                }
+                            });
+
+                            let result = futures::future::try_join_all(send_futures).await;
+                            blueprint_core::trace!(
+                                target: "blueprint-runner",
+                                results = ?result.as_ref().map(|_| "success"),
+                                "Job call results were broadcast to consumers"
+                            );
+                            if let Err(e) = result {
+                                let _ = shutdown_tx.send(true);
+                                return Err(Error::Consumer(e));
+                            }
+                        },
+                        Ok(Ok(None)) => {
+                            blueprint_core::debug!(target: "blueprint-runner", "Job call was ignored by router");
+                        },
+                        Ok(Err(e)) => {
+                            blueprint_core::error!(target: "blueprint-runner", "Job call task failed: {:?}", e);
+                            return Err(Error::JobCall(e.to_string()));
+                        },
+                        Err(e) => {
+                            blueprint_core::error!(target: "blueprint-runner", "Job call failed: {:?}", e);
+                            let _ = shutdown_tx.send(true);
+                            return Err(Error::JobCall(e.to_string()));
+                        },
+                    }
                 }
+
+                // Background service status updates
                 result = &mut background_services => {
                     let (result, _, remaining_background_services) = result;
                     match result {
                         Ok(()) => {
                             if has_background_services {
-                                blueprint_core::warn!("A background service has finished running");
+                                blueprint_core::warn!(target: "blueprint-runner", "A background service has finished running");
                             }
                         },
                         Err(e) => {
-                            blueprint_core::error!("A background service failed: {:?}", e);
+                            blueprint_core::error!(target: "blueprint-runner", "A background service failed: {:?}", e);
                             let _ = shutdown_tx.send(true);
                             return Err(e);
                         }
@@ -462,15 +499,17 @@ where
 
                     if remaining_background_services.is_empty() {
                         if has_background_services {
-                            blueprint_core::warn!("All background services have ended");
+                            blueprint_core::warn!(target: "blueprint-runner", "All background services have ended");
                         }
                         continue;
                     }
 
                     background_services = futures::future::select_all(remaining_background_services);
                 }
+
+                // Shutdown handler run, we're done
                 () = shutdown_tx.closed() => {
-                    break
+                    break;
                 }
             }
         }

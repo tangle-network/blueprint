@@ -2,9 +2,12 @@
 name = "blueprint-macros"
 version = "0.1.0"
 description = "Macros for the Tangle Blueprint SDK"
+authors.workspace = true
 edition.workspace = true
-homepage.workspace = true
 license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
