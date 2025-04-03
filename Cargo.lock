@@ -2661,14 +2661,17 @@ dependencies = [
 [[package]]
 name = "blueprint-anvil-testing-utils"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-primitives 0.8.23",
  "alloy-provider",
  "alloy-rpc-types",
  "alloy-rpc-types-eth",
  "alloy-transport",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "tokio",
  "url",
 ]
 
@@ -2691,9 +2694,9 @@ dependencies = [
 [[package]]
 name = "blueprint-build-utils"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
 ]
 
 [[package]]
@@ -2708,11 +2711,11 @@ dependencies = [
 [[package]]
 name = "blueprint-chain-setup"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-chain-setup-anvil 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-chain-setup-common 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-chain-setup-tangle 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-chain-setup-anvil 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-chain-setup-common 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-chain-setup-tangle 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
 ]
 
 [[package]]
@@ -2738,16 +2741,16 @@ dependencies = [
 [[package]]
 name = "blueprint-chain-setup-anvil"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-contract",
  "alloy-provider",
  "alloy-rpc-types",
  "alloy-rpc-types-eth",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-core-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "serde",
  "serde_json",
  "tempfile",
@@ -2778,17 +2781,17 @@ dependencies = [
 [[package]]
 name = "blueprint-chain-setup-common"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-signer-local",
- "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-contexts 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-networking 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-contexts 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-networking 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "color-eyre",
  "sp-core",
  "tangle-subxt",
@@ -2834,7 +2837,7 @@ dependencies = [
 [[package]]
 name = "blueprint-chain-setup-tangle"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-json-abi",
  "alloy-network",
@@ -2845,16 +2848,16 @@ dependencies = [
  "alloy-signer-local",
  "alloy-sol-types 0.8.23",
  "alloy-transport",
- "blueprint-chain-setup-common 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-contexts 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-networking 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-chain-setup-common 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-contexts 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-networking 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "cargo_metadata 0.18.1",
  "color-eyre",
  "dialoguer",
@@ -2880,10 +2883,10 @@ dependencies = [
 [[package]]
 name = "blueprint-client-core"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "auto_impl",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "thiserror 2.0.12",
 ]
 
@@ -2899,11 +2902,11 @@ dependencies = [
  "blueprint-chain-setup-anvil 0.1.0",
  "blueprint-client-core 0.1.0",
  "blueprint-core 0.1.0",
- "blueprint-eigenlayer-testing-utils",
+ "blueprint-eigenlayer-testing-utils 0.1.0",
  "blueprint-evm-extra 0.1.0",
  "blueprint-runner 0.1.0",
  "blueprint-std 0.1.0",
- "eigensdk 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "eigensdk",
  "num-bigint 0.4.6",
  "thiserror 2.0.12",
  "tokio",
@@ -2915,18 +2918,19 @@ dependencies = [
 [[package]]
 name = "blueprint-client-eigenlayer"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-contract",
  "alloy-network",
  "alloy-primitives 0.8.23",
  "alloy-provider",
  "alloy-transport",
- "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "eigensdk 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "eigensdk",
  "num-bigint 0.4.6",
  "thiserror 2.0.12",
  "tokio",
@@ -2968,7 +2972,7 @@ dependencies = [
 [[package]]
 name = "blueprint-client-evm"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-consensus",
  "alloy-json-rpc",
@@ -2980,10 +2984,10 @@ dependencies = [
  "alloy-rpc-types",
  "alloy-rpc-types-eth",
  "alloy-transport",
- "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-metrics-rpc-calls 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-metrics-rpc-calls 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "hex",
  "serde",
  "serde_json",
@@ -3014,15 +3018,15 @@ dependencies = [
 [[package]]
 name = "blueprint-client-tangle"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "auto_impl",
- "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-sp-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-sp-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "serde",
  "serde_json",
  "sp-core",
@@ -3046,13 +3050,13 @@ dependencies = [
 [[package]]
 name = "blueprint-clients"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-client-eigenlayer 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-client-evm 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-client-tangle 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-client-eigenlayer 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-client-evm 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-client-tangle 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "thiserror 2.0.12",
 ]
 
@@ -3077,7 +3081,7 @@ dependencies = [
 [[package]]
 name = "blueprint-context-derive"
 version = "0.3.1"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3100,19 +3104,20 @@ dependencies = [
 [[package]]
 name = "blueprint-contexts"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-networking 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-networking 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "tangle-subxt",
 ]
 
 [[package]]
 name = "blueprint-contract-deployer"
 version = "0.1.0"
+source = "git+https://github.com/tangle-network/blueprint-contract-deployer.git#945a8d67c070e14426ae22889856a6fca9f9317b"
 dependencies = [
  "alloy",
  "alloy-contract",
@@ -3120,10 +3125,10 @@ dependencies = [
  "alloy-primitives 0.8.23",
  "alloy-provider",
  "alloy-sol-types 0.8.23",
- "blueprint-build-utils 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-sdk 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-build-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-sdk 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "color-eyre",
- "eigensdk 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "eigensdk",
  "serde",
  "serde_json",
 ]
@@ -3147,7 +3152,7 @@ dependencies = [
 [[package]]
 name = "blueprint-core"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "bytes",
  "futures-util",
@@ -3177,13 +3182,13 @@ dependencies = [
 [[package]]
 name = "blueprint-core-testing-utils"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-router 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-router 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "cargo_toml",
  "thiserror 2.0.12",
  "tracing",
@@ -3210,17 +3215,17 @@ dependencies = [
 [[package]]
 name = "blueprint-crypto"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-crypto-bls 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-bn254 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-ed25519 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-hashing 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-k256 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-sp-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-sr25519 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-crypto-bls 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-bn254 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-ed25519 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-hashing 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-k256 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-sp-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-sr25519 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "thiserror 2.0.12",
 ]
 
@@ -3244,11 +3249,11 @@ dependencies = [
 [[package]]
 name = "blueprint-crypto-bls"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "ark-serialize 0.5.0",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "hex",
  "paste",
  "serde",
@@ -3281,14 +3286,14 @@ dependencies = [
 [[package]]
 name = "blueprint-crypto-bn254"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "ark-bn254",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "hex",
  "num-bigint 0.4.6",
  "num-traits",
@@ -3311,9 +3316,9 @@ dependencies = [
 [[package]]
 name = "blueprint-crypto-core"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "clap",
  "serde",
  "thiserror 2.0.12",
@@ -3336,10 +3341,10 @@ dependencies = [
 [[package]]
 name = "blueprint-crypto-ed25519"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "ed25519-zebra",
  "hex",
  "serde",
@@ -3360,10 +3365,10 @@ dependencies = [
 [[package]]
 name = "blueprint-crypto-hashing"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "blake3",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "sha2 0.10.8",
  "sha3",
 ]
@@ -3387,12 +3392,12 @@ dependencies = [
 [[package]]
 name = "blueprint-crypto-k256"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-primitives 0.8.23",
  "alloy-signer-local",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "hex",
  "k256",
  "serde",
@@ -3419,10 +3424,10 @@ dependencies = [
 [[package]]
 name = "blueprint-crypto-sp-core"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "hex",
  "paste",
  "serde",
@@ -3448,10 +3453,10 @@ dependencies = [
 [[package]]
 name = "blueprint-crypto-sr25519"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "hex",
  "schnorrkel",
  "serde",
@@ -3479,13 +3484,13 @@ dependencies = [
 [[package]]
 name = "blueprint-crypto-tangle-pair-signer"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-primitives 0.8.23",
  "alloy-signer-local",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-sp-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-sp-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "k256",
  "serde",
  "sp-core",
@@ -3508,7 +3513,35 @@ dependencies = [
  "blueprint-core 0.1.0",
  "blueprint-crypto-bn254 0.1.0",
  "blueprint-evm-extra 0.1.0",
- "eigensdk 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "eigensdk",
+ "jsonrpc-core",
+ "jsonrpc-http-server",
+ "num-bigint 0.4.6",
+ "reqwest 0.12.14",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "blueprint-eigenlayer-extra"
+version = "0.1.0"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
+dependencies = [
+ "alloy-contract",
+ "alloy-network",
+ "alloy-primitives 0.8.23",
+ "alloy-provider",
+ "alloy-rpc-client",
+ "alloy-sol-types 0.8.23",
+ "alloy-transport",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-bn254 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "eigensdk",
  "jsonrpc-core",
  "jsonrpc-http-server",
  "num-bigint 0.4.6",
@@ -3532,7 +3565,26 @@ dependencies = [
  "blueprint-core-testing-utils 0.1.0",
  "blueprint-evm-extra 0.1.0",
  "blueprint-runner 0.1.0",
- "eigensdk 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "eigensdk",
+ "futures",
+ "tempfile",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "blueprint-eigenlayer-testing-utils"
+version = "0.1.0"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
+dependencies = [
+ "alloy-primitives 0.8.23",
+ "alloy-provider",
+ "blueprint-chain-setup 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "eigensdk",
  "futures",
  "tempfile",
  "tokio",
@@ -3573,7 +3625,7 @@ dependencies = [
 [[package]]
 name = "blueprint-evm-extra"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-consensus",
  "alloy-network",
@@ -3587,8 +3639,8 @@ dependencies = [
  "alloy-transport",
  "alloy-transport-http",
  "async-stream",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "bytes",
  "document-features",
  "futures",
@@ -3622,7 +3674,7 @@ dependencies = [
  "blueprint-crypto 0.1.0",
  "blueprint-std 0.1.0",
  "ed25519-zebra",
- "eigensdk 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "eigensdk",
  "gcloud-sdk",
  "hex",
  "k256",
@@ -3647,7 +3699,7 @@ dependencies = [
 [[package]]
 name = "blueprint-keystore"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-network",
  "alloy-primitives 0.8.23",
@@ -3658,10 +3710,10 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
  "blake3",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "ed25519-zebra",
- "eigensdk 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigensdk",
  "hex",
  "k256",
  "parking_lot 0.12.3",
@@ -3698,7 +3750,7 @@ dependencies = [
 [[package]]
 name = "blueprint-macros"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3755,7 +3807,7 @@ dependencies = [
 [[package]]
 name = "blueprint-metrics-rpc-calls"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "metrics",
 ]
@@ -3797,16 +3849,16 @@ dependencies = [
 [[package]]
 name = "blueprint-networking"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-primitives 0.8.23",
  "anyhow",
  "auto_impl",
  "bincode",
  "blake3",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "crossbeam-channel",
  "dashmap",
  "futures",
@@ -3866,9 +3918,9 @@ dependencies = [
 [[package]]
 name = "blueprint-producers-extra"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "document-features",
  "futures",
 ]
@@ -3892,9 +3944,9 @@ dependencies = [
 [[package]]
 name = "blueprint-router"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "bytes",
  "document-features",
  "futures",
@@ -3924,7 +3976,7 @@ dependencies = [
  "crossbeam-channel",
  "document-features",
  "dynosaur",
- "eigensdk 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "eigensdk",
  "futures",
  "futures-core",
  "futures-util",
@@ -3942,23 +3994,23 @@ dependencies = [
 [[package]]
 name = "blueprint-runner"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy-contract",
  "alloy-primitives 0.8.23",
  "alloy-signer",
  "alloy-signer-local",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-router 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-router 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "clap",
  "document-features",
  "dynosaur",
- "eigensdk 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigensdk",
  "futures",
  "futures-core",
  "futures-util",
@@ -3986,7 +4038,7 @@ dependencies = [
  "blueprint-core 0.1.0",
  "blueprint-crypto 0.1.0",
  "blueprint-crypto-tangle-pair-signer 0.1.0",
- "blueprint-eigenlayer-extra",
+ "blueprint-eigenlayer-extra 0.1.0",
  "blueprint-evm-extra 0.1.0",
  "blueprint-keystore 0.1.0",
  "blueprint-macros 0.1.0",
@@ -4000,7 +4052,7 @@ dependencies = [
  "blueprint-tangle-extra 0.1.0",
  "blueprint-testing-utils 0.1.0",
  "document-features",
- "eigensdk 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "eigensdk",
  "tangle-subxt",
  "tempfile",
  "thiserror 2.0.12",
@@ -4010,28 +4062,29 @@ dependencies = [
 [[package]]
 name = "blueprint-sdk"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "alloy",
  "alloy-json-abi",
- "blueprint-chain-setup 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-context-derive 0.3.1 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-contexts 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-macros 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-producers-extra 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-router 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-chain-setup 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-context-derive 0.3.1 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-contexts 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-eigenlayer-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-macros 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-producers-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-router 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "document-features",
- "eigensdk 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigensdk",
  "tangle-subxt",
  "tempfile",
  "thiserror 2.0.12",
@@ -4052,7 +4105,7 @@ dependencies = [
 [[package]]
 name = "blueprint-std"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
  "colored",
  "num-traits",
@@ -4108,9 +4161,9 @@ dependencies = [
 [[package]]
 name = "blueprint-tangle-extra"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "bytes",
  "cargo_metadata 0.18.1",
  "cid",
@@ -4157,17 +4210,18 @@ version = "0.1.0"
 dependencies = [
  "blueprint-anvil-testing-utils 0.1.0",
  "blueprint-core-testing-utils 0.1.0",
- "blueprint-eigenlayer-testing-utils",
+ "blueprint-eigenlayer-testing-utils 0.1.0",
  "blueprint-tangle-testing-utils",
 ]
 
 [[package]]
 name = "blueprint-testing-utils"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint#20ea9b227915cc5634192a1e6be22c7f056adf3f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a67b3fc4c5eb2f01e84317dc1e4d0e0086dc171c"
 dependencies = [
- "blueprint-anvil-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint)",
- "blueprint-core-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint)",
+ "blueprint-anvil-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-eigenlayer-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
 ]
 
 [[package]]
@@ -4709,7 +4763,7 @@ dependencies = [
  "color-eyre",
  "dialoguer",
  "dotenv",
- "eigensdk 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "eigensdk",
  "hex",
  "indicatif",
  "serde",
@@ -6517,54 +6571,18 @@ dependencies = [
 [[package]]
 name = "eigen-client-avsregistry"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16480006823e3b09495cd5fee89d03364ba23fc254720a98efd97ee0a5a0f6c0"
-dependencies = [
- "alloy",
- "ark-ff 0.5.0",
- "async-trait",
- "eigen-client-elcontracts 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-common 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-crypto-bls 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-logging 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-types 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-utils 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "num-bigint 0.4.6",
- "thiserror 1.0.69",
- "tracing",
-]
-
-[[package]]
-name = "eigen-client-avsregistry"
-version = "0.5.0"
 source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "ark-ff 0.5.0",
  "async-trait",
- "eigen-client-elcontracts 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-common 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-crypto-bls 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-logging 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-types 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-utils 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-client-elcontracts",
+ "eigen-common",
+ "eigen-crypto-bls",
+ "eigen-logging",
+ "eigen-types",
+ "eigen-utils",
  "num-bigint 0.4.6",
- "thiserror 1.0.69",
- "tracing",
-]
-
-[[package]]
-name = "eigen-client-elcontracts"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c21afc43f721abbd0d49d42ad9ba26cb8ceed2eb86c3a056050d6945a8604780"
-dependencies = [
- "alloy",
- "eigen-common 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-crypto-bls 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-logging 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-types 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-utils 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror 1.0.69",
  "tracing",
 ]
@@ -6575,28 +6593,13 @@ version = "0.5.0"
 source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
- "eigen-common 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-crypto-bls 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-logging 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-types 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-utils 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-common",
+ "eigen-crypto-bls",
+ "eigen-logging",
+ "eigen-types",
+ "eigen-utils",
  "thiserror 1.0.69",
  "tracing",
-]
-
-[[package]]
-name = "eigen-client-eth"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98212a2eac963720a7d795f3a05c22fd88e21c673884d9aed167cc4912370ea8"
-dependencies = [
- "alloy",
- "async-trait",
- "eigen-logging 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-metrics-collectors-rpc-calls 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "hex",
- "thiserror 1.0.69",
- "url",
 ]
 
 [[package]]
@@ -6606,32 +6609,11 @@ source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-ann
 dependencies = [
  "alloy",
  "async-trait",
- "eigen-logging 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-metrics-collectors-rpc-calls 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-logging",
+ "eigen-metrics-collectors-rpc-calls",
  "hex",
  "thiserror 1.0.69",
  "url",
-]
-
-[[package]]
-name = "eigen-client-fireblocks"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab4c99c9c2bd4aae7453b935ac20d08c1c4884560aa7aa3acb26bac84fa43a6b"
-dependencies = [
- "alloy",
- "chrono",
- "eigen-common 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "hex",
- "jsonwebtoken 7.2.0",
- "mime",
- "once_cell",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "sha2 0.10.8",
- "thiserror 1.0.69",
- "uuid 1.16.0",
 ]
 
 [[package]]
@@ -6641,7 +6623,7 @@ source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-ann
 dependencies = [
  "alloy",
  "chrono",
- "eigen-common 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-common",
  "hex",
  "jsonwebtoken 7.2.0",
  "mime",
@@ -6657,38 +6639,10 @@ dependencies = [
 [[package]]
 name = "eigen-common"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "866a44244903cda1ea05d6f9cd2e5680a02236849c1290bf11cc8c3e305574b9"
-dependencies = [
- "alloy",
- "url",
-]
-
-[[package]]
-name = "eigen-common"
-version = "0.5.0"
 source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "url",
-]
-
-[[package]]
-name = "eigen-crypto-bls"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76af95503e08dfc9500910301220c4153d4de2345127326c5b4cf407fd1a02e2"
-dependencies = [
- "alloy",
- "ark-bn254",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-serialize 0.5.0",
- "ark-std 0.4.0",
- "eigen-crypto-bn254 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-utils 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -6702,22 +6656,10 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
  "ark-std 0.4.0",
- "eigen-crypto-bn254 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-utils 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-crypto-bn254",
+ "eigen-utils",
  "serde",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "eigen-crypto-bn254"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "039664a95a1c6e47fde635b9a5c07f3377901bf0463e10120f96627ac4386a8b"
-dependencies = [
- "ark-bn254",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "rust-bls-bn254",
 ]
 
 [[package]]
@@ -6734,18 +6676,6 @@ dependencies = [
 [[package]]
 name = "eigen-logging"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2348fa5a3b774e75a6db59f389c04ee3edcabc182349eb8c4b5888ef68cd888"
-dependencies = [
- "ctor",
- "once_cell",
- "tracing",
- "tracing-subscriber 0.3.19",
-]
-
-[[package]]
-name = "eigen-logging"
-version = "0.5.0"
 source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "ctor",
@@ -6757,21 +6687,9 @@ dependencies = [
 [[package]]
 name = "eigen-metrics"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e49aa6d4b362c0d1194b7a38ecda736d2838e0dbf83f83214297f51a7a2ad37"
-dependencies = [
- "eigen-logging 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "metrics",
- "metrics-exporter-prometheus",
- "metrics-util",
-]
-
-[[package]]
-name = "eigen-metrics"
-version = "0.5.0"
 source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
- "eigen-logging 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-logging",
  "metrics",
  "metrics-exporter-prometheus",
  "metrics-util",
@@ -6780,29 +6698,13 @@ dependencies = [
 [[package]]
 name = "eigen-metrics-collectors-economic"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7051c5cb6bc887038ba2c0a2625e2a2da176db2b70648decbcbe3617610ae7ac"
-dependencies = [
- "alloy",
- "eigen-client-avsregistry 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-client-elcontracts 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-logging 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-types 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "metrics",
- "num-bigint 0.4.6",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "eigen-metrics-collectors-economic"
-version = "0.5.0"
 source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
- "eigen-client-avsregistry 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-client-elcontracts 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-logging 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-types 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-client-avsregistry",
+ "eigen-client-elcontracts",
+ "eigen-logging",
+ "eigen-types",
  "metrics",
  "num-bigint 0.4.6",
  "thiserror 1.0.69",
@@ -6811,33 +6713,10 @@ dependencies = [
 [[package]]
 name = "eigen-metrics-collectors-rpc-calls"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73a09a261bcdac46a946f8f11965da87a5f025005d4a1867b69637efc2e716c4"
-dependencies = [
- "eigen-logging 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "metrics",
-]
-
-[[package]]
-name = "eigen-metrics-collectors-rpc-calls"
-version = "0.5.0"
 source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
- "eigen-logging 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-logging",
  "metrics",
-]
-
-[[package]]
-name = "eigen-nodeapi"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c433c184666dbb57e9126c57f607b26f0b7f43d3a60cf3d76019ec3f94abc0f"
-dependencies = [
- "ntex",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tracing",
 ]
 
 [[package]]
@@ -6855,57 +6734,17 @@ dependencies = [
 [[package]]
 name = "eigen-services-avsregistry"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b84fc826c4bd9a019936469aa6da1a81ce23e8108c7e05459050f520751fc98d"
-dependencies = [
- "alloy",
- "ark-bn254",
- "ark-ec 0.5.0",
- "async-trait",
- "eigen-client-avsregistry 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-crypto-bls 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-services-operatorsinfo 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-types 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-utils 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "eigen-services-avsregistry"
-version = "0.5.0"
 source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "ark-bn254",
  "ark-ec 0.5.0",
  "async-trait",
- "eigen-client-avsregistry 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-crypto-bls 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-services-operatorsinfo 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-types 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-utils 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
-]
-
-[[package]]
-name = "eigen-services-blsaggregation"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89eae314e9bb7465bad361fb5d33d6ac5103e6fc700b86e2c8863104429e390d"
-dependencies = [
- "alloy",
- "ark-bn254",
- "ark-ec 0.5.0",
- "eigen-client-avsregistry 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-common 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-crypto-bls 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-crypto-bn254 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-logging 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-services-avsregistry 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-types 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "parking_lot 0.12.3",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
+ "eigen-client-avsregistry",
+ "eigen-crypto-bls",
+ "eigen-services-operatorsinfo",
+ "eigen-types",
+ "eigen-utils",
 ]
 
 [[package]]
@@ -6916,13 +6755,13 @@ dependencies = [
  "alloy",
  "ark-bn254",
  "ark-ec 0.5.0",
- "eigen-client-avsregistry 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-common 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-crypto-bls 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-crypto-bn254 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-logging 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-services-avsregistry 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-types 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-client-avsregistry",
+ "eigen-common",
+ "eigen-crypto-bls",
+ "eigen-crypto-bn254",
+ "eigen-logging",
+ "eigen-services-avsregistry",
+ "eigen-types",
  "parking_lot 0.12.3",
  "serde",
  "serde_json",
@@ -6933,59 +6772,22 @@ dependencies = [
 [[package]]
 name = "eigen-services-operatorsinfo"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f100e075eca078c7db5a49956d132a9a35e93044a2fc5de9d0da8e6f69f23bc"
-dependencies = [
- "alloy",
- "async-trait",
- "eigen-client-avsregistry 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-common 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-crypto-bls 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-logging 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-types 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-utils 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eyre",
- "futures",
- "futures-util",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util 0.7.14",
-]
-
-[[package]]
-name = "eigen-services-operatorsinfo"
-version = "0.5.0"
 source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
  "async-trait",
- "eigen-client-avsregistry 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-common 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-crypto-bls 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-logging 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-types 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-utils 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-client-avsregistry",
+ "eigen-common",
+ "eigen-crypto-bls",
+ "eigen-logging",
+ "eigen-types",
+ "eigen-utils",
  "eyre",
  "futures",
  "futures-util",
  "thiserror 1.0.69",
  "tokio",
  "tokio-util 0.7.14",
-]
-
-[[package]]
-name = "eigen-signer"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9aa4dbc5ac13e1ee9dd70df619baffa62d206412b7e89e081a7963d833645b62"
-dependencies = [
- "alloy",
- "async-trait",
- "aws-sdk-kms",
- "eth-keystore",
- "serde",
- "thiserror 1.0.69",
- "url",
 ]
 
 [[package]]
@@ -7005,49 +6807,14 @@ dependencies = [
 [[package]]
 name = "eigen-testing-utils"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b4d6ea880a185d447a3e399ced2b157cd7bae5b7d6fdbe3842fc1f2e9a5de8e"
-dependencies = [
- "alloy",
- "eigen-common 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-utils 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde",
- "serde_json",
- "testcontainers",
- "url",
-]
-
-[[package]]
-name = "eigen-testing-utils"
-version = "0.5.0"
 source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
  "alloy",
- "eigen-common 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-utils 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-common",
+ "eigen-utils",
  "serde",
  "serde_json",
  "testcontainers",
- "url",
-]
-
-[[package]]
-name = "eigen-types"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbaed5435c73bd3085feac3460a22d153ab472542caded78a7481a7a4247aab2"
-dependencies = [
- "alloy",
- "ark-ff 0.5.0",
- "eigen-crypto-bls 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-utils 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ethers",
- "mime-sniffer",
- "num-bigint 0.4.6",
- "regex",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
  "url",
 ]
 
@@ -7058,8 +6825,8 @@ source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-ann
 dependencies = [
  "alloy",
  "ark-ff 0.5.0",
- "eigen-crypto-bls 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-utils 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-crypto-bls",
+ "eigen-utils",
  "ethers",
  "mime-sniffer",
  "num-bigint 0.4.6",
@@ -7068,17 +6835,6 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "url",
-]
-
-[[package]]
-name = "eigen-utils"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0813ece83d4e9c95eddad48bf6cbfe2e1c083ffbd9eac87a40d818225be31db0"
-dependencies = [
- "alloy",
- "regex",
- "reqwest 0.12.14",
 ]
 
 [[package]]
@@ -7094,54 +6850,27 @@ dependencies = [
 [[package]]
 name = "eigensdk"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "755d34a0a79ad84792325ca94e7c5f72d7dc5dbe92cbdd51780fa8ac0b7ba7f6"
-dependencies = [
- "eigen-client-avsregistry 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-client-elcontracts 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-client-eth 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-client-fireblocks 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-common 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-crypto-bls 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-crypto-bn254 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-logging 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-metrics 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-metrics-collectors-economic 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-metrics-collectors-rpc-calls 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-nodeapi 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-services-avsregistry 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-services-blsaggregation 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-services-operatorsinfo 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-signer 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-testing-utils 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-types 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "eigen-utils 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "eigensdk"
-version = "0.5.0"
 source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
 dependencies = [
- "eigen-client-avsregistry 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-client-elcontracts 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-client-eth 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-client-fireblocks 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-common 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-crypto-bls 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-crypto-bn254 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-logging 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-metrics 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-metrics-collectors-economic 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-metrics-collectors-rpc-calls 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-nodeapi 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-services-avsregistry 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-services-blsaggregation 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-services-operatorsinfo 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-signer 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-testing-utils 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-types 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
- "eigen-utils 0.5.0 (git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations)",
+ "eigen-client-avsregistry",
+ "eigen-client-elcontracts",
+ "eigen-client-eth",
+ "eigen-client-fireblocks",
+ "eigen-common",
+ "eigen-crypto-bls",
+ "eigen-crypto-bn254",
+ "eigen-logging",
+ "eigen-metrics",
+ "eigen-metrics-collectors-economic",
+ "eigen-metrics-collectors-rpc-calls",
+ "eigen-nodeapi",
+ "eigen-services-avsregistry",
+ "eigen-services-blsaggregation",
+ "eigen-services-operatorsinfo",
+ "eigen-signer",
+ "eigen-testing-utils",
+ "eigen-types",
+ "eigen-utils",
 ]
 
 [[package]]
@@ -9751,7 +9480,7 @@ dependencies = [
  "clap",
  "color-eyre",
  "ed25519-zebra",
- "eigensdk 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "eigensdk",
  "futures",
  "hex",
  "jsonrpc-core",

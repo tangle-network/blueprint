@@ -28,39 +28,60 @@ pub struct AnvilTestnet {
 
 /// Start an Anvil container for testing with contract state loaded.
 #[allow(clippy::missing_panics_doc)] // TODO(serial): Return errors, not panics
-pub async fn start_anvil_container(state_json: &str, include_logs: bool) -> AnvilTestnet {
-    // Create a temporary directory and write the state file
+pub async fn start_anvil_container(state_json: Option<&str>, include_logs: bool) -> AnvilTestnet {
     let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
-    let state_path = temp_dir.path().join("state.json");
-    fs::write(&state_path, state_json).expect("Failed to write state file");
+    let container = if let Some(state_json) = state_json {
+        // Create a temporary directory and write the state file
+        let state_path = temp_dir.path().join("state.json");
+        fs::write(&state_path, state_json).expect("Failed to write state file");
 
-    let container = GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
-        .with_wait_for(WaitFor::message_on_stdout("Listening on"))
-        .with_exposed_port(8545.tcp())
-        .with_entrypoint("anvil")
-        // .with_mount(testcontainers::core::Mount::bind_mount(
-        //     state_path.to_str().unwrap(),
-        //     "/state.json",
-        // ))
-        .with_cmd([
-            // "--dump-state",
-            // "./test-state.json",
-            "--host",
-            "0.0.0.0",
-            // "--load-state",
-            // "/state.json",
-            "--base-fee",
-            "0",
-            "--gas-price",
-            "0",
-            "--code-size-limit",
-            "50000",
-            "--hardfork",
-            "shanghai",
-        ])
-        .start()
-        .await
-        .expect("Error starting anvil container");
+        let container = GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
+            .with_wait_for(WaitFor::message_on_stdout("Listening on"))
+            .with_exposed_port(8545.tcp())
+            .with_entrypoint("anvil")
+            .with_mount(testcontainers::core::Mount::bind_mount(
+                state_path.to_str().unwrap(),
+                "/state.json",
+            ))
+            .with_cmd([
+                "--host",
+                "0.0.0.0",
+                "--load-state",
+                "/state.json",
+                "--base-fee",
+                "0",
+                "--gas-price",
+                "0",
+                "--code-size-limit",
+                "50000",
+                "--hardfork",
+                "shanghai",
+            ])
+            .start()
+            .await
+            .expect("Error starting anvil container");
+        container
+    } else {
+        GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
+            .with_wait_for(WaitFor::message_on_stdout("Listening on"))
+            .with_exposed_port(8545.tcp())
+            .with_entrypoint("anvil")
+            .with_cmd([
+                "--host",
+                "0.0.0.0",
+                "--base-fee",
+                "0",
+                "--gas-price",
+                "0",
+                "--code-size-limit",
+                "50000",
+                "--hardfork",
+                "shanghai",
+            ])
+            .start()
+            .await
+            .expect("Error starting anvil container")
+    };
 
     if include_logs {
         let reader = container.stdout(true);
@@ -115,7 +136,15 @@ pub async fn mine_anvil_blocks(container: &Container, n: u32) {
 /// # Arguments
 /// * `include_logs` - If true, testnet output will be printed to the console.
 pub async fn start_default_anvil_testnet(include_logs: bool) -> AnvilTestnet {
-    start_anvil_container(get_default_state_json(), include_logs).await
+    start_anvil_container(Some(get_default_state_json()), include_logs).await
+}
+
+/// Starts an Anvil container for testing with the default state.
+///
+/// # Arguments
+/// * `include_logs` - If true, testnet output will be printed to the console.
+pub async fn start_empty_anvil_testnet(include_logs: bool) -> AnvilTestnet {
+    start_anvil_container(None, include_logs).await
 }
 
 /// Starts an Anvil container for testing with custom state.
@@ -129,7 +158,7 @@ pub async fn start_anvil_testnet_with_state(
     include_logs: bool,
 ) -> AnvilTestnet {
     let state_json = serde_json::to_string(state).expect("Failed to serialize state");
-    start_anvil_container(&state_json, include_logs).await
+    start_anvil_container(Some(&state_json), include_logs).await
 }
 
 #[allow(clippy::missing_errors_doc)] // TODO: should this even be public?

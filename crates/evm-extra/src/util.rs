@@ -1,12 +1,15 @@
 use alloy_network::EthereumWallet;
+use alloy_primitives::FixedBytes;
 use alloy_primitives::U256;
-use alloy_provider::{Provider, ProviderBuilder, RootProvider, WsConnect, PendingTransactionBuilder, PendingTransactionError};
+use alloy_provider::{
+    PendingTransactionBuilder, PendingTransactionError, Provider, ProviderBuilder, RootProvider,
+    WsConnect,
+};
+use alloy_rpc_types::eth::TransactionReceipt;
 use alloy_signer_local::PrivateKeySigner;
+use alloy_transport::TransportErrorKind;
 use blueprint_std::str::FromStr;
 use url::Url;
-use alloy_primitives::FixedBytes;
-use alloy_rpc_types::eth::TransactionReceipt;
-use alloy_transport::TransportErrorKind;
 
 /// 1 day
 pub const SIGNATURE_EXPIRY: U256 = U256::from_limbs([86400, 0, 0, 0]);
