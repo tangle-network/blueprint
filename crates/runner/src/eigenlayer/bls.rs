@@ -1,9 +1,8 @@
 use alloy_primitives::{Address, U256, hex};
-use blueprint_evm_extra::util::get_provider_http;
+use blueprint_evm_extra::util::{get_provider_http, wait_transaction};
 use eigensdk::client_elcontracts::{reader::ELChainReader, writer::ELChainWriter};
 use eigensdk::crypto_bls::BlsKeyPair;
 use eigensdk::logging::get_test_logger;
-use eigensdk::testing_utils::transaction::wait_transaction;
 use eigensdk::types::operator::Operator;
 use eigensdk::utils::slashing::core::allocationmanager::AllocationManager::{self, OperatorSet};
 use eigensdk::utils::slashing::core::allocationmanager::IAllocationManagerTypes::AllocateParams;

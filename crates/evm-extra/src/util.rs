@@ -1,9 +1,12 @@
 use alloy_network::EthereumWallet;
 use alloy_primitives::U256;
-use alloy_provider::{Provider, ProviderBuilder, RootProvider, WsConnect};
+use alloy_provider::{Provider, ProviderBuilder, RootProvider, WsConnect, PendingTransactionBuilder, PendingTransactionError};
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_std::str::FromStr;
 use url::Url;
+use alloy_primitives::FixedBytes;
+use alloy_rpc_types::eth::TransactionReceipt;
+use alloy_transport::TransportErrorKind;
 
 /// 1 day
 pub const SIGNATURE_EXPIRY: U256 = U256::from_limbs([86400, 0, 0, 0]);
@@ -74,4 +77,26 @@ pub fn get_provider_from_signer(key: &str, rpc_url: &str) -> RootProvider {
         .on_http(url)
         .root()
         .clone()
+}
+
+/// Wait for a transaction to finish and return its receipt.
+///
+/// # Arguments
+///
+/// `rpc_url` - The RPC URL.
+/// `tx_hash` - The hash of the transaction.
+///
+/// # Returns
+///
+/// A [`TransportResult`] containing the transaction hash.
+pub async fn wait_transaction(
+    rpc_url: &str,
+    tx_hash: FixedBytes<32>,
+) -> Result<TransactionReceipt, PendingTransactionError> {
+    let url = Url::parse(rpc_url).map_err(|_| TransportErrorKind::custom_str("Invalid RPC URL"))?;
+    let root_provider = ProviderBuilder::new()
+        .disable_recommended_fillers()
+        .on_http(url);
+    let pending_tx = PendingTransactionBuilder::new(root_provider, tx_hash);
+    pending_tx.get_receipt().await
 }
