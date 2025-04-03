@@ -56,8 +56,7 @@ pub fn build_contracts(contract_dirs: Vec<&str>) {
                             let mut new_content = content.clone();
                             let insert_pos = content[pos..]
                                 .find('\n')
-                                .map(|p| p + pos + 1)
-                                .unwrap_or(content.len());
+                                .map_or(content.len(), |p| p + pos + 1);
                             new_content.insert_str(insert_pos, "    evm_version = \"shanghai\"\n");
 
                             // Write the modified content back

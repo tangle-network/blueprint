@@ -1,8 +1,8 @@
 #![allow(dead_code)]
+use crate::SquaringTask::NewTaskCreated;
+use crate::TaskManager::TaskResponse;
 use crate::contexts::client::SignedTaskResponse;
 use crate::contexts::combined::CombinedContext;
-use crate::contracts::SquaringTask::NewTaskCreated;
-use crate::contracts::TaskManager::TaskResponse;
 use crate::error::TaskError;
 use alloy_primitives::{U256, keccak256};
 use alloy_sol_types::{SolEvent, SolType, SolValue};

@@ -1,9 +1,9 @@
-use crate::constants::{AGGREGATOR_PRIVATE_KEY, PRIVATE_KEY};
+use crate::{AGGREGATOR_PRIVATE_KEY, PRIVATE_KEY};
 use crate::contexts::aggregator::AggregatorContext;
 use crate::contexts::client::AggregatorClient;
 use crate::contexts::combined::CombinedContext;
 use crate::contexts::x_square::EigenSquareContext;
-use crate::contracts::SquaringTask;
+use crate::SquaringTask;
 use crate::jobs::compute_x_square::xsquare_eigen;
 use crate::jobs::initialize_task::initialize_bls_task;
 use blueprint_contract_deployer::bindings::core::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
@@ -12,14 +12,6 @@ use blueprint_contract_deployer::bindings::RegistryCoordinator;
 use blueprint_contract_deployer::core::{
     deploy_core_contracts, DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData, EigenPodManagerConfig, RewardsCoordinatorConfig, StrategyFactoryConfig, StrategyManagerConfig
 };
-// use crate::tests::core::{
-//     DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData, EigenPodManagerConfig,
-//     RewardsCoordinatorConfig, StrategyFactoryConfig, StrategyManagerConfig,
-// };
-// use crate::tests::deploy::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
-// use crate::tests::deploy::registry_coordinator::IStakeRegistryTypes::StrategyParams;
-// use crate::tests::deploy::{DeployedContracts, registry_coordinator::RegistryCoordinator};
-// use crate::tests::permissions::setup_avs_permissions;
 use alloy_network::EthereumWallet;
 use alloy_primitives::aliases::U96;
 use alloy_primitives::{Address, Bytes, U256, address};

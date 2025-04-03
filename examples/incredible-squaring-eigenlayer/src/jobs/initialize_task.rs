@@ -1,5 +1,5 @@
+use crate::SquaringTask::NewTaskCreated;
 use crate::contexts::combined::CombinedContext;
-use crate::contracts::SquaringTask::NewTaskCreated;
 use crate::error::TaskError;
 use alloy_sol_types::SolEvent;
 use blueprint_sdk::evm::extract::BlockEvents;

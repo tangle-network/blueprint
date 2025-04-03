@@ -12,13 +12,12 @@ use blueprint_sdk::runner::BlueprintRunner;
 use blueprint_sdk::runner::config::BlueprintEnvironment;
 use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
 use blueprint_sdk::{Router, info};
-use incredible_squaring_blueprint_eigenlayer::constants::AGGREGATOR_PRIVATE_KEY;
-use incredible_squaring_blueprint_eigenlayer::constants::TASK_MANAGER_ADDRESS;
+use incredible_squaring_blueprint_eigenlayer::AGGREGATOR_PRIVATE_KEY;
+use incredible_squaring_blueprint_eigenlayer::TASK_MANAGER_ADDRESS;
 use incredible_squaring_blueprint_eigenlayer::contexts::aggregator::AggregatorContext;
 use incredible_squaring_blueprint_eigenlayer::contexts::client::AggregatorClient;
 use incredible_squaring_blueprint_eigenlayer::contexts::combined::CombinedContext;
 use incredible_squaring_blueprint_eigenlayer::contexts::x_square::EigenSquareContext;
-use incredible_squaring_blueprint_eigenlayer::contracts::SquaringTask as IncredibleSquaringTaskManager;
 use incredible_squaring_blueprint_eigenlayer::jobs::compute_x_square::{
     XSQUARE_JOB_ID, xsquare_eigen,
 };
@@ -59,8 +58,6 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
         Some(aggregator_context.clone()),
         env.clone(),
     );
-
-    let _contract = IncredibleSquaringTaskManager::new(*TASK_MANAGER_ADDRESS, provider.clone());
 
     let client = Arc::new(provider);
     // Create producer for task events

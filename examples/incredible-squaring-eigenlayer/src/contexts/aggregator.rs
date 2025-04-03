@@ -1,4 +1,4 @@
-use crate::contracts::TaskManager::{Task, TaskResponse};
+use crate::TaskManager::{Task, TaskResponse};
 use crate::error::TaskError as Error;
 use crate::{
     contexts::client::SignedTaskResponse,

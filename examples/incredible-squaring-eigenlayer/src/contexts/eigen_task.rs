@@ -1,7 +1,7 @@
-use crate::contracts::BN254::{G1Point, G2Point};
-use crate::contracts::IBLSSignatureCheckerTypes::NonSignerStakesAndSignature;
-use crate::contracts::SquaringTask as IncredibleSquaringTaskManager;
-use crate::contracts::TaskManager::{Task, TaskResponse};
+use crate::BN254::{G1Point, G2Point};
+use crate::IBLSSignatureCheckerTypes::NonSignerStakesAndSignature;
+use crate::SquaringTask as IncredibleSquaringTaskManager;
+use crate::TaskManager::{Task, TaskResponse};
 use alloy_primitives::address;
 use alloy_sol_types::SolType;
 use blueprint_sdk::eigenlayer::generic_task_aggregation::{
