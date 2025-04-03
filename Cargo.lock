@@ -3113,7 +3113,6 @@ dependencies = [
 [[package]]
 name = "blueprint-contract-deployer"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint-contract-deployer.git#3f68ab8db1ebddfddb4dd1711e03c979a6b420f3"
 dependencies = [
  "alloy",
  "alloy-contract",

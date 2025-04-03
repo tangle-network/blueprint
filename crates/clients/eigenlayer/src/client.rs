@@ -129,14 +129,14 @@ impl EigenlayerClient {
         let http_rpc_endpoint = self.config.http_rpc_endpoint.clone();
         let contract_addresses = self.config.protocol_settings.eigenlayer()?;
         let registry_coordinator_address = contract_addresses.registry_coordinator_address;
-        let operator_state_retriever_address = contract_addresses.operator_state_retriever_address;
+        let service_manager_address = contract_addresses.service_manager_address;
 
         eigensdk::client_avsregistry::writer::AvsRegistryChainWriter::build_avs_registry_chain_writer(
             eigensdk::logging::get_test_logger(),
             http_rpc_endpoint,
             private_key,
             registry_coordinator_address,
-            operator_state_retriever_address,
+            service_manager_address,
         ).await
         .map_err(Into::into)
     }

@@ -82,7 +82,7 @@ async fn avs_registry_reader() {
 async fn avs_registry_writer() {
     let env = setup_test_environment().await;
     let client = EigenlayerClient::new(env.config.clone());
-    let private_key = "0000000000000000000000000000000000000000000000000000000000000001";
+    let private_key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
     let _ = client
         .avs_registry_writer(private_key.to_string())
         .await
