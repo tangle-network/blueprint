@@ -203,8 +203,7 @@ chrono = { version = "0.4.40", default-features = false }
 
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }
-blueprint-contract-deployer = { git = "https://github.com/tangle-network/blueprint-contract-deployer.git", default-features = false }
-# blueprint-contract-deployer = { path = "./../blueprint-contract-deployer", default-features = false }
+eigenlayer-contract-deployer = { git = "https://github.com/tangle-network/eigenlayer-contract-deployer", default-features = false }
 cargo_toml = { version = "0.21.0", default-features = false }
 itertools = { version = "0.14.0", default-features = false }
 paste = { version = "1.0.15", default-features = false }

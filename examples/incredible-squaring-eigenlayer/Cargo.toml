@@ -11,7 +11,7 @@ publish = false
 
 [dependencies]
 blueprint-sdk = { workspace = true, features = ["eigenlayer", "evm", "eigenlayer", "macros", "std"] }
-blueprint-contract-deployer = { workspace = true }
+eigenlayer-contract-deployer = { workspace = true }
 futures = { workspace = true }
 
 eigensdk = { workspace = true, features = ["crypto-bls", "services-blsaggregation"] }
@@ -58,7 +58,7 @@ num-bigint = { workspace = true }
 
 [dev-dependencies]
 blueprint-sdk = { workspace = true, features = ["testing", "eigenlayer", "evm"] }
-blueprint-contract-deployer = { workspace = true }
+eigenlayer-contract-deployer = { workspace = true }
 tempfile = { workspace = true }
 
 [build-dependencies]

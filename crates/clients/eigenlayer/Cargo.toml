@@ -44,6 +44,7 @@ url = { workspace = true }
 [dev-dependencies]
 tracing-subscriber.workspace = true
 blueprint-chain-setup-anvil = { workspace = true }
+eigenlayer-contract-deployer = { workspace = true }
 blueprint-eigenlayer-testing-utils = { workspace = true }
 blueprint-evm-extra = { workspace = true }
 alloy-primitives = { workspace = true }

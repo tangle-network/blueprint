@@ -60,8 +60,6 @@ where
     pub async fn setup_with_context(test_dir: TempDir, _context: Ctx) -> Result<Self, Error> {
         // Start local Anvil testnet
         let testnet = start_empty_anvil_testnet(true).await;
-        // let http_endpoint = "http://127.0.0.1:8545";
-        // let ws_endpoint = "ws://127.0.0.1:8545";
 
         // Setup Eigenlayer test environment
         let EigenlayerTestEnvironment {
