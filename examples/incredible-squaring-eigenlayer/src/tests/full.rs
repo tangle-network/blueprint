@@ -275,19 +275,17 @@ async fn run_eigenlayer_incredible_squaring_test(
         env.clone(),
     );
 
-    let current_block_number = provider.get_block_number().await.unwrap();
-
     // Create task producer
     let client = Arc::new(provider);
     let task_producer = PollingProducer::new(
         client.clone(),
-        PollingConfig {
-            poll_interval: Duration::from_secs(1),
-            start_block: current_block_number,
-            confirmations: 1,
-            step: 1,
-        },
-    );
+        PollingConfig::default()
+            .poll_interval(Duration::from_secs(1))
+            .confirmations(1)
+            .step(1),
+    )
+    .await
+    .unwrap();
 
     info!("Setting up Blueprint Runner...");
     let eigen_config = EigenlayerBLSConfig::new(Address::default(), Address::default())

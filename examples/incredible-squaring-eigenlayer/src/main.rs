@@ -63,11 +63,10 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     // Create producer for task events
     let task_producer = PollingProducer::new(
         client.clone(),
-        PollingConfig {
-            poll_interval: Duration::from_secs(1),
-            ..Default::default()
-        },
-    );
+        PollingConfig::default().poll_interval(Duration::from_secs(1)),
+    )
+    .await
+    .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?;
 
     info!("~~~ Executing the incredible squaring blueprint ~~~");
     let eigen_config = EigenlayerBLSConfig::new(Address::default(), Address::default());
