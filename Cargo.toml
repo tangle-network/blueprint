@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cli", "crates/*", "contract-deployer", "examples/incredible-squaring-eigenlayer"]
+members = ["cli", "crates/*", "examples/incredible-squaring-eigenlayer"]
 
 [workspace.package]
 authors = ["Tangle Network"]
@@ -8,7 +8,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 homepage = "https://tangle.tools"
 repository = "https://github.com/tangle-network/blueprint"
-rust-version = "1.85" # Update the rust-toolchain.toml as well
+rust-version = "1.85"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "deny", priority = -1 }
@@ -58,9 +58,6 @@ incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./exampl
 # Blueprint utils
 blueprint-manager = { version = "0.2.2", path = "./crates/manager", default-features = false }
 blueprint-build-utils = { version = "0.1.0", path = "./crates/build-utils", default-features = false }
-
-# Blueprint Contract Deployer
-blueprint-contract-deployer = { version = "0.1.0", path = "./contract-deployer", default-features = false }
 
 # Chain Setup
 blueprint-chain-setup = { version = "0.1.0", path = "./crates/chain-setup", default-features = false }
@@ -206,6 +203,7 @@ chrono = { version = "0.4.40", default-features = false }
 
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }
+blueprint-contract-deployer = { git = "https://github.com/tangle-network/blueprint-contract-deployer.git", default-features = false }
 cargo_toml = { version = "0.21.0", default-features = false }
 itertools = { version = "0.14.0", default-features = false }
 paste = { version = "1.0.15", default-features = false }
