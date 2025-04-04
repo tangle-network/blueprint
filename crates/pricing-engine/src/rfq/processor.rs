@@ -822,6 +822,8 @@ impl<K: KeyType> RfqProcessor<K> {
                 // Deserialize the response
                 let response: PriceQuoteResponse<K> = bincode::deserialize(&response_bytes)?;
 
+                // TODO: Check quote is from a registered operator on blueprint_id
+
                 // Log response details
                 info!(
                     "Received quote response for request ID: {:?}, containing {} quotes from source: {:?}",

@@ -39,7 +39,7 @@ In this flow, users broadcast requests to discover and select operators based on
 2. Multiple operators respond with signed price quotes
 3. Users evaluate quotes based on their criteria (price, SLA, reputation, etc.)
 4. Users select operators and submit the signed quotes on-chain
-5. Service can start immediately since quotes already represent operator approvals
+5. Service can start immediately since quotes already represent operator approvals (new extrinsic needed)
 
 This flow enables a more competitive marketplace where users can select the best operators for their needs based on real-time price quotes.
 

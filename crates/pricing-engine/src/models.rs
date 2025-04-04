@@ -12,18 +12,6 @@ use serde::{Deserialize, Serialize};
 use crate::error::PricingError;
 use crate::types::{Price, ResourceRequirement, ResourceUnit, TimePeriod};
 
-/// Pricing tier for tiered pricing models
-#[derive(Debug, Clone, Encode, Decode, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct PricingTier {
-    /// Start value for this tier (inclusive)
-    pub start: u128,
-    /// End value for this tier (exclusive)
-    pub end: Option<u128>,
-    /// Price per unit in this tier
-    pub price_per_unit: Price,
-}
-
 /// Resource-based pricing configuration for a specific resource
 #[derive(Debug, Clone, Encode, Decode, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -38,8 +26,6 @@ pub struct ResourcePricing {
     pub max_quantity: Option<u128>,
     /// Optional time period for recurring pricing
     pub time_period: Option<TimePeriod>,
-    /// Optional tiers for tiered pricing
-    pub tiers: Option<Vec<PricingTier>>,
 }
 
 impl ResourcePricing {
@@ -51,7 +37,6 @@ impl ResourcePricing {
             min_quantity: None,
             max_quantity: None,
             time_period: None,
-            tiers: None,
         }
     }
 
@@ -73,12 +58,6 @@ impl ResourcePricing {
         self
     }
 
-    /// Set pricing tiers
-    pub fn with_tiers(mut self, tiers: Vec<PricingTier>) -> Self {
-        self.tiers = Some(tiers);
-        self
-    }
-
     /// Calculate price for a given quantity of this resource
     pub fn calculate_price(&self, quantity: u128) -> Result<Price, PricingError> {
         // Check quantity against min/max
@@ -94,42 +73,13 @@ impl ResourcePricing {
             }
         }
 
-        // Calculate price based on tiered or flat pricing
-        if let Some(tiers) = &self.tiers {
-            // Find the applicable tier(s)
-            let mut applicable_tiers = Vec::new();
-            for tier in tiers {
-                if quantity >= tier.start && (tier.end.is_none() || quantity < tier.end.unwrap()) {
-                    applicable_tiers.push(tier);
-                }
-            }
+        // Calculate price based on flat pricing
+        let price = Price {
+            value: quantity.saturating_mul(self.price_per_unit.value) / 1_000_000,
+            token: self.price_per_unit.token.clone(),
+        };
 
-            if applicable_tiers.is_empty() {
-                return Err(PricingError::CalculationError(
-                    "No applicable pricing tier found".to_string(),
-                ));
-            }
-
-            // In tiered pricing, we might need to calculate prices for different tiers
-            // For simplicity, we just use the first applicable tier in this implementation
-            let tier = &applicable_tiers[0];
-
-            // Price = quantity * price_per_unit
-            let price = Price {
-                value: quantity.saturating_mul(tier.price_per_unit.value) / 1_000_000,
-                token: tier.price_per_unit.token.clone(),
-            };
-
-            Ok(price)
-        } else {
-            // For flat pricing, we simply multiply quantity by price per unit
-            let price = Price {
-                value: quantity.saturating_mul(self.price_per_unit.value) / 1_000_000,
-                token: self.price_per_unit.token.clone(),
-            };
-
-            Ok(price)
-        }
+        Ok(price)
     }
 }
 
@@ -141,8 +91,6 @@ pub enum PricingModelType {
     Fixed,
     /// Price based on resource usage
     Usage,
-    /// Tiered pricing with different rates at different usage levels
-    Tiered,
 }
 
 #[cfg(feature = "std")]
@@ -151,7 +99,6 @@ impl fmt::Display for PricingModelType {
         match self {
             PricingModelType::Fixed => write!(f, "Fixed"),
             PricingModelType::Usage => write!(f, "Usage-based"),
-            PricingModelType::Tiered => write!(f, "Tiered"),
         }
     }
 }
@@ -166,12 +113,14 @@ pub struct PricingModel {
     pub name: String,
     /// Description of the pricing model
     pub description: Option<String>,
-    /// Blueprint ID this model applies to (replaces category)
+    /// Blueprint ID this model applies to
     pub blueprint_id: String,
     /// Base price (for fixed pricing or minimum charge)
     pub base_price: Option<Price>,
     /// Resource-specific pricing
     pub resource_pricing: Vec<ResourcePricing>,
+    /// Job-specific pricing
+    // pub job_pricing: Option<JobPricing>,
     /// Time period for recurring charges
     pub billing_period: Option<TimePeriod>,
 }

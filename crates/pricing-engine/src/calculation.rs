@@ -4,7 +4,7 @@
 
 use crate::error::{PricingError, Result};
 use crate::models::{PricingModel, PricingModelType};
-use crate::types::{Price, ResourceRequirement};
+use crate::types::{DynamicResourcePricing, Price, ResourceRequirement};
 
 /// Calculate service price based on resource requirements and pricing model
 pub fn calculate_service_price(
@@ -93,5 +93,44 @@ pub fn calculate_service_price(
 
             Ok(total_price)
         }
+    }
+}
+
+fn calculate_dynamic_price(
+    pricing: &[DynamicResourcePricing],
+    requirements: &[ResourceRequirement],
+    token: String,
+) -> Price {
+    let mut total = 0;
+    for req in requirements {
+        if let Some(model) = pricing.iter().find(|p| p.unit == req.unit) {
+            let units = req.quantity;
+            let contribution = match &model.function {
+                PriceFunction::Linear { per_unit } => per_unit * units,
+                PriceFunction::Exponential { base, exponent } => {
+                    let f_units = units as f64;
+                    (*base as f64 * f_units.powf(*exponent as f64)) as u128
+                }
+                PriceFunction::Tiered(ranges) => {
+                    // find which range the units fall into
+                    let mut tier_price = 0;
+                    for (min, max, per_unit) in ranges {
+                        if units >= *min && units <= *max {
+                            tier_price = per_unit * units;
+                            break;
+                        }
+                    }
+                    tier_price
+                }
+            };
+            total += contribution;
+        }
+    }
+
+    // TODO: Apply oracle price call for token
+
+    Price {
+        value: total,
+        token,
     }
 }

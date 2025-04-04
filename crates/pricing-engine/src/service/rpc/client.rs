@@ -134,25 +134,6 @@ impl RpcClient {
         Ok(info)
     }
 
-    /// Get supported blueprints
-    ///
-    /// # Returns
-    /// A list of supported blueprint IDs
-    ///
-    /// # Errors
-    /// Returns an error if the request fails
-    pub async fn get_supported_blueprints(&self) -> Result<Vec<String>> {
-        let blueprints = self
-            .client
-            .request("get_supported_blueprints", rpc_params![])
-            .await
-            .map_err(|e| {
-                Error::RpcClient(format!("Failed to request supported blueprints: {}", e))
-            })?;
-
-        Ok(blueprints)
-    }
-
     /// Calculate price for a service with specified requirements
     ///
     /// # Arguments

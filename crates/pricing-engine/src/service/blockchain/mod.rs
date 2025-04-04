@@ -5,7 +5,6 @@
 
 pub mod event;
 pub mod listener;
-pub mod types;
 
 pub use event::BlockchainEvent;
 pub use listener::EventListener;

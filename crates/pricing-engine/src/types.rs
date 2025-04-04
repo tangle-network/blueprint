@@ -193,3 +193,19 @@ impl TimePeriod {
         }
     }
 }
+
+#[derive(Debug, Clone, Encode, Decode, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum PriceFunction {
+    Linear { per_unit: u128 },
+    Tiered(Vec<(u128, u128, u128)>), // (min, max, per_unit)
+    Exponential { base: u128, exponent: f32 },
+}
+
+#[derive(Debug, Clone, Encode, Decode, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct DynamicResourcePricing {
+    pub unit: ResourceUnit,
+    pub function: PriceFunction,
+    pub time_period: Option<TimePeriod>,
+}
