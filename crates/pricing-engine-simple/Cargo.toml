@@ -1,5 +1,5 @@
 [package]
-name = "blueprint-pricing-engine"
+name = "blueprint-pricing-engine-simple"
 version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
@@ -8,9 +8,15 @@ homepage.workspace = true
 repository.workspace = true
 description = "Tangle Cloud Pricing Engine for service offerings"
 
+# Explicitly define the library
+[lib]
+name = "blueprint_pricing_engine_simple_lib" # Choose a distinct name for the lib if desired
+path = "src/lib.rs"
+
+# Define the binary executable
 [[bin]]
-name = "pricing-service"
-path = "bin/pricing-service.rs"
+name = "pricing-engine-server" # Name of the executable
+path = "src/main.rs"
 
 [dependencies]
 # Blueprint dependencies
@@ -61,12 +67,21 @@ serde_with = "3.12.0"
 tracing-subscriber = { workspace = true }
 time = "0.3.41"
 
+# Benchmarking
+sysinfo = "0.30"
+num_cpus = "1.16"
+
+# Utilities
+chrono = { workspace = true, features = ["serde"] }
+
 [dev-dependencies]
-chrono = { workspace = true }
 hex = { workspace = true }
 serial_test = { workspace = true, features = ["async"] }
 blueprint-networking = { workspace = true, features = ["testing"] }
 blueprint-testing-utils = { workspace = true }
+
+[build-dependencies]
+tonic-build = "0.11"
 
 [features]
 default = ["std"]

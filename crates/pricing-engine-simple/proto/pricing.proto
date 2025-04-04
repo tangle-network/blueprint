@@ -1,0 +1,38 @@
+// proto/pricing.proto
+syntax = "proto3";
+
+package pricing_engine;
+
+// The pricing service definition.
+service PricingEngine {
+  // Retrieves a signed price quote for a given blueprint.
+  rpc GetPrice (GetPriceRequest) returns (GetPriceResponse);
+}
+
+// Request message for GetPrice RPC
+message GetPriceRequest {
+  // The blueprint hash (e.g., SHA256) as a hex-encoded string.
+  string blueprint_hash_hex = 1;
+  // Optional: Desired quantity or duration for more complex pricing
+  // uint64 duration_seconds = 2;
+}
+
+// Response message for GetPrice RPC
+message GetPriceResponse {
+  SignedQuote quote = 1;
+}
+
+// Represents a signed price quote from an operator
+message SignedQuote {
+  QuotePayload payload = 1;
+  bytes signature = 2;       // Raw signature bytes (e.g., ed25519)
+  bytes signer_pubkey = 3;   // Raw public key bytes of the signer
+}
+
+// The data that is signed by the operator
+message QuotePayload {
+  bytes blueprint_hash = 1;  // Raw blueprint hash bytes ([u8; 32])
+  string price_wei = 2;      // Price as a string to handle u128
+  uint64 expiry = 3;         // Expiry timestamp (Unix seconds) or block number
+  uint64 timestamp = 4;      // Quote generation timestamp (Unix seconds)
+}

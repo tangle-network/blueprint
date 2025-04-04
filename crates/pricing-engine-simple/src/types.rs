@@ -2,15 +2,12 @@
 //!
 //! This module defines the fundamental data types used throughout the pricing engine.
 
-use parity_scale_codec::{Decode, Encode};
-use scale_info::TypeInfo;
-
 use core::{fmt, str::FromStr};
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
 /// Resource units for various types of cloud resources
-#[derive(Debug, Clone, PartialEq, Encode, Decode, TypeInfo)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum ResourceUnit {
     /// CPU cores or vCPUs
@@ -80,7 +77,7 @@ impl FromStr for ResourceUnit {
 }
 
 /// Represents a price with a value and currency/token
-#[derive(Debug, Clone, PartialEq, Encode, Decode, TypeInfo)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Price {
     /// Numerical value of the price (in the smallest unit of the token, e.g., microtoken)
@@ -130,7 +127,7 @@ impl fmt::Display for Price {
 }
 
 /// Resource requirement for a service
-#[derive(Debug, Clone, Encode, Decode, TypeInfo)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct ResourceRequirement {
     /// Type of resource
@@ -147,7 +144,7 @@ impl ResourceRequirement {
 }
 
 /// Time period for recurring pricing
-#[derive(Debug, Copy, Clone, PartialEq, Encode, Decode, TypeInfo)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum TimePeriod {
     /// Second
@@ -194,7 +191,7 @@ impl TimePeriod {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode, TypeInfo)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum PriceFunction {
     Linear { per_unit: u128 },
@@ -202,7 +199,7 @@ pub enum PriceFunction {
     Exponential { base: u128, exponent: f32 },
 }
 
-#[derive(Debug, Clone, Encode, Decode, TypeInfo)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct DynamicResourcePricing {
     pub unit: ResourceUnit,
