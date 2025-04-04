@@ -2657,26 +2657,9 @@ dependencies = [
  "alloy-rpc-types",
  "alloy-rpc-types-eth",
  "alloy-transport",
- "blueprint-core 0.1.0",
- "blueprint-core-testing-utils 0.1.0",
+ "blueprint-core",
+ "blueprint-core-testing-utils",
  "blueprint-std 0.1.0",
- "tokio",
- "url",
-]
-
-[[package]]
-name = "blueprint-anvil-testing-utils"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-primitives 0.8.25",
- "alloy-provider",
- "alloy-rpc-types",
- "alloy-rpc-types-eth",
- "alloy-transport",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-core-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "tokio",
  "url",
 ]
@@ -2700,7 +2683,7 @@ dependencies = [
 [[package]]
 name = "blueprint-build-utils"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a821ee929b35d4f07a375f132276e5232ed47d52"
 dependencies = [
  "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
 ]
@@ -2709,19 +2692,9 @@ dependencies = [
 name = "blueprint-chain-setup"
 version = "0.1.0"
 dependencies = [
- "blueprint-chain-setup-anvil 0.1.0",
- "blueprint-chain-setup-common 0.1.0",
- "blueprint-chain-setup-tangle 0.1.0",
-]
-
-[[package]]
-name = "blueprint-chain-setup"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-chain-setup-anvil 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-chain-setup-common 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-chain-setup-tangle 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-chain-setup-anvil",
+ "blueprint-chain-setup-common",
+ "blueprint-chain-setup-tangle",
 ]
 
 [[package]]
@@ -2732,31 +2705,10 @@ dependencies = [
  "alloy-provider",
  "alloy-rpc-types",
  "alloy-rpc-types-eth",
- "blueprint-core 0.1.0",
- "blueprint-core-testing-utils 0.1.0",
- "blueprint-keystore 0.1.0",
+ "blueprint-core",
+ "blueprint-core-testing-utils",
+ "blueprint-keystore",
  "blueprint-std 0.1.0",
- "serde",
- "serde_json",
- "tempfile",
- "testcontainers",
- "thiserror 2.0.12",
- "tokio",
-]
-
-[[package]]
-name = "blueprint-chain-setup-anvil"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-contract",
- "alloy-provider",
- "alloy-rpc-types",
- "alloy-rpc-types-eth",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-core-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "serde",
  "serde_json",
  "tempfile",
@@ -2770,34 +2722,14 @@ name = "blueprint-chain-setup-common"
 version = "0.1.0"
 dependencies = [
  "alloy-signer-local",
- "blueprint-clients 0.1.0",
- "blueprint-contexts 0.1.0",
- "blueprint-crypto 0.1.0",
- "blueprint-crypto-tangle-pair-signer 0.1.0",
- "blueprint-keystore 0.1.0",
- "blueprint-networking 0.1.0",
+ "blueprint-clients",
+ "blueprint-contexts",
+ "blueprint-crypto",
+ "blueprint-crypto-tangle-pair-signer",
+ "blueprint-keystore",
+ "blueprint-networking",
  "blueprint-std 0.1.0",
- "blueprint-tangle-extra 0.1.0",
- "color-eyre",
- "sp-core",
- "tangle-subxt",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "blueprint-chain-setup-common"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-signer-local",
- "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-contexts 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-networking 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-tangle-extra",
  "color-eyre",
  "sp-core",
  "tangle-subxt",
@@ -2817,53 +2749,16 @@ dependencies = [
  "alloy-signer-local",
  "alloy-sol-types 0.8.25",
  "alloy-transport",
- "blueprint-chain-setup-common 0.1.0",
- "blueprint-clients 0.1.0",
- "blueprint-contexts 0.1.0",
- "blueprint-core 0.1.0",
- "blueprint-crypto 0.1.0",
- "blueprint-crypto-tangle-pair-signer 0.1.0",
- "blueprint-keystore 0.1.0",
- "blueprint-networking 0.1.0",
+ "blueprint-chain-setup-common",
+ "blueprint-clients",
+ "blueprint-contexts",
+ "blueprint-core",
+ "blueprint-crypto",
+ "blueprint-crypto-tangle-pair-signer",
+ "blueprint-keystore",
+ "blueprint-networking",
  "blueprint-std 0.1.0",
- "blueprint-tangle-extra 0.1.0",
- "cargo_metadata 0.18.1",
- "color-eyre",
- "dialoguer",
- "dirs 6.0.0",
- "indicatif",
- "reqwest 0.12.15",
- "serde_json",
- "sp-core",
- "tangle-subxt",
- "thiserror 2.0.12",
- "tracing",
-]
-
-[[package]]
-name = "blueprint-chain-setup-tangle"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-json-abi",
- "alloy-network",
- "alloy-primitives 0.8.25",
- "alloy-provider",
- "alloy-rpc-types",
- "alloy-rpc-types-eth",
- "alloy-signer-local",
- "alloy-sol-types 0.8.25",
- "alloy-transport",
- "blueprint-chain-setup-common 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-contexts 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-networking 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-tangle-extra",
  "cargo_metadata 0.18.1",
  "color-eyre",
  "dialoguer",
@@ -2883,16 +2778,6 @@ version = "0.1.0"
 dependencies = [
  "auto_impl",
  "blueprint-std 0.1.0",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "blueprint-client-core"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "auto_impl",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "thiserror 2.0.12",
 ]
 
@@ -2905,13 +2790,13 @@ dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-provider",
  "alloy-transport",
- "blueprint-chain-setup-anvil 0.1.0",
- "blueprint-client-core 0.1.0",
- "blueprint-core 0.1.0",
- "blueprint-core-testing-utils 0.1.0",
- "blueprint-eigenlayer-testing-utils 0.1.0",
- "blueprint-evm-extra 0.1.0",
- "blueprint-runner 0.1.0",
+ "blueprint-chain-setup-anvil",
+ "blueprint-client-core",
+ "blueprint-core",
+ "blueprint-core-testing-utils",
+ "blueprint-eigenlayer-testing-utils",
+ "blueprint-evm-extra",
+ "blueprint-runner",
  "blueprint-std 0.1.0",
  "eigenlayer-contract-deployer",
  "eigensdk",
@@ -2925,29 +2810,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-client-eigenlayer"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-contract",
- "alloy-network",
- "alloy-primitives 0.8.25",
- "alloy-provider",
- "alloy-transport",
- "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "eigensdk",
- "num-bigint 0.4.6",
- "thiserror 2.0.12",
- "tokio",
- "tokio-util 0.7.14",
- "url",
-]
-
-[[package]]
 name = "blueprint-client-evm"
 version = "0.1.0"
 dependencies = [
@@ -2962,12 +2824,12 @@ dependencies = [
  "alloy-rpc-types-eth",
  "alloy-signer-local",
  "alloy-transport",
- "blueprint-anvil-testing-utils 0.1.0",
- "blueprint-chain-setup-anvil 0.1.0",
- "blueprint-client-core 0.1.0",
- "blueprint-core 0.1.0",
- "blueprint-evm-extra 0.1.0",
- "blueprint-metrics-rpc-calls 0.1.0",
+ "blueprint-anvil-testing-utils",
+ "blueprint-chain-setup-anvil",
+ "blueprint-client-core",
+ "blueprint-core",
+ "blueprint-evm-extra",
+ "blueprint-metrics-rpc-calls",
  "blueprint-std 0.1.0",
  "hex",
  "serde",
@@ -2979,63 +2841,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-client-evm"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-consensus",
- "alloy-json-rpc",
- "alloy-network",
- "alloy-primitives 0.8.25",
- "alloy-provider",
- "alloy-pubsub",
- "alloy-rlp",
- "alloy-rpc-types",
- "alloy-rpc-types-eth",
- "alloy-transport",
- "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-metrics-rpc-calls 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "hex",
- "serde",
- "serde_json",
- "thiserror 2.0.12",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "blueprint-client-tangle"
 version = "0.1.0"
 dependencies = [
  "auto_impl",
- "blueprint-client-core 0.1.0",
- "blueprint-core 0.1.0",
- "blueprint-crypto-sp-core 0.1.0",
- "blueprint-keystore 0.1.0",
- "blueprint-runner 0.1.0",
+ "blueprint-client-core",
+ "blueprint-core",
+ "blueprint-crypto-sp-core",
+ "blueprint-keystore",
+ "blueprint-runner",
  "blueprint-std 0.1.0",
- "serde",
- "serde_json",
- "sp-core",
- "tangle-subxt",
- "thiserror 2.0.12",
- "tokio",
-]
-
-[[package]]
-name = "blueprint-client-tangle"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "auto_impl",
- "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-sp-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "serde",
  "serde_json",
  "sp-core",
@@ -3048,24 +2863,11 @@ dependencies = [
 name = "blueprint-clients"
 version = "0.1.0"
 dependencies = [
- "blueprint-client-core 0.1.0",
- "blueprint-client-eigenlayer 0.1.0",
- "blueprint-client-evm 0.1.0",
- "blueprint-client-tangle 0.1.0",
+ "blueprint-client-core",
+ "blueprint-client-eigenlayer",
+ "blueprint-client-evm",
+ "blueprint-client-tangle",
  "blueprint-std 0.1.0",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "blueprint-clients"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-client-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-client-eigenlayer 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-client-evm 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-client-tangle 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "thiserror 2.0.12",
 ]
 
@@ -3076,8 +2878,8 @@ dependencies = [
  "alloy-network",
  "alloy-provider",
  "alloy-transport",
- "blueprint-context-derive 0.3.1",
- "blueprint-sdk 0.1.0",
+ "blueprint-context-derive",
+ "blueprint-sdk",
  "proc-macro2",
  "quote",
  "round-based",
@@ -3088,38 +2890,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-context-derive"
-version = "0.3.1"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.100",
-]
-
-[[package]]
 name = "blueprint-contexts"
 version = "0.1.0"
 dependencies = [
- "blueprint-clients 0.1.0",
- "blueprint-keystore 0.1.0",
- "blueprint-networking 0.1.0",
- "blueprint-runner 0.1.0",
+ "blueprint-clients",
+ "blueprint-keystore",
+ "blueprint-networking",
+ "blueprint-runner",
  "blueprint-std 0.1.0",
  "proc-macro2",
- "tangle-subxt",
-]
-
-[[package]]
-name = "blueprint-contexts"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-networking 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "tangle-subxt",
 ]
 
@@ -3127,7 +2906,7 @@ dependencies = [
 name = "blueprint-core"
 version = "0.1.0"
 dependencies = [
- "blueprint-sdk 0.1.0",
+ "blueprint-sdk",
  "bytes",
  "futures-util",
  "hashbrown 0.15.2",
@@ -3140,45 +2919,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-core"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "bytes",
- "futures-util",
- "hashbrown 0.15.2",
- "pin-project-lite",
- "tiny-keccak",
- "tower 0.5.2",
- "tracing",
-]
-
-[[package]]
 name = "blueprint-core-testing-utils"
 version = "0.1.0"
 dependencies = [
- "blueprint-clients 0.1.0",
- "blueprint-core 0.1.0",
- "blueprint-keystore 0.1.0",
- "blueprint-router 0.1.0",
- "blueprint-runner 0.1.0",
- "cargo_toml",
- "thiserror 2.0.12",
- "tracing",
- "tracing-subscriber 0.3.19",
- "url",
-]
-
-[[package]]
-name = "blueprint-core-testing-utils"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-router 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-clients",
+ "blueprint-core",
+ "blueprint-keystore",
+ "blueprint-router",
+ "blueprint-runner",
  "cargo_toml",
  "thiserror 2.0.12",
  "tracing",
@@ -3190,32 +2938,15 @@ dependencies = [
 name = "blueprint-crypto"
 version = "0.1.0"
 dependencies = [
- "blueprint-crypto-bls 0.1.0",
- "blueprint-crypto-bn254 0.1.0",
- "blueprint-crypto-core 0.1.0",
- "blueprint-crypto-ed25519 0.1.0",
- "blueprint-crypto-hashing 0.1.0",
- "blueprint-crypto-k256 0.1.0",
- "blueprint-crypto-sp-core 0.1.0",
- "blueprint-crypto-sr25519 0.1.0",
- "blueprint-crypto-tangle-pair-signer 0.1.0",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "blueprint-crypto"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-crypto-bls 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-bn254 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-ed25519 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-hashing 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-k256 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-sp-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-sr25519 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-crypto-bls",
+ "blueprint-crypto-bn254",
+ "blueprint-crypto-core",
+ "blueprint-crypto-ed25519",
+ "blueprint-crypto-hashing",
+ "blueprint-crypto-k256",
+ "blueprint-crypto-sp-core",
+ "blueprint-crypto-sr25519",
+ "blueprint-crypto-tangle-pair-signer",
  "thiserror 2.0.12",
 ]
 
@@ -3224,30 +2955,14 @@ name = "blueprint-crypto-bls"
 version = "0.1.0"
 dependencies = [
  "ark-serialize 0.5.0",
- "blueprint-crypto-core 0.1.0",
- "blueprint-crypto-hashing 0.1.0",
+ "blueprint-crypto-core",
+ "blueprint-crypto-hashing",
  "blueprint-std 0.1.0",
  "hex",
  "paste",
  "serde",
  "serde_bytes",
  "serde_json",
- "thiserror 2.0.12",
- "tnt-bls",
-]
-
-[[package]]
-name = "blueprint-crypto-bls"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "ark-serialize 0.5.0",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "hex",
- "paste",
- "serde",
- "serde_bytes",
  "thiserror 2.0.12",
  "tnt-bls",
 ]
@@ -3260,8 +2975,8 @@ dependencies = [
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
- "blueprint-crypto-core 0.1.0",
- "blueprint-crypto-hashing 0.1.0",
+ "blueprint-crypto-core",
+ "blueprint-crypto-hashing",
  "blueprint-std 0.1.0",
  "hex",
  "num-bigint 0.4.6",
@@ -3269,26 +2984,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "sha2 0.10.8",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "blueprint-crypto-bn254"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "ark-bn254",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-serialize 0.5.0",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "hex",
- "num-bigint 0.4.6",
- "num-traits",
- "serde",
- "serde_bytes",
  "sha2 0.10.8",
  "thiserror 2.0.12",
 ]
@@ -3304,41 +2999,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-crypto-core"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "clap",
- "serde",
- "thiserror 2.0.12",
-]
-
-[[package]]
 name = "blueprint-crypto-ed25519"
 version = "0.1.0"
 dependencies = [
- "blueprint-crypto-core 0.1.0",
+ "blueprint-crypto-core",
  "blueprint-std 0.1.0",
  "ed25519-zebra",
  "hex",
  "serde",
  "serde_bytes",
  "serde_json",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "blueprint-crypto-ed25519"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "ed25519-zebra",
- "hex",
- "serde",
- "serde_bytes",
  "thiserror 2.0.12",
 ]
 
@@ -3353,23 +3023,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-crypto-hashing"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blake3",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "sha2 0.10.8",
- "sha3",
-]
-
-[[package]]
 name = "blueprint-crypto-k256"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer-local",
- "blueprint-crypto-core 0.1.0",
+ "blueprint-crypto-core",
  "blueprint-std 0.1.0",
  "hex",
  "k256",
@@ -3380,27 +3039,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-crypto-k256"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-primitives 0.8.25",
- "alloy-signer-local",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "hex",
- "k256",
- "serde",
- "serde_bytes",
- "thiserror 2.0.12",
-]
-
-[[package]]
 name = "blueprint-crypto-sp-core"
 version = "0.1.0"
 dependencies = [
- "blueprint-crypto-core 0.1.0",
- "blueprint-crypto-sp-core 0.1.0",
+ "blueprint-crypto-core",
+ "blueprint-crypto-sp-core",
  "blueprint-std 0.1.0",
  "hex",
  "paste",
@@ -3412,25 +3055,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-crypto-sp-core"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "hex",
- "paste",
- "serde",
- "serde_bytes",
- "sp-core",
- "thiserror 2.0.12",
-]
-
-[[package]]
 name = "blueprint-crypto-sr25519"
 version = "0.1.0"
 dependencies = [
- "blueprint-crypto-core 0.1.0",
+ "blueprint-crypto-core",
  "blueprint-std 0.1.0",
  "hex",
  "schnorrkel",
@@ -3441,46 +3069,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-crypto-sr25519"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "hex",
- "schnorrkel",
- "serde",
- "serde_bytes",
- "thiserror 2.0.12",
-]
-
-[[package]]
 name = "blueprint-crypto-tangle-pair-signer"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer-local",
- "blueprint-crypto-core 0.1.0",
- "blueprint-crypto-sp-core 0.1.0",
+ "blueprint-crypto-core",
+ "blueprint-crypto-sp-core",
  "blueprint-std 0.1.0",
- "k256",
- "serde",
- "sp-core",
- "sp-runtime",
- "tangle-subxt",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "blueprint-crypto-tangle-pair-signer"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-primitives 0.8.25",
- "alloy-signer-local",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-sp-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "k256",
  "serde",
  "sp-core",
@@ -3500,37 +3096,9 @@ dependencies = [
  "alloy-rpc-client",
  "alloy-sol-types 0.8.25",
  "alloy-transport",
- "blueprint-core 0.1.0",
- "blueprint-crypto-bn254 0.1.0",
- "blueprint-evm-extra 0.1.0",
- "eigensdk",
- "jsonrpc-core",
- "jsonrpc-http-server",
- "num-bigint 0.4.6",
- "reqwest 0.12.15",
- "serde",
- "serde_json",
- "thiserror 2.0.12",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "blueprint-eigenlayer-extra"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-contract",
- "alloy-network",
- "alloy-primitives 0.8.25",
- "alloy-provider",
- "alloy-rpc-client",
- "alloy-sol-types 0.8.25",
- "alloy-transport",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-bn254 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-core",
+ "blueprint-crypto-bn254",
+ "blueprint-evm-extra",
  "eigensdk",
  "jsonrpc-core",
  "jsonrpc-http-server",
@@ -3550,30 +3118,11 @@ version = "0.1.0"
 dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-provider",
- "blueprint-chain-setup 0.1.0",
- "blueprint-core 0.1.0",
- "blueprint-core-testing-utils 0.1.0",
- "blueprint-evm-extra 0.1.0",
- "blueprint-runner 0.1.0",
- "eigensdk",
- "futures",
- "tempfile",
- "tokio",
- "url",
-]
-
-[[package]]
-name = "blueprint-eigenlayer-testing-utils"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-primitives 0.8.25",
- "alloy-provider",
- "blueprint-chain-setup 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-core-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-chain-setup",
+ "blueprint-core",
+ "blueprint-core-testing-utils",
+ "blueprint-evm-extra",
+ "blueprint-runner",
  "eigensdk",
  "futures",
  "tempfile",
@@ -3597,7 +3146,7 @@ dependencies = [
  "alloy-transport",
  "alloy-transport-http",
  "async-stream",
- "blueprint-core 0.1.0",
+ "blueprint-core",
  "blueprint-std 0.1.0",
  "bytes",
  "document-features",
@@ -3609,37 +3158,6 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "tracing-subscriber 0.3.19",
- "url",
-]
-
-[[package]]
-name = "blueprint-evm-extra"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-consensus",
- "alloy-network",
- "alloy-primitives 0.8.25",
- "alloy-provider",
- "alloy-rlp",
- "alloy-rpc-client",
- "alloy-rpc-types",
- "alloy-signer-local",
- "alloy-sol-types 0.8.25",
- "alloy-transport",
- "alloy-transport-http",
- "async-stream",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "bytes",
- "document-features",
- "futures",
- "futures-util",
- "pin-project-lite",
- "serde_json",
- "thiserror 2.0.12",
- "tokio",
- "tower 0.5.2",
  "url",
 ]
 
@@ -3661,7 +3179,7 @@ dependencies = [
  "aws-config",
  "aws-sdk-kms",
  "blake3",
- "blueprint-crypto 0.1.0",
+ "blueprint-crypto",
  "blueprint-std 0.1.0",
  "ed25519-zebra",
  "eigensdk",
@@ -3687,46 +3205,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-keystore"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-network",
- "alloy-primitives 0.8.25",
- "alloy-signer",
- "alloy-signer-local",
- "ark-bn254",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-serialize 0.5.0",
- "blake3",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "ed25519-zebra",
- "eigensdk",
- "hex",
- "k256",
- "parking_lot 0.12.3",
- "ripemd",
- "rust-bls-bn254",
- "schnorrkel",
- "serde",
- "serde_bytes",
- "serde_json",
- "sp-core",
- "sp-io",
- "tangle-subxt",
- "thiserror 2.0.12",
- "tnt-bls",
- "tokio",
- "zeroize",
-]
-
-[[package]]
 name = "blueprint-macros"
 version = "0.1.0"
 dependencies = [
- "blueprint-sdk 0.1.0",
+ "blueprint-sdk",
  "proc-macro2",
  "quote",
  "rustversion",
@@ -3738,27 +3220,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-macros"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "proc-macro2",
- "quote",
- "serde_json",
- "syn 2.0.100",
-]
-
-[[package]]
 name = "blueprint-manager"
 version = "0.2.2"
 dependencies = [
  "auto_impl",
- "blueprint-clients 0.1.0",
- "blueprint-core 0.1.0",
- "blueprint-crypto 0.1.0",
- "blueprint-keystore 0.1.0",
- "blueprint-networking 0.1.0",
- "blueprint-sdk 0.1.0",
+ "blueprint-clients",
+ "blueprint-core",
+ "blueprint-crypto",
+ "blueprint-keystore",
+ "blueprint-networking",
+ "blueprint-sdk",
  "blueprint-std 0.1.0",
  "clap",
  "color-eyre",
@@ -3784,20 +3255,12 @@ dependencies = [
 name = "blueprint-metrics"
 version = "0.1.0"
 dependencies = [
- "blueprint-metrics-rpc-calls 0.1.0",
+ "blueprint-metrics-rpc-calls",
 ]
 
 [[package]]
 name = "blueprint-metrics-rpc-calls"
 version = "0.1.0"
-dependencies = [
- "metrics",
-]
-
-[[package]]
-name = "blueprint-metrics-rpc-calls"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
 dependencies = [
  "metrics",
 ]
@@ -3811,9 +3274,9 @@ dependencies = [
  "auto_impl",
  "bincode",
  "blake3",
- "blueprint-crypto 0.1.0",
- "blueprint-crypto-core 0.1.0",
- "blueprint-networking 0.1.0",
+ "blueprint-crypto",
+ "blueprint-crypto-core",
+ "blueprint-networking",
  "blueprint-std 0.1.0",
  "crossbeam-channel",
  "dashmap",
@@ -3837,43 +3300,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-networking"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-primitives 0.8.25",
- "anyhow",
- "auto_impl",
- "bincode",
- "blake3",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "crossbeam-channel",
- "dashmap",
- "futures",
- "hex",
- "itertools 0.14.0",
- "k256",
- "libp2p",
- "libsecp256k1",
- "lru-mem",
- "parking_lot 0.12.3",
- "serde",
- "serde_json",
- "thiserror 2.0.12",
- "tokio",
- "tokio-stream",
- "tracing",
-]
-
-[[package]]
 name = "blueprint-networking-round-based-extension"
 version = "0.1.0"
 dependencies = [
- "blueprint-crypto 0.1.0",
- "blueprint-crypto-core 0.1.0",
- "blueprint-networking 0.1.0",
+ "blueprint-crypto",
+ "blueprint-crypto-core",
+ "blueprint-networking",
  "crossbeam",
  "crossbeam-channel",
  "dashmap",
@@ -3897,7 +3329,7 @@ dependencies = [
 name = "blueprint-producers-extra"
 version = "0.1.0"
 dependencies = [
- "blueprint-core 0.1.0",
+ "blueprint-core",
  "chrono",
  "document-features",
  "futures",
@@ -3906,21 +3338,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-producers-extra"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "document-features",
- "futures",
-]
-
-[[package]]
 name = "blueprint-router"
 version = "0.1.0"
 dependencies = [
- "blueprint-core 0.1.0",
- "blueprint-sdk 0.1.0",
+ "blueprint-core",
+ "blueprint-sdk",
  "bytes",
  "document-features",
  "futures",
@@ -3932,20 +3354,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-router"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "bytes",
- "document-features",
- "futures",
- "hashbrown 0.15.2",
- "pin-project-lite",
- "tower 0.5.2",
-]
-
-[[package]]
 name = "blueprint-runner"
 version = "0.1.0"
 dependencies = [
@@ -3953,15 +3361,15 @@ dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer",
  "alloy-signer-local",
- "blueprint-core 0.1.0",
- "blueprint-crypto 0.1.0",
- "blueprint-evm-extra 0.1.0",
- "blueprint-keystore 0.1.0",
- "blueprint-networking 0.1.0",
- "blueprint-router 0.1.0",
- "blueprint-sdk 0.1.0",
+ "blueprint-core",
+ "blueprint-crypto",
+ "blueprint-evm-extra",
+ "blueprint-keystore",
+ "blueprint-networking",
+ "blueprint-router",
+ "blueprint-sdk",
  "blueprint-std 0.1.0",
- "blueprint-tangle-extra 0.1.0",
+ "blueprint-tangle-extra",
  "clap",
  "crossbeam-channel",
  "document-features",
@@ -3982,97 +3390,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-runner"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy-contract",
- "alloy-primitives 0.8.25",
- "alloy-signer",
- "alloy-signer-local",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-router 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "clap",
- "document-features",
- "dynosaur",
- "eigensdk",
- "futures",
- "futures-core",
- "futures-util",
- "k256",
- "serde",
- "tangle-subxt",
- "thiserror 2.0.12",
- "tokio",
- "tower 0.5.2",
- "tracing",
- "url",
-]
-
-[[package]]
 name = "blueprint-sdk"
 version = "0.1.0"
 dependencies = [
  "alloy",
  "alloy-json-abi",
  "blueprint-build-utils 0.1.0",
- "blueprint-chain-setup 0.1.0",
- "blueprint-clients 0.1.0",
- "blueprint-context-derive 0.3.1",
- "blueprint-contexts 0.1.0",
- "blueprint-core 0.1.0",
- "blueprint-crypto 0.1.0",
- "blueprint-crypto-tangle-pair-signer 0.1.0",
- "blueprint-eigenlayer-extra 0.1.0",
- "blueprint-evm-extra 0.1.0",
- "blueprint-keystore 0.1.0",
- "blueprint-macros 0.1.0",
- "blueprint-networking 0.1.0",
+ "blueprint-chain-setup",
+ "blueprint-clients",
+ "blueprint-context-derive",
+ "blueprint-contexts",
+ "blueprint-core",
+ "blueprint-crypto",
+ "blueprint-crypto-tangle-pair-signer",
+ "blueprint-eigenlayer-extra",
+ "blueprint-evm-extra",
+ "blueprint-keystore",
+ "blueprint-macros",
+ "blueprint-networking",
  "blueprint-networking-round-based-extension",
- "blueprint-producers-extra 0.1.0",
- "blueprint-router 0.1.0",
- "blueprint-runner 0.1.0",
+ "blueprint-producers-extra",
+ "blueprint-router",
+ "blueprint-runner",
  "blueprint-std 0.1.0",
  "blueprint-stores",
- "blueprint-tangle-extra 0.1.0",
- "blueprint-testing-utils 0.1.0",
- "document-features",
- "eigensdk",
- "tangle-subxt",
- "tempfile",
- "thiserror 2.0.12",
- "tokio",
-]
-
-[[package]]
-name = "blueprint-sdk"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "alloy",
- "alloy-json-abi",
- "blueprint-chain-setup 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-clients 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-context-derive 0.3.1 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-contexts 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-crypto-tangle-pair-signer 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-eigenlayer-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-evm-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-keystore 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-macros 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-producers-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-router 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-runner 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-tangle-extra 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
+ "blueprint-tangle-extra",
+ "blueprint-testing-utils",
  "document-features",
  "eigensdk",
  "tangle-subxt",
@@ -4095,7 +3438,7 @@ dependencies = [
 [[package]]
 name = "blueprint-std"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
+source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#a821ee929b35d4f07a375f132276e5232ed47d52"
 dependencies = [
  "colored",
  "num-traits",
@@ -4126,8 +3469,8 @@ dependencies = [
 name = "blueprint-tangle-extra"
 version = "0.1.0"
 dependencies = [
- "blueprint-core 0.1.0",
- "blueprint-testing-utils 0.1.0",
+ "blueprint-core",
+ "blueprint-testing-utils",
  "bytes",
  "cargo_metadata 0.18.1",
  "cid",
@@ -4149,41 +3492,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-tangle-extra"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-core 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "bytes",
- "cargo_metadata 0.18.1",
- "cid",
- "document-features",
- "futures-core",
- "futures-util",
- "pin-project-lite",
- "serde",
- "serde_json",
- "tangle-subxt",
- "thiserror 2.0.12",
- "tower 0.5.2",
-]
-
-[[package]]
 name = "blueprint-tangle-testing-utils"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer-local",
- "blueprint-chain-setup 0.1.0",
- "blueprint-client-tangle 0.1.0",
- "blueprint-contexts 0.1.0",
- "blueprint-core 0.1.0",
- "blueprint-core-testing-utils 0.1.0",
- "blueprint-crypto-tangle-pair-signer 0.1.0",
- "blueprint-keystore 0.1.0",
- "blueprint-runner 0.1.0",
+ "blueprint-chain-setup",
+ "blueprint-client-tangle",
+ "blueprint-contexts",
+ "blueprint-core",
+ "blueprint-core-testing-utils",
+ "blueprint-crypto-tangle-pair-signer",
+ "blueprint-keystore",
+ "blueprint-runner",
  "blueprint-std 0.1.0",
- "blueprint-tangle-extra 0.1.0",
+ "blueprint-tangle-extra",
  "futures",
  "sp-core",
  "tangle-subxt",
@@ -4198,20 +3521,10 @@ dependencies = [
 name = "blueprint-testing-utils"
 version = "0.1.0"
 dependencies = [
- "blueprint-anvil-testing-utils 0.1.0",
- "blueprint-core-testing-utils 0.1.0",
- "blueprint-eigenlayer-testing-utils 0.1.0",
+ "blueprint-anvil-testing-utils",
+ "blueprint-core-testing-utils",
+ "blueprint-eigenlayer-testing-utils",
  "blueprint-tangle-testing-utils",
-]
-
-[[package]]
-name = "blueprint-testing-utils"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump#e64c27ab837e41af605e2edf60e69d2723bac80f"
-dependencies = [
- "blueprint-anvil-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-core-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-eigenlayer-testing-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
 ]
 
 [[package]]
@@ -4734,19 +4047,19 @@ dependencies = [
  "alloy-transport",
  "anyhow",
  "bip39",
- "blueprint-chain-setup 0.1.0",
- "blueprint-clients 0.1.0",
- "blueprint-contexts 0.1.0",
- "blueprint-core 0.1.0",
- "blueprint-crypto 0.1.0",
- "blueprint-crypto-core 0.1.0",
- "blueprint-evm-extra 0.1.0",
- "blueprint-keystore 0.1.0",
+ "blueprint-chain-setup",
+ "blueprint-clients",
+ "blueprint-contexts",
+ "blueprint-core",
+ "blueprint-crypto",
+ "blueprint-crypto-core",
+ "blueprint-evm-extra",
+ "blueprint-keystore",
  "blueprint-manager",
- "blueprint-runner 0.1.0",
+ "blueprint-runner",
  "blueprint-std 0.1.0",
- "blueprint-tangle-extra 0.1.0",
- "blueprint-testing-utils 0.1.0",
+ "blueprint-tangle-extra",
+ "blueprint-testing-utils",
  "cargo-generate",
  "clap",
  "clap-cargo",
@@ -6841,20 +6154,21 @@ dependencies = [
 [[package]]
 name = "eigenlayer-contract-deployer"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/eigenlayer-contract-deployer#fc07ae190d0ae91908e948b7bd98b4188735696d"
+source = "git+https://github.com/tangle-network/eigenlayer-contract-deployer#a904d587c99bc7cf33e0544a34da01b1a754858a"
 dependencies = [
  "alloy",
  "alloy-contract",
  "alloy-json-abi",
  "alloy-primitives 0.8.25",
  "alloy-provider",
+ "alloy-rpc-types-eth",
  "alloy-sol-types 0.8.25",
  "blueprint-build-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
- "blueprint-sdk 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=drew%2Feigensdk-bump)",
  "color-eyre",
  "eigensdk",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -9489,7 +8803,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "bip39",
  "blueprint-build-utils 0.1.0",
- "blueprint-sdk 0.1.0",
+ "blueprint-sdk",
  "clap",
  "color-eyre",
  "ed25519-zebra",
