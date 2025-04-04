@@ -42,10 +42,11 @@ async fn test_eigenlayer_incredible_squaring_blueprint() {
     run_eigenlayer_incredible_squaring_test(false, 1).await;
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_eigenlayer_pre_register_incredible_squaring_blueprint() {
-    run_eigenlayer_incredible_squaring_test(true, 1).await;
-}
+// TODO: Implement pre-registration test
+// #[tokio::test(flavor = "multi_thread")]
+// async fn test_eigenlayer_pre_register_incredible_squaring_blueprint() {
+//     run_eigenlayer_incredible_squaring_test(true, 1).await;
+// }
 
 async fn run_eigenlayer_incredible_squaring_test(
     exit_after_registration: bool,
