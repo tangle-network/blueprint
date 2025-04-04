@@ -1,0 +1,4 @@
+[profile.ci]
+failure-output = "immediate-final"
+fail-fast = false
+slow-timeout = { period = "240s", terminate-after = 4 }

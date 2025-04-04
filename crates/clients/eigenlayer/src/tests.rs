@@ -47,10 +47,10 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
         },
         rewards_coordinator: RewardsCoordinatorConfig {
             init_paused_status: U256::from(0),
-            max_rewards_duration: 864000u32,
-            max_retroactive_length: 432000u32,
-            max_future_length: 86400u32,
-            genesis_rewards_timestamp: 1672531200u32,
+            max_rewards_duration: 864_000_u32,
+            max_retroactive_length: 432_000_u32,
+            max_future_length: 864_000_u32,
+            genesis_rewards_timestamp: 1_672_531_200_u32,
             updater: owner_account,
             activation_delay: 0u32,
             calculation_interval_seconds: 86400u32,
@@ -63,7 +63,7 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
 
     let core_contracts = deploy_core_contracts(
         &http_endpoint,
-        &private_key,
+        private_key,
         owner_account,
         core_config,
         Some(address!("00000000219ab540356cBB839Cbe05303d7705Fa")),
@@ -85,7 +85,7 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
 
     let avs_contracts = deploy_avs_contracts(
         &http_endpoint,
-        &private_key,
+        private_key,
         owner_account,
         1,
         permission_controller_address,
@@ -110,7 +110,7 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
 
     println!("Setting AVS permissions and Metadata...");
     println!("Private key: {}", private_key);
-    let signer_wallet = get_provider_from_signer(&private_key, &http_endpoint);
+    let signer_wallet = get_provider_from_signer(private_key, &http_endpoint);
 
     match setup_avs_permissions(
         &core_contracts,
@@ -121,7 +121,7 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
     )
     .await
     {
-        Ok(_) => println!("Successfully set up AVS permissions"),
+        Ok(()) => println!("Successfully set up AVS permissions"),
         Err(e) => {
             println!("Failed to set up AVS permissions: {}", e);
             panic!("Failed to set up AVS permissions: {}", e);
@@ -161,14 +161,14 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
     match create_quorum_receipt {
         Ok(receipt) => {
             println!("Quorum created with receipt: {:?}", receipt);
-            if !receipt.status() {
-                println!("Failed to create quorum: {:?}", receipt);
-                panic!("Failed to create quorum: {:?}", receipt);
-            } else {
+            if receipt.status() {
                 println!(
                     "Quorum created with transaction hash: {:?}",
                     receipt.transaction_hash
                 );
+            } else {
+                println!("Failed to create quorum: {:?}", receipt);
+                panic!("Failed to create quorum: {:?}", receipt);
             }
         }
         Err(e) => {
