@@ -1,6 +1,7 @@
 // src/signer.rs
 use crate::config::OperatorConfig;
 use crate::error::{PricingError, Result};
+use blueprint_crypto::KeyType;
 use log::{info, warn};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
@@ -8,11 +9,11 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
 
-pub type BlueprintHashBytes = [u8; 32]; // Assuming SHA256 hash
+pub type BlueprintId = u64;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct QuotePayload {
-    pub blueprint_hash: BlueprintHashBytes,
+    pub blueprint_id: BlueprintId,
     pub price_wei: u128,
     /// Expiry timestamp (Unix epoch seconds) or block number
     pub expiry: u64,
@@ -21,87 +22,50 @@ pub struct QuotePayload {
 }
 
 impl QuotePayload {
-    /// Serializes the payload deterministically and hashes it.
-    pub fn hash(&self) -> Result<[u8; 32]> {
-        // Use bincode for stable serialization before hashing
-        let serialized = bincode::serialize(self)?;
-        let mut hasher = Sha256::new();
-        hasher.update(&serialized);
-        Ok(hasher.finalize().into())
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self)
+            .map_err(|_| PricingError::Serialization("Failed to serialize quote payload".into()))
     }
 }
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SignedQuote {
+pub struct SignedQuote<K: KeyType> {
     pub payload: QuotePayload,
-    pub signature: Vec<u8>,     // Store signature bytes
-    pub signer_pubkey: Vec<u8>, // Include public key for easier verification
+    pub signature: K::Signature,
+    pub signer_pubkey: K::Public,
 }
 
 pub struct OperatorSigner<K: KeyType> {
     keypair: K::Secret,
 }
 
-impl OperatorSigner {
+impl<K: KeyType> OperatorSigner<K> {
     /// Loads a keypair from a file or generates a new one if it doesn't exist.
-    pub fn new(config: &OperatorConfig) -> Result<Self> {
-        let path = &config.keypair_path;
-        let keypair = if path.exists() {
-            info!("Loading existing keypair from: {:?}", path);
-            let bytes = fs::read(path)?;
-            SigningKey::from_bytes(&bytes.try_into().map_err(|_| {
-                PricingError::Initialization("Invalid keypair file size".to_string())
-            })?)
-        } else {
-            warn!(
-                "Keypair file not found at {:?}. Generating new keypair.",
-                path
-            );
-            let mut csprng = OsRng;
-            let new_keypair = SigningKey::generate(&mut csprng);
-            fs::write(path, new_keypair.to_bytes())?;
-            info!("Saved new keypair to: {:?}", path);
-            new_keypair
-        };
+    pub fn new(config: &OperatorConfig, keypair: K::Secret) -> Result<Self> {
         Ok(OperatorSigner { keypair })
     }
 
     /// Signs a quote payload.
     pub fn sign_quote(&self, payload: QuotePayload) -> Result<SignedQuote> {
-        let message_hash = payload.hash()?;
-        let signature: Signature = self.keypair.sign(&message_hash);
-        let pubkey_bytes = self.keypair.verifying_key().to_bytes().to_vec();
+        let msg = payload.to_bytes()?;
+        let signature: K::Signature = K::sign_with_secret(&mut self.keypair, &msg);
 
         Ok(SignedQuote {
             payload,
-            signature: signature.to_bytes().to_vec(),
-            signer_pubkey: pubkey_bytes,
+            signature,
+            signer_pubkey: self.public_key(),
         })
     }
 
     /// Returns the public key associated with the signer.
-    pub fn public_key(&self) -> VerifyingKey {
-        self.keypair.verifying_key()
+    pub fn public_key(&self) -> K::Public {
+        K::public_from_secret(&self.keypair)
     }
 }
 
-// Optional: Verification function (might live elsewhere, e.g., client-side or contract)
-pub fn verify_quote(quote: &SignedQuote) -> Result<bool> {
-    let pubkey = VerifyingKey::from_bytes(
-        &quote
-            .signer_pubkey
-            .clone()
-            .try_into()
-            .map_err(|_| PricingError::Signing("Invalid public key length".into()))?,
-    )?;
-    let signature = Signature::from_bytes(
-        &quote
-            .signature
-            .clone()
-            .try_into()
-            .map_err(|_| PricingError::Signing("Invalid signature length".into()))?,
-    )?;
-    let message_hash = quote.payload.hash()?;
-
-    Ok(pubkey.verify_strict(&message_hash, &signature).is_ok())
+pub fn verify_quote<K: KeyType>(quote: &SignedQuote<K>) -> bool {
+    K::verify(
+        &quote.signer_pubkey,
+        &quote.payload.to_bytes()?,
+        &quote.signature,
+    )
 }
