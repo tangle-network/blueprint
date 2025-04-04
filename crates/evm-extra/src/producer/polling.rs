@@ -20,11 +20,11 @@
 //! 5. Maintains a buffer of pending jobs
 
 use alloc::collections::VecDeque;
-use alloc::sync::Arc;
 use alloy_provider::Provider;
 use alloy_rpc_types::{Filter, Log};
 use alloy_transport::TransportError;
 use blueprint_core::JobCall;
+use blueprint_std::sync::{Arc, Mutex};
 use core::{
     fmt::Debug,
     pin::Pin,
@@ -131,7 +131,7 @@ pub struct PollingProducer<P: Provider> {
     provider: Arc<P>,
     filter: Filter,
     config: PollingConfig,
-    state: PollingState,
+    state: Arc<Mutex<PollingState>>,
     buffer: VecDeque<JobCall>,
 }
 
@@ -192,7 +192,9 @@ impl<P: Provider> PollingProducer<P> {
             provider,
             config,
             filter,
-            state: PollingState::Idle(Box::pin(tokio::time::sleep(Duration::from_micros(1)))),
+            state: Arc::new(Mutex::new(PollingState::Idle(Box::pin(
+                tokio::time::sleep(Duration::from_micros(1)),
+            )))),
             buffer: VecDeque::with_capacity(config.step as usize),
         })
     }
@@ -213,7 +215,8 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                 return Poll::Ready(Some(Ok(job)));
             }
 
-            match this.state {
+            let mut state = this.state.lock().unwrap();
+            match *state {
                 PollingState::Idle(ref mut fut) => match fut.as_mut().poll(cx) {
                     Poll::Ready(()) => {
                         // Transition to fetching block number
@@ -221,7 +224,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                             target: "evm-polling-producer", "Polling interval elapsed, fetching current block number"
                         );
                         let fut = get_block_number(this.provider.clone());
-                        this.state = PollingState::FetchingBlockNumber(Box::pin(fut));
+                        *state = PollingState::FetchingBlockNumber(Box::pin(fut));
                     }
                     Poll::Pending => return Poll::Pending,
                 },
@@ -253,7 +256,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                             blueprint_core::trace!(
                                 target: "evm-polling-producer", "No new blocks to process yet, waiting for next interval"
                             );
-                            this.state = PollingState::Idle(Box::pin(tokio::time::sleep(
+                            *state = PollingState::Idle(Box::pin(tokio::time::sleep(
                                 this.config.poll_interval,
                             )));
                             continue;
@@ -273,7 +276,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
 
                         // Transition to fetching logs
                         let fut = get_logs(this.provider.clone(), this.filter.clone());
-                        this.state = PollingState::FetchingLogs(Box::pin(fut));
+                        *state = PollingState::FetchingLogs(Box::pin(fut));
                     }
                     Poll::Ready(Err(e)) => {
                         blueprint_core::error!(
@@ -281,7 +284,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                             error = ?e,
                             "Failed to fetch current block number, retrying after interval"
                         );
-                        this.state = PollingState::Idle(Box::pin(tokio::time::sleep(
+                        *state = PollingState::Idle(Box::pin(tokio::time::sleep(
                             this.config.poll_interval,
                         )));
                         return Poll::Ready(Some(Err(e)));
@@ -303,7 +306,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                         this.buffer.extend(job_calls);
 
                         // Transition back to idle state
-                        this.state = PollingState::Idle(Box::pin(tokio::time::sleep(
+                        *state = PollingState::Idle(Box::pin(tokio::time::sleep(
                             this.config.poll_interval,
                         )));
                     }
@@ -315,7 +318,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                             to_block = ?this.filter.get_to_block(),
                             "Failed to fetch logs, retrying after interval"
                         );
-                        this.state = PollingState::Idle(Box::pin(tokio::time::sleep(
+                        *state = PollingState::Idle(Box::pin(tokio::time::sleep(
                             this.config.poll_interval,
                         )));
                         return Poll::Ready(Some(Err(e)));

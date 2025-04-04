@@ -1,0 +1,19 @@
+[[dependencies]]
+name = "@openzeppelin-contracts"
+version = "4.7.0"
+url = "https://soldeer-revisions.s3.amazonaws.com/@openzeppelin-contracts/4_7_0_22-01-2024_13:13:32_contracts.zip"
+checksum = "dfcc7462e91029c10321784588bbd694db54320979a75eb98f52f59de51f09aa"
+integrity = "aa86dfb5e769bb48d1c95e6e940f683161aa1081dbc0bb7421f340d0bda1eafe"
+
+[[dependencies]]
+name = "eigenlayer-middleware"
+version = "0.5.4"
+git = "https://github.com/Layr-Labs/eigenlayer-middleware"
+rev = "4d63f27247587607beb67f96fdabec4b2c1321ef"
+
+[[dependencies]]
+name = "forge-std"
+version = "1.9.6"
+url = "https://soldeer-revisions.s3.amazonaws.com/forge-std/1_9_6_01-02-2025_20:49:10_forge-std-1.9.zip"
+checksum = "55f341818321b3f925161a72fd0dcd62e4a0a4b66785a7a932bf2bfaf96fb9d1"
+integrity = "e9ecdc364d152157431e5df5aa041ffddbe9bb1c1ad81634b1e72df9e23814e8"

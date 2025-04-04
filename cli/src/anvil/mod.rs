@@ -266,8 +266,8 @@ pub async fn start_anvil_container(
     //     Some(&format!("Address: {}", pauser_registry_address)),
     // );
 
-    let delegation_manager_address = address!("dc64a140aa3e981100a9beca4e685f962f0cf6c9");
-    let service_manager_address = address!("34B40BA116d5Dec75548a9e9A8f15411461E8c70");
+    let delegation_manager_address = address!("cf7ed3acca5a467e9e704c703e8d87f634fb0fc9");
+    let service_manager_address = address!("b7278a61aa25c888815afc32ad3cc52ff24fe575");
 
     let ecdsa_stake_registry =
         ECDSAStakeRegistry::deploy(provider.clone(), delegation_manager_address)
@@ -280,7 +280,7 @@ pub async fn start_anvil_container(
     );
 
     let registry_coordinator_address =
-        alloy_primitives::address!("c3e53f4d16ae77db1c982e75a937b9f60fe63690");
+        alloy_primitives::address!("7969c5ed335650692bc04293b07f5bf2e7a673c0");
     let registry_coordinator =
         RegistryCoordinator::new(registry_coordinator_address, provider.clone());
 

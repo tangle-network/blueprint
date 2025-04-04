@@ -38,6 +38,7 @@ blueprint-crypto-tangle-pair-signer = { workspace = true, optional = true }
 
 # Eigenlayer and EVM-specific extras
 blueprint-evm-extra = { workspace = true, optional = true }
+blueprint-eigenlayer-extra = { workspace = true, optional = true }
 alloy = { workspace = true, optional = true, features = ["full"] }
 alloy-json-abi = { workspace = true, optional = true, features = ["serde_json"] }
 eigensdk = { workspace = true, optional = true, features = ["full"] }
@@ -84,6 +85,7 @@ std = [
     # Extras
     "blueprint-tangle-extra?/std",
     "blueprint-evm-extra?/std",
+    "blueprint-eigenlayer-extra?/std",
     "blueprint-chain-setup/std",
 ]
 
@@ -141,6 +143,8 @@ eigenlayer = [
     "dep:eigensdk",
     "blueprint-contexts/eigenlayer",
     "blueprint-clients/eigenlayer",
+    "blueprint-testing-utils?/eigenlayer",
+    "blueprint-eigenlayer-extra",
     "evm",
 ]
 

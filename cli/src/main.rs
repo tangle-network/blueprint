@@ -756,6 +756,10 @@ fn load_protocol_settings(
                     .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
                     .parse()
                     .map_err(|_| ConfigError::Other("Invalid STRATEGY_MANAGER_ADDRESS".into()))?,
+                strategy_address: env::var("STRATEGY_ADDRESS")
+                    .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
+                    .parse()
+                    .map_err(|_| ConfigError::Other("Invalid STRATEGY_ADDRESS".into()))?,
                 avs_directory_address: env::var("AVS_DIRECTORY_ADDRESS")
                     .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
                     .parse()

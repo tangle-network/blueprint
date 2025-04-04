@@ -455,6 +455,8 @@ impl ContextConfig {
         let rewards_coordinator = eigenlayer_settings.map(|s| s.rewards_coordinator_address);
         #[cfg(feature = "eigenlayer")]
         let permission_controller = eigenlayer_settings.map(|s| s.permission_controller_address);
+        #[cfg(feature = "eigenlayer")]
+        let strategy = eigenlayer_settings.map(|s| s.strategy_address);
 
         // Tangle settings
         #[cfg(feature = "tangle")]
@@ -517,6 +519,8 @@ impl ContextConfig {
                 rewards_coordinator,
                 #[cfg(feature = "eigenlayer")]
                 permission_controller,
+                #[cfg(feature = "eigenlayer")]
+                strategy,
             }),
         }
     }
@@ -777,6 +781,15 @@ pub struct BlueprintSettings {
         required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
     )]
     pub permission_controller: Option<alloy_primitives::Address>,
+    #[cfg(feature = "eigenlayer")]
+    /// The address of the strategy
+    #[arg(
+        long,
+        value_name = "ADDR",
+        env = "STRATEGY_ADDRESS",
+        required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
+    )]
+    pub strategy: Option<alloy_primitives::Address>,
 }
 
 impl Default for BlueprintSettings {
@@ -835,6 +848,8 @@ impl Default for BlueprintSettings {
             rewards_coordinator: None,
             #[cfg(feature = "eigenlayer")]
             permission_controller: None,
+            #[cfg(feature = "eigenlayer")]
+            strategy: None,
         }
     }
 }

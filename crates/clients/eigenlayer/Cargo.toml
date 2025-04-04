@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 blueprint-runner = { workspace = true, features = ["eigenlayer"] }
 
+blueprint-core.workspace = true
 blueprint-client-core = { workspace = true }
 blueprint-std = { workspace = true }
 blueprint-evm-extra = { workspace = true }
@@ -43,13 +44,16 @@ url = { workspace = true }
 [dev-dependencies]
 tracing-subscriber.workspace = true
 blueprint-chain-setup-anvil = { workspace = true }
+eigenlayer-contract-deployer = { workspace = true }
 blueprint-eigenlayer-testing-utils = { workspace = true }
 blueprint-evm-extra = { workspace = true }
 alloy-primitives = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tempfile = { workspace = true }
+blueprint-core-testing-utils = { workspace = true }
 
 [features]
-default = ["std"]
+default = ["std", "tracing"]
 std = [
 	"blueprint-std/std",
 	"blueprint-evm-extra/std",
@@ -57,3 +61,5 @@ std = [
 	"blueprint-client-core/std",
 	"url/std",
 ]
+
+tracing = ["blueprint-core/tracing"]

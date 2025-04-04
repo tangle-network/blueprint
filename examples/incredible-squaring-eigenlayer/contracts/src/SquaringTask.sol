@@ -2,12 +2,11 @@
 pragma solidity ^0.8.20;
 
 import {TaskManager} from "./TaskManager.sol";
-import {IRegistryCoordinator} from "@eigenlayer-middleware/src/RegistryCoordinator.sol";
+import {IRegistryCoordinator} from "eigenlayer-middleware/src/RegistryCoordinator.sol";
 
 /// @title SquaringTask Contract
 /// @notice A specialized TaskManager that handles squaring number tasks
 contract SquaringTask is TaskManager {
-    /// @notice Emitted when a squaring task is completed
     /// @notice Emitted when a squaring task is completed
     event SquaringTaskCompleted(uint256 number, uint256 result);
 

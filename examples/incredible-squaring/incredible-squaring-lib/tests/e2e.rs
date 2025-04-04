@@ -12,24 +12,29 @@ async fn test_incredible_squaring() -> Result<()> {
     setup_log();
 
     // Initialize test harness (node, keys, deployment)
+    println!("Initializing test harness");
     let temp_dir = tempfile::TempDir::new()?;
     let harness = TangleTestHarness::setup(temp_dir).await?;
 
     // Setup service
+    println!("Setting up services");
     let (mut test_env, service_id, _blueprint_id) = harness.setup_services::<1>(false).await?;
     test_env.initialize().await?;
 
     // Add the job to the node, and start it
+    println!("Adding job to node and starting it");
     test_env.add_job(square.layer(TangleLayer)).await;
     test_env.start(()).await?;
 
     // Submit job and wait for execution
+    println!("Submitting job and waiting for execution");
     let job = harness
         .submit_job(service_id, 0, vec![InputValue::Uint64(5)])
         .await?;
     let results = harness.wait_for_job_execution(service_id, job).await?;
 
     // Verify results match expected output
+    println!("Verifying job results");
     harness.verify_job(&results, vec![OutputValue::Uint64(25)]);
 
     assert_eq!(results.service_id, service_id);
