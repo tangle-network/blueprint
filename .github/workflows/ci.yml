@@ -110,7 +110,7 @@ jobs:
 
       - name: tests
         working-directory: examples/incredible-squaring/incredible-squaring-lib
-        run: cargo nextest run --package incredible-squaring-blueprint --profile ci
+        run: cargo nextest run --profile ci
 
   testing:
     needs: generate-matrix
