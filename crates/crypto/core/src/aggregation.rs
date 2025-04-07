@@ -1,4 +1,4 @@
-use core::fmt::Debug;
+use blueprint_std::{fmt::Debug, vec::Vec};
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::KeyType;

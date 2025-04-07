@@ -445,7 +445,7 @@ pub fn create_whitelisted_nodes<K: KeyType>(
     }
 
     // Create nodes with whitelisted keys
-    for key_pair in key_pairs.iter() {
+    for key_pair in &key_pairs {
         nodes.push(create_node_with_keys(
             network_name,
             instance_name,
