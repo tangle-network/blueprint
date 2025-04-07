@@ -44,3 +44,4 @@ std = [
 	"num-traits/std",
 	"sha2/std",
 ]
+aggregation = []

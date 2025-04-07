@@ -2683,7 +2683,7 @@ dependencies = [
 [[package]]
 name = "blueprint-build-utils"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=main#545ba1318769a3e975320243a961a8ae9427edb3"
+source = "git+https://github.com/tangle-network/blueprint?branch=main#d34f59bd381fac63f9f6ba9b756babadfde51af1"
 dependencies = [
  "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=main)",
 ]
@@ -2963,6 +2963,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+ "sha2 0.10.8",
  "thiserror 2.0.12",
  "tnt-bls",
 ]
@@ -3042,6 +3043,10 @@ dependencies = [
 name = "blueprint-crypto-sp-core"
 version = "0.1.0"
 dependencies = [
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "blueprint-crypto-bls",
  "blueprint-crypto-core",
  "blueprint-crypto-sp-core",
  "blueprint-std 0.1.0",
@@ -3050,8 +3055,10 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+ "sha2 0.10.8",
  "sp-core",
  "thiserror 2.0.12",
+ "tnt-bls",
 ]
 
 [[package]]
@@ -3300,6 +3307,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "blueprint-networking-agg-sig-gossip"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "bitvec",
+ "blueprint-core",
+ "blueprint-crypto",
+ "blueprint-crypto-core",
+ "blueprint-networking",
+ "blueprint-std 0.1.0",
+ "crossbeam",
+ "crossbeam-channel",
+ "dashmap",
+ "futures",
+ "generic-array",
+ "hex",
+ "libp2p",
+ "rand 0.8.5",
+ "rand_dev",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+]
+
+[[package]]
 name = "blueprint-networking-round-based-extension"
 version = "0.1.0"
 dependencies = [
@@ -3438,7 +3474,7 @@ dependencies = [
 [[package]]
 name = "blueprint-std"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=main#545ba1318769a3e975320243a961a8ae9427edb3"
+source = "git+https://github.com/tangle-network/blueprint?branch=main#d34f59bd381fac63f9f6ba9b756babadfde51af1"
 dependencies = [
  "colored",
  "num-traits",
@@ -10861,9 +10897,9 @@ dependencies = [
 
 [[package]]
 name = "ntex-net"
-version = "2.5.11"
+version = "2.5.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "213eb269e4a41edd0c08296c133d955494997f8fb86bfabfc2dba74f99f5e613"
+checksum = "cb8cceda4db20d0420a92235663af93d34996f247f3c46c064cf30a108a40bc1"
 dependencies = [
  "bitflags 2.9.0",
  "cfg-if 1.0.0",
