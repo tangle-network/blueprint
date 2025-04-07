@@ -1,7 +1,5 @@
 //! Simple protocol in which parties cooperate to generate randomness
 
-mod common;
-
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, digest::Output};
 
