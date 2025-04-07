@@ -1,5 +1,5 @@
 use crate::error::Result;
-use alloy_primitives::{Address, Bytes};
+use alloy_primitives::{Address, Bytes, U256};
 use alloy_provider::{Provider, RootProvider};
 use blueprint_evm_extra::util::{get_provider_http, get_wallet_provider_http};
 use blueprint_runner::config::BlueprintEnvironment;
@@ -9,6 +9,10 @@ use eigensdk::common::get_ws_provider;
 use eigensdk::logging::get_test_logger;
 use eigensdk::utils::rewardsv2::middleware::registrycoordinator::RegistryCoordinator;
 use eigensdk::utils::rewardsv2::middleware::stakeregistry::{IStakeRegistry, StakeRegistry};
+use eigensdk::utils::slashing::core::allocationmanager::{
+    AllocationManager, IAllocationManagerTypes,
+};
+use eigensdk::utils::slashing::core::delegationmanager::DelegationManager;
 use eigensdk::utils::slashing::middleware::operatorstateretriever::OperatorStateRetriever;
 use num_bigint::BigInt;
 
@@ -19,7 +23,7 @@ pub struct EigenlayerClient {
 }
 
 impl EigenlayerClient {
-    /// Creates a new instance of the [`EigenlayerClient`] given a [`BlueprintEnvironment`].
+    /// Creates a new [`EigenlayerClient`].
     #[must_use]
     pub fn new(config: BlueprintEnvironment) -> Self {
         Self { config }
@@ -40,10 +44,12 @@ impl EigenlayerClient {
         get_provider_http(&self.config.http_rpc_endpoint)
     }
 
-    /// Get the provider for this client's http endpoint with the specified [`Wallet`](EthereumWallet)
+    /// Get the provider for this client's http endpoint with the specified [`EthereumWallet`]
     ///
     /// # Returns
     /// - [`The HTTP wallet provider`](RootProvider)
+    ///
+    /// [`EthereumWallet`]: alloy_network::EthereumWallet
     #[must_use]
     pub fn get_wallet_provider_http(&self, wallet: alloy_network::EthereumWallet) -> RootProvider {
         get_wallet_provider_http(&self.config.http_rpc_endpoint, wallet)
@@ -123,14 +129,14 @@ impl EigenlayerClient {
         let http_rpc_endpoint = self.config.http_rpc_endpoint.clone();
         let contract_addresses = self.config.protocol_settings.eigenlayer()?;
         let registry_coordinator_address = contract_addresses.registry_coordinator_address;
-        let operator_state_retriever_address = contract_addresses.operator_state_retriever_address;
+        let service_manager_address = contract_addresses.service_manager_address;
 
         eigensdk::client_avsregistry::writer::AvsRegistryChainWriter::build_avs_registry_chain_writer(
             eigensdk::logging::get_test_logger(),
             http_rpc_endpoint,
             private_key,
             registry_coordinator_address,
-            operator_state_retriever_address,
+            service_manager_address,
         ).await
         .map_err(Into::into)
     }
@@ -225,7 +231,9 @@ impl EigenlayerClient {
     /// # Errors
     ///
     /// * See [`Self::avs_registry_reader()`]
-    /// * See [`AvsRegistryReader::get_operators_stake_in_quorums_at_block()`]
+    /// * See [`AvsRegistryChainReader::get_operators_stake_in_quorums_at_block()`]
+    ///
+    /// [`AvsRegistryChainReader::get_operators_stake_in_quorums_at_block()`]: eigensdk::client_avsregistry::reader::AvsRegistryChainReader::get_operators_stake_in_quorums_at_block
     pub async fn get_operator_stake_in_quorums_at_block(
         &self,
         block_number: u32,
@@ -243,7 +251,9 @@ impl EigenlayerClient {
     /// # Errors
     ///
     /// * See [`Self::avs_registry_reader()`]
-    /// * See [`AvsRegistryReader::get_operator_stake_in_quorums_of_operator_at_current_block()`]
+    /// * See [`AvsRegistryChainReader::get_operator_stake_in_quorums_of_operator_at_current_block()`]
+    ///
+    /// [`AvsRegistryChainReader::get_operator_stake_in_quorums_of_operator_at_current_block()`]: eigensdk::client_avsregistry::reader::AvsRegistryChainReader::get_operator_stake_in_quorums_of_operator_at_current_block
     pub async fn get_operator_stake_in_quorums_at_current_block(
         &self,
         operator_id: alloy_primitives::FixedBytes<32>,
@@ -392,7 +402,10 @@ impl EigenlayerClient {
     /// # Errors
     ///
     /// * See [`Self::avs_registry_reader()`]
-    /// * See [`AvsRegistryReader::get_operator_id()`]
+    /// * See [`AvsRegistryChainReader::get_operator_id()`]
+    ///
+    /// [`FixedBytes`]: alloy_primitives::FixedBytes
+    /// [`AvsRegistryChainReader::get_operator_id()`]: eigensdk::client_avsregistry::reader::AvsRegistryChainReader::get_operator_id
     pub async fn get_operator_id(
         &self,
         operator_addr: Address,
@@ -458,7 +471,9 @@ impl EigenlayerClient {
     /// # Errors
     ///
     /// * See [`Self::avs_registry_reader()`]
-    /// * See [`AvsRegistryReader::query_existing_registered_operator_pub_keys()`]
+    /// * See [`AvsRegistryChainReader::query_existing_registered_operator_pub_keys()`]
+    ///
+    /// [`AvsRegistryChainReader::query_existing_registered_operator_pub_keys()`]: eigensdk::client_avsregistry::reader::AvsRegistryChainReader::query_existing_registered_operator_pub_keys
     pub async fn query_existing_registered_operator_pub_keys(
         &self,
         start_block: u64,
@@ -473,5 +488,246 @@ impl EigenlayerClient {
             .query_existing_registered_operator_pub_keys(start_block, to_block, ws_rpc_endpoint)
             .await
             .map_err(Into::into)
+    }
+
+    /// Get strategies in an operator set (quorum) for a given AVS.
+    ///
+    /// # Arguments
+    ///
+    /// * `avs_address` - The address of the AVS service manager
+    /// * `operator_set_id` - The ID of the operator set (quorum number)
+    ///
+    /// # Returns
+    ///
+    /// A vector of strategy addresses used in the specified operator set
+    ///
+    /// # Errors
+    ///
+    /// * [`Error::AlloyContractError`] - If the call to the contract fails
+    pub async fn get_strategies_in_operator_set(
+        &self,
+        avs_address: Address,
+        operator_set_id: u8,
+    ) -> Result<Vec<Address>> {
+        let contract_addresses = self.config.protocol_settings.eigenlayer()?;
+        let provider = self.get_provider_http();
+
+        let allocation_manager = AllocationManager::AllocationManagerInstance::new(
+            contract_addresses.allocation_manager_address,
+            provider,
+        );
+
+        let operator_set = AllocationManager::OperatorSet {
+            avs: avs_address,
+            id: u32::from(operator_set_id), // Convert u8 to u32
+        };
+
+        let result = allocation_manager
+            .getStrategiesInOperatorSet(operator_set)
+            .call()
+            .await?;
+
+        Ok(result._0)
+    }
+
+    /// Get strategy allocations for a specific operator and strategy.
+    ///
+    /// # Arguments
+    ///
+    /// * `operator_address` - The address of the operator
+    /// * `strategy_address` - The address of the strategy
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// - A vector of operator sets the operator is part of
+    /// - A vector of allocations for each operator set
+    ///
+    /// # Errors
+    ///
+    /// * [`Error::AlloyContractError`] - If the call to the contract fails
+    pub async fn get_strategy_allocations(
+        &self,
+        operator_address: Address,
+        strategy_address: Address,
+    ) -> Result<(
+        Vec<AllocationManager::OperatorSet>,
+        Vec<IAllocationManagerTypes::Allocation>,
+    )> {
+        let contract_addresses = self.config.protocol_settings.eigenlayer()?;
+        let provider = self.get_provider_http();
+
+        let allocation_manager = AllocationManager::AllocationManagerInstance::new(
+            contract_addresses.allocation_manager_address,
+            provider,
+        );
+
+        let result = allocation_manager
+            .getStrategyAllocations(operator_address, strategy_address)
+            .call()
+            .await?;
+
+        Ok((result._0, result._1))
+    }
+
+    /// Get the maximum magnitude for a specific operator and strategy.
+    ///
+    /// # Arguments
+    ///
+    /// * `operator_address` - The address of the operator
+    /// * `strategy_address` - The address of the strategy
+    ///
+    /// # Returns
+    ///
+    /// The maximum magnitude
+    ///
+    /// # Errors
+    ///
+    /// * [`Error::AlloyContractError`] - If the call to the contract fails
+    pub async fn get_max_magnitude(
+        &self,
+        operator_address: Address,
+        strategy_address: Address,
+    ) -> Result<u64> {
+        let contract_addresses = self.config.protocol_settings.eigenlayer()?;
+        let provider = self.get_provider_http();
+
+        let allocation_manager = AllocationManager::AllocationManagerInstance::new(
+            contract_addresses.allocation_manager_address,
+            provider,
+        );
+
+        let result = allocation_manager
+            .getMaxMagnitude(operator_address, strategy_address)
+            .call()
+            .await?;
+
+        Ok(result._0)
+    }
+
+    /// Get slashable shares in queue for a specific operator and strategy.
+    ///
+    /// # Arguments
+    ///
+    /// * `operator_address` - The address of the operator
+    /// * `strategy_address` - The address of the strategy
+    ///
+    /// # Returns
+    ///
+    /// The amount of slashable shares in the queue
+    ///
+    /// # Errors
+    ///
+    /// * [`Error::AlloyContractError`] - If the call to the contract fails
+    pub async fn get_slashable_shares_in_queue(
+        &self,
+        operator_address: Address,
+        strategy_address: Address,
+    ) -> Result<U256> {
+        let contract_addresses = self.config.protocol_settings.eigenlayer()?;
+        let provider = self.get_provider_http();
+
+        let delegation_manager = DelegationManager::DelegationManagerInstance::new(
+            contract_addresses.delegation_manager_address,
+            provider,
+        );
+
+        let result = delegation_manager
+            .getSlashableSharesInQueue(operator_address, strategy_address)
+            .call()
+            .await?;
+
+        Ok(result._0)
+    }
+
+    /// Get all operators for a service at a specific block.
+    ///
+    /// # Arguments
+    ///
+    /// * `avs_address` - The address of the AVS service manager
+    /// * `block_number` - The block number to retrieve the operators at
+    /// * `quorum_numbers` - The quorum numbers to retrieve operators for
+    ///
+    /// # Returns
+    ///
+    /// A vector of vectors containing operators in each quorum
+    ///
+    /// # Errors
+    ///
+    /// * [`Error::AlloyContractError`] - If the call to the contract fails
+    pub async fn get_operators_for_service(
+        &self,
+        _avs_address: Address,
+        block_number: u32,
+        quorum_numbers: Vec<u8>,
+    ) -> Result<Vec<Vec<OperatorStateRetriever::Operator>>> {
+        let quorum_bytes = Bytes::from(quorum_numbers);
+        self.get_operator_stake_in_quorums_at_block(block_number, quorum_bytes)
+            .await
+    }
+
+    /// Get all slashable assets for an AVS.
+    ///
+    /// # Arguments
+    ///
+    /// * `avs_address` - The address of the AVS service manager
+    /// * `block_number` - The block number to retrieve the data at
+    /// * `quorum_numbers` - The quorum numbers (operator set IDs) to retrieve data for
+    ///
+    /// # Returns
+    ///
+    /// A hashmap where:
+    /// - Key: Operator address
+    /// - Value: A hashmap where:
+    ///   - Key: Strategy address
+    ///   - Value: Amount of slashable shares
+    ///
+    /// # Errors
+    ///
+    /// * [`Error::AlloyContractError`] - If any contract call fails
+    pub async fn get_slashable_assets_for_avs(
+        &self,
+        avs_address: Address,
+        block_number: u32,
+        quorum_numbers: Vec<u8>,
+    ) -> Result<HashMap<Address, HashMap<Address, U256>>> {
+        let mut result = HashMap::new();
+
+        let all_operator_info = self
+            .get_operators_for_service(avs_address, block_number, quorum_numbers.clone())
+            .await?;
+
+        for (operators, quorum_number) in all_operator_info.iter().zip(quorum_numbers) {
+            let strategies = self
+                .get_strategies_in_operator_set(avs_address, quorum_number)
+                .await?;
+
+            for operator in operators {
+                let operator_id = operator.operatorId;
+
+                let operator_address = self.get_operator_by_id(operator_id.into()).await?;
+
+                let operator_entry = result.entry(operator_address).or_insert_with(HashMap::new);
+
+                for strategy_address in &strategies {
+                    match self
+                        .get_slashable_shares_in_queue(operator_address, *strategy_address)
+                        .await
+                    {
+                        Ok(slashable_shares) => {
+                            operator_entry.insert(*strategy_address, slashable_shares);
+                        }
+                        Err(e) => {
+                            // Log the error but continue with other strategies
+                            blueprint_core::error!(
+                                "Error getting slashable shares for operator {operator_address}, strategy {strategy_address}: {e}",
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(result)
     }
 }

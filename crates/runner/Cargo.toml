@@ -1,7 +1,12 @@
 [package]
 name = "blueprint-runner"
 version = "0.1.0"
+authors.workspace = true
 edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -41,7 +46,7 @@ alloy-contract = { workspace = true, optional = true }
 alloy-primitives = { workspace = true, features = ["serde"], optional = true }
 alloy-signer-local = { workspace = true, optional = true }
 alloy-signer = { workspace = true, optional = true }
-eigensdk = { workspace = true, features = ["client-elcontracts", "types", "utils", "logging", "client-avsregistry"], optional = true }
+eigensdk = { workspace = true, features = ["client-elcontracts", "types", "utils", "logging", "client-avsregistry", "crypto-bls"], optional = true }
 
 [dev-dependencies]
 blueprint-sdk = { workspace = true, features = ["std", "tangle"] }
@@ -84,6 +89,8 @@ tangle = [
 ## [Eigenlayer]: https://eigenlayer.xyz
 eigenlayer = [
     "dep:blueprint-evm-extra",
+    "blueprint-keystore/bn254",
+    "blueprint-keystore/eigenlayer",
     "dep:alloy-contract",
     "dep:alloy-primitives",
     "dep:alloy-signer-local",

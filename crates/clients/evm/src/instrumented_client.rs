@@ -23,11 +23,15 @@ use url::Url;
 
 const PENDING_TAG: &str = "pending";
 
+enum ProviderInner {
+    Http(RootProvider),
+    Ws(RootProvider),
+}
+
 /// This struct represents an instrumented client that can be used to interact with an Ethereum node.
 /// It provides a set of methods to interact with the node and measures the duration of the calls.
 pub struct InstrumentedClient {
-    http_client: Option<RootProvider>,
-    ws_client: Option<RootProvider>,
+    inner: ProviderInner,
     rpc_collector: RpcCallsCollector,
     net_version: u64,
 }
@@ -44,6 +48,14 @@ pub enum InstrumentedClientError {
 
     #[error(transparent)]
     Rpc(#[from] alloy_json_rpc::RpcError<alloy_transport::TransportErrorKind>),
+}
+
+impl Provider for InstrumentedClient {
+    fn root(&self) -> &RootProvider {
+        match &self.inner {
+            ProviderInner::Http(provider) | ProviderInner::Ws(provider) => provider,
+        }
+    }
 }
 
 impl BackendClient for InstrumentedClient {
@@ -124,8 +136,7 @@ impl InstrumentedClient {
 
         let rpc_collector = RpcCallsCollector::new();
         Ok(InstrumentedClient {
-            http_client: Some(http_client),
-            ws_client: None,
+            inner: ProviderInner::Http(http_client),
             rpc_collector,
             net_version,
         })
@@ -159,8 +170,7 @@ impl InstrumentedClient {
 
         let rpc_collector = RpcCallsCollector::new();
         Ok(InstrumentedClient {
-            http_client: None,
-            ws_client: Some(ws_client),
+            inner: ProviderInner::Ws(ws_client),
             rpc_collector,
             net_version,
         })
@@ -187,8 +197,7 @@ impl InstrumentedClient {
 
         let rpc_collector = RpcCallsCollector::new();
         Ok(InstrumentedClient {
-            http_client: Some(client),
-            ws_client: None,
+            inner: ProviderInner::Http(client),
             rpc_collector,
             net_version,
         })
@@ -608,13 +617,14 @@ impl InstrumentedClient {
                     err.to_string().as_str(),
                 );
             })?;
-        if let Some(ws_client) = self.ws_client.as_ref() {
-            ws_client.get_subscription(id.into()).await
-        } else {
-            Err(TransportError::UnsupportedFeature(
+
+        let ProviderInner::Ws(ws_client) = &self.inner else {
+            return Err(TransportError::UnsupportedFeature(
                 "http client does not support eth_subscribe calls.",
-            ))
-        }
+            ));
+        };
+
+        ws_client.get_subscription(id.into()).await
     }
 
     /// Subscribes to notifications about the current blockchain head.
@@ -636,13 +646,14 @@ impl InstrumentedClient {
                     err.to_string().as_str()
                 );
             })?;
-        if let Some(ws_client) = self.ws_client.as_ref() {
-            ws_client.get_subscription(id.into()).await
-        } else {
-            Err(TransportError::UnsupportedFeature(
+
+        let ProviderInner::Ws(ws_client) = &self.inner else {
+            return Err(TransportError::UnsupportedFeature(
                 "http client does not support eth_subscribe calls.",
-            ))
-        }
+            ));
+        };
+
+        ws_client.get_subscription(id.into()).await
     }
 
     /// Retrieves the currently suggested gas price.
@@ -804,12 +815,7 @@ impl InstrumentedClient {
         let method_string = String::from(rpc_method_name);
 
         // send the request with the provided client (http or ws)
-        let result = match (self.http_client.as_ref(), self.ws_client.as_ref()) {
-            (Some(http_client), _) => http_client.raw_request(method_string.into(), params).await,
-            (_, Some(ws_client)) => ws_client.raw_request(method_string.into(), params).await,
-            (_, _) => unreachable!(),
-        };
-
+        let result = self.raw_request(method_string.into(), params).await;
         let rpc_request_duration = start.elapsed();
 
         // we only observe the duration of successful calls (even though this is not well defined in the spec)
@@ -831,9 +837,9 @@ mod tests {
     use alloy_primitives::{TxKind::Call, U256, bytes};
     use alloy_rpc_types::eth::{BlockId, BlockNumberOrTag, pubsub::SubscriptionResult};
     use alloy_signer_local::PrivateKeySigner;
-    use blueprint_anvil_testing_utils::wait_transaction;
     use blueprint_chain_setup_anvil::start_default_anvil_testnet;
     use blueprint_evm_extra::util::get_provider_http;
+    use blueprint_evm_extra::util::wait_transaction;
     use tokio;
 
     #[tokio::test]

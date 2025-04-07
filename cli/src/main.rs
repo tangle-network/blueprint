@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use cargo_tangle::command::create;
+use cargo_tangle::command::{create, deploy};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, ProtocolSettings, SupportedChains};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use blueprint_runner::error::ConfigError;
@@ -306,6 +306,18 @@ pub enum BlueprintCommands {
         #[arg(long)]
         watcher: bool,
     },
+
+    /// Deploy a Master Blueprint Service Manager (MBSM) contract to the Tangle Network
+    #[command(visible_alias = "mbsm")]
+    DeployMBSM {
+        /// The HTTP RPC URL to use
+        #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:9944", env)]
+        http_rpc_url: String,
+
+        /// Force deployment even if the contract is already deployed
+        #[arg(short, long, value_name = "VALUE", default_value_t = false)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -364,7 +376,7 @@ pub enum DeployTarget {
 }
 
 #[tokio::main]
-#[allow(clippy::needless_return, clippy::too_many_lines)]
+#[allow(clippy::needless_return)]
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     init_tracing_subscriber();
@@ -620,6 +632,12 @@ async fn main() -> color_eyre::Result<()> {
                 )
                 .await?;
             }
+            BlueprintCommands::DeployMBSM {
+                http_rpc_url,
+                force,
+            } => {
+                deploy::mbsm::deploy_mbsm(http_rpc_url, force).await?;
+            }
         },
         Commands::Key { command } => match command {
             KeyCommands::Generate {
@@ -635,7 +653,10 @@ async fn main() -> color_eyre::Result<()> {
                 eprintln!("Generated {:?} key:", key_type);
                 eprintln!("Public key: {}", public);
                 if show_secret || output.is_none() {
-                    eprintln!("Private key: {}", secret.expect("Should exist"));
+                    eprintln!(
+                        "Private key: {}",
+                        secret.expect("Failed to find secret key")
+                    );
                 }
             }
             KeyCommands::Import {
@@ -735,6 +756,10 @@ fn load_protocol_settings(
                     .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
                     .parse()
                     .map_err(|_| ConfigError::Other("Invalid STRATEGY_MANAGER_ADDRESS".into()))?,
+                strategy_address: env::var("STRATEGY_ADDRESS")
+                    .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
+                    .parse()
+                    .map_err(|_| ConfigError::Other("Invalid STRATEGY_ADDRESS".into()))?,
                 avs_directory_address: env::var("AVS_DIRECTORY_ADDRESS")
                     .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
                     .parse()

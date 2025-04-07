@@ -7,12 +7,16 @@ edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
 
 [dependencies]
 blueprint-core = { workspace = true, features = ["tracing"] }
+blueprint-std = { workspace = true }
+tokio = { workspace = true }
+blueprint-core-testing-utils = { workspace = true }
 
 alloy-primitives = { workspace = true }
 alloy-provider = { workspace = true }

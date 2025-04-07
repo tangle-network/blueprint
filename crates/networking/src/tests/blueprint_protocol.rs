@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_lines)]
-
 use crate::{
     discovery::peers::VerificationIdentifierKey,
     service::AllowedKeys,

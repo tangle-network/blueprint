@@ -177,12 +177,12 @@ where
         let Some(route) = self.job_to_route_id.get(&parts.job_id) else {
             let call = JobCall::from_parts(parts, body);
 
-            blueprint_core::trace!(?call, "No job found, checking always routes");
+            blueprint_core::trace!(target: "blueprint-router", ?call, "No job found, checking always routes");
             let catch_all_futures = self.call_always_routes(call, context)?;
             return Ok(catch_all_futures.collect::<FuturesUnordered<_>>());
         };
 
-        blueprint_core::trace!("Job found for id {:?}", parts.job_id);
+        blueprint_core::trace!(target: "blueprint-router", "Job found for id {:?}", parts.job_id);
 
         let handler = self
             .routes

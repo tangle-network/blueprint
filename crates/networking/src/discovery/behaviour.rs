@@ -211,7 +211,7 @@ impl<K: KeyType> NetworkBehaviour for DiscoveryBehaviour<K> {
             .on_connection_handler_event(peer_id, connection, event);
     }
 
-    #[allow(clippy::type_complexity, clippy::too_many_lines)]
+    #[allow(clippy::type_complexity)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

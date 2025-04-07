@@ -417,11 +417,7 @@ impl ContextConfig {
     /// - `chain`: The [`chain`](SupportedChains)
     /// - `protocol`: The [`Protocol`]
     /// - `protocol_settings`: The protocol-specific settings
-    #[allow(
-        clippy::too_many_arguments,
-        clippy::too_many_lines,
-        clippy::match_wildcard_for_single_variants
-    )]
+    #[allow(clippy::too_many_arguments, clippy::match_wildcard_for_single_variants)]
     #[must_use]
     pub fn create_config(
         http_rpc_url: Url,
@@ -459,6 +455,8 @@ impl ContextConfig {
         let rewards_coordinator = eigenlayer_settings.map(|s| s.rewards_coordinator_address);
         #[cfg(feature = "eigenlayer")]
         let permission_controller = eigenlayer_settings.map(|s| s.permission_controller_address);
+        #[cfg(feature = "eigenlayer")]
+        let strategy = eigenlayer_settings.map(|s| s.strategy_address);
 
         // Tangle settings
         #[cfg(feature = "tangle")]
@@ -521,6 +519,8 @@ impl ContextConfig {
                 rewards_coordinator,
                 #[cfg(feature = "eigenlayer")]
                 permission_controller,
+                #[cfg(feature = "eigenlayer")]
+                strategy,
             }),
         }
     }
@@ -648,23 +648,23 @@ pub struct BlueprintSettings {
     #[cfg(feature = "networking")]
     #[arg(long, value_parser = <Multiaddr as blueprint_std::str::FromStr>::from_str, action = clap::ArgAction::Append, env)]
     #[serde(default)]
-    bootnodes: Option<Vec<Multiaddr>>,
+    pub bootnodes: Option<Vec<Multiaddr>>,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    network_bind_port: Option<u16>,
+    pub network_bind_port: Option<u16>,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    enable_mdns: bool,
+    pub enable_mdns: bool,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    enable_kademlia: bool,
+    pub enable_kademlia: bool,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    target_peer_count: Option<u32>,
+    pub target_peer_count: Option<u32>,
 
     // =======
     // TANGLE
@@ -781,6 +781,15 @@ pub struct BlueprintSettings {
         required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
     )]
     pub permission_controller: Option<alloy_primitives::Address>,
+    #[cfg(feature = "eigenlayer")]
+    /// The address of the strategy
+    #[arg(
+        long,
+        value_name = "ADDR",
+        env = "STRATEGY_ADDRESS",
+        required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
+    )]
+    pub strategy: Option<alloy_primitives::Address>,
 }
 
 impl Default for BlueprintSettings {
@@ -839,6 +848,8 @@ impl Default for BlueprintSettings {
             rewards_coordinator: None,
             #[cfg(feature = "eigenlayer")]
             permission_controller: None,
+            #[cfg(feature = "eigenlayer")]
+            strategy: None,
         }
     }
 }

@@ -1,0 +1,3 @@
+@openzeppelin-contracts/=dependencies/@openzeppelin-contracts-4.7.0/
+eigenlayer-middleware/=dependencies/eigenlayer-middleware-0.5.4/
+forge-std/=dependencies/forge-std-1.9.6/
