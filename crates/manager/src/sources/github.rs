@@ -1,8 +1,10 @@
+use super::BlueprintSource;
+use super::ProcessHandle;
+use super::binary::{BinarySourceFetcher, generate_running_process_status_handle};
 use crate::error::{Error, Result};
 use crate::gadget::native::get_gadget_binary;
 use crate::sdk;
-use crate::sdk::utils::{get_download_url, hash_bytes_to_hex, valid_file_exists};
-use crate::sources::BinarySourceFetcher;
+use crate::sdk::utils::{get_download_url, hash_bytes_to_hex, make_executable, valid_file_exists};
 use blueprint_core::info;
 use std::path::PathBuf;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::GithubFetcher;
@@ -12,6 +14,18 @@ pub struct GithubBinaryFetcher {
     pub fetcher: GithubFetcher,
     pub blueprint_id: u64,
     pub gadget_name: String,
+    resolved_binary_path: Option<PathBuf>,
+}
+
+impl GithubBinaryFetcher {
+    pub fn new(fetcher: GithubFetcher, blueprint_id: u64, gadget_name: String) -> Self {
+        GithubBinaryFetcher {
+            fetcher,
+            blueprint_id,
+            gadget_name,
+            resolved_binary_path: None,
+        }
+    }
 }
 
 impl BinarySourceFetcher for GithubBinaryFetcher {
@@ -52,6 +66,42 @@ impl BinarySourceFetcher for GithubBinaryFetcher {
         }
 
         Ok(PathBuf::from(binary_download_path))
+    }
+}
+
+impl BlueprintSource for GithubBinaryFetcher {
+    async fn fetch(&mut self) -> Result<()> {
+        if self.resolved_binary_path.is_some() {
+            return Ok(());
+        }
+
+        let mut binary_path = self.get_binary().await?;
+
+        // Ensure the binary is executable
+        binary_path = make_executable(&binary_path)?;
+        self.resolved_binary_path = Some(binary_path);
+        Ok(())
+    }
+
+    async fn spawn(
+        &mut self,
+        service: &str,
+        args: Vec<String>,
+        env: Vec<(String, String)>,
+    ) -> Result<ProcessHandle> {
+        let binary = self.resolved_binary_path.as_ref().expect("should be set");
+        let process_handle = tokio::process::Command::new(binary)
+            .kill_on_drop(true)
+            .stdin(std::process::Stdio::null())
+            .current_dir(&std::env::current_dir()?)
+            .envs(env)
+            .args(args)
+            .spawn()?;
+
+        let (status, abort_handle) =
+            generate_running_process_status_handle(process_handle, service);
+
+        Ok(ProcessHandle::new(status, abort_handle))
     }
 
     fn blueprint_id(&self) -> u64 {
