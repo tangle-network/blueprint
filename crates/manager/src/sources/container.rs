@@ -52,7 +52,8 @@ impl BlueprintSource for ContainerSource {
         let builder = dockworker::DockerBuilder::new()
             .await
             .map_err(|e| Error::Other(e.to_string()))?;
-        let mut container = Container::new(builder.get_client(), image).env(env);
+        let mut container = Container::new(builder.get_client(), image)
+            .env(env.into_iter().map(|(k, v)| format!("{k}={v}")));
 
         let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
         let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<Status>();
