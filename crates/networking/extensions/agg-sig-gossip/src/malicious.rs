@@ -30,17 +30,19 @@ pub enum MaliciousEvidence<S: AggregatableSignature> {
 
 impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<S, W> {
     /// Handle a malicious report message
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the evidence is invalid
     pub fn handle_malicious_report(
         &mut self,
         operator: ParticipantId,
-        evidence: MaliciousEvidence<S>,
+        evidence: &MaliciousEvidence<S>,
         public_keys: &HashMap<ParticipantId, S::Public>,
     ) -> Result<(), AggregationError> {
-        // Verify the evidence
-        let is_malicious = self.verify_malicious_evidence(operator, &evidence, public_keys)?;
-
+        // Verify the evidence and add to malicious set if so
+        let is_malicious = Self::verify_malicious_evidence(operator, evidence, public_keys)?;
         if is_malicious {
-            // Add to malicious set
             self.state.malicious.add(operator);
         }
 
@@ -48,8 +50,21 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     }
 
     /// Verify evidence of malicious behavior
+    ///
+    /// # Arguments
+    ///
+    /// * `operator` - The ID of the operator
+    /// * `evidence` - The evidence to verify
+    /// * `public_keys` - A map of participant IDs to their public keys
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` if the evidence is malicious, `false` otherwise
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the evidence is invalid
     fn verify_malicious_evidence(
-        &self,
         operator: ParticipantId,
         evidence: &MaliciousEvidence<S>,
         public_keys: &HashMap<ParticipantId, S::Public>,
@@ -58,7 +73,7 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
             MaliciousEvidence::InvalidSignature { signature, message } => {
                 let operator_key = public_keys
                     .get(&operator)
-                    .ok_or_else(|| AggregationError::KeyNotFound)?;
+                    .ok_or(AggregationError::KeyNotFound)?;
 
                 // Verify the signature is invalid - handle the Result properly
                 let is_valid = S::verify(operator_key, message, signature);
@@ -73,7 +88,7 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
             } => {
                 let operator_key = public_keys
                     .get(&operator)
-                    .ok_or_else(|| AggregationError::KeyNotFound)?;
+                    .ok_or(AggregationError::KeyNotFound)?;
 
                 // Messages must be different - signing the same message multiple times is allowed
                 if message1 == message2 {

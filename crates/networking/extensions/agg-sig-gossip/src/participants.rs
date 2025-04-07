@@ -14,6 +14,7 @@ pub struct ParticipantSet {
 
 impl ParticipantSet {
     /// Create a new participant set
+    #[must_use]
     pub fn new(max_id: u16) -> Self {
         Self {
             bitvec: bitvec![0; max_id as usize + 1],
@@ -44,6 +45,7 @@ impl ParticipantSet {
     }
 
     /// Check if a participant is in the set
+    #[must_use]
     pub fn contains(&self, id: &ParticipantId) -> bool {
         if id.0 > self.max_id {
             return false;
@@ -53,27 +55,35 @@ impl ParticipantSet {
     }
 
     /// Get the number of participants in the set
+    #[must_use]
     pub fn len(&self) -> usize {
         self.bitvec.count_ones()
     }
 
     /// Check if the set is empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Convert to a HashSet
+    #[must_use]
+    /// Convert to a `HashSet`
+    ///
+    /// # Panics
+    ///
+    /// Panics if the participant ID is greater than the `max_id`
     pub fn to_hashset(&self) -> HashSet<ParticipantId> {
         let mut result = HashSet::with_capacity(self.len());
         for i in 0..=self.max_id as usize {
             if self.bitvec[i] {
-                result.insert(ParticipantId(i as u16));
+                result.insert(ParticipantId(u16::try_from(i).unwrap()));
             }
         }
         result
     }
 
-    /// Create from a HashSet
+    /// Create from a `HashSet`
+    #[must_use]
     pub fn from_hashset(set: &HashSet<ParticipantId>, max_id: u16) -> Self {
         let mut result = Self::new(max_id);
         for &id in set {
@@ -83,25 +93,43 @@ impl ParticipantSet {
     }
 
     /// Union with another set
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sets have different `max_id`
     pub fn union(&mut self, other: &Self) {
         assert_eq!(self.max_id, other.max_id, "Sets must have the same max_id");
         self.bitvec |= &other.bitvec;
     }
 
     /// Intersection with another set
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sets have different `max_id`
     pub fn intersection(&mut self, other: &Self) {
         assert_eq!(self.max_id, other.max_id, "Sets must have the same max_id");
         self.bitvec &= &other.bitvec;
     }
 
     /// Difference from another set
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sets have different `max_id`
     pub fn difference(&mut self, other: &Self) {
         assert_eq!(self.max_id, other.max_id, "Sets must have the same max_id");
         self.bitvec &= !other.bitvec.clone();
     }
 
     /// Iterate over participants in the set
+    ///
+    /// # Panics
+    ///
+    /// Panics if the participant ID is greater than the `max_id`
     pub fn iter(&self) -> impl Iterator<Item = ParticipantId> + '_ {
-        self.bitvec.iter_ones().map(|idx| ParticipantId(idx as u16))
+        self.bitvec
+            .iter_ones()
+            .map(|idx| ParticipantId(u16::try_from(idx).unwrap()))
     }
 }

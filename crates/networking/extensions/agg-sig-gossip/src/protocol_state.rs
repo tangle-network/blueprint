@@ -66,6 +66,7 @@ pub struct AggregationState<S: AggregatableSignature> {
 
 impl<S: AggregatableSignature> AggregationState<S> {
     /// Create a new aggregation state
+    #[must_use]
     pub fn new(max_participants: u16, threshold_weight: u64) -> Self {
         Self {
             signatures_by_message: HashMap::new(),

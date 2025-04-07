@@ -30,6 +30,12 @@ pub struct EqualWeight {
 }
 
 impl EqualWeight {
+    #[must_use]
+    /// Creates a new `EqualWeight` instance
+    ///
+    /// # Panics
+    ///
+    /// Panics if the threshold percentage is greater than 100
     pub fn new(total_participants: usize, threshold_percentage: u8) -> Self {
         assert!(
             threshold_percentage <= 100,
@@ -52,7 +58,7 @@ impl SignatureWeight for EqualWeight {
     }
 
     fn threshold_weight(&self) -> u64 {
-        (self.total_participants as u64 * self.threshold_percentage as u64) / 100
+        (self.total_participants as u64 * u64::from(self.threshold_percentage)) / 100
     }
 }
 
@@ -63,6 +69,7 @@ pub struct CustomWeight {
 }
 
 impl CustomWeight {
+    #[must_use]
     pub fn new(
         weights: std::collections::HashMap<ParticipantId, u64>,
         threshold_weight: u64,

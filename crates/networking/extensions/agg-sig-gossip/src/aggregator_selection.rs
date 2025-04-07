@@ -21,13 +21,34 @@ pub struct AggregatorSelector {
 
 impl AggregatorSelector {
     /// Create a new aggregator selector with desired number of aggregators
+    #[must_use]
     pub fn new(target_aggregators: u16) -> Self {
         Self {
             target_aggregators: target_aggregators.max(1),
         }
     }
 
+    #[allow(
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation
+    )]
+    #[must_use]
     /// Check if a participant should be an aggregator based on their public key
+    ///
+    /// # Arguments
+    ///
+    /// * `participant_id` - The ID of the participant to check
+    /// * `participants_with_keys` - A map of participant IDs to their public keys
+    /// * `message_context` - The context of the message being signed
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` if the participant should be an aggregator, `false` otherwise
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of participants is greater than `u16::MAX`
     pub fn is_aggregator<S: AggregatableSignature>(
         &self,
         participant_id: ParticipantId,
@@ -53,13 +74,14 @@ impl AggregatorSelector {
         message_context.hash(&mut hasher);
 
         // Calculate the threshold based on number of participants and target aggregators
-        let total_participants = participants_with_keys.len() as u16;
+        let total_participants = u16::try_from(participants_with_keys.len()).unwrap();
         let selection_threshold = if total_participants <= self.target_aggregators {
             // If we have fewer participants than desired aggregators, everyone is an aggregator
             u64::MAX
         } else {
             // Calculate a threshold that will select approximately target_aggregators nodes
-            let selection_ratio = self.target_aggregators as f64 / total_participants as f64;
+            let selection_ratio =
+                f64::from(self.target_aggregators) / f64::from(total_participants);
             (selection_ratio * u64::MAX as f64) as u64
         };
 
@@ -68,6 +90,7 @@ impl AggregatorSelector {
     }
 
     /// Get all participants that should be aggregators
+    #[must_use]
     pub fn select_aggregators<S: AggregatableSignature>(
         &self,
         participants_with_keys: &HashMap<ParticipantId, S::Public>,
@@ -79,15 +102,27 @@ impl AggregatorSelector {
             .copied()
             .collect()
     }
-
-    /// Get the target number of aggregators
-    pub fn target_aggregator_count(&self) -> u16 {
-        self.target_aggregators
-    }
 }
 
 impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<S, W> {
     /// Check for a given message if we have enough signatures to meet the threshold
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The message to check the threshold for
+    ///
+    /// # Returns
+    ///
+    /// Returns the participants that contributed to the message if the threshold is met,
+    /// otherwise returns `None`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the threshold is not met
+    ///
+    /// # Panics
+    ///
+    /// Panics if the threshold is not met and the round is `Completion`
     pub fn check_threshold(
         &mut self,
         message: &[u8],
@@ -98,7 +133,7 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
                 let mut honest_contributors = ParticipantSet::new(self.state.max_participants);
                 for id in contributors.iter() {
                     if !self.state.malicious.contains(&id) {
-                        honest_contributors.add(id.clone());
+                        honest_contributors.add(id);
                     }
                 }
                 let total_weight = self.weight_scheme.calculate_weight(&honest_contributors);
@@ -107,8 +142,8 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
                 if total_weight < threshold_weight {
                     if matches!(self.state.round, ProtocolRound::Completion) {
                         return Err(AggregationError::ThresholdNotMet(
-                            total_weight as usize,
-                            threshold_weight as usize,
+                            usize::try_from(total_weight).unwrap(),
+                            usize::try_from(threshold_weight).unwrap(),
                         ));
                     }
                     return Ok(None);
@@ -120,6 +155,7 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     }
 
     /// Collect signatures and public keys for verification
+    #[allow(clippy::type_complexity)]
     fn collect_signatures_and_public_keys(
         &self,
         contributors: &ParticipantSet,
@@ -151,6 +187,12 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
         Ok((signatures, public_keys))
     }
 
+    /// Aggregate and verify signatures
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the public keys or signatures are
+    /// not valid and it fails to aggregate
     pub fn aggregate_and_verify(
         &mut self,
         message: &[u8],
@@ -190,10 +232,14 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     }
 
     /// Build a result for the current protocol round, if possible
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the threshold is not met
     pub fn build_result(
         &mut self,
         message: &[u8],
-        round: ProtocolRound,
+        round: &ProtocolRound,
     ) -> Result<Option<AggregationResult<S>>, AggregationError> {
         debug!("Building result for round {:?}", round);
 
@@ -213,6 +259,10 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     }
 
     /// Verify a result received from another node
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the result is missing data or the threshold is not met
     pub fn verify_result(&mut self, result: &AggregationResult<S>) -> Result<(), AggregationError> {
         match self.aggregate_and_verify(
             &result.message,

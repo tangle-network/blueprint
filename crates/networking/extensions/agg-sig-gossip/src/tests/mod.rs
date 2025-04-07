@@ -62,9 +62,9 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     // Generate keys for the signature aggregation protocol
     let secrets = generate_keys_fn(num_nodes);
     let mut public_keys = HashMap::new();
-    for i in 0..num_nodes {
-        let public_key = S::public_from_secret(&secrets[i]);
-        public_keys.insert(ParticipantId(i as u16), public_key);
+    for (i, secret) in secrets.iter().enumerate() {
+        let public_key = S::public_from_secret(secret);
+        public_keys.insert(ParticipantId(u16::try_from(i).unwrap()), public_key);
         info!("Generated key pair for node {}", i);
     }
 
@@ -84,8 +84,8 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     info!("Starting protocol on {} nodes", num_nodes);
     for i in 0..num_nodes {
         let config = ProtocolConfig {
-            local_id: ParticipantId(i as u16),
-            max_participants: num_nodes as u16,
+            local_id: ParticipantId(u16::try_from(i).unwrap()),
+            max_participants: u16::try_from(num_nodes).unwrap(),
             num_aggregators,
             timeout: protocol_timeout,
             protocol_id: format!("{}-{}", network_name, instance_name),
@@ -114,7 +114,7 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
             info!("Node {} starting protocol execution", i);
             info!("Node {} preparing to sign and broadcast message", i);
             let result = protocol
-                .run(message.to_vec(), &mut secret, &public_keys_clone, &handle)
+                .run(message, &mut secret, &public_keys_clone, &handle)
                 .await;
 
             if result.is_ok() {
@@ -148,8 +148,8 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
 
     for (i, result) in final_results.iter().enumerate() {
         let config = ProtocolConfig {
-            local_id: ParticipantId(i as u16),
-            max_participants: num_nodes as u16,
+            local_id: ParticipantId(u16::try_from(i).unwrap()),
+            max_participants: u16::try_from(num_nodes).unwrap(),
             num_aggregators,
             timeout: protocol_timeout,
             protocol_id: format!("{}-{}", network_name, instance_name),
@@ -159,9 +159,9 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
             crate::aggregator_selection::AggregatorSelector::new(config.num_aggregators);
 
         let is_aggregator = aggregator_selector.is_aggregator::<S>(
-            ParticipantId(i as u16),
+            ParticipantId(u16::try_from(i).unwrap()),
             &public_keys,
-            &message.to_vec(),
+            message.as_ref(),
         );
 
         match result {
@@ -208,7 +208,7 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
 fn generate_test_keys<K: KeyType>(num_keys: usize) -> Vec<K::Secret> {
     let mut keys = Vec::with_capacity(num_keys);
     for i in 0..num_keys {
-        let seed = [i as u8; 32];
+        let seed = [u8::try_from(i).unwrap(); 32];
         keys.push(K::generate_with_seed(Some(&seed)).unwrap());
     }
     keys
@@ -247,8 +247,7 @@ mod bls_tests {
 // BN254 Tests
 mod bn254_tests {
     use super::*;
-    use blueprint_crypto::KeyType;
-    use blueprint_crypto::bn254::{ArkBlsBn254, ArkBlsBn254Secret};
+    use blueprint_crypto::bn254::ArkBlsBn254;
 
     #[tokio::test]
     async fn test_bn254_basic_aggregation() {
