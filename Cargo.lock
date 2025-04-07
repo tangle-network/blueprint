@@ -2683,7 +2683,7 @@ dependencies = [
 [[package]]
 name = "blueprint-build-utils"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=main#545ba1318769a3e975320243a961a8ae9427edb3"
+source = "git+https://github.com/tangle-network/blueprint?branch=main#d34f59bd381fac63f9f6ba9b756babadfde51af1"
 dependencies = [
  "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=main)",
 ]
@@ -3474,7 +3474,7 @@ dependencies = [
 [[package]]
 name = "blueprint-std"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=main#545ba1318769a3e975320243a961a8ae9427edb3"
+source = "git+https://github.com/tangle-network/blueprint?branch=main#d34f59bd381fac63f9f6ba9b756babadfde51af1"
 dependencies = [
  "colored",
  "num-traits",
@@ -8301,12 +8301,12 @@ dependencies = [
 
 [[package]]
 name = "http-body-util"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "793429d76616a256bcb62c2a2ec2bed781c8307e797e2598c50010f2bee2544f"
+checksum = "b021d93e26becf5dc7e1b75b1bed1fd93124b374ceb73f43d4d4eafec896a64a"
 dependencies = [
  "bytes",
- "futures-util",
+ "futures-core",
  "http 1.3.1",
  "http-body 1.0.1",
  "pin-project-lite",
@@ -10897,9 +10897,9 @@ dependencies = [
 
 [[package]]
 name = "ntex-net"
-version = "2.5.11"
+version = "2.5.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "213eb269e4a41edd0c08296c133d955494997f8fb86bfabfc2dba74f99f5e613"
+checksum = "cb8cceda4db20d0420a92235663af93d34996f247f3c46c064cf30a108a40bc1"
 dependencies = [
  "bitflags 2.9.0",
  "cfg-if 1.0.0",
@@ -14828,9 +14828,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.39"
+version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1f1914ce909e1658d9907913b4b91947430c7d9be598b15a1912935b8c04801"
+checksum = "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
 dependencies = [
  "proc-macro2",
 ]
