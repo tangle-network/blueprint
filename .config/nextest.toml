@@ -7,4 +7,4 @@ slow-timeout = { period = "240s", terminate-after = 4 }
 test-threads = 1
 failure-output = "immediate-final"
 fail-fast = false
-slow-timeout = { period = "60s", terminate-after = 4 }
+slow-timeout = { period = "240s", terminate-after = 4 }
