@@ -100,7 +100,7 @@ blueprint-std = { version = "0.1.0", path = "./crates/std", default-features = f
 # P2P
 blueprint-networking = { version = "0.1.0", path = "./crates/networking", default-features = false }
 blueprint-networking-round-based-extension = { version = "0.1.0", path = "./crates/networking/extensions/round-based", default-features = false }
-blueprint-networking-agg-sig-gossip = { version = "0.1.0", path = "./crates/networking/extensions/agg-sig-gossip", default-features = false }
+blueprint-networking-agg-sig-gossip-extension = { version = "0.1.0", path = "./crates/networking/extensions/agg-sig-gossip", default-features = false }
 
 # Testing utilities
 blueprint-testing-utils = { version = "0.1.0", path = "./crates/testing-utils", default-features = false }

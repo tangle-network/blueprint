@@ -3304,7 +3304,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-networking-agg-sig-gossip"
+name = "blueprint-networking-agg-sig-gossip-extension"
 version = "0.1.0"
 dependencies = [
  "bincode",
