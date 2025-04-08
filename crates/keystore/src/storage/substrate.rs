@@ -1,11 +1,33 @@
+use blueprint_std::sync::Arc;
+
 use super::RawStorage;
 use crate::error::Result;
 use blueprint_crypto::KeyTypeId;
 use sp_core::Pair;
 use sp_keystore::Keystore;
 /// A substrate-backed local key storage
+///
+/// This wrapper is used to provide a substrate-backed local key storage.
+/// It implements the [`RawStorage`] trait, which allows for storing and retrieving keys in a
+/// substrate-compatible format.
 pub struct SubstrateStorage {
-    inner: sc_keystore::LocalKeystore,
+    inner: Arc<sc_keystore::LocalKeystore>,
+}
+
+impl core::fmt::Debug for SubstrateStorage {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SubstrateStorage")
+            .field("inner", &"sc_keystore::LocalKeystore")
+            .finish()
+    }
+}
+
+impl Clone for SubstrateStorage {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
 }
 
 mod role_ecdsa {
@@ -35,9 +57,21 @@ mod acco_sr25519 {
     sp_application_crypto::app_crypto!(sr25519, KEY_TYPE);
 }
 
+impl Default for SubstrateStorage {
+    fn default() -> Self {
+        let keystore = sc_keystore::LocalKeystore::in_memory();
+        Self {
+            inner: Arc::new(keystore),
+        }
+    }
+}
+
 impl SubstrateStorage {
+    /// Creates a new `SubstrateStorage` instance.
+    ///
+    /// This wrapper is used to provide a substrate-backed local key storage.
     #[must_use]
-    pub fn new(inner: sc_keystore::LocalKeystore) -> Self {
+    pub fn new(inner: Arc<sc_keystore::LocalKeystore>) -> Self {
         Self { inner }
     }
 }
@@ -162,6 +196,8 @@ fn sp_keystore_key_type_id_of(key_type: KeyTypeId) -> Result<sp_core::crypto::Ke
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use blueprint_crypto::sp_core::{SpSr25519, SpSr25519Public};
     use blueprint_crypto::{IntoCryptoError, KeyType, k256::K256Ecdsa};
 
@@ -172,7 +208,7 @@ mod tests {
     fn test_basic_operations() -> Result<()> {
         let tmpdir = tempfile::tempdir()?;
         let keystore = sc_keystore::LocalKeystore::open(tmpdir.path(), None).unwrap();
-        let raw_storage = SubstrateStorage::new(keystore);
+        let raw_storage = SubstrateStorage::new(Arc::new(keystore));
         let storage = TypedStorage::new(raw_storage);
 
         // Generate a key pair
@@ -201,7 +237,7 @@ mod tests {
     fn test_multiple_key_types() -> Result<()> {
         let tmpdir = tempfile::tempdir()?;
         let keystore = sc_keystore::LocalKeystore::open(tmpdir.path(), None).unwrap();
-        let raw_storage = SubstrateStorage::new(keystore);
+        let raw_storage = SubstrateStorage::new(Arc::new(keystore));
         let storage = TypedStorage::new(raw_storage);
 
         // Create keys of different types
@@ -228,7 +264,7 @@ mod tests {
         let public = keystore
             .sr25519_generate_new(acco_sr25519::KEY_TYPE, None)
             .unwrap();
-        let raw_storage = SubstrateStorage::new(keystore);
+        let raw_storage = SubstrateStorage::new(Arc::new(keystore));
         let storage = TypedStorage::new(raw_storage);
 
         let public = SpSr25519Public(public);

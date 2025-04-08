@@ -97,6 +97,14 @@ impl Keystore {
             }
         }
 
+        #[cfg(feature = "substrate-keystore")]
+        if let Some(inner) = config.substrate {
+            for key_type in KeyTypeId::ENABLED {
+                let backend = crate::storage::SubstrateStorage::new(inner.clone());
+                keystore.register_storage(*key_type, BackendConfig::Local(Box::new(backend)), 0)?;
+            }
+        }
+
         #[cfg(any(
             feature = "aws-signer",
             feature = "gcp-signer",

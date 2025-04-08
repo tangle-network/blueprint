@@ -30,7 +30,7 @@
 /// [`InMemoryStorage`]: crate::storage::InMemoryStorage
 /// [`Keystore`]: crate::Keystore
 /// [`Keystore::new()`]: crate::Keystore::new
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct KeystoreConfig {
     pub(crate) in_memory: bool,
     #[cfg(feature = "std")]
@@ -42,6 +42,29 @@ pub struct KeystoreConfig {
         feature = "ledger-node"
     ))]
     pub(crate) remote_configs: Vec<crate::remote::RemoteConfig>,
+
+    #[cfg(feature = "substrate-keystore")]
+    pub(crate) substrate: Option<blueprint_std::sync::Arc<sc_keystore::LocalKeystore>>,
+}
+
+impl core::fmt::Debug for KeystoreConfig {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut binding = f.debug_struct("KeystoreConfig");
+        let c = binding.field("in_memory", &self.in_memory);
+        #[cfg(feature = "std")]
+        let c = c.field("fs_root", &self.fs_root);
+
+        #[cfg(any(
+            feature = "aws-signer",
+            feature = "gcp-signer",
+            feature = "ledger-browser",
+            feature = "ledger-node"
+        ))]
+        let c = c.field("remote_configs", &self.remote_configs);
+        #[cfg(feature = "substrate-keystore")]
+        c.field("substrate", &"substrate");
+        c.finish()
+    }
 }
 
 impl KeystoreConfig {
@@ -107,6 +130,34 @@ impl KeystoreConfig {
     #[must_use]
     pub fn fs_root<P: AsRef<std::path::Path>>(mut self, path: P) -> Self {
         self.fs_root = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// Register a [`SubstrateStorage`] backend
+    /// See [`SubstrateStorage::new()`] for notes on how `keystore` is used.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use blueprint_keystore::{Keystore, KeystoreConfig};
+    /// use sc_keystore::LocalKeystore;
+    ///
+    /// # fn main() -> blueprint_keystore::Result<()> {
+    /// let keystore = LocalKeystore::in_memory();
+    /// let config = KeystoreConfig::new().substrate(keystore);
+    /// let keystore = Keystore::new(config)?;
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// [`SubstrateStorage`]: crate::storage::SubstrateStorage
+    /// [`SubstrateStorage::new()`]: crate::storage::SubstrateStorage::new
+    #[cfg(feature = "substrate-keystore")]
+    #[must_use]
+    pub fn substrate(
+        mut self,
+        keystore: blueprint_std::sync::Arc<sc_keystore::LocalKeystore>,
+    ) -> Self {
+        self.substrate = Some(keystore);
         self
     }
 
