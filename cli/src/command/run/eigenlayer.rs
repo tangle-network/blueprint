@@ -123,7 +123,13 @@ pub async fn run_eigenlayer_avs(
         .arg("--avs-directory")
         .arg(contract_addresses.avs_directory_address.to_string())
         .arg("--rewards-coordinator")
-        .arg(contract_addresses.rewards_coordinator_address.to_string());
+        .arg(contract_addresses.rewards_coordinator_address.to_string())
+        .arg("--allocation-manager")
+        .arg(contract_addresses.allocation_manager_address.to_string())
+        .arg("--permission-controller")
+        .arg(contract_addresses.permission_controller_address.to_string())
+        .arg("--strategy")
+        .arg(contract_addresses.strategy_address.to_string());
 
     assert!(binary_path.exists(), "Binary path does not exist");
 
