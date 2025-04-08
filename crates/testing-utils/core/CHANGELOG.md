@@ -9,59 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0-alpha.1](https://github.com/tangle-network/blueprint/releases/tag/blueprint-core-testing-utils-v0.1.0-alpha.1) - 2025-04-08
 
-### Added
-
-- increase eigen client methods ([#697](https://github.com/tangle-network/blueprint/pull/697))
-- *(cargo-tangle)* tangle command workflow  ([#703](https://github.com/tangle-network/blueprint/pull/703))
-- *(testing-utils)* support per-node contexts ([#739](https://github.com/tangle-network/blueprint/pull/739))
-- get blueprint protocol basic summation gossip working ([#678](https://github.com/tangle-network/blueprint/pull/678))
-- Add multinode test executor
-- testing improvement ([#629](https://github.com/tangle-network/blueprint/pull/629))
-- gadget workspace migration
-
-### Fixed
-
-- *(testing-utils)* allow setting harness context after creation ([#733](https://github.com/tangle-network/blueprint/pull/733))
-- *(testing-utils)* support non-unit contexts ([#723](https://github.com/tangle-network/blueprint/pull/723))
-- finish migration of new job system ([#699](https://github.com/tangle-network/blueprint/pull/699))
-
 ### Other
 
-- release ([#843](https://github.com/tangle-network/blueprint/pull/843))
-- set crates to pre-release versions ([#842](https://github.com/tangle-network/blueprint/pull/842))
-- pin workspace to 1.85 ([#821](https://github.com/tangle-network/blueprint/pull/821))
-- Implement the crate naming conventions ([#759](https://github.com/tangle-network/blueprint/pull/759))
-- remove `gadget-logging` ([#725](https://github.com/tangle-network/blueprint/pull/725))
-- remove `async-trait` ([#717](https://github.com/tangle-network/blueprint/pull/717))
-- *(clippy)* use workspace lints globally ([#710](https://github.com/tangle-network/blueprint/pull/710))
-- remove old event listeners and runners
-- add descriptions to crates ([#616](https://github.com/tangle-network/blueprint/pull/616))
-
-## [0.1.0-alpha.1](https://github.com/tangle-network/blueprint/releases/tag/blueprint-core-testing-utils-v0.1.0-alpha.1) - 2025-04-08
-
-### Added
-
-- increase eigen client methods ([#697](https://github.com/tangle-network/blueprint/pull/697))
-- *(cargo-tangle)* tangle command workflow  ([#703](https://github.com/tangle-network/blueprint/pull/703))
-- *(testing-utils)* support per-node contexts ([#739](https://github.com/tangle-network/blueprint/pull/739))
-- get blueprint protocol basic summation gossip working ([#678](https://github.com/tangle-network/blueprint/pull/678))
-- Add multinode test executor
-- testing improvement ([#629](https://github.com/tangle-network/blueprint/pull/629))
-- gadget workspace migration
-
-### Fixed
-
-- *(testing-utils)* allow setting harness context after creation ([#733](https://github.com/tangle-network/blueprint/pull/733))
-- *(testing-utils)* support non-unit contexts ([#723](https://github.com/tangle-network/blueprint/pull/723))
-- finish migration of new job system ([#699](https://github.com/tangle-network/blueprint/pull/699))
-
-### Other
-
-- set crates to pre-release versions ([#842](https://github.com/tangle-network/blueprint/pull/842))
-- pin workspace to 1.85 ([#821](https://github.com/tangle-network/blueprint/pull/821))
-- Implement the crate naming conventions ([#759](https://github.com/tangle-network/blueprint/pull/759))
-- remove `gadget-logging` ([#725](https://github.com/tangle-network/blueprint/pull/725))
-- remove `async-trait` ([#717](https://github.com/tangle-network/blueprint/pull/717))
-- *(clippy)* use workspace lints globally ([#710](https://github.com/tangle-network/blueprint/pull/710))
-- remove old event listeners and runners
-- add descriptions to crates ([#616](https://github.com/tangle-network/blueprint/pull/616))
+- Initial release
