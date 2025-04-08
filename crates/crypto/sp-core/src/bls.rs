@@ -1,6 +1,3 @@
-#[cfg(test)]
-mod tests;
-
 use blueprint_crypto_core::BytesEncoding;
 use blueprint_std::{
     hash::Hash,

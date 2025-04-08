@@ -1,24 +1,28 @@
-#![allow(dead_code)]
-use blueprint_crypto::KeyType;
-use blueprint_networking::{
+use crate::{
     NetworkConfig, NetworkService, service::AllowedKeys, service_handle::NetworkServiceHandle,
 };
+use blueprint_crypto::KeyType;
 use libp2p::{
     Multiaddr, PeerId,
     identity::{self, Keypair},
 };
-use std::string::ToString;
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 use tracing::info;
 
-pub fn init_tracing() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_target(true)
-        .with_thread_ids(false)
-        .with_file(true)
-        .with_line_number(true)
+pub fn setup_log() {
+    use tracing_subscriber::filter::LevelFilter;
+    use tracing_subscriber::util::SubscriberInitExt;
+
+    let _ = tracing_subscriber::fmt::SubscriberBuilder::default()
+        .without_time()
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NONE)
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .finish()
         .try_init();
 }
 
@@ -29,6 +33,7 @@ pub struct TestNode<K: KeyType> {
     pub listen_addr: Option<Multiaddr>,
     pub instance_key_pair: K::Secret,
     pub local_key: Keypair,
+    pub using_evm_address_for_handshake_verification: bool,
 }
 
 impl<K: KeyType> TestNode<K> {
@@ -52,6 +57,24 @@ impl<K: KeyType> TestNode<K> {
     }
 
     /// Create a new test node with specified keys
+    ///
+    /// # Arguments
+    ///
+    /// * `network_name` - The name of the network
+    /// * `instance_id` - The instance ID of the node
+    /// * `allowed_keys` - The allowed keys for the node
+    /// * `bootstrap_peers` - The bootstrap peers for the node
+    /// * `instance_key_pair` - The instance key pair for the node
+    /// * `local_key` - The local key for the node
+    /// * `using_evm_address_for_handshake_verification` - Whether to use the EVM address for handshake verification
+    ///
+    /// # Returns
+    ///
+    /// Returns a new test node
+    ///
+    /// # Panics
+    ///
+    /// Panics if the local key is not provided and cannot be generated
     pub fn new_with_keys(
         network_name: &str,
         instance_id: &str,
@@ -94,10 +117,15 @@ impl<K: KeyType> TestNode<K> {
             listen_addr: None,
             instance_key_pair,
             local_key,
+            using_evm_address_for_handshake_verification,
         }
     }
 
     /// Start the node and wait for it to be fully initialized
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service is already started
     pub async fn start(&mut self) -> Result<NetworkServiceHandle<K>, &'static str> {
         // Take ownership of the service
         let service = self.service.take().ok_or("Service already started")?;
@@ -167,9 +195,25 @@ impl<K: KeyType> TestNode<K> {
     pub fn get_listen_addr(&self) -> Option<Multiaddr> {
         self.listen_addr.clone()
     }
+
+    /// Update the allowed keys for this node
+    pub fn update_allowed_keys(&self, allowed_keys: AllowedKeys<K>) {
+        if let Some(service) = &self.service {
+            service.peer_manager.update_whitelisted_keys(allowed_keys);
+        }
+    }
 }
 
 /// Wait for a condition with timeout
+///
+/// # Arguments
+///
+/// * `timeout` - The timeout for the wait
+/// * `condition` - The condition to wait for
+///
+/// # Errors
+///
+/// Returns an error if the condition timed out
 pub async fn wait_for_condition<F>(timeout: Duration, mut condition: F) -> Result<(), &'static str>
 where
     F: FnMut() -> bool,
@@ -185,6 +229,15 @@ where
 }
 
 /// Wait for peers to discover each other
+///
+/// # Arguments
+///
+/// * `handles` - The handles to wait for peer discovery
+/// * `timeout` - The timeout for the wait
+///
+/// # Errors
+///
+/// Returns an error if the peer discovery timed out
 pub async fn wait_for_peer_discovery<K: KeyType>(
     handles: &[&NetworkServiceHandle<K>],
     timeout: Duration,
@@ -205,6 +258,16 @@ pub async fn wait_for_peer_discovery<K: KeyType>(
 }
 
 /// Wait for peer info to be updated
+///
+/// # Arguments
+///
+/// * `handle1` - The first handle
+/// * `handle2` - The second handle
+/// * `timeout` - The timeout for the wait
+///
+/// # Panics
+///
+/// Panics if the peer info timed out
 pub async fn wait_for_peer_info<K: KeyType>(
     handle1: &NetworkServiceHandle<K>,
     handle2: &NetworkServiceHandle<K>,
@@ -236,4 +299,161 @@ pub async fn wait_for_peer_info<K: KeyType>(
         Ok(()) => info!("Peer info updated successfully in both directions"),
         Err(e) => panic!("Peer info update timed out: {e}"),
     }
+}
+
+/// Helper to wait for handshake completion between multiple nodes
+///
+/// # Arguments
+///
+/// * `handles` - The handles to wait for handshake completion
+/// * `timeout_length` - The timeout for the wait
+///
+/// # Panics
+///
+/// Panics if the handshake verification timed out
+pub async fn wait_for_all_handshakes<K: KeyType>(
+    handles: &[&mut NetworkServiceHandle<K>],
+    timeout_length: Duration,
+) {
+    info!("Starting handshake wait for {} nodes", handles.len());
+    timeout(timeout_length, async {
+        loop {
+            let mut all_verified = true;
+            for (i, handle1) in handles.iter().enumerate() {
+                for (j, handle2) in handles.iter().enumerate() {
+                    if i != j {
+                        let verified = handle1
+                            .peer_manager
+                            .is_peer_verified(&handle2.local_peer_id);
+                        if !verified {
+                            info!("Node {} -> Node {}: handshake not verified yet", i, j);
+                            all_verified = false;
+                            break;
+                        }
+                    }
+                }
+                if !all_verified {
+                    break;
+                }
+            }
+            if all_verified {
+                info!("All handshakes completed successfully");
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("Handshake verification timed out");
+}
+
+/// Helper to wait for handshake completion between two nodes
+///
+/// # Arguments
+///
+/// * `handle1` - The first handle
+/// * `handle2` - The second handle
+/// * `timeout_length` - The timeout for the wait
+///
+/// # Panics
+///
+/// Panics if the handshake verification timed out
+pub async fn wait_for_handshake_completion<K: KeyType>(
+    handle1: &NetworkServiceHandle<K>,
+    handle2: &NetworkServiceHandle<K>,
+    timeout_length: Duration,
+) {
+    timeout(timeout_length, async {
+        loop {
+            if handle1
+                .peer_manager
+                .is_peer_verified(&handle2.local_peer_id)
+                && handle2
+                    .peer_manager
+                    .is_peer_verified(&handle1.local_peer_id)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("Handshake verification timed out");
+}
+
+/// Helper to create a whitelisted test node
+///
+/// # Arguments
+///
+/// * `network` - The network name
+/// * `instance` - The instance ID
+/// * `allowed_keys` - The allowed keys for the node
+/// * `key_pair` - The key pair for the node
+/// * `using_evm_address_for_handshake_verification` - Whether to use the EVM address for handshake verification
+///
+/// # Returns
+///
+/// Returns a new test node
+pub fn create_node_with_keys<K: KeyType>(
+    network: &str,
+    instance: &str,
+    allowed_keys: AllowedKeys<K>,
+    key_pair: Option<K::Secret>,
+    using_evm_address_for_handshake_verification: bool,
+) -> TestNode<K> {
+    TestNode::new_with_keys(
+        network,
+        instance,
+        allowed_keys,
+        vec![],
+        key_pair,
+        None,
+        using_evm_address_for_handshake_verification,
+    )
+}
+
+/// Helper to create a set of nodes with whitelisted keys
+///
+/// # Arguments
+///
+/// * `count` - The number of nodes to create
+/// * `using_evm_address_for_handshake_verification` - Whether to use the EVM address for handshake verification
+///
+/// # Returns
+///
+/// Returns a vector of test nodes
+///
+/// # Panics
+///
+/// Panics if the local key is not provided and cannot be generated
+#[must_use]
+pub fn create_whitelisted_nodes<K: KeyType>(
+    count: usize,
+    network_name: &str,
+    instance_name: &str,
+    using_evm_address_for_handshake_verification: bool,
+) -> Vec<TestNode<K>> {
+    let mut nodes = Vec::with_capacity(count);
+    let mut key_pairs = Vec::with_capacity(count);
+    let mut allowed_keys = HashSet::new();
+
+    // Generate all key pairs first
+    for _ in 0..count {
+        let key_pair = K::generate_with_seed(None).unwrap();
+        key_pairs.push(key_pair.clone());
+        allowed_keys.insert(K::public_from_secret(&key_pair));
+    }
+
+    // Create nodes with whitelisted keys
+    for key_pair in &key_pairs {
+        nodes.push(create_node_with_keys(
+            network_name,
+            instance_name,
+            AllowedKeys::InstancePublicKeys(allowed_keys.clone()),
+            Some(key_pair.clone()),
+            using_evm_address_for_handshake_verification,
+        ));
+    }
+
+    nodes
 }

@@ -1,7 +1,5 @@
 //! Simple protocol in which parties cooperate to generate randomness
 
-mod common;
-
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, digest::Output};
 
@@ -174,15 +172,25 @@ mod tests {
     use std::collections::{HashMap, HashSet};
     use std::time::Duration;
 
-    use super::common::*;
     use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
     use blueprint_networking::discovery::peers::VerificationIdentifierKey;
     use blueprint_networking::service::AllowedKeys;
+    use blueprint_networking::test_utils::{TestNode, wait_for_peer_discovery};
     use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
     use round_based::MpcParty;
     use tracing::{debug, info};
 
     use super::protocol_of_random_generation;
+
+    fn init_tracing() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_file(true)
+            .with_line_number(true)
+            .try_init();
+    }
 
     #[test]
     fn simulation() {

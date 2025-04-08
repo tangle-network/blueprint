@@ -160,7 +160,6 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
     let create_quorum_receipt = get_receipt(create_quorum_call).await;
     match create_quorum_receipt {
         Ok(receipt) => {
-            println!("Quorum created with receipt: {:?}", receipt);
             if receipt.status() {
                 println!(
                     "Quorum created with transaction hash: {:?}",

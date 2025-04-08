@@ -7,6 +7,10 @@ pub enum BlsError {
     InvalidSeed(String),
     #[error("Invalid hex string: {0}")]
     HexError(hex::FromHexError),
+    #[error("Invalid signature")]
+    InvalidSignature,
+    #[error("Invalid input")]
+    InvalidInput(String),
 }
 
 impl From<hex::FromHexError> for BlsError {
