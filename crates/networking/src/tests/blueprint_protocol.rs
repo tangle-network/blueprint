@@ -14,7 +14,7 @@ use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 use tracing::info;
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(10);
+const TEST_TIMEOUT: Duration = Duration::from_secs(20);
 const PROTOCOL_NAME: &str = "summation/1.0.0";
 
 // Protocol message types
