@@ -49,7 +49,7 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
             init_paused_status: U256::from(0),
             max_rewards_duration: 864_000_u32,
             max_retroactive_length: 432_000_u32,
-            max_future_length: 86400u32,
+            max_future_length: 864_000_u32,
             genesis_rewards_timestamp: 1_672_531_200_u32,
             updater: owner_account,
             activation_delay: 0u32,

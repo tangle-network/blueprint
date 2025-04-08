@@ -85,6 +85,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_TERM_COLOR: always
+      RUST_LOG: info
     steps:
       - name: checkout code
         uses: actions/checkout@v2
@@ -110,7 +111,7 @@ jobs:
 
       - name: tests
         working-directory: examples/incredible-squaring/incredible-squaring-lib
-        run: cargo nextest run
+        run: cargo nextest run --profile ci
 
   testing:
     needs: generate-matrix

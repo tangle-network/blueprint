@@ -146,7 +146,7 @@ tower = { version = "0.5.2", default-features = false }
 async-stream = { version = "0.3.6", default-features = false }
 
 # CLI & Configuration
-cargo-generate = { version = "0.22.1", default-features = false }
+cargo-generate = { version = "0.23", default-features = false }
 clap = { version = "4.5.34" }
 clap-cargo = { version = "0.14", default-features = false }
 toml = { version = "0.8.19", default-features = false }

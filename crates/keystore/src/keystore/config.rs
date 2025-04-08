@@ -140,11 +140,12 @@ impl KeystoreConfig {
     ///
     /// ```rust,no_run
     /// use blueprint_keystore::{Keystore, KeystoreConfig};
+    /// use blueprint_std::sync::Arc;
     /// use sc_keystore::LocalKeystore;
     ///
     /// # fn main() -> blueprint_keystore::Result<()> {
     /// let keystore = LocalKeystore::in_memory();
-    /// let config = KeystoreConfig::new().substrate(keystore);
+    /// let config = KeystoreConfig::new().substrate(Arc::new(keystore));
     /// let keystore = Keystore::new(config)?;
     /// # Ok(()) }
     /// ```
