@@ -1,0 +1,40 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0-alpha.1](https://github.com/tangle-network/blueprint/releases/tag/blueprint-core-v0.1.0-alpha.1) - 2025-04-08
+
+### Added
+
+- *(cargo-tangle)* tangle command workflow  ([#703](https://github.com/tangle-network/blueprint/pull/703))
+- core extractors ([#36](https://github.com/tangle-network/blueprint/pull/36))
+- EVM Consumers ([#30](https://github.com/tangle-network/blueprint/pull/30))
+- allow jobs to return errors
+- re-integrate the blueprint configs ([#28](https://github.com/tangle-network/blueprint/pull/28))
+- reflection ([#16](https://github.com/tangle-network/blueprint/pull/16))
+- add Tangle job layer
+- add Tangle result consumer
+- more EVM extractors ([#15](https://github.com/tangle-network/blueprint/pull/15))
+- allow empty call returns
+- EVM impl, contract and block events. ([#3](https://github.com/tangle-network/blueprint/pull/3))
+
+### Fixed
+
+- *(core)* unused variables in __log_rejection ([#810](https://github.com/tangle-network/blueprint/pull/810))
+- job call rejections should be errors ([#807](https://github.com/tangle-network/blueprint/pull/807))
+- many broken doc links ([#779](https://github.com/tangle-network/blueprint/pull/779))
+- *(core)* change the return of `JobResult::body()` ([#722](https://github.com/tangle-network/blueprint/pull/722))
+- finish migration of new job system ([#699](https://github.com/tangle-network/blueprint/pull/699))
+
+### Other
+
+- set crates to pre-release versions ([#842](https://github.com/tangle-network/blueprint/pull/842))
+- pin workspace to 1.85 ([#821](https://github.com/tangle-network/blueprint/pull/821))
+- *(clippy)* use workspace lints globally ([#710](https://github.com/tangle-network/blueprint/pull/710))
+- remove old event listeners and runners
+- rustdoc and READMEs for crates ([#27](https://github.com/tangle-network/blueprint/pull/27))
