@@ -18,6 +18,7 @@ pub struct GithubBinaryFetcher {
 }
 
 impl GithubBinaryFetcher {
+    #[must_use]
     pub fn new(fetcher: GithubFetcher, blueprint_id: u64, gadget_name: String) -> Self {
         GithubBinaryFetcher {
             fetcher,

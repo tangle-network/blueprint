@@ -1,9 +1,13 @@
 use super::ProcessHandle;
 use super::{BlueprintSource, Status};
 use crate::error::{Error, Result};
+use dockworker::DockerBuilder;
+use dockworker::bollard::Docker;
 use dockworker::container::Container;
+use std::sync::Arc;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::ImageRegistryFetcher;
 use tokio::process::Command;
+use tokio::sync::{mpsc, oneshot};
 use tracing::{info, log, warn};
 
 pub struct ContainerSource {
@@ -24,18 +28,16 @@ impl BlueprintSource for ContainerSource {
             .map_err(|e| Error::Other(e.to_string()))?;
 
         let full = format!("{registry}/{image}:{tag}");
-
         log::info!("Pulling image {full}");
 
         Command::new("docker")
             .arg("pull")
-            .arg(full)
+            .arg(&full)
             .status()
             .await
             .map_err(|e| Error::Other(e.to_string()))?;
 
         self.resolved_image = Some(format!("{image}:{tag}"));
-
         Ok(())
     }
 
@@ -45,38 +47,31 @@ impl BlueprintSource for ContainerSource {
         _args: Vec<String>,
         env: Vec<(String, String)>,
     ) -> Result<ProcessHandle> {
-        let Some(image) = &self.resolved_image else {
-            return Err(Error::Other("Image not resolved".to_string()));
+        let image = match &self.resolved_image {
+            Some(img) => img.clone(),
+            None => return Err(Error::Other("Image not resolved".to_string())),
         };
 
-        let builder = dockworker::DockerBuilder::new()
+        let builder = DockerBuilder::new()
             .await
             .map_err(|e| Error::Other(e.to_string()))?;
-        let mut container = Container::new(builder.get_client(), image)
-            .env(env.into_iter().map(|(k, v)| format!("{k}={v}")));
+        let client = builder.get_client().clone();
 
-        let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
-        let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<Status>();
+        let client = Arc::new(client);
 
-        let task = async move {
-            info!("Starting process execution for {service}");
-            let _ = status_tx.send(Status::Running).ok();
-            let output = container.start(true).await;
-            if output.is_ok() {
-                let _ = status_tx.send(Status::Finished).ok();
-            } else {
-                let _ = status_tx.send(Status::Error).ok();
-            }
+        let (stop_tx, stop_rx) = oneshot::channel::<()>();
+        let (status_tx, status_rx) = mpsc::unbounded_channel::<Status>();
 
-            warn!("Process for {service} exited: {output:?}");
-        };
-
-        let task = async move {
-            tokio::select! {
-                _ = stop_rx => {},
-                () = task => {},
-            }
-        };
+        let service_name = service.to_string();
+        let env_clone = env.clone();
+        tokio::spawn(run_container(
+            client,
+            image,
+            env_clone,
+            status_tx,
+            stop_rx,
+            service_name,
+        ));
 
         Ok(ProcessHandle::new(status_rx, stop_tx))
     }
@@ -87,5 +82,45 @@ impl BlueprintSource for ContainerSource {
 
     fn name(&self) -> String {
         self.gadget_name.clone()
+    }
+}
+
+async fn run_container(
+    client: Arc<Docker>,
+    image: String,
+    env: Vec<(String, String)>,
+    status_tx: mpsc::UnboundedSender<Status>,
+    mut stop_rx: oneshot::Receiver<()>,
+    service_name: String,
+) {
+    let mut container = Container::new(&client, image);
+    container.env(env.into_iter().map(|(k, v)| format!("{k}={v}")));
+
+    let container_run = async {
+        info!("Starting process execution for {service_name}");
+        let _ = status_tx.send(Status::Running);
+
+        let output = container.start(true).await;
+        if output.is_ok() {
+            let _ = status_tx.send(Status::Finished);
+        } else {
+            let _ = status_tx.send(Status::Error);
+        }
+
+        if let Err(e) = container.stop().await {
+            let id = container.id();
+            warn!("Failed to stop container with id `{id:?}`: {e}");
+        }
+        warn!("Process for {service_name} exited: {output:?}");
+    };
+
+    tokio::select! {
+        _ = &mut stop_rx => {
+            if let Err(e) = container.stop().await {
+                let id = container.id();
+                warn!("Stop signal received but failed to stop container with id `{id:?}`: {e}");
+            }
+        },
+        () = container_run => {},
     }
 }

@@ -22,6 +22,7 @@ pub struct ProcessHandle {
 }
 
 impl ProcessHandle {
+    #[must_use]
     pub fn new(
         mut status: UnboundedReceiver<Status>,
         abort_handle: tokio::sync::oneshot::Sender<()>,
@@ -42,6 +43,7 @@ impl ProcessHandle {
         self.status.recv().await
     }
 
+    #[must_use]
     pub fn abort(self) -> bool {
         self.abort_handle.send(()).is_ok()
     }

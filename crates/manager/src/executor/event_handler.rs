@@ -72,7 +72,11 @@ impl VerifiedBlueprint {
                 // We must wait for the process to exit successfully
                 let Some(status) = handle.wait_for_status_change().await else {
                     error!("Process status channel closed unexpectedly, aborting...");
-                    handle.abort();
+                    if !handle.abort() {
+                        error!(
+                            "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                        );
+                    }
                     continue;
                 };
 
@@ -89,7 +93,11 @@ impl VerifiedBlueprint {
                     }
                     Status::Running => {
                         error!("Process did not terminate successfully, aborting...");
-                        handle.abort();
+                        if !handle.abort() {
+                            error!(
+                                "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                            );
+                        }
                     }
                 }
                 continue;
@@ -322,12 +330,12 @@ pub(crate) async fn handle_tangle_event(
             }
 
             // Check to see if any process handles have died
-            if !to_remove.contains(&(*blueprint_id, *service_id)) {
-                if process_handle.status() != Status::Running {
-                    // By removing any killed processes, we will auto-restart them on the next finality notification if required
-                    warn!("Killing service that has died to allow for auto-restart");
-                    to_remove.push((*blueprint_id, *service_id));
-                }
+            if !to_remove.contains(&(*blueprint_id, *service_id))
+                && process_handle.status() != Status::Running
+            {
+                // By removing any killed processes, we will auto-restart them on the next finality notification if required
+                warn!("Killing service that has died to allow for auto-restart");
+                to_remove.push((*blueprint_id, *service_id));
             }
         }
     }
@@ -340,11 +348,11 @@ pub(crate) async fn handle_tangle_event(
         if let Some(gadgets) = active_gadgets.get_mut(&blueprint_id) {
             if let Some(process_handle) = gadgets.remove(&service_id) {
                 if process_handle.abort() {
+                    warn!("Sent abort signal to service: bid={blueprint_id}//sid={service_id}");
+                } else {
                     error!(
                         "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
                     );
-                } else {
-                    warn!("Sent abort signal to service: bid={blueprint_id}//sid={service_id}");
                 }
             }
 

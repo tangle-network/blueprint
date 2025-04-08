@@ -15,6 +15,7 @@ pub struct TestSourceFetcher {
 }
 
 impl TestSourceFetcher {
+    #[must_use]
     pub fn new(fetcher: TestFetcher, blueprint_id: u64, gadget_name: String) -> Self {
         Self {
             fetcher,
