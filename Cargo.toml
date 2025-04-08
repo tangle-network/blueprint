@@ -176,7 +176,7 @@ serde = { version = "1.0.208", default-features = false }
 serde_bytes = { version = "0.11.15", default-features = false }
 serde_json = { version = "1.0", default-features = false }
 serde_test = { version = "1.0.177", default-features = false }
-dynosaur = { git = "https://github.com/spastorino/dynosaur.git", rev = "7a761a3", default-features = false }
+dynosaur = { version = "0.2.0", default-features = false }
 bytes = { version = "1.10.1", default-features = false }
 hashbrown = { version = "0.15.2", default-features = false }
 
@@ -212,6 +212,7 @@ chrono = { version = "0.4.40", default-features = false }
 auto_impl = { version = "1.2.1", default-features = false }
 eigenlayer-contract-deployer = { version = "0.1.0", default-features = false }
 cargo_toml = { version = "0.21.0", default-features = false }
+docktopus = { version = "0.1.0", default-features = false }
 itertools = { version = "0.14.0", default-features = false }
 paste = { version = "1.0.15", default-features = false }
 proc-macro2 = { version = "1.0", default-features = false }

@@ -2,18 +2,16 @@ use crate::config::BlueprintManagerConfig;
 use crate::error::{Error, Result};
 use crate::gadget::native::FilteredBlueprint;
 use crate::gadget::ActiveGadgets;
-use crate::sdk::utils::{
-    bounded_string_to_string, generate_running_process_status_handle, make_executable,
-};
+use crate::sdk::utils::bounded_string_to_string;
 use crate::sources::github::GithubBinaryFetcher;
-use crate::sources::{process_arguments_and_env, BinarySourceFetcher, DynBinarySourceFetcher};
+use crate::sources::{process_arguments_and_env, BlueprintSource, DynBlueprintSource, Status};
+use crate::sources::testing::TestSourceFetcher;
 use blueprint_clients::tangle::client::{TangleConfig, TangleEvent};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
 use blueprint_runner::config::Protocol;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_core::{error, info, trace, warn};
 use blueprint_std::fmt::Debug;
-use blueprint_std::sync::atomic::Ordering;
 use tangle_subxt::subxt::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::{
     Gadget, GadgetSourceFetcher,
@@ -25,18 +23,18 @@ use tangle_subxt::tangle_testnet_runtime::api::services::events::{
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
 
 pub struct VerifiedBlueprint {
-    pub(crate) fetcher: Box<DynBinarySourceFetcher<'static>>,
+    pub(crate) fetcher: Box<DynBlueprintSource<'static>>,
     pub(crate) blueprint: FilteredBlueprint,
 }
 
 impl VerifiedBlueprint {
     pub async fn start_services_if_needed(
-        &self,
+        &mut self,
         gadget_config: &BlueprintEnvironment,
         blueprint_manager_opts: &BlueprintManagerConfig,
         active_gadgets: &mut ActiveGadgets,
     ) -> Result<()> {
-        let blueprint_source = &self.fetcher;
+        let blueprint_source = &mut self.fetcher;
         let blueprint = &self.blueprint;
 
         let blueprint_id = blueprint_source.blueprint_id();
@@ -44,18 +42,7 @@ impl VerifiedBlueprint {
             return Ok(());
         }
 
-        let mut binary_download_path = blueprint_source.get_binary().await?;
-
-        // Ensure the binary is executable
-        if cfg!(target_family = "windows") {
-            if binary_download_path.extension().is_none() {
-                binary_download_path.set_extension("exe");
-            }
-        } else if let Err(err) = make_executable(&binary_download_path) {
-            let msg = format!("Failed to make the binary executable: {err}");
-            warn!("{}", msg);
-            return Err(Error::Other(msg));
-        }
+        blueprint_source.fetch().await?;
 
         let service_str = blueprint_source.name();
         for service_id in &blueprint.services {
@@ -72,38 +59,54 @@ impl VerifiedBlueprint {
             info!("Starting protocol: {sub_service_str} with args: {arguments:?}");
 
             // Now that the file is loaded, spawn the process
-            let process_handle = tokio::process::Command::new(&binary_download_path)
-                .kill_on_drop(true)
-                .stdin(std::process::Stdio::null())
-                .current_dir(&std::env::current_dir()?)
-                .envs(env_vars)
-                .args(arguments)
-                .spawn()?;
+            let mut handle = blueprint_source
+                .spawn(&sub_service_str, arguments, env_vars)
+                .await?;
+
+            if handle.status() != Status::Running {
+                error!("Process did not start successfully");
+                continue;
+            }
 
             if blueprint.registration_mode {
                 // We must wait for the process to exit successfully
-                let status = process_handle.wait_with_output().await?;
-                if status.status.success() {
-                    info!(
-                        "***Protocol (registration mode) {sub_service_str} executed successfully***"
-                    );
-                } else {
-                    error!(
-                        "Protocol (registration mode) {sub_service_str} failed to execute: {status:?}"
-                    );
+                let Some(status) = handle.wait_for_status_change().await else {
+                    error!("Process status channel closed unexpectedly, aborting...");
+                    if !handle.abort() {
+                        error!(
+                            "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                        );
+                    }
+                    continue;
+                };
+
+                match status {
+                    Status::Finished => {
+                        info!(
+                            "***Protocol (registration mode) {sub_service_str} executed successfully***"
+                        );
+                    }
+                    Status::Error => {
+                        error!(
+                            "Protocol (registration mode) {sub_service_str} failed to execute: {status:?}"
+                        );
+                    }
+                    Status::Running => {
+                        error!("Process did not terminate successfully, aborting...");
+                        if !handle.abort() {
+                            error!(
+                                "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                            );
+                        }
+                    }
                 }
                 continue;
             }
 
-            // A normal running gadget binary. Store the process handle and let the event loop handle the rest
-
-            let (status_handle, abort) =
-                generate_running_process_status_handle(process_handle, &sub_service_str);
-
             active_gadgets
                 .entry(blueprint_id)
                 .or_default()
-                .insert(*service_id, (status_handle, Some(abort)));
+                .insert(*service_id, handle);
         }
 
         Ok(())
@@ -296,7 +299,7 @@ pub(crate) async fn handle_tangle_event(
     );
 
     // Step 3: Check to see if we need to start any new services
-    for blueprint in &verified_blueprints {
+    for blueprint in &mut verified_blueprints {
         blueprint
             .start_services_if_needed(gadget_config, manager_opts, active_gadgets)
             .await?;
@@ -328,7 +331,7 @@ pub(crate) async fn handle_tangle_event(
 
             // Check to see if any process handles have died
             if !to_remove.contains(&(*blueprint_id, *service_id))
-                && !process_handle.0.load(Ordering::Relaxed)
+                && process_handle.status() != Status::Running
             {
                 // By removing any killed processes, we will auto-restart them on the next finality notification if required
                 warn!("Killing service that has died to allow for auto-restart");
@@ -343,15 +346,13 @@ pub(crate) async fn handle_tangle_event(
         );
         let mut should_delete_blueprint = false;
         if let Some(gadgets) = active_gadgets.get_mut(&blueprint_id) {
-            if let Some((_, mut process_handle)) = gadgets.remove(&service_id) {
-                if let Some(abort_handle) = process_handle.take() {
-                    if abort_handle.send(()).is_err() {
-                        error!(
-                            "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
-                        );
-                    } else {
-                        warn!("Sent abort signal to service: bid={blueprint_id}//sid={service_id}");
-                    }
+            if let Some(process_handle) = gadgets.remove(&service_id) {
+                if process_handle.abort() {
+                    warn!("Sent abort signal to service: bid={blueprint_id}//sid={service_id}");
+                } else {
+                    error!(
+                        "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                    );
                 }
             }
 
@@ -371,9 +372,9 @@ pub(crate) async fn handle_tangle_event(
 fn get_fetcher_candidates(
     blueprint: &FilteredBlueprint,
     manager_opts: &BlueprintManagerConfig,
-) -> Result<Vec<Box<DynBinarySourceFetcher<'static>>>> {
+) -> Result<Vec<Box<DynBlueprintSource<'static>>>> {
     let mut test_fetcher_idx = None;
-    let mut fetcher_candidates: Vec<Box<DynBinarySourceFetcher<'static>>> = vec![];
+    let mut fetcher_candidates: Vec<Box<DynBlueprintSource<'static>>> = vec![];
 
     let sources;
     match &blueprint.gadget {
@@ -393,13 +394,12 @@ fn get_fetcher_candidates(
     for (source_idx, gadget_source) in sources.iter().enumerate() {
         match &gadget_source.fetcher {
             GadgetSourceFetcher::Github(gh) => {
-                let fetcher = GithubBinaryFetcher {
-                    fetcher: gh.clone(),
-                    blueprint_id: blueprint.blueprint_id,
-                    gadget_name: blueprint.name.clone(),
-                };
-
-                fetcher_candidates.push(DynBinarySourceFetcher::boxed(fetcher));
+                let fetcher = GithubBinaryFetcher::new(
+                    gh.clone(),
+                    blueprint.blueprint_id,
+                    blueprint.name.clone(),
+                );
+                fetcher_candidates.push(DynBlueprintSource::boxed(fetcher));
             }
 
             GadgetSourceFetcher::Testing(test) => {
@@ -410,14 +410,14 @@ fn get_fetcher_candidates(
                 //     continue;
                 // }
 
-                let fetcher = crate::sources::testing::TestSourceFetcher {
-                    fetcher: test.clone(),
-                    blueprint_id: blueprint.blueprint_id,
-                    gadget_name: blueprint.name.clone(),
-                };
+                let fetcher = TestSourceFetcher::new(
+                    test.clone(),
+                    blueprint.blueprint_id,
+                    blueprint.name.clone(),
+                );
 
                 test_fetcher_idx = Some(source_idx);
-                fetcher_candidates.push(DynBinarySourceFetcher::boxed(fetcher));
+                fetcher_candidates.push(DynBlueprintSource::boxed(fetcher));
             }
 
             _ => {

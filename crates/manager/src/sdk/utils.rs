@@ -1,9 +1,7 @@
-use crate::error::Result;
-use blueprint_core::{info, warn};
+use crate::error::{Error, Result};
+use blueprint_core::warn;
 use sha2::Digest;
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::BoundedString;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::{
     GadgetBinary, GithubFetcher,
@@ -83,56 +81,41 @@ pub fn get_download_url(binary: &GadgetBinary, fetcher: &GithubFetcher) -> Strin
 }
 
 /// Makes a file executable by setting the executable permission bits on Unix systems.
-/// On Windows, this is a no-op since Windows handles executables differently.
+/// On Windows, this adds the `.exe` extension if it doesn't already exist.
 ///
 /// # Arguments
 /// * `path` - Path to the file to make executable
 ///
 /// # Returns
-/// * `Result<()>` - Ok if successful, Error if file operations fail
+/// This returns the altered path on Windows, and the original path on Unix.
 ///
 /// # Errors
-/// * If the file cannot be opened or its metadata cannot be read
-pub fn make_executable<P: AsRef<Path>>(path: P) -> Result<()> {
+/// * On Unix, if the file cannot be opened or its metadata cannot be read
+pub fn make_executable<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
     #[cfg(target_family = "unix")]
-    {
+    fn unix(path: &Path) -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
 
         let f = std::fs::File::open(path)?;
         let mut perms = f.metadata()?.permissions();
         perms.set_mode(perms.mode() | 0o111);
         f.set_permissions(perms)?;
+
+        Ok(())
     }
 
-    Ok(())
-}
-
-#[must_use]
-pub fn generate_running_process_status_handle(
-    process: tokio::process::Child,
-    service_name: &str,
-) -> (Arc<AtomicBool>, tokio::sync::oneshot::Sender<()>) {
-    let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
-    let status = Arc::new(AtomicBool::new(true));
-    let status_clone = status.clone();
-    let service_name = service_name.to_string();
-
-    let task = async move {
-        info!("Starting process execution for {service_name}");
-        let output = process.wait_with_output().await;
-        warn!("Process for {service_name} exited: {output:?}");
-        status_clone.store(false, Ordering::Relaxed);
-    };
-
-    let task = async move {
-        tokio::select! {
-            _ = stop_rx => {},
-            () = task => {},
+    let mut path = path.as_ref().to_path_buf();
+    if cfg!(target_family = "windows") {
+        if path.extension().is_none() {
+            path.set_extension("exe");
         }
-    };
+    } else if let Err(err) = unix(&path) {
+        let msg = format!("Failed to make the binary executable: {err}");
+        warn!("{}", msg);
+        return Err(Error::Other(msg));
+    }
 
-    tokio::spawn(task);
-    (status, stop_tx)
+    Ok(path)
 }
 
 #[must_use]
