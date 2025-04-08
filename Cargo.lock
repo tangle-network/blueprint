@@ -251,7 +251,7 @@ dependencies = [
  "itoa",
  "serde",
  "serde_json",
- "winnow 0.7.4",
+ "winnow 0.7.6",
 ]
 
 [[package]]
@@ -839,7 +839,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d162f8524adfdfb0e4bd0505c734c985f3e2474eb022af32eef0d52a4f3935c"
 dependencies = [
  "serde",
- "winnow 0.7.4",
+ "winnow 0.7.6",
 ]
 
 [[package]]
@@ -2659,7 +2659,7 @@ dependencies = [
  "alloy-transport",
  "blueprint-core",
  "blueprint-core-testing-utils",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "tokio",
  "url",
 ]
@@ -2668,7 +2668,7 @@ dependencies = [
 name = "blueprint-benchmarking"
 version = "0.1.0"
 dependencies = [
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "sysinfo",
  "tokio",
 ]
@@ -2677,15 +2677,7 @@ dependencies = [
 name = "blueprint-build-utils"
 version = "0.1.0"
 dependencies = [
- "blueprint-std 0.1.0",
-]
-
-[[package]]
-name = "blueprint-build-utils"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=main#d34f59bd381fac63f9f6ba9b756babadfde51af1"
-dependencies = [
- "blueprint-std 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=main)",
+ "blueprint-std",
 ]
 
 [[package]]
@@ -2708,7 +2700,7 @@ dependencies = [
  "blueprint-core",
  "blueprint-core-testing-utils",
  "blueprint-keystore",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "serde",
  "serde_json",
  "tempfile",
@@ -2728,7 +2720,7 @@ dependencies = [
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-keystore",
  "blueprint-networking",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "blueprint-tangle-extra",
  "color-eyre",
  "sp-core",
@@ -2757,7 +2749,7 @@ dependencies = [
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-keystore",
  "blueprint-networking",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "blueprint-tangle-extra",
  "cargo_metadata 0.18.1",
  "color-eyre",
@@ -2777,7 +2769,7 @@ name = "blueprint-client-core"
 version = "0.1.0"
 dependencies = [
  "auto_impl",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "thiserror 2.0.12",
 ]
 
@@ -2797,7 +2789,7 @@ dependencies = [
  "blueprint-eigenlayer-testing-utils",
  "blueprint-evm-extra",
  "blueprint-runner",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "eigenlayer-contract-deployer",
  "eigensdk",
  "num-bigint 0.4.6",
@@ -2830,7 +2822,7 @@ dependencies = [
  "blueprint-core",
  "blueprint-evm-extra",
  "blueprint-metrics-rpc-calls",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "hex",
  "serde",
  "serde_json",
@@ -2850,7 +2842,7 @@ dependencies = [
  "blueprint-crypto-sp-core",
  "blueprint-keystore",
  "blueprint-runner",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "serde",
  "serde_json",
  "sp-core",
@@ -2867,7 +2859,7 @@ dependencies = [
  "blueprint-client-eigenlayer",
  "blueprint-client-evm",
  "blueprint-client-tangle",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "thiserror 2.0.12",
 ]
 
@@ -2897,7 +2889,7 @@ dependencies = [
  "blueprint-keystore",
  "blueprint-networking",
  "blueprint-runner",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "proc-macro2",
  "tangle-subxt",
 ]
@@ -2957,7 +2949,7 @@ dependencies = [
  "ark-serialize 0.5.0",
  "blueprint-crypto-core",
  "blueprint-crypto-hashing",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "hex",
  "paste",
  "serde",
@@ -2978,7 +2970,7 @@ dependencies = [
  "ark-serialize 0.5.0",
  "blueprint-crypto-core",
  "blueprint-crypto-hashing",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "hex",
  "num-bigint 0.4.6",
  "num-traits",
@@ -2993,7 +2985,7 @@ dependencies = [
 name = "blueprint-crypto-core"
 version = "0.1.0"
 dependencies = [
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "clap",
  "serde",
  "thiserror 2.0.12",
@@ -3004,7 +2996,7 @@ name = "blueprint-crypto-ed25519"
 version = "0.1.0"
 dependencies = [
  "blueprint-crypto-core",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "ed25519-zebra",
  "hex",
  "serde",
@@ -3018,7 +3010,7 @@ name = "blueprint-crypto-hashing"
 version = "0.1.0"
 dependencies = [
  "blake3",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "sha2 0.10.8",
  "sha3",
 ]
@@ -3030,7 +3022,7 @@ dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer-local",
  "blueprint-crypto-core",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "hex",
  "k256",
  "serde",
@@ -3049,7 +3041,7 @@ dependencies = [
  "blueprint-crypto-bls",
  "blueprint-crypto-core",
  "blueprint-crypto-sp-core",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "hex",
  "paste",
  "serde",
@@ -3066,7 +3058,7 @@ name = "blueprint-crypto-sr25519"
 version = "0.1.0"
 dependencies = [
  "blueprint-crypto-core",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "hex",
  "schnorrkel",
  "serde",
@@ -3083,7 +3075,7 @@ dependencies = [
  "alloy-signer-local",
  "blueprint-crypto-core",
  "blueprint-crypto-sp-core",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "k256",
  "serde",
  "sp-core",
@@ -3154,7 +3146,7 @@ dependencies = [
  "alloy-transport-http",
  "async-stream",
  "blueprint-core",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "bytes",
  "document-features",
  "futures",
@@ -3187,7 +3179,7 @@ dependencies = [
  "aws-sdk-kms",
  "blake3",
  "blueprint-crypto",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "ed25519-zebra",
  "eigensdk",
  "gcloud-sdk",
@@ -3237,7 +3229,7 @@ dependencies = [
  "blueprint-keystore",
  "blueprint-networking",
  "blueprint-sdk",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "clap",
  "color-eyre",
  "dynosaur",
@@ -3284,7 +3276,7 @@ dependencies = [
  "blueprint-crypto",
  "blueprint-crypto-core",
  "blueprint-networking",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "crossbeam-channel",
  "dashmap",
  "fastrand",
@@ -3316,7 +3308,7 @@ dependencies = [
  "blueprint-crypto",
  "blueprint-crypto-core",
  "blueprint-networking",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "crossbeam",
  "crossbeam-channel",
  "dashmap",
@@ -3404,7 +3396,7 @@ dependencies = [
  "blueprint-networking",
  "blueprint-router",
  "blueprint-sdk",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "blueprint-tangle-extra",
  "clap",
  "crossbeam-channel",
@@ -3431,7 +3423,7 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "alloy-json-abi",
- "blueprint-build-utils 0.1.0",
+ "blueprint-build-utils",
  "blueprint-chain-setup",
  "blueprint-clients",
  "blueprint-context-derive",
@@ -3448,7 +3440,7 @@ dependencies = [
  "blueprint-producers-extra",
  "blueprint-router",
  "blueprint-runner",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "blueprint-stores",
  "blueprint-tangle-extra",
  "blueprint-testing-utils",
@@ -3472,21 +3464,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-std"
-version = "0.1.0"
-source = "git+https://github.com/tangle-network/blueprint?branch=main#d34f59bd381fac63f9f6ba9b756babadfde51af1"
-dependencies = [
- "colored",
- "num-traits",
- "rand 0.8.5",
- "thiserror 2.0.12",
-]
-
-[[package]]
 name = "blueprint-store-local-database"
 version = "0.1.0"
 dependencies = [
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "serde",
  "serde_json",
  "tempfile",
@@ -3541,7 +3522,7 @@ dependencies = [
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-keystore",
  "blueprint-runner",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "blueprint-tangle-extra",
  "futures",
  "sp-core",
@@ -4093,7 +4074,7 @@ dependencies = [
  "blueprint-keystore",
  "blueprint-manager",
  "blueprint-runner",
- "blueprint-std 0.1.0",
+ "blueprint-std",
  "blueprint-tangle-extra",
  "blueprint-testing-utils",
  "cargo-generate",
@@ -5330,9 +5311,9 @@ dependencies = [
 
 [[package]]
 name = "cxx"
-version = "1.0.155"
+version = "1.0.156"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76751bca18309cbce06f9821698d6c05b3af5c3fde8af5caf57f11611729397b"
+checksum = "aa3a202fc4f3dd6d2ce5a2f87b04fb2becc00f5643ee9c4743ba10777efb314f"
 dependencies = [
  "cc",
  "cxxbridge-cmd",
@@ -5344,9 +5325,9 @@ dependencies = [
 
 [[package]]
 name = "cxx-build"
-version = "1.0.155"
+version = "1.0.156"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab3309df6a3cbbfc900c1b7665f4a4109da2b90ce5fd9b0c9f51e3687f51c970"
+checksum = "644bdf46f34f6325783f76a8ad8e737ab995a302d7868b5236a1ba55008883e0"
 dependencies = [
  "cc",
  "codespan-reporting",
@@ -5358,9 +5339,9 @@ dependencies = [
 
 [[package]]
 name = "cxxbridge-cmd"
-version = "1.0.155"
+version = "1.0.156"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78ce717e582fc3b56bd2f1eb3cda9916e9b4629721e4c2ce637ac5e7d4beef11"
+checksum = "8e8cefbebcb74ed0b4a08b76139e6c29d8884a0bb94d02c6f35de821a14a6e39"
 dependencies = [
  "clap",
  "codespan-reporting",
@@ -5371,15 +5352,15 @@ dependencies = [
 
 [[package]]
 name = "cxxbridge-flags"
-version = "1.0.155"
+version = "1.0.156"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa7fdd4b264a3335a8b21221092bd2fbfba35c3606bd50feb28d22ba3fb0a6e5"
+checksum = "604e3eff62e2f27289d618f621491a068330c3c9f8eb06555dabc292c123596e"
 
 [[package]]
 name = "cxxbridge-macro"
-version = "1.0.155"
+version = "1.0.156"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c36a0a2b78ff9232a3dc584340471d4fa1751a81026cf62f3661a06d5a8bae17"
+checksum = "130c3a05501d9c15dedbf08f2ff9af60f8e78422e3dffac1f43e2d83c5b489a1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5911,7 +5892,8 @@ dependencies = [
 [[package]]
 name = "eigen-client-avsregistry"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16480006823e3b09495cd5fee89d03364ba23fc254720a98efd97ee0a5a0f6c0"
 dependencies = [
  "alloy",
  "ark-ff 0.5.0",
@@ -5930,7 +5912,8 @@ dependencies = [
 [[package]]
 name = "eigen-client-elcontracts"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c21afc43f721abbd0d49d42ad9ba26cb8ceed2eb86c3a056050d6945a8604780"
 dependencies = [
  "alloy",
  "eigen-common",
@@ -5945,7 +5928,8 @@ dependencies = [
 [[package]]
 name = "eigen-client-eth"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98212a2eac963720a7d795f3a05c22fd88e21c673884d9aed167cc4912370ea8"
 dependencies = [
  "alloy",
  "async-trait",
@@ -5959,7 +5943,8 @@ dependencies = [
 [[package]]
 name = "eigen-client-fireblocks"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab4c99c9c2bd4aae7453b935ac20d08c1c4884560aa7aa3acb26bac84fa43a6b"
 dependencies = [
  "alloy",
  "chrono",
@@ -5979,7 +5964,8 @@ dependencies = [
 [[package]]
 name = "eigen-common"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "866a44244903cda1ea05d6f9cd2e5680a02236849c1290bf11cc8c3e305574b9"
 dependencies = [
  "alloy",
  "url",
@@ -5988,7 +5974,8 @@ dependencies = [
 [[package]]
 name = "eigen-crypto-bls"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76af95503e08dfc9500910301220c4153d4de2345127326c5b4cf407fd1a02e2"
 dependencies = [
  "alloy",
  "ark-bn254",
@@ -6005,7 +5992,8 @@ dependencies = [
 [[package]]
 name = "eigen-crypto-bn254"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "039664a95a1c6e47fde635b9a5c07f3377901bf0463e10120f96627ac4386a8b"
 dependencies = [
  "ark-bn254",
  "ark-ec 0.5.0",
@@ -6016,7 +6004,8 @@ dependencies = [
 [[package]]
 name = "eigen-logging"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2348fa5a3b774e75a6db59f389c04ee3edcabc182349eb8c4b5888ef68cd888"
 dependencies = [
  "ctor",
  "once_cell",
@@ -6027,7 +6016,8 @@ dependencies = [
 [[package]]
 name = "eigen-metrics"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e49aa6d4b362c0d1194b7a38ecda736d2838e0dbf83f83214297f51a7a2ad37"
 dependencies = [
  "eigen-logging",
  "metrics",
@@ -6038,7 +6028,8 @@ dependencies = [
 [[package]]
 name = "eigen-metrics-collectors-economic"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7051c5cb6bc887038ba2c0a2625e2a2da176db2b70648decbcbe3617610ae7ac"
 dependencies = [
  "alloy",
  "eigen-client-avsregistry",
@@ -6053,7 +6044,8 @@ dependencies = [
 [[package]]
 name = "eigen-metrics-collectors-rpc-calls"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73a09a261bcdac46a946f8f11965da87a5f025005d4a1867b69637efc2e716c4"
 dependencies = [
  "eigen-logging",
  "metrics",
@@ -6062,7 +6054,8 @@ dependencies = [
 [[package]]
 name = "eigen-nodeapi"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c433c184666dbb57e9126c57f607b26f0b7f43d3a60cf3d76019ec3f94abc0f"
 dependencies = [
  "ntex",
  "serde",
@@ -6074,7 +6067,8 @@ dependencies = [
 [[package]]
 name = "eigen-services-avsregistry"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b84fc826c4bd9a019936469aa6da1a81ce23e8108c7e05459050f520751fc98d"
 dependencies = [
  "alloy",
  "ark-bn254",
@@ -6090,7 +6084,8 @@ dependencies = [
 [[package]]
 name = "eigen-services-blsaggregation"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89eae314e9bb7465bad361fb5d33d6ac5103e6fc700b86e2c8863104429e390d"
 dependencies = [
  "alloy",
  "ark-bn254",
@@ -6112,7 +6107,8 @@ dependencies = [
 [[package]]
 name = "eigen-services-operatorsinfo"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f100e075eca078c7db5a49956d132a9a35e93044a2fc5de9d0da8e6f69f23bc"
 dependencies = [
  "alloy",
  "async-trait",
@@ -6133,7 +6129,8 @@ dependencies = [
 [[package]]
 name = "eigen-signer"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9aa4dbc5ac13e1ee9dd70df619baffa62d206412b7e89e081a7963d833645b62"
 dependencies = [
  "alloy",
  "async-trait",
@@ -6147,7 +6144,8 @@ dependencies = [
 [[package]]
 name = "eigen-testing-utils"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b4d6ea880a185d447a3e399ced2b157cd7bae5b7d6fdbe3842fc1f2e9a5de8e"
 dependencies = [
  "alloy",
  "eigen-common",
@@ -6161,7 +6159,8 @@ dependencies = [
 [[package]]
 name = "eigen-types"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbaed5435c73bd3085feac3460a22d153ab472542caded78a7481a7a4247aab2"
 dependencies = [
  "alloy",
  "ark-ff 0.5.0",
@@ -6180,7 +6179,8 @@ dependencies = [
 [[package]]
 name = "eigen-utils"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0813ece83d4e9c95eddad48bf6cbfe2e1c083ffbd9eac87a40d818225be31db0"
 dependencies = [
  "alloy",
  "regex",
@@ -6190,7 +6190,8 @@ dependencies = [
 [[package]]
 name = "eigenlayer-contract-deployer"
 version = "0.1.0"
-source = "git+https://github.com/tangle-network/eigenlayer-contract-deployer#f04a9c965d1058a165336a05703af6f68b3956dd"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0ea2a88efb65a5a401947e1544f61f002cf50a28192854eb766fcfdb8f77390"
 dependencies = [
  "alloy",
  "alloy-contract",
@@ -6199,7 +6200,6 @@ dependencies = [
  "alloy-provider",
  "alloy-rpc-types-eth",
  "alloy-sol-types 0.8.25",
- "blueprint-build-utils 0.1.0 (git+https://github.com/tangle-network/blueprint?branch=main)",
  "color-eyre",
  "eigensdk",
  "serde",
@@ -6210,7 +6210,8 @@ dependencies = [
 [[package]]
 name = "eigensdk"
 version = "0.5.0"
-source = "git+https://github.com/Tjemmmic/eigensdk-rs.git?branch=reader-type-annotations#443b2fd99b25a4e1466f5d46ffa34eb82942c2ee"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "755d34a0a79ad84792325ca94e7c5f72d7dc5dbe92cbdd51780fa8ac0b7ba7f6"
 dependencies = [
  "eigen-client-avsregistry",
  "eigen-client-elcontracts",
@@ -8247,13 +8248,13 @@ dependencies = [
 
 [[package]]
 name = "hostname"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9c7c7c8ac16c798734b8a24560c1362120597c40d5e1459f09498f8f6c8f2ba"
+checksum = "a56f203cd1c76362b69e3863fd987520ac36cf70a8c92627449b2f64a8cf7d65"
 dependencies = [
  "cfg-if 1.0.0",
  "libc",
- "windows 0.52.0",
+ "windows-link",
 ]
 
 [[package]]
@@ -8838,7 +8839,7 @@ dependencies = [
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "bip39",
- "blueprint-build-utils 0.1.0",
+ "blueprint-build-utils",
  "blueprint-sdk",
  "clap",
  "color-eyre",
@@ -9055,9 +9056,9 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
 name = "jiff"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c102670231191d07d37a35af3eb77f1f0dbf7a71be51a962dcd57ea607be7260"
+checksum = "1f33145a5cbea837164362c7bd596106eb7c5198f97d1ba6f6ebb3223952e488"
 dependencies = [
  "jiff-static",
  "jiff-tzdb-platform",
@@ -9070,9 +9071,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-static"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cdde31a9d349f1b1f51a0b3714a5940ac022976f4b49485fc04be052b183b4c"
+checksum = "43ce13c40ec6956157a3635d97a1ee2df323b263f09ea14165131289cb0f5c19"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10943,9 +10944,9 @@ dependencies = [
 
 [[package]]
 name = "ntex-server"
-version = "2.7.4"
+version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c98a261eb20bc4d9bdf0120de5777d61950152c3f6f48f39756ea544a53cdccd"
+checksum = "2321ea04a31a0424cfe5559e3b996f3170be71513f87c5e3aafdc16df822f4ea"
 dependencies = [
  "async-channel",
  "atomic-waker",
@@ -19094,7 +19095,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow 0.7.4",
+ "winnow 0.7.6",
 ]
 
 [[package]]
@@ -19628,9 +19629,9 @@ checksum = "5c3082ca00d5a5ef149bb8b555a72ae84c9c59f7250f013ac822ac2e49b19c64"
 
 [[package]]
 name = "w3f-bls"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70a3028804c8bbae2a97a15b71ffc0e308c4b01a520994aafa77d56e94e19024"
+checksum = "e6bfb937b3d12077654a9e43e32a4e9c20177dd9fea0f3aba673e7840bb54f32"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -19639,14 +19640,12 @@ dependencies = [
  "ark-serialize 0.4.2",
  "ark-serialize-derive 0.4.2",
  "arrayref",
- "constcat",
  "digest 0.10.7",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "sha2 0.10.8",
  "sha3",
- "thiserror 1.0.69",
  "zeroize",
 ]
 
@@ -20216,16 +20215,6 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "windows"
-version = "0.52.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e48a53791691ab099e5e2ad123536d0fff50652600abaf43bbf952894110d0be"
-dependencies = [
- "windows-core 0.52.0",
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows"
 version = "0.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efc5cf48f83140dcaab716eeaea345f9e93d0018fb81162753a3f76c3397b538"
@@ -20251,15 +20240,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd04d41d93c4992d421894c18c8b43496aa748dd4c081bac0dc93eb0489272b6"
 dependencies = [
  "windows-core 0.58.0",
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-core"
-version = "0.52.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ab640c8d7e35bf8ba19b884ba838ceb4fba93a4e8c65a9059d08afcfc683d9"
-dependencies = [
  "windows-targets 0.52.6",
 ]
 
@@ -20738,9 +20718,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.7.4"
+version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e97b544156e9bebe1a0ffbc03484fc1ffe3100cbce3ffb17eac35f7cdd7ab36"
+checksum = "63d3fcd9bba44b03821e7d699eeee959f3126dcc4aa8e4ae18ec617c2a5cea10"
 dependencies = [
  "memchr",
 ]
