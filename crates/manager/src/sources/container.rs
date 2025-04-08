@@ -1,9 +1,9 @@
 use super::ProcessHandle;
 use super::{BlueprintSource, Status};
 use crate::error::{Error, Result};
-use dockworker::DockerBuilder;
-use dockworker::bollard::Docker;
-use dockworker::container::Container;
+use docktopus::DockerBuilder;
+use docktopus::bollard::Docker;
+use docktopus::container::Container;
 use std::sync::Arc;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::ImageRegistryFetcher;
 use tokio::process::Command;
@@ -55,7 +55,7 @@ impl BlueprintSource for ContainerSource {
         let builder = DockerBuilder::new()
             .await
             .map_err(|e| Error::Other(e.to_string()))?;
-        let client = builder.get_client().clone();
+        let client = builder.client().clone();
 
         let client = Arc::new(client);
 
