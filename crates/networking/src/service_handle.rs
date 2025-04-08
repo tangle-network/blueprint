@@ -176,7 +176,12 @@ impl<K: KeyType> NetworkServiceHandle<K> {
         Ok(())
     }
 
-    pub(crate) fn send_network_message(&self, message: NetworkMessage<K>) -> Result<(), String> {
+    /// Send a network message
+    ///
+    /// # Errors
+    ///
+    /// See [`crossbeam_channel::Sender::send`]
+    pub fn send_network_message(&self, message: NetworkMessage<K>) -> Result<(), String> {
         self.sender.send_message(message)
     }
 

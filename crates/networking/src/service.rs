@@ -183,6 +183,12 @@ pub enum NetworkMessage<K: KeyType> {
         topic: String,
         message: Vec<u8>,
     },
+    Subscribe {
+        topic: String,
+    },
+    Unsubscribe {
+        topic: String,
+    },
 }
 
 /// Configuration for the network service
@@ -714,6 +720,21 @@ fn handle_network_message<K: KeyType>(
                 .map_err(|_| {
                     SendError(NetworkEventSendError::<K>::GossipSent { topic, message }.to_string())
                 })?;
+        }
+        NetworkMessage::Subscribe { topic } => {
+            debug!(%topic, "Subscribing to topic");
+            match swarm.behaviour_mut().blueprint_protocol.subscribe(&topic) {
+                Ok(_) => {}
+                Err(e) => {
+                    warn!(%topic, "Failed to subscribe to topic: {:?}", e);
+                }
+            }
+        }
+        NetworkMessage::Unsubscribe { topic } => {
+            debug!(%topic, "Unsubscribing from topic");
+            if !swarm.behaviour_mut().blueprint_protocol.unsubscribe(&topic) {
+                warn!(%topic, "Failed to unsubscribe from topic");
+            }
         }
     }
 
