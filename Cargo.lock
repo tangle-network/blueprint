@@ -3233,7 +3233,7 @@ dependencies = [
  "blueprint-crypto",
  "blueprint-keystore",
  "blueprint-networking",
- "blueprint-sdk",
+ "blueprint-runner",
  "blueprint-std",
  "clap",
  "color-eyre",

@@ -11,7 +11,7 @@ use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
-use blueprint_sdk::runner::config::BlueprintEnvironment;
+use blueprint_runner::config::BlueprintEnvironment;
 use color_eyre::Report;
 use color_eyre::eyre::OptionExt;
 use sp_core::{ecdsa, sr25519};
