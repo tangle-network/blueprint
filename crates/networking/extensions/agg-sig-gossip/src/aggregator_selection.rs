@@ -272,7 +272,7 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
             Ok(Some(_)) => {}
             Ok(None) => return Err(AggregationError::MissingData),
             Err(e) => return Err(e),
-        };
+        }
 
         // Check the threshold
         self.check_threshold(&result.message)?;
