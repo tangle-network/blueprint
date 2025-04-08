@@ -63,6 +63,13 @@ aws-sdk-kms = { workspace = true, optional = true }
 gcloud-sdk = { workspace = true, features = ["google-cloud-kms-v1"], optional = true }
 ripemd = { workspace = true, optional = true }
 
+# Substrate Keystore backend
+sp-keystore = { workspace = true, optional = true }
+sc-keystore = { workspace = true, optional = true }
+sp-application-crypto = { workspace = true, optional = true }
+scale-info = { workspace = true, optional = true }
+parity-scale-codec = { workspace = true, optional = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 
@@ -71,36 +78,37 @@ default = ["std", "tangle-full", "eigenlayer-full", "all-remote-signers"]
 
 # Core features
 std = [
-	# Basic std dependencies
-	"dep:serde_json",
-	"serde/std",
-	"serde_bytes/std",
-	"hex/std",
-	"zeroize/std",
-	"blueprint-crypto/std",
-	"blueprint-std/std",
-	"thiserror/std",
-	"dep:tokio",
-	# Conditional std enables for misc
-	"hex?/std",
-	# Condition std enables for alloy
-	"alloy-primitives?/std",
-	# Conditional std enables for crypto
-	"k256?/std",
-	"schnorrkel?/std",
-	"ed25519-zebra?/std",
-	"tnt-bls?/std",
-	"rust-bls-bn254?/std",
-	# Conditional std enables for protocols
-	"alloy-primitives?/std",
-	"sp-core?/std",
-	"sp-io?/std",
-	"tangle-subxt/std",
-	"ark-serialize?/std",
+    # Basic std dependencies
+    "dep:serde_json",
+    "serde/std",
+    "serde_bytes/std",
+    "hex/std",
+    "zeroize/std",
+    "blueprint-crypto/std",
+    "blueprint-std/std",
+    "thiserror/std",
+    "dep:tokio",
+    # Conditional std enables for misc
+    "hex?/std",
+    # Condition std enables for alloy
+    "alloy-primitives?/std",
+    # Conditional std enables for crypto
+    "k256?/std",
+    "schnorrkel?/std",
+    "ed25519-zebra?/std",
+    "tnt-bls?/std",
+    "rust-bls-bn254?/std",
+    # Conditional std enables for protocols
+    "alloy-primitives?/std",
+    "sp-core?/std",
+    "sp-io?/std",
+    "tangle-subxt/std",
+    "ark-serialize?/std",
+    # Conditional std enables for sp-*
+    "sp-keystore?/std",
+    "sp-application-crypto?/std",
 ]
-web = [
-	"tangle-subxt/web",
-]
+web = ["tangle-subxt/web"]
 
 # Crypto primitive features
 ecdsa = ["dep:k256", "dep:ripemd", "dep:hex", "blueprint-crypto/k256"]
@@ -111,41 +119,25 @@ bn254 = ["dep:ark-bn254", "dep:ark-ec", "dep:ark-ff", "dep:ark-serialize", "blue
 sp-core = ["dep:sp-core", "blueprint-crypto/sp-core"]
 
 # Meant to be used in conjunction with `tangle` feature (for `sp-core`)
-substrate = ["dep:paste", "dep:sp-core", "dep:sp-io", "dep:tangle-subxt", "blueprint-crypto/sp-core"]
+substrate = [
+    "dep:paste",
+    "dep:sp-core",
+    "dep:sp-io",
+    "dep:tangle-subxt",
+    "blueprint-crypto/sp-core",
+    "substrate-keystore",
+]
 
 # Protocol features
-evm = [
-	"ecdsa",
-	"dep:alloy-primitives",
-	"dep:alloy-signer",
-	"dep:alloy-signer-local",
-	"dep:alloy-network",
-]
+evm = ["ecdsa", "dep:alloy-primitives", "dep:alloy-signer", "dep:alloy-signer-local", "dep:alloy-network"]
 
-tangle = [
-	"substrate",
-	"ecdsa",
-	"sr25519-schnorrkel",
-	"zebra",
-	"blueprint-crypto/tangle-pair-signer",
-]
+tangle = ["substrate", "ecdsa", "sr25519-schnorrkel", "zebra", "blueprint-crypto/tangle-pair-signer"]
 
-tangle-bls = [
-	"tangle",
-	"sp-core/bls-experimental",
-	"blueprint-crypto/sp-core-bls",
-]
+tangle-bls = ["tangle", "sp-core/bls-experimental", "blueprint-crypto/sp-core-bls"]
 
-eigenlayer = [
-	"evm",
-	"dep:eigensdk",
-	"dep:rust-bls-bn254",
-	"bn254",
-]
+eigenlayer = ["evm", "dep:eigensdk", "dep:rust-bls-bn254", "bn254"]
 
-symbiotic = [
-	"evm",
-]
+symbiotic = ["evm"]
 
 remote = []
 
@@ -153,6 +145,14 @@ remote = []
 tangle-full = ["tangle", "tangle-bls", "bn254", "evm"]
 eigenlayer-full = ["eigenlayer", "sr25519-schnorrkel", "zebra", "bls"]
 symbiotic-full = ["symbiotic", "sr25519-schnorrkel", "zebra", "bls", "bn254"]
+substrate-keystore = [
+    "dep:sp-keystore",
+    "dep:sc-keystore",
+    "dep:sp-core",
+    "dep:sp-application-crypto",
+    "dep:scale-info",
+    "dep:parity-scale-codec",
+]
 
 # Hardware/Cloud wallet support
 aws-signer = ["remote", "alloy-signer-aws", "aws-config", "aws-sdk-kms", "evm", "std"]

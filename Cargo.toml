@@ -100,7 +100,7 @@ blueprint-std = { version = "0.1.0", path = "./crates/std", default-features = f
 # P2P
 blueprint-networking = { version = "0.1.0", path = "./crates/networking", default-features = false }
 blueprint-networking-round-based-extension = { version = "0.1.0", path = "./crates/networking/extensions/round-based", default-features = false }
-blueprint-networking-agg-sig-gossip = { version = "0.1.0", path = "./crates/networking/extensions/agg-sig-gossip", default-features = false }
+blueprint-networking-agg-sig-gossip-extension = { version = "0.1.0", path = "./crates/networking/extensions/agg-sig-gossip", default-features = false }
 
 # Testing utilities
 blueprint-testing-utils = { version = "0.1.0", path = "./crates/testing-utils", default-features = false }
@@ -125,6 +125,11 @@ round-based = { version = "0.4.1", default-features = false }
 sp-core = { version = "34.0.0", default-features = false }
 sp-io = { version = "38.0.0", default-features = false }
 sp-runtime = { version = "39.0.0", default-features = false }
+sp-keystore = { version = "0.40.0", default-features = false }
+sc-keystore = { version = "33.0.0", default-features = false }
+sp-application-crypto = { version = "38.0.0", default-features = false }
+scale-info = { version = "2.11", default-features = false }
+parity-scale-codec = { version = "3.6", default-features = false }
 
 # Async & Runtime
 crossbeam = { version = "0.8", default-features = false }
