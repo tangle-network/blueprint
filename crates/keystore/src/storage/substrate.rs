@@ -8,7 +8,7 @@ use sp_keystore::Keystore;
 /// A substrate-backed local key storage
 ///
 /// This wrapper is used to provide a substrate-backed local key storage.
-/// It implements the `RawStorage` trait, which allows for storing and retrieving keys in a
+/// It implements the [`RawStorage`] trait, which allows for storing and retrieving keys in a
 /// substrate-compatible format.
 pub struct SubstrateStorage {
     inner: Arc<sc_keystore::LocalKeystore>,
