@@ -11,6 +11,10 @@ mod fs;
 pub use fs::FileStorage;
 mod in_memory;
 pub use in_memory::InMemoryStorage;
+#[cfg(feature = "substrate-keystore")]
+mod substrate;
+#[cfg(feature = "substrate-keystore")]
+pub use substrate::SubstrateStorage;
 
 // Raw storage trait that can be made into a trait object
 #[allow(missing_docs, clippy::missing_errors_doc)] // TODO: determine if this should be doc(hidden)
