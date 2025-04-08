@@ -13,7 +13,7 @@ incredible-squaring-blueprint-lib = { path = "incredible-squaring-lib" }
 
 blueprint-sdk = { path = "../../crates/sdk", default-features = false }
 tokio = { version = "^1", default-features = false }
-color-eyre = "0.6.3"
+color-eyre = "0.6"
 tower = { version = "0.5.2", default-features = false }
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-tracing = "0.1.41"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing = "0.1"
