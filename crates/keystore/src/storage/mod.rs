@@ -11,8 +11,6 @@ mod fs;
 pub use fs::FileStorage;
 mod in_memory;
 pub use in_memory::InMemoryStorage;
-#[cfg(feature = "substrate-keystore")]
-mod substrate;
 /// Substrate keystore storage
 #[cfg(feature = "substrate-keystore")]
 pub use substrate::SubstrateStorage;
