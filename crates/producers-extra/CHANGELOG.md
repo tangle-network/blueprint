@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
+- release ([#843](https://github.com/tangle-network/blueprint/pull/843))
+- set crates to pre-release versions ([#842](https://github.com/tangle-network/blueprint/pull/842))
+- pin workspace to 1.85 ([#821](https://github.com/tangle-network/blueprint/pull/821))
+- *(clippy)* use workspace lints globally ([#710](https://github.com/tangle-network/blueprint/pull/710))
+- remove old event listeners and runners
+- rustdoc and READMEs for crates ([#27](https://github.com/tangle-network/blueprint/pull/27))
+
+## [0.1.0-alpha.1](https://github.com/tangle-network/blueprint/releases/tag/blueprint-producers-extra-v0.1.0-alpha.1) - 2025-04-08
+
+### Added
+
+- re-integrate the blueprint configs ([#28](https://github.com/tangle-network/blueprint/pull/28))
+- add CronJob producer ([#25](https://github.com/tangle-network/blueprint/pull/25))
+
+### Fixed
+
+- finish migration of new job system ([#699](https://github.com/tangle-network/blueprint/pull/699))
+
+### Other
+
 - set crates to pre-release versions ([#842](https://github.com/tangle-network/blueprint/pull/842))
 - pin workspace to 1.85 ([#821](https://github.com/tangle-network/blueprint/pull/821))
 - *(clippy)* use workspace lints globally ([#710](https://github.com/tangle-network/blueprint/pull/710))
