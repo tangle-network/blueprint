@@ -2865,7 +2865,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-context-derive"
-version = "0.3.1"
+version = "0.1.0-alpha.1"
 dependencies = [
  "alloy-network",
  "alloy-provider",

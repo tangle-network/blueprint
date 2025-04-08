@@ -11,7 +11,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- set crates to pre-release versions ([#842](https://github.com/tangle-network/blueprint/pull/842))
-- add docs for the new substrate based keystore backend ([#840](https://github.com/tangle-network/blueprint/pull/840))
-- *(agg-sig-gossip)* add extension suffix to crate name ([#839](https://github.com/tangle-network/blueprint/pull/839))
-- add initial sig agg protocol module ([#824](https://github.com/tangle-network/blueprint/pull/824))
+- Initial release
