@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-client-core"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 description = "Core primitives for Tangle Blueprint clients"
 authors.workspace = true
 edition.workspace = true
