@@ -21,8 +21,8 @@ quote = { workspace = true }
 proc-macro2 = { workspace = true }
 
 [dev-dependencies]
-blueprint-context-derive = { workspace = true, features = ["std", "tangle", "evm", "networking"] }
-blueprint-sdk = { workspace = true, features = [
+blueprint-context-derive = { path = ".", features = ["std", "tangle", "evm", "networking"] }
+blueprint-sdk = { path = "../../sdk", features = [
     "std",
     "macros",
     "evm",
