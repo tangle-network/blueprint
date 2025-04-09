@@ -46,10 +46,10 @@ default = ["std", "tracing", "macros"]
 #! ### Core
 
 ## Enable standard library support
-std = ["futures-util/std", "cid?/std"]
+std = ["futures-util/std", "cid?/std", "tangle-subxt/std"]
 
 ## Enable support for web targets
-web = ["futures-util/std", "cid?/std"]
+web = ["futures-util/std", "cid?/std", "tangle-subxt/web"]
 
 ## Enable [tracing] support
 ##
