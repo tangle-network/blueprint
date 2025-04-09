@@ -1,6 +1,7 @@
 [package]
 name = "blueprint-store-local-database"
 version = "0.1.0-alpha.1"
+description = "Local database storage provider for the Blueprint SDK"
 edition.workspace = true
 rust-version.workspace = true
 
