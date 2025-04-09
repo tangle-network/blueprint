@@ -21,7 +21,7 @@ hashbrown = { workspace = true, default-features = false, features = ["default-h
 futures = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
-blueprint-sdk = { workspace = true, features = ["macros"]}
+blueprint-sdk = { path = "../sdk", features = ["macros"]}
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter"] }
