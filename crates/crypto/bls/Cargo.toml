@@ -23,7 +23,7 @@ thiserror = { workspace = true }
 sha2 = { workspace = true, optional = true }
 
 [dev-dependencies]
-blueprint-crypto-hashing = { workspace = true, features = ["sha2"] }
+blueprint-crypto-hashing = { path = "../hashing", features = ["sha2"] }
 serde_json = { workspace = true, features = ["alloc"] }
 
 [features]
