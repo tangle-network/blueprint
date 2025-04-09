@@ -23,6 +23,9 @@ syn = { workspace = true, features = [
     "parsing",
     # needed for `Hash` impls
     "extra-traits",
+    "clone-impls",
+    "printing",
+    "proc-macro",
 ] }
 
 # EVM
