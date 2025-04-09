@@ -135,6 +135,7 @@ impl Future for BlueprintManagerHandle {
 /// # Arguments
 ///
 /// * `blueprint_manager_config` - The configuration for the blueprint manager
+/// * `keystore` - The keystore to use for the blueprint manager
 /// * `gadget_config` - The configuration for the gadget
 /// * `shutdown_cmd` - The shutdown command for the blueprint manager
 ///
@@ -150,8 +151,9 @@ impl Future for BlueprintManagerHandle {
 ///
 /// * If the SR25519 or ECDSA keypair cannot be found
 #[allow(clippy::used_underscore_binding)]
-pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
+pub fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     blueprint_manager_config: BlueprintManagerConfig,
+    keystore: &Keystore,
     env: BlueprintEnvironment,
     shutdown_cmd: F,
 ) -> color_eyre::Result<BlueprintManagerHandle> {
@@ -177,7 +179,6 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
 
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
-        let keystore = Keystore::new(KeystoreConfig::new().fs_root(&env.keystore_uri))?;
         let sr_key_pub = keystore.first_local::<SpSr25519>()?;
         let sr_pair = keystore.get_secret::<SpSr25519>(&sr_key_pub)?;
         let sr_key = TanglePairSigner::new(sr_pair.0);
@@ -289,6 +290,39 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
     };
 
     Ok(handle)
+}
+
+/// Run the blueprint manager with the given configuration
+///
+/// # Arguments
+///
+/// * `blueprint_manager_config` - The configuration for the blueprint manager
+/// * `gadget_config` - The configuration for the gadget
+/// * `shutdown_cmd` - The shutdown command for the blueprint manager
+///
+/// # Returns
+///
+/// * A handle to the running blueprint manager
+///
+/// # Errors
+///
+/// * If the blueprint manager fails to start
+///
+/// # Panics
+///
+/// * If the SR25519 or ECDSA keypair cannot be found
+#[allow(clippy::used_underscore_binding)]
+pub fn run_blueprint_manager<F: SendFuture<'static, ()>>(
+    blueprint_manager_config: BlueprintManagerConfig,
+    env: BlueprintEnvironment,
+    shutdown_cmd: F,
+) -> color_eyre::Result<BlueprintManagerHandle> {
+    run_blueprint_manager_with_keystore(
+        blueprint_manager_config,
+        &Keystore::new(KeystoreConfig::new().fs_root(&env.keystore_uri))?,
+        env,
+        shutdown_cmd,
+    )
 }
 
 /// * Query to get Vec<RpcServicesWithBlueprint>
