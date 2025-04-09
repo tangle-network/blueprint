@@ -38,7 +38,7 @@ paste = { workspace = true }
 serde_bytes = { workspace = true, features = ["alloc"] }
 serde_test.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-blueprint-testing-utils = { workspace = true, features = ["tangle"] }
+blueprint-testing-utils = { path = "../testing-utils", features = ["tangle"] }
 
 [features]
 default = ["std", "tracing", "macros"]
