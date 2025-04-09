@@ -364,14 +364,26 @@ impl BlueprintEnvironment {
         using_evm_address_for_handshake_verification: bool,
     ) -> Result<blueprint_networking::NetworkConfig<K>, crate::error::RunnerError> {
         use blueprint_keystore::backends::Backend;
+        #[cfg(not(feature = "tangle"))]
+        use blueprint_keystore::crypto::ed25519::Ed25519Zebra as LibP2PKeyType;
+        #[cfg(feature = "tangle")]
         use blueprint_keystore::crypto::sp_core::SpEd25519 as LibP2PKeyType;
 
         let keystore_config = blueprint_keystore::KeystoreConfig::new().fs_root(&self.keystore_uri);
         let keystore = blueprint_keystore::Keystore::new(keystore_config)?;
         let ed25519_pub_key = keystore.first_local::<LibP2PKeyType>()?;
         let ed25519_pair = keystore.get_secret::<LibP2PKeyType>(&ed25519_pub_key)?;
+
+        #[cfg(feature = "tangle")]
         let network_identity = libp2p::identity::Keypair::ed25519_from_bytes(ed25519_pair.seed())
             .expect("should be valid");
+
+        #[cfg(not(feature = "tangle"))]
+        let network_identity = {
+            // `ed25519_from_bytes` takes an `AsMut<[u8]>` for seemingly no reason??
+            let bytes = ed25519_pair.0.as_ref().to_vec();
+            libp2p::identity::Keypair::ed25519_from_bytes(bytes).expect("should be valid")
+        };
 
         let ecdsa_pub_key = keystore.first_local::<K>()?;
         let ecdsa_pair = keystore.get_secret::<K>(&ecdsa_pub_key)?;
