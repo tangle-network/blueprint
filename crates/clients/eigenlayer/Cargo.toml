@@ -42,15 +42,15 @@ tokio-util = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-tracing-subscriber.workspace = true
-blueprint-chain-setup-anvil = { workspace = true }
-eigenlayer-contract-deployer = { workspace = true }
-blueprint-eigenlayer-testing-utils = { workspace = true }
-blueprint-evm-extra = { workspace = true }
+blueprint-chain-setup-anvil = { path = "../../chain-setup/anvil" }
+blueprint-evm-extra = { path = "../../evm-extra" }
+blueprint-core-testing-utils = { path = "../../testing-utils/core" }
+blueprint-eigenlayer-testing-utils = { path = "../../testing-utils/eigenlayer" }
 alloy-primitives = { workspace = true }
+eigenlayer-contract-deployer = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tracing-subscriber.workspace = true
 tempfile = { workspace = true }
-blueprint-core-testing-utils = { workspace = true }
 
 [features]
 default = ["std", "tracing"]
