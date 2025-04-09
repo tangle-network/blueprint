@@ -19,12 +19,12 @@ tiny-keccak = { workspace = true, features = ["keccak"] }
 tracing = { workspace = true }
 
 [dev-dependencies]
-blueprint-sdk = { path = "../sdk" }
+blueprint-sdk = { path = "../sdk", features = ["std"] }
 serde_json = { workspace = true, features = ["alloc"] }
 tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter"] }
 tokio = { workspace = true, features = ["full"] }
 
 [features]
 default = ["std", "tracing"]
-std = ["futures-util/std", "blueprint-sdk/std"]
+std = ["futures-util/std"]
 tracing = []
