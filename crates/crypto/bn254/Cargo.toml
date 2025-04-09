@@ -25,7 +25,7 @@ sha2 = { workspace = true }
 hex = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
-blueprint-crypto-hashing = { workspace = true, features = ["sha3"] }
+blueprint-crypto-hashing = { path = "../hashing", features = ["sha3"] }
 serde_json = { workspace = true, features = ["alloc"] }
 
 [features]
