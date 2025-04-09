@@ -70,6 +70,7 @@ networking = [
     "dep:blueprint-networking",
     "dep:crossbeam-channel",
     "dep:libp2p",
+    "blueprint-keystore/zebra"
 ]
 
 #! ### Protocols
