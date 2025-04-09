@@ -49,7 +49,7 @@ alloy-signer = { workspace = true, optional = true }
 eigensdk = { workspace = true, features = ["client-elcontracts", "types", "utils", "logging", "client-avsregistry", "crypto-bls"], optional = true }
 
 [dev-dependencies]
-blueprint-sdk = { workspace = true, features = ["std", "tangle"] }
+blueprint-sdk = { path = "../sdk", features = ["std", "tangle"] }
 
 [features]
 default = ["std", "networking"]

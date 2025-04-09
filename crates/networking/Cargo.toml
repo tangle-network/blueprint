@@ -71,9 +71,9 @@ features = [
 ]
 
 [dev-dependencies]
-blueprint-networking = { workspace = true, features = ["testing"] }
-blueprint-crypto = { workspace = true, features = ["sp-core"] }
-blueprint-crypto-core = { workspace = true, features = ["tangle"] }
+blueprint-networking = { path = ".", features = ["testing"] }
+blueprint-crypto = { path = "../crypto", features = ["sp-core"] }
+blueprint-crypto-core = { path = "../crypto/core", features = ["tangle"] }
 tracing-subscriber = { workspace = true }
 lazy_static = { workspace = true }
 fastrand = "2.0"
