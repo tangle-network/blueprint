@@ -12,6 +12,11 @@ fn create_test_benchmark_profile(avg_cpu_cores: f32) -> BenchmarkProfile {
         peak_memory_mb: 150.0,
         io_read_mb: 10.0,
         io_write_mb: 5.0,
+        network_rx_mb: 20.0,
+        network_tx_mb: 10.0,
+        storage_available_gb: 100.0,
+        gpu_available: false,
+        gpu_memory_mb: 0.0,
         duration_secs: 60,
         timestamp: 1643723400, // Fixed timestamp for testing
         success: true,
