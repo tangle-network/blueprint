@@ -21,7 +21,7 @@ impl Default for BlueprintSource<'_> {
     fn default() -> Self {
         BlueprintSource::Wasm {
             runtime: WasmRuntime::Wasmtime,
-            fetcher: WasmFetcher::Github(Default::default()),
+            fetcher: WasmFetcher::Github(GithubFetcher::default()),
         }
     }
 }
