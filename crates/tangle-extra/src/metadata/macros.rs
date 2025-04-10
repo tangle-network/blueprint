@@ -164,22 +164,17 @@ fn generate_sources_for_current_crate() -> Result<Vec<BlueprintSource<'static>>,
     let mut sources: Vec<BlueprintSource<'static>> = Vec::new();
     if let Some(blueprint_metadata) = package.metadata.get("blueprint") {
         sources = match blueprint_metadata.get("sources") {
-            Some(sources) => {
-                serde_json::from_value(sources.clone())?
-            },
-            None => Vec::new()
+            Some(sources) => serde_json::from_value(sources.clone())?,
+            None => Vec::new(),
         };
     } else {
         eprintln!("[WARN] No gadget metadata found in the Cargo.toml.");
         eprintln!("[WARN] For more information, see: <TODO>");
     }
 
-    let has_testing_source = sources.iter().any(|source| {
-        matches!(
-            source,
-            BlueprintSource::Testing(..)
-        )
-    });
+    let has_testing_source = sources
+        .iter()
+        .any(|source| matches!(source, BlueprintSource::Testing(..)));
 
     if !has_testing_source {
         println!("Adding testing source since none exists");

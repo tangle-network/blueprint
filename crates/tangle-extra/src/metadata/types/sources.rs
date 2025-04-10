@@ -19,7 +19,10 @@ pub enum BlueprintSource<'a> {
 
 impl Default for BlueprintSource<'_> {
     fn default() -> Self {
-        BlueprintSource::Wasm { runtime: WasmRuntime::Wasmtime, fetcher: WasmFetcher::Github(Default::default()) }
+        BlueprintSource::Wasm {
+            runtime: WasmRuntime::Wasmtime,
+            fetcher: WasmFetcher::Github(Default::default()),
+        }
     }
 }
 
@@ -67,7 +70,16 @@ pub struct TestFetcher<'a> {
 
 /// The CPU or System architecture.
 #[derive(
-    Default, PartialEq, PartialOrd, Ord, Eq, Debug, Clone, Copy, serde::Serialize, serde::Deserialize,
+    Default,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Eq,
+    Debug,
+    Clone,
+    Copy,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 pub enum Architecture {
     /// WebAssembly architecture (32-bit).
