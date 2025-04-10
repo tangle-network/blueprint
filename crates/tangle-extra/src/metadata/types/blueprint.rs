@@ -2,7 +2,7 @@ use alloc::borrow::Cow;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::MasterBlueprintServiceManagerRevision;
 use super::job::JobDefinition;
-use super::gadget::Gadget;
+use super::sources::BlueprintSource;
 
 /// Mirror of [`ServiceBlueprint`] for un-deployed blueprints
 ///
@@ -27,8 +27,8 @@ pub struct ServiceBlueprint<'a> {
     pub registration_params: Vec<FieldType>,
     /// The parameters that are required for the service request.
     pub request_params: Vec<FieldType>,
-    /// The gadget that will be executed for the service.
-    pub gadget: Gadget<'a>,
+    /// The binary sources for the blueprint.
+    pub sources: Vec<BlueprintSource<'a>>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

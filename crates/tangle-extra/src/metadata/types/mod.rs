@@ -1,4 +1,4 @@
 pub mod blueprint;
-pub mod gadget;
+pub mod sources;
 pub mod job;
 pub mod report;
