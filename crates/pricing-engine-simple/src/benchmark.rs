@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use sysinfo::{Pid, Process, System};
+use sysinfo::System;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BenchmarkProfile {
@@ -58,7 +58,6 @@ pub fn run_benchmark(config: BenchmarkRunConfig) -> Result<BenchmarkProfile> {
     let mut mem_samples = Vec::new();
     let mut peak_cpu: f32 = 0.0;
     let mut peak_mem: f32 = 0.0;
-    let num_cores = num_cpus::get() as f32;
 
     let start = Instant::now();
     let mut process_exited = false;

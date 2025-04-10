@@ -38,6 +38,9 @@ pub enum BlockchainEvent {
 
     /// A service has been terminated
     ServiceTerminated(ServiceTerminated),
+
+    /// Unknown event type (for testing and handling unexpected events)
+    Unknown(String),
 }
 
 pub async fn handle_events<T: Config>(events: Events<T>) -> Vec<BlockchainEvent> {

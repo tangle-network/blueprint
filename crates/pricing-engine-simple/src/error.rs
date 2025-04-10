@@ -4,16 +4,16 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum PricingError {
     #[error("Configuration error: {0}")]
-    Config(#[from] config::ConfigError),
+    Config(String),
 
     #[error("Cache error: {0}")]
-    Cache(#[from] sled::Error),
+    Cache(String),
 
     #[error("Serialization error: {0}")]
     Serialization(#[from] bincode::Error),
 
     #[error("Signing error: {0}")]
-    Signing(#[from] ed25519_dalek::SignatureError),
+    Signing(String),
 
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
@@ -37,10 +37,10 @@ pub enum PricingError {
     Initialization(String),
 
     #[error("Hex decoding error: {0}")]
-    HexDecode(#[from] hex::FromHexError),
+    HexDecode(String),
 
     #[error("Other error: {0}")]
-    Other(#[from] anyhow::Error),
+    Other(String),
 }
 
 pub type Result<T> = std::result::Result<T, PricingError>;

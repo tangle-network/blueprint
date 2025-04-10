@@ -2,7 +2,6 @@
 //!
 //! This module defines the fundamental data types used throughout the pricing engine.
 
-use core::{fmt, str::FromStr};
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
@@ -33,8 +32,8 @@ pub enum ResourceUnit {
 }
 
 #[cfg(feature = "std")]
-impl fmt::Display for ResourceUnit {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ResourceUnit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ResourceUnit::CPU => write!(f, "CPU"),
             ResourceUnit::MemoryMB => write!(f, "MemoryMB"),
@@ -57,7 +56,7 @@ impl fmt::Display for ResourceUnit {
 pub struct ParseResourceUnitError;
 
 #[cfg(feature = "std")]
-impl FromStr for ResourceUnit {
+impl std::str::FromStr for ResourceUnit {
     type Err = ParseResourceUnitError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -117,8 +116,8 @@ impl Price {
 }
 
 #[cfg(feature = "std")]
-impl fmt::Display for Price {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Price {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Format to show as a decimal number with 6 decimal places (assuming microtoken)
         let whole = self.value / 1_000_000;
         let fractional = self.value % 1_000_000;

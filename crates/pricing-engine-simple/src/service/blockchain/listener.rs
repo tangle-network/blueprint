@@ -7,14 +7,17 @@ use std::sync::Arc;
 
 use crate::service::blockchain::event::handle_events;
 
-use super::{
-    event::BlockchainEvent,
-    types::{SubxtError, TangleClient},
-};
+use super::event::BlockchainEvent;
+// Remove the reference to the non-existent types module
+// Instead, define the types we need directly
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, error, info, warn};
 
 use tangle_subxt::subxt::{OnlineClient, PolkadotConfig};
+
+// Define the types that were previously imported from the missing module
+pub type SubxtError = Box<dyn std::error::Error + Send + Sync>;
+pub type TangleClient = Arc<OnlineClient<PolkadotConfig>>;
 
 /// Listener for blockchain events
 pub struct EventListener {

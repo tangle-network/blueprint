@@ -7,7 +7,8 @@
 
 // src/lib.rs
 
-// Re-export modules to make them accessible
+// Define modules
+pub mod app;
 pub mod benchmark;
 pub mod cache;
 pub mod config;
@@ -21,13 +22,19 @@ pub mod types;
 // Re-export key types and functions for easier use by the binary or other crates
 pub use benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark};
 pub use cache::PriceCache;
-pub use config::{OperatorConfig, load_config};
+pub use config::{OperatorConfig, load_config, load_config_from_path};
 pub use error::{PricingError, Result};
 pub use handlers::handle_blueprint_update;
-pub use pricing::PriceModel;
-pub use service::blockchain;
-pub use service::{
-    blockchain::{event::BlockchainEvent, listener::EventListener},
-    rpc::server::{pricing_proto, run_rpc_server},
+pub use pricing::{PriceModel, calculate_price};
+pub use service::blockchain::event::BlockchainEvent;
+pub use service::blockchain::listener::EventListener;
+pub use signer::{OperatorSigner, QuotePayload, SignedQuote};
+
+// Re-export application-level functions
+pub use app::{
+    cleanup, init_logging, init_price_cache, load_operator_config, spawn_event_processor,
+    start_blockchain_listener, wait_for_shutdown,
 };
-pub use signer::{BlueprintHashBytes, OperatorSigner, QuotePayload, SignedQuote};
+
+#[cfg(test)]
+mod tests;

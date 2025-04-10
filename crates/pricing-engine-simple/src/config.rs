@@ -1,71 +1,65 @@
 // src/config.rs
-use crate::error::{PricingError, Result};
-use serde::Deserialize;
-use std::path::PathBuf;
-use std::time::Duration;
+use crate::error::Result;
+use serde::{Deserialize, Serialize};
+use std::path::Path;
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperatorConfig {
-    pub database_path: PathBuf,
-    pub keypair_path: PathBuf,
-    #[serde(with = "humantime_serde")]
-    pub quote_validity_duration: Duration,
-    // Add other config fields like RPC bind address, blockchain node URL, etc.
-    pub rpc_bind_address: String,
-    // We need info on how to run benchmarks per blueprint
-    // This is simplified - likely needs a more complex structure
-    // mapping blueprint IDs/hashes to benchmark commands/images.
+    /// Path to store database files (e.g., price cache)
+    pub database_path: String,
+
+    /// Command to run for benchmarking
     pub benchmark_command: String,
-    #[serde(default = "default_benchmark_args")]
+
+    /// Arguments for the benchmark command
     pub benchmark_args: Vec<String>,
-    #[serde(with = "humantime_serde", default = "default_benchmark_duration")]
-    pub benchmark_duration: Duration,
-    #[serde(with = "humantime_serde", default = "default_benchmark_interval")]
-    pub benchmark_interval: Duration,
-    #[serde(default = "default_price_scaling_factor")]
-    pub price_scaling_factor: f64, // Simple factor for pricing
+
+    /// Maximum duration for benchmark runs (in seconds)
+    pub benchmark_duration: u64,
+
+    /// Interval for sampling metrics during benchmarks (in seconds)
+    pub benchmark_interval: u64,
+
+    /// Scaling factor for pricing (e.g., Wei per CPU core)
+    pub price_scaling_factor: f64,
+
+    /// Path to the operator's keypair file
+    pub keypair_path: String,
+
+    /// Address to bind the RPC server to
+    pub rpc_bind_address: String,
+
+    /// Port for the RPC server
+    pub rpc_port: u16,
+
+    /// Timeout for RPC requests (in seconds)
+    pub rpc_timeout: u64,
+
+    /// Maximum number of concurrent RPC connections
+    pub rpc_max_connections: u32,
 }
 
-// Defaults for serde
-fn default_benchmark_args() -> Vec<String> {
-    vec![]
-}
-fn default_benchmark_duration() -> Duration {
-    Duration::from_secs(10)
-}
-fn default_benchmark_interval() -> Duration {
-    Duration::from_secs(1)
-}
-fn default_price_scaling_factor() -> f64 {
-    1.0
-}
-
-// Basic loading function - enhance as needed (e.g., use config crate)
+/// Load configuration from a file or use defaults
 pub fn load_config() -> Result<OperatorConfig> {
-    // In a real app, load from a file (e.g., "config.toml") or env vars
-    // For simplicity here, we'll hardcode some values, but ideally use the config crate.
-    // Example using config crate (requires setup):
-    /*
-    let builder = config::Config::builder()
-        .add_source(config::File::with_name("config/operator.toml").required(false))
-        .add_source(config::Environment::with_prefix("OPERATOR"));
-    let cfg = builder.build()?.try_deserialize::<OperatorConfig>()?;
-    Ok(cfg)
-    */
+    // For simplicity, we'll use hardcoded values
+    Ok(OperatorConfig {
+        database_path: "./data/price_cache".to_string(),
+        benchmark_command: "echo".to_string(),
+        benchmark_args: vec!["Simulated benchmark".to_string()],
+        benchmark_duration: 60,
+        benchmark_interval: 1,
+        price_scaling_factor: 1_000_000.0, // 1M Wei per CPU core
+        keypair_path: "./data/operator_key".to_string(),
+        rpc_bind_address: "127.0.0.1".to_string(),
+        rpc_port: 9000,
+        rpc_timeout: 30,
+        rpc_max_connections: 100,
+    })
+}
 
-    // --- Hardcoded Example (replace with real loading) ---
-    let config = OperatorConfig {
-        database_path: PathBuf::from("./operator_db"),
-        keypair_path: PathBuf::from("./operator_keypair.bin"),
-        quote_validity_duration: Duration::from_secs(300), // 5 minutes
-        rpc_bind_address: "0.0.0.0:50051".to_string(),
-        benchmark_command: "sleep".to_string(), // Default/example command
-        benchmark_args: vec!["5".to_string()],  // Example args
-        benchmark_duration: Duration::from_secs(6),
-        benchmark_interval: Duration::from_secs(1),
-        price_scaling_factor: 100.0, // e.g., 100 Wei per avg CPU core second
-    };
-    std::fs::create_dir_all(&config.database_path)?; // Ensure DB path exists
-    Ok(config)
-    // --- End Hardcoded Example ---
+/// Load configuration from a specified path
+pub fn load_config_from_path<P: AsRef<Path>>(_path: P) -> Result<OperatorConfig> {
+    // In a real implementation, this would load and parse a TOML/JSON file
+    // For now, we'll just use the default config
+    load_config()
 }

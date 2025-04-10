@@ -4,8 +4,9 @@ use crate::cache::{BlueprintHash, PriceCache};
 use crate::config::OperatorConfig;
 use crate::error::{PricingError, Result};
 use crate::pricing::calculate_price;
-use log::{error, info, warn};
+use log::{info, warn};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Handles updates for a blueprint (registration or price target change).
 /// Runs benchmarking, calculates pricing, and stores it in the cache.
@@ -28,8 +29,8 @@ pub async fn handle_blueprint_update(
         args: config.benchmark_args.clone(), // Adjust args based on blueprint if needed
         job_id: blueprint_hash.clone(),      // Use blueprint hash as job ID
         mode: "native".to_string(),          // Assuming native for now
-        max_duration: config.benchmark_duration,
-        sample_interval: config.benchmark_interval,
+        max_duration: Duration::from_secs(config.benchmark_duration),
+        sample_interval: Duration::from_secs(config.benchmark_interval),
     };
 
     // 2. Run Benchmark (Potentially long-running, ensure it doesn't block critical paths)

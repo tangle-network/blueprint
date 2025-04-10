@@ -37,7 +37,7 @@ pub fn calculate_price(
 
     Ok(PriceModel {
         price_per_second_wei,
-        generated_at: Utc::now(),
+        generated_at: chrono::Utc::now(),
         benchmark_profile: Some(profile),
     })
 }

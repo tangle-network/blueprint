@@ -38,6 +38,8 @@ scale-info = { workspace = true, features = ["derive"] }
 parity-scale-codec = { workspace = true, features = ["derive"] }
 uuid = { workspace = true, features = ["v4"] }
 once_cell = { workspace = true }
+hex = { workspace = true }
+anyhow = { workspace = true }
 
 # Substrate RPC and runtime API dependencies
 jsonrpsee = { workspace = true, features = ["server", "macros", "http-client"] }
@@ -72,7 +74,7 @@ sysinfo = "0.30"
 num_cpus = "1.16"
 
 # Utilities
-chrono = { workspace = true, features = ["serde"] }
+chrono = { workspace = true, features = ["serde", "now"] }
 
 [dev-dependencies]
 hex = { workspace = true }
@@ -84,16 +86,6 @@ blueprint-testing-utils = { workspace = true }
 tonic-build = "0.11"
 
 [features]
-default = ["std"]
-std = [
-    "log/std",
-    "serde/std",
-    "scale-info/std",
-    "parity-scale-codec/std",
-    "sp-core/std",
-    "blueprint-std/std",
-    "blueprint-crypto/std",
-    "blueprint-crypto-core/std",
-    "blueprint-networking/std",
-    "blueprint-keystore/std",
-]
+default = []
+tangle-listener = []
+std = [] # Add the std feature to fix warnings in types.rs
