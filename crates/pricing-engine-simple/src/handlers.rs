@@ -1,8 +1,8 @@
 // src/handlers.rs
-use crate::benchmark::{BenchmarkRunConfig, run_benchmark};
+use crate::benchmark::run_benchmark_suite;
 use crate::cache::{BlueprintHash, PriceCache};
 use crate::config::OperatorConfig;
-use crate::error::{PricingError, Result};
+use crate::error::Result;
 use crate::pricing::calculate_price;
 use log::{info, warn};
 use std::sync::Arc;
@@ -21,30 +21,24 @@ pub async fn handle_blueprint_update(
 ) -> Result<()> {
     info!("Handling update for blueprint: {}", blueprint_hash);
 
-    // 1. Determine Benchmark Configuration
-    // FIXME: This needs actual logic based on the blueprint_hash.
-    // Using generic config command for now. A real system needs a lookup.
-    let benchmark_config = BenchmarkRunConfig {
-        command: config.benchmark_command.clone(),
-        args: config.benchmark_args.clone(), // Adjust args based on blueprint if needed
-        job_id: blueprint_hash.clone(),      // Use blueprint hash as job ID
-        mode: "native".to_string(),          // Assuming native for now
-        max_duration: Duration::from_secs(config.benchmark_duration),
-        sample_interval: Duration::from_secs(config.benchmark_interval),
-        run_cpu_test: true,      // Enable CPU benchmarking
-        run_memory_test: true,   // Enable memory benchmarking
-        run_io_test: true,       // Enable I/O benchmarking
-        run_network_test: false, // Disable network benchmarking by default (can be noisy)
-        run_gpu_test: true,      // Enable GPU detection
-    };
+    // 1. Configure Benchmark
+    let benchmark_duration = config.benchmark_duration;
+    let benchmark_interval = config.benchmark_interval;
 
     // 2. Run Benchmark (Potentially long-running, ensure it doesn't block critical paths)
-    // Consider running this in a blocking task if it's CPU-intensive itself
-    let benchmark_profile = tokio::task::spawn_blocking(move || run_benchmark(benchmark_config))
-        .await
-        .map_err(|e| PricingError::Benchmark(format!("Benchmark task failed: {}", e)))??; // Double ?? for JoinError and inner Result
+    let benchmark_result = run_benchmark_suite(
+        blueprint_hash.clone(),
+        "native".to_string(),
+        Duration::from_secs(benchmark_duration),
+        Duration::from_secs(benchmark_interval),
+        true,  // run_cpu_test
+        true,  // run_memory_test
+        true,  // run_io_test
+        false, // run_network_test - disable by default (can be noisy)
+        true,  // run_gpu_test
+    )?;
 
-    if !benchmark_profile.success {
+    if !benchmark_result.success {
         warn!(
             "Benchmark command failed for blueprint {}. Skipping price update.",
             blueprint_hash
@@ -55,7 +49,7 @@ pub async fn handle_blueprint_update(
     }
 
     // 3. Calculate Price
-    let price_model = calculate_price(benchmark_profile, config.price_scaling_factor)?;
+    let price_model = calculate_price(benchmark_result, config.price_scaling_factor)?;
     info!(
         "Calculated price model for {}: {:?}",
         blueprint_hash, price_model

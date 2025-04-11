@@ -67,19 +67,30 @@ impl Default for BenchmarkRunConfig {
     }
 }
 
-/// Run a comprehensive benchmark suite to profile system resources
-pub fn run_benchmark_suite(config: BenchmarkRunConfig) -> Result<BenchmarkProfile> {
+/// Run a comprehensive benchmark suite to measure various system resources
+/// This is the main entry point for benchmarking
+pub fn run_benchmark_suite(
+    job_id: String,
+    mode: String,
+    max_duration: Duration,
+    sample_interval: Duration,
+    run_cpu_test: bool,
+    run_memory_test: bool,
+    run_io_test: bool,
+    run_network_test: bool,
+    run_gpu_test: bool,
+) -> Result<BenchmarkProfile> {
     info!(
         "Starting benchmark suite for job '{}' with max_duration={:?}",
-        config.job_id, config.max_duration
+        job_id, max_duration
     );
 
     let start_time = Instant::now();
 
     // Initialize the profile with default values
     let mut profile = BenchmarkProfile {
-        job_id: config.job_id.clone(),
-        execution_mode: config.mode.clone(),
+        job_id: job_id.clone(),
+        execution_mode: mode.clone(),
         avg_cpu_cores: 0.0,
         peak_cpu_cores: 0.0,
         avg_memory_mb: 0.0,
@@ -94,45 +105,54 @@ pub fn run_benchmark_suite(config: BenchmarkRunConfig) -> Result<BenchmarkProfil
         duration_secs: 0,
         timestamp: SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|e| PricingError::Benchmark(format!("Failed to get system time: {}", e)))?
+            .unwrap_or_default()
             .as_secs(),
         success: true,
     };
 
     // Measure available storage
     // Use df command to get disk space since sysinfo disk API might differ between versions
-    if let Ok(output) = Command::new("df")
-        .args(&["-h", "--output=avail", "/"])
-        .output()
-    {
+    if let Ok(output) = Command::new("df").args(&["-h", "/"]).output() {
         let output_str = String::from_utf8_lossy(&output.stdout);
         // Parse the output to get available space
-        // Format is typically "Avail\n100G" so we take the second line
-        let lines: Vec<&str> = output_str.trim().split('\n').collect();
-        if lines.len() > 1 {
-            let avail = lines[1].trim();
-            // Extract the number part and convert to GB
-            if let Some(num_end) = avail.find(|c: char| !c.is_digit(10) && c != '.') {
-                if let Ok(num) = avail[..num_end].parse::<f32>() {
-                    // Convert to GB based on unit
-                    let unit = avail[num_end..].trim();
-                    profile.storage_available_gb = match unit {
-                        "T" | "TB" => num * 1024.0,
-                        "G" | "GB" => num,
-                        "M" | "MB" => num / 1024.0,
-                        _ => num, // Assume GB if unknown
-                    };
+        for line in output_str.lines().skip(1) {
+            // Skip header line
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 4 {
+                // Format is typically: Filesystem Size Used Avail Use% Mounted on
+                let avail = parts[3];
+                if avail.ends_with('G') {
+                    // Extract the numeric part
+                    if let Ok(gb) = avail.trim_end_matches('G').parse::<f32>() {
+                        profile.storage_available_gb = gb;
+                        break;
+                    }
                 }
             }
         }
     }
 
+    // Create a config for individual benchmark runs
+    let config = BenchmarkRunConfig {
+        command: "".to_string(),
+        args: vec![],
+        job_id: job_id.clone(),
+        mode: mode.clone(),
+        max_duration,
+        sample_interval,
+        run_cpu_test,
+        run_memory_test,
+        run_io_test,
+        run_network_test,
+        run_gpu_test,
+    };
+
     // Run CPU benchmark if enabled
-    if config.run_cpu_test {
+    if run_cpu_test {
         match run_cpu_benchmark(&config) {
-            Ok(cpu_results) => {
-                profile.avg_cpu_cores = cpu_results.0;
-                profile.peak_cpu_cores = cpu_results.1;
+            Ok((avg_cpu, peak_cpu)) => {
+                profile.avg_cpu_cores = avg_cpu;
+                profile.peak_cpu_cores = peak_cpu;
             }
             Err(e) => {
                 warn!("CPU benchmark failed: {}", e);
@@ -142,11 +162,11 @@ pub fn run_benchmark_suite(config: BenchmarkRunConfig) -> Result<BenchmarkProfil
     }
 
     // Run memory benchmark if enabled
-    if config.run_memory_test {
+    if run_memory_test {
         match run_memory_benchmark(&config) {
-            Ok(memory_results) => {
-                profile.avg_memory_mb = memory_results.0;
-                profile.peak_memory_mb = memory_results.1;
+            Ok((avg_memory, peak_memory)) => {
+                profile.avg_memory_mb = avg_memory;
+                profile.peak_memory_mb = peak_memory;
             }
             Err(e) => {
                 warn!("Memory benchmark failed: {}", e);
@@ -156,11 +176,11 @@ pub fn run_benchmark_suite(config: BenchmarkRunConfig) -> Result<BenchmarkProfil
     }
 
     // Run I/O benchmark if enabled
-    if config.run_io_test {
+    if run_io_test {
         match run_io_benchmark(&config) {
-            Ok(io_results) => {
-                profile.io_read_mb = io_results.0;
-                profile.io_write_mb = io_results.1;
+            Ok((read_mb, write_mb)) => {
+                profile.io_read_mb = read_mb;
+                profile.io_write_mb = write_mb;
             }
             Err(e) => {
                 warn!("I/O benchmark failed: {}", e);
@@ -170,11 +190,11 @@ pub fn run_benchmark_suite(config: BenchmarkRunConfig) -> Result<BenchmarkProfil
     }
 
     // Run network benchmark if enabled
-    if config.run_network_test {
+    if run_network_test {
         match run_network_benchmark(&config) {
-            Ok(network_results) => {
-                profile.network_rx_mb = network_results.0;
-                profile.network_tx_mb = network_results.1;
+            Ok((rx_mb, tx_mb)) => {
+                profile.network_rx_mb = rx_mb;
+                profile.network_tx_mb = tx_mb;
             }
             Err(e) => {
                 warn!("Network benchmark failed: {}", e);
@@ -184,15 +204,15 @@ pub fn run_benchmark_suite(config: BenchmarkRunConfig) -> Result<BenchmarkProfil
     }
 
     // Run GPU benchmark if enabled
-    if config.run_gpu_test {
+    if run_gpu_test {
         match run_gpu_benchmark(&config) {
-            Ok(gpu_results) => {
-                profile.gpu_available = gpu_results.0;
-                profile.gpu_memory_mb = gpu_results.1;
+            Ok((gpu_available, gpu_memory_mb)) => {
+                profile.gpu_available = gpu_available;
+                profile.gpu_memory_mb = gpu_memory_mb;
             }
             Err(e) => {
                 warn!("GPU benchmark failed: {}", e);
-                // Don't mark the whole benchmark as failed just because GPU check failed
+                profile.success = false;
             }
         }
     }
@@ -809,7 +829,7 @@ fn run_and_monitor_command(config: &BenchmarkRunConfig) -> Result<BenchmarkProfi
     // Get current timestamp
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|e| PricingError::Benchmark(format!("Failed to get system time: {}", e)))?
+        .unwrap_or_default()
         .as_secs();
 
     // Create benchmark profile
