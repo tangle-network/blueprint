@@ -6,7 +6,7 @@ use crate::sdk::entry::SendFuture;
 use blueprint_clients::tangle::EventsClient;
 use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
-use blueprint_core::info;
+use blueprint_core::{info, warn};
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
@@ -343,9 +343,20 @@ async fn handle_init(
         return Err(Error::InitialBlock);
     };
 
-    let operator_subscribed_blueprints = services_client
+    let maybe_operator_subscribed_blueprints = services_client
         .query_operator_blueprints(init_event.hash, sub_account_id.clone())
-        .await?;
+        .await;
+
+    let operator_subscribed_blueprints = match maybe_operator_subscribed_blueprints {
+        Ok(blueprints) => blueprints,
+        Err(err) => {
+            warn!(
+                "Failed to query operator blueprints: {}, did you register as an operator?",
+                err
+            );
+            blueprint_std::vec::Vec::new()
+        }
+    };
 
     info!(
         "Received {} initial blueprints this operator is registered to",
