@@ -1,26 +1,27 @@
-use dialoguer::console::style;
-use blueprint_std::{env, thread, rand};
-use blueprint_std::io::{BufRead, BufReader};
-use blueprint_std::path::Path;
-use blueprint_std::process::{Command, Stdio};
 use alloy_provider::network::TransactionBuilder;
 use alloy_provider::{Provider, WsConnect};
 use alloy_rpc_types_eth::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
-use color_eyre::eyre::{self, eyre, Context, ContextCompat, Result};
-use blueprint_tangle_extra::metadata::types::blueprint::BlueprintServiceManager;
+use blueprint_chain_setup_common::signer::{load_evm_signer_from_env, load_signer_from_env};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_std::fmt::Debug;
+use blueprint_std::io::{BufRead, BufReader};
+use blueprint_std::path::Path;
 use blueprint_std::path::PathBuf;
-use serde_json::Value;
+use blueprint_std::process::{Command, Stdio};
+use blueprint_std::{env, rand, thread};
+use blueprint_tangle_extra::metadata::types::blueprint::BlueprintServiceManager;
+use color_eyre::eyre::{self, Context, ContextCompat, Result, eyre};
+use dialoguer::console::style;
+use indicatif::{ProgressBar, ProgressStyle};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use subxt::tx::Signer;
 use tangle_subxt::subxt;
 use tangle_subxt::tangle_testnet_runtime::api as TangleApi;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::ServiceBlueprint;
-use blueprint_chain_setup_common::signer::{load_evm_signer_from_env, load_signer_from_env};
-use indicatif::{ProgressBar, ProgressStyle};
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 #[derive(Clone)]
 pub struct Opts {
@@ -86,7 +87,8 @@ async fn generate_service_blueprint<P: Into<PathBuf>, T: AsRef<str>>(
     let mut blueprint = load_blueprint_metadata(&package)?;
     build_contracts_if_needed(&package, &blueprint).context("Building contracts")?;
     deploy_contracts_to_tangle(rpc_url.as_ref(), &package, &mut blueprint, signer_evm).await?;
-    bake_blueprint(&blueprint)
+
+    blueprint.try_into().map_err(Into::into)
 }
 
 /// Deploy a blueprint to the Tangle Network
@@ -111,8 +113,7 @@ pub async fn deploy_to_tangle(
     let progress_bar = ProgressBar::new(100);
     progress_bar.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}% {msg}")
-            .unwrap()
+            .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}% {msg}")?
             .progress_chars("#>-"),
     );
 
@@ -545,93 +546,6 @@ fn build_contracts_if_needed(
     }
 
     Ok(())
-}
-
-/// Converts the `ServiceBlueprint` to a format that can be sent to the Tangle Network.
-fn bake_blueprint(
-    blueprint: &blueprint_tangle_extra::metadata::types::blueprint::ServiceBlueprint<'static>,
-) -> Result<ServiceBlueprint> {
-    let mut blueprint_json = serde_json::to_value(blueprint)?;
-    convert_to_bytes_or_null(&mut blueprint_json["metadata"]["name"]);
-    convert_to_bytes_or_null(&mut blueprint_json["metadata"]["description"]);
-    convert_to_bytes_or_null(&mut blueprint_json["metadata"]["author"]);
-    convert_to_bytes_or_null(&mut blueprint_json["metadata"]["license"]);
-    convert_to_bytes_or_null(&mut blueprint_json["metadata"]["website"]);
-    convert_to_bytes_or_null(&mut blueprint_json["metadata"]["code_repository"]);
-    convert_to_bytes_or_null(&mut blueprint_json["metadata"]["category"]);
-
-    // Set the Hooks to be empty to be compatible with the old blueprint format.
-    // This is because the new blueprint format has manager field instead of different hooks.
-    blueprint_json["registration_hook"] = serde_json::json!("None");
-    blueprint_json["request_hook"] = serde_json::json!("None");
-    for job in blueprint_json["jobs"].as_array_mut().unwrap() {
-        convert_to_bytes_or_null(&mut job["metadata"]["name"]);
-        convert_to_bytes_or_null(&mut job["metadata"]["description"]);
-        // Set an empty verifier to be compatible with the old blueprint format.
-        job["verifier"] = serde_json::json!("None");
-    }
-
-    // Retrieves the Gadget information from the blueprint.json file.
-    // From this data, we find the sources of the Gadget.
-    let (_, gadget) = blueprint_json["gadget"]
-        .as_object_mut()
-        .expect("Bad gadget value")
-        .iter_mut()
-        .next()
-        .expect("Should be at least one gadget");
-    let sources = gadget["sources"].as_array_mut().expect("Should be a list");
-
-    // The source includes where to fetch the Blueprint, the name of the blueprint, and
-    // the name of the binary. From this data, we create the blueprint's [`ServiceBlueprint`]
-    for (idx, source) in sources.iter_mut().enumerate() {
-        let Some(fetchers) = source["fetcher"].as_object_mut() else {
-            return Err(Error::MissingFetcher(idx).into());
-        };
-
-        let fetcher_fields = fetchers
-            .iter_mut()
-            .next()
-            .expect("Should be at least one fetcher")
-            .1;
-        for (_key, value) in fetcher_fields
-            .as_object_mut()
-            .expect("Fetcher should be a map")
-        {
-            if value.is_array() {
-                let xs = value.as_array_mut().expect("Value should be an array");
-                for x in xs {
-                    if x.is_object() {
-                        convert_to_bytes_or_null(&mut x["name"]);
-                    }
-                }
-            } else {
-                convert_to_bytes_or_null(value);
-            }
-        }
-    }
-
-    // TODO
-    blueprint_json["supported_membership_models"] =
-        Value::Array(vec![Value::String(String::from("Fixed"))]);
-
-    let blueprint = serde_json::from_value(blueprint_json)?;
-    Ok(blueprint)
-}
-
-/// Recursively converts a JSON string (or array of JSON strings) to bytes.
-///
-/// Empty strings are converted to nulls.
-fn convert_to_bytes_or_null(v: &mut serde_json::Value) {
-    if let serde_json::Value::String(s) = v {
-        *v = serde_json::Value::Array(s.bytes().map(serde_json::Value::from).collect());
-        return;
-    }
-
-    if let serde_json::Value::Array(vals) = v {
-        for val in vals {
-            convert_to_bytes_or_null(val);
-        }
-    }
 }
 
 /// Resolves a path relative to the package manifest.

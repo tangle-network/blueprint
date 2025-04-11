@@ -1,5 +1,5 @@
 use super::types::blueprint::{BlueprintServiceManager, ServiceBlueprint, ServiceMetadata};
-use crate::metadata::types::gadget::{Gadget, GadgetSource, GadgetSourceFetcher, NativeGadget, TestFetcher};
+use crate::metadata::types::sources::{BlueprintSource, TestFetcher};
 use crate::metadata::types::job::JobDefinition;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -136,13 +136,12 @@ impl PartialBlueprintJson {
             master_manager_revision: self
                 .master_manager_revision
                 .unwrap_or(MasterBlueprintServiceManagerRevision::Latest),
-            gadget: generate_gadget_for_current_crate()?,
+            sources: generate_sources_for_current_crate()?,
         })
     }
 }
 
-/// Generates the metadata for the gadget.
-fn generate_gadget_for_current_crate() -> Result<Gadget<'static>, Error> {
+fn generate_sources_for_current_crate() -> Result<Vec<BlueprintSource<'static>>, Error> {
     let root = std::env::var("CARGO_MANIFEST_DIR")
         .map_err(|_| Error::MissingEnvVar("CARGO_MANIFEST_DIR"))?;
     let root = Path::new(&root).canonicalize()?;
@@ -162,41 +161,32 @@ fn generate_gadget_for_current_crate() -> Result<Gadget<'static>, Error> {
         .find(|p| p.name == package_name)
         .ok_or(Error::PackageNotFound(package_name))?;
 
-    let mut sources = vec![];
-    if let Some(gadget) = package.metadata.get("gadget") {
-        let gadget: Gadget<'static> = serde_json::from_value(gadget.clone())?;
-        if let Gadget::Native(NativeGadget { sources: fetchers }) = gadget {
-            sources.extend(fetchers);
-        } else {
-            panic!("Currently unsupported gadget type has been parsed")
-        }
+    let mut sources: Vec<BlueprintSource<'static>> = Vec::new();
+    if let Some(blueprint_metadata) = package.metadata.get("blueprint") {
+        sources = match blueprint_metadata.get("sources") {
+            Some(sources) => serde_json::from_value(sources.clone())?,
+            None => Vec::new(),
+        };
     } else {
         eprintln!("[WARN] No gadget metadata found in the Cargo.toml.");
         eprintln!("[WARN] For more information, see: <TODO>");
     }
 
-    let has_test_fetcher = sources.iter().any(|fetcher| {
-        matches!(
-            fetcher,
-            GadgetSource {
-                fetcher: GadgetSourceFetcher::Testing(..)
-            }
-        )
-    });
+    let has_testing_source = sources
+        .iter()
+        .any(|source| matches!(source, BlueprintSource::Testing(..)));
 
-    if !has_test_fetcher {
-        println!("Adding test fetcher since none exists");
-        sources.push(GadgetSource {
-            fetcher: GadgetSourceFetcher::Testing(TestFetcher {
-                cargo_package: package.name.clone().into(),
-                cargo_bin: "main".into(),
-                base_path: format!("{}", root.display()).into(),
-            }),
-        });
+    if !has_testing_source {
+        println!("Adding testing source since none exists");
+        sources.push(BlueprintSource::Testing(TestFetcher {
+            cargo_package: package.name.clone().into(),
+            cargo_bin: "main".into(),
+            base_path: format!("{}", root.display()).into(),
+        }));
     }
 
     assert_ne!(sources.len(), 0, "No sources found for the gadget");
-    Ok(Gadget::Native(NativeGadget { sources }))
+    Ok(sources)
 }
 
 /// Define a Tangle blueprint.json file
@@ -592,27 +582,19 @@ mod tests {
     }
 
     #[test]
-    fn generates_testing_gadget() {
+    fn generates_testing_source() {
         let blueprint = blueprint! {
             name: "test",
             manager: { Evm = "TestBlueprint" }
         }
         .unwrap();
 
-        let Gadget::Native(NativeGadget { sources }) = blueprint.gadget else {
-            panic!("Not a native gadget");
+        let [BlueprintSource::Testing(testing_fetcher)] = &blueprint.sources[..] else {
+            panic!("No testing fetcher defined");
         };
 
-        let Some(testing_gadget) = sources.first() else {
-            panic!("No sources defined");
-        };
-
-        let GadgetSourceFetcher::Testing(fetcher) = &testing_gadget.fetcher else {
-            panic!("Not a testing fetcher");
-        };
-
-        assert_eq!(fetcher.cargo_package, "blueprint-tangle-extra");
-        assert_eq!(fetcher.cargo_bin, "main");
+        assert_eq!(testing_fetcher.cargo_package, "blueprint-tangle-extra");
+        assert_eq!(testing_fetcher.cargo_bin, "main");
     }
 
     #[test]

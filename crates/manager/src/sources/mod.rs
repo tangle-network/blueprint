@@ -51,7 +51,7 @@ impl ProcessHandle {
 
 #[auto_impl::auto_impl(Box)]
 #[dynosaur::dynosaur(pub(crate) DynBlueprintSource)]
-pub trait BlueprintSource: Send + Sync {
+pub trait BlueprintSourceHandler: Send + Sync {
     fn fetch(&mut self) -> impl Future<Output = crate::error::Result<()>> + Send;
     fn spawn(
         &mut self,
