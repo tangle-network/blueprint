@@ -153,7 +153,7 @@ impl Future for BlueprintManagerHandle {
 #[allow(clippy::used_underscore_binding)]
 pub fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     blueprint_manager_config: BlueprintManagerConfig,
-    keystore: &Keystore,
+    keystore: Keystore,
     env: BlueprintEnvironment,
     shutdown_cmd: F,
 ) -> color_eyre::Result<BlueprintManagerHandle> {
@@ -197,7 +197,7 @@ pub fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let keystore_uri = env.keystore_uri.clone();
 
     let manager_task = async move {
-        let tangle_client = TangleClient::new(env.clone()).await?;
+        let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
         let services_client = tangle_client.services_client();
 
         // With the basics setup, we must now implement the main logic of the Blueprint Manager
@@ -319,7 +319,7 @@ pub fn run_blueprint_manager<F: SendFuture<'static, ()>>(
 ) -> color_eyre::Result<BlueprintManagerHandle> {
     run_blueprint_manager_with_keystore(
         blueprint_manager_config,
-        &Keystore::new(KeystoreConfig::new().fs_root(&env.keystore_uri))?,
+        Keystore::new(KeystoreConfig::new().fs_root(&env.keystore_uri))?,
         env,
         shutdown_cmd,
     )
