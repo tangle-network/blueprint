@@ -9,7 +9,7 @@ use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, System};
 
-use super::{BenchmarkProfile, BenchmarkRunConfig, CpuBenchmarkResult, MemoryBenchmarkResult};
+use super::{BenchmarkProfile, BenchmarkRunConfig, CpuBenchmarkResult, MemoryBenchmarkResult, MemoryAccessMode, MemoryOperationType};
 
 /// Helper function to get disk I/O statistics
 pub fn get_io_stats() -> Result<(u64, u64)> {
@@ -231,6 +231,14 @@ pub fn run_and_monitor_command(config: &BenchmarkRunConfig) -> Result<BenchmarkP
         memory_details: Some(MemoryBenchmarkResult {
             avg_memory_mb: avg_memory,
             peak_memory_mb: peak_memory,
+            block_size_kb: 0,
+            total_size_mb: 0,
+            operations_per_second: 0.0,
+            transfer_rate_mb_s: 0.0,
+            access_mode: MemoryAccessMode::Sequential,
+            operation_type: MemoryOperationType::None,
+            latency_ns: 0.0,
+            duration_ms: 0,
         }),
         io_details: None,
         network_details: None,

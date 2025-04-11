@@ -29,6 +29,14 @@ fn create_test_benchmark_profile(avg_cpu_cores: f32) -> BenchmarkProfile {
         memory_details: Some(crate::benchmark::MemoryBenchmarkResult {
             avg_memory_mb: 100.0,
             peak_memory_mb: 150.0,
+            block_size_kb: 1024,
+            total_size_mb: 1024,
+            operations_per_second: 10000.0,
+            transfer_rate_mb_s: 2048.0,
+            access_mode: crate::benchmark::MemoryAccessMode::Sequential,
+            operation_type: crate::benchmark::MemoryOperationType::Write,
+            latency_ns: 250.0,
+            duration_ms: 5000,
         }),
         io_details: Some(crate::benchmark::IoBenchmarkResult {
             read_mb: 10.0,
@@ -71,10 +79,10 @@ fn test_benchmark_suite() {
         Duration::from_secs(30),
         Duration::from_millis(500),
         false, // run_cpu_test
-        false, // run_memory_test
-        false,  // run_io_test
+        true,  // run_memory_test
+        false, // run_io_test
         false, // run_network_test - Skip just for test
-        true, // run_gpu_test
+        false,  // run_gpu_test
     );
     assert!(result.is_ok());
 
@@ -206,4 +214,44 @@ fn test_io_benchmark() {
     assert!(result.write_mb >= 0.0);
     assert!(result.read_iops >= 0.0);
     assert!(result.write_iops >= 0.0);
+}
+
+#[test]
+fn test_memory_benchmark() {
+    setup_log();
+
+    // Create a simple benchmark config
+    let config = BenchmarkRunConfig {
+        job_id: "memory-test".to_string(),
+        mode: "test".to_string(),
+        command: "echo".to_string(),
+        args: vec!["benchmark".to_string()],
+        max_duration: Duration::from_secs(10),
+        sample_interval: Duration::from_millis(100),
+        run_cpu_test: false,
+        run_memory_test: true,
+        run_io_test: false,
+        run_network_test: false,
+        run_gpu_test: false,
+    };
+
+    // Run the memory benchmark
+    let result = crate::benchmark::memory::run_memory_benchmark(&config).unwrap();
+
+    // Print the results
+    println!("Memory Benchmark Results:");
+    println!("  Block Size: {} KB", result.block_size_kb);
+    println!("  Total Size: {} MB", result.total_size_mb);
+    println!("  Operations/sec: {:.2}", result.operations_per_second);
+    println!("  Transfer Rate: {:.2} MB/s", result.transfer_rate_mb_s);
+    println!("  Access Mode: {:?}", result.access_mode);
+    println!("  Operation Type: {:?}", result.operation_type);
+    println!("  Avg Latency: {:.2} ns", result.latency_ns);
+    println!("  Duration: {} ms", result.duration_ms);
+
+    // Verify that we got some results
+    assert!(result.operations_per_second > 0.0);
+    assert!(result.transfer_rate_mb_s > 0.0);
+    assert!(result.latency_ns > 0.0);
+    assert!(result.duration_ms > 0);
 }

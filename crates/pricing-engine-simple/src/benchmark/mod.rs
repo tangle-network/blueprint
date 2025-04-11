@@ -46,6 +46,29 @@ pub struct BenchmarkProfile {
 pub struct MemoryBenchmarkResult {
     pub avg_memory_mb: f32,
     pub peak_memory_mb: f32,
+    pub block_size_kb: u64,         // Memory block size in KB
+    pub total_size_mb: u64,         // Total memory size in MB
+    pub operations_per_second: f32, // Operations per second
+    pub transfer_rate_mb_s: f32,    // Transfer rate in MB/s
+    pub access_mode: MemoryAccessMode, // Sequential or random access
+    pub operation_type: MemoryOperationType, // Read, write or none
+    pub latency_ns: f32,            // Average latency in nanoseconds
+    pub duration_ms: u64,           // Benchmark duration in milliseconds
+}
+
+/// Memory access modes
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MemoryAccessMode {
+    Sequential,
+    Random,
+}
+
+/// Memory operation types
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MemoryOperationType {
+    Read,
+    Write,
+    None,
 }
 
 /// Network benchmark results
