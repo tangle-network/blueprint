@@ -19,10 +19,9 @@ pub fn get_io_stats() -> Result<(u64, u64)> {
     let diskstats = std::fs::read_to_string("/proc/diskstats")
         .map_err(|e| PricingError::Benchmark(format!("Failed to read diskstats: {}", e)))?;
 
-    // Find the root device (usually sda or nvme0n1)
-    // This is a simplified approach; in production, you'd want to find the device for the root filesystem
-    let mut read_bytes = 0;
-    let mut write_bytes = 0;
+    // Sum up I/O stats from all physical disks (not partitions or virtual devices)
+    let mut total_read_bytes = 0;
+    let mut total_write_bytes = 0;
 
     for line in diskstats.lines() {
         let parts: Vec<&str> = line.split_whitespace().collect();
@@ -31,25 +30,26 @@ pub fn get_io_stats() -> Result<(u64, u64)> {
         }
 
         let device_name = parts[2];
-        // Check if this is a main device (not a partition)
-        if device_name == "sda"
-            || device_name == "nvme0n1"
-            || device_name == "vda"
-            || device_name == "xvda"
-        {
+        // Check if this is a physical disk (not a partition, loop, or ram device)
+        if (device_name.starts_with("sd") || 
+            device_name.starts_with("nvme") || 
+            device_name.starts_with("vd") || 
+            device_name.starts_with("xvd")) && 
+            // Exclude partitions (devices with numbers at the end)
+            !device_name.chars().last().unwrap_or('x').is_numeric() {
+            
             // Field 6 is sectors read, field 10 is sectors written
             // Each sector is 512 bytes
             if let (Ok(sectors_read), Ok(sectors_written)) =
                 (parts[5].parse::<u64>(), parts[9].parse::<u64>())
             {
-                read_bytes = sectors_read * 512;
-                write_bytes = sectors_written * 512;
-                break;
+                total_read_bytes += sectors_read * 512;
+                total_write_bytes += sectors_written * 512;
             }
         }
     }
 
-    Ok((read_bytes, write_bytes))
+    Ok((total_read_bytes, total_write_bytes))
 }
 
 /// Helper function to get network statistics using system commands

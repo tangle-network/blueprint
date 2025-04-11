@@ -3314,6 +3314,7 @@ dependencies = [
  "futures",
  "hex",
  "jsonrpsee",
+ "libc",
  "libp2p",
  "log",
  "num_cpus",

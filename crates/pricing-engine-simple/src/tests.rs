@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::benchmark::{BenchmarkProfile, run_benchmark_suite};
+use crate::benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark_suite};
 use crate::pricing::calculate_price;
 
 // Helper function to create a test benchmark profile
@@ -129,4 +129,40 @@ fn test_calculate_price_negative_scaling_factor() {
 
     // Price should be clamped to 0
     assert_eq!(price_model.price_per_second_wei, 0);
+}
+
+#[test]
+fn test_io_benchmark() {
+    // Create a simple benchmark config
+    let config = BenchmarkRunConfig {
+        job_id: "io-test".to_string(),
+        mode: "test".to_string(),
+        command: "echo".to_string(),
+        args: vec!["benchmark".to_string()],
+        max_duration: Duration::from_secs(30),
+        sample_interval: Duration::from_millis(100),
+        run_cpu_test: false,
+        run_memory_test: false,
+        run_io_test: true,
+        run_network_test: false,
+        run_gpu_test: false,
+    };
+
+    // Run the I/O benchmark
+    let result = crate::benchmark::io::run_io_benchmark(&config).unwrap();
+    
+    // Print the results
+    println!("I/O Benchmark Results:");
+    println!("  Read: {:.2} MB", result.read_mb);
+    println!("  Write: {:.2} MB", result.write_mb);
+    println!("  Read IOPS: {:.2}", result.read_iops);
+    println!("  Write IOPS: {:.2}", result.write_iops);
+    println!("  Avg Read Latency: {:.2} ms", result.avg_read_latency_ms);
+    println!("  Avg Write Latency: {:.2} ms", result.avg_write_latency_ms);
+    
+    // Verify that we got some results
+    assert!(result.read_mb >= 0.0);
+    assert!(result.write_mb >= 0.0);
+    assert!(result.read_iops >= 0.0);
+    assert!(result.write_iops >= 0.0);
 }

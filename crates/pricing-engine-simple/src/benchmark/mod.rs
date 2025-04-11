@@ -20,7 +20,7 @@ pub use gpu::{
     DEFAULT_AMD_GPU_MEMORY, DEFAULT_INTEL_GPU_MEMORY, DEFAULT_NVIDIA_GPU_MEMORY,
     DEFAULT_UNKNOWN_GPU_MEMORY, run_gpu_benchmark,
 };
-pub use io::run_io_benchmark;
+pub use io::{IoBenchmarkResult, IoTestMode, run_io_benchmark};
 pub use memory::run_memory_benchmark;
 pub use network::run_network_benchmark;
 pub use utils::{get_io_stats, get_network_stats, run_and_monitor_command};
@@ -206,9 +206,9 @@ pub fn run_benchmark_suite(
     // Run I/O benchmark if enabled
     if run_io_test {
         match run_io_benchmark(&config) {
-            Ok((read_mb, write_mb)) => {
-                profile.io_read_mb = read_mb;
-                profile.io_write_mb = write_mb;
+            Ok(io_result) => {
+                profile.io_read_mb = io_result.read_mb;
+                profile.io_write_mb = io_result.write_mb;
             }
             Err(e) => {
                 warn!("I/O benchmark failed: {}", e);
