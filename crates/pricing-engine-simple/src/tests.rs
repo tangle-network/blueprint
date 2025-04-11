@@ -84,11 +84,11 @@ fn test_benchmark_suite() {
         "test".to_string(),
         Duration::from_secs(30),
         Duration::from_millis(500),
-        false, // run_cpu_test
-        false, // run_memory_test
-        false, // run_io_test
+        true, // run_cpu_test
+        true, // run_memory_test
+        true, // run_io_test
         true,  // run_network_test
-        false, // run_gpu_test
+        true, // run_gpu_test
     );
     assert!(result.is_ok());
 
