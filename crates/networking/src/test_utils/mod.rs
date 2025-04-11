@@ -239,7 +239,7 @@ where
 ///
 /// Returns an error if the peer discovery timed out
 pub async fn wait_for_peer_discovery<K: KeyType>(
-    handles: &[&NetworkServiceHandle<K>],
+    handles: &[NetworkServiceHandle<K>],
     timeout: Duration,
 ) -> Result<(), &'static str> {
     info!("Waiting for peer discovery...");

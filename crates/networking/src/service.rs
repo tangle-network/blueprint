@@ -243,6 +243,12 @@ pub enum AllowedKeys<K: KeyType> {
     InstancePublicKeys(blueprint_std::collections::HashSet<K::Public>),
 }
 
+impl<K: KeyType> Default for AllowedKeys<K> {
+    fn default() -> Self {
+        Self::InstancePublicKeys(blueprint_std::collections::HashSet::new())
+    }
+}
+
 impl<K: KeyType> NetworkService<K> {
     /// Create a new network service
     ///
