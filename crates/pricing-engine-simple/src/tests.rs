@@ -22,6 +22,7 @@ fn create_test_benchmark_profile(avg_cpu_cores: f32) -> BenchmarkProfile {
         duration_secs: 60,
         timestamp: 1643723400, // Fixed timestamp for testing
         success: true,
+        cpu_details: None,
     }
 }
 
