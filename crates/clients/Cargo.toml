@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-clients"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 description = "Metapackage for Tangle Blueprint clients"
 authors.workspace = true
 edition.workspace = true

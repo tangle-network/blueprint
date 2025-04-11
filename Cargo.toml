@@ -38,15 +38,15 @@ broken_intra_doc_links = "deny"
 
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
-blueprint-sdk = { version = "0.1.0-alpha.1", path = "./crates/sdk", default-features = false }
+blueprint-sdk = { version = "0.1.0-alpha.2", path = "./crates/sdk", default-features = false }
 
 # Job system
 blueprint-core = { version = "0.1.0-alpha.1", path = "crates/core", default-features = false }
 blueprint-router = { version = "0.1.0-alpha.1", path = "crates/router", default-features = false }
-blueprint-runner = { version = "0.1.0-alpha.1", path = "crates/runner", default-features = false }
+blueprint-runner = { version = "0.1.0-alpha.2", path = "crates/runner", default-features = false }
 
 # Extras
-blueprint-tangle-extra = { version = "0.1.0-alpha.1", path = "crates/tangle-extra", default-features = false }
+blueprint-tangle-extra = { version = "0.1.0-alpha.2", path = "crates/tangle-extra", default-features = false }
 blueprint-evm-extra = { version = "0.1.0-alpha.1", path = "crates/evm-extra", default-features = false }
 blueprint-eigenlayer-extra = { version = "0.1.0-alpha.1", path = "crates/eigenlayer-extra", default-features = false }
 blueprint-producers-extra = { version = "0.1.0-alpha.1", path = "crates/producers-extra", default-features = false }
@@ -56,14 +56,14 @@ incredible-squaring-blueprint = { version = "0.1.1", path = "./examples/incredib
 incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./examples/incredible-squaring-eigenlayer", default-features = false }
 
 # Blueprint utils
-blueprint-manager = { version = "0.3.0-alpha.1", path = "./crates/manager", default-features = false }
+blueprint-manager = { version = "0.3.0-alpha.2", path = "./crates/manager", default-features = false }
 blueprint-build-utils = { version = "0.1.0-alpha.1", path = "./crates/build-utils", default-features = false }
 
 # Chain Setup
-blueprint-chain-setup = { version = "0.1.0-alpha.1", path = "./crates/chain-setup", default-features = false }
-blueprint-chain-setup-common = { version = "0.1.0-alpha.1", path = "./crates/chain-setup/common", default-features = false }
-blueprint-chain-setup-tangle = { version = "0.1.0-alpha.1", path = "./crates/chain-setup/tangle", default-features = false }
-blueprint-chain-setup-anvil = { version = "0.1.0-alpha.1", path = "./crates/chain-setup/anvil", default-features = false }
+blueprint-chain-setup = { version = "0.1.0-alpha.2", path = "./crates/chain-setup", default-features = false }
+blueprint-chain-setup-common = { version = "0.1.0-alpha.2", path = "./crates/chain-setup/common", default-features = false }
+blueprint-chain-setup-tangle = { version = "0.1.0-alpha.2", path = "./crates/chain-setup/tangle", default-features = false }
+blueprint-chain-setup-anvil = { version = "0.1.0-alpha.2", path = "./crates/chain-setup/anvil", default-features = false }
 
 # Crypto
 blueprint-crypto-core = { version = "0.1.0-alpha.1", path = "./crates/crypto/core", default-features = false }
@@ -74,46 +74,46 @@ blueprint-crypto-hashing = { version = "0.1.0-alpha.1", path = "./crates/crypto/
 blueprint-crypto-bls = { version = "0.1.0-alpha.1", path = "./crates/crypto/bls", default-features = false }
 blueprint-crypto-bn254 = { version = "0.1.0-alpha.1", path = "./crates/crypto/bn254", default-features = false }
 blueprint-crypto-sp-core = { version = "0.1.0-alpha.1", path = "./crates/crypto/sp-core", default-features = false }
-blueprint-crypto = { version = "0.1.0-alpha.1", path = "./crates/crypto", default-features = false }
-blueprint-crypto-tangle-pair-signer = { version = "0.1.0-alpha.1", path = "./crates/crypto/tangle-pair-signer", default-features = false }
+blueprint-crypto = { version = "0.1.0-alpha.2", path = "./crates/crypto", default-features = false }
+blueprint-crypto-tangle-pair-signer = { version = "0.1.0-alpha.2", path = "./crates/crypto/tangle-pair-signer", default-features = false }
 
 # Clients
-blueprint-clients = { version = "0.1.0-alpha.1", path = "./crates/clients", default-features = false }
+blueprint-clients = { version = "0.1.0-alpha.2", path = "./crates/clients", default-features = false }
 blueprint-client-core = { version = "0.1.0-alpha.1", path = "./crates/clients/core", default-features = false }
-blueprint-client-eigenlayer = { version = "0.1.0-alpha.1", path = "./crates/clients/eigenlayer", default-features = false }
+blueprint-client-eigenlayer = { version = "0.1.0-alpha.2", path = "./crates/clients/eigenlayer", default-features = false }
 blueprint-client-evm = { version = "0.1.0-alpha.1", path = "./crates/clients/evm", default-features = false }
-blueprint-client-tangle = { version = "0.1.0-alpha.1", path = "./crates/clients/tangle", default-features = false }
-blueprint-contexts = { version = "0.1.0-alpha.1", path = "./crates/contexts", default-features = false }
+blueprint-client-tangle = { version = "0.1.0-alpha.2", path = "./crates/clients/tangle", default-features = false }
+blueprint-contexts = { version = "0.1.0-alpha.2", path = "./crates/contexts", default-features = false }
 
 # Macros
 blueprint-macros = { version = "0.1.0-alpha.1", path = "./crates/macros", default-features = false }
-blueprint-context-derive = { version = "0.1.0-alpha.1", path = "./crates/macros/context-derive", default-features = false }
+blueprint-context-derive = { version = "0.1.0-alpha.2", path = "./crates/macros/context-derive", default-features = false }
 
 # Stores
 blueprint-stores = { version = "0.1.0-alpha.1", path = "./crates/stores", default-features = false }
 blueprint-store-local-database = { version = "0.1.0-alpha.1", path = "./crates/stores/local-database", default-features = false }
 
 # SDK
-blueprint-keystore = { version = "0.1.0-alpha.1", path = "./crates/keystore", default-features = false }
+blueprint-keystore = { version = "0.1.0-alpha.2", path = "./crates/keystore", default-features = false }
 blueprint-std = { version = "0.1.0-alpha.1", path = "./crates/std", default-features = false }
 
 # P2P
-blueprint-networking = { version = "0.1.0-alpha.1", path = "./crates/networking", default-features = false }
-blueprint-networking-round-based-extension = { version = "0.1.0-alpha.1", path = "./crates/networking/extensions/round-based", default-features = false }
+blueprint-networking = { version = "0.1.0-alpha.2", path = "./crates/networking", default-features = false }
+blueprint-networking-round-based-extension = { version = "0.1.0-alpha.2", path = "./crates/networking/extensions/round-based", default-features = false }
 blueprint-networking-agg-sig-gossip-extension = { version = "0.1.0-alpha.1", path = "./crates/networking/extensions/agg-sig-gossip", default-features = false }
 
 # Testing utilities
-blueprint-testing-utils = { version = "0.1.0-alpha.1", path = "./crates/testing-utils", default-features = false }
-blueprint-core-testing-utils = { version = "0.1.0-alpha.1", path = "./crates/testing-utils/core", default-features = false }
-blueprint-anvil-testing-utils = { version = "0.1.0-alpha.1", path = "./crates/testing-utils/anvil", default-features = false }
-blueprint-tangle-testing-utils = { version = "0.1.0-alpha.1", path = "./crates/testing-utils/tangle", default-features = false }
-blueprint-eigenlayer-testing-utils = { version = "0.1.0-alpha.1", path = "./crates/testing-utils/eigenlayer", default-features = false }
+blueprint-testing-utils = { version = "0.1.0-alpha.2", path = "./crates/testing-utils", default-features = false }
+blueprint-core-testing-utils = { version = "0.1.0-alpha.2", path = "./crates/testing-utils/core", default-features = false }
+blueprint-anvil-testing-utils = { version = "0.1.0-alpha.2", path = "./crates/testing-utils/anvil", default-features = false }
+blueprint-tangle-testing-utils = { version = "0.1.0-alpha.2", path = "./crates/testing-utils/tangle", default-features = false }
+blueprint-eigenlayer-testing-utils = { version = "0.1.0-alpha.2", path = "./crates/testing-utils/eigenlayer", default-features = false }
 
 # Metrics
 blueprint-metrics = { version = "0.1.0-alpha.1", path = "./crates/metrics", default-features = false }
 blueprint-metrics-rpc-calls = { version = "0.1.0-alpha.1", path = "./crates/metrics/rpc-calls", default-features = false }
 
-cargo-tangle = { version = "0.4.0-alpha.1", path = "./cli", default-features = false }
+cargo-tangle = { version = "0.4.0-alpha.2", path = "./cli", default-features = false }
 cargo_metadata = { version = "0.18.1" }
 tnt-core-bytecode = { version = "0.4.0", default-features = false }
 

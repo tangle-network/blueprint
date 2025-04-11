@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-eigenlayer-testing-utils"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 description = "EigenLayer-specific testing utilities for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
