@@ -84,20 +84,19 @@ async fn test_app_functions() -> Result<()> {
     let config_path = PathBuf::from("/tmp/test-operator-config.toml");
     std::fs::write(
         &config_path,
-        r#"
-        database_path = "./data/price_cache"
-        benchmark_command = "echo"
-        benchmark_args = ["test"]
-        benchmark_duration = 10
-        benchmark_interval = 1
-        price_scaling_factor = 1000000.0
-        keypair_path = "/tmp/test-keypair"
-        keystore_path = "/tmp/test-keystore"
-        rpc_bind_address = "127.0.0.1"
-        rpc_port = 9000
-        rpc_timeout = 30
-        rpc_max_connections = 100
-        "#,
+        r#"database_path = "./data/price_cache"
+benchmark_command = "echo"
+benchmark_args = ["test"]
+benchmark_duration = 10
+benchmark_interval = 1
+price_scaling_factor = 1000000.0
+keypair_path = "/tmp/test-keypair"
+keystore_path = "/tmp/test-keystore"
+rpc_bind_address = "127.0.0.1"
+rpc_port = 9000
+rpc_timeout = 30
+rpc_max_connections = 100
+"#,
     )
     .unwrap();
 
@@ -128,20 +127,19 @@ async fn test_config_loading() -> Result<()> {
     let config_path = PathBuf::from("/tmp/test-operator-config.toml");
     std::fs::write(
         &config_path,
-        r#"
-        database_path = "./data/price_cache"
-        benchmark_command = "echo"
-        benchmark_args = ["test"]
-        benchmark_duration = 10
-        benchmark_interval = 1
-        price_scaling_factor = 1000000.0
-        keypair_path = "/tmp/test-keypair"
-        keystore_path = "/tmp/test-keystore"
-        rpc_bind_address = "127.0.0.1"
-        rpc_port = 9000
-        rpc_timeout = 30
-        rpc_max_connections = 100
-        "#,
+        r#"database_path = "./data/price_cache"
+benchmark_command = "echo"
+benchmark_args = ["test"]
+benchmark_duration = 10
+benchmark_interval = 1
+price_scaling_factor = 1000000.0
+keypair_path = "/tmp/test-keypair"
+keystore_path = "/tmp/test-keystore"
+rpc_bind_address = "127.0.0.1"
+rpc_port = 9000
+rpc_timeout = 30
+rpc_max_connections = 100
+"#,
     )
     .unwrap();
 
@@ -202,10 +200,18 @@ async fn test_operator_signer() -> Result<()> {
     // Verify the signature
     assert_eq!(signed_quote.payload.blueprint_id, 123);
     assert_eq!(signed_quote.payload.price_wei, 1000000);
-    assert_eq!(signed_quote.signer_pubkey, public_key);
 
-    // Clean up
-    let _ = std::fs::remove_dir_all("/tmp/test-keystore");
+    // Use BytesEncoding trait for comparison
+    use blueprint_crypto_core::BytesEncoding;
+    assert_eq!(
+        signed_quote.signer_pubkey.to_bytes(),
+        public_key.to_bytes(),
+        "Public keys don't match"
+    );
+
+    // Clean up - but don't remove the keystore directory since other tests might use it
+    // Let the operating system clean it up when the test process exits
+    // let _ = std::fs::remove_dir_all("/tmp/test-keystore");
 
     Ok(())
 }
