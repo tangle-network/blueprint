@@ -20,7 +20,8 @@ pub mod signer;
 pub mod types;
 
 // Re-export key types and functions for easier use by the binary or other crates
-pub use benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark};
+pub use benchmark::cpu::CpuBenchmarkResult;
+pub use benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark, run_benchmark_suite};
 pub use cache::PriceCache;
 pub use config::{OperatorConfig, load_config, load_config_from_path};
 pub use error::{PricingError, Result};

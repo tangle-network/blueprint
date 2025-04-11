@@ -40,6 +40,9 @@ fn test_benchmark_suite() {
         true,  // run_gpu_test
     );
     assert!(result.is_ok());
+
+    let profile = result.unwrap();
+    println!("Profile: {:#?}", profile)
 }
 
 #[test]
