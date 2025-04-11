@@ -109,21 +109,14 @@ master_revision = "Latest"
   ],
   "registration_params": [],
   "request_params": [],
-  "gadget": {{
-    "Native": {{
-      "sources": [
-      {{
-        "fetcher": {{
-          "Testing": {{
-            "cargo_package": "incredible-squaring-blueprint",
-            "cargo_bin": "main",
-            "base_path": "{}"
-          }}
-        }}
-      }}
-    ]
-  }}
-  }}
+  "sources": [
+    {{
+      "type": "Testing",
+      "cargo_package": "incredible-squaring-blueprint",
+      "cargo_bin": "main",
+      "base_path": "{}"
+    }}
+  ]
 }}"#,
             blueprint_dir.display()
         ),
