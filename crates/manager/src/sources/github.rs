@@ -1,13 +1,13 @@
-use super::BlueprintSource;
+use super::BlueprintSourceHandler;
 use super::ProcessHandle;
 use super::binary::{BinarySourceFetcher, generate_running_process_status_handle};
 use crate::error::{Error, Result};
-use crate::gadget::native::get_gadget_binary;
+use crate::gadget::native::get_blueprint_binary;
 use crate::sdk;
 use crate::sdk::utils::{get_download_url, hash_bytes_to_hex, make_executable, valid_file_exists};
 use blueprint_core::info;
 use std::path::PathBuf;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::GithubFetcher;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::GithubFetcher;
 use tokio::io::AsyncWriteExt;
 
 pub struct GithubBinaryFetcher {
@@ -32,7 +32,7 @@ impl GithubBinaryFetcher {
 impl BinarySourceFetcher for GithubBinaryFetcher {
     async fn get_binary(&self) -> Result<PathBuf> {
         let relevant_binary =
-            get_gadget_binary(&self.fetcher.binaries.0).ok_or(Error::NoMatchingBinary)?;
+            get_blueprint_binary(&self.fetcher.binaries.0).ok_or(Error::NoMatchingBinary)?;
         let expected_hash = sdk::utils::slice_32_to_sha_hex_string(relevant_binary.sha256);
         let current_dir = std::env::current_dir()?;
         let mut binary_download_path =
@@ -70,7 +70,7 @@ impl BinarySourceFetcher for GithubBinaryFetcher {
     }
 }
 
-impl BlueprintSource for GithubBinaryFetcher {
+impl BlueprintSourceHandler for GithubBinaryFetcher {
     async fn fetch(&mut self) -> Result<()> {
         if self.resolved_binary_path.is_some() {
             return Ok(());

@@ -1,5 +1,9 @@
+use crate::serde::new_bounded_string;
 use alloc::borrow::Cow;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::JobDefinition as SubxtJobDefinition;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::JobMetadata as SubxtJobMetadata;
 
 /// A Job Definition is a definition of a job that can be called.
 /// It contains the input and output fields of the job with the permitted caller.
@@ -16,13 +20,23 @@ pub struct JobDefinition<'a> {
     pub result: Vec<FieldType>,
 }
 
-impl From<tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::JobDefinition> for JobDefinition<'static> {
-    fn from(value: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::JobDefinition) -> Self {
+impl From<SubxtJobDefinition> for JobDefinition<'static> {
+    fn from(value: SubxtJobDefinition) -> Self {
         Self {
             job_id: 0,
             metadata: value.metadata.into(),
             params: value.params.0,
             result: value.result.0,
+        }
+    }
+}
+
+impl From<JobDefinition<'_>> for SubxtJobDefinition {
+    fn from(value: JobDefinition<'_>) -> Self {
+        Self {
+            metadata: value.metadata.into(),
+            params: BoundedVec(value.params),
+            result: BoundedVec(value.result),
         }
     }
 }
@@ -35,11 +49,22 @@ pub struct JobMetadata<'a> {
     pub description: Option<Cow<'a, str>>,
 }
 
-impl From<tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::JobMetadata> for JobMetadata<'static> {
-    fn from(value: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::JobMetadata) -> Self {
+impl From<SubxtJobMetadata> for JobMetadata<'static> {
+    fn from(value: SubxtJobMetadata) -> Self {
         Self {
             name: String::from_utf8_lossy(&value.name.0.0).into_owned().into(),
-            description: value.description.map(|desc| String::from_utf8_lossy(&desc.0.0).into_owned().into()),
+            description: value
+                .description
+                .map(|desc| String::from_utf8_lossy(&desc.0.0).into_owned().into()),
+        }
+    }
+}
+
+impl From<JobMetadata<'_>> for SubxtJobMetadata {
+    fn from(value: JobMetadata<'_>) -> Self {
+        Self {
+            name: new_bounded_string(value.name),
+            description: value.description.map(new_bounded_string),
         }
     }
 }

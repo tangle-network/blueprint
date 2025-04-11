@@ -3,8 +3,8 @@ use blueprint_core::warn;
 use sha2::Digest;
 use std::path::{Path, PathBuf};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::BoundedString;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::{
-    GadgetBinary, GithubFetcher,
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{
+    BlueprintBinary, GithubFetcher,
 };
 
 /// Converts a `BoundedString` to a `String`
@@ -64,7 +64,7 @@ pub fn get_formatted_os_string() -> String {
 /// # Panics
 /// * If the owner, repo, tag, binary name, OS, or architecture are not valid UTF-8
 #[must_use]
-pub fn get_download_url(binary: &GadgetBinary, fetcher: &GithubFetcher) -> String {
+pub fn get_download_url(binary: &BlueprintBinary, fetcher: &GithubFetcher) -> String {
     let os = get_formatted_os_string();
     let ext = if os == "windows" { ".exe" } else { "" };
     let owner = String::from_utf8(fetcher.owner.0.0.clone()).expect("Should be a valid owner");

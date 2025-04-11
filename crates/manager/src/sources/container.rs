@@ -1,11 +1,11 @@
 use super::ProcessHandle;
-use super::{BlueprintSource, Status};
+use super::{BlueprintSourceHandler, Status};
 use crate::error::{Error, Result};
 use docktopus::DockerBuilder;
 use docktopus::bollard::Docker;
 use docktopus::container::Container;
 use std::sync::Arc;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::ImageRegistryFetcher;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::ImageRegistryFetcher;
 use tokio::process::Command;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, log, warn};
@@ -13,12 +13,24 @@ use tracing::{info, log, warn};
 pub struct ContainerSource {
     pub fetcher: ImageRegistryFetcher,
     pub blueprint_id: u64,
-    pub gadget_name: String,
+    pub blueprint_name: String,
     resolved_image: Option<String>,
 }
 
+impl ContainerSource {
+    #[must_use]
+    pub fn new(fetcher: ImageRegistryFetcher, blueprint_id: u64, blueprint_name: String) -> Self {
+        Self {
+            fetcher,
+            blueprint_id,
+            blueprint_name,
+            resolved_image: None,
+        }
+    }
+}
+
 // TODO(serial): Stop using `Error::Other` everywhere
-impl BlueprintSource for ContainerSource {
+impl BlueprintSourceHandler for ContainerSource {
     async fn fetch(&mut self) -> Result<()> {
         let registry = String::from_utf8(self.fetcher.registry.0.0.clone())
             .map_err(|e| Error::Other(e.to_string()))?;
@@ -81,7 +93,7 @@ impl BlueprintSource for ContainerSource {
     }
 
     fn name(&self) -> String {
-        self.gadget_name.clone()
+        self.blueprint_name.clone()
     }
 }
 

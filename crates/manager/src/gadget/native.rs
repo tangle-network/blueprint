@@ -1,20 +1,18 @@
 use crate::sdk::utils::get_formatted_os_string;
 use blueprint_runner::config::Protocol;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::{
-    Gadget, GadgetBinary,
-};
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{BlueprintBinary, BlueprintSource};
 
 pub struct FilteredBlueprint {
     pub blueprint_id: u64,
     pub services: Vec<u64>,
-    pub gadget: Gadget,
+    pub sources: Vec<BlueprintSource>,
     pub name: String,
     pub registration_mode: bool,
     pub protocol: Protocol,
 }
 
 #[must_use]
-pub fn get_gadget_binary(gadget_binaries: &[GadgetBinary]) -> Option<&GadgetBinary> {
+pub fn get_blueprint_binary(gadget_binaries: &[BlueprintBinary]) -> Option<&BlueprintBinary> {
     let os = get_formatted_os_string().to_lowercase();
     let arch = std::env::consts::ARCH.to_lowercase();
     for binary in gadget_binaries {

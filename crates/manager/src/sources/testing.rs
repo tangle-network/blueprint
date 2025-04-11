@@ -1,11 +1,11 @@
-use super::BlueprintSource;
+use super::BlueprintSourceHandler;
 use super::ProcessHandle;
 use super::binary::{BinarySourceFetcher, generate_running_process_status_handle};
 use crate::error::{Error, Result};
 use crate::sdk::utils::make_executable;
 use blueprint_core::trace;
 use std::path::PathBuf;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::TestFetcher;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
 
 pub struct TestSourceFetcher {
     pub fetcher: TestFetcher,
@@ -96,7 +96,7 @@ async fn get_git_repo_root_path() -> Result<PathBuf> {
     Ok(PathBuf::from(String::from_utf8(output.stdout)?.trim()))
 }
 
-impl BlueprintSource for TestSourceFetcher {
+impl BlueprintSourceHandler for TestSourceFetcher {
     async fn fetch(&mut self) -> Result<()> {
         if self.resolved_binary_path.is_some() {
             return Ok(());

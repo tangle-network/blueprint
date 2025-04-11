@@ -4,7 +4,7 @@ use crate::gadget::native::FilteredBlueprint;
 use crate::gadget::ActiveGadgets;
 use crate::sdk::utils::bounded_string_to_string;
 use crate::sources::github::GithubBinaryFetcher;
-use crate::sources::{process_arguments_and_env, BlueprintSource, DynBlueprintSource, Status};
+use crate::sources::{process_arguments_and_env, BlueprintSourceHandler, DynBlueprintSource, Status};
 use crate::sources::testing::TestSourceFetcher;
 use blueprint_clients::tangle::client::{TangleConfig, TangleEvent};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
@@ -13,12 +13,11 @@ use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_core::{error, info, trace, warn};
 use blueprint_std::fmt::Debug;
 use tangle_subxt::subxt::utils::AccountId32;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::{
-    Gadget, GadgetSourceFetcher,
-};
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{BlueprintSource, NativeFetcher};
 use tangle_subxt::tangle_testnet_runtime::api::services::events::{
     JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
 };
+use crate::sources::container::ContainerSource;
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
 
@@ -255,7 +254,7 @@ pub(crate) async fn handle_tangle_event(
             let general_blueprint = FilteredBlueprint {
                 blueprint_id: *blueprint_id,
                 services: vec![0], // Add a dummy service id for now, since it does not matter for registration mode
-                gadget: blueprint.gadget,
+                sources: blueprint.sources.0,
                 name: bounded_string_to_string(&blueprint.metadata.name)?,
                 registration_mode: true,
                 protocol: DEFAULT_PROTOCOL,
@@ -272,7 +271,7 @@ pub(crate) async fn handle_tangle_event(
         .map(|r| FilteredBlueprint {
             blueprint_id: r.blueprint_id,
             services: r.services.iter().map(|r| r.id).collect(),
-            gadget: r.blueprint.gadget.clone(),
+            sources: r.blueprint.sources.0.clone(),
             name: bounded_string_to_string(&r.blueprint.metadata.name)
                 .unwrap_or("unknown_blueprint_name".to_string()),
             registration_mode: false,
@@ -376,33 +375,38 @@ fn get_fetcher_candidates(
     let mut test_fetcher_idx = None;
     let mut fetcher_candidates: Vec<Box<DynBlueprintSource<'static>>> = vec![];
 
-    let sources;
-    match &blueprint.gadget {
-        Gadget::Native(gadget) => {
-            sources = &gadget.sources.0;
-        }
-        Gadget::Wasm(_) => {
-            warn!("WASM gadgets are not supported yet");
-            return Err(Error::UnsupportedGadget);
-        }
-        Gadget::Container(_) => {
-            warn!("Container gadgets are not supported yet");
-            return Err(Error::UnsupportedGadget);
-        }
-    }
+    for (source_idx, blueprint_source) in blueprint.sources.iter().enumerate() {
+        match &blueprint_source {
+            BlueprintSource::Wasm { .. } => {
+                warn!("WASM gadgets are not supported yet");
+                return Err(Error::UnsupportedGadget);
+            }
 
-    for (source_idx, gadget_source) in sources.iter().enumerate() {
-        match &gadget_source.fetcher {
-            GadgetSourceFetcher::Github(gh) => {
-                let fetcher = GithubBinaryFetcher::new(
-                    gh.clone(),
+            BlueprintSource::Native(native) => match native {
+                NativeFetcher::Github(gh) => {
+                    let fetcher = GithubBinaryFetcher::new(
+                        gh.clone(),
+                        blueprint.blueprint_id,
+                        blueprint.name.clone(),
+                    );
+                    fetcher_candidates.push(DynBlueprintSource::boxed(fetcher));
+                }
+                NativeFetcher::IPFS(_) => {
+                    warn!("IPFS Native sources are not supported yet");
+                    return Err(Error::UnsupportedGadget);
+                }
+            },
+
+            BlueprintSource::Container(container) => {
+                let fetcher = ContainerSource::new(
+                    container.clone(),
                     blueprint.blueprint_id,
                     blueprint.name.clone(),
                 );
                 fetcher_candidates.push(DynBlueprintSource::boxed(fetcher));
             }
 
-            GadgetSourceFetcher::Testing(test) => {
+            BlueprintSource::Testing(test) => {
                 // TODO: demote to TRACE once proven to work
                 warn!("Using testing fetcher");
                 // if !manager_opts.test_mode {
@@ -418,10 +422,6 @@ fn get_fetcher_candidates(
 
                 test_fetcher_idx = Some(source_idx);
                 fetcher_candidates.push(DynBlueprintSource::boxed(fetcher));
-            }
-
-            _ => {
-                warn!("Blueprint does not contain a supported fetcher");
             }
         }
     }

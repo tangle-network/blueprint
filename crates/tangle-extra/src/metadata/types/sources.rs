@@ -1,4 +1,15 @@
 use alloc::borrow::Cow;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{Architecture, OperatingSystem, WasmRuntime};
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::BlueprintSource as SubxtBlueprintSource;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::WasmFetcher as SubxtWasmFetcher;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::NativeFetcher as SubxtNativeFetcher;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::GithubFetcher as SubxtGithubFetcher;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher as SubxtTestFetcher;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::BlueprintBinary as SubxtBlueprintBinary;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::ImageRegistryFetcher as SubxtImageRegistryFetcher;
+
+use crate::serde::new_bounded_string;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "PascalCase", tag = "type")]
@@ -26,6 +37,22 @@ impl Default for BlueprintSource<'_> {
     }
 }
 
+impl From<BlueprintSource<'_>> for SubxtBlueprintSource {
+    fn from(source: BlueprintSource<'_>) -> Self {
+        match source {
+            BlueprintSource::Wasm { runtime, fetcher } => SubxtBlueprintSource::Wasm {
+                runtime,
+                fetcher: fetcher.into(),
+            },
+            BlueprintSource::Native(native) => SubxtBlueprintSource::Native(native.into()),
+            BlueprintSource::Container(container) => {
+                SubxtBlueprintSource::Container(container.into())
+            }
+            BlueprintSource::Testing(testing) => SubxtBlueprintSource::Testing(testing.into()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum WasmFetcher<'a> {
     /// A WASM binary that will be fetched from the IPFS.
@@ -34,12 +61,30 @@ pub enum WasmFetcher<'a> {
     Github(GithubFetcher<'a>),
 }
 
+impl From<WasmFetcher<'_>> for SubxtWasmFetcher {
+    fn from(source: WasmFetcher<'_>) -> Self {
+        match source {
+            WasmFetcher::IPFS(ipfs) => SubxtWasmFetcher::IPFS(BoundedVec(ipfs)),
+            WasmFetcher::Github(github) => SubxtWasmFetcher::Github(github.into()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum NativeFetcher<'a> {
     /// A blueprint that will be fetched from the IPFS.
     IPFS(Vec<u8>),
     /// A blueprint that will be fetched from a GitHub release.
     Github(GithubFetcher<'a>),
+}
+
+impl From<NativeFetcher<'_>> for SubxtNativeFetcher {
+    fn from(source: NativeFetcher<'_>) -> Self {
+        match source {
+            NativeFetcher::IPFS(ipfs) => SubxtNativeFetcher::IPFS(BoundedVec(ipfs)),
+            NativeFetcher::Github(github) => SubxtNativeFetcher::Github(github.into()),
+        }
+    }
 }
 
 /// A binary that is stored in the GitHub release.
@@ -61,6 +106,50 @@ pub struct GithubFetcher<'a> {
     pub binaries: Vec<BlueprintBinary<'a>>,
 }
 
+impl From<GithubFetcher<'_>> for SubxtGithubFetcher {
+    fn from(source: GithubFetcher<'_>) -> Self {
+        let GithubFetcher {
+            owner,
+            repo,
+            tag,
+            binaries,
+        } = source;
+
+        SubxtGithubFetcher {
+            owner: new_bounded_string(owner),
+            repo: new_bounded_string(repo),
+            tag: new_bounded_string(tag),
+            binaries: BoundedVec(binaries.into_iter().map(Into::into).collect()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ImageRegistryFetcher<'a> {
+    /// The URL of the container registry.
+    registry: Cow<'a, str>,
+    /// The name of the image.
+    image: Cow<'a, str>,
+    /// The tag of the image.
+    tag: Cow<'a, str>,
+}
+
+impl From<ImageRegistryFetcher<'_>> for SubxtImageRegistryFetcher {
+    fn from(source: ImageRegistryFetcher<'_>) -> Self {
+        let ImageRegistryFetcher {
+            registry,
+            image,
+            tag,
+        } = source;
+
+        SubxtImageRegistryFetcher {
+            registry: new_bounded_string(registry),
+            image: new_bounded_string(image),
+            tag: new_bounded_string(tag),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TestFetcher<'a> {
     pub cargo_package: Cow<'a, str>,
@@ -68,70 +157,20 @@ pub struct TestFetcher<'a> {
     pub base_path: Cow<'a, str>,
 }
 
-/// The CPU or System architecture.
-#[derive(
-    Default,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Eq,
-    Debug,
-    Clone,
-    Copy,
-    serde::Serialize,
-    serde::Deserialize,
-)]
-pub enum Architecture {
-    /// WebAssembly architecture (32-bit).
-    #[default]
-    Wasm,
-    /// WebAssembly architecture (64-bit).
-    Wasm64,
-    /// WASI architecture (32-bit).
-    Wasi,
-    /// WASI architecture (64-bit).
-    Wasi64,
-    /// Amd architecture (32-bit).
-    Amd,
-    /// Amd64 architecture (`x86_64`).
-    Amd64,
-    /// Arm architecture (32-bit).
-    Arm,
-    /// Arm64 architecture (64-bit).
-    Arm64,
-    /// Risc-V architecture (32-bit).
-    RiscV,
-    /// Risc-V architecture (64-bit).
-    RiscV64,
-}
+impl From<TestFetcher<'_>> for SubxtTestFetcher {
+    fn from(source: TestFetcher<'_>) -> Self {
+        let TestFetcher {
+            cargo_package,
+            cargo_bin,
+            base_path,
+        } = source;
 
-/// Operating System that the binary is compiled for.
-#[derive(
-    Default,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Eq,
-    Debug,
-    Clone,
-    Copy,
-    serde::Serialize,
-    serde::Deserialize,
-)]
-pub enum OperatingSystem {
-    /// Unknown operating system.
-    /// This is used when the operating system is not known
-    /// for example, for WASM, where the OS is not relevant.
-    #[default]
-    Unknown,
-    /// Linux operating system.
-    Linux,
-    /// Windows operating system.
-    Windows,
-    /// `MacOS` operating system.
-    MacOS,
-    /// BSD operating system.
-    BSD,
+        SubxtTestFetcher {
+            cargo_package: new_bounded_string(cargo_package),
+            cargo_bin: new_bounded_string(cargo_bin),
+            base_path: new_bounded_string(base_path),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -148,20 +187,20 @@ pub struct BlueprintBinary<'a> {
     pub sha256: [u8; 32],
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ImageRegistryFetcher<'a> {
-    /// The URL of the container registry.
-    registry: Cow<'a, str>,
-    /// The name of the image.
-    image: Cow<'a, str>,
-    /// The tag of the image.
-    tag: Cow<'a, str>,
-}
+impl From<BlueprintBinary<'_>> for SubxtBlueprintBinary {
+    fn from(source: BlueprintBinary<'_>) -> Self {
+        let BlueprintBinary {
+            arch,
+            os,
+            name,
+            sha256,
+        } = source;
 
-#[derive(Copy, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum WasmRuntime {
-    /// The WASM binary will be executed using the `WASMtime` runtime.
-    Wasmtime,
-    /// The WASM binary will be executed using the Wasmer runtime.
-    Wasmer,
+        SubxtBlueprintBinary {
+            arch,
+            os,
+            name: new_bounded_string(name),
+            sha256,
+        }
+    }
 }
