@@ -52,6 +52,8 @@ fn create_test_benchmark_profile(avg_cpu_cores: f32) -> BenchmarkProfile {
         gpu_details: Some(crate::benchmark::GpuBenchmarkResult {
             gpu_available: false,
             gpu_memory_mb: 0.0,
+            gpu_model: "Test GPU".to_string(),
+            gpu_frequency_mhz: 0.0,
         }),
         storage_details: Some(crate::benchmark::StorageBenchmarkResult {
             storage_available_gb: 100.0,
@@ -70,9 +72,9 @@ fn test_benchmark_suite() {
         Duration::from_millis(500),
         false, // run_cpu_test
         false, // run_memory_test
-        true,  // run_io_test
+        false,  // run_io_test
         false, // run_network_test - Skip just for test
-        false, // run_gpu_test
+        true, // run_gpu_test
     );
     assert!(result.is_ok());
 

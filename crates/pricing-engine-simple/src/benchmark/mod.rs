@@ -60,6 +60,8 @@ pub struct NetworkBenchmarkResult {
 pub struct GpuBenchmarkResult {
     pub gpu_available: bool, // Whether GPU is available
     pub gpu_memory_mb: f32,  // GPU memory if available
+    pub gpu_model: String,   // GPU model name
+    pub gpu_frequency_mhz: f32, // GPU frequency in MHz if available
 }
 
 /// Storage benchmark results
@@ -253,6 +255,8 @@ pub fn run_benchmark_suite(
                 profile.gpu_details = Some(GpuBenchmarkResult {
                     gpu_available: false,
                     gpu_memory_mb: 0.0,
+                    gpu_model: "".to_string(),
+                    gpu_frequency_mhz: 0.0,
                 });
             }
         }

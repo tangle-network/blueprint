@@ -22,19 +22,29 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
     // Try multiple methods to detect GPU
     // 1. Try nvidia-smi for NVIDIA GPUs
     if let Ok(output) = Command::new("nvidia-smi")
-        .args(&["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
+        .args(&["--query-gpu=memory.total,name,clocks.max.graphics", "--format=csv,noheader,nounits"])
         .output()
     {
         if output.status.success() {
             if let Ok(output_str) = String::from_utf8(output.stdout) {
                 let output_str = output_str.trim();
                 if !output_str.is_empty() {
-                    if let Ok(memory) = output_str.parse::<f32>() {
-                        info!("Detected NVIDIA GPU with {} MB memory", memory);
-                        return Ok(GpuBenchmarkResult {
-                            gpu_available: true,
-                            gpu_memory_mb: memory,
-                        });
+                    let parts: Vec<&str> = output_str.split(',').collect();
+                    if parts.len() >= 3 {
+                        if let Ok(memory) = parts[0].trim().parse::<f32>() {
+                            let gpu_model = parts[1].trim().to_string();
+                            let gpu_frequency_mhz = parts[2].trim().parse::<f32>().unwrap_or(0.0);
+                            
+                            info!("Detected NVIDIA GPU: {}, {} MHz with {} MB memory", 
+                                  gpu_model, gpu_frequency_mhz, memory);
+                            
+                            return Ok(GpuBenchmarkResult {
+                                gpu_available: true,
+                                gpu_memory_mb: memory,
+                                gpu_model,
+                                gpu_frequency_mhz,
+                            });
+                        }
                     }
                 }
             }
@@ -43,17 +53,21 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
 
     // 2. Try rocm-smi for AMD GPUs
     if let Ok(output) = Command::new("rocm-smi")
-        .args(&["--showmeminfo", "vram"])
+        .args(&["--showmeminfo", "vram", "--showproductname"])
         .output()
     {
         if output.status.success() {
             if let Ok(output_str) = String::from_utf8(output.stdout) {
                 let memory = parse_amd_gpu_memory(&output_str);
+                let gpu_model = parse_amd_gpu_model(&output_str);
+                
                 if memory > 0.0 {
-                    info!("Detected AMD GPU with {} MB memory", memory);
+                    info!("Detected AMD GPU: {}, with {} MB memory", gpu_model, memory);
                     return Ok(GpuBenchmarkResult {
                         gpu_available: true,
                         gpu_memory_mb: memory,
+                        gpu_model,
+                        gpu_frequency_mhz: 0.0, // AMD frequency not easily available
                     });
                 }
             }
@@ -74,11 +88,17 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
     {
         if let Ok(output_str) = String::from_utf8(output.stdout) {
             let memory = parse_intel_gpu_memory(&output_str);
+            let (gpu_model, gpu_frequency_mhz) = parse_intel_gpu_info(&output_str);
+            
             if memory > 0.0 {
-                info!("Detected Intel GPU with {} MB memory", memory);
+                info!("Detected Intel GPU: {}, {} MHz with {} MB memory", 
+                      gpu_model, gpu_frequency_mhz, memory);
+                
                 return Ok(GpuBenchmarkResult {
                     gpu_available: true,
                     gpu_memory_mb: memory,
+                    gpu_model,
+                    gpu_frequency_mhz,
                 });
             }
         }
@@ -95,6 +115,9 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
                         .find(|line| line.contains("OpenGL renderer string:"))
                         .unwrap_or("");
 
+                    // Extract GPU model from renderer string
+                    let gpu_model = extract_gpu_model_from_glxinfo(renderer_line);
+                    
                     // Extract GPU memory if available
                     let memory = parse_glxinfo_memory(&output_str);
 
@@ -131,6 +154,8 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
                     return Ok(GpuBenchmarkResult {
                         gpu_available: true,
                         gpu_memory_mb: gpu_memory,
+                        gpu_model,
+                        gpu_frequency_mhz: 0.0, // Frequency not available from glxinfo
                     });
                 }
             }
@@ -149,6 +174,8 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
         return Ok(GpuBenchmarkResult {
             gpu_available: true,
             gpu_memory_mb: DEFAULT_NVIDIA_GPU_MEMORY,
+            gpu_model: "NVIDIA GPU (detected via device file)".to_string(),
+            gpu_frequency_mhz: 0.0,
         });
     } else if amdgpu_device.exists() {
         info!(
@@ -158,6 +185,8 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
         return Ok(GpuBenchmarkResult {
             gpu_available: true,
             gpu_memory_mb: DEFAULT_AMD_GPU_MEMORY,
+            gpu_model: "AMD GPU (detected via device file)".to_string(),
+            gpu_frequency_mhz: 0.0,
         });
     }
 
@@ -166,7 +195,61 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
     Ok(GpuBenchmarkResult {
         gpu_available: false,
         gpu_memory_mb: 0.0,
+        gpu_model: "No GPU detected".to_string(),
+        gpu_frequency_mhz: 0.0,
     })
+}
+
+/// Helper function to extract GPU model from glxinfo renderer string
+fn extract_gpu_model_from_glxinfo(renderer_line: &str) -> String {
+    if renderer_line.contains("OpenGL renderer string:") {
+        let parts: Vec<&str> = renderer_line.split(':').collect();
+        if parts.len() >= 2 {
+            return parts[1].trim().to_string();
+        }
+    }
+    "Unknown GPU".to_string()
+}
+
+/// Helper function to parse AMD GPU model from rocm-smi output
+pub fn parse_amd_gpu_model(output: &str) -> String {
+    // Look for product name in rocm-smi output
+    for line in output.lines() {
+        if line.contains("GPU") && line.contains("Product name") {
+            let parts: Vec<&str> = line.split(':').collect();
+            if parts.len() >= 2 {
+                return parts[1].trim().to_string();
+            }
+        }
+    }
+    "AMD GPU".to_string()
+}
+
+/// Helper function to parse Intel GPU information
+pub fn parse_intel_gpu_info(output: &str) -> (String, f32) {
+    let mut model = "Intel GPU".to_string();
+    let mut frequency = 0.0;
+    
+    // Try to extract model and frequency information
+    for line in output.lines() {
+        if line.contains("Device:") {
+            let parts: Vec<&str> = line.split(':').collect();
+            if parts.len() >= 2 {
+                model = parts[1].trim().to_string();
+            }
+        }
+        
+        // Extract frequency if available (format: "1539MHz")
+        if let Some(freq_str) = line.split_whitespace().next() {
+            if freq_str.ends_with("MHz") {
+                if let Ok(freq) = freq_str.trim_end_matches("MHz").parse::<f32>() {
+                    frequency = freq;
+                }
+            }
+        }
+    }
+    
+    (model, frequency)
 }
 
 /// Helper function to parse AMD GPU memory from rocm-smi output
@@ -219,7 +302,7 @@ pub fn parse_intel_gpu_memory(output: &str) -> f32 {
 pub fn parse_glxinfo_memory(output: &str) -> f32 {
     // Look for dedicated video memory
     for line in output.lines() {
-        if line.contains("Dedicated video memory:") {
+        if line.contains("Video memory:") {
             let parts: Vec<&str> = line.split(':').collect();
             if parts.len() >= 2 {
                 let memory_part = parts[1].trim();
@@ -237,9 +320,9 @@ pub fn parse_glxinfo_memory(output: &str) -> f32 {
         }
     }
 
-    // Look for total available memory as fallback
+    // Look for any memory output as a fallback
     for line in output.lines() {
-        if line.contains("Total available memory:") {
+        if line.contains("memory:") {
             let parts: Vec<&str> = line.split(':').collect();
             if parts.len() >= 2 {
                 let memory_part = parts[1].trim();
