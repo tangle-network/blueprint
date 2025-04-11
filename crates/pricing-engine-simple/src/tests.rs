@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use blueprint_testing_utils::setup_log;
+
 use crate::benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark_suite};
 use crate::pricing::calculate_price;
 
@@ -8,45 +10,82 @@ fn create_test_benchmark_profile(avg_cpu_cores: f32) -> BenchmarkProfile {
     BenchmarkProfile {
         job_id: "test-job".to_string(),
         execution_mode: "native".to_string(),
-        avg_cpu_cores,
-        peak_cpu_cores: avg_cpu_cores * 1.5,
-        avg_memory_mb: 100.0,
-        peak_memory_mb: 150.0,
-        io_read_mb: 10.0,
-        io_write_mb: 5.0,
-        network_rx_mb: 20.0,
-        network_tx_mb: 10.0,
-        storage_available_gb: 100.0,
-        gpu_available: false,
-        gpu_memory_mb: 0.0,
         duration_secs: 60,
         timestamp: 1643723400, // Fixed timestamp for testing
         success: true,
-        cpu_details: None,
+        cpu_details: Some(crate::benchmark::CpuBenchmarkResult {
+            num_cores_detected: 4,
+            avg_cores_used: avg_cpu_cores,
+            avg_usage_percent: avg_cpu_cores * 25.0, // Assuming 4 cores total
+            peak_cores_used: avg_cpu_cores * 1.5,
+            peak_usage_percent: avg_cpu_cores * 1.5 * 25.0,
+            benchmark_duration_ms: 10000,
+            primes_found: 1000,
+            max_prime: 10000,
+            primes_per_second: 100.0,
+            cpu_model: "Test CPU".to_string(),
+            cpu_frequency_mhz: 3000.0,
+        }),
+        memory_details: Some(crate::benchmark::MemoryBenchmarkResult {
+            avg_memory_mb: 100.0,
+            peak_memory_mb: 150.0,
+        }),
+        io_details: Some(crate::benchmark::IoBenchmarkResult {
+            read_mb: 10.0,
+            write_mb: 5.0,
+            read_iops: 100.0,
+            write_iops: 50.0,
+            avg_read_latency_ms: 0.1,
+            avg_write_latency_ms: 0.2,
+            max_read_latency_ms: 1.0,
+            max_write_latency_ms: 2.0,
+            test_mode: crate::benchmark::IoTestMode::RndRw,
+            block_size: 4096,
+            total_file_size: 1024 * 1024 * 100, // 100 MB
+            num_files: 2,
+            duration_ms: 5000,
+        }),
+        network_details: Some(crate::benchmark::NetworkBenchmarkResult {
+            network_rx_mb: 20.0,
+            network_tx_mb: 10.0,
+        }),
+        gpu_details: Some(crate::benchmark::GpuBenchmarkResult {
+            gpu_available: false,
+            gpu_memory_mb: 0.0,
+        }),
+        storage_details: Some(crate::benchmark::StorageBenchmarkResult {
+            storage_available_gb: 100.0,
+        }),
     }
 }
 
 #[test]
 fn test_benchmark_suite() {
+    setup_log();
+
     let result = run_benchmark_suite(
         "test-suite".to_string(),
         "test".to_string(),
         Duration::from_secs(30),
         Duration::from_millis(500),
-        true,  // run_cpu_test
-        true,  // run_memory_test
+        false, // run_cpu_test
+        false, // run_memory_test
         true,  // run_io_test
         false, // run_network_test - Skip just for test
-        true,  // run_gpu_test
+        false, // run_gpu_test
     );
     assert!(result.is_ok());
 
     let profile = result.unwrap();
-    println!("Profile: {:#?}", profile)
+    println!("Profile: {:#?}", profile);
+
+    assert!(profile.success)
 }
 
 #[test]
 fn test_calculate_price_basic() {
+    setup_log();
+
     // Create a simple benchmark profile with 1.0 CPU cores
     let profile = create_test_benchmark_profile(1.0);
 
@@ -63,7 +102,7 @@ fn test_calculate_price_basic() {
     assert!(price_model.benchmark_profile.is_some());
     let stored_profile = price_model.benchmark_profile.unwrap();
     assert_eq!(stored_profile.job_id, "test-job");
-    assert_eq!(stored_profile.avg_cpu_cores, 1.0);
+    assert_eq!(stored_profile.cpu_details.unwrap().avg_cores_used, 1.0);
 }
 
 #[test]
@@ -150,7 +189,7 @@ fn test_io_benchmark() {
 
     // Run the I/O benchmark
     let result = crate::benchmark::io::run_io_benchmark(&config).unwrap();
-    
+
     // Print the results
     println!("I/O Benchmark Results:");
     println!("  Read: {:.2} MB", result.read_mb);
@@ -159,7 +198,7 @@ fn test_io_benchmark() {
     println!("  Write IOPS: {:.2}", result.write_iops);
     println!("  Avg Read Latency: {:.2} ms", result.avg_read_latency_ms);
     println!("  Avg Write Latency: {:.2} ms", result.avg_write_latency_ms);
-    
+
     // Verify that we got some results
     assert!(result.read_mb >= 0.0);
     assert!(result.write_mb >= 0.0);

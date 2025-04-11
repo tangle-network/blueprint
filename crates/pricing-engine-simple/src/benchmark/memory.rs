@@ -4,12 +4,11 @@
 
 use crate::error::Result;
 use blueprint_core::info;
-use std::process::Command;
 
-use super::BenchmarkRunConfig;
+use super::{BenchmarkRunConfig, MemoryBenchmarkResult};
 
 /// Run a memory-intensive benchmark to measure memory performance
-pub fn run_memory_benchmark(config: &BenchmarkRunConfig) -> Result<(f32, f32)> {
+pub fn run_memory_benchmark(config: &BenchmarkRunConfig) -> Result<MemoryBenchmarkResult> {
     info!("Running memory benchmark");
 
     // Create a memory-intensive workload
@@ -45,5 +44,15 @@ pub fn run_memory_benchmark(config: &BenchmarkRunConfig) -> Result<(f32, f32)> {
     };
 
     let result = super::utils::run_and_monitor_command(&memory_config)?;
-    Ok((result.avg_memory_mb, result.peak_memory_mb))
+
+    Ok(MemoryBenchmarkResult {
+        avg_memory_mb: result
+            .memory_details
+            .as_ref()
+            .map_or(0.0, |m| m.avg_memory_mb),
+        peak_memory_mb: result
+            .memory_details
+            .as_ref()
+            .map_or(0.0, |m| m.peak_memory_mb),
+    })
 }

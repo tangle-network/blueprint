@@ -6,11 +6,10 @@ use crate::error::{PricingError, Result};
 use blueprint_core::{debug, info, warn};
 use std::process::{Command, Stdio};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, System};
 
-use super::BenchmarkProfile;
-use super::BenchmarkRunConfig;
+use super::{BenchmarkProfile, BenchmarkRunConfig, CpuBenchmarkResult, MemoryBenchmarkResult};
 
 /// Helper function to get disk I/O statistics
 pub fn get_io_stats() -> Result<(u64, u64)> {
@@ -36,8 +35,8 @@ pub fn get_io_stats() -> Result<(u64, u64)> {
             device_name.starts_with("vd") || 
             device_name.starts_with("xvd")) && 
             // Exclude partitions (devices with numbers at the end)
-            !device_name.chars().last().unwrap_or('x').is_numeric() {
-            
+            !device_name.chars().last().unwrap_or('x').is_numeric()
+        {
             // Field 6 is sectors read, field 10 is sectors written
             // Each sector is 512 bytes
             if let (Ok(sectors_read), Ok(sectors_written)) =
@@ -213,21 +212,30 @@ pub fn run_and_monitor_command(config: &BenchmarkRunConfig) -> Result<BenchmarkP
     let profile = BenchmarkProfile {
         job_id: config.job_id.clone(),
         execution_mode: config.mode.clone(),
-        avg_cpu_cores,
-        peak_cpu_cores,
-        avg_memory_mb: avg_memory,
-        peak_memory_mb: peak_memory,
-        io_read_mb: 0.0,
-        io_write_mb: 0.0,
-        network_rx_mb: 0.0,
-        network_tx_mb: 0.0,
-        storage_available_gb: 0.0,
-        gpu_available: false,
-        gpu_memory_mb: 0.0,
         duration_secs: start_time.elapsed().as_secs(),
         timestamp,
         success,
-        cpu_details: None,
+        cpu_details: Some(CpuBenchmarkResult {
+            num_cores_detected: System::new().cpus().len(),
+            avg_cores_used: avg_cpu_cores,
+            avg_usage_percent: avg_cpu,
+            peak_cores_used: peak_cpu_cores,
+            peak_usage_percent: peak_cpu,
+            benchmark_duration_ms: start_time.elapsed().as_millis() as u64,
+            primes_found: 0,        // Not applicable for general command monitoring
+            max_prime: 0,           // Not applicable
+            primes_per_second: 0.0, // Not applicable
+            cpu_model: "Unknown".to_string(), // Could extract from system info if needed
+            cpu_frequency_mhz: 0.0, // Could extract from system info if needed
+        }),
+        memory_details: Some(MemoryBenchmarkResult {
+            avg_memory_mb: avg_memory,
+            peak_memory_mb: peak_memory,
+        }),
+        io_details: None,
+        network_details: None,
+        gpu_details: None,
+        storage_details: None,
     };
 
     info!("Command benchmark completed: {:?}", profile);

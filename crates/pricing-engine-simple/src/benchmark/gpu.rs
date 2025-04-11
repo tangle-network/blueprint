@@ -3,11 +3,11 @@
 // GPU benchmarking module for detecting GPU availability and memory
 
 use crate::error::Result;
-use blueprint_core::{debug, info, warn};
+use blueprint_core::info;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use super::BenchmarkRunConfig;
+use super::{BenchmarkRunConfig, GpuBenchmarkResult};
 
 // GPU benchmark constants
 pub const DEFAULT_UNKNOWN_GPU_MEMORY: f32 = 512.0;
@@ -16,7 +16,7 @@ pub const DEFAULT_NVIDIA_GPU_MEMORY: f32 = 2048.0;
 pub const DEFAULT_AMD_GPU_MEMORY: f32 = 2048.0;
 
 /// Check for GPU availability and memory
-pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<(bool, f32)> {
+pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkResult> {
     info!("Running GPU benchmark");
 
     // Try multiple methods to detect GPU
@@ -31,7 +31,10 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<(bool, f32)> {
                 if !output_str.is_empty() {
                     if let Ok(memory) = output_str.parse::<f32>() {
                         info!("Detected NVIDIA GPU with {} MB memory", memory);
-                        return Ok((true, memory));
+                        return Ok(GpuBenchmarkResult {
+                            gpu_available: true,
+                            gpu_memory_mb: memory,
+                        });
                     }
                 }
             }
@@ -48,7 +51,10 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<(bool, f32)> {
                 let memory = parse_amd_gpu_memory(&output_str);
                 if memory > 0.0 {
                     info!("Detected AMD GPU with {} MB memory", memory);
-                    return Ok((true, memory));
+                    return Ok(GpuBenchmarkResult {
+                        gpu_available: true,
+                        gpu_memory_mb: memory,
+                    });
                 }
             }
         }
@@ -70,7 +76,10 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<(bool, f32)> {
             let memory = parse_intel_gpu_memory(&output_str);
             if memory > 0.0 {
                 info!("Detected Intel GPU with {} MB memory", memory);
-                return Ok((true, memory));
+                return Ok(GpuBenchmarkResult {
+                    gpu_available: true,
+                    gpu_memory_mb: memory,
+                });
             }
         }
     }
@@ -119,7 +128,10 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<(bool, f32)> {
                         DEFAULT_UNKNOWN_GPU_MEMORY
                     };
 
-                    return Ok((true, gpu_memory));
+                    return Ok(GpuBenchmarkResult {
+                        gpu_available: true,
+                        gpu_memory_mb: gpu_memory,
+                    });
                 }
             }
         }
@@ -134,18 +146,27 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<(bool, f32)> {
             "Detected NVIDIA GPU device file, assuming {} MB memory",
             DEFAULT_NVIDIA_GPU_MEMORY
         );
-        return Ok((true, DEFAULT_NVIDIA_GPU_MEMORY));
+        return Ok(GpuBenchmarkResult {
+            gpu_available: true,
+            gpu_memory_mb: DEFAULT_NVIDIA_GPU_MEMORY,
+        });
     } else if amdgpu_device.exists() {
         info!(
             "Detected AMD GPU device file, assuming {} MB memory",
             DEFAULT_AMD_GPU_MEMORY
         );
-        return Ok((true, DEFAULT_AMD_GPU_MEMORY));
+        return Ok(GpuBenchmarkResult {
+            gpu_available: true,
+            gpu_memory_mb: DEFAULT_AMD_GPU_MEMORY,
+        });
     }
 
     // No GPU detected
     info!("No GPU detected");
-    Ok((false, 0.0))
+    Ok(GpuBenchmarkResult {
+        gpu_available: false,
+        gpu_memory_mb: 0.0,
+    })
 }
 
 /// Helper function to parse AMD GPU memory from rocm-smi output

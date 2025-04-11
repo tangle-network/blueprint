@@ -53,7 +53,7 @@ impl Default for CpuBenchmarkResult {
 /// Run a CPU-intensive benchmark to measure CPU performance
 ///
 /// This implementation calculates prime numbers up to a certain limit
-pub fn run_cpu_benchmark(_config: &BenchmarkRunConfig) -> Result<(f32, f32, CpuBenchmarkResult)> {
+pub fn run_cpu_benchmark(_config: &BenchmarkRunConfig) -> Result<CpuBenchmarkResult> {
     info!("Running CPU benchmark (prime number calculation)");
 
     let num_cores = num_cpus::get();
@@ -194,11 +194,7 @@ pub fn run_cpu_benchmark(_config: &BenchmarkRunConfig) -> Result<(f32, f32, CpuB
         cpu_result.primes_per_second
     );
 
-    Ok((
-        cpu_result.avg_cores_used,
-        cpu_result.peak_cores_used,
-        cpu_result,
-    ))
+    Ok(cpu_result)
 }
 
 /// Calculate prime numbers in a specific range

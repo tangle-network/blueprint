@@ -30,21 +30,42 @@ pub use utils::{get_io_stats, get_network_stats, run_and_monitor_command};
 pub struct BenchmarkProfile {
     pub job_id: String,         // Corresponds to blueprint_id or similar
     pub execution_mode: String, // e.g., "native", "docker"
-    pub avg_cpu_cores: f32,
-    pub peak_cpu_cores: f32,
-    pub avg_memory_mb: f32,
-    pub peak_memory_mb: f32,
-    pub io_read_mb: f32,
-    pub io_write_mb: f32,
-    pub network_rx_mb: f32,        // Network received (download)
-    pub network_tx_mb: f32,        // Network transmitted (upload)
-    pub storage_available_gb: f32, // Available storage
-    pub gpu_available: bool,       // Whether GPU is available
-    pub gpu_memory_mb: f32,        // GPU memory if available
     pub duration_secs: u64,
-    pub timestamp: u64,                          // Unix timestamp
+    pub timestamp: u64,                                  // Unix timestamp
     pub success: bool, // Indicate if benchmark command finished successfully
     pub cpu_details: Option<CpuBenchmarkResult>, // Detailed CPU benchmark results
+    pub io_details: Option<IoBenchmarkResult>, // Detailed I/O benchmark results
+    pub memory_details: Option<MemoryBenchmarkResult>, // Detailed memory benchmark results
+    pub network_details: Option<NetworkBenchmarkResult>, // Detailed network benchmark results
+    pub gpu_details: Option<GpuBenchmarkResult>, // Detailed GPU benchmark results
+    pub storage_details: Option<StorageBenchmarkResult>, // Detailed storage benchmark results
+}
+
+/// Memory benchmark results
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MemoryBenchmarkResult {
+    pub avg_memory_mb: f32,
+    pub peak_memory_mb: f32,
+}
+
+/// Network benchmark results
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NetworkBenchmarkResult {
+    pub network_rx_mb: f32, // Network received (download)
+    pub network_tx_mb: f32, // Network transmitted (upload)
+}
+
+/// GPU benchmark results
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GpuBenchmarkResult {
+    pub gpu_available: bool, // Whether GPU is available
+    pub gpu_memory_mb: f32,  // GPU memory if available
+}
+
+/// Storage benchmark results
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StorageBenchmarkResult {
+    pub storage_available_gb: f32, // Available storage
 }
 
 /// Configuration specific to a single benchmark run
@@ -94,72 +115,17 @@ pub fn run_benchmark_suite(
     run_network_test: bool,
     run_gpu_test: bool,
 ) -> crate::error::Result<BenchmarkProfile> {
-    use crate::error::Result;
     use blueprint_core::{info, warn};
 
     info!(
-        "Starting benchmark suite for job '{}' with max_duration={:?}",
-        job_id, max_duration
+        "Starting benchmark suite for job '{}' with max_duration={}s",
+        job_id,
+        max_duration.as_secs()
     );
 
-    let start_time = Instant::now();
-
-    // Initialize the profile with default values
-    let mut profile = BenchmarkProfile {
-        job_id: job_id.clone(),
-        execution_mode: mode.clone(),
-        avg_cpu_cores: 0.0,
-        peak_cpu_cores: 0.0,
-        avg_memory_mb: 0.0,
-        peak_memory_mb: 0.0,
-        io_read_mb: 0.0,
-        io_write_mb: 0.0,
-        network_rx_mb: 0.0,
-        network_tx_mb: 0.0,
-        storage_available_gb: 0.0,
-        gpu_available: false,
-        gpu_memory_mb: 0.0,
-        duration_secs: 0,
-        timestamp: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-        success: true,
-        cpu_details: None,
-    };
-
-    // Measure available storage
-    // Use df command to get disk space since sysinfo disk API might differ between versions
-    if let Ok(output) = std::process::Command::new("df")
-        .args(&["-h", "--output=avail", "/"])
-        .output()
-    {
-        if let Ok(output_str) = String::from_utf8(output.stdout) {
-            // Parse the output to get available space
-            let lines: Vec<&str> = output_str.lines().collect();
-            if lines.len() > 1 {
-                let avail = lines[1].trim();
-                // Convert to GB - handle different formats (e.g., "10G", "1.5T")
-                if avail.ends_with('G') {
-                    if let Ok(gb) = avail.trim_end_matches('G').parse::<f32>() {
-                        profile.storage_available_gb = gb;
-                    }
-                } else if avail.ends_with('T') {
-                    if let Ok(tb) = avail.trim_end_matches('T').parse::<f32>() {
-                        profile.storage_available_gb = tb * 1024.0;
-                    }
-                } else if avail.ends_with('M') {
-                    if let Ok(mb) = avail.trim_end_matches('M').parse::<f32>() {
-                        profile.storage_available_gb = mb / 1024.0;
-                    }
-                }
-            }
-        }
-    }
-
-    // Create a config for the benchmark
+    // Create a benchmark run configuration
     let config = BenchmarkRunConfig {
-        command: "echo".to_string(),
+        command: "".to_string(),
         args: vec![],
         job_id: job_id.clone(),
         mode: mode.clone(),
@@ -172,83 +138,127 @@ pub fn run_benchmark_suite(
         run_gpu_test,
     };
 
-    // Run CPU benchmark if enabled
+    // Initialize the benchmark profile
+    let mut profile = BenchmarkProfile {
+        job_id: job_id.clone(),
+        execution_mode: mode.clone(),
+        duration_secs: 0,
+        timestamp: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        success: true,
+        cpu_details: None,
+        io_details: None,
+        memory_details: None,
+        network_details: None,
+        gpu_details: None,
+        storage_details: None,
+    };
+
+    // Measure available storage
+    if let Ok(output) = std::process::Command::new("df").args(&["-h", "/"]).output() {
+        if let Ok(output_str) = String::from_utf8(output.stdout) {
+            if let Some(line) = output_str.lines().nth(1) {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 4 {
+                    let avail = parts[3];
+                    // Convert to GB - handle different formats (e.g., "10G", "1.5T")
+                    if avail.ends_with('G') {
+                        if let Ok(gb) = avail.trim_end_matches('G').parse::<f32>() {
+                            profile.storage_details = Some(StorageBenchmarkResult {
+                                storage_available_gb: gb,
+                            });
+                        }
+                    } else if avail.ends_with('T') {
+                        if let Ok(tb) = avail.trim_end_matches('T').parse::<f32>() {
+                            profile.storage_details = Some(StorageBenchmarkResult {
+                                storage_available_gb: tb * 1024.0,
+                            });
+                        }
+                    } else if avail.ends_with('M') {
+                        if let Ok(mb) = avail.trim_end_matches('M').parse::<f32>() {
+                            profile.storage_details = Some(StorageBenchmarkResult {
+                                storage_available_gb: mb / 1024.0,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Start time
+    let start_time = Instant::now();
+
+    // Run the CPU benchmark if requested
     if run_cpu_test {
         info!("Running CPU benchmark test");
         match run_cpu_benchmark(&config) {
-            Ok((avg_cores, peak_cores, cpu_details)) => {
-                profile.avg_cpu_cores = avg_cores;
-                profile.peak_cpu_cores = peak_cores;
+            Ok(cpu_details) => {
                 profile.cpu_details = Some(cpu_details);
                 info!("CPU benchmark completed successfully");
             }
             Err(e) => {
                 warn!("CPU benchmark failed: {}", e);
-                profile.success = false;
             }
         }
     }
 
-    // Run memory benchmark if enabled
+    // Run the memory benchmark if requested
     if run_memory_test {
         match run_memory_benchmark(&config) {
-            Ok((avg_memory, peak_memory)) => {
-                profile.avg_memory_mb = avg_memory;
-                profile.peak_memory_mb = peak_memory;
+            Ok(memory_details) => {
+                profile.memory_details = Some(memory_details);
             }
             Err(e) => {
                 warn!("Memory benchmark failed: {}", e);
-                profile.success = false;
             }
         }
     }
 
-    // Run I/O benchmark if enabled
+    // Run the I/O benchmark if requested
     if run_io_test {
         match run_io_benchmark(&config) {
             Ok(io_result) => {
-                profile.io_read_mb = io_result.read_mb;
-                profile.io_write_mb = io_result.write_mb;
+                profile.io_details = Some(io_result);
             }
             Err(e) => {
                 warn!("I/O benchmark failed: {}", e);
-                profile.success = false;
             }
         }
     }
 
-    // Run network benchmark if enabled
+    // Run the network benchmark if requested
     if run_network_test {
         match run_network_benchmark(&config) {
-            Ok((rx_mb, tx_mb)) => {
-                profile.network_rx_mb = rx_mb;
-                profile.network_tx_mb = tx_mb;
+            Ok(network_details) => {
+                profile.network_details = Some(network_details);
             }
             Err(e) => {
                 warn!("Network benchmark failed: {}", e);
-                profile.success = false;
             }
         }
     }
 
-    // Run GPU benchmark if enabled
+    // Run the GPU benchmark if requested
     if run_gpu_test {
         match run_gpu_benchmark(&config) {
-            Ok((gpu_available, gpu_memory)) => {
-                profile.gpu_available = gpu_available;
-                profile.gpu_memory_mb = gpu_memory;
+            Ok(gpu_details) => {
+                profile.gpu_details = Some(gpu_details);
             }
             Err(e) => {
                 warn!("GPU benchmark failed: {}", e);
-                // Don't mark the entire benchmark as failed just because GPU check failed
                 // Some systems legitimately don't have GPUs
-                profile.gpu_available = false;
-                profile.gpu_memory_mb = 0.0;
+                profile.gpu_details = Some(GpuBenchmarkResult {
+                    gpu_available: false,
+                    gpu_memory_mb: 0.0,
+                });
             }
         }
     }
 
-    // Set the total duration
+    // Record the total duration
     profile.duration_secs = start_time.elapsed().as_secs();
 
     info!("Benchmark suite completed: {:?}", profile);

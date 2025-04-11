@@ -7,10 +7,10 @@ use blueprint_core::info;
 use std::process::Command;
 use std::time::Duration;
 
-use super::BenchmarkRunConfig;
+use super::{BenchmarkRunConfig, NetworkBenchmarkResult};
 
 /// Run a network benchmark to measure network performance
-pub fn run_network_benchmark(config: &BenchmarkRunConfig) -> Result<(f32, f32)> {
+pub fn run_network_benchmark(_config: &BenchmarkRunConfig) -> Result<NetworkBenchmarkResult> {
     info!("Running network benchmark");
 
     // Get initial network stats
@@ -52,5 +52,9 @@ pub fn run_network_benchmark(config: &BenchmarkRunConfig) -> Result<(f32, f32)> 
         "Network benchmark completed: RX: {:.2} MB, TX: {:.2} MB",
         rx_mb, tx_mb
     );
-    Ok((rx_mb, tx_mb))
+
+    Ok(NetworkBenchmarkResult {
+        network_rx_mb: rx_mb,
+        network_tx_mb: tx_mb,
+    })
 }
