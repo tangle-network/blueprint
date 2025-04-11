@@ -5,9 +5,9 @@ use tracing::info;
 
 // Import functions from the library
 use blueprint_pricing_engine_simple_lib::{
-    cleanup, error::Result, init_logging, init_price_cache, load_operator_config,
-    service::blockchain::event::BlockchainEvent, spawn_event_processor, start_blockchain_listener,
-    wait_for_shutdown,
+    cleanup, error::Result, init_logging, init_operator_signer_ed25519, init_price_cache,
+    load_operator_config, service::blockchain::event::BlockchainEvent, spawn_event_processor,
+    start_blockchain_listener, wait_for_shutdown,
 };
 
 /// Operator RFQ Pricing Engine Server CLI
@@ -57,10 +57,9 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     // Initialize price cache
     let price_cache = init_price_cache(&config).await?;
 
-    // Skip operator signer initialization for now
-    // @human-review: The operator signer initialization is commented out due to type inference issues.
-    // A proper implementation would require a concrete KeyType implementation and a valid keypair.
-    info!("Skipping operator signer initialization");
+    // Initialize operator signer with Ed25519 key type
+    let _operator_signer = init_operator_signer_ed25519(&config).await?;
+    info!("Operator signer initialized successfully");
 
     // Process blockchain events
     let _event_processor = spawn_event_processor(event_rx, price_cache, config);

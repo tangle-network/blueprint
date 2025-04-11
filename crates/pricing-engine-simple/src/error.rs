@@ -43,4 +43,11 @@ pub enum PricingError {
     Other(String),
 }
 
+// Implement From<blueprint_keystore::Error> for PricingError
+impl From<blueprint_keystore::Error> for PricingError {
+    fn from(err: blueprint_keystore::Error) -> Self {
+        PricingError::Signing(format!("Keystore error: {:?}", err))
+    }
+}
+
 pub type Result<T> = std::result::Result<T, PricingError>;

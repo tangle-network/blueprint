@@ -26,6 +26,9 @@ pub struct OperatorConfig {
     /// Path to the operator's keypair file
     pub keypair_path: String,
 
+    /// Path to the keystore directory
+    pub keystore_path: String,
+
     /// Address to bind the RPC server to
     pub rpc_bind_address: String,
 
@@ -50,6 +53,7 @@ pub fn load_config() -> Result<OperatorConfig> {
         benchmark_interval: 1,
         price_scaling_factor: 1_000_000.0, // 1M Wei per CPU core
         keypair_path: "./data/operator_key".to_string(),
+        keystore_path: "./data/keystore".to_string(),
         rpc_bind_address: "127.0.0.1".to_string(),
         rpc_port: 9000,
         rpc_timeout: 30,

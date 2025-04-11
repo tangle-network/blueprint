@@ -16,7 +16,10 @@ use crate::{
     handlers::handle_blueprint_update,
     service::blockchain::event::BlockchainEvent,
     service::blockchain::listener::EventListener,
+    signer::OperatorSigner,
 };
+
+use blueprint_keystore::backends::Backend;
 
 /// Initialize the logging system with the specified log level
 pub fn init_logging(log_level: &str) {
@@ -67,6 +70,63 @@ pub async fn init_price_cache(config: &Arc<OperatorConfig>) -> Result<Arc<PriceC
         })?);
     info!("Price cache initialized");
     Ok(price_cache)
+}
+
+/// Initialize the operator signer with a concrete key type implementation
+pub async fn init_operator_signer(
+    config: &Arc<OperatorConfig>,
+) -> Result<Arc<OperatorSigner<blueprint_keystore::crypto::k256::K256Ecdsa>>> {
+    use blueprint_keystore::crypto::k256::K256Ecdsa;
+    use blueprint_keystore::{Keystore, KeystoreConfig};
+    use std::path::Path;
+
+    info!("Initializing operator signer with K256Ecdsa");
+
+    // Create keystore path if it doesn't exist
+    let keystore_path = Path::new(&config.keystore_path);
+    if !keystore_path.exists() {
+        std::fs::create_dir_all(keystore_path).map_err(|e| {
+            PricingError::Signing(format!("Failed to create keystore directory: {}", e))
+        })?;
+    }
+
+    // Initialize the keystore
+    let keystore_config = KeystoreConfig::new().fs_root(keystore_path);
+    let keystore = Keystore::new(keystore_config)?;
+
+    // Get or generate the keypair
+    let public_key = match keystore.list_local::<K256Ecdsa>()? {
+        keys if !keys.is_empty() => {
+            info!("Using existing K256Ecdsa operator key");
+            keys[0].clone()
+        }
+        _ => {
+            info!("Generating new K256Ecdsa operator key");
+            // Generate a new keypair
+            keystore.generate::<K256Ecdsa>(None)?
+        }
+    };
+
+    // Get the secret key
+    let keypair = keystore.get_secret::<K256Ecdsa>(&public_key)?;
+
+    // Create the operator signer
+    let signer = OperatorSigner::new(config, keypair)?;
+    info!(
+        "K256Ecdsa operator signer initialized with public key: {:?}",
+        signer.public_key()
+    );
+
+    Ok(Arc::new(signer))
+}
+
+/// Initialize the operator signer with Ed25519 key type implementation
+pub async fn init_operator_signer_ed25519(
+    config: &Arc<OperatorConfig>,
+) -> Result<Arc<OperatorSigner<blueprint_keystore::crypto::k256::K256Ecdsa>>> {
+    // For now, we'll just use the K256Ecdsa implementation since Ed25519 isn't available
+    // without enabling the "zebra" feature
+    init_operator_signer(config).await
 }
 
 /// Process blockchain events and update pricing as needed
