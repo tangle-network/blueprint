@@ -9,7 +9,7 @@ use std::process;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use sysinfo::{Pid, Process, System};
+use sysinfo::{Pid, System};
 
 use super::{BenchmarkRunConfig, MemoryAccessMode, MemoryBenchmarkResult, MemoryOperationType};
 

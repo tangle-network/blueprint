@@ -33,8 +33,8 @@ pub use signer::{OperatorSigner, QuotePayload, SignedQuote};
 
 // Re-export application-level functions
 pub use app::{
-    cleanup, init_logging, init_operator_signer, init_operator_signer_ed25519, init_price_cache,
-    load_operator_config, spawn_event_processor, start_blockchain_listener, wait_for_shutdown,
+    cleanup, init_logging, init_operator_signer, init_price_cache, load_operator_config,
+    spawn_event_processor, start_blockchain_listener, wait_for_shutdown,
 };
 
 #[cfg(test)]

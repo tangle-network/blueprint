@@ -5,7 +5,7 @@ use tracing::info;
 
 // Import functions from the library
 use blueprint_pricing_engine_simple_lib::{
-    cleanup, error::Result, init_logging, init_operator_signer_ed25519, init_price_cache,
+    cleanup, error::Result, init_logging, init_operator_signer, init_price_cache,
     load_operator_config, service::blockchain::event::BlockchainEvent, spawn_event_processor,
     start_blockchain_listener, wait_for_shutdown,
 };
@@ -57,8 +57,8 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     // Initialize price cache
     let price_cache = init_price_cache(&config).await?;
 
-    // Initialize operator signer with Ed25519 key type
-    let _operator_signer = init_operator_signer_ed25519(&config).await?;
+    // Initialize operator signer
+    let _operator_signer = init_operator_signer(&config).await?;
     info!("Operator signer initialized successfully");
 
     // Process blockchain events

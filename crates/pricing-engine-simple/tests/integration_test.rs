@@ -1,11 +1,13 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use blueprint_pricing_engine_simple_lib::{
-    app::{init_price_cache, load_operator_config},
+    app::{init_operator_signer, init_price_cache, load_operator_config},
     cache::PriceCache,
     config::{OperatorConfig, load_config_from_path},
     error::Result,
     pricing::PriceModel,
+    signer::QuotePayload,
 };
 use chrono::Utc;
 
@@ -19,6 +21,7 @@ fn create_test_config() -> OperatorConfig {
         benchmark_interval: 1,
         price_scaling_factor: 1000000.0,
         keypair_path: "/tmp/test-keypair".to_string(),
+        keystore_path: "/tmp/test-keystore".to_string(),
         rpc_bind_address: "127.0.0.1".to_string(),
         rpc_port: 9000,
         rpc_timeout: 30,
@@ -89,6 +92,7 @@ async fn test_app_functions() -> Result<()> {
         benchmark_interval = 1
         price_scaling_factor = 1000000.0
         keypair_path = "/tmp/test-keypair"
+        keystore_path = "/tmp/test-keystore"
         rpc_bind_address = "127.0.0.1"
         rpc_port = 9000
         rpc_timeout = 30
@@ -110,6 +114,7 @@ async fn test_app_functions() -> Result<()> {
 
     // Clean up
     let _ = std::fs::remove_file(config_path);
+    let _ = std::fs::remove_dir_all("/tmp/test-keystore");
 
     Ok(())
 }
@@ -131,6 +136,7 @@ async fn test_config_loading() -> Result<()> {
         benchmark_interval = 1
         price_scaling_factor = 1000000.0
         keypair_path = "/tmp/test-keypair"
+        keystore_path = "/tmp/test-keystore"
         rpc_bind_address = "127.0.0.1"
         rpc_port = 9000
         rpc_timeout = 30
@@ -146,10 +152,60 @@ async fn test_config_loading() -> Result<()> {
     assert_eq!(config.database_path, "./data/price_cache");
     assert_eq!(config.benchmark_command, "echo");
     assert_eq!(config.price_scaling_factor, 1000000.0);
+    assert_eq!(config.keystore_path, "/tmp/test-keystore");
     assert_eq!(config.rpc_port, 9000);
 
     // Clean up
     let _ = std::fs::remove_file(config_path);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_operator_signer() -> Result<()> {
+    // Initialize logging
+    init_test_logging();
+
+    // Create a test config
+    let config = Arc::new(create_test_config());
+
+    // Create keystore directory if it doesn't exist
+    let keystore_path = std::path::Path::new(&config.keystore_path);
+    if !keystore_path.exists() {
+        std::fs::create_dir_all(keystore_path)?;
+    }
+
+    // Initialize the operator signer
+    let operator_signer_arc = init_operator_signer(&config).await?;
+
+    // Extract the public key for later comparison
+    let public_key = operator_signer_arc.public_key();
+
+    // Extract the OperatorSigner from the Arc
+    // This will fail if there are other references to the Arc
+    let mut operator_signer = match Arc::try_unwrap(operator_signer_arc) {
+        Ok(signer) => signer,
+        Err(_) => panic!("Could not unwrap Arc - there are other references"),
+    };
+
+    // Create a test quote payload
+    let payload = QuotePayload {
+        blueprint_id: 123,
+        price_wei: 1000000,
+        expiry: (Utc::now().timestamp() + 3600) as u64, // 1 hour from now
+        timestamp: Utc::now().timestamp() as u64,
+    };
+
+    // Sign the payload
+    let signed_quote = operator_signer.sign_quote(payload)?;
+
+    // Verify the signature
+    assert_eq!(signed_quote.payload.blueprint_id, 123);
+    assert_eq!(signed_quote.payload.price_wei, 1000000);
+    assert_eq!(signed_quote.signer_pubkey, public_key);
+
+    // Clean up
+    let _ = std::fs::remove_dir_all("/tmp/test-keystore");
 
     Ok(())
 }

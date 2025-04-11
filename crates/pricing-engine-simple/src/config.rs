@@ -2,6 +2,7 @@
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use toml;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperatorConfig {
@@ -62,8 +63,22 @@ pub fn load_config() -> Result<OperatorConfig> {
 }
 
 /// Load configuration from a specified path
-pub fn load_config_from_path<P: AsRef<Path>>(_path: P) -> Result<OperatorConfig> {
-    // In a real implementation, this would load and parse a TOML/JSON file
-    // For now, we'll just use the default config
-    load_config()
+pub fn load_config_from_path<P: AsRef<Path>>(path: P) -> Result<OperatorConfig> {
+    // Check if the file exists
+    let path = path.as_ref();
+    if !path.exists() {
+        return load_config();
+    }
+
+    // Read the file content
+    let content = std::fs::read_to_string(path).map_err(|e| {
+        crate::error::PricingError::Config(format!("Failed to read config file: {}", e))
+    })?;
+
+    // Parse the TOML content
+    let config: OperatorConfig = toml::from_str(&content).map_err(|e| {
+        crate::error::PricingError::Config(format!("Failed to parse config file: {}", e))
+    })?;
+
+    Ok(config)
 }

@@ -40,6 +40,7 @@ uuid = { workspace = true, features = ["v4"] }
 once_cell = { workspace = true }
 hex = { workspace = true }
 anyhow = { workspace = true }
+toml = "0.8.0"
 
 # Substrate RPC and runtime API dependencies
 jsonrpsee = { workspace = true, features = ["server", "macros", "http-client"] }

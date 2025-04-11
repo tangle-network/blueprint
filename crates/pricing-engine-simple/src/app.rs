@@ -120,15 +120,6 @@ pub async fn init_operator_signer(
     Ok(Arc::new(signer))
 }
 
-/// Initialize the operator signer with Ed25519 key type implementation
-pub async fn init_operator_signer_ed25519(
-    config: &Arc<OperatorConfig>,
-) -> Result<Arc<OperatorSigner<blueprint_keystore::crypto::k256::K256Ecdsa>>> {
-    // For now, we'll just use the K256Ecdsa implementation since Ed25519 isn't available
-    // without enabling the "zebra" feature
-    init_operator_signer(config).await
-}
-
 /// Process blockchain events and update pricing as needed
 pub fn spawn_event_processor(
     mut event_rx: mpsc::Receiver<BlockchainEvent>,
