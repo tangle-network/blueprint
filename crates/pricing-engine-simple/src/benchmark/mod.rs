@@ -46,14 +46,14 @@ pub struct BenchmarkProfile {
 pub struct MemoryBenchmarkResult {
     pub avg_memory_mb: f32,
     pub peak_memory_mb: f32,
-    pub block_size_kb: u64,         // Memory block size in KB
-    pub total_size_mb: u64,         // Total memory size in MB
-    pub operations_per_second: f32, // Operations per second
-    pub transfer_rate_mb_s: f32,    // Transfer rate in MB/s
-    pub access_mode: MemoryAccessMode, // Sequential or random access
+    pub block_size_kb: u64,                  // Memory block size in KB
+    pub total_size_mb: u64,                  // Total memory size in MB
+    pub operations_per_second: f32,          // Operations per second
+    pub transfer_rate_mb_s: f32,             // Transfer rate in MB/s
+    pub access_mode: MemoryAccessMode,       // Sequential or random access
     pub operation_type: MemoryOperationType, // Read, write or none
-    pub latency_ns: f32,            // Average latency in nanoseconds
-    pub duration_ms: u64,           // Benchmark duration in milliseconds
+    pub latency_ns: f32,                     // Average latency in nanoseconds
+    pub duration_ms: u64,                    // Benchmark duration in milliseconds
 }
 
 /// Memory access modes
@@ -74,16 +74,22 @@ pub enum MemoryOperationType {
 /// Network benchmark results
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NetworkBenchmarkResult {
-    pub network_rx_mb: f32, // Network received (download)
-    pub network_tx_mb: f32, // Network transmitted (upload)
+    pub network_rx_mb: f32,
+    pub network_tx_mb: f32,
+    pub download_speed_mbps: f32, // Download speed in Mbps
+    pub upload_speed_mbps: f32,   // Upload speed in Mbps
+    pub latency_ms: f32,          // Network latency in milliseconds
+    pub duration_ms: u64,         // Benchmark duration in milliseconds
+    pub packet_loss_percent: f32, // Packet loss percentage
+    pub jitter_ms: f32,           // Jitter in milliseconds
 }
 
 /// GPU benchmark results
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GpuBenchmarkResult {
-    pub gpu_available: bool, // Whether GPU is available
-    pub gpu_memory_mb: f32,  // GPU memory if available
-    pub gpu_model: String,   // GPU model name
+    pub gpu_available: bool,    // Whether GPU is available
+    pub gpu_memory_mb: f32,     // GPU memory if available
+    pub gpu_model: String,      // GPU model name
     pub gpu_frequency_mhz: f32, // GPU frequency in MHz if available
 }
 

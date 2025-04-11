@@ -9,7 +9,10 @@ use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, System};
 
-use super::{BenchmarkProfile, BenchmarkRunConfig, CpuBenchmarkResult, MemoryBenchmarkResult, MemoryAccessMode, MemoryOperationType};
+use super::{
+    BenchmarkProfile, BenchmarkRunConfig, CpuBenchmarkResult, MemoryAccessMode,
+    MemoryBenchmarkResult, MemoryOperationType,
+};
 
 /// Helper function to get disk I/O statistics
 pub fn get_io_stats() -> Result<(u64, u64)> {

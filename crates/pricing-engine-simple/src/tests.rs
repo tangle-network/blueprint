@@ -56,6 +56,12 @@ fn create_test_benchmark_profile(avg_cpu_cores: f32) -> BenchmarkProfile {
         network_details: Some(crate::benchmark::NetworkBenchmarkResult {
             network_rx_mb: 20.0,
             network_tx_mb: 10.0,
+            download_speed_mbps: 100.0,
+            upload_speed_mbps: 50.0,
+            latency_ms: 15.0,
+            duration_ms: 5000,
+            packet_loss_percent: 0.0,
+            jitter_ms: 2.5,
         }),
         gpu_details: Some(crate::benchmark::GpuBenchmarkResult {
             gpu_available: false,
@@ -79,10 +85,10 @@ fn test_benchmark_suite() {
         Duration::from_secs(30),
         Duration::from_millis(500),
         false, // run_cpu_test
-        true,  // run_memory_test
+        false, // run_memory_test
         false, // run_io_test
-        false, // run_network_test - Skip just for test
-        false,  // run_gpu_test
+        true,  // run_network_test
+        false, // run_gpu_test
     );
     assert!(result.is_ok());
 
@@ -253,5 +259,46 @@ fn test_memory_benchmark() {
     assert!(result.operations_per_second > 0.0);
     assert!(result.transfer_rate_mb_s > 0.0);
     assert!(result.latency_ns > 0.0);
+    assert!(result.duration_ms > 0);
+}
+
+#[test]
+fn test_network_benchmark() {
+    setup_log();
+
+    // Create a simple benchmark config
+    let config = BenchmarkRunConfig {
+        job_id: "network-test".to_string(),
+        mode: "test".to_string(),
+        command: "echo".to_string(),
+        args: vec!["benchmark".to_string()],
+        max_duration: Duration::from_secs(30),
+        sample_interval: Duration::from_millis(100),
+        run_cpu_test: false,
+        run_memory_test: false,
+        run_io_test: false,
+        run_network_test: true,
+        run_gpu_test: false,
+    };
+
+    // Run the network benchmark
+    let result = crate::benchmark::network::run_network_benchmark(&config).unwrap();
+
+    // Print the results
+    println!("Network Benchmark Results:");
+    println!("  Data Received: {:.2} MB", result.network_rx_mb);
+    println!("  Data Transmitted: {:.2} MB", result.network_tx_mb);
+    println!("  Download Speed: {:.2} Mbps", result.download_speed_mbps);
+    println!("  Upload Speed: {:.2} Mbps", result.upload_speed_mbps);
+    println!("  Latency: {:.2} ms", result.latency_ms);
+    println!("  Jitter: {:.2} ms", result.jitter_ms);
+    println!("  Packet Loss: {:.2}%", result.packet_loss_percent);
+    println!("  Duration: {} ms", result.duration_ms);
+
+    // Verify that we got some results
+    assert!(result.network_rx_mb > 0.0);
+    assert!(result.network_tx_mb > 0.0);
+    assert!(result.download_speed_mbps > 0.0);
+    assert!(result.latency_ms >= 0.0);
     assert!(result.duration_ms > 0);
 }

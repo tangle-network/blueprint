@@ -22,7 +22,10 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
     // Try multiple methods to detect GPU
     // 1. Try nvidia-smi for NVIDIA GPUs
     if let Ok(output) = Command::new("nvidia-smi")
-        .args(&["--query-gpu=memory.total,name,clocks.max.graphics", "--format=csv,noheader,nounits"])
+        .args(&[
+            "--query-gpu=memory.total,name,clocks.max.graphics",
+            "--format=csv,noheader,nounits",
+        ])
         .output()
     {
         if output.status.success() {
@@ -34,10 +37,12 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
                         if let Ok(memory) = parts[0].trim().parse::<f32>() {
                             let gpu_model = parts[1].trim().to_string();
                             let gpu_frequency_mhz = parts[2].trim().parse::<f32>().unwrap_or(0.0);
-                            
-                            info!("Detected NVIDIA GPU: {}, {} MHz with {} MB memory", 
-                                  gpu_model, gpu_frequency_mhz, memory);
-                            
+
+                            info!(
+                                "Detected NVIDIA GPU: {}, {} MHz with {} MB memory",
+                                gpu_model, gpu_frequency_mhz, memory
+                            );
+
                             return Ok(GpuBenchmarkResult {
                                 gpu_available: true,
                                 gpu_memory_mb: memory,
@@ -60,7 +65,7 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
             if let Ok(output_str) = String::from_utf8(output.stdout) {
                 let memory = parse_amd_gpu_memory(&output_str);
                 let gpu_model = parse_amd_gpu_model(&output_str);
-                
+
                 if memory > 0.0 {
                     info!("Detected AMD GPU: {}, with {} MB memory", gpu_model, memory);
                     return Ok(GpuBenchmarkResult {
@@ -89,11 +94,13 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
         if let Ok(output_str) = String::from_utf8(output.stdout) {
             let memory = parse_intel_gpu_memory(&output_str);
             let (gpu_model, gpu_frequency_mhz) = parse_intel_gpu_info(&output_str);
-            
+
             if memory > 0.0 {
-                info!("Detected Intel GPU: {}, {} MHz with {} MB memory", 
-                      gpu_model, gpu_frequency_mhz, memory);
-                
+                info!(
+                    "Detected Intel GPU: {}, {} MHz with {} MB memory",
+                    gpu_model, gpu_frequency_mhz, memory
+                );
+
                 return Ok(GpuBenchmarkResult {
                     gpu_available: true,
                     gpu_memory_mb: memory,
@@ -117,7 +124,7 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
 
                     // Extract GPU model from renderer string
                     let gpu_model = extract_gpu_model_from_glxinfo(renderer_line);
-                    
+
                     // Extract GPU memory if available
                     let memory = parse_glxinfo_memory(&output_str);
 
@@ -229,7 +236,7 @@ pub fn parse_amd_gpu_model(output: &str) -> String {
 pub fn parse_intel_gpu_info(output: &str) -> (String, f32) {
     let mut model = "Intel GPU".to_string();
     let mut frequency = 0.0;
-    
+
     // Try to extract model and frequency information
     for line in output.lines() {
         if line.contains("Device:") {
@@ -238,7 +245,7 @@ pub fn parse_intel_gpu_info(output: &str) -> (String, f32) {
                 model = parts[1].trim().to_string();
             }
         }
-        
+
         // Extract frequency if available (format: "1539MHz")
         if let Some(freq_str) = line.split_whitespace().next() {
             if freq_str.ends_with("MHz") {
@@ -248,7 +255,7 @@ pub fn parse_intel_gpu_info(output: &str) -> (String, f32) {
             }
         }
     }
-    
+
     (model, frequency)
 }
 
