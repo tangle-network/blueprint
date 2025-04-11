@@ -31,11 +31,11 @@ pub async fn handle_blueprint_update(
         mode: "native".to_string(),          // Assuming native for now
         max_duration: Duration::from_secs(config.benchmark_duration),
         sample_interval: Duration::from_secs(config.benchmark_interval),
-        run_cpu_test: true,     // Enable CPU benchmarking
-        run_memory_test: true,  // Enable memory benchmarking
-        run_io_test: true,      // Enable I/O benchmarking
+        run_cpu_test: true,      // Enable CPU benchmarking
+        run_memory_test: true,   // Enable memory benchmarking
+        run_io_test: true,       // Enable I/O benchmarking
         run_network_test: false, // Disable network benchmarking by default (can be noisy)
-        run_gpu_test: true,     // Enable GPU detection
+        run_gpu_test: true,      // Enable GPU detection
     };
 
     // 2. Run Benchmark (Potentially long-running, ensure it doesn't block critical paths)

@@ -1,4 +1,7 @@
-use crate::benchmark::BenchmarkProfile;
+use std::time::Duration;
+
+use crate::BenchmarkRunConfig;
+use crate::benchmark::{BenchmarkProfile, run_benchmark_suite};
 use crate::pricing::calculate_price;
 
 // Helper function to create a test benchmark profile
@@ -21,6 +24,26 @@ fn create_test_benchmark_profile(avg_cpu_cores: f32) -> BenchmarkProfile {
         timestamp: 1643723400, // Fixed timestamp for testing
         success: true,
     }
+}
+
+#[test]
+fn test_benchmark_suite() {
+    let config = BenchmarkRunConfig {
+        command: "echo".to_string(),
+        args: vec!["test".to_string()],
+        job_id: "test-suite".to_string(),
+        mode: "test".to_string(),
+        max_duration: Duration::from_secs(30),
+        sample_interval: Duration::from_millis(500),
+        run_cpu_test: true,
+        run_memory_test: true,
+        run_io_test: true,
+        run_network_test: false, // Skip just for test
+        run_gpu_test: true,
+    };
+
+    let result = run_benchmark_suite(config);
+    assert!(result.is_ok());
 }
 
 #[test]
