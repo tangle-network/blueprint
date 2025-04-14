@@ -22,7 +22,7 @@ use crate::sources::container::ContainerSource;
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
 
 pub struct VerifiedBlueprint {
-    pub(crate) fetcher: Box<DynBlueprintSource<'static>>,
+    pub(crate) fetchers: Vec<Box<DynBlueprintSource<'static>>>,
     pub(crate) blueprint: FilteredBlueprint,
 }
 
@@ -33,79 +33,85 @@ impl VerifiedBlueprint {
         blueprint_manager_opts: &BlueprintManagerConfig,
         active_gadgets: &mut ActiveGadgets,
     ) -> Result<()> {
-        let blueprint_source = &mut self.fetcher;
-        let blueprint = &self.blueprint;
+        for (index, source) in self.fetchers.iter_mut().enumerate() {
+            let blueprint = &self.blueprint;
 
-        let blueprint_id = blueprint_source.blueprint_id();
-        if active_gadgets.contains_key(&blueprint_id) {
-            return Ok(());
-        }
+            let blueprint_id = source.blueprint_id();
+            if active_gadgets.contains_key(&blueprint_id) {
+                return Ok(());
+            }
 
-        blueprint_source.fetch().await?;
-
-        let service_str = blueprint_source.name();
-        for service_id in &blueprint.services {
-            let sub_service_str = format!("{service_str}-{service_id}");
-            let (arguments, env_vars) = process_arguments_and_env(
-                gadget_config,
-                blueprint_manager_opts,
-                blueprint_id,
-                *service_id,
-                blueprint,
-                &sub_service_str,
-            );
-
-            info!("Starting protocol: {sub_service_str} with args: {arguments:?}");
-
-            // Now that the file is loaded, spawn the process
-            let mut handle = blueprint_source
-                .spawn(&sub_service_str, arguments, env_vars)
-                .await?;
-
-            if handle.status() != Status::Running {
-                error!("Process did not start successfully");
+            if let Err(e) = source.fetch().await {
+                error!(
+                    "Failed to fetch blueprint from source {index}, attempting next available: {e}"
+                );
                 continue;
             }
 
-            if blueprint.registration_mode {
-                // We must wait for the process to exit successfully
-                let Some(status) = handle.wait_for_status_change().await else {
-                    error!("Process status channel closed unexpectedly, aborting...");
-                    if !handle.abort() {
-                        error!(
-                            "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
-                        );
-                    }
-                    continue;
-                };
+            let service_str = source.name();
+            for service_id in &blueprint.services {
+                let sub_service_str = format!("{service_str}-{service_id}");
+                let (arguments, env_vars) = process_arguments_and_env(
+                    gadget_config,
+                    blueprint_manager_opts,
+                    blueprint_id,
+                    *service_id,
+                    blueprint,
+                    &sub_service_str,
+                );
 
-                match status {
-                    Status::Finished => {
-                        info!(
-                            "***Protocol (registration mode) {sub_service_str} executed successfully***"
-                        );
-                    }
-                    Status::Error => {
-                        error!(
-                            "Protocol (registration mode) {sub_service_str} failed to execute: {status:?}"
-                        );
-                    }
-                    Status::Running => {
-                        error!("Process did not terminate successfully, aborting...");
+                info!("Starting protocol: {sub_service_str} with args: {arguments:?}");
+
+                // Now that the file is loaded, spawn the process
+                let mut handle = source.spawn(&sub_service_str, arguments, env_vars).await?;
+
+                if handle.status() != Status::Running {
+                    error!("Process did not start successfully");
+                    continue;
+                }
+
+                if blueprint.registration_mode {
+                    // We must wait for the process to exit successfully
+                    let Some(status) = handle.wait_for_status_change().await else {
+                        error!("Process status channel closed unexpectedly, aborting...");
                         if !handle.abort() {
                             error!(
                                 "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
                             );
                         }
+                        continue;
+                    };
+
+                    match status {
+                        Status::Finished => {
+                            info!(
+                                "***Protocol (registration mode) {sub_service_str} executed successfully***"
+                            );
+                        }
+                        Status::Error => {
+                            error!(
+                                "Protocol (registration mode) {sub_service_str} failed to execute: {status:?}"
+                            );
+                        }
+                        Status::Running => {
+                            error!("Process did not terminate successfully, aborting...");
+                            if !handle.abort() {
+                                error!(
+                                    "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                                );
+                            }
+                        }
                     }
+                    continue;
                 }
-                continue;
+
+                active_gadgets
+                    .entry(blueprint_id)
+                    .or_default()
+                    .insert(*service_id, handle);
             }
 
-            active_gadgets
-                .entry(blueprint_id)
-                .or_default()
-                .insert(*service_id, handle);
+            break;
         }
 
         Ok(())
@@ -279,10 +285,8 @@ pub(crate) async fn handle_tangle_event(
         })
         .chain(registration_blueprints)
     {
-        let mut fetcher_candidates = get_fetcher_candidates(&blueprint, manager_opts)?;
-
         let verified_blueprint = VerifiedBlueprint {
-            fetcher: fetcher_candidates.pop().expect("Should exist"),
+            fetchers: get_fetcher_candidates(&blueprint, manager_opts)?,
             blueprint,
         };
 
@@ -318,9 +322,7 @@ pub(crate) async fn handle_tangle_event(
             // we compare all these fresh values to see if we're running a service locally that is no longer on-chain
             for verified_blueprints in &verified_blueprints {
                 let services = &verified_blueprints.blueprint.services;
-                // Safe assertion since we know there is at least one fetcher. All fetchers should have the same blueprint id
-                let fetcher = &verified_blueprints.fetcher;
-                if fetcher.blueprint_id() == *blueprint_id && !services.contains(service_id) {
+                if !services.contains(service_id) {
                     warn!(
                         "Killing service that is no longer on-chain: bid={blueprint_id}//sid={service_id}"
                     );
@@ -340,11 +342,12 @@ pub(crate) async fn handle_tangle_event(
     }
 
     for (blueprint_id, service_id) in to_remove {
-        warn!(
-            "Removing service that is no longer active on-chain or killed: bid={blueprint_id}//sid={service_id}"
-        );
         let mut should_delete_blueprint = false;
         if let Some(gadgets) = active_gadgets.get_mut(&blueprint_id) {
+            warn!(
+                "Removing service that is no longer active on-chain or killed: bid={blueprint_id}//sid={service_id}"
+            );
+
             if let Some(process_handle) = gadgets.remove(&service_id) {
                 if process_handle.abort() {
                     warn!("Sent abort signal to service: bid={blueprint_id}//sid={service_id}");
@@ -431,11 +434,6 @@ fn get_fetcher_candidates(
     // Ensure that we have at least one fetcher
     if fetcher_candidates.is_empty() {
         return Err(Error::NoFetchers);
-    }
-
-    // Ensure there is only a single candidate fetcher
-    if fetcher_candidates.len() != 1 {
-        return Err(Error::MultipleFetchers);
     }
 
     // Ensure that we have a test fetcher if we are in test mode
