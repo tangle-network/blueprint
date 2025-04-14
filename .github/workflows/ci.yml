@@ -36,7 +36,7 @@ jobs:
   linting:
     timeout-minutes: 120
     name: cargo clippy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: checkout code
         uses: actions/checkout@v2
@@ -65,7 +65,7 @@ jobs:
         run: cargo clippy --tests --examples -- -D warnings
 
   generate-matrix:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -82,7 +82,7 @@ jobs:
   test-incredible-squaring-tangle:
     timeout-minutes: 30
     name: Tangle incredible squaring
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       CARGO_TERM_COLOR: always
       RUST_LOG: info
@@ -117,7 +117,7 @@ jobs:
     needs: generate-matrix
     timeout-minutes: 30
     name: cargo test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       CARGO_TERM_COLOR: always
     strategy:
