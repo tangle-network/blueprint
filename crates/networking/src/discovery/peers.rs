@@ -381,6 +381,19 @@ impl<K: KeyType> PeerManager<K> {
             .get(verification_id_key)
             .map(|id| *id)
     }
+
+    /// Get the position (index) of a verification key in the whitelist
+    ///
+    /// # Arguments
+    /// * `key` - The verification identifier key to find
+    ///
+    /// # Returns
+    /// Returns the index of the key in the whitelist if found, None otherwise
+    #[must_use]
+    pub fn get_key_position_in_whitelist(&self, key: &VerificationIdentifierKey<K>) -> Option<usize> {
+        let whitelist = self.whitelisted_keys.read();
+        whitelist.iter().position(|k| k == key)
+    }
 }
 
 /// Update the average response time for a peer

@@ -1,7 +1,7 @@
 use crate::types::MessageRouting;
 use crate::{
     blueprint_protocol::InstanceMessageRequest,
-    discovery::{PeerInfo, PeerManager},
+    discovery::{PeerInfo, PeerManager, peers::VerificationIdentifierKey},
     service::NetworkMessage,
     types::ProtocolMessage,
 };
@@ -68,6 +68,8 @@ pub struct NetworkServiceHandle<K: KeyType> {
     pub sender: NetworkSender<K>,
     pub receiver: NetworkReceiver<K>,
     pub peer_manager: Arc<PeerManager<K>>,
+    /// The local verification key used to identify this node in the whitelist
+    pub local_verification_key: Option<VerificationIdentifierKey<K>>,
 }
 
 impl<K: KeyType> Clone for NetworkServiceHandle<K> {
@@ -78,6 +80,7 @@ impl<K: KeyType> Clone for NetworkServiceHandle<K> {
             sender: self.sender.clone(),
             receiver: NetworkReceiver::new(self.receiver.protocol_message_receiver.clone()),
             peer_manager: self.peer_manager.clone(),
+            local_verification_key: self.local_verification_key.clone(),
         }
     }
 }
@@ -97,6 +100,7 @@ impl<K: KeyType> NetworkServiceHandle<K> {
             sender: NetworkSender::new(network_message_sender),
             receiver: NetworkReceiver::new(protocol_message_receiver),
             peer_manager,
+            local_verification_key: None,
         }
     }
 
@@ -191,6 +195,22 @@ impl<K: KeyType> NetworkServiceHandle<K> {
         if let Some(peer_info) = self.peer_manager.get_peer_info(&self.local_peer_id) {
             // Return the first address from our peer info
             peer_info.addresses.iter().next().cloned()
+        } else {
+            None
+        }
+    }
+
+    /// Get the participant ID (index) of this node in the whitelisted keys
+    ///
+    /// This returns the position of this node's verification key in the
+    /// whitelist, which can be used as a participant identifier.
+    ///
+    /// # Returns
+    /// Returns the index in the whitelist if found, None otherwise
+    #[must_use]
+    pub fn get_participant_id(&self) -> Option<usize> {
+        if let Some(verification_key) = &self.local_verification_key {
+            self.peer_manager.get_key_position_in_whitelist(verification_key)
         } else {
             None
         }
