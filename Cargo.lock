@@ -17593,9 +17593,9 @@ dependencies = [
 
 [[package]]
 name = "sp-io"
-version = "38.0.0"
+version = "38.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59ef7eb561bb4839cc8424ce58c5ea236cbcca83f26fcc0426d8decfe8aa97d4"
+checksum = "a47cb95e32bd5f7e2d8d6cd222a14c207a8da05b3f5ab9699d338e99c791320d"
 dependencies = [
  "bytes",
  "docify",
