@@ -188,5 +188,5 @@ testing = ["dep:blueprint-testing-utils", "dep:tempfile", "dep:blueprint-chain-s
 cronjob = ["blueprint-producers-extra/cron"]
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["tangle", "evm", "eigenlayer", "networking", "round-based-compat", "local-store", "macros", "build", "testing", "cronjob"]
 rustdoc-args = ["--cfg", "docsrs"]
