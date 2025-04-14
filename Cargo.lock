@@ -2669,7 +2669,7 @@ name = "blueprint-benchmarking"
 version = "0.1.0-alpha.1"
 dependencies = [
  "blueprint-std",
- "sysinfo 0.31.4",
+ "sysinfo",
  "tokio",
 ]
 
@@ -5445,7 +5445,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "18e4fdb82bd54a12e42fb58a800dcae6b9e13982238ce2296dc3570b92148e1f"
 dependencies = [
  "data-encoding",
- "syn 2.0.100",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -5745,7 +5745,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "shell-words",
- "sysinfo 0.34.2",
+ "sysinfo",
  "tar",
  "tempfile",
  "thiserror 2.0.12",
@@ -9503,7 +9503,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if 1.0.0",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -18620,19 +18620,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.100",
-]
-
-[[package]]
-name = "sysinfo"
-version = "0.31.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "355dbe4f8799b304b05e1b0f05fc59b2a18d36645cf169607da45bde2f69a1be"
-dependencies = [
- "core-foundation-sys",
- "libc",
- "memchr",
- "ntapi",
- "windows 0.57.0",
 ]
 
 [[package]]
