@@ -633,15 +633,15 @@ impl Default for BlueprintCliCoreSettings {
 pub struct BlueprintSettings {
     #[arg(long, short = 't', env)]
     pub test_mode: bool,
-    #[arg(long, env)]
+    #[arg(long, env, default_value_t = default_http_rpc_url())]
     #[serde(default = "default_http_rpc_url")]
     pub http_rpc_url: Url,
-    #[arg(long, env)]
+    #[arg(long, env, default_value_t = default_ws_rpc_url())]
     #[serde(default = "default_ws_rpc_url")]
     pub ws_rpc_url: Url,
-    #[arg(long, short = 'd', env)]
+    #[arg(long, short = 'd', env, default_value_t = String::from("./keystore"))]
     pub keystore_uri: String,
-    #[arg(long, value_enum, env)]
+    #[arg(long, value_enum, env, default_value_t)]
     pub chain: SupportedChains,
     #[arg(long, short = 'v', global = true, action = clap::ArgAction::Count)]
     pub verbose: u8,
