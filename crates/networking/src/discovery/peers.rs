@@ -390,7 +390,10 @@ impl<K: KeyType> PeerManager<K> {
     /// # Returns
     /// Returns the index of the key in the whitelist if found, None otherwise
     #[must_use]
-    pub fn get_key_position_in_whitelist(&self, key: &VerificationIdentifierKey<K>) -> Option<usize> {
+    pub fn get_key_position_in_whitelist(
+        &self,
+        key: &VerificationIdentifierKey<K>,
+    ) -> Option<usize> {
         let whitelist = self.whitelisted_keys.read();
         whitelist.iter().position(|k| k == key)
     }

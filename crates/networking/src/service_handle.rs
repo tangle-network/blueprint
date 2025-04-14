@@ -210,7 +210,8 @@ impl<K: KeyType> NetworkServiceHandle<K> {
     #[must_use]
     pub fn get_participant_id(&self) -> Option<usize> {
         if let Some(verification_key) = &self.local_verification_key {
-            self.peer_manager.get_key_position_in_whitelist(verification_key)
+            self.peer_manager
+                .get_key_position_in_whitelist(verification_key)
         } else {
             None
         }
