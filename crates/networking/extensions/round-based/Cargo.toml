@@ -58,7 +58,7 @@ rand_dev = "0.1"
 rand = { workspace = true }
 hex = { workspace = true }
 # We don't use it directly, but we need to enable `serde` feature
-generic-array = { version = "0.14", features = ["serde"] }
+generic-array = { version = "1.2", features = ["serde"] }
 
 [features]
 default = ["std"]
