@@ -264,7 +264,7 @@ mod tests {
         let handle1 = node1.start().await.expect("Failed to start node1");
         let handle2 = node2.start().await.expect("Failed to start node2");
 
-        wait_for_peer_discovery(&[&handle1, &handle2], Duration::from_secs(5))
+        wait_for_peer_discovery(&[handle1, handle2], Duration::from_secs(5))
             .await
             .unwrap();
 
