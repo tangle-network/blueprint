@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.3](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.2...blueprint-manager-v0.3.0-alpha.3) - 2025-04-14
+
+### Added
+
+- *(manager)* support multiple sources (#866)
+
 ## [0.3.0-alpha.2](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.1...blueprint-manager-v0.3.0-alpha.2) - 2025-04-11
 
 ### Added
