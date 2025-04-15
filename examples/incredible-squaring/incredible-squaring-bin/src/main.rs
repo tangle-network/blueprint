@@ -20,6 +20,8 @@ use tracing::level_filters::LevelFilter;
 async fn main() -> Result<(), blueprint_sdk::Error> {
     setup_log();
 
+    blueprint_sdk::info!("Starting the incredible squaring blueprint!");
+
     let env = BlueprintEnvironment::load()?;
     let sr25519_signer = env.keystore().first_local::<SpSr25519>()?;
     let sr25519_pair = env.keystore().get_secret::<SpSr25519>(&sr25519_signer)?;
