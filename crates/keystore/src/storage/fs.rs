@@ -45,7 +45,7 @@ impl FileStorage {
     /// ```
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let root = path.as_ref();
-        if !root.is_dir() {
+        if root.exists() && !root.is_dir() {
             return Err(Error::Io(io::Error::from(io::ErrorKind::NotADirectory)));
         }
 
