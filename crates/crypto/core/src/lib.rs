@@ -10,7 +10,7 @@ pub mod aggregation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum KeyTypeId {
-    #[cfg(feature = "bn254")]
+    #[cfg(any(feature = "bls", feature = "tangle"))]
     Bn254,
     #[cfg(any(feature = "k256", feature = "tangle"))]
     Ecdsa,
@@ -42,7 +42,7 @@ impl KeyTypeId {
 
     pub fn name(&self) -> &'static str {
         match *self {
-            #[cfg(feature = "bn254")]
+            #[cfg(any(feature = "bn254", feature = "tangle"))]
             Self::Bn254 => "bn254",
             #[cfg(any(feature = "k256", feature = "tangle"))]
             Self::Ecdsa => "ecdsa",

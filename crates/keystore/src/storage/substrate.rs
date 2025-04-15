@@ -96,7 +96,7 @@ impl RawStorage for SubstrateStorage {
         public_bytes: Vec<u8>,
     ) -> Result<Option<Box<[u8]>>> {
         match type_id {
-            #[cfg(feature = "bn254")]
+            #[cfg(any(feature = "bn254", feature = "tangle"))]
             KeyTypeId::Bn254 => Err(crate::Error::KeyTypeNotSupported),
             #[cfg(any(feature = "ecdsa", feature = "tangle"))]
             KeyTypeId::Ecdsa => {
@@ -170,7 +170,7 @@ impl RawStorage for SubstrateStorage {
 
 fn sp_keystore_key_type_id_of(key_type: KeyTypeId) -> Result<sp_core::crypto::KeyTypeId> {
     match key_type {
-        #[cfg(feature = "bn254")]
+        #[cfg(any(feature = "bn254", feature = "tangle"))]
         KeyTypeId::Bn254 => Err(crate::Error::KeyTypeNotSupported),
         #[cfg(any(feature = "ecdsa", feature = "tangle"))]
         KeyTypeId::Ecdsa => Ok(role_ecdsa::KEY_TYPE),
