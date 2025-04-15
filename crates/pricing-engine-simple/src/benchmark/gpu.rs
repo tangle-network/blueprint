@@ -22,7 +22,7 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
     // Try multiple methods to detect GPU
     // 1. Try nvidia-smi for NVIDIA GPUs
     if let Ok(output) = Command::new("nvidia-smi")
-        .args(&[
+        .args([
             "--query-gpu=memory.total,name,clocks.max.graphics",
             "--format=csv,noheader,nounits",
         ])
@@ -58,7 +58,7 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
 
     // 2. Try rocm-smi for AMD GPUs
     if let Ok(output) = Command::new("rocm-smi")
-        .args(&["--showmeminfo", "vram", "--showproductname"])
+        .args(["--showmeminfo", "vram", "--showproductname"])
         .output()
     {
         if output.status.success() {
@@ -81,7 +81,7 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
 
     // 3. Try intel_gpu_top for Intel GPUs
     if let Ok(output) = Command::new("intel_gpu_top")
-        .args(&["-l"])
+        .args(["-l"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -112,7 +112,7 @@ pub fn run_gpu_benchmark(_config: &BenchmarkRunConfig) -> Result<GpuBenchmarkRes
     }
 
     // 4. Try glxinfo as a fallback
-    if let Ok(output) = Command::new("glxinfo").args(&["-B"]).output() {
+    if let Ok(output) = Command::new("glxinfo").args(["-B"]).output() {
         if output.status.success() {
             if let Ok(output_str) = String::from_utf8(output.stdout) {
                 // Check if we have a GPU renderer

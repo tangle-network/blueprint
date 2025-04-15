@@ -2,23 +2,18 @@
 
 use crate::cache::{BlueprintHash, PriceCache};
 use crate::config::OperatorConfig;
-use crate::error::{PricingError, Result as PricingResult};
 use crate::signer::{
-    BlueprintHashBytes, OperatorSigner, QuotePayload as SignerQuotePayload,
-    SignedQuote as SignerSignedQuote,
+    OperatorSigner, QuotePayload as SignerQuotePayload, SignedQuote as SignerSignedQuote,
 };
+use blueprint_crypto::BytesEncoding;
+use blueprint_crypto::k256::K256Ecdsa;
+use chrono::Utc;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, transport::Server};
 use tracing::{debug, error, info, warn};
 
-// Assuming proto definitions are generated into this module
-// You might need to adjust the path based on your build script (e.g., tonic-build)
-pub mod pricing_proto {
-    tonic::include_proto!("pricing_engine"); // Matches the package name in pricing.proto
-}
-
-use pricing_proto::{
+use crate::pricing_engine::{
     GetPriceRequest, GetPriceResponse, QuotePayload, SignedQuote,
     pricing_engine_server::{PricingEngine, PricingEngineServer},
 };
@@ -26,14 +21,14 @@ use pricing_proto::{
 pub struct PricingEngineService {
     config: Arc<OperatorConfig>,
     cache: Arc<PriceCache>,
-    signer: Arc<OperatorSigner>,
+    signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
 }
 
 impl PricingEngineService {
     pub fn new(
         config: Arc<OperatorConfig>,
         cache: Arc<PriceCache>,
-        signer: Arc<OperatorSigner>,
+        signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
     ) -> Self {
         Self {
             config,
@@ -56,8 +51,7 @@ impl PricingEngine for PricingEngineService {
             blueprint_hash_hex
         );
 
-        // 1. Decode Blueprint Hash
-        let blueprint_hash_bytes: BlueprintHashBytes = hex::decode(&blueprint_hash_hex)
+        let blueprint_hash_bytes: [u8; 32] = hex::decode(&blueprint_hash_hex)
             .map_err(|e| {
                 warn!(
                     "Invalid hex for blueprint hash '{}': {}",
@@ -78,7 +72,6 @@ impl PricingEngine for PricingEngineService {
                 ))
             })?;
 
-        // 2. Look up PriceModel in Cache
         let price_model = self
             .cache
             .get_price(&blueprint_hash_hex)
@@ -97,58 +90,53 @@ impl PricingEngine for PricingEngineService {
                 ))
             })?;
 
-        // 3. Check if PriceModel is stale? (Optional - depends on requirements)
-        // You might want to check price_model.generated_at against a max age.
+        let expiry_time = Utc::now().timestamp() as u64 + self.config.quote_validity_duration_secs;
+        let timestamp = Utc::now().timestamp() as u64;
 
-        // 4. Calculate Expiry
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|e| {
-                error!("System time error: {}", e);
-                Status::internal("Failed to get current time")
-            })?
-            .as_secs();
-        let expiry = now + self.config.quote_validity_duration.as_secs();
-
-        // 5. Create Quote Payload
-        // Using the price_per_second_wei from the model. A real system might
-        // use request parameters (like duration) to calculate the final price.
-        let quote_payload = SignerQuotePayload {
-            blueprint_hash: blueprint_hash_bytes,
-            price_wei: price_model.price_per_second_wei, // Using price_per_second directly
-            expiry,
-            timestamp: now,
+        let blueprint_id = if blueprint_hash_bytes.len() >= 8 {
+            u64::from_be_bytes(blueprint_hash_bytes[0..8].try_into().unwrap())
+        } else {
+            warn!("Blueprint hash is shorter than 8 bytes, using 0 for ID");
+            0
         };
-        debug!("Prepared quote payload: {:?}", quote_payload);
 
-        // 6. Sign Payload
-        let signed_quote: SignerSignedQuote =
-            self.signer.sign_quote(quote_payload).map_err(|e| {
-                error!("Failed to sign quote for {}: {}", blueprint_hash_hex, e);
-                Status::internal("Failed to sign price quote")
-            })?;
+        let signer_payload = SignerQuotePayload {
+            blueprint_id,
+            price_wei: price_model.price_per_second_wei,
+            expiry: expiry_time,
+            timestamp,
+        };
+        debug!("Constructed signer payload: {:?}", signer_payload);
+
+        let signed_quote: SignerSignedQuote<K256Ecdsa> =
+            match self.signer.lock().await.sign_quote(signer_payload) {
+                Ok(quote) => quote,
+                Err(e) => {
+                    error!("Failed to sign quote for {}: {}", blueprint_hash_hex, e);
+                    return Err(Status::internal("Failed to sign price quote"));
+                }
+            };
         debug!(
             "Signed quote generated. Signature length: {}",
-            signed_quote.signature.len()
+            signed_quote.signature.to_bytes().len()
         );
 
-        // 7. Convert to gRPC Response Type
+        let blueprint_hash_bytes_for_response = hex::decode(&blueprint_hash_hex)
+            .map_err(|_| Status::internal("Failed to decode blueprint hash for response"))?;
+
         let response_payload = QuotePayload {
-            blueprint_hash: signed_quote.payload.blueprint_hash.to_vec(),
-            // Convert u128 to String for protobuf compatibility
+            blueprint_hash: blueprint_hash_bytes_for_response,
             price_wei: signed_quote.payload.price_wei.to_string(),
             expiry: signed_quote.payload.expiry,
             timestamp: signed_quote.payload.timestamp,
         };
 
-        let response_quote = SignedQuote {
-            payload: Some(response_payload), // Use Some for message fields
-            signature: signed_quote.signature,
-            signer_pubkey: signed_quote.signer_pubkey,
-        };
-
         let response = GetPriceResponse {
-            quote: Some(response_quote), // Use Some for message fields
+            quote: Some(SignedQuote {
+                payload: Some(response_payload),
+                signature: signed_quote.signature.to_bytes().to_vec(),
+                signer_pubkey: signed_quote.signer_pubkey.to_bytes().to_vec(),
+            }),
         };
 
         info!("Sending signed quote for blueprint: {}", blueprint_hash_hex);
@@ -160,7 +148,7 @@ impl PricingEngine for PricingEngineService {
 pub async fn run_rpc_server(
     config: Arc<OperatorConfig>,
     cache: Arc<PriceCache>,
-    signer: Arc<OperatorSigner>,
+    signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
 ) -> anyhow::Result<()> {
     let addr = config.rpc_bind_address.parse()?;
     info!("gRPC server listening on {}", addr);

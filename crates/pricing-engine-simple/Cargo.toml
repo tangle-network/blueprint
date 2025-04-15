@@ -75,14 +75,22 @@ sysinfo = "0.30"
 num_cpus = "1.16"
 
 # Utilities
-chrono = { workspace = true, features = ["serde", "now"] }
+# Add serde feature to chrono
+chrono = { version = "0.4", features = ["serde"] }
 libc = "0.2.147"  # For direct I/O support
 
+# Add tonic and prost for gRPC server
+tonic = { version = "0.11", features = ["transport", "codegen"] }
+prost = "0.12"
+
+# Combine dev-dependencies into one section and remove duplicates
 [dev-dependencies]
-hex = { workspace = true }
+test-log = "0.2"
+tokio = { version = "1", features = ["full"] }
 serial_test = { workspace = true, features = ["async"] }
 blueprint-networking = { workspace = true, features = ["testing"] }
 blueprint-testing-utils = { workspace = true }
+tonic = "0.11"
 
 [build-dependencies]
 tonic-build = "0.11"

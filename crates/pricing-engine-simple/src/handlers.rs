@@ -21,11 +21,11 @@ pub async fn handle_blueprint_update(
 ) -> Result<()> {
     info!("Handling update for blueprint: {}", blueprint_hash);
 
-    // 1. Configure Benchmark
+    // Configure Benchmark
     let benchmark_duration = config.benchmark_duration;
     let benchmark_interval = config.benchmark_interval;
 
-    // 2. Run Benchmark (Potentially long-running, ensure it doesn't block critical paths)
+    // Run Benchmark (Potentially long-running, ensure it doesn't block critical paths)
     let benchmark_result = run_benchmark_suite(
         blueprint_hash.clone(),
         "native".to_string(),
@@ -48,14 +48,14 @@ pub async fn handle_blueprint_update(
         return Ok(()); // Or return an error depending on desired behavior
     }
 
-    // 3. Calculate Price
+    // Calculate Price
     let price_model = calculate_price(benchmark_result, config.price_scaling_factor)?;
     info!(
         "Calculated price model for {}: {:?}",
         blueprint_hash, price_model
     );
 
-    // 4. Store Price in Cache
+    // Store Price in Cache
     cache.store_price(&blueprint_hash, &price_model)?;
 
     info!(

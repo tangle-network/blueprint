@@ -135,6 +135,7 @@ impl Default for BenchmarkRunConfig {
 
 /// Run a comprehensive benchmark suite to measure various system resources
 /// This is the main entry point for benchmarking
+#[allow(clippy::too_many_arguments)]
 pub fn run_benchmark_suite(
     job_id: String,
     mode: String,
@@ -188,7 +189,7 @@ pub fn run_benchmark_suite(
     };
 
     // Measure available storage
-    if let Ok(output) = std::process::Command::new("df").args(&["-h", "/"]).output() {
+    if let Ok(output) = std::process::Command::new("df").args(["-h", "/"]).output() {
         if let Ok(output_str) = String::from_utf8(output.stdout) {
             if let Some(line) = output_str.lines().nth(1) {
                 let parts: Vec<&str> = line.split_whitespace().collect();

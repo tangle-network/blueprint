@@ -87,7 +87,7 @@ fn test_benchmark_suite() {
         true, // run_cpu_test
         true, // run_memory_test
         true, // run_io_test
-        true,  // run_network_test
+        true, // run_network_test
         true, // run_gpu_test
     );
     assert!(result.is_ok());

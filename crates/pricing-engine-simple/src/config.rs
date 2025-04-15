@@ -41,6 +41,9 @@ pub struct OperatorConfig {
 
     /// Maximum number of concurrent RPC connections
     pub rpc_max_connections: u32,
+
+    /// Validity duration for generated quotes (in seconds)
+    pub quote_validity_duration_secs: u64,
 }
 
 /// Load configuration from a file or use defaults
@@ -59,6 +62,7 @@ pub fn load_config() -> Result<OperatorConfig> {
         rpc_port: 9000,
         rpc_timeout: 30,
         rpc_max_connections: 100,
+        quote_validity_duration_secs: 300, // Default to 5 minutes
     })
 }
 

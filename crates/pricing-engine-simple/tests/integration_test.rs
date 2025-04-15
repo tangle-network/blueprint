@@ -20,6 +20,7 @@ fn create_test_config() -> OperatorConfig {
         benchmark_duration: 10,
         benchmark_interval: 1,
         price_scaling_factor: 1000000.0,
+        quote_validity_duration_secs: 300,
         keypair_path: "/tmp/test-keypair".to_string(),
         keystore_path: "/tmp/test-keystore".to_string(),
         rpc_bind_address: "127.0.0.1".to_string(),
@@ -177,11 +178,11 @@ async fn test_operator_signer() -> Result<()> {
     let operator_signer_arc = init_operator_signer(&config).await?;
 
     // Extract the public key for later comparison
-    let public_key = operator_signer_arc.public_key();
+    let public_key = operator_signer_arc.lock().await.public_key();
 
     // Extract the OperatorSigner from the Arc
     // This will fail if there are other references to the Arc
-    let mut operator_signer = match Arc::try_unwrap(operator_signer_arc) {
+    let operator_signer = match Arc::try_unwrap(operator_signer_arc) {
         Ok(signer) => signer,
         Err(_) => panic!("Could not unwrap Arc - there are other references"),
     };
@@ -195,7 +196,7 @@ async fn test_operator_signer() -> Result<()> {
     };
 
     // Sign the payload
-    let signed_quote = operator_signer.sign_quote(payload)?;
+    let signed_quote = operator_signer.lock().await.sign_quote(payload)?;
 
     // Verify the signature
     assert_eq!(signed_quote.payload.blueprint_id, 123);

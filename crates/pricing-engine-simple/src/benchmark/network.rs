@@ -86,7 +86,7 @@ pub fn run_network_benchmark(_config: &BenchmarkRunConfig) -> Result<NetworkBenc
     // Create a temporary file with random data for upload
     let temp_file = "/tmp/network_benchmark_upload.dat";
     let _ = Command::new("dd")
-        .args(&[
+        .args([
             "if=/dev/urandom",
             &format!("of={}", temp_file),
             "bs=1M",
@@ -99,7 +99,7 @@ pub fn run_network_benchmark(_config: &BenchmarkRunConfig) -> Result<NetworkBenc
 
     // Upload the file
     let upload_status = Command::new("curl")
-        .args(&[
+        .args([
             "-s",
             "-X",
             "POST",
@@ -175,7 +175,7 @@ pub fn run_network_benchmark(_config: &BenchmarkRunConfig) -> Result<NetworkBenc
 fn measure_network_latency() -> Result<(f32, f32, f32)> {
     // Use ping to measure latency to a reliable server (Google's DNS)
     let ping_output = Command::new("ping")
-        .args(&["-c", "10", "-i", "0.2", "8.8.8.8"])
+        .args(["-c", "10", "-i", "0.2", "8.8.8.8"])
         .output()
         .map_err(|e| PricingError::Benchmark(format!("Failed to run ping: {}", e)))?;
 

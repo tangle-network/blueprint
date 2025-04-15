@@ -583,8 +583,8 @@ fn fill_buffer(buffer: &mut [u8], offset: u64) {
 
     // Fill main data area with random values
     let mut rng = StdRng::from_entropy();
-    for i in 0..data_size {
-        buffer[i] = rng.r#gen();
+    for (_i, byte) in buffer.iter_mut().enumerate().take(data_size) {
+        *byte = rng.r#gen();
     }
 
     // Calculate checksum of the data

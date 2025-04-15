@@ -37,5 +37,10 @@ pub use app::{
     spawn_event_processor, start_blockchain_listener, wait_for_shutdown,
 };
 
+// Include generated gRPC code
+pub mod pricing_engine {
+    include!(concat!(env!("OUT_DIR"), "/pricing_engine.rs"));
+}
+
 #[cfg(test)]
 mod tests;

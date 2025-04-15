@@ -18,7 +18,7 @@ pub struct QuotePayload {
 
 impl QuotePayload {
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        bincode::serialize(self).map_err(|e| PricingError::Serialization(e))
+        bincode::serialize(self).map_err(PricingError::Serialization)
     }
 }
 

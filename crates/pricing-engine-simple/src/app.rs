@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{Mutex, mpsc};
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
@@ -24,7 +24,7 @@ use blueprint_keystore::backends::Backend;
 /// Initialize the logging system with the specified log level
 pub fn init_logging(log_level: &str) {
     let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level.to_string()));
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
     tracing_subscriber::fmt().with_env_filter(env_filter).init();
 }
 
@@ -75,7 +75,7 @@ pub async fn init_price_cache(config: &Arc<OperatorConfig>) -> Result<Arc<PriceC
 /// Initialize the operator signer with a concrete key type implementation
 pub async fn init_operator_signer(
     config: &Arc<OperatorConfig>,
-) -> Result<Arc<OperatorSigner<blueprint_keystore::crypto::k256::K256Ecdsa>>> {
+) -> Result<Arc<Mutex<OperatorSigner<blueprint_keystore::crypto::k256::K256Ecdsa>>>> {
     use blueprint_keystore::crypto::k256::K256Ecdsa;
     use blueprint_keystore::{Keystore, KeystoreConfig};
     use std::path::Path;
@@ -98,7 +98,7 @@ pub async fn init_operator_signer(
     let public_key = match keystore.list_local::<K256Ecdsa>()? {
         keys if !keys.is_empty() => {
             info!("Using existing K256Ecdsa operator key");
-            keys[0].clone()
+            keys[0]
         }
         _ => {
             info!("Generating new K256Ecdsa operator key");
@@ -117,7 +117,7 @@ pub async fn init_operator_signer(
         signer.public_key()
     );
 
-    Ok(Arc::new(signer))
+    Ok(Arc::new(Mutex::new(signer)))
 }
 
 /// Process blockchain events and update pricing as needed

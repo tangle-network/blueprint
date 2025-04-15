@@ -1,7 +1,10 @@
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::mpsc;
-use tokio::time::sleep;
+
+use blueprint_crypto::KeyType;
+use blueprint_crypto::k256::K256Ecdsa;
+use blueprint_pricing_engine_simple_lib::pricing_engine::GetPriceRequest;
+use blueprint_pricing_engine_simple_lib::pricing_engine::pricing_engine_server::PricingEngine;
+use blueprint_pricing_engine_simple_lib::service::rpc::server::PricingEngineService;
 
 use blueprint_pricing_engine_simple_lib::{
     app::{init_operator_signer, init_price_cache},
@@ -10,12 +13,12 @@ use blueprint_pricing_engine_simple_lib::{
     config::OperatorConfig,
     error::Result,
     pricing::{self, PriceModel},
-    service::blockchain::event::BlockchainEvent,
-    signer::{BlueprintId, QuotePayload},
+    signer::QuotePayload as SignerQuotePayload, // Import the signer's payload
 };
 
 use blueprint_crypto_core::BytesEncoding;
 use chrono::Utc;
+use tonic::Request;
 
 // Helper function to initialize test logging
 fn init_test_logging() {
@@ -39,15 +42,16 @@ fn create_test_config() -> OperatorConfig {
         rpc_port: 9000,
         rpc_timeout: 5,
         rpc_max_connections: 10,
+        quote_validity_duration_secs: 300, // e.g., 5 minutes for testing
     }
 }
 
 // Helper function to create a test blueprint hash
-fn create_test_blueprint_hash() -> BlueprintHash {
+fn create_test_blueprint_hash() -> ([u8; 32], BlueprintHash) {
     // Create a deterministic test hash (32 bytes of data)
-    let hash_bytes = [0u8; 32];
+    let hash_bytes = [1u8; 32];
     // Convert to hex string
-    hex::encode(hash_bytes)
+    (hash_bytes, hex::encode(hash_bytes))
 }
 
 // Helper function to create a test price model
@@ -87,47 +91,31 @@ fn create_test_price_model() -> PriceModel {
     }
 }
 
-// Helper function to simulate a blockchain event
-fn create_test_blockchain_event() -> BlockchainEvent {
-    // Create a mock Registered event
-    // This is a simplified version that avoids using the actual Registered struct
-    // which has fields that are difficult to construct in a test
-    BlockchainEvent::Unknown("Test event".to_string())
-}
-
 #[tokio::test]
 async fn test_pricing_engine_components() -> Result<()> {
-    // Initialize logging
     init_test_logging();
 
-    // Step 1: Set up configuration and components
     let config = Arc::new(create_test_config());
 
-    // Create keystore directory if it doesn't exist
     let keystore_path = std::path::Path::new(&config.keystore_path);
     if !keystore_path.exists() {
         std::fs::create_dir_all(keystore_path)?;
     }
 
-    // Create cache directory if it doesn't exist
     let cache_path = std::path::Path::new(&config.database_path);
     if !cache_path.exists() {
         std::fs::create_dir_all(cache_path)?;
     }
 
-    // Initialize price cache
     let price_cache = init_price_cache(&config).await?;
 
-    // Initialize operator signer
-    let operator_signer = init_operator_signer(&config).await?;
+    let _operator_signer_arc = init_operator_signer(&config).await?;
 
-    // Step 2: Add a test price model to the cache
-    let blueprint_hash = create_test_blueprint_hash();
+    let (_blueprint_bytes, blueprint_hash_hex) = create_test_blueprint_hash();
     let price_model = create_test_price_model();
-    price_cache.store_price(&blueprint_hash, &price_model)?;
+    price_cache.store_price(&blueprint_hash_hex, &price_model)?;
 
-    // Step 3: Verify the price model was stored correctly
-    let retrieved_model = price_cache.get_price(&blueprint_hash)?;
+    let retrieved_model = price_cache.get_price(&blueprint_hash_hex)?;
     assert!(
         retrieved_model.is_some(),
         "Price model should be in the cache"
@@ -139,43 +127,6 @@ async fn test_pricing_engine_components() -> Result<()> {
         "Retrieved price should match stored price"
     );
 
-    // Step 4: Test the operator signer
-    // Extract the public key for verification
-    let public_key = operator_signer.public_key();
-
-    // Create a test quote payload
-    let blueprint_id: BlueprintId = 12345;
-    let quote_payload = QuotePayload {
-        blueprint_id,
-        price_wei: 1000000,
-        expiry: 1000,
-        timestamp: 500,
-    };
-
-    // Extract the signer from Arc for testing
-    // This will fail if there are other references to the Arc
-    let mut operator_signer = match Arc::try_unwrap(operator_signer) {
-        Ok(signer) => signer,
-        Err(_) => panic!("Could not unwrap Arc, there are other references"),
-    };
-
-    // Sign the quote
-    let signed_quote = operator_signer.sign_quote(quote_payload)?;
-
-    // Verify the signature is present
-    assert!(
-        signed_quote.signature.to_bytes().len() > 0,
-        "Signature should not be empty"
-    );
-
-    // Verify the public key matches
-    assert_eq!(
-        signed_quote.signer_pubkey.to_bytes(),
-        public_key.to_bytes(),
-        "Signer public key should match"
-    );
-
-    // Step 5: Test price calculation
     let cpu_result = CpuBenchmarkResult {
         num_cores_detected: 4,
         avg_cores_used: 3.0,
@@ -207,13 +158,11 @@ async fn test_pricing_engine_components() -> Result<()> {
     let calculated_price =
         pricing::calculate_price(benchmark_profile.clone(), config.price_scaling_factor)?;
 
-    // Verify the price calculation
     assert!(
         calculated_price.price_per_second_wei > 0,
         "Calculated price should be greater than zero"
     );
 
-    // Verify the benchmark profile was included
     assert!(
         calculated_price.benchmark_profile.is_some(),
         "Benchmark profile should be included in the price model"
@@ -222,43 +171,108 @@ async fn test_pricing_engine_components() -> Result<()> {
     Ok(())
 }
 
-// Test for simulating blockchain events
 #[tokio::test]
-async fn test_blockchain_event_handling() -> Result<()> {
-    // Initialize logging
+async fn test_rpc_get_price_flow() -> Result<()> {
     init_test_logging();
 
-    // Set up configuration and components
     let config = Arc::new(create_test_config());
+    let (blueprint_bytes, blueprint_hash_hex) = create_test_blueprint_hash();
+    let price_model = create_test_price_model();
 
-    // Create cache directory if it doesn't exist
+    let keystore_path = std::path::Path::new(&config.keystore_path);
+    if !keystore_path.exists() {
+        std::fs::create_dir_all(keystore_path)?;
+    }
     let cache_path = std::path::Path::new(&config.database_path);
     if !cache_path.exists() {
         std::fs::create_dir_all(cache_path)?;
     }
 
-    // Initialize price cache
     let price_cache = init_price_cache(&config).await?;
+    let operator_signer = init_operator_signer(&config).await?;
 
-    // Create a channel for blockchain events
-    let (event_tx, event_rx) = mpsc::channel::<BlockchainEvent>(10);
+    price_cache.store_price(&blueprint_hash_hex, &price_model)?;
 
-    // Start the event processor
-    let processor_handle = blueprint_pricing_engine_simple_lib::app::spawn_event_processor(
-        event_rx,
-        price_cache.clone(),
-        config.clone(),
+    let pricing_service =
+        PricingEngineService::new(config.clone(), price_cache.clone(), operator_signer.clone());
+
+    let request = Request::new(GetPriceRequest {
+        blueprint_hash_hex: blueprint_hash_hex.clone(),
+    });
+
+    let response = pricing_service.get_price(request).await;
+
+    assert!(response.is_ok(), "RPC call failed: {:?}", response.err());
+    let response = response.unwrap().into_inner();
+
+    assert!(response.quote.is_some(), "Response should contain a quote");
+    let signed_quote_rpc = response.quote.unwrap();
+
+    assert!(
+        signed_quote_rpc.payload.is_some(),
+        "Quote should contain a payload"
+    );
+    let payload_rpc = signed_quote_rpc.payload.unwrap();
+
+    assert_eq!(
+        payload_rpc.blueprint_hash,
+        blueprint_bytes.to_vec(),
+        "Blueprint hash in payload mismatch"
+    );
+    assert_eq!(
+        payload_rpc.price_wei,
+        price_model.price_per_second_wei.to_string(),
+        "Price mismatch"
+    );
+    assert!(
+        payload_rpc.expiry > payload_rpc.timestamp,
+        "Expiry should be after timestamp"
     );
 
-    // Create and send a test blockchain event
-    let event = create_test_blockchain_event();
-    event_tx.send(event).await.expect("Failed to send event");
+    // Verify signature
+    // Reconstruct the *exact* payload structure that was signed inside get_price
+    // This must match the `signer::QuotePayload` struct.
 
-    // Give the processor time to process the event
-    sleep(Duration::from_millis(500)).await;
+    // Derive the blueprint_id from the first 8 bytes of the original hash
+    // This MUST match the derivation logic in the server
+    let derived_blueprint_id = u64::from_be_bytes(
+        blueprint_bytes[0..8]
+            .try_into()
+            .expect("Slice length mismatch"),
+    );
 
-    // Shut down the processor
-    processor_handle.abort();
+    let internal_payload_for_verification = SignerQuotePayload {
+        // Use the derived ID that the server signed
+        blueprint_id: derived_blueprint_id,
+        price_wei: payload_rpc
+            .price_wei
+            .parse::<u128>()
+            .expect("Invalid price format in response"),
+        expiry: payload_rpc.expiry,
+        timestamp: payload_rpc.timestamp,
+    };
+
+    // Serialize the reconstructed internal payload to get the message bytes
+    let message_bytes = bincode::serialize(&internal_payload_for_verification)
+        .expect("Failed to serialize internal payload for verification");
+
+    let public_key_bytes = signed_quote_rpc.signer_pubkey;
+    let signature_bytes = signed_quote_rpc.signature;
+
+    let public_key = <K256Ecdsa as KeyType>::Public::from_bytes(&public_key_bytes)
+        .expect("Failed to deserialize public key from response");
+
+    let signature = <K256Ecdsa as KeyType>::Signature::from_bytes(&signature_bytes)
+        .expect("Failed to deserialize signature from response");
+
+    let is_valid = K256Ecdsa::verify(&public_key, &message_bytes, &signature);
+    assert!(is_valid, "RPC response signature verification failed");
+
+    assert_eq!(
+        public_key_bytes,
+        operator_signer.lock().await.public_key().to_bytes(),
+        "Signer public key mismatch"
+    );
 
     Ok(())
 }

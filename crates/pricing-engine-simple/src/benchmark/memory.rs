@@ -105,8 +105,8 @@ pub fn run_memory_benchmark(config: &BenchmarkRunConfig) -> Result<MemoryBenchma
 
             // Initialize buffer with some data
             let mut rng = rand::thread_rng();
-            for idx in 0..buffer.len() {
-                buffer[idx] = (rng.gen_range(0..256)) as u8;
+            for byte in buffer.iter_mut() {
+                *byte = (rng.gen_range(0..256)) as u8;
             }
 
             // Prepare for random access if needed
@@ -144,9 +144,8 @@ pub fn run_memory_benchmark(config: &BenchmarkRunConfig) -> Result<MemoryBenchma
                                 // Random read - read from random offsets
                                 let mut sum = 0u8;
                                 let offset_len = std::cmp::min(offsets.len(), thread_ops as usize);
-                                for i in 0..offset_len {
-                                    let offset = offsets[i];
-                                    sum = sum.wrapping_add(buffer[offset]);
+                                for offset in offsets.iter().take(offset_len) {
+                                    sum = sum.wrapping_add(buffer[*offset]);
                                 }
                                 // Use sum to prevent compiler optimization
                                 if sum == 123 {
@@ -159,16 +158,15 @@ pub fn run_memory_benchmark(config: &BenchmarkRunConfig) -> Result<MemoryBenchma
                         match thread_access_mode {
                             MemoryAccessMode::Sequential => {
                                 // Sequential write - write to entire buffer
-                                for j in 0..buffer.len() {
-                                    buffer[j] = (j % 256) as u8;
+                                for (j, byte) in buffer.iter_mut().enumerate() {
+                                    *byte = (j % 256) as u8;
                                 }
                             }
                             MemoryAccessMode::Random => {
                                 // Random write - write to random offsets
                                 let offset_len = std::cmp::min(offsets.len(), thread_ops as usize);
-                                for i in 0..offset_len {
-                                    let offset = offsets[i];
-                                    buffer[offset] = (thread_id % 256) as u8;
+                                for offset in offsets.iter().take(offset_len) {
+                                    buffer[*offset] = (thread_id % 256) as u8;
                                 }
                             }
                         }
@@ -186,8 +184,7 @@ pub fn run_memory_benchmark(config: &BenchmarkRunConfig) -> Result<MemoryBenchma
                             MemoryAccessMode::Random => {
                                 // Random iteration
                                 let offset_len = std::cmp::min(offsets.len(), thread_ops as usize);
-                                for i in 0..offset_len {
-                                    let offset = offsets[i];
+                                for offset in offsets.iter().take(offset_len) {
                                     // No-op, just access random index
                                     std::hint::black_box(offset);
                                 }
