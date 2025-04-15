@@ -212,7 +212,7 @@ chrono = { version = "0.4.40", default-features = false }
 auto_impl = { version = "1.2.1", default-features = false }
 eigenlayer-contract-deployer = { version = "0.1.0", default-features = false }
 cargo_toml = { version = "0.21.0", default-features = false }
-docktopus = { version = "0.1.0", default-features = false }
+docktopus = { version = "0.2.0", default-features = false }
 itertools = { version = "0.14.0", default-features = false }
 paste = { version = "1.0.15", default-features = false }
 proc-macro2 = { version = "1.0", default-features = false }
@@ -284,6 +284,9 @@ metrics = { version = "0.24.1", default-features = false }
 
 [profile.dev.package.backtrace]
 opt-level = 3
+
+[profile.release.package."cargo-tangle"]
+debug = true
 
 # The profile that 'cargo dist' will build with
 [profile.dist]

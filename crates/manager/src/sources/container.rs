@@ -9,6 +9,8 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use tokio::process::Command;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, log, warn};
+use blueprint_runner::config::BlueprintEnvironment;
+use std::future::Future;
 
 pub struct ContainerSource {
     pub fetcher: ImageRegistryFetcher,
@@ -55,9 +57,10 @@ impl BlueprintSourceHandler for ContainerSource {
 
     async fn spawn(
         &mut self,
+        env: &BlueprintEnvironment,
         service: &str,
         _args: Vec<String>,
-        env: Vec<(String, String)>,
+        env_vars: Vec<(String, String)>,
     ) -> Result<ProcessHandle> {
         let image = match &self.resolved_image {
             Some(img) => img.clone(),
@@ -67,23 +70,22 @@ impl BlueprintSourceHandler for ContainerSource {
         let builder = DockerBuilder::new()
             .await
             .map_err(|e| Error::Other(e.to_string()))?;
-        let client = builder.client().clone();
-
-        let client = Arc::new(client);
+        let client = builder.client();
 
         let (stop_tx, stop_rx) = oneshot::channel::<()>();
         let (status_tx, status_rx) = mpsc::unbounded_channel::<Status>();
 
         let service_name = service.to_string();
-        let env_clone = env.clone();
-        tokio::spawn(run_container(
+        let task = create_container_task(
             client,
             image,
-            env_clone,
+            env.keystore_uri.clone(),
+            env_vars,
             status_tx,
             stop_rx,
             service_name,
-        ));
+        )?;
+        tokio::spawn(task);
 
         Ok(ProcessHandle::new(status_rx, stop_tx))
     }
@@ -97,42 +99,51 @@ impl BlueprintSourceHandler for ContainerSource {
     }
 }
 
-async fn run_container(
+fn create_container_task(
     client: Arc<Docker>,
     image: String,
-    env: Vec<(String, String)>,
+    keystore_uri: String,
+    env_vars: Vec<(String, String)>,
     status_tx: mpsc::UnboundedSender<Status>,
-    mut stop_rx: oneshot::Receiver<()>,
+    stop_rx: oneshot::Receiver<()>,
     service_name: String,
-) {
-    let mut container = Container::new(&client, image);
-    container.env(env.into_iter().map(|(k, v)| format!("{k}={v}")));
+) -> Result<impl Future<Output = ()> + Send> {
+    let mut container = Container::new(client, image);
+    container.env(env_vars.into_iter().map(|(k, v)| format!("{k}={v}")));
 
-    let container_run = async {
-        info!("Starting process execution for {service_name}");
-        let _ = status_tx.send(Status::Running);
+    let keystore_uri_absolute = std::path::absolute(&keystore_uri)?;
+    container.binds([format!(
+        "{}:{keystore_uri}",
+        keystore_uri_absolute.display()
+    )]);
 
-        let output = container.start(true).await;
-        if output.is_ok() {
-            let _ = status_tx.send(Status::Finished);
-        } else {
-            let _ = status_tx.send(Status::Error);
-        }
-
-        if let Err(e) = container.stop().await {
-            let id = container.id();
-            warn!("Failed to stop container with id `{id:?}`: {e}");
-        }
-        warn!("Process for {service_name} exited: {output:?}");
-    };
-
-    tokio::select! {
-        _ = &mut stop_rx => {
-            if let Err(e) = container.stop().await {
-                let id = container.id();
-                warn!("Stop signal received but failed to stop container with id `{id:?}`: {e}");
+    Ok(async move {
+        let container_future = async {
+            info!("Starting process execution for {service_name}");
+            let _ = status_tx.send(Status::Running);
+            let output = container.start(true).await;
+            if output.is_ok() {
+                let _ = status_tx.send(Status::Finished);
+            } else {
+                let _ = status_tx.send(Status::Error);
             }
-        },
-        () = container_run => {},
-    }
+            dbg!(output)
+        };
+
+        tokio::select! {
+            _ = stop_rx => {
+                if let Err(e) = container.stop().await {
+                    let id = container.id();
+                    warn!("Stop signal received but failed to stop container with id {id:?}: {e}");
+                }
+            },
+            output = container_future => {
+                if let Err(e) = container.stop().await {
+                    let id = container.id();
+                    warn!("Failed to stop container with id {id:?}: {e}");
+                }
+                warn!("Process for {service_name} exited: {output:?}");
+            }
+        }
+    })
 }

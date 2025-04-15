@@ -30,7 +30,7 @@ impl VerifiedBlueprint {
     pub async fn start_services_if_needed(
         &mut self,
         gadget_config: &BlueprintEnvironment,
-        blueprint_manager_opts: &BlueprintManagerConfig,
+        manager_config: &BlueprintManagerConfig,
         active_gadgets: &mut ActiveGadgets,
     ) -> Result<()> {
         for (index, source) in self.fetchers.iter_mut().enumerate() {
@@ -53,7 +53,7 @@ impl VerifiedBlueprint {
                 let sub_service_str = format!("{service_str}-{service_id}");
                 let (arguments, env_vars) = process_arguments_and_env(
                     gadget_config,
-                    blueprint_manager_opts,
+                    manager_config,
                     blueprint_id,
                     *service_id,
                     blueprint,
@@ -66,7 +66,9 @@ impl VerifiedBlueprint {
                 );
 
                 // Now that the file is loaded, spawn the process
-                let mut handle = source.spawn(&sub_service_str, arguments, env_vars).await?;
+                let mut handle = source
+                    .spawn(gadget_config, &sub_service_str, arguments, env_vars)
+                    .await?;
 
                 if handle.status() != Status::Running {
                     error!("Process did not start successfully");
@@ -241,7 +243,7 @@ pub(crate) async fn handle_tangle_event(
     event: &TangleEvent,
     blueprints: &[RpcServicesWithBlueprint],
     gadget_config: &BlueprintEnvironment,
-    manager_opts: &BlueprintManagerConfig,
+    manager_config: &BlueprintManagerConfig,
     active_gadgets: &mut ActiveGadgets,
     poll_result: EventPollResult,
     client: &TangleServicesClient<TangleConfig>,
@@ -290,7 +292,7 @@ pub(crate) async fn handle_tangle_event(
         .chain(registration_blueprints)
     {
         let verified_blueprint = VerifiedBlueprint {
-            fetchers: get_fetcher_candidates(&blueprint, manager_opts)?,
+            fetchers: get_fetcher_candidates(&blueprint, manager_config)?,
             blueprint,
         };
 
@@ -308,7 +310,7 @@ pub(crate) async fn handle_tangle_event(
     // Step 3: Check to see if we need to start any new services
     for blueprint in &mut verified_blueprints {
         blueprint
-            .start_services_if_needed(gadget_config, manager_opts, active_gadgets)
+            .start_services_if_needed(gadget_config, manager_config, active_gadgets)
             .await?;
     }
 

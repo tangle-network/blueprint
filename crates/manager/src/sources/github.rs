@@ -9,6 +9,7 @@ use blueprint_core::info;
 use std::path::PathBuf;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::GithubFetcher;
 use tokio::io::AsyncWriteExt;
+use blueprint_runner::config::BlueprintEnvironment;
 
 pub struct GithubBinaryFetcher {
     pub fetcher: GithubFetcher,
@@ -86,6 +87,7 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
 
     async fn spawn(
         &mut self,
+        _env: &BlueprintEnvironment,
         service: &str,
         args: Vec<String>,
         env: Vec<(String, String)>,

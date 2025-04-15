@@ -6,6 +6,7 @@ use crate::sdk::utils::make_executable;
 use blueprint_core::trace;
 use std::path::PathBuf;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
+use blueprint_runner::config::BlueprintEnvironment;
 
 pub struct TestSourceFetcher {
     pub fetcher: TestFetcher,
@@ -112,6 +113,7 @@ impl BlueprintSourceHandler for TestSourceFetcher {
 
     async fn spawn(
         &mut self,
+        _env: &BlueprintEnvironment,
         service: &str,
         args: Vec<String>,
         env: Vec<(String, String)>,

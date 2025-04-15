@@ -55,9 +55,10 @@ pub trait BlueprintSourceHandler: Send + Sync {
     fn fetch(&mut self) -> impl Future<Output = crate::error::Result<()>> + Send;
     fn spawn(
         &mut self,
+        env: &BlueprintEnvironment,
         service: &str,
         args: Vec<String>,
-        env: Vec<(String, String)>,
+        env_vars: Vec<(String, String)>,
     ) -> impl Future<Output = crate::error::Result<ProcessHandle>> + Send;
     fn blueprint_id(&self) -> u64;
     fn name(&self) -> String;
@@ -68,8 +69,8 @@ unsafe impl Sync for DynBlueprintSource<'_> {}
 
 #[must_use]
 pub fn process_arguments_and_env(
-    gadget_config: &BlueprintEnvironment,
-    manager_opts: &BlueprintManagerConfig,
+    env: &BlueprintEnvironment,
+    manager_config: &BlueprintManagerConfig,
     blueprint_id: u64,
     service_id: u64,
     blueprint: &FilteredBlueprint,
@@ -78,68 +79,56 @@ pub fn process_arguments_and_env(
     let mut arguments = vec![];
     arguments.push("run".to_string());
 
-    if manager_opts.test_mode {
+    if manager_config.test_mode {
         arguments.push("--test-mode".to_string());
     }
 
-    if manager_opts.pretty {
+    if manager_config.pretty {
         arguments.push("--pretty".to_string());
     }
 
-    for bootnode in &gadget_config.bootnodes {
-        arguments.push(format!("--bootnodes={}", bootnode));
-    }
-
-    if manager_opts.test_mode {
+    if manager_config.test_mode {
         blueprint_core::warn!("Test mode is enabled");
     }
 
-    let chain = match gadget_config.http_rpc_endpoint.as_str() {
+    // TODO: Add support for keystore password
+    // if let Some(keystore_password) = &env.keystore_password {
+    //     arguments.push(format!("--keystore-password={}", keystore_password));
+    // }
+
+    // Uses occurrences of clap short -v
+    if manager_config.verbose > 0 {
+        arguments.push(format!("-{}", "v".repeat(manager_config.verbose as usize)));
+    }
+
+    let chain = match env.http_rpc_endpoint.as_str() {
         url if url.contains("127.0.0.1") || url.contains("localhost") => {
             SupportedChains::LocalTestnet
         }
         _ => SupportedChains::Testnet,
     };
 
-    arguments.extend([
-        format!("--http-rpc-url={}", gadget_config.http_rpc_endpoint),
-        format!("--ws-rpc-url={}", gadget_config.ws_rpc_endpoint),
-        format!("--keystore-uri={}", gadget_config.keystore_uri),
-        format!("--protocol={}", blueprint.protocol),
-        format!("--chain={}", chain),
-        format!("--blueprint-id={}", blueprint_id),
-        format!("--service-id={}", service_id),
-    ]);
-
-    // TODO: Add support for keystore password
-    // if let Some(keystore_password) = &gadget_config.keystore_password {
-    //     arguments.push(format!("--keystore-password={}", keystore_password));
-    // }
-
-    // Uses occurrences of clap short -v
-    if manager_opts.verbose > 0 {
-        arguments.push(format!("-{}", "v".repeat(manager_opts.verbose as usize)));
-    }
+    let bootnodes = env
+        .bootnodes
+        .iter()
+        .fold(String::new(), |acc, bootnode| format!("{acc} {bootnode}"));
 
     // Add required env vars for all child processes/gadgets
     let mut env_vars = vec![
         (
             "HTTP_RPC_URL".to_string(),
-            gadget_config.http_rpc_endpoint.to_string(),
+            env.http_rpc_endpoint.to_string(),
         ),
-        (
-            "WS_RPC_URL".to_string(),
-            gadget_config.ws_rpc_endpoint.to_string(),
-        ),
-        (
-            "KEYSTORE_URI".to_string(),
-            manager_opts.keystore_uri.clone(),
-        ),
+        ("WS_RPC_URL".to_string(), env.ws_rpc_endpoint.to_string()),
+        ("KEYSTORE_URI".to_string(), env.keystore_uri.clone()),
         ("BLUEPRINT_ID".to_string(), format!("{}", blueprint_id)),
         ("SERVICE_ID".to_string(), format!("{}", service_id)),
+        ("PROTOCOL".to_string(), blueprint.protocol.to_string()),
+        ("CHAIN".to_string(), chain.to_string()),
+        ("BOOTNODES".to_string(), bootnodes),
     ];
 
-    let base_data_dir = &manager_opts.data_dir;
+    let base_data_dir = &manager_config.data_dir;
     let data_dir = base_data_dir.join(format!("blueprint-{blueprint_id}-{sub_service_str}"));
     env_vars.push((
         "DATA_DIR".to_string(),
