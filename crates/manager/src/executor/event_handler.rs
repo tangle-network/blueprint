@@ -60,7 +60,10 @@ impl VerifiedBlueprint {
                     &sub_service_str,
                 );
 
-                info!("Starting protocol: {sub_service_str} with args: {arguments:?}");
+                info!(
+                    "Starting protocol: {sub_service_str} with args: {}",
+                    arguments.join(" ")
+                );
 
                 // Now that the file is loaded, spawn the process
                 let mut handle = source.spawn(&sub_service_str, arguments, env_vars).await?;
@@ -94,12 +97,7 @@ impl VerifiedBlueprint {
                             );
                         }
                         Status::Running => {
-                            error!("Process did not terminate successfully, aborting...");
-                            if !handle.abort() {
-                                error!(
-                                    "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
-                                );
-                            }
+                            error!("Received unexpected status: {status:?}");
                         }
                     }
                     continue;
