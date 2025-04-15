@@ -1,12 +1,13 @@
 [package]
 name = "blueprint-crypto-k256"
-version = "0.1.0"
+version = "0.1.0-alpha.2"
 description = "k256 crypto primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 blueprint-crypto-core = { workspace = true, features = ["k256"] }

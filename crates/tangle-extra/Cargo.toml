@@ -1,12 +1,13 @@
 [package]
 name = "blueprint-tangle-extra"
-version = "0.1.0"
+version = "0.1.0-alpha.2"
 description = "Tangle Network extra utilities for Blueprint framework"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -25,10 +26,10 @@ pin-project-lite = { workspace = true }
 # Macros
 serde_json = { workspace = true, features = ["alloc"], optional = true }
 cargo_metadata = { workspace = true, optional = true }
-thiserror = { workspace = true, optional = true }
 
 # Metadata types
 cid = { workspace = true, features = ["serde", "alloc"], optional = true }
+thiserror = { workspace = true, optional = true }
 
 [dev-dependencies]
 color-eyre = { workspace = true, features = ["color-spantrace", "track-caller"] }
@@ -37,7 +38,7 @@ paste = { workspace = true }
 serde_bytes = { workspace = true, features = ["alloc"] }
 serde_test.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-blueprint-testing-utils = { workspace = true, features = ["tangle"] }
+blueprint-testing-utils = { path = "../testing-utils", features = ["tangle"] }
 
 [features]
 default = ["std", "tracing", "macros"]
@@ -45,10 +46,10 @@ default = ["std", "tracing", "macros"]
 #! ### Core
 
 ## Enable standard library support
-std = ["futures-util/std", "cid?/std"]
+std = ["futures-util/std", "cid?/std", "tangle-subxt/std"]
 
 ## Enable support for web targets
-web = ["futures-util/std", "cid?/std"]
+web = ["futures-util/std", "cid?/std", "tangle-subxt/web"]
 
 ## Enable [tracing] support
 ##
@@ -58,7 +59,7 @@ tracing = ["blueprint-core/tracing"]
 #! ### Other
 
 ## Enable access to the metadata types used in `blueprint.json` generation
-metadata-types = ["dep:cid"]
+metadata-types = ["dep:cid", "dep:thiserror"]
 
 ## Enable access to the [`blueprint!`](crate::blueprint) macro
-macros = ["dep:serde_json", "dep:cargo_metadata", "dep:thiserror", "metadata-types"]
+macros = ["dep:serde_json", "dep:cargo_metadata", "metadata-types"]

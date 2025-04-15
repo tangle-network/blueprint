@@ -73,6 +73,9 @@ pub use evm_feat::*;
 #[cfg(feature = "eigenlayer")]
 pub use eigensdk;
 
+#[cfg(feature = "eigenlayer")]
+pub use blueprint_eigenlayer_extra as eigenlayer;
+
 // == Development utilities ==
 
 #[cfg(feature = "testing")]

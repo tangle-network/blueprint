@@ -1,4 +1,5 @@
 use blueprint_chain_setup::anvil::start_default_anvil_testnet;
+use blueprint_core::info;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::SupportedChains;
 use blueprint_runner::config::{ContextConfig, Protocol, ProtocolSettings};
@@ -15,7 +16,6 @@ use crate::command::deploy::eigenlayer::deploy_avs_contracts;
 use crate::command::run::run_eigenlayer_avs;
 
 #[tokio::test]
-#[allow(clippy::too_many_lines)]
 async fn test_run_eigenlayer_avs() -> Result<()> {
     setup_log();
 
@@ -104,6 +104,8 @@ evm_version = 'shanghai'",
         .map(|(_key, value)| value)
         .expect("Could not find TestContract in deployed contracts");
 
+    info!("Contract(s) deployed successfully");
+
     // Create a binary that will interact with the contract
     let binary_dir = temp_dir.path().join("binary");
     fs::create_dir_all(&binary_dir)?;
@@ -114,23 +116,23 @@ evm_version = 'shanghai'",
         r#"[package]
 name = "testing"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-blueprint-sdk = {{ git = "https://github.com/tangle-network/gadget.git", default-features = false, features = ["std", "eigenlayer", "evm", "macros", "build"] }}
-tokio = {{ version = "1.40", features = ["full"] }}
+blueprint-sdk = {{ git = "https://github.com/tangle-network/blueprint.git", default-features = false, features = ["std", "eigenlayer", "evm", "macros", "build"] }}
+tokio = {{ version = "1.44", features = ["full"] }}
 color-eyre = "0.6"
 alloy-primitives = {{ version = "0.8" }}
 alloy-sol-types = {{ version = "0.8" }}
-alloy-transport = {{ version = "0.9" }}
-alloy-transport-http = {{ version = "0.9" }}
-alloy-json-rpc = {{ version = "0.9" }}
-alloy-provider = {{ version = "0.9", features = ["reqwest", "ws"] }}
-alloy-rpc-client = {{ version = "0.9" }}
+alloy-transport = {{ version = "0.12" }}
+alloy-transport-http = {{ version = "0.12" }}
+alloy-json-rpc = {{ version = "0.12" }}
+alloy-provider = {{ version = "0.12", features = ["reqwest", "ws"] }}
+alloy-rpc-client = {{ version = "0.12" }}
 alloy-json-abi = {{ version = "0.8" }}
 alloy-dyn-abi = {{ version = "0.8" }}
-alloy-contract = {{ version = "0.9" }}
-alloy-network = {{ version = "0.9" }}
+alloy-contract = {{ version = "0.12" }}
+alloy-network = {{ version = "0.12" }}
 serde = {{ version = "1.0", features = ["derive"] }}
 serde_json = "1.0"
 "#
@@ -147,23 +149,25 @@ serde_json = "1.0"
     // Create the binary that will interact with the contract
     let main_rs = format!(
         r#"use blueprint_sdk::alloy::primitives::Address;
-use blueprint_sdk::info;
 use blueprint_sdk::std::{{string::ToString, fs, path::PathBuf}};
 use alloy_sol_types::sol;
 use alloy_transport::BoxTransport;
 use alloy_provider::RootProvider;
 use serde_json::Value;
-use blueprint_sdk::utils::evm::get_provider_http;
+use blueprint_sdk::evm::util::get_provider_http;
+use blueprint_sdk::runner::config::BlueprintEnvironment;
 
-#[blueprint_sdk::main(env)]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {{
-    info!("~~~ Test AVS Started ~~~");
+    println!("~~~ Test AVS Started ~~~");
+
+    let env = BlueprintEnvironment::load()?;
 
     let test_contract_address: Address = "{}".parse().expect("Invalid TEST_CONTRACT_ADDRESS");
-    info!("Test contract address: {{}}", test_contract_address);
+    println!("Test contract address: {{}}", test_contract_address);
 
     let temp_dir_str: String = "{}".to_string();
-    info!("Temp dir str: {{}}", temp_dir_str);
+    println!("Temp dir str: {{}}", temp_dir_str);
 
     // Create a provider
     let http_url = env.http_rpc_endpoint.clone();
@@ -175,19 +179,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     let json: Value = serde_json::from_str(&json_content)?;
     let abi = json["abi"].to_string();
     let abi = alloy_json_abi::JsonAbi::from_json_str(&abi).unwrap();
-    info!("Successfully read ABI");
+    println!("Successfully read ABI");
 
     // Create a contract instance
-    let test_contract = alloy_contract::ContractInstance::<
-        BoxTransport,
-        RootProvider<BoxTransport>,
-        alloy_network::Ethereum,
-    >::new(
+    let test_contract = alloy_contract::ContractInstance::new(
         test_contract_address,
         provider.clone(),
         alloy_contract::Interface::new(abi),
     );
-    info!("Successfully created contract instance");
+    println!("Successfully created contract instance");
 
     // Test the getValue function
     let get_result = test_contract
@@ -196,7 +196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
         .call()
         .await
         .unwrap();
-    info!("Successfully called getValue function");
+    println!("Successfully called getValue function");
 
     let get_result_value: alloy_primitives::U256 =
         if let alloy_dyn_abi::DynSolValue::Uint(val, 256) = get_result[0] {{
@@ -205,10 +205,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
             panic!("Expected Uint256, but did not receive correct type")
         }};
 
-    info!("Contract returned value: {{}}", get_result_value);
+    println!("Contract returned value: {{}}", get_result_value);
 
     if get_result_value == alloy_primitives::U256::from({}) {{
-        info!("Writing success file");
+        println!("Writing success file");
         fs::write("{}", "")?;
     }}
 
@@ -222,16 +222,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     );
     fs::write(binary_dir.join("src/main.rs"), main_rs)?;
 
+    info!("Building binary... This may take a while");
+
     // Build the binary
     let build_output = Command::new("cargo")
         .arg("build")
         .arg("--release")
         .current_dir(&binary_dir)
-        .output()
-        .expect("Failed to build binary");
-    if !build_output.status.success() {
-        blueprint_core::debug!("Cargo build output: {:?}", build_output);
+        .output();
+    if let Err(e) = build_output {
+        info!("Cargo build output: {:?}", e);
         panic!("Failed to build binary")
+    } else {
+        let output = build_output?;
+        if !output.status.success() {
+            info!("Cargo build output: {:?}", output);
+            panic!("Failed to build binary")
+        }
+        info!("Binary built successfully!");
     }
 
     let binary_path = binary_dir.join("target/release");
@@ -256,6 +264,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
 
     let run_opts = BlueprintEnvironment::load_with_config(config)
         .expect("Failed to load BlueprintEnvironment");
+
+    info!("Running AVS...");
 
     // Run the AVS
     let mut child =

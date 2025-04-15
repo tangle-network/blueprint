@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cli", "crates/*"]
+members = ["cli", "crates/*", "crates/networking/extensions/*", "examples/incredible-squaring-eigenlayer"]
 
 [workspace.package]
 authors = ["Tangle Network"]
@@ -8,6 +8,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 homepage = "https://tangle.tools"
 repository = "https://github.com/tangle-network/blueprint"
+rust-version = "1.86"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "deny", priority = -1 }
@@ -30,100 +31,105 @@ assigning_clones = "allow"
 transmute_ptr_to_ptr = "allow"
 items_after_statements = "allow"
 match_wildcard_for_single_variants = "allow"
+too_many_lines = "allow"
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
 
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
-blueprint-sdk = { version = "0.1.0", path = "./crates/sdk", default-features = false }
+blueprint-sdk = { version = "0.1.0-alpha.3", path = "./crates/sdk", default-features = false }
 
 # Job system
-blueprint-core = { version = "0.1.0", path = "crates/core", default-features = false }
-blueprint-router = { version = "0.1.0", path = "crates/router", default-features = false }
-blueprint-runner = { version = "0.1.0", path = "crates/runner", default-features = false }
+blueprint-core = { version = "0.1.0-alpha.1", path = "crates/core", default-features = false }
+blueprint-router = { version = "0.1.0-alpha.1", path = "crates/router", default-features = false }
+blueprint-runner = { version = "0.1.0-alpha.3", path = "crates/runner", default-features = false }
 
 # Extras
-blueprint-tangle-extra = { version = "0.1.0", path = "crates/tangle-extra", default-features = false }
-blueprint-evm-extra = { version = "0.1.0", path = "crates/evm-extra", default-features = false }
-blueprint-eigenlayer-extra = { version = "0.1.0", path = "crates/eigenlayer-extra", default-features = false }
-blueprint-producers-extra = { version = "0.1.0", path = "crates/producers-extra", default-features = false }
+blueprint-tangle-extra = { version = "0.1.0-alpha.2", path = "crates/tangle-extra", default-features = false }
+blueprint-evm-extra = { version = "0.1.0-alpha.1", path = "crates/evm-extra", default-features = false }
+blueprint-eigenlayer-extra = { version = "0.1.0-alpha.2", path = "crates/eigenlayer-extra", default-features = false }
+blueprint-producers-extra = { version = "0.1.0-alpha.1", path = "crates/producers-extra", default-features = false }
 
 # Blueprint Examples
 incredible-squaring-blueprint = { version = "0.1.1", path = "./examples/incredible-squaring", default-features = false }
 incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./examples/incredible-squaring-eigenlayer", default-features = false }
 
 # Blueprint utils
-blueprint-manager = { version = "0.2.2", path = "./crates/manager", default-features = false }
-blueprint-build-utils = { version = "0.1.0", path = "./crates/build-utils", default-features = false }
+blueprint-manager = { version = "0.3.0-alpha.3", path = "./crates/manager", default-features = false }
+blueprint-build-utils = { version = "0.1.0-alpha.1", path = "./crates/build-utils", default-features = false }
 
 # Chain Setup
-blueprint-chain-setup = { version = "0.1.0", path = "./crates/chain-setup", default-features = false }
-blueprint-chain-setup-common = { version = "0.1.0", path = "./crates/chain-setup/common", default-features = false }
-blueprint-chain-setup-tangle = { version = "0.1.0", path = "./crates/chain-setup/tangle", default-features = false }
-blueprint-chain-setup-anvil = { version = "0.1.0", path = "./crates/chain-setup/anvil", default-features = false }
+blueprint-chain-setup = { version = "0.1.0-alpha.3", path = "./crates/chain-setup", default-features = false }
+blueprint-chain-setup-common = { version = "0.1.0-alpha.3", path = "./crates/chain-setup/common", default-features = false }
+blueprint-chain-setup-tangle = { version = "0.1.0-alpha.3", path = "./crates/chain-setup/tangle", default-features = false }
+blueprint-chain-setup-anvil = { version = "0.1.0-alpha.3", path = "./crates/chain-setup/anvil", default-features = false }
 
 # Crypto
-blueprint-crypto-core = { version = "0.1.0", path = "./crates/crypto/core", default-features = false }
-blueprint-crypto-k256 = { version = "0.1.0", path = "./crates/crypto/k256", default-features = false }
-blueprint-crypto-sr25519 = { version = "0.1.0", path = "./crates/crypto/sr25519", default-features = false }
-blueprint-crypto-ed25519 = { version = "0.1.0", path = "./crates/crypto/ed25519", default-features = false }
-blueprint-crypto-hashing = { version = "0.1.0", path = "./crates/crypto/hashing", default-features = false }
-blueprint-crypto-bls = { version = "0.1.0", path = "./crates/crypto/bls", default-features = false }
-blueprint-crypto-bn254 = { version = "0.1.0", path = "./crates/crypto/bn254", default-features = false }
-blueprint-crypto-sp-core = { version = "0.1.0", path = "./crates/crypto/sp-core", default-features = false }
-blueprint-crypto = { version = "0.1.0", path = "./crates/crypto", default-features = false }
-blueprint-crypto-tangle-pair-signer = { version = "0.1.0", path = "./crates/crypto/tangle-pair-signer", default-features = false }
+blueprint-crypto-core = { version = "0.1.0-alpha.2", path = "./crates/crypto/core", default-features = false }
+blueprint-crypto-k256 = { version = "0.1.0-alpha.2", path = "./crates/crypto/k256", default-features = false }
+blueprint-crypto-sr25519 = { version = "0.1.0-alpha.2", path = "./crates/crypto/sr25519", default-features = false }
+blueprint-crypto-ed25519 = { version = "0.1.0-alpha.2", path = "./crates/crypto/ed25519", default-features = false }
+blueprint-crypto-hashing = { version = "0.1.0-alpha.1", path = "./crates/crypto/hashing", default-features = false }
+blueprint-crypto-bls = { version = "0.1.0-alpha.2", path = "./crates/crypto/bls", default-features = false }
+blueprint-crypto-bn254 = { version = "0.1.0-alpha.2", path = "./crates/crypto/bn254", default-features = false }
+blueprint-crypto-sp-core = { version = "0.1.0-alpha.2", path = "./crates/crypto/sp-core", default-features = false }
+blueprint-crypto = { version = "0.1.0-alpha.3", path = "./crates/crypto", default-features = false }
+blueprint-crypto-tangle-pair-signer = { version = "0.1.0-alpha.3", path = "./crates/crypto/tangle-pair-signer", default-features = false }
 
 # Clients
-blueprint-clients = { version = "0.1.0", path = "./crates/clients", default-features = false }
-blueprint-client-core = { version = "0.1.0", path = "./crates/clients/core", default-features = false }
-blueprint-client-eigenlayer = { version = "0.1.0", path = "./crates/clients/eigenlayer", default-features = false }
-blueprint-client-evm = { version = "0.1.0", path = "./crates/clients/evm", default-features = false }
-blueprint-client-tangle = { version = "0.1.0", path = "./crates/clients/tangle", default-features = false }
-blueprint-contexts = { version = "0.1.0", path = "./crates/contexts", default-features = false }
+blueprint-clients = { version = "0.1.0-alpha.3", path = "./crates/clients", default-features = false }
+blueprint-client-core = { version = "0.1.0-alpha.1", path = "./crates/clients/core", default-features = false }
+blueprint-client-eigenlayer = { version = "0.1.0-alpha.3", path = "./crates/clients/eigenlayer", default-features = false }
+blueprint-client-evm = { version = "0.1.0-alpha.1", path = "./crates/clients/evm", default-features = false }
+blueprint-client-tangle = { version = "0.1.0-alpha.3", path = "./crates/clients/tangle", default-features = false }
+blueprint-contexts = { version = "0.1.0-alpha.3", path = "./crates/contexts", default-features = false }
 
 # Macros
-blueprint-macros = { version = "0.1.0", path = "./crates/macros", default-features = false }
-blueprint-context-derive = { version = "0.3.1", path = "./crates/macros/context-derive", default-features = false }
+blueprint-macros = { version = "0.1.0-alpha.1", path = "./crates/macros", default-features = false }
+blueprint-context-derive = { version = "0.1.0-alpha.2", path = "./crates/macros/context-derive", default-features = false }
 
 # Stores
-blueprint-stores = { version = "0.1.0", path = "./crates/stores", default-features = false }
-blueprint-store-local-database = { version = "0.1.0", path = "./crates/stores/local-database", default-features = false }
+blueprint-stores = { version = "0.1.0-alpha.1", path = "./crates/stores", default-features = false }
+blueprint-store-local-database = { version = "0.1.0-alpha.1", path = "./crates/stores/local-database", default-features = false }
 
 # SDK
-blueprint-keystore = { version = "0.1.0", path = "./crates/keystore", default-features = false }
-blueprint-std = { version = "0.1.0", path = "./crates/std", default-features = false }
+blueprint-keystore = { version = "0.1.0-alpha.3", path = "./crates/keystore", default-features = false }
+blueprint-std = { version = "0.1.0-alpha.1", path = "./crates/std", default-features = false }
 
 # P2P
-blueprint-networking = { version = "0.1.0", path = "./crates/networking", default-features = false }
-blueprint-networking-round-based-extension = { version = "0.1.0", path = "./crates/networking/extensions/round-based", default-features = false }
+blueprint-networking = { version = "0.1.0-alpha.3", path = "./crates/networking", default-features = false }
+blueprint-networking-round-based-extension = { version = "0.1.0-alpha.3", path = "./crates/networking/extensions/round-based", default-features = false }
+blueprint-networking-agg-sig-gossip-extension = { version = "0.1.0-alpha.2", path = "./crates/networking/extensions/agg-sig-gossip", default-features = false }
 
 # Testing utilities
-blueprint-testing-utils = { version = "0.1.0", path = "./crates/testing-utils", default-features = false }
-blueprint-core-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/core", default-features = false }
-blueprint-anvil-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/anvil", default-features = false }
-blueprint-tangle-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/tangle", default-features = false }
-blueprint-eigenlayer-testing-utils = { version = "0.1.0", path = "./crates/testing-utils/eigenlayer", default-features = false }
+blueprint-testing-utils = { version = "0.1.0-alpha.3", path = "./crates/testing-utils", default-features = false }
+blueprint-core-testing-utils = { version = "0.1.0-alpha.3", path = "./crates/testing-utils/core", default-features = false }
+blueprint-anvil-testing-utils = { version = "0.1.0-alpha.3", path = "./crates/testing-utils/anvil", default-features = false }
+blueprint-tangle-testing-utils = { version = "0.1.0-alpha.3", path = "./crates/testing-utils/tangle", default-features = false }
+blueprint-eigenlayer-testing-utils = { version = "0.1.0-alpha.3", path = "./crates/testing-utils/eigenlayer", default-features = false }
 
 # Metrics
-blueprint-metrics = { version = "0.1.0", path = "./crates/metrics", default-features = false }
-blueprint-metrics-rpc-calls = { version = "0.1.0", path = "./crates/metrics/rpc-calls", default-features = false }
+blueprint-metrics = { version = "0.1.0-alpha.1", path = "./crates/metrics", default-features = false }
+blueprint-metrics-rpc-calls = { version = "0.1.0-alpha.1", path = "./crates/metrics/rpc-calls", default-features = false }
 
-cargo-tangle = { version = "0.1.0", path = "./cli", default-features = false }
+cargo-tangle = { version = "0.4.0-alpha.3", path = "./cli", default-features = false }
 cargo_metadata = { version = "0.18.1" }
 tnt-core-bytecode = { version = "0.4.0", default-features = false }
 
 # Tangle-related dependencies
-tangle-subxt = { version = "0.14.0", default-features = false }
+tangle-subxt = { version = "0.15", default-features = false }
 round-based = { version = "0.4.1", default-features = false }
 
 # Substrate dependencies
-parity-scale-codec = { version = "3.7.0", default-features = false }
-scale-info = { version = "2.0.3", default-features = false }
 sp-core = { version = "34.0.0", default-features = false }
-sp-io = { version = "38.0.0", default-features = false }
+sp-io = { version = "38.0.1", default-features = false }
 sp-runtime = { version = "39.0.0", default-features = false }
+sp-keystore = { version = "0.40.0", default-features = false }
+sc-keystore = { version = "33.0.0", default-features = false }
+sp-application-crypto = { version = "38.0.0", default-features = false }
+scale-info = { version = "2.11", default-features = false }
+parity-scale-codec = { version = "3.6", default-features = false }
 
 # Async & Runtime
 crossbeam = { version = "0.8", default-features = false }
@@ -131,18 +137,17 @@ crossbeam-channel = { version = "0.5", default-features = false }
 futures = { version = "0.3.30", default-features = false }
 futures-util = { version = "0.3.31", default-features = false }
 futures-core = { version = "0.3.31", default-features = false }
-tokio = { version = "1.44.1", default-features = false }
-tokio-util = { version = "0.7.14", default-features = false }
+tokio = { version = "^1", default-features = false }
+tokio-util = { version = "^0.7", default-features = false }
 tokio-cron-scheduler = { version = "0.13.0", default-features = false }
-tokio-stream = { version = "0.1.17", default-features = false }
+tokio-stream = { version = "^0.1", default-features = false }
 pin-project-lite = "0.2.7"
 tower = { version = "0.5.2", default-features = false }
-async-trait = { version = "0.1.88", default-features = false }
 async-stream = { version = "0.3.6", default-features = false }
 
 # CLI & Configuration
-cargo-generate = { version = "0.22.1", default-features = false }
-clap = { version = "4.5.16" }
+cargo-generate = { version = "0.23", default-features = false }
+clap = { version = "4.5.36" }
 clap-cargo = { version = "0.14", default-features = false }
 toml = { version = "0.8.19", default-features = false }
 dialoguer = { version = "0.11.0", default-features = false }
@@ -162,20 +167,21 @@ tnt-bls = { version = "0.1.8", default-features = false }
 tiny-keccak = { version = "2.0.2", default-features = false }
 
 # Data Structures & Serialization
+bitvec = { version = "1.0.1", default-features = false, features = ["atomic", "alloc"] }
 bincode = { version = "1.3.3", default-features = false }
 cid = { version = "0.11.1", default-features = false }
-indexmap = { version = "2.5.0", default-features = false }
+indexmap = { version = "2.9.0", default-features = false }
 lazy_static = { version = "1.5.0", default-features = false }
 serde = { version = "1.0.208", default-features = false }
 serde_bytes = { version = "0.11.15", default-features = false }
 serde_json = { version = "1.0", default-features = false }
 serde_test = { version = "1.0.177", default-features = false }
-dynosaur = { git = "https://github.com/spastorino/dynosaur.git", rev = "7a761a3", default-features = false }
+dynosaur = { version = "0.2.0", default-features = false }
 bytes = { version = "1.10.1", default-features = false }
 hashbrown = { version = "0.15.2", default-features = false }
 
 # Error Handling & Logging
-anyhow = { version = "1.0.93", default-features = false }
+anyhow = { version = "1.0.98", default-features = false }
 color-eyre = { version = "0.6", default-features = false }
 colored = { version = "3.0.0", default-features = false }
 log = { version = "0.4.22", default-features = false }
@@ -185,7 +191,6 @@ tracing-core = { version = "0.1.33", default-features = false }
 tracing-subscriber = { version = "0.3", default-features = false }
 
 # Networking & HTTP
-jsonrpsee = { version = "0.24.9", default-features = false }
 jsonrpc-core = { version = "18.0.0", default-features = false }
 jsonrpc-http-server = { version = "18.0.0", default-features = false }
 libp2p = { version = "0.55.0", default-features = false }
@@ -197,16 +202,18 @@ fs2 = { version = "0.4", default-features = false }
 lock_api = { version = "0.4.12", default-features = false }
 nix = { version = "0.29.0", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false }
-sysinfo = { version = "0.31.2", default-features = false }
+sysinfo = { version = "0.34.2", default-features = false }
 tempfile = { version = "3.13.0", default-features = false }
 uuid = { version = "1.16.0", default-features = false }
 once_cell = { version = "1.21.1", default-features = false }
-blake3 = { version = "1.5.5", default-features = false }
+blake3 = { version = "1.8.0", default-features = false }
 chrono = { version = "0.4.40", default-features = false }
 
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }
+eigenlayer-contract-deployer = { version = "0.1.0", default-features = false }
 cargo_toml = { version = "0.21.0", default-features = false }
+docktopus = { version = "0.1.0", default-features = false }
 itertools = { version = "0.14.0", default-features = false }
 paste = { version = "1.0.15", default-features = false }
 proc-macro2 = { version = "1.0", default-features = false }
@@ -264,7 +271,7 @@ rayon = { version = "1", default-features = false }
 zeroize = { version = "1.8.1", default-features = false }
 
 # Eigenlayer
-eigensdk = { git = "https://github.com/Serial-ATA/eigensdk-rs.git", branch = "alloy-update", default-features = false }
+eigensdk = { version = "0.5.0", default-features = false }
 rust-bls-bn254 = { version = "0.2.1", default-features = false }
 testcontainers = { version = "0.23.1", default-features = false }
 

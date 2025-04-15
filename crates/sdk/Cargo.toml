@@ -1,12 +1,13 @@
 [package]
 name = "blueprint-sdk"
-version = "0.1.0"
+version = "0.1.0-alpha.3"
 description = "Blueprint SDK for building decentralized and distributed services."
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -37,6 +38,7 @@ blueprint-crypto-tangle-pair-signer = { workspace = true, optional = true }
 
 # Eigenlayer and EVM-specific extras
 blueprint-evm-extra = { workspace = true, optional = true }
+blueprint-eigenlayer-extra = { workspace = true, optional = true }
 alloy = { workspace = true, optional = true, features = ["full"] }
 alloy-json-abi = { workspace = true, optional = true, features = ["serde_json"] }
 eigensdk = { workspace = true, optional = true, features = ["full"] }
@@ -83,6 +85,7 @@ std = [
     # Extras
     "blueprint-tangle-extra?/std",
     "blueprint-evm-extra?/std",
+    "blueprint-eigenlayer-extra?/std",
     "blueprint-chain-setup/std",
 ]
 
@@ -140,6 +143,8 @@ eigenlayer = [
     "dep:eigensdk",
     "blueprint-contexts/eigenlayer",
     "blueprint-clients/eigenlayer",
+    "blueprint-testing-utils?/eigenlayer",
+    "blueprint-eigenlayer-extra",
     "evm",
 ]
 
@@ -183,5 +188,5 @@ testing = ["dep:blueprint-testing-utils", "dep:tempfile", "dep:blueprint-chain-s
 cronjob = ["blueprint-producers-extra/cron"]
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["tangle", "evm", "eigenlayer", "networking", "round-based-compat", "local-store", "macros", "build", "testing", "cronjob"]
 rustdoc-args = ["--cfg", "docsrs"]

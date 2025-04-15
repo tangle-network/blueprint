@@ -1,0 +1,66 @@
+[package]
+name = "blueprint-networking-agg-sig-gossip-extension"
+version = "0.1.0-alpha.2"
+description = "Signature aggregation extension for Blueprint SDK networking"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+blueprint-core = { workspace = true }
+blueprint-crypto = { workspace = true }
+blueprint-networking = { workspace = true }
+blueprint-std = { workspace = true }
+bincode = { workspace = true }
+bitvec = { workspace = true, features = ["serde"] }
+tokio = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+dashmap = { workspace = true }
+crossbeam = { workspace = true }
+crossbeam-channel = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+libp2p = { workspace = true, features = [
+  "tokio",
+  "gossipsub",
+  "mdns",
+  "noise",
+  "macros",
+  "yamux",
+  "tcp",
+  "quic",
+  "request-response",
+  "cbor",
+  "identify",
+  "kad",
+  "dcutr",
+  "relay",
+  "ping",
+  "dns",
+  "autonat",
+  "upnp",
+] }
+blueprint-networking = { workspace = true, features = ["testing"] }
+blueprint-crypto = { path = "../../../crypto", features = ["sp-core", "bn254", "bls"] }
+blueprint-crypto-core = { path = "../../../crypto/core", features = ["tangle", "bn254"] }
+tokio = { workspace = true, features = ["full"] }
+tracing-subscriber = { workspace = true }
+sha2 = { workspace = true }
+rand_dev = "0.1"
+rand = { workspace = true }
+hex = { workspace = true }
+# We don't use it directly, but we need to enable `serde` feature
+generic-array = { version = "0.14", features = ["serde"] }
+
+[lints]
+workspace = true
+
+[features]
+default = ["std"]
+std = ["bitvec/std", "blueprint-crypto/std", "blueprint-networking/std", "blueprint-std/std"]

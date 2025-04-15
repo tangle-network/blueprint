@@ -2,108 +2,116 @@ use crate::config::BlueprintManagerConfig;
 use crate::error::{Error, Result};
 use crate::gadget::native::FilteredBlueprint;
 use crate::gadget::ActiveGadgets;
-use crate::sdk::utils::{
-    bounded_string_to_string, generate_running_process_status_handle, make_executable,
-};
+use crate::sdk::utils::bounded_string_to_string;
 use crate::sources::github::GithubBinaryFetcher;
-use crate::sources::{process_arguments_and_env, BinarySourceFetcher, DynBinarySourceFetcher};
+use crate::sources::{process_arguments_and_env, BlueprintSourceHandler, DynBlueprintSource, Status};
+use crate::sources::testing::TestSourceFetcher;
 use blueprint_clients::tangle::client::{TangleConfig, TangleEvent};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
-use blueprint_sdk::runner::config::Protocol;
-use blueprint_sdk::runner::config::BlueprintEnvironment;
+use blueprint_runner::config::Protocol;
+use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_core::{error, info, trace, warn};
 use blueprint_std::fmt::Debug;
-use blueprint_std::sync::atomic::Ordering;
 use tangle_subxt::subxt::utils::AccountId32;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::gadget::{
-    Gadget, GadgetSourceFetcher,
-};
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{BlueprintSource, NativeFetcher};
 use tangle_subxt::tangle_testnet_runtime::api::services::events::{
     JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
 };
+use crate::sources::container::ContainerSource;
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
 
 pub struct VerifiedBlueprint {
-    pub(crate) fetcher: Box<DynBinarySourceFetcher<'static>>,
+    pub(crate) fetchers: Vec<Box<DynBlueprintSource<'static>>>,
     pub(crate) blueprint: FilteredBlueprint,
 }
 
 impl VerifiedBlueprint {
     pub async fn start_services_if_needed(
-        &self,
+        &mut self,
         gadget_config: &BlueprintEnvironment,
         blueprint_manager_opts: &BlueprintManagerConfig,
         active_gadgets: &mut ActiveGadgets,
     ) -> Result<()> {
-        let blueprint_source = &self.fetcher;
-        let blueprint = &self.blueprint;
+        for (index, source) in self.fetchers.iter_mut().enumerate() {
+            let blueprint = &self.blueprint;
 
-        let blueprint_id = blueprint_source.blueprint_id();
-        if active_gadgets.contains_key(&blueprint_id) {
-            return Ok(());
-        }
-
-        let mut binary_download_path = blueprint_source.get_binary().await?;
-
-        // Ensure the binary is executable
-        if cfg!(target_family = "windows") {
-            if binary_download_path.extension().is_none() {
-                binary_download_path.set_extension("exe");
+            let blueprint_id = source.blueprint_id();
+            if active_gadgets.contains_key(&blueprint_id) {
+                return Ok(());
             }
-        } else if let Err(err) = make_executable(&binary_download_path) {
-            let msg = format!("Failed to make the binary executable: {err}");
-            warn!("{}", msg);
-            return Err(Error::Other(msg));
-        }
 
-        let service_str = blueprint_source.name();
-        for service_id in &blueprint.services {
-            let sub_service_str = format!("{service_str}-{service_id}");
-            let (arguments, env_vars) = process_arguments_and_env(
-                gadget_config,
-                blueprint_manager_opts,
-                blueprint_id,
-                *service_id,
-                blueprint,
-                &sub_service_str,
-            );
-
-            info!("Starting protocol: {sub_service_str} with args: {arguments:?}");
-
-            // Now that the file is loaded, spawn the process
-            let process_handle = tokio::process::Command::new(&binary_download_path)
-                .kill_on_drop(true)
-                .stdin(std::process::Stdio::null())
-                .current_dir(&std::env::current_dir()?)
-                .envs(env_vars)
-                .args(arguments)
-                .spawn()?;
-
-            if blueprint.registration_mode {
-                // We must wait for the process to exit successfully
-                let status = process_handle.wait_with_output().await?;
-                if status.status.success() {
-                    info!(
-                        "***Protocol (registration mode) {sub_service_str} executed successfully***"
-                    );
-                } else {
-                    error!(
-                        "Protocol (registration mode) {sub_service_str} failed to execute: {status:?}"
-                    );
-                }
+            if let Err(e) = source.fetch().await {
+                error!(
+                    "Failed to fetch blueprint from source {index}, attempting next available: {e}"
+                );
                 continue;
             }
 
-            // A normal running gadget binary. Store the process handle and let the event loop handle the rest
+            let service_str = source.name();
+            for service_id in &blueprint.services {
+                let sub_service_str = format!("{service_str}-{service_id}");
+                let (arguments, env_vars) = process_arguments_and_env(
+                    gadget_config,
+                    blueprint_manager_opts,
+                    blueprint_id,
+                    *service_id,
+                    blueprint,
+                    &sub_service_str,
+                );
 
-            let (status_handle, abort) =
-                generate_running_process_status_handle(process_handle, &sub_service_str);
+                info!("Starting protocol: {sub_service_str} with args: {arguments:?}");
 
-            active_gadgets
-                .entry(blueprint_id)
-                .or_default()
-                .insert(*service_id, (status_handle, Some(abort)));
+                // Now that the file is loaded, spawn the process
+                let mut handle = source.spawn(&sub_service_str, arguments, env_vars).await?;
+
+                if handle.status() != Status::Running {
+                    error!("Process did not start successfully");
+                    continue;
+                }
+
+                if blueprint.registration_mode {
+                    // We must wait for the process to exit successfully
+                    let Some(status) = handle.wait_for_status_change().await else {
+                        error!("Process status channel closed unexpectedly, aborting...");
+                        if !handle.abort() {
+                            error!(
+                                "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                            );
+                        }
+                        continue;
+                    };
+
+                    match status {
+                        Status::Finished => {
+                            info!(
+                                "***Protocol (registration mode) {sub_service_str} executed successfully***"
+                            );
+                        }
+                        Status::Error => {
+                            error!(
+                                "Protocol (registration mode) {sub_service_str} failed to execute: {status:?}"
+                            );
+                        }
+                        Status::Running => {
+                            error!("Process did not terminate successfully, aborting...");
+                            if !handle.abort() {
+                                error!(
+                                    "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                                );
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                active_gadgets
+                    .entry(blueprint_id)
+                    .or_default()
+                    .insert(*service_id, handle);
+            }
+
+            break;
         }
 
         Ok(())
@@ -225,7 +233,6 @@ pub(crate) fn check_blueprint_events(
     result
 }
 
-#[allow(clippy::too_many_lines)]
 pub(crate) async fn handle_tangle_event(
     event: &TangleEvent,
     blueprints: &[RpcServicesWithBlueprint],
@@ -253,7 +260,7 @@ pub(crate) async fn handle_tangle_event(
             let general_blueprint = FilteredBlueprint {
                 blueprint_id: *blueprint_id,
                 services: vec![0], // Add a dummy service id for now, since it does not matter for registration mode
-                gadget: blueprint.gadget,
+                sources: blueprint.sources.0,
                 name: bounded_string_to_string(&blueprint.metadata.name)?,
                 registration_mode: true,
                 protocol: DEFAULT_PROTOCOL,
@@ -270,7 +277,7 @@ pub(crate) async fn handle_tangle_event(
         .map(|r| FilteredBlueprint {
             blueprint_id: r.blueprint_id,
             services: r.services.iter().map(|r| r.id).collect(),
-            gadget: r.blueprint.gadget.clone(),
+            sources: r.blueprint.sources.0.clone(),
             name: bounded_string_to_string(&r.blueprint.metadata.name)
                 .unwrap_or("unknown_blueprint_name".to_string()),
             registration_mode: false,
@@ -278,10 +285,8 @@ pub(crate) async fn handle_tangle_event(
         })
         .chain(registration_blueprints)
     {
-        let mut fetcher_candidates = get_fetcher_candidates(&blueprint, manager_opts)?;
-
         let verified_blueprint = VerifiedBlueprint {
-            fetcher: fetcher_candidates.pop().expect("Should exist"),
+            fetchers: get_fetcher_candidates(&blueprint, manager_opts)?,
             blueprint,
         };
 
@@ -297,7 +302,7 @@ pub(crate) async fn handle_tangle_event(
     );
 
     // Step 3: Check to see if we need to start any new services
-    for blueprint in &verified_blueprints {
+    for blueprint in &mut verified_blueprints {
         blueprint
             .start_services_if_needed(gadget_config, manager_opts, active_gadgets)
             .await?;
@@ -317,9 +322,7 @@ pub(crate) async fn handle_tangle_event(
             // we compare all these fresh values to see if we're running a service locally that is no longer on-chain
             for verified_blueprints in &verified_blueprints {
                 let services = &verified_blueprints.blueprint.services;
-                // Safe assertion since we know there is at least one fetcher. All fetchers should have the same blueprint id
-                let fetcher = &verified_blueprints.fetcher;
-                if fetcher.blueprint_id() == *blueprint_id && !services.contains(service_id) {
+                if !services.contains(service_id) {
                     warn!(
                         "Killing service that is no longer on-chain: bid={blueprint_id}//sid={service_id}"
                     );
@@ -329,7 +332,7 @@ pub(crate) async fn handle_tangle_event(
 
             // Check to see if any process handles have died
             if !to_remove.contains(&(*blueprint_id, *service_id))
-                && !process_handle.0.load(Ordering::Relaxed)
+                && process_handle.status() != Status::Running
             {
                 // By removing any killed processes, we will auto-restart them on the next finality notification if required
                 warn!("Killing service that has died to allow for auto-restart");
@@ -339,20 +342,19 @@ pub(crate) async fn handle_tangle_event(
     }
 
     for (blueprint_id, service_id) in to_remove {
-        warn!(
-            "Removing service that is no longer active on-chain or killed: bid={blueprint_id}//sid={service_id}"
-        );
         let mut should_delete_blueprint = false;
         if let Some(gadgets) = active_gadgets.get_mut(&blueprint_id) {
-            if let Some((_, mut process_handle)) = gadgets.remove(&service_id) {
-                if let Some(abort_handle) = process_handle.take() {
-                    if abort_handle.send(()).is_err() {
-                        error!(
-                            "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
-                        );
-                    } else {
-                        warn!("Sent abort signal to service: bid={blueprint_id}//sid={service_id}");
-                    }
+            warn!(
+                "Removing service that is no longer active on-chain or killed: bid={blueprint_id}//sid={service_id}"
+            );
+
+            if let Some(process_handle) = gadgets.remove(&service_id) {
+                if process_handle.abort() {
+                    warn!("Sent abort signal to service: bid={blueprint_id}//sid={service_id}");
+                } else {
+                    error!(
+                        "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                    );
                 }
             }
 
@@ -372,38 +374,42 @@ pub(crate) async fn handle_tangle_event(
 fn get_fetcher_candidates(
     blueprint: &FilteredBlueprint,
     manager_opts: &BlueprintManagerConfig,
-) -> Result<Vec<Box<DynBinarySourceFetcher<'static>>>> {
+) -> Result<Vec<Box<DynBlueprintSource<'static>>>> {
     let mut test_fetcher_idx = None;
-    let mut fetcher_candidates: Vec<Box<DynBinarySourceFetcher<'static>>> = vec![];
+    let mut fetcher_candidates: Vec<Box<DynBlueprintSource<'static>>> = vec![];
 
-    let sources;
-    match &blueprint.gadget {
-        Gadget::Native(gadget) => {
-            sources = &gadget.sources.0;
-        }
-        Gadget::Wasm(_) => {
-            warn!("WASM gadgets are not supported yet");
-            return Err(Error::UnsupportedGadget);
-        }
-        Gadget::Container(_) => {
-            warn!("Container gadgets are not supported yet");
-            return Err(Error::UnsupportedGadget);
-        }
-    }
-
-    for (source_idx, gadget_source) in sources.iter().enumerate() {
-        match &gadget_source.fetcher {
-            GadgetSourceFetcher::Github(gh) => {
-                let fetcher = GithubBinaryFetcher {
-                    fetcher: gh.clone(),
-                    blueprint_id: blueprint.blueprint_id,
-                    gadget_name: blueprint.name.clone(),
-                };
-
-                fetcher_candidates.push(DynBinarySourceFetcher::boxed(fetcher));
+    for (source_idx, blueprint_source) in blueprint.sources.iter().enumerate() {
+        match &blueprint_source {
+            BlueprintSource::Wasm { .. } => {
+                warn!("WASM gadgets are not supported yet");
+                return Err(Error::UnsupportedGadget);
             }
 
-            GadgetSourceFetcher::Testing(test) => {
+            BlueprintSource::Native(native) => match native {
+                NativeFetcher::Github(gh) => {
+                    let fetcher = GithubBinaryFetcher::new(
+                        gh.clone(),
+                        blueprint.blueprint_id,
+                        blueprint.name.clone(),
+                    );
+                    fetcher_candidates.push(DynBlueprintSource::boxed(fetcher));
+                }
+                NativeFetcher::IPFS(_) => {
+                    warn!("IPFS Native sources are not supported yet");
+                    return Err(Error::UnsupportedGadget);
+                }
+            },
+
+            BlueprintSource::Container(container) => {
+                let fetcher = ContainerSource::new(
+                    container.clone(),
+                    blueprint.blueprint_id,
+                    blueprint.name.clone(),
+                );
+                fetcher_candidates.push(DynBlueprintSource::boxed(fetcher));
+            }
+
+            BlueprintSource::Testing(test) => {
                 // TODO: demote to TRACE once proven to work
                 warn!("Using testing fetcher");
                 // if !manager_opts.test_mode {
@@ -411,18 +417,14 @@ fn get_fetcher_candidates(
                 //     continue;
                 // }
 
-                let fetcher = crate::sources::testing::TestSourceFetcher {
-                    fetcher: test.clone(),
-                    blueprint_id: blueprint.blueprint_id,
-                    gadget_name: blueprint.name.clone(),
-                };
+                let fetcher = TestSourceFetcher::new(
+                    test.clone(),
+                    blueprint.blueprint_id,
+                    blueprint.name.clone(),
+                );
 
                 test_fetcher_idx = Some(source_idx);
-                fetcher_candidates.push(DynBinarySourceFetcher::boxed(fetcher));
-            }
-
-            _ => {
-                warn!("Blueprint does not contain a supported fetcher");
+                fetcher_candidates.push(DynBlueprintSource::boxed(fetcher));
             }
         }
     }
@@ -432,11 +434,6 @@ fn get_fetcher_candidates(
     // Ensure that we have at least one fetcher
     if fetcher_candidates.is_empty() {
         return Err(Error::NoFetchers);
-    }
-
-    // Ensure there is only a single candidate fetcher
-    if fetcher_candidates.len() != 1 {
-        return Err(Error::MultipleFetchers);
     }
 
     // Ensure that we have a test fetcher if we are in test mode

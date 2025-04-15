@@ -1,22 +1,23 @@
 [package]
 name = "blueprint-crypto"
-version = "0.1.0"
+version = "0.1.0-alpha.3"
 description = "Crypto metapackage for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
-blueprint-crypto-core = { path = "core" }
-blueprint-crypto-k256 = { path = "k256", optional = true }
-blueprint-crypto-sr25519 = { path = "sr25519", optional = true }
-blueprint-crypto-ed25519 = { path = "ed25519", optional = true }
-blueprint-crypto-hashing = { path = "hashing", optional = true }
-blueprint-crypto-bls = { path = "bls", optional = true }
-blueprint-crypto-bn254 = { path = "bn254", optional = true }
-blueprint-crypto-sp-core = { path = "sp-core", optional = true }
+blueprint-crypto-core = { workspace = true }
+blueprint-crypto-k256 = { workspace = true, optional = true }
+blueprint-crypto-sr25519 = { workspace = true, optional = true }
+blueprint-crypto-ed25519 = { workspace = true, optional = true }
+blueprint-crypto-hashing = { workspace = true, optional = true }
+blueprint-crypto-bls = { workspace = true, optional = true }
+blueprint-crypto-bn254 = { workspace = true, optional = true }
+blueprint-crypto-sp-core = { workspace = true, optional = true }
 blueprint-crypto-tangle-pair-signer = { workspace = true, optional = true }
 thiserror = { workspace = true }
 

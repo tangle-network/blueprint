@@ -26,6 +26,9 @@ pub enum Error {
     /// Key type not supported
     #[error("Key type not supported")]
     KeyTypeNotSupported,
+    /// Keystore operation not supported
+    #[error("Keystore operation not supported")]
+    KeystoreOperationNotSupported,
     /// Key not found
     #[error("Key not found")]
     KeyNotFound,
@@ -106,6 +109,11 @@ pub enum Error {
     #[error(transparent)]
     #[cfg(feature = "evm")]
     LocalSignerError(#[from] alloy_signer_local::LocalSignerError),
+
+    /// An error occurred during the keystore operation
+    #[error("sp-keystore error")]
+    #[cfg(feature = "substrate-keystore")]
+    SpKeystoreError,
 }
 
 #[macro_export]

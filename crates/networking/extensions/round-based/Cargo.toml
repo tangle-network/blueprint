@@ -1,11 +1,13 @@
 [package]
 name = "blueprint-networking-round-based-extension"
-version = "0.1.0"
+version = "0.1.0-alpha.3"
+description = "round-based integration for Blueprint SDK networking"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -48,9 +50,9 @@ libp2p = { workspace = true, features = [
   "autonat",
   "upnp",
 ] }
-blueprint-crypto = { workspace = true, features = ["sp-core"] }
-blueprint-crypto-core = { workspace = true, features = ["tangle"] }
 blueprint-networking = { workspace = true, features = ["testing"] }
+blueprint-crypto = { path = "../../../crypto", features = ["sp-core"] }
+blueprint-crypto-core = { path = "../../../crypto/core", features = ["tangle"] }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 sha2 = { workspace = true }

@@ -1,10 +1,13 @@
 [package]
 name = "blueprint-macros"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 description = "Macros for the Tangle Blueprint SDK"
+authors.workspace = true
 edition.workspace = true
-homepage.workspace = true
 license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -20,13 +23,16 @@ syn = { workspace = true, features = [
     "parsing",
     # needed for `Hash` impls
     "extra-traits",
+    "clone-impls",
+    "printing",
+    "proc-macro",
 ] }
 
 # EVM
 serde_json = { workspace = true, features = ["alloc"], optional = true }
 
 [dev-dependencies]
-blueprint-sdk = { workspace = true, features = ["macros", "std"] }
+blueprint-sdk = { path = "../sdk", features = ["macros", "std"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["alloc"] }
 tokio = { workspace = true, features = ["full"] }

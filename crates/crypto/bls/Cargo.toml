@@ -1,12 +1,13 @@
 [package]
 name = "blueprint-crypto-bls"
-version = "0.1.0"
+version = "0.1.0-alpha.2"
 description = "tnt-bls crypto primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 blueprint-crypto-core = { workspace = true, features = ["bls"] }
@@ -19,12 +20,14 @@ hex = { workspace = true, features = ["alloc"] }
 paste = { workspace = true }
 thiserror = { workspace = true }
 
+sha2 = { workspace = true, optional = true }
+
 [dev-dependencies]
-blueprint-crypto-hashing = { workspace = true, features = ["sha2"] }
+blueprint-crypto-hashing = { path = "../hashing", features = ["sha2"] }
 serde_json = { workspace = true, features = ["alloc"] }
 
 [features]
-default = ["std"]
+default = ["std", "aggregation"]
 std = [
 	"ark-serialize/std",
 	"blueprint-crypto-core/std",
@@ -34,3 +37,4 @@ std = [
 	"serde_bytes/std",
 	"tnt-bls/std",
 ]
+aggregation = ["sha2", "tnt-bls/std"]

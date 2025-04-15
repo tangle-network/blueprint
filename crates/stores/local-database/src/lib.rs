@@ -7,7 +7,7 @@ use blueprint_std::collections::HashMap;
 use blueprint_std::fs;
 use blueprint_std::path::{Path, PathBuf};
 use blueprint_std::sync::Mutex;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 /// A local database for storing key-value pairs.
 ///

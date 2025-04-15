@@ -1,12 +1,13 @@
 [package]
 name = "blueprint-crypto-tangle-pair-signer"
-version = "0.1.0"
+version = "0.1.0-alpha.3"
 description = "Pair signer for Tangle"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 blueprint-std = { workspace = true }

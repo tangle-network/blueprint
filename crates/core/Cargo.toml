@@ -1,8 +1,13 @@
 [package]
 name = "blueprint-core"
-version = "0.1.0"
-edition.workspace = true
+version = "0.1.0-alpha.1"
 description = "Blueprint SDK Core functionality"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 bytes.workspace = true
@@ -14,12 +19,12 @@ tiny-keccak = { workspace = true, features = ["keccak"] }
 tracing = { workspace = true }
 
 [dev-dependencies]
-blueprint-sdk.workspace = true
+blueprint-sdk = { path = "../sdk", features = ["std"] }
 serde_json = { workspace = true, features = ["alloc"] }
 tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter"] }
 tokio = { workspace = true, features = ["full"] }
 
 [features]
 default = ["std", "tracing"]
-std = ["futures-util/std", "blueprint-sdk/std"]
+std = ["futures-util/std"]
 tracing = []

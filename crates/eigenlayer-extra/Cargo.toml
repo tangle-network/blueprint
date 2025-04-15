@@ -1,29 +1,49 @@
 [package]
 name = "blueprint-eigenlayer-extra"
-version = "0.1.0"
+version = "0.1.0-alpha.2"
 description = "EigenLayer utilites for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
 
 [dependencies]
+blueprint-core = { workspace = true }
+blueprint-crypto-bn254 = { workspace = true }
 blueprint-evm-extra = { workspace = true }
 alloy-contract = { workspace = true, default-features = false }
 alloy-network = { workspace = true, default-features = false }
 alloy-primitives = { workspace = true, default-features = false }
 alloy-provider = { workspace = true, default-features = false }
+alloy-rpc-client = { workspace = true, default-features = false }
+alloy-sol-types = { workspace = true, default-features = false }
 alloy-transport = { workspace = true, default-features = false }
-eigensdk = { workspace = true, default-features = false, features = ["utils"] }
+eigensdk = { workspace = true, default-features = false, features = [
+    "utils",
+    "types",
+    "client-avsregistry",
+    "services-avsregistry",
+    "services-blsaggregation",
+    "services-operatorsinfo",
+    "crypto-bls"] }
+num-bigint = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+# RPC server dependencies
+jsonrpc-core = { workspace = true }
+jsonrpc-http-server = { workspace = true }
 
 [features]
 default = ["std"]
-std = [
-    "blueprint-evm-extra/std",
-    "alloy-primitives/std",
-]
+std = ["blueprint-evm-extra/std", "alloy-primitives/std"]

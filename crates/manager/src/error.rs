@@ -4,8 +4,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("No fetchers found for blueprint")]
     NoFetchers,
-    #[error("Multiple fetchers found for blueprint")]
-    MultipleFetchers,
     #[error("No testing fetcher found for blueprint, despite operating in test mode")]
     NoTestFetcher,
     #[error("Blueprint does not contain a supported fetcher")]

@@ -363,14 +363,26 @@ impl BlueprintEnvironment {
         using_evm_address_for_handshake_verification: bool,
     ) -> Result<blueprint_networking::NetworkConfig<K>, crate::error::RunnerError> {
         use blueprint_keystore::backends::Backend;
+        #[cfg(not(feature = "tangle"))]
+        use blueprint_keystore::crypto::ed25519::Ed25519Zebra as LibP2PKeyType;
+        #[cfg(feature = "tangle")]
         use blueprint_keystore::crypto::sp_core::SpEd25519 as LibP2PKeyType;
 
         let keystore_config = blueprint_keystore::KeystoreConfig::new().fs_root(&self.keystore_uri);
         let keystore = blueprint_keystore::Keystore::new(keystore_config)?;
         let ed25519_pub_key = keystore.first_local::<LibP2PKeyType>()?;
         let ed25519_pair = keystore.get_secret::<LibP2PKeyType>(&ed25519_pub_key)?;
+
+        #[cfg(feature = "tangle")]
         let network_identity = libp2p::identity::Keypair::ed25519_from_bytes(ed25519_pair.seed())
             .expect("should be valid");
+
+        #[cfg(not(feature = "tangle"))]
+        let network_identity = {
+            // `ed25519_from_bytes` takes an `AsMut<[u8]>` for seemingly no reason??
+            let bytes = ed25519_pair.0.as_ref().to_vec();
+            libp2p::identity::Keypair::ed25519_from_bytes(bytes).expect("should be valid")
+        };
 
         let ecdsa_pub_key = keystore.first_local::<K>()?;
         let ecdsa_pair = keystore.get_secret::<K>(&ecdsa_pub_key)?;
@@ -416,11 +428,7 @@ impl ContextConfig {
     /// - `chain`: The [`chain`](SupportedChains)
     /// - `protocol`: The [`Protocol`]
     /// - `protocol_settings`: The protocol-specific settings
-    #[allow(
-        clippy::too_many_arguments,
-        clippy::too_many_lines,
-        clippy::match_wildcard_for_single_variants
-    )]
+    #[allow(clippy::too_many_arguments, clippy::match_wildcard_for_single_variants)]
     #[must_use]
     pub fn create_config(
         http_rpc_url: Url,
@@ -458,6 +466,8 @@ impl ContextConfig {
         let rewards_coordinator = eigenlayer_settings.map(|s| s.rewards_coordinator_address);
         #[cfg(feature = "eigenlayer")]
         let permission_controller = eigenlayer_settings.map(|s| s.permission_controller_address);
+        #[cfg(feature = "eigenlayer")]
+        let strategy = eigenlayer_settings.map(|s| s.strategy_address);
 
         // Tangle settings
         #[cfg(feature = "tangle")]
@@ -520,6 +530,8 @@ impl ContextConfig {
                 rewards_coordinator,
                 #[cfg(feature = "eigenlayer")]
                 permission_controller,
+                #[cfg(feature = "eigenlayer")]
+                strategy,
             }),
         }
     }
@@ -620,15 +632,15 @@ impl Default for BlueprintCliCoreSettings {
 pub struct BlueprintSettings {
     #[arg(long, short = 't', env)]
     pub test_mode: bool,
-    #[arg(long, env)]
+    #[arg(long, env, default_value_t = default_http_rpc_url())]
     #[serde(default = "default_http_rpc_url")]
     pub http_rpc_url: Url,
-    #[arg(long, env)]
+    #[arg(long, env, default_value_t = default_ws_rpc_url())]
     #[serde(default = "default_ws_rpc_url")]
     pub ws_rpc_url: Url,
-    #[arg(long, short = 'd', env)]
+    #[arg(long, short = 'd', env, default_value_t = String::from("./keystore"))]
     pub keystore_uri: String,
-    #[arg(long, value_enum, env)]
+    #[arg(long, value_enum, env, default_value_t)]
     pub chain: SupportedChains,
     #[arg(long, short = 'v', global = true, action = clap::ArgAction::Count)]
     pub verbose: u8,
@@ -647,23 +659,23 @@ pub struct BlueprintSettings {
     #[cfg(feature = "networking")]
     #[arg(long, value_parser = <Multiaddr as blueprint_std::str::FromStr>::from_str, action = clap::ArgAction::Append, env)]
     #[serde(default)]
-    bootnodes: Option<Vec<Multiaddr>>,
+    pub bootnodes: Option<Vec<Multiaddr>>,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    network_bind_port: Option<u16>,
+    pub network_bind_port: Option<u16>,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    enable_mdns: bool,
+    pub enable_mdns: bool,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    enable_kademlia: bool,
+    pub enable_kademlia: bool,
     #[cfg(feature = "networking")]
     #[arg(long, env)]
     #[serde(default)]
-    target_peer_count: Option<u32>,
+    pub target_peer_count: Option<u32>,
 
     // =======
     // TANGLE
@@ -780,6 +792,15 @@ pub struct BlueprintSettings {
         required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
     )]
     pub permission_controller: Option<alloy_primitives::Address>,
+    #[cfg(feature = "eigenlayer")]
+    /// The address of the strategy
+    #[arg(
+        long,
+        value_name = "ADDR",
+        env = "STRATEGY_ADDRESS",
+        required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
+    )]
+    pub strategy: Option<alloy_primitives::Address>,
 }
 
 impl Default for BlueprintSettings {
@@ -838,6 +859,8 @@ impl Default for BlueprintSettings {
             rewards_coordinator: None,
             #[cfg(feature = "eigenlayer")]
             permission_controller: None,
+            #[cfg(feature = "eigenlayer")]
+            strategy: None,
         }
     }
 }

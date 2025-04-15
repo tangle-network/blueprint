@@ -67,6 +67,8 @@ pub fn new_blueprint(
         overwrite: false,
         skip_submodules: false,
         other_args: Option::default(),
+        continue_on_error: false,
+        quiet: false,
     })
     .map_err(Error::GenerationFailed)?;
 

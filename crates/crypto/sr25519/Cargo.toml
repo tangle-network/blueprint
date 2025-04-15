@@ -1,12 +1,13 @@
 [package]
 name = "blueprint-crypto-sr25519"
-version = "0.1.0"
+version = "0.1.0-alpha.2"
 description = "Schnorrkel sr25519 crypto primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 blueprint-crypto-core = { workspace = true, features = ["sr25519-schnorrkel"] }

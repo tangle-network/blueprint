@@ -1,62 +1,69 @@
 [package]
-name = "incredible-squaring-eigenlayer"
-version = "0.1.0"
-edition = "2021"
-
-[package.metadata.blueprint]
-manager = { Evm = "ExperimentalBlueprint" }
-master_revision = "Latest"
-
-[[bin]]
-name = "incredible-squaring"
-path = "src/main.rs"
-
+name = "incredible-squaring-blueprint-eigenlayer"
+version = "0.1.1"
+description = "A Simple Blueprint to demo how blueprints work on Eigenlayer"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish = false
 
 [dependencies]
-# Blueprint dependencies
-blueprint-sdk = { workspace = true, features = ["eigenlayer", "macros", "testing"] }
-serde = { workspace = true }
-serde_json = { workspace = true, features = ["alloc"] }
+blueprint-sdk = { workspace = true, features = ["eigenlayer", "evm", "eigenlayer", "macros", "std"] }
+eigenlayer-contract-deployer = { workspace = true }
+futures = { workspace = true }
 
-# Alloy dependencies
+eigensdk = { workspace = true, features = ["crypto-bls", "services-blsaggregation"] }
+tracing = { workspace = true }
+color-eyre = { workspace = true }
+lazy_static = { workspace = true }
+lock_api = { workspace = true }
+tokio = { workspace = true, default-features = false, features = ["full"] }
+tokio-util = { workspace = true }
+sp-core = { workspace = true }
 alloy-contract = { workspace = true }
+alloy-consensus = { workspace = true }
+alloy-json-abi = { workspace = true, features = ["serde_json"] }
 alloy-network = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-provider = { workspace = true }
-alloy-rpc-client = { workspace = true }
+alloy-pubsub = { workspace = true }
 alloy-rpc-types = { workspace = true }
+alloy-rpc-types-eth = { workspace = true }
+alloy-rpc-client = { workspace = true }
 alloy-signer = { workspace = true }
 alloy-signer-local = { workspace = true }
 alloy-sol-types = { workspace = true, features = ["json"] }
 alloy-transport = { workspace = true }
 alloy-transport-http = { workspace = true }
-
-# Async dependencies
-futures = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
-tower = { workspace = true }
+ark-bn254 = { workspace = true }
+ark-ff = { workspace = true }
+ark-ec = { workspace = true }
+parking_lot = { workspace = true }
+libp2p = { workspace = true }
+ed25519-zebra = { workspace = true, features = ["pkcs8", "default", "der", "std", "serde", "pem"] }
+clap = { workspace = true, features = ["derive", "wrap_help"] }
+hex = { workspace = true }
+k256 = { workspace = true }
 reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
+bip39 = { workspace = true }
+thiserror = { workspace = true }
+jsonrpc-core = { workspace = true }
+jsonrpc-http-server = { workspace = true }
 num-bigint = { workspace = true }
 
-# Eigenlayer dependencies
-eigensdk = { workspace = true, features = [
-    "client-elcontracts",
-    "types",
-    "utils",
-    "logging",
-    "client-avsregistry",
-    "crypto-bls",
-    "services-blsaggregation",
-    "services-operatorsinfo",
-    "services-avsregistry",
-] }
-
-# Misc
-thiserror = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
-
 [dev-dependencies]
-blueprint-sdk = { workspace = true, features = ["eigenlayer", "testing"] }
-testcontainers = { workspace = true }
-tokio-util = { workspace = true }
+blueprint-sdk = { workspace = true, features = ["testing", "eigenlayer", "evm"] }
+eigenlayer-contract-deployer = { workspace = true }
+tempfile = { workspace = true }
+
+[build-dependencies]
+blueprint-build-utils = { workspace = true }
+
+[features]
+default = ["std"]
+std = []

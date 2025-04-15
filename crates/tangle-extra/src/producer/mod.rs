@@ -135,7 +135,7 @@ impl Stream for TangleProducer {
 
 /// Converts Tangle Blocks into Job Calls
 async fn block_to_job_calls(block: TangleBlock) -> Result<Vec<JobCall>, subxt::Error> {
-    blueprint_core::trace!("Processing block #{}", block.header().number);
+    blueprint_core::trace!(target: "tangle-producer", "Processing block #{}", block.header().number);
     let header = block.header();
     let metadata = block_header_to_job_metadata(header);
     let mut extensions = Extensions::new();
@@ -160,7 +160,7 @@ async fn block_to_job_calls(block: TangleBlock) -> Result<Vec<JobCall>, subxt::E
         .collect::<Result<Vec<_>, _>>()?;
 
     if job_calls.is_empty() {
-        blueprint_core::trace!("No job calls in block #{}", header.number);
+        blueprint_core::trace!(target: "tangle-producer", "No job calls in block #{}", header.number);
     }
 
     Ok(job_calls)

@@ -1,12 +1,13 @@
 [package]
 name = "blueprint-manager"
-version = "0.2.2"
+version = "0.3.0-alpha.3"
 description = "Tangle Blueprint manager and Runner"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -16,14 +17,15 @@ name = "blueprint-manager"
 path = "src/main.rs"
 
 [dependencies]
-blueprint-sdk = { workspace = true, features = ["std", "networking"] }
 blueprint-core = { workspace = true, features = ["tracing"] }
+blueprint-runner = { workspace = true, features = ["networking"] }
 blueprint-clients = { workspace = true, features = ["std", "tangle"] }
 blueprint-crypto = { workspace = true, features = ["std", "tangle-pair-signer"] }
 blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-networking = { workspace = true, features = ["std"] }
 blueprint-std = { workspace = true, features = ["std"] }
 
+docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace", "issue-url"] }
 serde = { workspace = true }

@@ -1,12 +1,13 @@
 [package]
 name = "blueprint-clients"
-version = "0.1.0"
+version = "0.1.0-alpha.3"
 description = "Metapackage for Tangle Blueprint clients"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true

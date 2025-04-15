@@ -145,7 +145,7 @@ pub fn generate_key(
     let (public, secret) = (hex::encode(public_bytes), hex::encode(secret_bytes));
 
     let mut secret = Some(secret);
-    if !show_secret || output.is_none() {
+    if !show_secret {
         secret = None;
     }
 

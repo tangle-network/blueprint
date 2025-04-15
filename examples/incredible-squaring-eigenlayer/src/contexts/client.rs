@@ -7,7 +7,7 @@ use serde_json::json;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, info};
 
-use crate::IIncredibleSquaringTaskManager::TaskResponse;
+use crate::TaskManager::TaskResponse;
 
 const MAX_RETRIES: u32 = 5;
 const INITIAL_RETRY_DELAY: Duration = Duration::from_secs(1);

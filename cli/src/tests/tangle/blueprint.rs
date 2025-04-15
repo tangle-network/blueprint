@@ -7,7 +7,6 @@ use tempfile::TempDir;
 /// This function creates a temporary directory and populates it with the files needed
 /// for the incredible-squaring blueprint. It returns the temporary directory and the path
 /// to the blueprint directory.
-#[allow(clippy::too_many_lines)]
 pub fn create_test_blueprint() -> (TempDir, PathBuf) {
     let temp_dir = TempDir::new().expect("Failed to create temporary directory");
     let blueprint_dir = temp_dir.path().join("test-blueprint");
@@ -110,21 +109,14 @@ master_revision = "Latest"
   ],
   "registration_params": [],
   "request_params": [],
-  "gadget": {{
-    "Native": {{
-      "sources": [
-      {{
-        "fetcher": {{
-          "Testing": {{
-            "cargo_package": "incredible-squaring-blueprint",
-            "cargo_bin": "main",
-            "base_path": "{}"
-          }}
-        }}
-      }}
-    ]
-  }}
-  }}
+  "sources": [
+    {{
+      "type": "Testing",
+      "cargo_package": "incredible-squaring-blueprint",
+      "cargo_bin": "main",
+      "base_path": "{}"
+    }}
+  ]
 }}"#,
             blueprint_dir.display()
         ),
@@ -162,7 +154,7 @@ pub const XSQUARE_JOB_ID: u32 = 0;
 // The job function
 pub async fn square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
     let result = x * x;
-    
+
     // The result is then converted into a `JobResult` to be sent back to the caller.
     TangleResult(result)
 }

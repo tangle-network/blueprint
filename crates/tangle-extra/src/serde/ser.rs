@@ -24,7 +24,7 @@ impl<'a> serde::Serializer for &'a mut Serializer {
     type SerializeTuple = Self::SerializeSeq;
     type SerializeTupleStruct = SerializeTupleStruct<'a>;
     type SerializeTupleVariant = ser::Impossible<Self::Ok, Self::Error>;
-    type SerializeMap = ser::Impossible<Self::Ok, Self::Error>;
+    type SerializeMap = SerializeMap<'a>;
     type SerializeStruct = SerializeStruct<'a>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
@@ -178,7 +178,7 @@ impl<'a> serde::Serializer for &'a mut Serializer {
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
-        Err(Self::Error::UnsupportedType(UnsupportedType::Map))
+        Ok(SerializeMap::new(self))
     }
 
     fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct> {
@@ -356,6 +356,57 @@ impl ser::SerializeStruct for SerializeStruct<'_> {
         Ok(Field::Struct(
             new_bounded_string(self.name),
             Box::new(BoundedVec(self.fields)),
+        ))
+    }
+}
+
+pub struct SerializeMap<'a> {
+    ser: &'a mut Serializer,
+    keys: Vec<BoundedString>,
+    values: Vec<Field<AccountId32>>,
+}
+
+impl<'a> SerializeMap<'a> {
+    fn new(ser: &'a mut Serializer) -> Self {
+        Self {
+            ser,
+            keys: Vec::new(),
+            values: Vec::new(),
+        }
+    }
+}
+
+impl ser::SerializeMap for SerializeMap<'_> {
+    type Ok = Field<AccountId32>;
+    type Error = super::error::Error;
+
+    fn serialize_key<T>(&mut self, key: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        let key = key.serialize(&mut *self.ser)?;
+        let Field::String(string) = key else {
+            return Err(super::error::Error::BadMapKey);
+        };
+
+        self.keys.push(string);
+        Ok(())
+    }
+
+    fn serialize_value<T>(&mut self, value: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        let value = value.serialize(&mut *self.ser)?;
+        self.values.push(value);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok> {
+        let fields = self.keys.into_iter().zip(self.values).collect::<Vec<_>>();
+        Ok(Field::Struct(
+            new_bounded_string(""),
+            Box::new(BoundedVec(fields)),
         ))
     }
 }

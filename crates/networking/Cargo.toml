@@ -1,12 +1,13 @@
 [package]
 name = "blueprint-networking"
-version = "0.1.0"
+version = "0.1.0-alpha.3"
 description = "Networking utilities for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -34,8 +35,8 @@ itertools = { workspace = true, features = ["use_alloc"] }
 parking_lot = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 crossbeam-channel = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 # TODO: Can be optional with proper flag. Used for p2p w/ evm addresses
 libsecp256k1 = { workspace = true, features = ["static-context"] }
@@ -70,9 +71,10 @@ features = [
 ]
 
 [dev-dependencies]
-blueprint-networking = { workspace = true }
-blueprint-crypto = { workspace = true, features = ["sp-core"] }
-blueprint-crypto-core = { workspace = true, features = ["tangle"] }
+blueprint-networking = { path = ".", features = ["testing"] }
+blueprint-crypto = { path = "../crypto", features = ["sp-core"] }
+blueprint-crypto-core = { path = "../crypto/core", features = ["tangle"] }
+tracing-subscriber = { workspace = true }
 lazy_static = { workspace = true }
 serial_test = { workspace = true }
 

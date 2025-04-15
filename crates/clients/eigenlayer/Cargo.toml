@@ -1,12 +1,13 @@
 [package]
 name = "blueprint-client-eigenlayer"
-version = "0.1.0"
+version = "0.1.0-alpha.3"
 description = "Eigenlayer client for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -14,6 +15,7 @@ workspace = true
 [dependencies]
 blueprint-runner = { workspace = true, features = ["eigenlayer"] }
 
+blueprint-core.workspace = true
 blueprint-client-core = { workspace = true }
 blueprint-std = { workspace = true }
 blueprint-evm-extra = { workspace = true }
@@ -40,15 +42,18 @@ tokio-util = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-tracing-subscriber.workspace = true
-blueprint-chain-setup-anvil = { workspace = true }
-blueprint-eigenlayer-testing-utils = { workspace = true }
-blueprint-evm-extra = { workspace = true }
+blueprint-chain-setup-anvil = { path = "../../chain-setup/anvil" }
+blueprint-evm-extra = { path = "../../evm-extra" }
+blueprint-core-testing-utils = { path = "../../testing-utils/core" }
+blueprint-eigenlayer-testing-utils = { path = "../../testing-utils/eigenlayer" }
 alloy-primitives = { workspace = true }
+eigenlayer-contract-deployer = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tracing-subscriber.workspace = true
+tempfile = { workspace = true }
 
 [features]
-default = ["std"]
+default = ["std", "tracing"]
 std = [
 	"blueprint-std/std",
 	"blueprint-evm-extra/std",
@@ -56,3 +61,5 @@ std = [
 	"blueprint-client-core/std",
 	"url/std",
 ]
+
+tracing = ["blueprint-core/tracing"]

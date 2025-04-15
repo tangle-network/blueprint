@@ -29,6 +29,8 @@ pub struct EigenlayerProtocolSettings {
     pub rewards_coordinator_address: Address,
     /// The address of the permission controller contract
     pub permission_controller_address: Address,
+    /// The address of the strategy contract
+    pub strategy_address: Address,
 }
 
 impl ProtocolSettingsT for EigenlayerProtocolSettings {
@@ -66,6 +68,9 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
             permission_controller_address: settings
                 .permission_controller
                 .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
+            strategy_address: settings
+                .strategy
+                .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
         })
     }
 
@@ -81,16 +86,17 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
 impl Default for EigenlayerProtocolSettings {
     fn default() -> Self {
         Self {
-            allocation_manager_address: address!("67d269191c92caf3cd7723f116c85e6e9bf55933"),
-            registry_coordinator_address: address!("4c4a2f8c81640e47606d3fd77b353e87ba015584"),
-            operator_state_retriever_address: address!("1429859428c0abc9c2c47c8ee9fbaf82cfa0f20f"),
-            delegation_manager_address: address!("a85233c63b9ee964add6f2cffe00fd84eb32338f"),
-            service_manager_address: address!("0000000000000000000000000000000000000000"), // Depends on AVS
-            stake_registry_address: address!("922d6956c99e12dfeb3224dea977d0939758a1fe"), // Differs when using ECDSA Base
-            strategy_manager_address: address!("09635f643e140090a9a8dcd712ed6285858cebef"),
-            avs_directory_address: address!("7a2088a1bfc9d81c55368ae168c2c02570cb814f"),
-            rewards_coordinator_address: address!("c3e53f4d16ae77db1c982e75a937b9f60fe63690"),
-            permission_controller_address: address!("0x4a679253410272dd5232b3ff7cf5dbb88f295319"),
+            allocation_manager_address: address!("8a791620dd6260079bf849dc5567adc3f2fdc318"),
+            registry_coordinator_address: address!("cd8a1c3ba11cf5ecfa6267617243239504a98d90"),
+            operator_state_retriever_address: address!("b0d4afd8879ed9f52b28595d31b441d079b2ca07"),
+            delegation_manager_address: address!("cf7ed3acca5a467e9e704c703e8d87f634fb0fc9"),
+            service_manager_address: address!("36c02da8a0983159322a80ffe9f24b1acff8b570"), // Squaring service manager
+            stake_registry_address: address!("4c5859f0f772848b2d91f1d83e2fe57935348029"),
+            strategy_manager_address: address!("a513e6e4b8f2a923d98304ec87f64353c4d5c853"),
+            avs_directory_address: address!("5fc8d32690cc91d4c39d9d3abcbd16989f875707"),
+            rewards_coordinator_address: address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e"),
+            permission_controller_address: address!("3aa5ebb10dc797cac828524e59a333d0a371443c"),
+            strategy_address: address!("524f04724632eed237cba3c37272e018b3a7967e"),
         }
     }
 }
