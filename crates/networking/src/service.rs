@@ -352,7 +352,7 @@ impl<K: KeyType> NetworkService<K> {
         // Spawn whitelist update task - clone the peer_manager first to avoid partial move
         let peer_manager_clone = self.peer_manager.clone();
         let whitelist_rx = self.whitelist_rx.clone();
-        let _ = peer_manager_clone.spawn_whitelist_updater(whitelist_rx);
+        peer_manager_clone.spawn_whitelist_updater(whitelist_rx);
 
         // Spawn background task
         tokio::spawn(async move {
@@ -429,14 +429,13 @@ impl<K: KeyType> NetworkService<K> {
                     }
                 }
                 Ok(whitelist_update) = async { self.whitelist_rx.try_recv() } => {
-                    info!("Received whitelist update: {:?}", whitelist_update.keys());
-                    // Directly update the peer manager's whitelist
-                    self.peer_manager.update_whitelist(&whitelist_update);
+                    debug!("Received whitelist update");
+                    self.peer_manager.update_whitelist(whitelist_update);
                     // Attempt to handshake with any unverified peers after whitelist update
                     self.retry_unverified_handshakes();
                 }
                 // Add a short timeout to ensure we don't miss the handshake retry check
-                () = tokio::time::sleep(Duration::from_millis(100)) => {}
+                _ = tokio::time::sleep(Duration::from_millis(100)) => {}
                 else => break,
             }
         }

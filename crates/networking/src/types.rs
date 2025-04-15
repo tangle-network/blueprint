@@ -60,23 +60,17 @@ impl Display for ParticipantId {
     }
 }
 
-impl MessageRouting {
-    #[must_use]
-    pub fn display_recipient(&self) -> String {
-        self.recipient
-            .as_ref()
-            .map_or_else(|| "broadcast".to_string(), ToString::to_string)
-    }
-}
-
 impl Display for MessageRouting {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "msg={} round={} to={}",
+            "msg={} round={} to={:?}",
             self.message_id,
             self.round_id,
-            self.display_recipient()
+            self.recipient
+                .as_ref()
+                .map(|r| r.to_string())
+                .unwrap_or("broadcast".to_string())
         )
     }
 }

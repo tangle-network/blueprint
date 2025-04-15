@@ -460,7 +460,7 @@ impl<K: KeyType> NetworkBehaviour for BlueprintProtocolBehaviour<K> {
                     );
 
                     match self.send_handshake(&conn.peer_id) {
-                        Ok(()) => {
+                        Ok(_) => {
                             debug!(%conn.peer_id, "Sent handshake request");
                             self.outbound_handshakes
                                 .insert(conn.peer_id, Instant::now());

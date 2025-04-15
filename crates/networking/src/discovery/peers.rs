@@ -77,7 +77,6 @@ impl<K: KeyType> WhitelistedKeys<K> {
         }
     }
 
-    #[must_use]
     pub fn new_from_hashset(keys: HashSet<VerificationIdentifierKey<K>>) -> Self {
         Self::new(keys.into_iter().collect())
     }
@@ -143,7 +142,7 @@ impl<K: KeyType> WhitelistedKeys<K> {
         }
     }
 
-    #[must_use]
+    /// Check if the whitelist is empty
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -246,7 +245,6 @@ impl<K: KeyType> PeerManager<K> {
     ///
     /// # Returns
     /// A join handle for the spawned thread
-    #[must_use]
     pub fn spawn_whitelist_updater(
         self: Arc<Self>,
         whitelisted_keys_rx: Receiver<WhitelistedKeys<K>>,
@@ -254,10 +252,8 @@ impl<K: KeyType> PeerManager<K> {
         std::thread::spawn(move || {
             debug!("Starting whitelist updater thread");
             let receiver = whitelisted_keys_rx;
-            let self_clone = self.clone();
             while let Ok(whitelisted_keys) = receiver.recv() {
-                // Update the internal whitelist when new keys are received
-                self_clone.update_whitelist(&whitelisted_keys);
+                self.update_whitelist(whitelisted_keys);
             }
             debug!("Whitelist updater thread terminated");
         })
@@ -268,7 +264,7 @@ impl<K: KeyType> PeerManager<K> {
     ///
     /// # Arguments
     /// * `keys` - The new whitelist to update with
-    pub fn update_whitelist(&self, keys: &WhitelistedKeys<K>) {
+    pub fn update_whitelist(&self, keys: WhitelistedKeys<K>) {
         // Create a new Vec with keys from the input WhitelistedKeys
         let new_keys = keys.keys();
 
@@ -460,35 +456,28 @@ impl<K: KeyType> PeerManager<K> {
             .map(|id| *id)
     }
 
-    /// This function iterates over the currently known whitelisted keys and finds the
-    /// position (index) of the key corresponding to the given `peer_id`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the read locks for internal maps cannot be acquired (poisoned lock).
-    /// Panics if the key derived from the `peer_id` is not found within the internal
-    /// `whitelisted_keys` set. This typically indicates an inconsistent state where
-    /// a peer is known but not part of the current official whitelist.
+    #[must_use]
+    pub fn get_peer_id_from_party_index(&self, party_index: &ParticipantId) -> Option<PeerId> {
+        let p_index = party_index.0 as usize;
+        // We use get_by_index to preserve the exact ordering from the whitelist
+        match self.whitelisted_keys.get_by_index(p_index) {
+            Some(key) => self.get_peer_id_from_verification_id_key(&key),
+            None => None,
+        }
+    }
+
     #[must_use]
     pub fn get_party_index_from_peer_id(&self, peer_id: &PeerId) -> Option<ParticipantId> {
-        // Get the verification key from the DashMap (no lock needed for read)
-        let key_ref = self
-            .peer_ids_to_verification_id_keys
+        self.peer_ids_to_verification_id_keys
             .get(peer_id)
-            .expect("Peer ID not found in key map");
-        let key = key_ref.value(); // Get the actual key from the Ref
-
-        // Read lock the inner IndexSet within WhitelistedKeys
-        let locked_whitelist_inner = self
-            .whitelisted_keys
-            .inner // Access the inner Arc<RwLock<...>>
-            .read()
-            .expect("Whitelist inner lock poisoned");
-
-        locked_whitelist_inner // This guard dereferences to IndexSet
-            .iter()
-            .position(|k| k == key) // Compare with the dereferenced key
-            .and_then(|p_index| u16::try_from(p_index).ok())
-            .map(ParticipantId)
+            .map(|key| {
+                let p_index = self
+                    .whitelisted_keys
+                    .keys()
+                    .iter()
+                    .position(|k| k == &*key)
+                    .unwrap();
+                ParticipantId(p_index as u16)
+            })
     }
 }
