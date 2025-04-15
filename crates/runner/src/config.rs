@@ -269,6 +269,11 @@ impl BlueprintEnvironment {
     #[allow(clippy::missing_panics_doc)] // TODO: Should return errors
     pub fn keystore(&self) -> Keystore {
         let config = KeystoreConfig::new().fs_root(self.keystore_uri.clone());
+        #[cfg(feature = "tangle")]
+        let substrate_keystore = sc_keystore::LocalKeystore::open(self.keystore_uri.clone(), None)
+            .expect("Failed to open keystore");
+        #[cfg(feature = "tangle")]
+        let config = config.substrate(blueprint_std::sync::Arc::new(substrate_keystore));
         Keystore::new(config).expect("Failed to create keystore")
     }
 }
