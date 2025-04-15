@@ -28,6 +28,10 @@ use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::sp_arithmetic::per_things::Percent;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{Asset, AssetSecurityCommitment};
 use blueprint_crypto::KeyTypeId;
+use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
+use blueprint_crypto_core::KeyType;
+use blueprint_keystore::{Keystore, KeystoreConfig};
+use blueprint_keystore::backends::Backend;
 use blueprint_std::env;
 
 /// Tangle CLI tool
@@ -509,11 +513,20 @@ async fn main() -> color_eyre::Result<()> {
                         "Keystore not found at {}. Let's set up your keys.",
                         keystore_path.display()
                     );
-                    let keys = prompt_for_keys(vec![KeyTypeId::Ecdsa])?;
-                    std::fs::create_dir_all(&keystore_path)?;
+                    let keys = prompt_for_keys(vec![KeyTypeId::Sr25519, KeyTypeId::Ecdsa])?;
+                    let keystore = Keystore::new(KeystoreConfig::new().fs_root(&keystore_path))?;
                     for (key_type, key) in keys {
-                        let key_path = keystore_path.join(format!("{:?}", key_type));
-                        std::fs::write(key_path, key)?;
+                        match key_type {
+                            KeyTypeId::Sr25519 => {
+                                let key = SpSr25519::generate_with_string(key)?;
+                                keystore.insert::<SpSr25519>(&key)?;
+                            }
+                            KeyTypeId::Ecdsa => {
+                                let key = SpEcdsa::generate_with_string(key)?;
+                                keystore.insert::<SpEcdsa>(&key)?;
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 config.keystore_uri = keystore_path.to_string_lossy().to_string();
