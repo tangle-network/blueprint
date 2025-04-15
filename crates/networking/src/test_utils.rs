@@ -22,7 +22,12 @@ pub fn init_tracing() {
         .try_init();
 }
 
-/// Test node configuration for network tests
+/// Helper structure for setting up and managing a network node in tests.
+///
+/// # Panics
+/// Panics if the default listen address "/ip4/0.0.0.0/tcp/0" fails to parse,
+/// which should generally not happen (specifically due to the `.unwrap()` call
+/// during `Multiaddr` parsing).
 pub struct TestNode<K: KeyType> {
     pub service: Option<NetworkService<K>>,
     pub peer_id: PeerId,
@@ -53,6 +58,11 @@ impl<K: KeyType> TestNode<K> {
     }
 
     /// Create a new test node with specified keys
+    ///
+    /// # Panics
+    /// Panics if the default listen address "/ip4/0.0.0.0/tcp/0" fails to parse,
+    /// which should generally not happen (specifically due to the `.unwrap()` call
+    /// during `Multiaddr` parsing).
     pub fn new_with_keys(
         network_name: &str,
         instance_id: &str,
@@ -99,7 +109,11 @@ impl<K: KeyType> TestNode<K> {
         }
     }
 
-    /// Start the node and wait for it to be fully initialized
+    /// Starts the network service for this test node.
+    ///
+    /// # Errors
+    /// Returns an error string if the network service fails to start, for example,
+    /// due to configuration issues or inability to bind to the specified address.
     pub async fn start(&mut self) -> Result<NetworkServiceHandle<K>, &'static str> {
         // Take ownership of the service
         let service = self.service.take().ok_or("Service already started")?;
@@ -171,7 +185,10 @@ impl<K: KeyType> TestNode<K> {
     }
 }
 
-/// Wait for a condition with timeout
+/// Utility function to wait for a condition to become true, polling periodically.
+///
+/// # Errors
+/// Returns an error string if the condition does not become true within the specified timeout.
 pub async fn wait_for_condition<F>(timeout: Duration, mut condition: F) -> Result<(), &'static str>
 where
     F: FnMut() -> bool,
@@ -186,7 +203,10 @@ where
     Ok(())
 }
 
-/// Wait for peers to discover each other
+/// Waits until all provided network service handles have discovered each other.
+///
+/// # Errors
+/// Returns an error string if peers do not discover each other within the specified timeout.
 pub async fn wait_for_peer_discovery<K: KeyType>(
     handles: &[&NetworkServiceHandle<K>],
     timeout: Duration,
@@ -206,7 +226,10 @@ pub async fn wait_for_peer_discovery<K: KeyType>(
     .await
 }
 
-/// Wait for peer info to be updated
+/// Waits until two specific nodes have exchanged peer info (verification IDs).
+///
+/// # Panics
+/// Panics if the peer info exchange does not complete within the timeout duration.
 pub async fn wait_for_peer_info<K: KeyType>(
     handle1: &NetworkServiceHandle<K>,
     handle2: &NetworkServiceHandle<K>,
@@ -241,6 +264,9 @@ pub async fn wait_for_peer_info<K: KeyType>(
 }
 
 // Helper to wait for handshake completion between multiple nodes
+/// # Panics
+/// Panics if the handshake verification process for all pairs does not complete
+/// within the specified timeout.
 pub async fn wait_for_all_handshakes<K: KeyType>(
     handles: &[&mut NetworkServiceHandle<K>],
     timeout_length: Duration,
@@ -278,6 +304,9 @@ pub async fn wait_for_all_handshakes<K: KeyType>(
 }
 
 // Helper to wait for handshake completion between two nodes
+/// # Panics
+/// Panics if the handshake verification between the two specified nodes does not
+/// complete within the timeout duration.
 pub async fn wait_for_handshake_completion<K: KeyType>(
     handle1: &NetworkServiceHandle<K>,
     handle2: &NetworkServiceHandle<K>,
@@ -321,7 +350,10 @@ pub fn create_node_with_keys<K: KeyType>(
 }
 
 // Helper to create a set of nodes with whitelisted keys
-pub async fn create_whitelisted_nodes<K: KeyType>(
+/// # Panics
+/// Panics if key generation fails for any node, which is highly unlikely.
+#[must_use]
+pub fn create_whitelisted_nodes<K: KeyType>(
     count: usize,
     network_name: &str,
     instance_id: &str,

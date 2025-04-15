@@ -161,6 +161,14 @@ impl<K: KeyType> NetworkServiceHandle<K> {
         Ok(())
     }
 
+    /// Sends a network message command to the underlying network service.
+    ///
+    /// # Arguments
+    /// * `message` - The network command message to send.
+    ///
+    /// # Errors
+    /// Returns an error if the command channel to the network service is closed,
+    /// indicating the service might have shut down.
     pub fn send_network_message(&self, message: NetworkCommandMessage<K>) -> Result<(), String> {
         self.sender.send_message(message)
     }
