@@ -1,4 +1,5 @@
 use crate::types::ParticipantId;
+use crate::types::ParticipantInfo;
 use alloy_primitives::Address;
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::KeyType;
@@ -464,6 +465,25 @@ impl<K: KeyType> PeerManager<K> {
             Some(key) => self.get_peer_id_from_verification_id_key(&key),
             None => None,
         }
+    }
+
+    #[must_use]
+    pub fn get_peer_id_from_participant(&self, participant: &ParticipantInfo<K>) -> Option<PeerId> {
+        let verification_id = participant.verification_id_key.clone();
+        match verification_id {
+            Some(verification_id) => self.get_peer_id_from_verification_id_key(&verification_id),
+            None => None,
+        }
+    }
+
+    #[must_use]
+    pub fn get_verification_id_key_from_peer_id(
+        &self,
+        peer_id: &PeerId,
+    ) -> Option<VerificationIdentifierKey<K>> {
+        self.peer_ids_to_verification_id_keys
+            .get(peer_id)
+            .map(|key| key.clone())
     }
 
     #[must_use]

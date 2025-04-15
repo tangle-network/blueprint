@@ -222,7 +222,7 @@ pub struct NetworkService<K: KeyType> {
     /// Channel for receiving messages from the network service
     network_receiver: Receiver<NetworkCommandMessage<K>>,
     /// Channel for receiving messages from the network service
-    protocol_message_receiver: Receiver<ProtocolMessage>,
+    protocol_message_receiver: Receiver<ProtocolMessage<K>>,
     /// Channel for sending events to the network service
     event_sender: Sender<NetworkEvent<K>>,
     /// Channel for receiving events from the network service

@@ -14,11 +14,11 @@ use tracing::debug;
 
 /// Handle for sending outgoing messages to the network
 #[derive(Clone)]
-pub struct NetworkCommandSender<K: KeyType> {
+pub struct NetworkSender<K: KeyType> {
     network_message_sender: Sender<NetworkCommandMessage<K>>,
 }
 
-impl<K: KeyType> NetworkCommandSender<K> {
+impl<K: KeyType> NetworkSender<K> {
     #[must_use]
     pub fn new(network_message_sender: Sender<NetworkCommandMessage<K>>) -> Self {
         Self {
@@ -39,13 +39,13 @@ impl<K: KeyType> NetworkCommandSender<K> {
 }
 
 /// Handle for receiving incoming messages from the network
-pub struct NetworkReceiver {
-    protocol_message_receiver: Receiver<ProtocolMessage>,
+pub struct NetworkReceiver<K: KeyType> {
+    protocol_message_receiver: Receiver<ProtocolMessage<K>>,
 }
 
-impl NetworkReceiver {
+impl<K: KeyType> NetworkReceiver<K> {
     #[must_use]
-    pub fn new(protocol_message_receiver: Receiver<ProtocolMessage>) -> Self {
+    pub fn new(protocol_message_receiver: Receiver<ProtocolMessage<K>>) -> Self {
         Self {
             protocol_message_receiver,
         }
@@ -56,7 +56,7 @@ impl NetworkReceiver {
     /// # Errors
     ///
     /// See [`crossbeam_channel::Receiver::try_recv()`]
-    pub fn try_recv(&self) -> Result<ProtocolMessage, crossbeam_channel::TryRecvError> {
+    pub fn try_recv(&self) -> Result<ProtocolMessage<K>, crossbeam_channel::TryRecvError> {
         self.protocol_message_receiver.try_recv()
     }
 }
@@ -64,9 +64,9 @@ impl NetworkReceiver {
 /// Combined handle for the network service
 pub struct NetworkServiceHandle<K: KeyType> {
     pub local_peer_id: PeerId,
-    pub sender: NetworkCommandSender<K>,
-    pub receiver: NetworkReceiver,
     pub blueprint_protocol_name: Arc<str>,
+    pub sender: NetworkSender<K>,
+    pub receiver: NetworkReceiver<K>,
     pub peer_manager: Arc<PeerManager<K>>,
 }
 
@@ -89,18 +89,18 @@ impl<K: KeyType> NetworkServiceHandle<K> {
         blueprint_protocol_name: String,
         peer_manager: Arc<PeerManager<K>>,
         network_message_sender: Sender<NetworkCommandMessage<K>>,
-        protocol_message_receiver: Receiver<ProtocolMessage>,
+        protocol_message_receiver: Receiver<ProtocolMessage<K>>,
     ) -> Self {
         Self {
             local_peer_id,
             blueprint_protocol_name: Arc::from(blueprint_protocol_name),
-            sender: NetworkCommandSender::new(network_message_sender),
+            sender: NetworkSender::new(network_message_sender),
             receiver: NetworkReceiver::new(protocol_message_receiver),
             peer_manager,
         }
     }
 
-    pub fn next_protocol_message(&mut self) -> Option<ProtocolMessage> {
+    pub fn next_protocol_message(&mut self) -> Option<ProtocolMessage<K>> {
         self.receiver.try_recv().ok()
     }
 
@@ -125,7 +125,11 @@ impl<K: KeyType> NetworkServiceHandle<K> {
     /// # Errors
     ///
     /// See [`crossbeam_channel::Sender::send`]
-    pub fn send(&self, routing: MessageRouting, message: impl Into<Vec<u8>>) -> Result<(), String> {
+    pub fn send(
+        &self,
+        routing: MessageRouting<K>,
+        message: impl Into<Vec<u8>>,
+    ) -> Result<(), String> {
         let protocol_message = ProtocolMessage {
             protocol: self.blueprint_protocol_name.clone().to_string(),
             routing,
@@ -141,11 +145,22 @@ impl<K: KeyType> NetworkServiceHandle<K> {
                     metadata: None,
                 };
 
+                let Some(verification_id_key) = recipient.verification_id_key else {
+                    return Ok(());
+                };
+
+                let Some(peer_id) = self
+                    .peer_manager
+                    .get_peer_id_from_verification_id_key(&verification_id_key)
+                else {
+                    return Ok(());
+                };
+
                 self.send_network_message(NetworkCommandMessage::InstanceRequest {
-                    peer: recipient,
+                    peer: peer_id,
                     request: instance_message_request,
                 })?;
-                debug!("Sent outbound p2p `NetworkMessage` to {:?}", recipient);
+                debug!("Sent outbound p2p `NetworkMessage` to {:?}", peer_id);
             }
             None => {
                 let gossip_message = NetworkCommandMessage::GossipMessage {
@@ -161,7 +176,10 @@ impl<K: KeyType> NetworkServiceHandle<K> {
         Ok(())
     }
 
-    pub fn send_network_message(&self, message: NetworkCommandMessage<K>) -> Result<(), String> {
+    pub(crate) fn send_network_message(
+        &self,
+        message: NetworkCommandMessage<K>,
+    ) -> Result<(), String> {
         self.sender.send_message(message)
     }
 
@@ -178,7 +196,7 @@ impl<K: KeyType> NetworkServiceHandle<K> {
 
     /// Split the handle into separate sender and receiver
     #[must_use]
-    pub fn split(self) -> (NetworkCommandSender<K>, NetworkReceiver) {
+    pub fn split(self) -> (NetworkSender<K>, NetworkReceiver<K>) {
         (self.sender, self.receiver)
     }
 }

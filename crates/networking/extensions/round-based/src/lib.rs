@@ -3,7 +3,7 @@ use blueprint_crypto::KeyType;
 use blueprint_networking::{
     discovery::PeerManager,
     service_handle::NetworkServiceHandle,
-    types::{ParticipantId, ProtocolMessage},
+    types::{ParticipantId, ParticipantInfo, ProtocolMessage},
 };
 use blueprint_std::{
     pin::Pin,
@@ -126,37 +126,85 @@ where
             "Sending message",
         );
 
-        let recipient = match outgoing.recipient {
+        let recipient_info = match outgoing.recipient {
             MessageDestination::AllParties => None,
             MessageDestination::OneParty(p) => {
-                let key = this
+                match this
                     .peer_manager
-                    .get_peer_id_from_party_index(&ParticipantId(p));
-                key
+                    .get_peer_id_from_party_index(&ParticipantId(p))
+                {
+                    Some(peer_id) => Some((p, peer_id)),
+                    None => {
+                        warn!(party_index = %p, "Could not find PeerId for party index");
+                        None
+                    }
+                }
             }
         };
 
-        let protocol_message = ProtocolMessage {
-            protocol: format!("{}/{}", this.protocol_id, round),
-            routing: blueprint_networking::types::MessageRouting {
-                sender: this.handle.local_peer_id,
-                message_id: msg_id,
-                round_id: round,
-                recipient,
-            },
-            payload: serde_json::to_vec(&outgoing.msg).map_err(NetworkError::Serialization)?,
-        };
+        if let Some((recipient_index, recipient_peer_id)) = recipient_info {
+            let protocol_message = ProtocolMessage {
+                protocol: format!("{}/{}", this.protocol_id, round),
+                routing: blueprint_networking::types::MessageRouting {
+                    sender: ParticipantInfo {
+                        id: blueprint_networking::types::ParticipantId(this.party_index),
+                        verification_id_key: this
+                            .peer_manager
+                            .get_verification_id_key_from_peer_id(&this.handle.local_peer_id),
+                    },
+                    message_id: msg_id,
+                    round_id: round,
+                    recipient: Some(ParticipantInfo {
+                        id: blueprint_networking::types::ParticipantId(recipient_index),
+                        verification_id_key: this
+                            .peer_manager
+                            .get_verification_id_key_from_peer_id(&recipient_peer_id),
+                    }),
+                },
+                payload: serde_json::to_vec(&outgoing.msg).map_err(NetworkError::Serialization)?,
+            };
 
-        tracing::trace!(
-            %round,
-            %msg_id,
-            protocol_id = %this.protocol_id,
-            "Sending message to network",
-        );
+            tracing::trace!(
+                %round,
+                %msg_id,
+                protocol_id = %this.protocol_id,
+                recipient_peer_id = %recipient_peer_id,
+                "Sending unicast message to network",
+            );
 
-        this.handle
-            .send(protocol_message.routing, protocol_message.payload)
-            .map_err(NetworkError::Send)
+            this.handle
+                .send(protocol_message.routing, protocol_message.payload)
+                .map_err(NetworkError::Send)?;
+        } else if outgoing.recipient == MessageDestination::AllParties {
+            let protocol_message = ProtocolMessage {
+                protocol: format!("{}/{}", this.protocol_id, round),
+                routing: blueprint_networking::types::MessageRouting {
+                    sender: ParticipantInfo {
+                        id: blueprint_networking::types::ParticipantId(this.party_index),
+                        verification_id_key: this
+                            .peer_manager
+                            .get_verification_id_key_from_peer_id(&this.handle.local_peer_id),
+                    },
+                    message_id: msg_id,
+                    round_id: round,
+                    recipient: None,
+                },
+                payload: serde_json::to_vec(&outgoing.msg).map_err(NetworkError::Serialization)?,
+            };
+
+            tracing::trace!(
+                %round,
+                %msg_id,
+                protocol_id = %this.protocol_id,
+                "Sending broadcast message to network",
+            );
+
+            this.handle
+                .send(protocol_message.routing, protocol_message.payload)
+                .map_err(NetworkError::Send)?;
+        }
+
+        Ok(())
     }
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -204,7 +252,31 @@ where
                     MessageType::Broadcast
                 };
 
-                let sender_peer_id = protocol_message.routing.sender;
+                let sender_verification_id =
+                    match protocol_message.routing.sender.verification_id_key {
+                        Some(verification_id) => verification_id,
+                        None => {
+                            warn!("Received message from unknown participant");
+                            return Poll::Ready(Some(Err(NetworkError::UnknownPeer(
+                                "Failed to find verification ID key".to_string(),
+                            ))));
+                        }
+                    };
+                let sender_peer_id = match this
+                    .handle
+                    .peer_manager
+                    .get_peer_id_from_verification_id_key(&sender_verification_id)
+                {
+                    Some(peer_id) => peer_id,
+                    None => {
+                        warn!("Received message from unknown participant");
+                        return Poll::Ready(Some(Err(NetworkError::UnknownPeer(format!(
+                            "Failed to find peer ID for verification ID key: {:?}",
+                            sender_verification_id
+                        )))));
+                    }
+                };
+
                 let sender_party_index = match this
                     .handle
                     .peer_manager

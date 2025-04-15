@@ -63,7 +63,7 @@ pub struct GadgetBehaviourConfig<K: KeyType> {
     /// Peer manager instance
     pub peer_manager: Arc<PeerManager<K>>,
     /// Channel for sending protocol messages
-    pub protocol_message_sender: Sender<ProtocolMessage>,
+    pub protocol_message_sender: Sender<ProtocolMessage<K>>,
     /// Whether to use EVM address for handshake verification
     pub using_evm_address_for_handshake_verification: bool,
 }

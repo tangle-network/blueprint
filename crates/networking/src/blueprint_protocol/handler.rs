@@ -184,7 +184,7 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
                     return;
                 }
 
-                let protocol_message: ProtocolMessage = match bincode::deserialize(&payload) {
+                let protocol_message: ProtocolMessage<K> = match bincode::deserialize(&payload) {
                     Ok(message) => message,
                     Err(e) => {
                         warn!(%peer, "Failed to deserialize protocol message: {:?}", e);
