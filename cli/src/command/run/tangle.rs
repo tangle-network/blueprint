@@ -57,6 +57,10 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
 
     gadget_config.keystore_uri = std::path::absolute(&gadget_config.keystore_uri)?.display().to_string();
 
+    gadget_config.keystore_uri = std::path::absolute(&gadget_config.keystore_uri)?
+        .display()
+        .to_string();
+
     gadget_config.data_dir = opts.data_dir;
 
     let blueprint_manager_config = BlueprintManagerConfig {

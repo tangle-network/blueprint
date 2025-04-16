@@ -11,6 +11,9 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::{info, log, warn};
 use blueprint_runner::config::BlueprintEnvironment;
 use std::future::Future;
+use url::Url;
+use std::net::IpAddr;
+use tokio::net::lookup_host;
 
 pub struct ContainerSource {
     pub fetcher: ImageRegistryFetcher,
@@ -31,7 +34,51 @@ impl ContainerSource {
     }
 }
 
-// TODO(serial): Stop using `Error::Other` everywhere
+/// Returns true if the given URL appears to refer to a local endpoint,
+/// using the OS's resolver configuration.
+async fn is_local_endpoint(raw_url: &str) -> bool {
+    let url = match Url::parse(raw_url) {
+        Ok(u) => u,
+        Err(_) => return false,
+    };
+
+    let host = match url.host_str() {
+        Some(h) => h,
+        None => return false,
+    };
+
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return ip.is_loopback();
+    }
+
+    // Default to 9944, since this is only ever used to determine the RPC endpoint for a Tangle node anyway.
+    let port = url.port_or_known_default().unwrap_or(9944);
+    if let Ok(mut addrs) = lookup_host((host, port)).await {
+        return addrs.all(|addr| addr.ip().is_loopback());
+    }
+
+    false
+}
+
+/// Convert any local endpoints to `host.docker.internal`
+async fn adjust_url_for_container(raw_url: &str) -> String {
+    let mut url = match Url::parse(raw_url) {
+        Ok(u) => u,
+        Err(_) => return raw_url.to_owned(),
+    };
+
+    if is_local_endpoint(raw_url).await {
+        url.set_host(Some("host.docker.internal"))
+            .expect("Failed to set host in URL");
+    }
+    url.to_string()
+}
+
+// TODO(serial): Stop using `Error::Other` everywhere.
 impl BlueprintSourceHandler for ContainerSource {
     async fn fetch(&mut self) -> Result<()> {
         let registry = String::from_utf8(self.fetcher.registry.0.0.clone())
@@ -67,6 +114,18 @@ impl BlueprintSourceHandler for ContainerSource {
             None => return Err(Error::Other("Image not resolved".to_string())),
         };
 
+        let mut adjusted_env_vars = Vec::with_capacity(env_vars.len());
+        for (key, value) in env_vars {
+            // The RPC endpoints need to be adjusted for containers, since they'll usually refer to
+            // localhost when testing.
+            if key == "HTTP_RPC_ENDPOINT" || key == "WS_RPC_URL" {
+                let adjusted_value = adjust_url_for_container(&value).await;
+                adjusted_env_vars.push((key, adjusted_value));
+            } else {
+                adjusted_env_vars.push((key, value));
+            }
+        }
+
         let builder = DockerBuilder::new()
             .await
             .map_err(|e| Error::Other(e.to_string()))?;
@@ -80,11 +139,12 @@ impl BlueprintSourceHandler for ContainerSource {
             client,
             image,
             env.keystore_uri.clone(),
-            env_vars,
+            adjusted_env_vars,
             status_tx,
             stop_rx,
             service_name,
-        )?;
+        )
+        .await?;
         tokio::spawn(task);
 
         Ok(ProcessHandle::new(status_rx, stop_tx))
@@ -99,23 +159,78 @@ impl BlueprintSourceHandler for ContainerSource {
     }
 }
 
-fn create_container_task(
+/// Get the current docker host and the path to the socket, if applicable
+fn current_docker_endpoint() -> (String, Option<String>) {
+    let dh = std::env::var("DOCKER_HOST").unwrap_or_default();
+    if dh.starts_with("unix://") {
+        let path = dh.trim_start_matches("unix://").to_string();
+        (dh, Some(path))
+    } else if dh.is_empty() {
+        // Same default as the Docker CLI
+        (
+            String::from("unix:///var/run/docker.sock"),
+            Some("/var/run/docker.sock".into()),
+        )
+    } else {
+        // Some other network host, no socket
+        (dh, None)
+    }
+}
+
+async fn detect_sysbox(client: &Docker) -> Result<bool> {
+    let info = client
+        .info()
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?;
+    if let Some(rts) = info.runtimes {
+        if rts.contains_key("sysbox-runc") {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+async fn create_container_task(
     client: Arc<Docker>,
     image: String,
     keystore_uri: String,
-    env_vars: Vec<(String, String)>,
+    mut env_vars: Vec<(String, String)>,
     status_tx: mpsc::UnboundedSender<Status>,
     stop_rx: oneshot::Receiver<()>,
     service_name: String,
 ) -> Result<impl Future<Output = ()> + Send> {
-    let mut container = Container::new(client, image);
-    container.env(env_vars.into_iter().map(|(k, v)| format!("{k}={v}")));
+    let (client, runtime, docker_host, mut binds) = match detect_sysbox(&client).await {
+        Ok(_) => {
+            info!("Starting container with Sysbox runtime.");
+            let (docker_host, maybe_sock) = current_docker_endpoint();
 
+            let mut binds = Vec::new();
+            if let Some(p) = maybe_sock {
+                binds.push(format!("{p}:{p}"));
+            }
+
+            (client, Some("sysbox-runc"), docker_host, binds)
+        }
+        Err(_) => todo!(),
+    };
+
+    let mut container = Container::new(client, image);
     let keystore_uri_absolute = std::path::absolute(&keystore_uri)?;
-    container.binds([format!(
+
+    if let Some(runtime) = runtime {
+        container.runtime(runtime);
+    }
+
+    env_vars.push((String::from("DOCKER_HOST"), docker_host));
+    binds.push(format!(
         "{}:{keystore_uri}",
         keystore_uri_absolute.display()
-    )]);
+    ));
+
+    container
+        .env(env_vars.into_iter().map(|(k, v)| format!("{k}={v}")))
+        .binds(binds)
+        .extra_hosts(["host.docker.internal:host-gateway"]);
 
     Ok(async move {
         let container_future = async {
@@ -127,7 +242,7 @@ fn create_container_task(
             } else {
                 let _ = status_tx.send(Status::Error);
             }
-            dbg!(output)
+            output
         };
 
         tokio::select! {
