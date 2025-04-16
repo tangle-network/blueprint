@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.6](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.5...cargo-tangle-v0.4.0-alpha.6) - 2025-04-16
+
+### Other
+
+- updated the following local packages: blueprint-clients, blueprint-contexts, blueprint-chain-setup, blueprint-manager, blueprint-testing-utils, blueprint-testing-utils
+
 ## [0.4.0-alpha.5](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.4...cargo-tangle-v0.4.0-alpha.5) - 2025-04-15
 
 ### Fixed
