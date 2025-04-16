@@ -1,4 +1,4 @@
-use crate::config::BlueprintManagerConfig;
+use crate::config::{BlueprintManagerConfig, SourceCandidates};
 use crate::error::{Error, Result};
 use crate::gadget::native::FilteredBlueprint;
 use crate::gadget::ActiveGadgets;
@@ -29,6 +29,7 @@ pub struct VerifiedBlueprint {
 impl VerifiedBlueprint {
     pub async fn start_services_if_needed(
         &mut self,
+        source_candidates: &SourceCandidates,
         gadget_config: &BlueprintEnvironment,
         manager_config: &BlueprintManagerConfig,
         active_gadgets: &mut ActiveGadgets,
@@ -48,6 +49,7 @@ impl VerifiedBlueprint {
                 continue;
             }
 
+            // TODO(serial): Check preferred sources first
             let service_str = source.name();
             for service_id in &blueprint.services {
                 let sub_service_str = format!("{service_str}-{service_id}");
@@ -67,7 +69,13 @@ impl VerifiedBlueprint {
 
                 // Now that the file is loaded, spawn the process
                 let mut handle = source
-                    .spawn(gadget_config, &sub_service_str, arguments, env_vars)
+                    .spawn(
+                        source_candidates,
+                        gadget_config,
+                        &sub_service_str,
+                        arguments,
+                        env_vars,
+                    )
                     .await?;
 
                 if handle.status() != Status::Running {
@@ -241,6 +249,7 @@ pub(crate) fn check_blueprint_events(
 
 pub(crate) async fn handle_tangle_event(
     event: &TangleEvent,
+    source_candidates: &SourceCandidates,
     blueprints: &[RpcServicesWithBlueprint],
     gadget_config: &BlueprintEnvironment,
     manager_config: &BlueprintManagerConfig,
@@ -310,7 +319,12 @@ pub(crate) async fn handle_tangle_event(
     // Step 3: Check to see if we need to start any new services
     for blueprint in &mut verified_blueprints {
         blueprint
-            .start_services_if_needed(gadget_config, manager_config, active_gadgets)
+            .start_services_if_needed(
+                source_candidates,
+                gadget_config,
+                manager_config,
+                active_gadgets,
+            )
             .await?;
     }
 

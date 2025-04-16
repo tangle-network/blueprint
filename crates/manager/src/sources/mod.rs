@@ -1,4 +1,4 @@
-use crate::config::BlueprintManagerConfig;
+use crate::config::{BlueprintManagerConfig, SourceCandidates};
 use crate::gadget::native::FilteredBlueprint;
 use blueprint_runner::config::{BlueprintEnvironment, SupportedChains};
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -55,6 +55,7 @@ pub trait BlueprintSourceHandler: Send + Sync {
     fn fetch(&mut self) -> impl Future<Output = crate::error::Result<()>> + Send;
     fn spawn(
         &mut self,
+        source_candidates: &SourceCandidates,
         env: &BlueprintEnvironment,
         service: &str,
         args: Vec<String>,

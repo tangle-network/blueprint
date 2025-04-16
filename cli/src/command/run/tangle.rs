@@ -1,6 +1,6 @@
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
-use blueprint_manager::config::BlueprintManagerConfig;
+use blueprint_manager::config::{BlueprintManagerConfig, DEFAULT_DOCKER_HOST};
 use blueprint_manager::executor::run_blueprint_manager;
 use blueprint_runner::config::BlueprintEnvironment;
 use color_eyre::eyre::{Result, eyre};
@@ -10,6 +10,7 @@ use sp_core::sr25519;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::signal;
+use url::Url;
 
 #[derive(Clone)]
 pub struct RunOpts {
@@ -27,6 +28,8 @@ pub struct RunOpts {
     pub keystore_path: Option<String>,
     /// The data directory path
     pub data_dir: Option<PathBuf>,
+    /// The Podman host to use for containerized blueprints
+    pub podman_host: Option<Url>,
 }
 
 /// Runs a blueprint using the blueprint manager
@@ -55,8 +58,6 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         gadget_config.keystore_uri = keystore_path;
     }
 
-    gadget_config.keystore_uri = std::path::absolute(&gadget_config.keystore_uri)?.display().to_string();
-
     gadget_config.keystore_uri = std::path::absolute(&gadget_config.keystore_uri)?
         .display()
         .to_string();
@@ -74,6 +75,8 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         pretty: true,
         instance_id: Some(format!("Blueprint-{}", blueprint_id)),
         test_mode: false,
+        preferred_source: Default::default(),
+        podman_host: opts.podman_host.unwrap_or(DEFAULT_DOCKER_HOST.clone()),
     };
 
     println!(

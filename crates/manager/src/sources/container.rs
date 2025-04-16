@@ -14,6 +14,7 @@ use std::future::Future;
 use url::Url;
 use std::net::IpAddr;
 use tokio::net::lookup_host;
+use crate::config::SourceCandidates;
 
 pub struct ContainerSource {
     pub fetcher: ImageRegistryFetcher,
@@ -104,11 +105,18 @@ impl BlueprintSourceHandler for ContainerSource {
 
     async fn spawn(
         &mut self,
+        source_candidates: &SourceCandidates,
         env: &BlueprintEnvironment,
         service: &str,
         _args: Vec<String>,
         env_vars: Vec<(String, String)>,
     ) -> Result<ProcessHandle> {
+        let Some(container_host) = &source_candidates.container else {
+            return Err(Error::Other(String::from(
+                "No container manager found, unable to use this container source.",
+            )));
+        };
+
         let image = match &self.resolved_image {
             Some(img) => img.clone(),
             None => return Err(Error::Other("Image not resolved".to_string())),
@@ -126,7 +134,7 @@ impl BlueprintSourceHandler for ContainerSource {
             }
         }
 
-        let builder = DockerBuilder::new()
+        let builder = DockerBuilder::with_address(container_host.as_str())
             .await
             .map_err(|e| Error::Other(e.to_string()))?;
         let client = builder.client();
@@ -159,73 +167,22 @@ impl BlueprintSourceHandler for ContainerSource {
     }
 }
 
-/// Get the current docker host and the path to the socket, if applicable
-fn current_docker_endpoint() -> (String, Option<String>) {
-    let dh = std::env::var("DOCKER_HOST").unwrap_or_default();
-    if dh.starts_with("unix://") {
-        let path = dh.trim_start_matches("unix://").to_string();
-        (dh, Some(path))
-    } else if dh.is_empty() {
-        // Same default as the Docker CLI
-        (
-            String::from("unix:///var/run/docker.sock"),
-            Some("/var/run/docker.sock".into()),
-        )
-    } else {
-        // Some other network host, no socket
-        (dh, None)
-    }
-}
-
-async fn detect_sysbox(client: &Docker) -> Result<bool> {
-    let info = client
-        .info()
-        .await
-        .map_err(|e| Error::Other(e.to_string()))?;
-    if let Some(rts) = info.runtimes {
-        if rts.contains_key("sysbox-runc") {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 async fn create_container_task(
     client: Arc<Docker>,
     image: String,
     keystore_uri: String,
-    mut env_vars: Vec<(String, String)>,
+    env_vars: Vec<(String, String)>,
     status_tx: mpsc::UnboundedSender<Status>,
     stop_rx: oneshot::Receiver<()>,
     service_name: String,
 ) -> Result<impl Future<Output = ()> + Send> {
-    let (client, runtime, docker_host, mut binds) = match detect_sysbox(&client).await {
-        Ok(_) => {
-            info!("Starting container with Sysbox runtime.");
-            let (docker_host, maybe_sock) = current_docker_endpoint();
-
-            let mut binds = Vec::new();
-            if let Some(p) = maybe_sock {
-                binds.push(format!("{p}:{p}"));
-            }
-
-            (client, Some("sysbox-runc"), docker_host, binds)
-        }
-        Err(_) => todo!(),
-    };
-
     let mut container = Container::new(client, image);
     let keystore_uri_absolute = std::path::absolute(&keystore_uri)?;
 
-    if let Some(runtime) = runtime {
-        container.runtime(runtime);
-    }
-
-    env_vars.push((String::from("DOCKER_HOST"), docker_host));
-    binds.push(format!(
+    let binds = vec![format!(
         "{}:{keystore_uri}",
         keystore_uri_absolute.display()
-    ));
+    )];
 
     container
         .env(env_vars.into_iter().map(|(k, v)| format!("{k}={v}")))

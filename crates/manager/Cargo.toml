@@ -46,6 +46,10 @@ parking_lot = { workspace = true }
 dynosaur = { workspace = true }
 sp-core = { workspace = true }
 url.workspace = true
+hyper.workspace = true
+hyperlocal.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
 
 [package.metadata.dist]
 dist = false

@@ -1,7 +1,6 @@
 use blueprint_manager::config::BlueprintManagerConfig;
-use blueprint_manager::sdk;
+use blueprint_manager::sdk::entry;
 use clap::Parser;
-use sdk::entry;
 
 #[tokio::main]
 #[allow(clippy::needless_return)]
