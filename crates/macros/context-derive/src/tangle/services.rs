@@ -26,7 +26,7 @@ pub fn generate_context_impl(
     quote! {
         impl #impl_generics ::blueprint_sdk::contexts::services::ServicesContext for #name #ty_generics #where_clause {
             async fn services_client(&self) -> #config_ty {
-                let rpc_client = ::blueprint_sdk::tangle_subxt::subxt::OnlineClient::from_url(
+                let rpc_client = ::blueprint_sdk::tangle_subxt::subxt::OnlineClient::from_insecure_url(
                     &#field_access_config.http_rpc_endpoint
                 )
                 .await
