@@ -4,6 +4,7 @@ use tangle_subxt::subxt_core::utils::AccountId32;
 #[cfg(test)]
 mod tests;
 
+pub mod blueprint;
 pub mod harness;
 pub mod keys;
 pub mod multi_node;

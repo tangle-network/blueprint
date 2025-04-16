@@ -439,14 +439,11 @@ async fn get_next_request_id(client: &TestClient) -> Result<u64, TransactionErro
     Ok(next_request_id)
 }
 
-pub async fn setup_operator_and_service_multiple<T: Signer<TangleConfig>>(
+pub async fn request_service_for_operators<T: Signer<TangleConfig>>(
     clients: &[TestClient],
     sr25519_signers: &[T],
     blueprint_id: u64,
-    preferences: &[Preferences],
-    registration_args: &[RegistrationArgs],
     request_args: RequestArgs,
-    _exit_after_registration: bool,
 ) -> Result<u64, TransactionError> {
     let alice_signer = sr25519_signers
         .first()
@@ -455,25 +452,6 @@ pub async fn setup_operator_and_service_multiple<T: Signer<TangleConfig>>(
     let alice_client = clients
         .first()
         .ok_or(TransactionError::Other("No client".to_string()))?;
-
-    for (((operator, client), preferences), registration_arg) in sr25519_signers
-        .iter()
-        .zip(clients)
-        .zip(preferences)
-        .zip(registration_args)
-    {
-        join_operators(client, operator).await?;
-        // Register for blueprint
-        register_for_blueprint(
-            client,
-            operator,
-            blueprint_id,
-            preferences.clone(),
-            registration_arg.clone(),
-            0,
-        )
-        .await?;
-    }
 
     // Get the current service ID before requesting new service
     let prev_service_id = get_next_service_id(alice_client).await?;
@@ -522,4 +500,50 @@ pub async fn setup_operator_and_service_multiple<T: Signer<TangleConfig>>(
         return Err(TransactionError::ServiceIdMismatch);
     }
     Ok(new_service_id.saturating_sub(1))
+}
+
+/// Setup operators and services for multiple nodes
+///
+/// # Returns
+///
+/// The service ID, or 0 if `skip_service_request` is true since no service was yet requested
+///
+/// # Errors
+///
+/// Returns an error if the transaction fails
+pub async fn setup_operator_and_service_multiple<T: Signer<TangleConfig>>(
+    clients: &[TestClient],
+    sr25519_signers: &[T],
+    blueprint_id: u64,
+    preferences: &[Preferences],
+    registration_args: &[RegistrationArgs],
+    request_args: RequestArgs,
+    _exit_after_registration: bool,
+    skip_service_request: bool,
+) -> Result<u64, TransactionError> {
+    for (((operator, client), preferences), registration_arg) in sr25519_signers
+        .iter()
+        .zip(clients)
+        .zip(preferences)
+        .zip(registration_args)
+    {
+        join_operators(client, operator).await?;
+        // Register for blueprint
+        register_for_blueprint(
+            client,
+            operator,
+            blueprint_id,
+            preferences.clone(),
+            registration_arg.clone(),
+            0,
+        )
+        .await?;
+    }
+
+    if skip_service_request {
+        return Ok(0);
+    }
+
+    // Request service
+    request_service_for_operators(clients, sr25519_signers, blueprint_id, request_args).await
 }

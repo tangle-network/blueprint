@@ -206,6 +206,8 @@ struct NodeInfo {
 pub struct SetupServicesOpts<const N: usize> {
     /// Whether to exit after registration
     pub exit_after_registration: bool,
+    /// Whether to skip automatic service request
+    pub skip_service_request: bool,
     /// Registration parameters for each node
     pub registration_args: [RegistrationArgs; N],
     /// Request parameters for the service
@@ -216,6 +218,7 @@ impl<const N: usize> Default for SetupServicesOpts<N> {
     fn default() -> Self {
         Self {
             exit_after_registration: false,
+            skip_service_request: false,
             registration_args: vec![RegistrationArgs::default(); N].try_into().unwrap(),
             request_args: RequestArgs::default(),
         }
@@ -356,6 +359,7 @@ where
         &self,
         SetupServicesOpts {
             exit_after_registration,
+            skip_service_request,
             registration_args,
             request_args,
         }: SetupServicesOpts<N>,
@@ -397,6 +401,7 @@ where
                 &registration_args,
                 request_args.clone(),
                 exit_after_registration,
+                skip_service_request,
             )
             .await
             .map_err(|e| Error::Setup(e.to_string()))?
@@ -427,6 +432,7 @@ where
 
         self.setup_services_with_options::<N>(SetupServicesOpts {
             exit_after_registration,
+            skip_service_request: false,
             registration_args: vec![RegistrationArgs::default(); N].try_into().unwrap(),
             request_args: RequestArgs::default(),
         })
