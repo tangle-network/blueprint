@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-context-derive"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 description = "Procedural macros for deriving Context Extension traits from blueprint-sdk"
 authors.workspace = true
 edition.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-chain-setup-tangle"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 description = "Tangle-specific chain setup utilities"
 authors.workspace = true
 edition.workspace = true
