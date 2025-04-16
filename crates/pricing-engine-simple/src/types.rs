@@ -2,12 +2,10 @@
 //!
 //! This module defines the fundamental data types used throughout the pricing engine.
 
-#[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
 /// Resource units for various types of cloud resources
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ResourceUnit {
     /// CPU cores or vCPUs
     CPU,
@@ -31,7 +29,6 @@ pub enum ResourceUnit {
     Custom(String),
 }
 
-#[cfg(feature = "std")]
 impl std::fmt::Display for ResourceUnit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -50,12 +47,10 @@ impl std::fmt::Display for ResourceUnit {
 }
 
 /// Error type for parsing resource units
-#[derive(Debug)]
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
-#[cfg_attr(feature = "std", error("Failed to parse resource unit"))]
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to parse resource unit")]
 pub struct ParseResourceUnitError;
 
-#[cfg(feature = "std")]
 impl std::str::FromStr for ResourceUnit {
     type Err = ParseResourceUnitError;
 
@@ -76,8 +71,7 @@ impl std::str::FromStr for ResourceUnit {
 }
 
 /// Represents a price with a value and currency/token
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Price {
     /// Numerical value of the price (in the smallest unit of the token, e.g., microtoken)
     pub value: u128,
@@ -115,7 +109,6 @@ impl Price {
     }
 }
 
-#[cfg(feature = "std")]
 impl std::fmt::Display for Price {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Format to show as a decimal number with 6 decimal places (assuming microtoken)
@@ -126,8 +119,7 @@ impl std::fmt::Display for Price {
 }
 
 /// Resource requirement for a service
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceRequirement {
     /// Type of resource
     pub unit: ResourceUnit,
@@ -143,8 +135,7 @@ impl ResourceRequirement {
 }
 
 /// Time period for recurring pricing
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TimePeriod {
     /// Second
     Second,
@@ -190,16 +181,14 @@ impl TimePeriod {
     }
 }
 
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PriceFunction {
     Linear { per_unit: u128 },
     Tiered(Vec<(u128, u128, u128)>), // (min, max, per_unit)
     Exponential { base: u128, exponent: f32 },
 }
 
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DynamicResourcePricing {
     pub unit: ResourceUnit,
     pub function: PriceFunction,

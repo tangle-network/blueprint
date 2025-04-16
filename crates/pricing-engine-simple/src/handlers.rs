@@ -1,6 +1,6 @@
 // src/handlers.rs
 use crate::benchmark::run_benchmark_suite;
-use crate::cache::{BlueprintHash, PriceCache};
+use crate::cache::{BlueprintId, PriceCache};
 use crate::config::OperatorConfig;
 use crate::error::Result;
 use crate::pricing::calculate_price;
@@ -11,15 +11,15 @@ use std::time::Duration;
 /// Handles updates for a blueprint (registration or price target change).
 /// Runs benchmarking, calculates pricing, and stores it in the cache.
 pub async fn handle_blueprint_update(
-    blueprint_hash: BlueprintHash, // Use the hash directly as the ID
+    blueprint_id: BlueprintId,
     cache: Arc<PriceCache>,
     config: Arc<OperatorConfig>,
-    // TODO: Need a way to determine *what* to benchmark for this blueprint_hash.
+    // TODO: Need a way to determine *what* to benchmark for this blueprint_id.
     // This might involve looking up details from the blockchain event data,
-    // or from a local configuration mapping hashes to benchmarkable artifacts (e.g., docker images, commands).
+    // or from a local configuration mapping IDs to benchmarkable artifacts (e.g., docker images, commands).
     // For now, we use the generic benchmark command from config.
 ) -> Result<()> {
-    info!("Handling update for blueprint: {}", blueprint_hash);
+    info!("Handling update for blueprint ID: {}", blueprint_id);
 
     // Configure Benchmark
     let benchmark_duration = config.benchmark_duration;
@@ -27,7 +27,7 @@ pub async fn handle_blueprint_update(
 
     // Run Benchmark (Potentially long-running, ensure it doesn't block critical paths)
     let benchmark_result = run_benchmark_suite(
-        blueprint_hash.clone(),
+        blueprint_id.to_string(),
         "native".to_string(),
         Duration::from_secs(benchmark_duration),
         Duration::from_secs(benchmark_interval),
@@ -41,10 +41,10 @@ pub async fn handle_blueprint_update(
     if !benchmark_result.success {
         warn!(
             "Benchmark command failed for blueprint {}. Skipping price update.",
-            blueprint_hash
+            blueprint_id
         );
         // Optionally store a marker indicating failure or remove old price?
-        // cache.remove_price(&blueprint_hash)?;
+        // cache.remove_price(blueprint_id)?;
         return Ok(()); // Or return an error depending on desired behavior
     }
 
@@ -52,15 +52,15 @@ pub async fn handle_blueprint_update(
     let price_model = calculate_price(benchmark_result, config.price_scaling_factor)?;
     info!(
         "Calculated price model for {}: {:?}",
-        blueprint_hash, price_model
+        blueprint_id, price_model
     );
 
     // Store Price in Cache
-    cache.store_price(&blueprint_hash, &price_model)?;
+    cache.store_price(blueprint_id, &price_model)?;
 
     info!(
-        "Successfully updated price for blueprint: {}",
-        blueprint_hash
+        "Successfully updated price for blueprint ID: {}",
+        blueprint_id
     );
     Ok(())
 }

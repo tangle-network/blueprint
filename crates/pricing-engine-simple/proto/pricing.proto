@@ -11,28 +11,58 @@ service PricingEngine {
 
 // Request message for GetPrice RPC
 message GetPriceRequest {
-  // The blueprint hash (e.g., SHA256) as a hex-encoded string.
-  string blueprint_hash_hex = 1;
-  // Optional: Desired quantity or duration for more complex pricing
-  // uint64 duration_seconds = 2;
+  // The blueprint ID
+  uint64 blueprint_id = 1;
+  // Time-to-live for service in seconds
+  uint64 ttl_seconds = 2;
+  // Proof of work to prevent DDOS
+  bytes proof_of_work = 3;
+  // Optional resource recommendations
+  repeated ResourceRequirement resource_requirements = 4;
+}
+
+// Resource requirement for a specific resource type
+message ResourceRequirement {
+  // Resource kind (CPU, Memory, GPU, etc.)
+  string kind = 1;
+  // Quantity required
+  uint64 count = 2;
 }
 
 // Response message for GetPrice RPC
 message GetPriceResponse {
-  SignedQuote quote = 1;
+  // The quote details
+  QuoteDetails quote_details = 1;
+  // Signature of the hash of the body
+  bytes signature = 2;
+  // Operator ID
+  bytes operator_id = 3;
+  // Proof of work response
+  bytes proof_of_work = 4;
 }
 
-// Represents a signed price quote from an operator
-message SignedQuote {
-  QuotePayload payload = 1;
-  bytes signature = 2;       // Raw signature bytes (e.g., ed25519)
-  bytes signer_pubkey = 3;   // Raw public key bytes of the signer
+// The detailed quote information
+message QuoteDetails {
+  // The blueprint ID
+  uint64 blueprint_id = 1;
+  // Time-to-live for service in seconds
+  uint64 ttl_seconds = 2;
+  // Total cost in wei
+  string total_cost_wei = 3;
+  // Timestamp when quote was generated
+  uint64 timestamp = 4;
+  // Expiry timestamp
+  uint64 expiry = 5;
+  // Resource pricing details
+  repeated ResourcePricing resources = 6;
 }
 
-// The data that is signed by the operator
-message QuotePayload {
-  bytes blueprint_hash = 1;  // Raw blueprint hash bytes ([u8; 32])
-  string price_wei = 2;      // Price as a string to handle u128
-  uint64 expiry = 3;         // Expiry timestamp (Unix seconds) or block number
-  uint64 timestamp = 4;      // Quote generation timestamp (Unix seconds)
+// Pricing for a specific resource type
+message ResourcePricing {
+  // Resource kind (CPU, Memory, GPU, etc.)
+  string kind = 1;
+  // Quantity of the resource
+  uint64 count = 2;
+  // Price per unit in wei
+  string price_per_unit_wei = 3;
 }

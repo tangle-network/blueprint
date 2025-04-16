@@ -24,8 +24,8 @@ pub enum PricingError {
     #[error("Pricing calculation error: {0}")]
     Pricing(String),
 
-    #[error("Invalid blueprint hash: {0}")]
-    InvalidBlueprintHash(String),
+    #[error("Invalid blueprint ID: {0}")]
+    InvalidBlueprintId(String),
 
     #[error("Price not found for blueprint: {0}")]
     PriceNotFound(String),
@@ -38,6 +38,15 @@ pub enum PricingError {
 
     #[error("Hex decoding error: {0}")]
     HexDecode(String),
+
+    #[error("Proof of work error: {0}")]
+    ProofOfWork(String),
+
+    #[error("Invalid proof of work")]
+    InvalidProofOfWork,
+
+    #[error("Resource requirement error: {0}")]
+    ResourceRequirement(String),
 
     #[error("Other error: {0}")]
     Other(String),

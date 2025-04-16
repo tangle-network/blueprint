@@ -1,16 +1,20 @@
 // src/signer.rs
 use crate::config::OperatorConfig;
 use crate::error::{PricingError, Result};
+use crate::pricing::ResourcePricing;
 use blueprint_crypto::KeyType;
 use serde::{Deserialize, Serialize};
 
 pub type BlueprintId = u64;
+pub type OperatorId = [u8; 32];
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct QuotePayload {
     pub blueprint_id: BlueprintId,
-    pub price_wei: u128,
-    /// Expiry timestamp (Unix epoch seconds) or block number
+    pub ttl_seconds: u64,
+    pub total_cost_wei: u128,
+    pub resources: Vec<ResourcePricing>,
+    /// Expiry timestamp (Unix epoch seconds)
     pub expiry: u64,
     /// Timestamp when the quote was generated (Unix epoch seconds)
     pub timestamp: u64,
@@ -26,21 +30,34 @@ impl QuotePayload {
 pub struct SignedQuote<K: KeyType> {
     pub payload: QuotePayload,
     pub signature: K::Signature,
-    pub signer_pubkey: K::Public,
+    pub operator_id: OperatorId,
+    pub proof_of_work: Vec<u8>,
 }
 
 pub struct OperatorSigner<K: KeyType> {
     keypair: K::Secret,
+    operator_id: OperatorId,
 }
 
 impl<K: KeyType> OperatorSigner<K> {
     /// Loads a keypair from a file or generates a new one if it doesn't exist.
-    pub fn new(_config: &OperatorConfig, keypair: K::Secret) -> Result<Self> {
-        Ok(OperatorSigner { keypair })
+    pub fn new(
+        _config: &OperatorConfig,
+        keypair: K::Secret,
+        operator_id: OperatorId,
+    ) -> Result<Self> {
+        Ok(OperatorSigner {
+            keypair,
+            operator_id,
+        })
     }
 
     /// Signs a quote payload.
-    pub fn sign_quote(&mut self, payload: QuotePayload) -> Result<SignedQuote<K>> {
+    pub fn sign_quote(
+        &mut self,
+        payload: QuotePayload,
+        proof_of_work: Vec<u8>,
+    ) -> Result<SignedQuote<K>> {
         let msg = payload.to_bytes()?;
         let signature = K::sign_with_secret(&mut self.keypair, &msg)
             .map_err(|e| PricingError::Signing(format!("{:?}", e)))?;
@@ -48,7 +65,8 @@ impl<K: KeyType> OperatorSigner<K> {
         Ok(SignedQuote {
             payload,
             signature,
-            signer_pubkey: self.public_key(),
+            operator_id: self.operator_id,
+            proof_of_work,
         })
     }
 
@@ -56,9 +74,14 @@ impl<K: KeyType> OperatorSigner<K> {
     pub fn public_key(&self) -> K::Public {
         K::public_from_secret(&self.keypair)
     }
+
+    /// Returns the operator ID
+    pub fn operator_id(&self) -> OperatorId {
+        self.operator_id
+    }
 }
 
-pub fn verify_quote<K: KeyType>(quote: &SignedQuote<K>) -> Result<bool> {
+pub fn verify_quote<K: KeyType>(quote: &SignedQuote<K>, public_key: &K::Public) -> Result<bool> {
     let msg = quote.payload.to_bytes()?;
-    Ok(K::verify(&quote.signer_pubkey, &msg, &quote.signature))
+    Ok(K::verify(public_key, &msg, &quote.signature))
 }

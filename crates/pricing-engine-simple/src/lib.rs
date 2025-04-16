@@ -14,6 +14,7 @@ pub mod cache;
 pub mod config;
 pub mod error;
 pub mod handlers;
+pub mod pow;
 pub mod pricing;
 pub mod service;
 pub mod signer;
@@ -22,14 +23,15 @@ pub mod types;
 // Re-export key types and functions for easier use by the binary or other crates
 pub use benchmark::cpu::CpuBenchmarkResult;
 pub use benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark, run_benchmark_suite};
-pub use cache::PriceCache;
+pub use cache::{BlueprintId, PriceCache};
 pub use config::{OperatorConfig, load_config, load_config_from_path};
 pub use error::{PricingError, Result};
 pub use handlers::handle_blueprint_update;
-pub use pricing::{PriceModel, calculate_price};
+pub use pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
+pub use pricing::{PriceModel, ResourcePricing, calculate_price, load_pricing_from_toml};
 pub use service::blockchain::event::BlockchainEvent;
 pub use service::blockchain::listener::EventListener;
-pub use signer::{OperatorSigner, QuotePayload, SignedQuote};
+pub use signer::{OperatorId, OperatorSigner, QuotePayload, SignedQuote};
 
 // Re-export application-level functions
 pub use app::{

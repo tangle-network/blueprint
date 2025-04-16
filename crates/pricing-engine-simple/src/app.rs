@@ -72,22 +72,21 @@ pub async fn init_price_cache(config: &Arc<OperatorConfig>) -> Result<Arc<PriceC
     Ok(price_cache)
 }
 
-/// Initialize the operator signer with a concrete key type implementation
-pub async fn init_operator_signer(
-    config: &Arc<OperatorConfig>,
+/// Initialize the operator signer with a keypair
+pub fn init_operator_signer<P: AsRef<std::path::Path>>(
+    config: &OperatorConfig,
+    keystore_path: P,
 ) -> Result<Arc<Mutex<OperatorSigner<blueprint_keystore::crypto::k256::K256Ecdsa>>>> {
+    use blueprint_crypto::BytesEncoding;
     use blueprint_keystore::crypto::k256::K256Ecdsa;
     use blueprint_keystore::{Keystore, KeystoreConfig};
-    use std::path::Path;
 
     info!("Initializing operator signer with K256Ecdsa");
 
-    // Create keystore path if it doesn't exist
-    let keystore_path = Path::new(&config.keystore_path);
+    let keystore_path = keystore_path.as_ref();
     if !keystore_path.exists() {
-        std::fs::create_dir_all(keystore_path).map_err(|e| {
-            PricingError::Signing(format!("Failed to create keystore directory: {}", e))
-        })?;
+        info!("Creating keystore directory: {:?}", keystore_path);
+        std::fs::create_dir_all(keystore_path)?;
     }
 
     // Initialize the keystore
@@ -110,8 +109,23 @@ pub async fn init_operator_signer(
     // Get the secret key
     let keypair = keystore.get_secret::<K256Ecdsa>(&public_key)?;
 
+    // Create a deterministic operator ID from the public key
+    let mut operator_id = [0u8; 32];
+    let public_bytes = public_key.to_bytes();
+
+    // Copy the public key bytes to the operator ID, or hash them if needed
+    if public_bytes.len() >= 32 {
+        operator_id.copy_from_slice(&public_bytes[0..32]);
+    } else {
+        // If public key is shorter than 32 bytes, use a hash
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(&public_bytes);
+        operator_id.copy_from_slice(&hasher.finalize());
+    }
+
     // Create the operator signer
-    let signer = OperatorSigner::new(config, keypair)?;
+    let signer = OperatorSigner::new(config, keypair, operator_id)?;
     info!(
         "K256Ecdsa operator signer initialized with public key: {:?}",
         signer.public_key()
@@ -140,14 +154,11 @@ pub fn spawn_event_processor(
 
             if update_pricing {
                 if let Some(id) = blueprint_id {
-                    // Convert ID to a string hash format for the cache
-                    let blueprint_hash = id.to_string();
-                    info!("Updating pricing for blueprint: {}", blueprint_hash);
+                    info!("Updating pricing for blueprint ID: {}", id);
 
                     // Handle the blueprint update
                     if let Err(e) =
-                        handle_blueprint_update(blueprint_hash, price_cache.clone(), config.clone())
-                            .await
+                        handle_blueprint_update(id, price_cache.clone(), config.clone()).await
                     {
                         error!("Failed to update pricing: {}", e);
                     }

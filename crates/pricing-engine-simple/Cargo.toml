@@ -83,6 +83,9 @@ libc = "0.2.147"  # For direct I/O support
 tonic = { version = "0.11", features = ["transport", "codegen"] }
 prost = "0.12"
 
+# Proof of work
+sha2 = "0.10.8"
+
 # Combine dev-dependencies into one section and remove duplicates
 [dev-dependencies]
 test-log = "0.2"

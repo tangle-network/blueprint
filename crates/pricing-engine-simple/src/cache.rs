@@ -5,12 +5,12 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-// Using String for blueprint hash for simplicity, could be [u8; 32]
-pub type BlueprintHash = String;
+// Using u64 for blueprint ID
+pub type BlueprintId = u64;
 
 #[derive(Clone)]
 pub struct PriceCache {
-    cache: Arc<Mutex<HashMap<BlueprintHash, PriceModel>>>,
+    cache: Arc<Mutex<HashMap<BlueprintId, PriceModel>>>,
 }
 
 impl PriceCache {
@@ -21,37 +21,33 @@ impl PriceCache {
         })
     }
 
-    /// Stores a price model for a given blueprint hash.
+    /// Stores a price model for a given blueprint ID.
     /// Overwrites existing entries.
-    pub fn store_price(
-        &self,
-        blueprint_hash: &BlueprintHash,
-        price_model: &PriceModel,
-    ) -> Result<()> {
+    pub fn store_price(&self, blueprint_id: BlueprintId, price_model: &PriceModel) -> Result<()> {
         let mut cache = self
             .cache
             .lock()
             .map_err(|e| PricingError::Cache(format!("Lock error: {}", e)))?;
-        cache.insert(blueprint_hash.clone(), price_model.clone());
+        cache.insert(blueprint_id, price_model.clone());
         Ok(())
     }
 
-    /// Retrieves a price model for a given blueprint hash.
-    /// Returns `Ok(None)` if the blueprint hash is not found.
-    pub fn get_price(&self, blueprint_hash: &BlueprintHash) -> Result<Option<PriceModel>> {
+    /// Retrieves a price model for a given blueprint ID.
+    /// Returns `Ok(None)` if the blueprint ID is not found.
+    pub fn get_price(&self, blueprint_id: BlueprintId) -> Result<Option<PriceModel>> {
         let cache = self
             .cache
             .lock()
             .map_err(|e| PricingError::Cache(format!("Lock error: {}", e)))?;
-        Ok(cache.get(blueprint_hash).cloned())
+        Ok(cache.get(&blueprint_id).cloned())
     }
 
-    /// Removes a price model for a given blueprint hash.
-    pub fn remove_price(&self, blueprint_hash: &BlueprintHash) -> Result<Option<PriceModel>> {
+    /// Removes a price model for a given blueprint ID.
+    pub fn remove_price(&self, blueprint_id: BlueprintId) -> Result<Option<PriceModel>> {
         let mut cache = self
             .cache
             .lock()
             .map_err(|e| PricingError::Cache(format!("Lock error: {}", e)))?;
-        Ok(cache.remove(blueprint_hash))
+        Ok(cache.remove(&blueprint_id))
     }
 }

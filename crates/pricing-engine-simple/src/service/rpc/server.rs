@@ -1,7 +1,8 @@
 // src/service/rpc/server.rs
 
-use crate::cache::{BlueprintHash, PriceCache};
 use crate::config::OperatorConfig;
+use crate::pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
+use crate::pricing::load_pricing_from_toml;
 use crate::signer::{
     OperatorSigner, QuotePayload as SignerQuotePayload, SignedQuote as SignerSignedQuote,
 };
@@ -11,23 +12,23 @@ use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, transport::Server};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::pricing_engine::{
-    GetPriceRequest, GetPriceResponse, QuotePayload, SignedQuote,
+    GetPriceRequest, GetPriceResponse, QuoteDetails, ResourcePricing as ProtoResourcePricing,
     pricing_engine_server::{PricingEngine, PricingEngineServer},
 };
 
 pub struct PricingEngineService {
     config: Arc<OperatorConfig>,
-    cache: Arc<PriceCache>,
+    cache: Arc<crate::cache::PriceCache>,
     signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
 }
 
 impl PricingEngineService {
     pub fn new(
         config: Arc<OperatorConfig>,
-        cache: Arc<PriceCache>,
+        cache: Arc<crate::cache::PriceCache>,
         signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
     ) -> Self {
         Self {
@@ -45,101 +46,147 @@ impl PricingEngine for PricingEngineService {
         request: Request<GetPriceRequest>,
     ) -> Result<Response<GetPriceResponse>, Status> {
         let req = request.into_inner();
-        let blueprint_hash_hex: BlueprintHash = req.blueprint_hash_hex; // Already a String
+        let blueprint_id = req.blueprint_id;
+        let ttl_seconds = req.ttl_seconds;
+        let proof_of_work = req.proof_of_work;
+
         info!(
-            "Received GetPrice request for blueprint: {}",
-            blueprint_hash_hex
+            "Received GetPrice request for blueprint ID: {}",
+            blueprint_id
         );
 
-        let blueprint_hash_bytes: [u8; 32] = hex::decode(&blueprint_hash_hex)
-            .map_err(|e| {
-                warn!(
-                    "Invalid hex for blueprint hash '{}': {}",
-                    blueprint_hash_hex, e
-                );
-                Status::invalid_argument(format!("Invalid blueprint_hash_hex format: {}", e))
-            })?
-            .try_into()
-            .map_err(|v: Vec<u8>| {
-                warn!(
-                    "Incorrect byte length for blueprint hash '{}': expected 32, got {}",
-                    blueprint_hash_hex,
-                    v.len()
-                );
-                Status::invalid_argument(format!(
-                    "Blueprint hash must be 32 bytes, got {}",
-                    v.len()
-                ))
-            })?;
+        // Verify proof of work
+        let challenge = generate_challenge(blueprint_id, Utc::now().timestamp() as u64);
+        if !verify_proof(&challenge, &proof_of_work, DEFAULT_POW_DIFFICULTY).map_err(|e| {
+            warn!("Failed to verify proof of work: {}", e);
+            Status::invalid_argument("Invalid proof of work")
+        })? {
+            warn!("Invalid proof of work for blueprint ID: {}", blueprint_id);
+            return Err(Status::invalid_argument("Invalid proof of work"));
+        }
 
-        let price_model = self
-            .cache
-            .get_price(&blueprint_hash_hex)
-            .map_err(|e| {
-                error!("Cache lookup failed for {}: {}", blueprint_hash_hex, e);
-                Status::internal("Failed to access price cache")
-            })?
-            .ok_or_else(|| {
-                warn!(
-                    "Price not found in cache for blueprint: {}",
-                    blueprint_hash_hex
-                );
-                Status::not_found(format!(
-                    "Price not found for blueprint {}",
-                    blueprint_hash_hex
-                ))
-            })?;
+        // Check if we have a price model for this blueprint
+        let price_model = self.cache.get_price(blueprint_id).map_err(|e| {
+            error!("Cache lookup failed for {}: {}", blueprint_id, e);
+            Status::internal("Failed to access price cache")
+        })?;
 
+        // If no price model exists, try to load from pricing.toml or run benchmark
+        let price_model = match price_model {
+            Some(model) => model,
+            None => {
+                // Try to load from pricing.toml
+                let pricing_data = load_pricing_from_toml("pricing.toml").map_err(|e| {
+                    error!("Failed to load pricing data: {}", e);
+                    Status::internal("Failed to load pricing data")
+                })?;
+
+                // Check if we have specific pricing for this blueprint
+                let resources = pricing_data
+                    .get(&Some(blueprint_id))
+                    .or_else(|| pricing_data.get(&None)) // Fall back to default pricing
+                    .ok_or_else(|| {
+                        warn!("No pricing found for blueprint ID: {}", blueprint_id);
+                        Status::not_found(format!(
+                            "No pricing found for blueprint ID {}",
+                            blueprint_id
+                        ))
+                    })?;
+
+                // Create a price model from the resources
+                let mut total_price_per_second = 0u128;
+                for resource in resources {
+                    total_price_per_second = total_price_per_second.saturating_add(
+                        resource
+                            .price_per_unit_wei
+                            .saturating_mul(resource.count as u128),
+                    );
+                }
+
+                let model = crate::pricing::PriceModel {
+                    resources: resources.clone(),
+                    price_per_second_wei: total_price_per_second,
+                    generated_at: Utc::now(),
+                    benchmark_profile: None,
+                };
+
+                // Cache the model for future use
+                if let Err(e) = self.cache.store_price(blueprint_id, &model) {
+                    error!("Failed to cache price model: {}", e);
+                }
+
+                model
+            }
+        };
+
+        // Calculate total cost based on TTL
+        let total_cost_wei = price_model.calculate_total_cost(ttl_seconds);
+
+        // Prepare the response
         let expiry_time = Utc::now().timestamp() as u64 + self.config.quote_validity_duration_secs;
         let timestamp = Utc::now().timestamp() as u64;
 
-        let blueprint_id = if blueprint_hash_bytes.len() >= 8 {
-            u64::from_be_bytes(blueprint_hash_bytes[0..8].try_into().unwrap())
-        } else {
-            warn!("Blueprint hash is shorter than 8 bytes, using 0 for ID");
-            0
-        };
+        // Convert our internal resource pricing to proto resource pricing
+        let proto_resources: Vec<ProtoResourcePricing> = price_model
+            .resources
+            .iter()
+            .map(|r| ProtoResourcePricing {
+                kind: format!("{:?}", r.kind),
+                count: r.count,
+                price_per_unit_wei: r.price_per_unit_wei.to_string(),
+            })
+            .collect();
 
+        // Create the quote payload
         let signer_payload = SignerQuotePayload {
             blueprint_id,
-            price_wei: price_model.price_per_second_wei,
+            ttl_seconds,
+            total_cost_wei,
+            resources: price_model.resources.clone(),
             expiry: expiry_time,
             timestamp,
         };
-        debug!("Constructed signer payload: {:?}", signer_payload);
 
-        let signed_quote: SignerSignedQuote<K256Ecdsa> =
-            match self.signer.lock().await.sign_quote(signer_payload) {
-                Ok(quote) => quote,
-                Err(e) => {
-                    error!("Failed to sign quote for {}: {}", blueprint_hash_hex, e);
-                    return Err(Status::internal("Failed to sign price quote"));
-                }
-            };
-        debug!(
-            "Signed quote generated. Signature length: {}",
-            signed_quote.signature.to_bytes().len()
-        );
+        // Generate proof of work for the response
+        let response_pow = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY)
+            .await
+            .map_err(|e| {
+                error!("Failed to generate proof of work: {}", e);
+                Status::internal("Failed to generate proof of work")
+            })?;
 
-        let blueprint_hash_bytes_for_response = hex::decode(&blueprint_hash_hex)
-            .map_err(|_| Status::internal("Failed to decode blueprint hash for response"))?;
+        // Sign the quote
+        let signed_quote: SignerSignedQuote<K256Ecdsa> = match self
+            .signer
+            .lock()
+            .await
+            .sign_quote(signer_payload, response_pow.clone())
+        {
+            Ok(quote) => quote,
+            Err(e) => {
+                error!("Failed to sign quote for {}: {}", blueprint_id, e);
+                return Err(Status::internal("Failed to sign price quote"));
+            }
+        };
 
-        let response_payload = QuotePayload {
-            blueprint_hash: blueprint_hash_bytes_for_response,
-            price_wei: signed_quote.payload.price_wei.to_string(),
-            expiry: signed_quote.payload.expiry,
+        // Create the response
+        let quote_details = QuoteDetails {
+            blueprint_id,
+            ttl_seconds,
+            total_cost_wei: signed_quote.payload.total_cost_wei.to_string(),
             timestamp: signed_quote.payload.timestamp,
+            expiry: signed_quote.payload.expiry,
+            resources: proto_resources,
         };
 
         let response = GetPriceResponse {
-            quote: Some(SignedQuote {
-                payload: Some(response_payload),
-                signature: signed_quote.signature.to_bytes().to_vec(),
-                signer_pubkey: signed_quote.signer_pubkey.to_bytes().to_vec(),
-            }),
+            quote_details: Some(quote_details),
+            signature: signed_quote.signature.to_bytes().to_vec(),
+            operator_id: signed_quote.operator_id.to_vec(),
+            proof_of_work: signed_quote.proof_of_work,
         };
 
-        info!("Sending signed quote for blueprint: {}", blueprint_hash_hex);
+        info!("Sending signed quote for blueprint ID: {}", blueprint_id);
         Ok(Response::new(response))
     }
 }
@@ -147,7 +194,7 @@ impl PricingEngine for PricingEngineService {
 // Function to run the server (called from main.rs)
 pub async fn run_rpc_server(
     config: Arc<OperatorConfig>,
-    cache: Arc<PriceCache>,
+    cache: Arc<crate::cache::PriceCache>,
     signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
 ) -> anyhow::Result<()> {
     let addr = config.rpc_bind_address.parse()?;
