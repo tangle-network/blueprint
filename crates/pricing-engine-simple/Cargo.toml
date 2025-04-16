@@ -40,7 +40,7 @@ uuid = { workspace = true, features = ["v4"] }
 once_cell = { workspace = true }
 hex = { workspace = true }
 anyhow = { workspace = true }
-toml = "0.8.0"
+toml = { workspace = true, features = ["parse"] }
 
 # Substrate RPC and runtime API dependencies
 jsonrpsee = { workspace = true, features = ["server", "macros", "http-client"] }
@@ -64,39 +64,39 @@ crossbeam-channel = { workspace = true }
 
 # P2P networking for RFQ and gossip
 libp2p = { workspace = true, features = ["gossipsub", "identify", "kad", "noise", "yamux", "tcp", "tokio", "dns"] }
-serde_with = "3.12.0"
+serde_with = { workspace = true }
 
 # Logging
 tracing-subscriber = { workspace = true }
-time = "0.3.41"
+time = { workspace = true }
 
 # Benchmarking
-sysinfo = "0.30"
-num_cpus = "1.16"
+sysinfo = { workspace = true, features = ["system"] }
+num_cpus = { workspace = true }
 
 # Utilities
 # Add serde feature to chrono
-chrono = { version = "0.4", features = ["serde"] }
-libc = "0.2.147"  # For direct I/O support
+chrono = { workspace = true, features = ["serde", "clock"] }
+libc = { workspace = true }  # For direct I/O support
 
 # Add tonic and prost for gRPC server
-tonic = { version = "0.11", features = ["transport", "codegen"] }
-prost = "0.12"
+tonic = { workspace = true, features = ["transport", "codegen", "prost"] }
+prost = { workspace = true, features = ["prost-derive"] }
 
 # Proof of work
-sha2 = "0.10.8"
+sha2 = { workspace = true }
 
 # Combine dev-dependencies into one section and remove duplicates
 [dev-dependencies]
-test-log = "0.2"
-tokio = { version = "1", features = ["full"] }
+test-log = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 serial_test = { workspace = true, features = ["async"] }
 blueprint-networking = { workspace = true, features = ["testing"] }
 blueprint-testing-utils = { workspace = true }
-tonic = "0.11"
+tonic = { workspace = true }
 
 [build-dependencies]
-tonic-build = "0.11"
+tonic-build = { workspace = true, features = ["prost"] }
 
 [features]
 default = []

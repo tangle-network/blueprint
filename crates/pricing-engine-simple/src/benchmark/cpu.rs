@@ -88,8 +88,8 @@ pub fn run_cpu_benchmark(_config: &BenchmarkRunConfig) -> Result<CpuBenchmarkRes
 
             let usage = {
                 let mut sys = thread_system.lock().unwrap();
-                sys.refresh_cpu();
-                sys.global_cpu_info().cpu_usage()
+                sys.refresh_cpu_all();
+                sys.global_cpu_usage()
             };
 
             (primes_found, usage)
@@ -106,8 +106,8 @@ pub fn run_cpu_benchmark(_config: &BenchmarkRunConfig) -> Result<CpuBenchmarkRes
         while monitor_start.elapsed() < Duration::from_secs(10) {
             {
                 let mut sys = monitoring_system.lock().unwrap();
-                sys.refresh_cpu();
-                cpu_usage_samples.push(sys.global_cpu_info().cpu_usage());
+                sys.refresh_cpu_all();
+                cpu_usage_samples.push(sys.global_cpu_usage());
             }
             thread::sleep(Duration::from_millis(100));
         }
