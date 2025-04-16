@@ -4,6 +4,7 @@ use blueprint_testing_utils::setup_log;
 
 use crate::benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark_suite};
 use crate::pricing::calculate_price;
+use crate::types::ResourceUnit;
 
 // Helper function to create a test benchmark profile
 fn create_test_benchmark_profile(avg_cpu_cores: f32) -> BenchmarkProfile {
@@ -114,6 +115,20 @@ fn test_calculate_price_basic() {
     // Verify the price calculation (1.0 cores * 1,000,000 Wei = 1,000,000 Wei)
     assert_eq!(price_model.price_per_second_wei, 1_000_000);
 
+    // Verify resources were created correctly
+    assert!(!price_model.resources.is_empty());
+
+    // Find CPU resource
+    let cpu_resource = price_model
+        .resources
+        .iter()
+        .find(|r| r.kind == ResourceUnit::CPU);
+    assert!(cpu_resource.is_some(), "CPU resource should be present");
+    let cpu_resource = cpu_resource.unwrap();
+
+    // Verify CPU count is 1 (rounded up from 1.0)
+    assert_eq!(cpu_resource.count, 1);
+
     // Verify the benchmark profile was stored in the price model
     assert!(price_model.benchmark_profile.is_some());
     let stored_profile = price_model.benchmark_profile.unwrap();
@@ -132,6 +147,14 @@ fn test_calculate_price_zero_cpu() {
 
     // Price should be zero when CPU usage is zero
     assert_eq!(price_model.price_per_second_wei, 0);
+
+    // CPU resource should still exist but with count 0
+    let cpu_resource = price_model
+        .resources
+        .iter()
+        .find(|r| r.kind == ResourceUnit::CPU);
+    assert!(cpu_resource.is_some(), "CPU resource should be present");
+    assert_eq!(cpu_resource.unwrap().count, 0);
 }
 
 #[test]
@@ -145,6 +168,14 @@ fn test_calculate_price_high_cpu() {
 
     // Price should be 8 million Wei per second (8.0 cores * 1,000,000 Wei)
     assert_eq!(price_model.price_per_second_wei, 8_000_000);
+
+    // CPU resource should have count 8
+    let cpu_resource = price_model
+        .resources
+        .iter()
+        .find(|r| r.kind == ResourceUnit::CPU);
+    assert!(cpu_resource.is_some(), "CPU resource should be present");
+    assert_eq!(cpu_resource.unwrap().count, 8);
 }
 
 #[test]
@@ -169,6 +200,64 @@ fn test_calculate_price_different_scaling_factors() {
     assert_eq!(medium_price.price_per_second_wei, 20_000);
     // 2.0 cores * 1,000,000,000 Wei = 2,000,000,000 Wei
     assert_eq!(high_price.price_per_second_wei, 2_000_000_000);
+
+    // Verify CPU resource count is consistent across all models
+    assert_eq!(
+        low_price
+            .resources
+            .iter()
+            .find(|r| r.kind == ResourceUnit::CPU)
+            .unwrap()
+            .count,
+        2
+    );
+    assert_eq!(
+        medium_price
+            .resources
+            .iter()
+            .find(|r| r.kind == ResourceUnit::CPU)
+            .unwrap()
+            .count,
+        2
+    );
+    assert_eq!(
+        high_price
+            .resources
+            .iter()
+            .find(|r| r.kind == ResourceUnit::CPU)
+            .unwrap()
+            .count,
+        2
+    );
+
+    // Verify price per unit is scaled correctly
+    assert_eq!(
+        low_price
+            .resources
+            .iter()
+            .find(|r| r.kind == ResourceUnit::CPU)
+            .unwrap()
+            .price_per_unit_wei,
+        100
+    );
+    assert_eq!(
+        medium_price
+            .resources
+            .iter()
+            .find(|r| r.kind == ResourceUnit::CPU)
+            .unwrap()
+            .price_per_unit_wei,
+        10_000
+    );
+    assert_eq!(
+        high_price
+            .resources
+            .iter()
+            .find(|r| r.kind == ResourceUnit::CPU)
+            .unwrap()
+            .price_per_unit_wei,
+        1_000_000_000
+    );
 }
 
 #[test]
@@ -184,6 +273,14 @@ fn test_calculate_price_negative_scaling_factor() {
 
     // Price should be clamped to 0
     assert_eq!(price_model.price_per_second_wei, 0);
+
+    // CPU resource should still exist but with price_per_unit_wei of 0
+    let cpu_resource = price_model
+        .resources
+        .iter()
+        .find(|r| r.kind == ResourceUnit::CPU);
+    assert!(cpu_resource.is_some(), "CPU resource should be present");
+    assert_eq!(cpu_resource.unwrap().price_per_unit_wei, 0);
 }
 
 #[test]
@@ -299,6 +396,89 @@ fn test_network_benchmark() {
     assert!(result.network_rx_mb > 0.0);
     assert!(result.network_tx_mb > 0.0);
     assert!(result.download_speed_mbps > 0.0);
-    assert!(result.latency_ms >= 0.0);
-    assert!(result.duration_ms > 0);
+    assert!(result.upload_speed_mbps > 0.0);
+}
+
+#[test]
+fn test_resource_pricing() {
+    // Create a price model with specific resource pricing
+    let price_model = crate::pricing::PriceModel {
+        resources: vec![
+            crate::pricing::ResourcePricing {
+                kind: ResourceUnit::CPU,
+                count: 2,
+                price_per_unit_wei: 1_000_000,
+            },
+            crate::pricing::ResourcePricing {
+                kind: ResourceUnit::MemoryMB,
+                count: 1024,
+                price_per_unit_wei: 500,
+            },
+        ],
+        price_per_second_wei: 2_512_000, // 2 CPU + 1024 MB memory
+        generated_at: chrono::Utc::now(),
+        benchmark_profile: None,
+    };
+
+    // Test total cost calculation for different TTLs
+    let one_minute_cost = price_model.calculate_total_cost(60);
+    let one_hour_cost = price_model.calculate_total_cost(3600);
+    let one_day_cost = price_model.calculate_total_cost(86400);
+
+    // Verify calculations
+    assert_eq!(
+        one_minute_cost,
+        2_512_000 * 60,
+        "One minute cost calculation incorrect"
+    );
+    assert_eq!(
+        one_hour_cost,
+        2_512_000 * 3600,
+        "One hour cost calculation incorrect"
+    );
+    assert_eq!(
+        one_day_cost,
+        2_512_000 * 86400,
+        "One day cost calculation incorrect"
+    );
+}
+
+#[test]
+fn test_pow_challenge_generation() {
+    use crate::pow::generate_challenge;
+
+    // Generate challenges with different inputs
+    let blueprint_id_1 = 12345;
+    let timestamp_1 = 1643723400;
+    let challenge_1 = generate_challenge(blueprint_id_1, timestamp_1);
+
+    let blueprint_id_2 = 12345;
+    let timestamp_2 = 1643723401; // Different timestamp
+    let challenge_2 = generate_challenge(blueprint_id_2, timestamp_2);
+
+    let blueprint_id_3 = 54321; // Different blueprint ID
+    let timestamp_3 = 1643723400;
+    let challenge_3 = generate_challenge(blueprint_id_3, timestamp_3);
+
+    // Verify challenges are not empty
+    assert!(!challenge_1.is_empty());
+    assert!(!challenge_2.is_empty());
+    assert!(!challenge_3.is_empty());
+
+    // Verify different inputs produce different challenges
+    assert_ne!(
+        challenge_1, challenge_2,
+        "Different timestamps should produce different challenges"
+    );
+    assert_ne!(
+        challenge_1, challenge_3,
+        "Different blueprint IDs should produce different challenges"
+    );
+
+    // Verify same inputs produce the same challenge (deterministic)
+    let challenge_1_repeat = generate_challenge(blueprint_id_1, timestamp_1);
+    assert_eq!(
+        challenge_1, challenge_1_repeat,
+        "Same inputs should produce the same challenge"
+    );
 }
