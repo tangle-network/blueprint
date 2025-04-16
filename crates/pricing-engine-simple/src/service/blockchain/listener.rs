@@ -1,7 +1,4 @@
 //! Blockchain event listener for the Tangle Cloud Pricing Engine
-//!
-//! This module implements a listener for blockchain events using the tangle-subxt library,
-//! which provides a type-safe interface for interacting with Tangle Network.
 
 use std::sync::Arc;
 

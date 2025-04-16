@@ -29,8 +29,8 @@ pub enum ResourceUnit {
     Custom(String),
 }
 
-impl std::fmt::Display for ResourceUnit {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ResourceUnit {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             ResourceUnit::CPU => write!(f, "CPU"),
             ResourceUnit::MemoryMB => write!(f, "MemoryMB"),
@@ -51,7 +51,7 @@ impl std::fmt::Display for ResourceUnit {
 #[error("Failed to parse resource unit")]
 pub struct ParseResourceUnitError;
 
-impl std::str::FromStr for ResourceUnit {
+impl core::str::FromStr for ResourceUnit {
     type Err = ParseResourceUnitError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -109,8 +109,8 @@ impl Price {
     }
 }
 
-impl std::fmt::Display for Price {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for Price {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         // Format to show as a decimal number with 6 decimal places (assuming microtoken)
         let whole = self.value / 1_000_000;
         let fractional = self.value % 1_000_000;
