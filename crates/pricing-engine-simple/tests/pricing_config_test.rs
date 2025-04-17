@@ -32,7 +32,7 @@ async fn test_default_pricing_config() -> Result<()> {
 
         for resource in resources {
             println!(
-                "    Resource: {}, Count: {}, Price: {}",
+                "    Resource: {}, Count: {}, Price: ${:.6} per unit",
                 resource.kind, resource.count, resource.price_per_unit_rate
             );
         }
@@ -97,13 +97,9 @@ async fn test_default_pricing_config() -> Result<()> {
     );
 
     // Calculate total price per second for default pricing
-    let mut expected_total: u128 = 0;
+    let mut expected_total: f64 = 0.0;
     for resource in default_resources {
-        expected_total = expected_total.saturating_add(
-            resource
-                .price_per_unit_rate
-                .saturating_mul(resource.count as u128),
-        );
+        expected_total += resource.price_per_unit_rate * resource.count as f64;
     }
 
     // Create a price model from the resources
@@ -124,10 +120,10 @@ async fn test_default_pricing_config() -> Result<()> {
     let monthly_cost = price_model.calculate_total_cost(month);
 
     println!("Pricing verification successful");
-    println!("  Total price per second: {} rate units", expected_total);
-    println!("  Hourly cost: {} rate units", hourly_cost);
-    println!("  Daily cost: {} rate units", daily_cost);
-    println!("  Monthly cost: {} rate units", monthly_cost);
+    println!("  Total price per second: ${:.6} USD", expected_total);
+    println!("  Hourly cost: ${:.6} USD", hourly_cost);
+    println!("  Daily cost: ${:.6} USD", daily_cost);
+    println!("  Monthly cost: ${:.6} USD", monthly_cost);
 
     Ok(())
 }

@@ -14,16 +14,16 @@ pub struct ResourcePricing {
     pub kind: ResourceUnit,
     /// Quantity of the resource
     pub count: u64,
-    /// Price per unit in the smallest denomination of the chosen currency (e.g., wei, satoshi)
-    pub price_per_unit_rate: u128,
+    /// Price per unit in USD with decimal precision (e.g., 0.00005 USD per MB)
+    pub price_per_unit_rate: f64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PriceModel {
     /// Pricing for different resource types
     pub resources: Vec<ResourcePricing>,
-    /// Total price rate per second in the smallest unit (e.g., Wei for Ethereum).
-    pub price_per_second_rate: u128,
+    /// Total price rate per second in USD with decimal precision
+    pub price_per_second_rate: f64,
     /// Timestamp when this price was calculated/cached.
     pub generated_at: DateTime<Utc>,
     /// Optional: Include benchmark details used for pricing.
@@ -32,16 +32,15 @@ pub struct PriceModel {
 
 impl PriceModel {
     /// Calculate the total cost for a given TTL
-    pub fn calculate_total_cost(&self, ttl_seconds: u64) -> u128 {
-        self.price_per_second_rate
-            .saturating_mul(ttl_seconds as u128)
+    pub fn calculate_total_cost(&self, ttl_seconds: u64) -> f64 {
+        self.price_per_second_rate * ttl_seconds as f64
     }
 }
 
 /// Calculates a price based on benchmark results and configuration.
 pub fn calculate_price(profile: BenchmarkProfile, rate_multiplier: f64) -> Result<PriceModel> {
     let mut resources = Vec::new();
-    let mut total_price_per_second = 0u128;
+    let mut total_price_per_second = 0.0;
 
     // CPU pricing
     let avg_cpu_cores = profile
@@ -51,15 +50,14 @@ pub fn calculate_price(profile: BenchmarkProfile, rate_multiplier: f64) -> Resul
         .unwrap_or(0.0);
 
     if avg_cpu_cores > 0.0 {
-        let cpu_price = (avg_cpu_cores as f64 * rate_multiplier).max(0.0).round() as u128;
-        total_price_per_second = total_price_per_second.saturating_add(cpu_price);
+        let cpu_price = avg_cpu_cores * rate_multiplier;
+        total_price_per_second += cpu_price;
 
         resources.push(ResourcePricing {
             kind: ResourceUnit::CPU,
             count: avg_cpu_cores.ceil() as u64,
-            // Ensure price_per_unit is not zero if avg_cpu_cores is non-zero but rounds to 0
-            // Use max(1) to avoid division by zero
-            price_per_unit_rate: cpu_price / (avg_cpu_cores.ceil() as u128).max(1),
+            // Price per unit is the total price divided by the number of units
+            price_per_unit_rate: if avg_cpu_cores > 0.0 { cpu_price / avg_cpu_cores } else { 0.0 },
         });
     }
 
@@ -109,15 +107,14 @@ pub fn load_pricing_from_toml(path: &str) -> Result<HashMap<Option<u64>, Vec<Res
                         .and_then(|c| c.as_integer())
                         .unwrap_or(1) as u64;
 
-                    // Extract price per unit rate
+                    // Extract price per unit rate as float
                     let price_per_unit_rate = resource_table
                         .get("price_per_unit_rate")
                         .and_then(|p| {
-                            p.as_integer()
-                                .map(|int_val| int_val as u128)
-                                .or_else(|| p.as_float().map(|float_val| float_val as u128))
+                            p.as_float()
+                                .or_else(|| p.as_integer().map(|int_val| int_val as f64))
                         })
-                        .unwrap_or(0);
+                        .unwrap_or(0.0);
 
                     default_resources.push(ResourcePricing {
                         kind,
@@ -160,17 +157,14 @@ pub fn load_pricing_from_toml(path: &str) -> Result<HashMap<Option<u64>, Vec<Res
                             .and_then(|c| c.as_integer())
                             .unwrap_or(1) as u64;
 
-                        // Extract price per unit rate
+                        // Extract price per unit rate as float
                         let price_per_unit_rate = resource_table
                             .get("price_per_unit_rate")
                             .and_then(|p| {
-                                if let Some(int_val) = p.as_integer() {
-                                    Some(int_val as u128)
-                                } else {
-                                    p.as_float().map(|float_val| float_val as u128)
-                                }
+                                p.as_float()
+                                    .or_else(|| p.as_integer().map(|int_val| int_val as f64))
                             })
-                            .unwrap_or(0);
+                            .unwrap_or(0.0);
 
                         blueprint_resources.push(ResourcePricing {
                             kind,
