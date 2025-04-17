@@ -1,21 +1,21 @@
-use std::collections::HashMap;
 use std::fs;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use blueprint_pricing_engine_simple_lib::{
-    app::{init_operator_signer, init_benchmark_cache},
-    benchmark::{BenchmarkProfile, CpuBenchmarkResult, MemoryBenchmarkResult, NetworkBenchmarkResult, StorageBenchmarkResult, GpuBenchmarkResult, IoBenchmarkResult},
+    app::{init_benchmark_cache, init_operator_signer},
+    benchmark::{
+        BenchmarkProfile, CpuBenchmarkResult, GpuBenchmarkResult, IoBenchmarkResult,
+        MemoryBenchmarkResult, NetworkBenchmarkResult, StorageBenchmarkResult,
+    },
     config::OperatorConfig,
     error::Result,
+    init_pricing_config,
     pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof},
-    pricing::{PriceModel, ResourcePricing, load_pricing_from_toml, calculate_price},
+    pricing::{calculate_price, load_pricing_from_toml},
     pricing_engine,
     pricing_engine::pricing_engine_client::PricingEngineClient,
     service::rpc::server::PricingEngineService,
-    types::ResourceUnit,
-    init_pricing_config,
 };
 
 use blueprint_core::{error, info, warn};
@@ -28,10 +28,7 @@ use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::{
     register::RegistrationArgs, request::RequestArgs,
 };
 use tempfile::tempdir;
-use tokio::sync::Mutex;
 use tokio::time::sleep;
-use tonic::transport::Channel;
-use tonic::Request;
 
 /// Test the full flow with a blueprint on a local Tangle Testnet
 /// This test covers:
@@ -146,8 +143,10 @@ resources = [
             total_size_mb: 1024,
             operations_per_second: 1000.0,
             transfer_rate_mb_s: 2000.0,
-            access_mode: blueprint_pricing_engine_simple_lib::benchmark::MemoryAccessMode::Sequential,
-            operation_type: blueprint_pricing_engine_simple_lib::benchmark::MemoryOperationType::Read,
+            access_mode:
+                blueprint_pricing_engine_simple_lib::benchmark::MemoryAccessMode::Sequential,
+            operation_type:
+                blueprint_pricing_engine_simple_lib::benchmark::MemoryOperationType::Read,
             latency_ns: 50.0,
             duration_ms: 1000,
         }),
@@ -190,12 +189,12 @@ resources = [
     // Step 3: Calculate a price based on the benchmark profile and pricing data
     // Default TTL in blocks (e.g., 1 hour with 6-second blocks = 600 blocks)
     let ttl_blocks = 600u64;
-    
+
     let price_model = calculate_price(
         benchmark_profile.clone(),
         &pricing_data,
         Some(blueprint_id),
-        ttl_blocks
+        ttl_blocks,
     )?;
 
     // Debug: Print the calculated price model
@@ -214,7 +213,7 @@ resources = [
     let mut cleanup_paths = Vec::new();
 
     // Create 3 different operators with different rate multipliers
-    let rate_multipliers = vec![1.0, 1.2, 1.4];
+    let rate_multipliers = [1.0, 1.2, 1.4];
 
     for (i, multiplier) in rate_multipliers.iter().enumerate() {
         let port = 9000 + i as u16;
@@ -236,25 +235,25 @@ resources = [
 
         // Initialize the benchmark cache
         let benchmark_cache = init_benchmark_cache(&Arc::new(config.clone())).await?;
-        
+
         // Store the benchmark profile in the cache
         benchmark_cache.store_profile(blueprint_id, &benchmark_profile)?;
 
         // Initialize the pricing config
         let pricing_config = init_pricing_config(config_file_path.to_str().unwrap()).await?;
-        
+
         // Apply the rate multiplier to each resource's price
         // This is test-only code to demonstrate different operator pricing
         {
             let mut pricing_map = pricing_config.lock().await;
-            
+
             // Apply multiplier to default resources
             if let Some(resources) = pricing_map.get_mut(&None) {
                 for resource in resources.iter_mut() {
                     resource.price_per_unit_rate *= multiplier;
                 }
             }
-            
+
             // Apply multiplier to blueprint-specific resources if they exist
             if let Some(resources) = pricing_map.get_mut(&Some(blueprint_id)) {
                 for resource in resources.iter_mut() {
@@ -276,9 +275,7 @@ resources = [
 
         // Start the gRPC server
         let server = tonic::transport::Server::builder()
-            .add_service(pricing_engine::pricing_engine_server::PricingEngineServer::new(
-                service,
-            ))
+            .add_service(pricing_engine::pricing_engine_server::PricingEngineServer::new(service))
             .serve(socket_addr);
 
         // Spawn the server in a background task
@@ -293,18 +290,16 @@ resources = [
         // Connect to the server
         let client = loop {
             match tonic::transport::Endpoint::new(format!("http://{}", addr)) {
-                Ok(endpoint) => {
-                    match endpoint.connect().await {
-                        Ok(channel) => {
-                            break PricingEngineClient::new(channel);
-                        }
-                        Err(e) => {
-                            warn!("Failed to connect to endpoint: {}", e);
-                            sleep(Duration::from_millis(100)).await;
-                            continue;
-                        }
+                Ok(endpoint) => match endpoint.connect().await {
+                    Ok(channel) => {
+                        break PricingEngineClient::new(channel);
                     }
-                }
+                    Err(e) => {
+                        warn!("Failed to connect to endpoint: {}", e);
+                        sleep(Duration::from_millis(100)).await;
+                        continue;
+                    }
+                },
                 Err(e) => {
                     warn!("Failed to create endpoint: {}", e);
                     sleep(Duration::from_millis(100)).await;
@@ -387,7 +382,9 @@ resources = [
 
         // Sort quotes by total cost
         quote_responses.sort_by(|a, b| {
-            a.1.total_cost_rate.partial_cmp(&b.1.total_cost_rate).unwrap_or(std::cmp::Ordering::Equal)
+            a.1.total_cost_rate
+                .partial_cmp(&b.1.total_cost_rate)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         for (i, details, operator_id) in &quote_responses {

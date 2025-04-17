@@ -1,10 +1,10 @@
-use std::time::Duration;
 use std::collections::HashMap;
+use std::time::Duration;
 
 use blueprint_testing_utils::setup_log;
 
 use crate::benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark_suite};
-use crate::pricing::{calculate_price, ResourcePricing};
+use crate::pricing::{ResourcePricing, calculate_price};
 use crate::types::ResourceUnit;
 
 // Helper function to create a test benchmark profile
@@ -147,24 +147,34 @@ fn test_calculate_price_basic() {
     println!("Price Model: {:#?}", price_model);
 
     // Verify the price model
-    assert!(!price_model.resources.is_empty(), "Resources should not be empty");
-    
+    assert!(
+        !price_model.resources.is_empty(),
+        "Resources should not be empty"
+    );
+
     // With the new pricing model, the total cost is not just the sum of resource prices
     // It includes the TTL adjustment factor (ttl_blocks * BLOCK_TIME)
     // So we need to calculate the expected total differently
-    
+
     // First, verify that the total cost is positive and reasonable
     assert!(
         price_model.total_cost > 0.0,
         "Expected total cost to be positive, got {}",
         price_model.total_cost
     );
-    
+
     // Verify that the benchmark profile is included
-    assert!(price_model.benchmark_profile.is_some(), "Benchmark profile should be included");
+    assert!(
+        price_model.benchmark_profile.is_some(),
+        "Benchmark profile should be included"
+    );
 
     // Verify that CPU pricing is based on the number of cores
-    if let Some(cpu_resource) = price_model.resources.iter().find(|r| matches!(r.kind, ResourceUnit::CPU)) {
+    if let Some(cpu_resource) = price_model
+        .resources
+        .iter()
+        .find(|r| matches!(r.kind, ResourceUnit::CPU))
+    {
         assert!(
             cpu_resource.count > 0,
             "Expected CPU count to be positive, got {}",
@@ -176,23 +186,35 @@ fn test_calculate_price_basic() {
 
     // Verify that memory pricing is included
     assert!(
-        price_model.resources.iter().any(|r| matches!(r.kind, ResourceUnit::MemoryMB)),
+        price_model
+            .resources
+            .iter()
+            .any(|r| matches!(r.kind, ResourceUnit::MemoryMB)),
         "Memory resource not found in price model"
     );
 
     // Verify that storage pricing is included
     assert!(
-        price_model.resources.iter().any(|r| matches!(r.kind, ResourceUnit::StorageMB)),
+        price_model
+            .resources
+            .iter()
+            .any(|r| matches!(r.kind, ResourceUnit::StorageMB)),
         "Storage resource not found in price model"
     );
 
     // Verify that network pricing is included
     assert!(
-        price_model.resources.iter().any(|r| matches!(r.kind, ResourceUnit::NetworkIngressMB)),
+        price_model
+            .resources
+            .iter()
+            .any(|r| matches!(r.kind, ResourceUnit::NetworkIngressMB)),
         "Network ingress resource not found in price model"
     );
     assert!(
-        price_model.resources.iter().any(|r| matches!(r.kind, ResourceUnit::NetworkEgressMB)),
+        price_model
+            .resources
+            .iter()
+            .any(|r| matches!(r.kind, ResourceUnit::NetworkEgressMB)),
         "Network egress resource not found in price model"
     );
 }
@@ -229,7 +251,11 @@ fn test_calculate_price_high_cpu() {
     println!("Price Model (High CPU): {:#?}", price_model);
 
     // Verify that CPU pricing is based on the number of cores
-    if let Some(cpu_resource) = price_model.resources.iter().find(|r| matches!(r.kind, ResourceUnit::CPU)) {
+    if let Some(cpu_resource) = price_model
+        .resources
+        .iter()
+        .find(|r| matches!(r.kind, ResourceUnit::CPU))
+    {
         assert_eq!(
             cpu_resource.count, 4,
             "Expected 4 CPU cores, got {}",
@@ -285,12 +311,16 @@ fn test_calculate_price_different_scaling_factors() {
         // Verify that the price scales with TTL
         let base_price = price_model.total_cost;
         let expected_total_cost = base_price * (ttl as f64);
-        
+
         println!("Base price per block: ${:.6}", base_price);
         println!("Total cost for {} blocks: ${:.6}", ttl, expected_total_cost);
-        
+
         // Verify that CPU pricing is based on the number of cores
-        if let Some(cpu_resource) = price_model.resources.iter().find(|r| matches!(r.kind, ResourceUnit::CPU)) {
+        if let Some(cpu_resource) = price_model
+            .resources
+            .iter()
+            .find(|r| matches!(r.kind, ResourceUnit::CPU))
+        {
             assert_eq!(
                 cpu_resource.count, 2,
                 "Expected 2 CPU cores, got {}",
@@ -336,7 +366,10 @@ fn test_calculate_price_negative_scaling_factor() {
     match result {
         Ok(price_model) => {
             // If it succeeds, make sure the price is reasonable
-            println!("Price calculation succeeded with negative price: ${:.6}", price_model.total_cost);
+            println!(
+                "Price calculation succeeded with negative price: ${:.6}",
+                price_model.total_cost
+            );
             // Just verify that the total cost is not negative
             assert!(
                 price_model.total_cost >= 0.0,
@@ -491,8 +524,11 @@ fn test_resource_pricing() {
     };
 
     // Test total cost
-    assert!((price_model.total_cost - 0.0000532).abs() < 1e-6,
-        "Expected total cost to be 0.0000532, got {}", price_model.total_cost);
+    assert!(
+        (price_model.total_cost - 0.0000532).abs() < 1e-6,
+        "Expected total cost to be 0.0000532, got {}",
+        price_model.total_cost
+    );
 }
 
 #[test]

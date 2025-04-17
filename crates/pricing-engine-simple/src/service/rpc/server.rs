@@ -23,7 +23,8 @@ use crate::pricing_engine::{
 pub struct PricingEngineService {
     config: Arc<OperatorConfig>,
     benchmark_cache: Arc<BenchmarkCache>,
-    pricing_config: Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
+    pricing_config:
+        Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
     signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
 }
 
@@ -31,7 +32,9 @@ impl PricingEngineService {
     pub fn new(
         config: Arc<OperatorConfig>,
         benchmark_cache: Arc<BenchmarkCache>,
-        pricing_config: Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
+        pricing_config: Arc<
+            Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
+        >,
         signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
     ) -> Self {
         Self {
@@ -88,7 +91,7 @@ impl PricingEngine for PricingEngineService {
 
         // Get the pricing configuration
         let pricing_config = self.pricing_config.lock().await;
-        
+
         // Calculate the price based on the benchmark profile, pricing config, and TTL
         let price_model = match calculate_price(
             benchmark_profile,
@@ -98,7 +101,10 @@ impl PricingEngine for PricingEngineService {
         ) {
             Ok(model) => model,
             Err(e) => {
-                error!("Failed to calculate price for blueprint ID {}: {:?}", blueprint_id, e);
+                error!(
+                    "Failed to calculate price for blueprint ID {}: {:?}",
+                    blueprint_id, e
+                );
                 return Err(Status::internal("Failed to calculate price"));
             }
         };
@@ -179,13 +185,16 @@ impl PricingEngine for PricingEngineService {
 pub async fn run_rpc_server(
     config: Arc<OperatorConfig>,
     benchmark_cache: Arc<BenchmarkCache>,
-    pricing_config: Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
+    pricing_config: Arc<
+        Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
+    >,
     signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
 ) -> anyhow::Result<()> {
     let addr = config.rpc_bind_address.parse()?;
     info!("gRPC server listening on {}", addr);
 
-    let pricing_service = PricingEngineService::new(config, benchmark_cache, pricing_config, signer);
+    let pricing_service =
+        PricingEngineService::new(config, benchmark_cache, pricing_config, signer);
     let server = PricingEngineServer::new(pricing_service);
 
     Server::builder().add_service(server).serve(addr).await?;

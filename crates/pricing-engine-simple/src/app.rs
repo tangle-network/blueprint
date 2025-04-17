@@ -64,10 +64,9 @@ pub async fn load_operator_config(config_path: &PathBuf) -> Result<Arc<OperatorC
 
 /// Initialize the benchmark cache
 pub async fn init_benchmark_cache(config: &Arc<OperatorConfig>) -> Result<Arc<BenchmarkCache>> {
-    let benchmark_cache =
-        Arc::new(BenchmarkCache::new(&config.database_path).map_err(|e| {
-            PricingError::Cache(format!("Failed to initialize benchmark cache: {}", e))
-        })?);
+    let benchmark_cache = Arc::new(BenchmarkCache::new(&config.database_path).map_err(|e| {
+        PricingError::Cache(format!("Failed to initialize benchmark cache: {}", e))
+    })?);
     info!("Benchmark cache initialized");
     Ok(benchmark_cache)
 }

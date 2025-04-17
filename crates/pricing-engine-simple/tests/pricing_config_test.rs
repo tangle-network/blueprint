@@ -3,10 +3,9 @@ use std::path::Path;
 
 use blueprint_pricing_engine_simple_lib::{
     error::Result,
-    pricing::{PriceModel, BLOCK_TIME, calculate_resource_price, load_pricing_from_toml},
+    pricing::{BLOCK_TIME, PriceModel, calculate_resource_price, load_pricing_from_toml},
     types::ResourceUnit,
 };
-use chrono::Utc;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::{
     sp_arithmetic::per_things::Percent,
     tangle_primitives::services::types::{Asset, AssetSecurityRequirement},
@@ -131,63 +130,64 @@ async fn test_resource_price_calculation() -> Result<()> {
     let count = 4u64; // 4 units of a resource
     let price_per_unit = 0.001; // $0.001 per unit
     let ttl_blocks = 600u64; // 600 blocks (equivalent to 1 hour with 6-second blocks)
-    
+
     // Test without security requirements
-    let price_no_security = calculate_resource_price(
-        count,
-        price_per_unit,
-        ttl_blocks,
-        None,
-    );
-    
+    let price_no_security = calculate_resource_price(count, price_per_unit, ttl_blocks, None);
+
     // Expected calculation:
     // calculate_base_resource_cost(0.001 * 4) * calculate_ttl_price_adjustment(600) * calculate_security_rate_adjustment(None)
     // = 0.004 * (600 * 6.0) * 1.0
     // = 0.004 * 3600 * 1.0
     // = 14.4
     let expected_price_no_security = 0.004 * (ttl_blocks as f64 * BLOCK_TIME) * 1.0;
-    
+
     assert_eq!(
-        price_no_security, 
-        expected_price_no_security,
+        price_no_security, expected_price_no_security,
         "Price calculation without security requirements failed"
     );
-    
+
     println!("Resource price calculation (no security):");
     println!("  Count: {}", count);
     println!("  Price per unit: ${:.6}", price_per_unit);
-    println!("  TTL: {} blocks ({} seconds)", ttl_blocks, ttl_blocks as f64 * BLOCK_TIME);
+    println!(
+        "  TTL: {} blocks ({} seconds)",
+        ttl_blocks,
+        ttl_blocks as f64 * BLOCK_TIME
+    );
     println!("  Calculated price: ${:.6}", price_no_security);
-    
+
     // Test with security requirements
     let security_requirements = AssetSecurityRequirement {
         asset: Asset::Custom(0),
-            min_exposure_percent: Percent(50),
-            max_exposure_percent: Percent(80),
+        min_exposure_percent: Percent(50),
+        max_exposure_percent: Percent(80),
     };
-    
+
     let price_with_security = calculate_resource_price(
         count,
         price_per_unit,
         ttl_blocks,
         Some(security_requirements),
     );
-    
+
     // With security requirements, the security factor is still 1.0 (default)
     // So the price should be the same as without security requirements
     let expected_price_with_security = expected_price_no_security;
-    
+
     assert_eq!(
-        price_with_security, 
-        expected_price_with_security,
+        price_with_security, expected_price_with_security,
         "Price calculation with security requirements failed"
     );
-    
+
     println!("Resource price calculation (with security):");
     println!("  Count: {}", count);
     println!("  Price per unit: ${:.6}", price_per_unit);
-    println!("  TTL: {} blocks ({} seconds)", ttl_blocks, ttl_blocks as f64 * BLOCK_TIME);
+    println!(
+        "  TTL: {} blocks ({} seconds)",
+        ttl_blocks,
+        ttl_blocks as f64 * BLOCK_TIME
+    );
     println!("  Calculated price: ${:.6}", price_with_security);
-    
+
     Ok(())
 }

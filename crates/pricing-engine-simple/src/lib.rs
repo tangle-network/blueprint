@@ -36,8 +36,8 @@ pub use signer::{OperatorId, OperatorSigner, QuotePayload, SignedQuote};
 
 // Re-export application-level functions
 pub use app::{
-    cleanup, init_logging, init_operator_signer, load_operator_config,
-    spawn_event_processor, start_blockchain_listener, wait_for_shutdown,
+    cleanup, init_logging, init_operator_signer, load_operator_config, spawn_event_processor,
+    start_blockchain_listener, wait_for_shutdown,
 };
 
 // Export the benchmark cache
@@ -57,7 +57,9 @@ pub async fn init_benchmark_cache(config: &OperatorConfig) -> Result<Arc<Benchma
 }
 
 // Add init_pricing_config function
-pub async fn init_pricing_config(config_path: &str) -> Result<Arc<Mutex<HashMap<Option<u64>, Vec<ResourcePricing>>>>> {
+pub async fn init_pricing_config(
+    config_path: &str,
+) -> Result<Arc<Mutex<HashMap<Option<u64>, Vec<ResourcePricing>>>>> {
     let pricing_config = pricing::load_pricing_from_toml(config_path)?;
     info!("Pricing configuration loaded from {}", config_path);
     Ok(Arc::new(Mutex::new(pricing_config)))

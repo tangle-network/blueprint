@@ -5,7 +5,7 @@ use tracing::info;
 
 // Import functions from the library
 use blueprint_pricing_engine_simple_lib::{
-    cleanup, error::Result, init_benchmark_cache, init_logging, init_operator_signer, 
+    cleanup, error::Result, init_benchmark_cache, init_logging, init_operator_signer,
     init_pricing_config, load_operator_config, service::blockchain::event::BlockchainEvent,
     service::rpc::server::run_rpc_server, spawn_event_processor, start_blockchain_listener,
     wait_for_shutdown,
@@ -68,7 +68,12 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     let benchmark_cache = init_benchmark_cache(&config).await?;
 
     // Initialize pricing configuration
-    let pricing_config = init_pricing_config(cli.pricing_config.to_str().unwrap_or("config/default_pricing.toml")).await?;
+    let pricing_config = init_pricing_config(
+        cli.pricing_config
+            .to_str()
+            .unwrap_or("config/default_pricing.toml"),
+    )
+    .await?;
 
     // Initialize operator signer
     let operator_signer = init_operator_signer(&config, &config.keystore_path)?;
@@ -79,7 +84,9 @@ pub async fn run_app(cli: Cli) -> Result<()> {
 
     // Start the gRPC server
     let server_handle = tokio::spawn(async move {
-        if let Err(e) = run_rpc_server(config, benchmark_cache, pricing_config, operator_signer).await {
+        if let Err(e) =
+            run_rpc_server(config, benchmark_cache, pricing_config, operator_signer).await
+        {
             tracing::error!("gRPC server error: {}", e);
         }
     });

@@ -23,7 +23,11 @@ impl BenchmarkCache {
 
     /// Stores a benchmark profile for a given blueprint ID.
     /// Overwrites existing entries.
-    pub fn store_profile(&self, blueprint_id: BlueprintId, profile: &BenchmarkProfile) -> Result<()> {
+    pub fn store_profile(
+        &self,
+        blueprint_id: BlueprintId,
+        profile: &BenchmarkProfile,
+    ) -> Result<()> {
         let mut cache = self
             .cache
             .lock()

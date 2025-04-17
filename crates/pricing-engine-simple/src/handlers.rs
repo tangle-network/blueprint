@@ -47,7 +47,7 @@ pub async fn handle_blueprint_update(
 
     // Store benchmark profile in cache
     cache.store_profile(blueprint_id, &benchmark_result)?;
-    
+
     info!(
         "Successfully updated benchmark profile for blueprint ID: {}",
         blueprint_id
