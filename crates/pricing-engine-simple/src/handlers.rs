@@ -1,9 +1,8 @@
 // src/handlers.rs
 use crate::benchmark::run_benchmark_suite;
-use crate::cache::{BlueprintId, PriceCache};
+use crate::benchmark_cache::{BenchmarkCache, BlueprintId};
 use crate::config::OperatorConfig;
 use crate::error::Result;
-use crate::pricing::{calculate_price, load_pricing_from_toml};
 use log::{info, warn};
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,7 +11,7 @@ use std::time::Duration;
 /// Runs benchmarking, calculates pricing, and stores it in the cache.
 pub async fn handle_blueprint_update(
     blueprint_id: BlueprintId,
-    cache: Arc<PriceCache>,
+    cache: Arc<BenchmarkCache>,
     config: Arc<OperatorConfig>,
     // TODO: Need a way to determine *what* to benchmark for this blueprint_id.
     // This might involve looking up details from the blockchain event data,
@@ -40,28 +39,17 @@ pub async fn handle_blueprint_update(
 
     if !benchmark_result.success {
         warn!(
-            "Benchmark command failed for blueprint {}. Skipping price update.",
+            "Benchmark command failed for blueprint {}. Skipping profile update.",
             blueprint_id
         );
-        // Optionally store a marker indicating failure or remove old price?
-        // cache.remove_price(blueprint_id)?;
         return Ok(()); // Or return an error depending on desired behavior
     }
 
-    // Calculate Price
-    // Load pricing configuration from file
-    let pricing_config = load_pricing_from_toml("config/default_pricing.toml")?;
-    let price_model = calculate_price(benchmark_result, config.rate_multiplier, &pricing_config, Some(blueprint_id))?;
+    // Store benchmark profile in cache
+    cache.store_profile(blueprint_id, &benchmark_result)?;
+    
     info!(
-        "Calculated price model for {}: {:?}",
-        blueprint_id, price_model
-    );
-
-    // Store Price in Cache
-    cache.store_price(blueprint_id, &price_model)?;
-
-    info!(
-        "Successfully updated price for blueprint ID: {}",
+        "Successfully updated benchmark profile for blueprint ID: {}",
         blueprint_id
     );
     Ok(())

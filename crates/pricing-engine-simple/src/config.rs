@@ -21,9 +21,6 @@ pub struct OperatorConfig {
     /// Interval for sampling metrics during benchmarks (in seconds)
     pub benchmark_interval: u64,
 
-    /// Price multiplier (applied to benchmark results)
-    pub rate_multiplier: f64,
-
     /// Path to the operator's keypair file
     pub keypair_path: String,
 
@@ -55,7 +52,6 @@ pub fn load_config() -> Result<OperatorConfig> {
         benchmark_args: vec!["Simulated benchmark".to_string()],
         benchmark_duration: 60,
         benchmark_interval: 1,
-        rate_multiplier: 1_000_000.0, // Example: 1M units per standard resource unit (e.g., per core-second)
         keypair_path: "./data/operator_key".to_string(),
         keystore_path: "./data/keystore".to_string(),
         rpc_bind_address: "127.0.0.1".to_string(),

@@ -117,7 +117,7 @@ async fn test_default_pricing_config() -> Result<()> {
 
     // Create a pricing configuration for testing
     let mut pricing_config = HashMap::new();
-    pricing_config.insert(None, default_resources.clone());
+    pricing_config.insert(None::<u64>, default_resources.clone());
 
     println!("Pricing verification successful");
     println!("  Total cost: ${:.6} USD", price_model.total_cost);
@@ -130,21 +130,22 @@ async fn test_resource_price_calculation() -> Result<()> {
     // Test parameters
     let count = 4u64; // 4 units of a resource
     let price_per_unit = 0.001; // $0.001 per unit
-    let ttl_seconds = 3600u64; // 1 hour
+    let ttl_blocks = 600u64; // 600 blocks (equivalent to 1 hour with 6-second blocks)
     
     // Test without security requirements
     let price_no_security = calculate_resource_price(
         count,
         price_per_unit,
-        ttl_seconds,
+        ttl_blocks,
         None,
     );
     
     // Expected calculation:
-    // calculate_base_resource_cost(0.001 * 4) * calculate_ttl_price_adjustment(3600 * 6.0) * calculate_security_rate_adjustment(None)
-    // = 0.004 * 21600 * 1.0
-    // = 86.4
-    let expected_price_no_security = 0.004 * (3600.0 * BLOCK_TIME) * 1.0;
+    // calculate_base_resource_cost(0.001 * 4) * calculate_ttl_price_adjustment(600) * calculate_security_rate_adjustment(None)
+    // = 0.004 * (600 * 6.0) * 1.0
+    // = 0.004 * 3600 * 1.0
+    // = 14.4
+    let expected_price_no_security = 0.004 * (ttl_blocks as f64 * BLOCK_TIME) * 1.0;
     
     assert_eq!(
         price_no_security, 
@@ -155,8 +156,7 @@ async fn test_resource_price_calculation() -> Result<()> {
     println!("Resource price calculation (no security):");
     println!("  Count: {}", count);
     println!("  Price per unit: ${:.6}", price_per_unit);
-    println!("  TTL: {} seconds", ttl_seconds);
-    println!("  Block time: {} seconds", BLOCK_TIME);
+    println!("  TTL: {} blocks ({} seconds)", ttl_blocks, ttl_blocks as f64 * BLOCK_TIME);
     println!("  Calculated price: ${:.6}", price_no_security);
     
     // Test with security requirements
@@ -169,11 +169,12 @@ async fn test_resource_price_calculation() -> Result<()> {
     let price_with_security = calculate_resource_price(
         count,
         price_per_unit,
-        ttl_seconds,
+        ttl_blocks,
         Some(security_requirements),
     );
     
-    // Since calculate_security_rate_adjustment currently returns 1.0 regardless of input, the result should be the same
+    // With security requirements, the security factor is still 1.0 (default)
+    // So the price should be the same as without security requirements
     let expected_price_with_security = expected_price_no_security;
     
     assert_eq!(
@@ -185,8 +186,7 @@ async fn test_resource_price_calculation() -> Result<()> {
     println!("Resource price calculation (with security):");
     println!("  Count: {}", count);
     println!("  Price per unit: ${:.6}", price_per_unit);
-    println!("  TTL: {} seconds", ttl_seconds);
-    println!("  Block time: {} seconds", BLOCK_TIME);
+    println!("  TTL: {} blocks ({} seconds)", ttl_blocks, ttl_blocks as f64 * BLOCK_TIME);
     println!("  Calculated price: ${:.6}", price_with_security);
     
     Ok(())

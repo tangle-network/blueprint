@@ -1,7 +1,9 @@
 // src/service/rpc/server.rs
 
+use crate::benchmark_cache::BenchmarkCache;
 use crate::config::OperatorConfig;
 use crate::pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
+use crate::pricing::calculate_price;
 use crate::signer::{
     OperatorSigner, QuotePayload as SignerQuotePayload, SignedQuote as SignerSignedQuote,
 };
@@ -20,19 +22,22 @@ use crate::pricing_engine::{
 
 pub struct PricingEngineService {
     config: Arc<OperatorConfig>,
-    cache: Arc<crate::cache::PriceCache>,
+    benchmark_cache: Arc<BenchmarkCache>,
+    pricing_config: Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
     signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
 }
 
 impl PricingEngineService {
     pub fn new(
         config: Arc<OperatorConfig>,
-        cache: Arc<crate::cache::PriceCache>,
+        benchmark_cache: Arc<BenchmarkCache>,
+        pricing_config: Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
         signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
     ) -> Self {
         Self {
             config,
-            cache,
+            benchmark_cache,
+            pricing_config,
             signer,
         }
     }
@@ -46,7 +51,7 @@ impl PricingEngine for PricingEngineService {
     ) -> Result<Response<GetPriceResponse>, Status> {
         let req = request.into_inner();
         let blueprint_id = req.blueprint_id;
-        let ttl_seconds = req.ttl_seconds;
+        let ttl_blocks = req.ttl_blocks;
         let proof_of_work = req.proof_of_work;
 
         info!(
@@ -64,21 +69,37 @@ impl PricingEngine for PricingEngineService {
             return Err(Status::invalid_argument("Invalid proof of work"));
         }
 
-        // Check if we have a price model for this blueprint
-        let price_model = match self.cache.get_price(blueprint_id) {
-            Ok(Some(model)) => model,
+        // Get the benchmark profile from cache
+        let benchmark_profile = match self.benchmark_cache.get_profile(blueprint_id) {
+            Ok(Some(profile)) => profile,
             _ => {
                 warn!(
-                    "Price not found or cache error for blueprint ID: {}. Using defaults.",
+                    "Benchmark profile not found for blueprint ID: {}. Using defaults.",
                     blueprint_id
                 );
-                // Fallback to default pricing or error
-                // For now, let's use a default PriceModel or return an error
-                // This part needs refinement based on desired behavior
+                // Here you would typically run a benchmark or return an error
+                // For now, let's return an error
                 return Err(Status::not_found(format!(
-                    "Price not found for blueprint ID: {}",
+                    "Benchmark profile not found for blueprint ID: {}",
                     blueprint_id
                 )));
+            }
+        };
+
+        // Get the pricing configuration
+        let pricing_config = self.pricing_config.lock().await;
+        
+        // Calculate the price based on the benchmark profile, pricing config, and TTL
+        let price_model = match calculate_price(
+            benchmark_profile,
+            &pricing_config,
+            Some(blueprint_id),
+            ttl_blocks,
+        ) {
+            Ok(model) => model,
+            Err(e) => {
+                error!("Failed to calculate price for blueprint ID {}: {:?}", blueprint_id, e);
+                return Err(Status::internal("Failed to calculate price"));
             }
         };
 
@@ -103,7 +124,7 @@ impl PricingEngine for PricingEngineService {
         // Create the quote payload
         let signer_payload = SignerQuotePayload {
             blueprint_id,
-            ttl_seconds,
+            ttl_blocks, // Updated from ttl_seconds to ttl_blocks
             total_cost_rate: total_cost,
             resources: price_model.resources.clone(),
             expiry: expiry_time,
@@ -135,8 +156,8 @@ impl PricingEngine for PricingEngineService {
         // Create the response
         let quote_details = QuoteDetails {
             blueprint_id,
-            ttl_seconds,
-            total_cost_rate: signed_quote.payload.total_cost_rate, // Now directly use f64
+            ttl_blocks: signed_quote.payload.ttl_blocks, // Updated from ttl_seconds to ttl_blocks
+            total_cost_rate: signed_quote.payload.total_cost_rate,
             timestamp: signed_quote.payload.timestamp,
             expiry: signed_quote.payload.expiry,
             resources: proto_resources,
@@ -157,13 +178,14 @@ impl PricingEngine for PricingEngineService {
 // Function to run the server (called from main.rs)
 pub async fn run_rpc_server(
     config: Arc<OperatorConfig>,
-    cache: Arc<crate::cache::PriceCache>,
+    benchmark_cache: Arc<BenchmarkCache>,
+    pricing_config: Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
     signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
 ) -> anyhow::Result<()> {
     let addr = config.rpc_bind_address.parse()?;
     info!("gRPC server listening on {}", addr);
 
-    let pricing_service = PricingEngineService::new(config, cache, signer);
+    let pricing_service = PricingEngineService::new(config, benchmark_cache, pricing_config, signer);
     let server = PricingEngineServer::new(pricing_service);
 
     Server::builder().add_service(server).serve(addr).await?;

@@ -5,8 +5,8 @@ use tracing::info;
 
 // Import functions from the library
 use blueprint_pricing_engine_simple_lib::{
-    cleanup, error::Result, init_logging, init_operator_signer, init_price_cache,
-    load_operator_config, service::blockchain::event::BlockchainEvent,
+    cleanup, error::Result, init_benchmark_cache, init_logging, init_operator_signer, 
+    init_pricing_config, load_operator_config, service::blockchain::event::BlockchainEvent,
     service::rpc::server::run_rpc_server, spawn_event_processor, start_blockchain_listener,
     wait_for_shutdown,
 };
@@ -24,6 +24,15 @@ pub struct Cli {
         default_value = "config/operator.toml"
     )]
     pub config: PathBuf,
+
+    /// Path to the pricing configuration file.
+    #[arg(
+        long,
+        value_name = "FILE",
+        env = "PRICING_CONFIG_PATH",
+        default_value = "config/default_pricing.toml"
+    )]
+    pub pricing_config: PathBuf,
 
     /// Tangle node WebSocket URL (only used if 'tangle-listener' feature is enabled).
     #[arg(
@@ -55,19 +64,22 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     // Load configuration (already returns Arc<OperatorConfig>)
     let config = load_operator_config(&cli.config).await?;
 
-    // Initialize price cache
-    let price_cache = init_price_cache(&config).await?;
+    // Initialize benchmark cache
+    let benchmark_cache = init_benchmark_cache(&config).await?;
+
+    // Initialize pricing configuration
+    let pricing_config = init_pricing_config(cli.pricing_config.to_str().unwrap_or("config/default_pricing.toml")).await?;
 
     // Initialize operator signer
     let operator_signer = init_operator_signer(&config, &config.keystore_path)?;
     info!("Operator signer initialized successfully");
 
     // Process blockchain events
-    let _event_processor = spawn_event_processor(event_rx, price_cache.clone(), config.clone());
+    let _event_processor = spawn_event_processor(event_rx, benchmark_cache.clone(), config.clone());
 
     // Start the gRPC server
     let server_handle = tokio::spawn(async move {
-        if let Err(e) = run_rpc_server(config, price_cache, operator_signer).await {
+        if let Err(e) = run_rpc_server(config, benchmark_cache, pricing_config, operator_signer).await {
             tracing::error!("gRPC server error: {}", e);
         }
     });

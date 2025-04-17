@@ -10,7 +10,7 @@ use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
 use crate::{
-    cache::PriceCache,
+    benchmark_cache::BenchmarkCache,
     config::{OperatorConfig, load_config_from_path},
     error::{PricingError, Result},
     handlers::handle_blueprint_update,
@@ -62,14 +62,14 @@ pub async fn load_operator_config(config_path: &PathBuf) -> Result<Arc<OperatorC
     Ok(config)
 }
 
-/// Initialize the price cache
-pub async fn init_price_cache(config: &Arc<OperatorConfig>) -> Result<Arc<PriceCache>> {
-    let price_cache =
-        Arc::new(PriceCache::new(&config.database_path).map_err(|e| {
-            PricingError::Cache(format!("Failed to initialize price cache: {}", e))
+/// Initialize the benchmark cache
+pub async fn init_benchmark_cache(config: &Arc<OperatorConfig>) -> Result<Arc<BenchmarkCache>> {
+    let benchmark_cache =
+        Arc::new(BenchmarkCache::new(&config.database_path).map_err(|e| {
+            PricingError::Cache(format!("Failed to initialize benchmark cache: {}", e))
         })?);
-    info!("Price cache initialized");
-    Ok(price_cache)
+    info!("Benchmark cache initialized");
+    Ok(benchmark_cache)
 }
 
 /// Initialize the operator signer with a keypair
@@ -137,7 +137,7 @@ pub fn init_operator_signer<P: AsRef<std::path::Path>>(
 /// Process blockchain events and update pricing as needed
 pub fn spawn_event_processor(
     mut event_rx: mpsc::Receiver<BlockchainEvent>,
-    price_cache: Arc<PriceCache>,
+    benchmark_cache: Arc<BenchmarkCache>,
     config: Arc<OperatorConfig>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -158,7 +158,7 @@ pub fn spawn_event_processor(
 
                     // Handle the blueprint update
                     if let Err(e) =
-                        handle_blueprint_update(id, price_cache.clone(), config.clone()).await
+                        handle_blueprint_update(id, benchmark_cache.clone(), config.clone()).await
                     {
                         error!("Failed to update pricing: {}", e);
                     }

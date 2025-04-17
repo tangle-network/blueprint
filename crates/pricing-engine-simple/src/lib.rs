@@ -10,6 +10,7 @@
 // Define modules
 pub mod app;
 pub mod benchmark;
+pub mod benchmark_cache;
 pub mod cache;
 pub mod config;
 pub mod error;
@@ -35,9 +36,32 @@ pub use signer::{OperatorId, OperatorSigner, QuotePayload, SignedQuote};
 
 // Re-export application-level functions
 pub use app::{
-    cleanup, init_logging, init_operator_signer, init_price_cache, load_operator_config,
+    cleanup, init_logging, init_operator_signer, load_operator_config,
     spawn_event_processor, start_blockchain_listener, wait_for_shutdown,
 };
+
+// Export the benchmark cache
+pub use crate::benchmark_cache::BenchmarkCache;
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing::info;
+
+// Add init_benchmark_cache function
+pub async fn init_benchmark_cache(config: &OperatorConfig) -> Result<Arc<BenchmarkCache>> {
+    let cache_path = format!("{}/benchmark_cache", config.database_path);
+    let cache = BenchmarkCache::new(cache_path)?;
+    info!("Benchmark cache initialized");
+    Ok(Arc::new(cache))
+}
+
+// Add init_pricing_config function
+pub async fn init_pricing_config(config_path: &str) -> Result<Arc<Mutex<HashMap<Option<u64>, Vec<ResourcePricing>>>>> {
+    let pricing_config = pricing::load_pricing_from_toml(config_path)?;
+    info!("Pricing configuration loaded from {}", config_path);
+    Ok(Arc::new(Mutex::new(pricing_config)))
+}
 
 // Include generated gRPC code
 pub mod pricing_engine {

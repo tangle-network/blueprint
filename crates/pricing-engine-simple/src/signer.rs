@@ -11,7 +11,7 @@ pub type OperatorId = [u8; 32];
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct QuotePayload {
     pub blueprint_id: BlueprintId,
-    pub ttl_seconds: u64,
+    pub ttl_blocks: u64,
     pub total_cost_rate: f64,
     pub resources: Vec<ResourcePricing>,
     /// Expiry timestamp (Unix epoch seconds)

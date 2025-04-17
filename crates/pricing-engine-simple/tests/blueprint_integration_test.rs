@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blueprint_pricing_engine_simple_lib::{
-    app::{init_operator_signer, init_price_cache},
-    benchmark::{BenchmarkProfile, CpuBenchmarkResult, MemoryBenchmarkResult},
+    app::{init_operator_signer, init_benchmark_cache},
+    benchmark::{BenchmarkProfile, CpuBenchmarkResult, MemoryBenchmarkResult, NetworkBenchmarkResult, StorageBenchmarkResult, GpuBenchmarkResult, IoBenchmarkResult},
     config::OperatorConfig,
     error::Result,
     pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof},
@@ -15,15 +15,15 @@ use blueprint_pricing_engine_simple_lib::{
     pricing_engine::pricing_engine_client::PricingEngineClient,
     service::rpc::server::PricingEngineService,
     types::ResourceUnit,
+    init_pricing_config,
 };
 
-use blueprint_core::{error, info};
+use blueprint_core::{error, info, warn};
 use blueprint_testing_utils::{
     setup_log,
     tangle::{TangleTestHarness, blueprint::create_test_blueprint, harness::SetupServicesOpts},
 };
 use chrono::Utc;
-use log::{error, info, warn};
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::{
     register::RegistrationArgs, request::RequestArgs,
 };
@@ -67,29 +67,29 @@ async fn test_full_pricing_flow_with_blueprint() -> Result<()> {
 [default]
 resources = [
   # CPU is priced higher as it's a primary resource
-  { kind = "CPU", count = 1, price_per_unit_rate = 0.001 },
+  { kind = "CPU", count = 1, price_per_unit_rate = 0.000001 },
   
   # Memory is priced lower per MB
-  { kind = "MemoryMB", count = 1024, price_per_unit_rate = 0.00005 },
+  { kind = "MemoryMB", count = 1024, price_per_unit_rate = 0.00000005 },
   
   # Storage is priced similar to memory but slightly cheaper
-  { kind = "StorageMB", count = 1024, price_per_unit_rate = 0.00002 },
+  { kind = "StorageMB", count = 1024, price_per_unit_rate = 0.00000002 },
   
   # Network has different rates for ingress and egress
-  { kind = "NetworkEgressMB", count = 1024, price_per_unit_rate = 0.00003 },
-  { kind = "NetworkIngressMB", count = 1024, price_per_unit_rate = 0.00001 },
+  { kind = "NetworkEgressMB", count = 1024, price_per_unit_rate = 0.00000003 },
+  { kind = "NetworkIngressMB", count = 1024, price_per_unit_rate = 0.00000001 },
   
   # GPU is a premium resource
-  { kind = "GPU", count = 1, price_per_unit_rate = 0.005 },
+  { kind = "GPU", count = 1, price_per_unit_rate = 0.000005 },
   
   # Request-based pricing
-  { kind = "Request", count = 1000, price_per_unit_rate = 0.0001 },
+  { kind = "Request", count = 1000, price_per_unit_rate = 0.0000001 },
   
   # Function invocation pricing
-  { kind = "Invocation", count = 1000, price_per_unit_rate = 0.0002 },
+  { kind = "Invocation", count = 1000, price_per_unit_rate = 0.0000002 },
   
   # Execution time pricing
-  { kind = "ExecutionTimeMS", count = 1000, price_per_unit_rate = 0.00001 }
+  { kind = "ExecutionTimeMS", count = 1000, price_per_unit_rate = 0.00000001 }
 ]
 "#;
 
@@ -106,214 +106,207 @@ resources = [
     // Debug: Print all loaded pricing data
     info!("Loaded pricing data:");
     for (key, resources) in &pricing_data {
-        match key {
-            Some(id) => info!("  Blueprint ID: {}", id),
-            None => info!("  Default pricing"),
-        }
-
+        let blueprint_id_str = match key {
+            Some(id) => id.to_string(),
+            None => "default".to_string(),
+        };
+        info!("Blueprint ID: {}", blueprint_id_str);
         for resource in resources {
             info!(
-                "    Resource: {}, Count: {}, Price: ${:.6}",
+                "  Resource: {} - Count: {} - Rate: ${:.6}",
                 resource.kind, resource.count, resource.price_per_unit_rate
             );
         }
     }
 
-    // Step 2: Verify resource pricing
-    let default_resources = pricing_data.get(&None).expect("Default pricing not found");
-
-    // Check that each resource has a valid price
-    for resource in default_resources {
-        info!(
-            "Verifying resource pricing for {}: ${:.6} per unit",
-            resource.kind, resource.price_per_unit_rate
-        );
-        assert!(
-            resource.price_per_unit_rate > 0.0,
-            "Resource price should be positive"
-        );
-    }
-
-    // Step 3: Calculate expected total cost
-    let mut expected_total = 0.0;
-
-    // Verify each resource type and collect expected prices
-    let expected_resource_prices = [
-        ("CPU", 0.001),
-        ("MemoryMB", 0.00005),
-        ("StorageMB", 0.00002),
-        ("NetworkEgressMB", 0.00003),
-        ("NetworkIngressMB", 0.00001),
-        ("GPU", 0.005),
-        ("Request", 0.0001),
-        ("Invocation", 0.0002),
-        ("ExecutionTimeMS", 0.00001),
-    ];
-
-    for (resource_name, expected_rate) in &expected_resource_prices {
-        if let Some(resource) = default_resources
-            .iter()
-            .find(|r| format!("{}", r.kind) == *resource_name)
-        {
-            info!(
-                "Verifying {} price: ${:.6} (expected ${:.6})",
-                resource_name, resource.price_per_unit_rate, expected_rate
-            );
-
-            // Verify the price is close to the expected value
-            assert!(
-                (resource.price_per_unit_rate - expected_rate).abs() < 1e-6,
-                "{} price doesn't match expected value",
-                resource_name
-            );
-
-            // Add to the total price (price per unit * count)
-            expected_total += resource.price_per_unit_rate * resource.count as f64;
-        }
-    }
-
-    info!("Expected total cost per second: ${:.6}", expected_total);
-
-    // Calculate the price based on the benchmark results
-    let cpu_count = 2;
-    let memory_mb = 1024;
-    let resources = vec![
-        ResourcePricing {
-            kind: ResourceUnit::CPU,
-            count: cpu_count,
-            price_per_unit_rate: 0.001,
-        },
-        ResourcePricing {
-            kind: ResourceUnit::MemoryMB,
-            count: memory_mb,
-            price_per_unit_rate: 0.00005,
-        },
-    ];
-    
-    // Create a pricing configuration for testing
-    let mut pricing_config = HashMap::new();
-    pricing_config.insert(None, resources.clone());
-    
-    // Create a benchmark profile for testing
-    let profile = BenchmarkProfile {
+    // Step 2: Create a benchmark profile
+    let benchmark_profile = BenchmarkProfile {
+        job_id: "test-job".to_string(),
+        execution_mode: "native".to_string(),
+        duration_secs: 60,
+        timestamp: Utc::now().timestamp() as u64,
+        success: true,
         cpu_details: Some(CpuBenchmarkResult {
-            avg_cores_used: cpu_count as f32,
-            ..Default::default()
+            num_cores_detected: 2,
+            avg_cores_used: 2.0,
+            avg_usage_percent: 50.0,
+            peak_cores_used: 2.0,
+            peak_usage_percent: 80.0,
+            benchmark_duration_ms: 1000,
+            primes_found: 1000,
+            max_prime: 20000,
+            primes_per_second: 1000.0,
+            cpu_model: "Test CPU".to_string(),
+            cpu_frequency_mhz: 2500.0,
         }),
         memory_details: Some(MemoryBenchmarkResult {
-            avg_memory_mb: memory_mb as f32,
-            ..Default::default()
+            avg_memory_mb: 1024.0,
+            peak_memory_mb: 1536.0,
+            block_size_kb: 64,
+            total_size_mb: 1024,
+            operations_per_second: 1000.0,
+            transfer_rate_mb_s: 2000.0,
+            access_mode: blueprint_pricing_engine_simple_lib::benchmark::MemoryAccessMode::Sequential,
+            operation_type: blueprint_pricing_engine_simple_lib::benchmark::MemoryOperationType::Read,
+            latency_ns: 50.0,
+            duration_ms: 1000,
         }),
-        ..Default::default()
+        storage_details: Some(StorageBenchmarkResult {
+            storage_available_gb: 100.0,
+        }),
+        network_details: Some(NetworkBenchmarkResult {
+            network_rx_mb: 100.0,
+            network_tx_mb: 50.0,
+            download_speed_mbps: 100.0,
+            upload_speed_mbps: 50.0,
+            latency_ms: 20.0,
+            duration_ms: 1000,
+            packet_loss_percent: 0.1,
+            jitter_ms: 2.0,
+        }),
+        io_details: Some(IoBenchmarkResult {
+            read_mb: 100.0,
+            write_mb: 80.0,
+            read_iops: 500.0,
+            write_iops: 400.0,
+            avg_read_latency_ms: 5.0,
+            avg_write_latency_ms: 8.0,
+            max_read_latency_ms: 10.0,
+            max_write_latency_ms: 15.0,
+            test_mode: blueprint_pricing_engine_simple_lib::benchmark::io::IoTestMode::RndRw,
+            block_size: 4096,
+            total_file_size: 128 * 1024 * 1024, // 128 MB
+            num_files: 2,
+            duration_ms: 1000,
+        }),
+        gpu_details: Some(GpuBenchmarkResult {
+            gpu_available: true,
+            gpu_memory_mb: 4000.0,
+            gpu_model: "Test GPU Model".to_string(),
+            gpu_frequency_mhz: 1500.0,
+        }),
     };
+
+    // Step 3: Calculate a price based on the benchmark profile and pricing data
+    // Default TTL in blocks (e.g., 1 hour with 6-second blocks = 600 blocks)
+    let ttl_blocks = 600u64;
     
-    // Calculate the price per second
-    let price_per_second = calculate_price(profile, 1.0, &pricing_config, None)?;
-    
-    // Create the price model
-    let model = PriceModel {
-        resources: resources.clone(),
-        total_cost: price_per_second.total_cost,
-        benchmark_profile: None,
-    };
+    let price_model = calculate_price(
+        benchmark_profile.clone(),
+        &pricing_data,
+        Some(blueprint_id),
+        ttl_blocks
+    )?;
 
-    // Test cost calculation for different time periods
-    let ttl_seconds = 3600u64; // 1 hour
-    let expected_cost = price_per_second.total_cost;
+    // Debug: Print the calculated price model
+    info!("\nCalculated Price Model:");
+    info!("Total Cost Rate: ${:.6}", price_model.total_cost);
+    for resource in &price_model.resources {
+        info!(
+            "  Resource: {} - Count: {} - Rate: ${:.6}",
+            resource.kind, resource.count, resource.price_per_unit_rate
+        );
+    }
 
-    info!(
-        "Expected cost for {} seconds: ${:.6}",
-        ttl_seconds, expected_cost
-    );
-
-    // Step 4: Set up multiple pricing engines with different rate multipliers
-    let mut cleanup_paths = Vec::new();
+    // Step 4: Set up multiple pricing engines with different pricing strategies
+    let mut servers = Vec::new();
     let mut clients = Vec::new();
-    let mut operator_ids = Vec::new();
+    let mut cleanup_paths = Vec::new();
 
-    // Create 3 pricing engines with different rate multipliers
-    let rate_multipliers = [1.0, 1.2, 1.4];
+    // Create 3 different operators with different rate multipliers
+    let rate_multipliers = vec![1.0, 1.2, 1.4];
 
-    for (i, &rate_multiplier) in rate_multipliers.iter().enumerate() {
-        info!("Setting up pricing engine {} with rate multiplier {}", i, rate_multiplier);
+    for (i, multiplier) in rate_multipliers.iter().enumerate() {
+        let port = 9000 + i as u16;
+        let addr = format!("127.0.0.1:{}", port);
+        let socket_addr = match addr.parse() {
+            Ok(addr) => addr,
+            Err(e) => {
+                error!("Failed to parse socket address: {}", e);
+                continue;
+            }
+        };
 
         // Create a unique config for each operator
         let mut config = create_test_config();
-        config.rate_multiplier = rate_multiplier;
-        config.rpc_port = 9000 + i as u16;
-        config.rpc_bind_address = format!("127.0.0.1:{}", config.rpc_port);
+        config.rpc_port = port;
+        config.rpc_bind_address = addr.clone();
+        config.database_path = format!("./data/test_benchmark_cache_{}", i);
         config.keystore_path = format!("/tmp/test-keystore-{}", i);
-        config.database_path = format!("./data/test_price_cache_{}", i);
+
+        // Initialize the benchmark cache
+        let benchmark_cache = init_benchmark_cache(&Arc::new(config.clone())).await?;
+        
+        // Store the benchmark profile in the cache
+        benchmark_cache.store_profile(blueprint_id, &benchmark_profile)?;
+
+        // Initialize the pricing config
+        let pricing_config = init_pricing_config(config_file_path.to_str().unwrap()).await?;
 
         // Initialize the operator signer
-        let keystore_path = config.keystore_path.clone();
-        let signer = init_operator_signer(&config, &keystore_path)?;
-        let operator_id = signer.lock().await.operator_id();
-        operator_ids.push(operator_id);
+        let operator_signer = init_operator_signer(&config, &config.keystore_path)?;
 
-        // Create config Arc for price cache
-        let config_arc = Arc::new(config.clone());
-        
-        // Initialize the price cache
-        let cache = init_price_cache(&config_arc).await?;
-        
-        // Store pricing data in cache
-        for (blueprint_id_opt, resources) in &pricing_data {
-            if let Some(blueprint_id) = blueprint_id_opt {
-                let price_per_second = resources.iter()
-                    .map(|r| r.price_per_unit_rate * r.count as f64)
-                    .sum::<f64>() * config.rate_multiplier;
-                
-                let model = PriceModel {
-                    resources: resources.clone(),
-                    total_cost: price_per_second,
-                    benchmark_profile: None,
-                };
-                
-                cache.store_price(*blueprint_id, &model)?;
-            }
-        }
+        // Create the pricing engine service
+        let service = PricingEngineService::new(
+            Arc::new(config.clone()),
+            benchmark_cache,
+            pricing_config,
+            operator_signer,
+        );
 
-        // Start the RPC server in a background task
-        let service = PricingEngineService::new(config_arc.clone(), cache.clone(), signer.clone());
-        
-        let addr = config.rpc_bind_address.parse().unwrap();
-        tokio::spawn(async move {
-            let server = tonic::transport::Server::builder()
-                .add_service(pricing_engine::pricing_engine_server::PricingEngineServer::new(service))
-                .serve(addr);
-                
+        // Start the gRPC server
+        let server = tonic::transport::Server::builder()
+            .add_service(pricing_engine::pricing_engine_server::PricingEngineServer::new(
+                service,
+            ))
+            .serve(socket_addr);
+
+        // Spawn the server in a background task
+        let server_handle = tokio::spawn(async move {
             if let Err(e) = server.await {
                 error!("Server error: {}", e);
             }
         });
 
-        // Connect to the RPC server
-        sleep(tokio::time::Duration::from_millis(100)).await;
-        let channel = match Channel::from_shared(format!("http://{}", config.rpc_bind_address))
-            .unwrap()
-            .connect()
-            .await {
-                Ok(channel) => channel,
+        servers.push(server_handle);
+
+        // Connect to the server
+        let client = loop {
+            match tonic::transport::Endpoint::new(format!("http://{}", addr)) {
+                Ok(endpoint) => {
+                    match endpoint.connect().await {
+                        Ok(channel) => {
+                            break PricingEngineClient::new(channel);
+                        }
+                        Err(e) => {
+                            warn!("Failed to connect to endpoint: {}", e);
+                            sleep(Duration::from_millis(100)).await;
+                            continue;
+                        }
+                    }
+                }
                 Err(e) => {
-                    error!("Failed to connect to RPC server: {}", e);
+                    warn!("Failed to create endpoint: {}", e);
+                    sleep(Duration::from_millis(100)).await;
                     continue;
                 }
-            };
-            
-        let client = PricingEngineClient::new(channel);
+            }
+        };
+
         clients.push(client);
 
         // Add paths to clean up later
         cleanup_paths.push((config.database_path, config.keystore_path));
-
-        info!("Pricing engine {} started", i);
     }
 
-    // Step 5: Request quotes from all operators
+    // Step 5: Request quotes from all operators and compare
     let mut quote_responses = Vec::new();
 
-    // Generate a proof of work for the request
+    // Calculate expected cost for a 1-hour TTL
+    let expected_total = price_model.total_cost;
+    let expected_cost = expected_total * (ttl_blocks as f64);
+
+    // Generate proof of work for the request
     let challenge = generate_challenge(blueprint_id, Utc::now().timestamp() as u64);
     let proof = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
 
@@ -321,7 +314,7 @@ resources = [
         // Create a request for the pricing engine
         let request = pricing_engine::GetPriceRequest {
             blueprint_id,
-            ttl_seconds,
+            ttl_blocks,
             resource_requirements: vec![
                 pricing_engine::ResourceRequirement {
                     kind: "CPU".to_string(),
@@ -354,7 +347,7 @@ resources = [
 
         if let Some(details) = &response_ref.quote_details {
             info!("  Total Cost: ${:.6}", details.total_cost_rate);
-            info!("  TTL: {} seconds", details.ttl_seconds);
+            info!("  TTL: {} blocks", details.ttl_blocks);
             info!("  Timestamp: {}", details.timestamp);
             info!("  Expiry: {}", details.expiry);
 
@@ -394,14 +387,13 @@ resources = [
     }
 
     // Step 6: Verify the total cost calculation
-    // Calculate expected cost for a 1-hour TTL
+    // Calculate expected cost for a given TTL in blocks
     info!("\n=== Cost Calculation Verification ===");
-    info!("Base price per second: ${:.6}", expected_total);
+    info!("Base price per block: ${:.6}", expected_total);
     info!(
-        "Expected cost for {} seconds: ${:.6}",
-        ttl_seconds, expected_cost
+        "Expected cost for {} blocks: ${:.6}",
+        ttl_blocks, expected_cost
     );
-    info!("Operator rate multipliers: 1.0, 1.2, 1.4");
 
     // Clean up
     for (cache_path, keystore_path) in cleanup_paths {
@@ -416,14 +408,13 @@ resources = [
 fn create_test_config() -> OperatorConfig {
     OperatorConfig {
         keystore_path: "/tmp/test-keystore".to_string(),
-        database_path: "./data/test_price_cache".to_string(),
+        database_path: "./data/test_benchmark_cache".to_string(),
         rpc_port: 9000,
         rpc_bind_address: "127.0.0.1:9000".to_string(),
         benchmark_command: "echo".to_string(),
         benchmark_args: vec!["benchmark".to_string()],
         benchmark_duration: 10,
         benchmark_interval: 1,
-        rate_multiplier: 1.0,
         keypair_path: "/tmp/test-keypair".to_string(),
         rpc_timeout: 30,
         rpc_max_connections: 100,

@@ -38,7 +38,8 @@ fn calculate_base_resource_cost(resource_count: u64, resource_price_rate: f64) -
     resource_count as f64 * resource_price_rate
 }
 
-/// Function that applies time-based adjustments to the cost
+/// Calculate the time-based price adjustment factor based on TTL in blocks
+/// Each block represents BLOCK_TIME seconds
 fn calculate_ttl_price_adjustment(time_blocks: u64) -> f64 {
     // We multiply the input TTL by BLOCK_TIME
     time_blocks as f64 * BLOCK_TIME
@@ -51,17 +52,15 @@ fn calculate_security_rate_adjustment(_security_requirements: &Option<AssetSecur
 }
 
 /// Calculate the price for a specific resource based on count, rate, TTL, and security requirements
-/// Following the formula: calculate_base_resource_cost(cost * count) * calculate_ttl_price_adjustment(ttl * BLOCK_TIME) * calculate_security_rate_adjustment(security requirements * adjustment rate)
+/// Following the formula: calculate_base_resource_cost(cost * count) * calculate_ttl_price_adjustment(time_blocks) * calculate_security_rate_adjustment(security requirements)
 pub fn calculate_resource_price(
     count: u64,
     price_per_unit_rate: f64,
-    ttl_seconds: u64,
+    ttl_blocks: u64,
     security_requirements: Option<AssetSecurityRequirement<AssetId>>,
 ) -> f64 {   
     let adjusted_base_cost = calculate_base_resource_cost(count, price_per_unit_rate);
-
-    let adjusted_time_cost = calculate_ttl_price_adjustment(ttl_seconds);
-    
+    let adjusted_time_cost = calculate_ttl_price_adjustment(ttl_blocks);
     let security_factor = calculate_security_rate_adjustment(&security_requirements);
     
     adjusted_base_cost * adjusted_time_cost * security_factor
@@ -70,15 +69,12 @@ pub fn calculate_resource_price(
 /// Calculates a price based on benchmark results and configuration.
 pub fn calculate_price(
     profile: BenchmarkProfile, 
-    rate_multiplier: f64,
     pricing_config: &HashMap<Option<u64>, Vec<ResourcePricing>>,
     blueprint_id: Option<u64>,
+    ttl_blocks: u64,
 ) -> Result<PriceModel> {
     let mut resources = Vec::new();
     let mut total_cost = 0.0;
-
-    // Set a default TTL of 1 second for per-second pricing
-    let ttl_seconds = 1;
     
     // Get the appropriate pricing configuration based on blueprint ID or default
     let resource_pricing = pricing_config
@@ -95,7 +91,7 @@ pub fn calculate_price(
     for resource in resource_pricing {
         resource_price_map.insert(resource.kind.clone(), resource.price_per_unit_rate);
     }
-    
+
     // CPU pricing
     if let Some(cpu_details) = &profile.cpu_details {
         // Round up to nearest integer for CPU cores
@@ -105,18 +101,14 @@ pub fn calculate_price(
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::CPU)
                 .copied()
-                .unwrap_or(rate_multiplier * 0.001); // Fallback value
+                .unwrap_or(0.001); // Fallback value
             
-            // Calculate CPU price using the standard formula
-            let cpu_price = calculate_resource_price(
-                cpu_count,
-                price_per_unit,
-                ttl_seconds,
-                None,
-            );
+            // Calculate the base price and apply TTL adjustment
+            let base_price = cpu_count as f64 * price_per_unit;
+            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
             
             // Add to total cost
-            total_cost += cpu_price;
+            total_cost += time_adjusted_price;
             
             // Add CPU resource to the resources list
             resources.push(ResourcePricing {
@@ -136,18 +128,14 @@ pub fn calculate_price(
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::MemoryMB)
                 .copied()
-                .unwrap_or(rate_multiplier * 0.00005); // Fallback value
+                .unwrap_or(0.00005); // Fallback value
             
-            // Calculate memory price using the standard formula
-            let memory_price = calculate_resource_price(
-                memory_mb,
-                price_per_unit,
-                ttl_seconds,
-                None,
-            );
+            // Calculate the base price and apply TTL adjustment
+            let base_price = memory_mb as f64 * price_per_unit;
+            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
             
             // Add to total cost
-            total_cost += memory_price;
+            total_cost += time_adjusted_price;
             
             // Add memory resource to the resources list
             resources.push(ResourcePricing {
@@ -167,18 +155,14 @@ pub fn calculate_price(
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::StorageMB)
                 .copied()
-                .unwrap_or(rate_multiplier * 0.00002); // Fallback value
+                .unwrap_or(0.00002); // Fallback value
             
-            // Calculate storage price using the standard formula
-            let storage_price = calculate_resource_price(
-                storage_mb,
-                price_per_unit,
-                ttl_seconds,
-                None,
-            );
+            // Calculate the base price and apply TTL adjustment
+            let base_price = storage_mb as f64 * price_per_unit;
+            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
             
             // Add to total cost
-            total_cost += storage_price;
+            total_cost += time_adjusted_price;
             
             // Add storage resource to the resources list
             resources.push(ResourcePricing {
@@ -198,18 +182,14 @@ pub fn calculate_price(
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::NetworkEgressMB)
                 .copied()
-                .unwrap_or(rate_multiplier * 0.00003); // Fallback value
+                .unwrap_or(0.00003); // Fallback value
             
-            // Calculate egress price using the standard formula
-            let egress_price = calculate_resource_price(
-                egress_mb,
-                price_per_unit,
-                ttl_seconds,
-                None,
-            );
+            // Calculate the base price and apply TTL adjustment
+            let base_price = egress_mb as f64 * price_per_unit;
+            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
             
             // Add to total cost
-            total_cost += egress_price;
+            total_cost += time_adjusted_price;
             
             // Add egress resource to the resources list
             resources.push(ResourcePricing {
@@ -226,18 +206,14 @@ pub fn calculate_price(
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::NetworkIngressMB)
                 .copied()
-                .unwrap_or(rate_multiplier * 0.00001); // Fallback value
+                .unwrap_or(0.00001); // Fallback value
             
-            // Calculate ingress price using the standard formula
-            let ingress_price = calculate_resource_price(
-                ingress_mb,
-                price_per_unit,
-                ttl_seconds,
-                None,
-            );
+            // Calculate the base price and apply TTL adjustment
+            let base_price = ingress_mb as f64 * price_per_unit;
+            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
             
             // Add to total cost
-            total_cost += ingress_price;
+            total_cost += time_adjusted_price;
             
             // Add ingress resource to the resources list
             resources.push(ResourcePricing {
@@ -255,18 +231,14 @@ pub fn calculate_price(
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::GPU)
                 .copied()
-                .unwrap_or(rate_multiplier * 0.005); // Fallback value
+                .unwrap_or(0.005); // Fallback value
             
-            // Calculate GPU price using the standard formula
-            let gpu_price = calculate_resource_price(
-                1, // Assuming 1 GPU if available
-                price_per_unit,
-                ttl_seconds,
-                None,
-            );
+            // Calculate the base price and apply TTL adjustment
+            let base_price = 1.0 * price_per_unit;
+            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
             
             // Add to total cost
-            total_cost += gpu_price;
+            total_cost += time_adjusted_price;
             
             // Add GPU resource to the resources list
             resources.push(ResourcePricing {
