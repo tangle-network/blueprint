@@ -96,7 +96,7 @@ impl RawStorage for SubstrateStorage {
         public_bytes: Vec<u8>,
     ) -> Result<Option<Box<[u8]>>> {
         match type_id {
-            #[cfg(any(feature = "bn254", feature = "tangle"))]
+            #[cfg(feature = "bn254")]
             KeyTypeId::Bn254 => Err(crate::Error::KeyTypeNotSupported),
             #[cfg(any(feature = "ecdsa", feature = "tangle"))]
             KeyTypeId::Ecdsa => {
