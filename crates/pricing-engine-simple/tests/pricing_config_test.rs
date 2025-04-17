@@ -1,10 +1,12 @@
+use std::collections::HashMap;
+use std::path::Path;
+
 use blueprint_pricing_engine_simple_lib::{
     error::Result,
     pricing::{PriceModel, BLOCK_TIME, calculate_resource_price, load_pricing_from_toml},
     types::ResourceUnit,
 };
 use chrono::Utc;
-use std::path::Path;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::{
     sp_arithmetic::per_things::Percent,
     tangle_primitives::services::types::{Asset, AssetSecurityRequirement},
@@ -100,7 +102,7 @@ async fn test_default_pricing_config() -> Result<()> {
         "Blueprint 2 pricing should be available"
     );
 
-    // Calculate total price per second for default pricing
+    // Calculate total cost for default pricing
     let mut expected_total: f64 = 0.0;
     for resource in default_resources {
         expected_total += resource.price_per_unit_rate * resource.count as f64;
@@ -109,24 +111,16 @@ async fn test_default_pricing_config() -> Result<()> {
     // Create a price model from the resources
     let price_model = PriceModel {
         resources: default_resources.clone(),
-        price_per_second_rate: expected_total,
+        total_cost: expected_total,
         benchmark_profile: None,
     };
 
-    // Verify the total cost calculation for different time periods
-    let hour = 3600; // 1 hour in seconds
-    let day = 86400; // 1 day in seconds
-    let month = 2592000; // 30 days in seconds
-
-    let hourly_cost = price_model.calculate_total_cost(hour);
-    let daily_cost = price_model.calculate_total_cost(day);
-    let monthly_cost = price_model.calculate_total_cost(month);
+    // Create a pricing configuration for testing
+    let mut pricing_config = HashMap::new();
+    pricing_config.insert(None, default_resources.clone());
 
     println!("Pricing verification successful");
-    println!("  Total price per second: ${:.6} USD", expected_total);
-    println!("  Hourly cost: ${:.6} USD", hourly_cost);
-    println!("  Daily cost: ${:.6} USD", daily_cost);
-    println!("  Monthly cost: ${:.6} USD", monthly_cost);
+    println!("  Total cost: ${:.6} USD", price_model.total_cost);
 
     Ok(())
 }

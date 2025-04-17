@@ -3,9 +3,10 @@
 //! This module defines the fundamental data types used throughout the pricing engine.
 
 use serde::{Deserialize, Serialize};
+use std::hash::Hash;
 
 /// Resource units for various types of cloud resources
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ResourceUnit {
     /// CPU cores or vCPUs
     CPU,

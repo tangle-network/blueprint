@@ -82,8 +82,8 @@ impl PricingEngine for PricingEngineService {
             }
         };
 
-        // Calculate total cost based on TTL
-        let total_cost = price_model.calculate_total_cost(ttl_seconds);
+        // Get the total cost from the price model
+        let total_cost = price_model.total_cost;
 
         // Prepare the response
         let expiry_time = Utc::now().timestamp() as u64 + self.config.quote_validity_duration_secs;

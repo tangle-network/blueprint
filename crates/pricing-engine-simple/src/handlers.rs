@@ -3,7 +3,7 @@ use crate::benchmark::run_benchmark_suite;
 use crate::cache::{BlueprintId, PriceCache};
 use crate::config::OperatorConfig;
 use crate::error::Result;
-use crate::pricing::calculate_price;
+use crate::pricing::{calculate_price, load_pricing_from_toml};
 use log::{info, warn};
 use std::sync::Arc;
 use std::time::Duration;
@@ -49,7 +49,9 @@ pub async fn handle_blueprint_update(
     }
 
     // Calculate Price
-    let price_model = calculate_price(benchmark_result, config.rate_multiplier)?;
+    // Load pricing configuration from file
+    let pricing_config = load_pricing_from_toml("config/default_pricing.toml")?;
+    let price_model = calculate_price(benchmark_result, config.rate_multiplier, &pricing_config, Some(blueprint_id))?;
     info!(
         "Calculated price model for {}: {:?}",
         blueprint_id, price_model

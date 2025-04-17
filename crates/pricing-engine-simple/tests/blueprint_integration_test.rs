@@ -1,27 +1,37 @@
+use std::collections::HashMap;
 use std::fs;
+use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
-use blueprint_core::{error, info};
 use blueprint_pricing_engine_simple_lib::{
     app::{init_operator_signer, init_price_cache},
+    benchmark::{BenchmarkProfile, CpuBenchmarkResult, MemoryBenchmarkResult},
     config::OperatorConfig,
     error::Result,
     pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof},
-    pricing::{PriceModel, load_pricing_from_toml},
+    pricing::{PriceModel, ResourcePricing, load_pricing_from_toml, calculate_price},
     pricing_engine,
     pricing_engine::pricing_engine_client::PricingEngineClient,
     service::rpc::server::PricingEngineService,
+    types::ResourceUnit,
 };
+
+use blueprint_core::{error, info};
 use blueprint_testing_utils::{
     setup_log,
     tangle::{TangleTestHarness, blueprint::create_test_blueprint, harness::SetupServicesOpts},
 };
 use chrono::Utc;
+use log::{error, info, warn};
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::{
     register::RegistrationArgs, request::RequestArgs,
 };
 use tempfile::tempdir;
+use tokio::sync::Mutex;
+use tokio::time::sleep;
 use tonic::transport::Channel;
+use tonic::Request;
 
 /// Test the full flow with a blueprint on a local Tangle Testnet
 /// This test covers:
@@ -124,7 +134,7 @@ resources = [
         );
     }
 
-    // Step 3: Calculate expected total price
+    // Step 3: Calculate expected total cost
     let mut expected_total = 0.0;
 
     // Verify each resource type and collect expected prices
@@ -162,18 +172,54 @@ resources = [
         }
     }
 
-    info!("Expected total price per second: ${:.6}", expected_total);
+    info!("Expected total cost per second: ${:.6}", expected_total);
 
-    // Create a price model for testing (for reference only)
-    let _price_model = PriceModel {
-        resources: default_resources.clone(),
-        price_per_second_rate: expected_total,
+    // Calculate the price based on the benchmark results
+    let cpu_count = 2;
+    let memory_mb = 1024;
+    let resources = vec![
+        ResourcePricing {
+            kind: ResourceUnit::CPU,
+            count: cpu_count,
+            price_per_unit_rate: 0.001,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::MemoryMB,
+            count: memory_mb,
+            price_per_unit_rate: 0.00005,
+        },
+    ];
+    
+    // Create a pricing configuration for testing
+    let mut pricing_config = HashMap::new();
+    pricing_config.insert(None, resources.clone());
+    
+    // Create a benchmark profile for testing
+    let profile = BenchmarkProfile {
+        cpu_details: Some(CpuBenchmarkResult {
+            avg_cores_used: cpu_count as f32,
+            ..Default::default()
+        }),
+        memory_details: Some(MemoryBenchmarkResult {
+            avg_memory_mb: memory_mb as f32,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    
+    // Calculate the price per second
+    let price_per_second = calculate_price(profile, 1.0, &pricing_config, None)?;
+    
+    // Create the price model
+    let model = PriceModel {
+        resources: resources.clone(),
+        total_cost: price_per_second.total_cost,
         benchmark_profile: None,
     };
 
     // Test cost calculation for different time periods
     let ttl_seconds = 3600u64; // 1 hour
-    let expected_cost = expected_total * ttl_seconds as f64;
+    let expected_cost = price_per_second.total_cost;
 
     info!(
         "Expected cost for {} seconds: ${:.6}",
@@ -220,7 +266,7 @@ resources = [
                 
                 let model = PriceModel {
                     resources: resources.clone(),
-                    price_per_second_rate: price_per_second,
+                    total_cost: price_per_second,
                     benchmark_profile: None,
                 };
                 
@@ -243,7 +289,7 @@ resources = [
         });
 
         // Connect to the RPC server
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        sleep(tokio::time::Duration::from_millis(100)).await;
         let channel = match Channel::from_shared(format!("http://{}", config.rpc_bind_address))
             .unwrap()
             .connect()

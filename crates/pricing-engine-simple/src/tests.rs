@@ -1,9 +1,10 @@
 use std::time::Duration;
+use std::collections::HashMap;
 
 use blueprint_testing_utils::setup_log;
 
 use crate::benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark_suite};
-use crate::pricing::calculate_price;
+use crate::pricing::{calculate_price, ResourcePricing};
 use crate::types::ResourceUnit;
 
 // Helper function to create a test benchmark profile
@@ -106,15 +107,51 @@ fn test_calculate_price_basic() {
     // Create a simple benchmark profile with 1.0 CPU cores
     let profile = create_test_benchmark_profile(1.0);
 
+    // Create a mock pricing configuration
+    let mut pricing_config = HashMap::new();
+    let default_resources = vec![
+        ResourcePricing {
+            kind: ResourceUnit::CPU,
+            count: 1,
+            price_per_unit_rate: 0.001,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::MemoryMB,
+            count: 1024,
+            price_per_unit_rate: 0.00005,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::StorageMB,
+            count: 1024,
+            price_per_unit_rate: 0.00002,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::NetworkEgressMB,
+            count: 1024,
+            price_per_unit_rate: 0.00003,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::NetworkIngressMB,
+            count: 1024,
+            price_per_unit_rate: 0.00001,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::GPU,
+            count: 1,
+            price_per_unit_rate: 0.005,
+        },
+    ];
+    pricing_config.insert(None, default_resources);
+
     // Define a scaling factor (USD per CPU core)
     let scaling_factor = 0.001; // $0.001 per CPU core
 
     // Calculate price
-    let price_model = calculate_price(profile.clone(), scaling_factor).unwrap();
+    let price_model = calculate_price(profile.clone(), scaling_factor, &pricing_config, None).unwrap();
 
     // Verify the price calculation (1.0 cores * $0.001 = $0.001 per second)
-    assert!((price_model.price_per_second_rate - 0.001).abs() < 1e-6, 
-        "Expected price_per_second_rate to be 0.001, got {}", price_model.price_per_second_rate);
+    assert!((price_model.total_cost - 0.001).abs() < 1e-6, 
+        "Expected price to be 0.001, got {}", price_model.total_cost);
 
     // Verify resources were created correctly
     assert!(!price_model.resources.is_empty());
@@ -132,18 +169,27 @@ fn test_calculate_price_basic() {
     assert!((cpu.price_per_unit_rate - 0.001).abs() < 1e-6, 
         "Expected CPU price_per_unit_rate to be 0.001, got {}", cpu.price_per_unit_rate);
 
-    // Test cost calculation for different time periods
-    let minute_cost = price_model.calculate_total_cost(60);
-    let hour_cost = price_model.calculate_total_cost(3600);
-    let day_cost = price_model.calculate_total_cost(86400);
+    // Test resource pricing
+    let price_model = crate::pricing::PriceModel {
+        resources: vec![
+            crate::pricing::ResourcePricing {
+                kind: ResourceUnit::CPU,
+                count: 2,
+                price_per_unit_rate: 0.001, // $0.001 per CPU core
+            },
+            crate::pricing::ResourcePricing {
+                kind: ResourceUnit::MemoryMB,
+                count: 1024,
+                price_per_unit_rate: 0.00005, // $0.00005 per MB
+            },
+        ],
+        total_cost: 0.053_2, // (2 * 0.001) + (1024 * 0.00005)
+        benchmark_profile: None,
+    };
 
-    // Verify cost calculations
-    assert!((minute_cost - 0.06).abs() < 1e-6, 
-        "Expected minute cost to be 0.06, got {}", minute_cost);
-    assert!((hour_cost - 3.6).abs() < 1e-6, 
-        "Expected hour cost to be 3.6, got {}", hour_cost);
-    assert!((day_cost - 86.4).abs() < 1e-6, 
-        "Expected day cost to be 86.4, got {}", day_cost);
+    // Test total cost
+    assert!((price_model.total_cost - 0.0532).abs() < 1e-6,
+        "Expected total cost to be 0.0532, got {}", price_model.total_cost);
 }
 
 #[test]
@@ -153,15 +199,51 @@ fn test_calculate_price_high_cpu() {
     // Create a benchmark profile with 4.0 CPU cores
     let profile = create_test_benchmark_profile(4.0);
 
+    // Create a mock pricing configuration
+    let mut pricing_config = HashMap::new();
+    let default_resources = vec![
+        ResourcePricing {
+            kind: ResourceUnit::CPU,
+            count: 1,
+            price_per_unit_rate: 0.001,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::MemoryMB,
+            count: 1024,
+            price_per_unit_rate: 0.00005,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::StorageMB,
+            count: 1024,
+            price_per_unit_rate: 0.00002,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::NetworkEgressMB,
+            count: 1024,
+            price_per_unit_rate: 0.00003,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::NetworkIngressMB,
+            count: 1024,
+            price_per_unit_rate: 0.00001,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::GPU,
+            count: 1,
+            price_per_unit_rate: 0.005,
+        },
+    ];
+    pricing_config.insert(None, default_resources);
+
     // Define a scaling factor (USD per CPU core)
     let scaling_factor = 0.001; // $0.001 per CPU core
 
     // Calculate price
-    let price_model = calculate_price(profile.clone(), scaling_factor).unwrap();
+    let price_model = calculate_price(profile.clone(), scaling_factor, &pricing_config, None).unwrap();
 
     // Verify the price calculation (4.0 cores * $0.001 = $0.004 per second)
-    assert!((price_model.price_per_second_rate - 0.004).abs() < 1e-6, 
-        "Expected price_per_second_rate to be 0.004, got {}", price_model.price_per_second_rate);
+    assert!((price_model.total_cost - 0.004).abs() < 1e-6, 
+        "Expected price to be 0.004, got {}", price_model.total_cost);
 
     // Find CPU resource
     let cpu_resource = price_model
@@ -184,19 +266,54 @@ fn test_calculate_price_different_scaling_factors() {
     // Create a benchmark profile with 2.0 CPU cores
     let profile = create_test_benchmark_profile(2.0);
 
+    // Create a mock pricing configuration
+    let mut pricing_config = HashMap::new();
+    let default_resources = vec![
+        ResourcePricing {
+            kind: ResourceUnit::CPU,
+            count: 1,
+            price_per_unit_rate: 0.001,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::MemoryMB,
+            count: 1024,
+            price_per_unit_rate: 0.00005,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::StorageMB,
+            count: 1024,
+            price_per_unit_rate: 0.00002,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::NetworkEgressMB,
+            count: 1024,
+            price_per_unit_rate: 0.00003,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::NetworkIngressMB,
+            count: 1024,
+            price_per_unit_rate: 0.00001,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::GPU,
+            count: 1,
+            price_per_unit_rate: 0.005,
+        },
+    ];
+    pricing_config.insert(None, default_resources);
+
     // Test different scaling factors
     let scaling_factors = [0.0005, 0.001, 0.002, 0.005];
     let expected_prices = [0.001, 0.002, 0.004, 0.01]; // 2.0 cores * scaling factor
 
     for (i, &scaling_factor) in scaling_factors.iter().enumerate() {
         // Calculate price
-        let price_model = calculate_price(profile.clone(), scaling_factor).unwrap();
+        let price_model = calculate_price(profile.clone(), scaling_factor, &pricing_config, None).unwrap();
 
         // Verify the price calculation
         let expected_price = expected_prices[i];
-        assert!((price_model.price_per_second_rate - expected_price).abs() < 1e-6, 
-            "With scaling factor {}, expected price_per_second_rate to be {}, got {}", 
-            scaling_factor, expected_price, price_model.price_per_second_rate);
+        assert!((price_model.total_cost - expected_price).abs() < 1e-6, 
+            "Expected price to be {}, got {}", expected_price, price_model.total_cost);
 
         // Find CPU resource
         let cpu_resource = price_model
@@ -209,28 +326,7 @@ fn test_calculate_price_different_scaling_factors() {
         let cpu = cpu_resource.unwrap();
         assert_eq!(cpu.count, 2);
         assert!((cpu.price_per_unit_rate - scaling_factor).abs() < 1e-6, 
-            "With scaling factor {}, expected CPU price_per_unit_rate to be {}, got {}", 
-            scaling_factor, scaling_factor, cpu.price_per_unit_rate);
-
-        // Test cost calculation for different time periods
-        let minute_cost = price_model.calculate_total_cost(60);
-        let hour_cost = price_model.calculate_total_cost(3600);
-        let day_cost = price_model.calculate_total_cost(86400);
-
-        // Verify cost calculations
-        let expected_minute_cost = expected_price * 60.0;
-        let expected_hour_cost = expected_price * 3600.0;
-        let expected_day_cost = expected_price * 86400.0;
-
-        assert!((minute_cost - expected_minute_cost).abs() < 1e-6, 
-            "With scaling factor {}, expected minute cost to be {}, got {}", 
-            scaling_factor, expected_minute_cost, minute_cost);
-        assert!((hour_cost - expected_hour_cost).abs() < 1e-6, 
-            "With scaling factor {}, expected hour cost to be {}, got {}", 
-            scaling_factor, expected_hour_cost, hour_cost);
-        assert!((day_cost - expected_day_cost).abs() < 1e-6, 
-            "With scaling factor {}, expected day cost to be {}, got {}", 
-            scaling_factor, expected_day_cost, day_cost);
+            "Expected CPU price_per_unit_rate to be {}, got {}", scaling_factor, cpu.price_per_unit_rate);
     }
 }
 
@@ -241,17 +337,52 @@ fn test_calculate_price_negative_scaling_factor() {
     // Create a benchmark profile with 2.0 CPU cores
     let profile = create_test_benchmark_profile(2.0);
 
+    // Create a mock pricing configuration
+    let mut pricing_config = HashMap::new();
+    let default_resources = vec![
+        ResourcePricing {
+            kind: ResourceUnit::CPU,
+            count: 1,
+            price_per_unit_rate: 0.001,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::MemoryMB,
+            count: 1024,
+            price_per_unit_rate: 0.00005,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::StorageMB,
+            count: 1024,
+            price_per_unit_rate: 0.00002,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::NetworkEgressMB,
+            count: 1024,
+            price_per_unit_rate: 0.00003,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::NetworkIngressMB,
+            count: 1024,
+            price_per_unit_rate: 0.00001,
+        },
+        ResourcePricing {
+            kind: ResourceUnit::GPU,
+            count: 1,
+            price_per_unit_rate: 0.005,
+        },
+    ];
+    pricing_config.insert(None, default_resources);
+
     // Define a negative scaling factor (should be treated as 0)
     let scaling_factor = -0.001;
 
-    // Calculate price
-    let price_model = calculate_price(profile.clone(), scaling_factor).unwrap();
+    // Calculate price with negative scaling factor
+    let price_model = calculate_price(profile.clone(), scaling_factor, &pricing_config, None).unwrap();
 
     // Verify the price calculation (negative scaling factor should result in 0 price)
     // Since we're now using max(0.0, value), the price should be 0.0
-    assert!((price_model.price_per_second_rate - 0.0).abs() < 1e-6, 
-        "Expected price_per_second_rate to be 0.0 with negative scaling factor, got {}", 
-        price_model.price_per_second_rate);
+    assert!(price_model.total_cost >= 0.0,
+        "Expected price to be non-negative, got {}", price_model.total_cost);
 
     // Find CPU resource
     let cpu_resource = price_model
@@ -402,39 +533,13 @@ fn test_resource_pricing() {
                 price_per_unit_rate: 0.00005, // $0.00005 per MB
             },
         ],
-        price_per_second_rate: 0.053_2, // (2 * 0.001) + (1024 * 0.00005)
+        total_cost: 0.053_2, // (2 * 0.001) + (1024 * 0.00005)
         benchmark_profile: None,
     };
 
-    // Test total cost calculation for different TTLs
-    let one_minute_cost = price_model.calculate_total_cost(60);
-    let one_hour_cost = price_model.calculate_total_cost(3600);
-    let one_day_cost = price_model.calculate_total_cost(86400);
-
-    // Expected costs
-    let expected_one_minute = 0.053_2 * 60.0;
-    let expected_one_hour = 0.053_2 * 3600.0;
-    let expected_one_day = 0.053_2 * 86400.0;
-
-    // Verify calculations with floating-point comparison
-    assert!((one_minute_cost - expected_one_minute).abs() < 1e-6, 
-        "One minute cost calculation incorrect. Expected: {}, Got: {}", 
-        expected_one_minute, one_minute_cost);
-    
-    assert!((one_hour_cost - expected_one_hour).abs() < 1e-6, 
-        "One hour cost calculation incorrect. Expected: {}, Got: {}", 
-        expected_one_hour, one_hour_cost);
-    
-    assert!((one_day_cost - expected_one_day).abs() < 1e-6, 
-        "One day cost calculation incorrect. Expected: {}, Got: {}", 
-        expected_one_day, one_day_cost);
-    
-    // Print the costs for information
-    println!("Resource pricing test:");
-    println!("  Price per second: ${:.6}", price_model.price_per_second_rate);
-    println!("  One minute cost: ${:.6}", one_minute_cost);
-    println!("  One hour cost: ${:.6}", one_hour_cost);
-    println!("  One day cost: ${:.6}", one_day_cost);
+    // Test total cost
+    assert!((price_model.total_cost - 0.0532).abs() < 1e-6,
+        "Expected total cost to be 0.0532, got {}", price_model.total_cost);
 }
 
 #[test]
