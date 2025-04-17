@@ -73,7 +73,7 @@ async fn adjust_url_for_container(raw_url: &str) -> String {
     };
 
     if is_local_endpoint(raw_url).await {
-        url.set_host(Some("host.docker.internal"))
+        url.set_host(Some("172.17.0.1"))
             .expect("Failed to set host in URL");
     }
     url.to_string()

@@ -9,15 +9,12 @@ use hyper_util::rt::TokioExecutor;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::LazyLock;
+use hyper::header::HeaderValue;
 use tracing::error;
 use url::Url;
 
-#[cfg(unix)]
-pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =
-    LazyLock::new(|| Url::parse("unix:///var/run/docker.sock").unwrap());
-#[cfg(windows)]
-pub const DEFAULT_DOCKER_HOST: LazyLock<Url> =
-    LazyLock::new(|| Url::parse("tcp://localhost:2375").unwrap());
+pub static DEFAULT_PODMAN_HOST: LazyLock<Url> =
+    LazyLock::new(|| Url::parse("unix:///run/podman/podman.sock").unwrap());
 
 #[derive(Debug, Parser)]
 #[command(
@@ -53,7 +50,7 @@ pub struct BlueprintManagerConfig {
     #[arg(long, short, default_value_t)]
     pub preferred_source: SourceType,
     /// The location of the Podman-Docker socket
-    #[arg(long, short, default_value_t = DEFAULT_DOCKER_HOST.clone())]
+    #[arg(long, short, default_value_t = DEFAULT_PODMAN_HOST.clone())]
     pub podman_host: Url,
 }
 
@@ -107,6 +104,16 @@ impl SourceCandidates {
     }
 
     async fn determine_podman(&mut self, host: Url) -> Result<()> {
+        async fn check_server_header(server: Option<&HeaderValue>) -> bool {
+            if let Some(server) = server {
+                if let Ok(server) = server.to_str() {
+                    return server.to_lowercase().contains("libpod");
+                }
+            }
+            false
+        }
+
+
         let client = Docker::connect_with_local(host.as_str(), 20, API_DEFAULT_VERSION)
             .map_err(|e| Error::Other(e.to_string()))?;
 
@@ -132,39 +139,28 @@ impl SourceCandidates {
         }
 
         // Fallback, read the HTTP "Server" header from a /_ping
-        if let Some(socket) = host.as_str().strip_prefix("unix://") {
+        let res = if let Some(socket) = host.as_str().strip_prefix("unix://") {
             let client = Client::builder(TokioExecutor::new())
                 .build::<_, Full<Bytes>>(hyperlocal::UnixConnector);
-            let res = client
+            client
                 .get(hyperlocal::Uri::new(socket, "/_ping").into())
                 .await
-                .map_err(|e| Error::Other(format!("Unable to reach specified Podman host: {e}")))?;
-            if let Some(server) = res.headers().get("Server") {
-                if let Ok(server) = server.to_str() {
-                    if server.to_lowercase().contains("libpod") {
-                        self.container = Some(host);
-                        return Ok(());
-                    }
-                }
-            }
+                .map_err(|e| Error::Other(format!("Unable to reach specified Podman host: {e}")))?
         } else {
             let client = Client::builder(TokioExecutor::new()).build_http::<Full<Bytes>>();
-            let res = client
+            client
                 .get(
                     format!("{host}/_ping")
                         .parse()
                         .map_err(|e| Error::Other(format!("Unable to parse provided URI: {e}")))?,
                 )
                 .await
-                .map_err(|e| Error::Other(format!("Unable to reach specified Podman host: {e}")))?;
-            if let Some(server) = res.headers().get("Server") {
-                if let Ok(server) = server.to_str() {
-                    if server.to_lowercase().contains("libpod") {
-                        self.container = Some(host);
-                        return Ok(());
-                    }
-                }
-            }
+                .map_err(|e| Error::Other(format!("Unable to reach specified Podman host: {e}")))?
+        };
+
+        if check_server_header(res.headers().get("Server")).await {
+            self.container = Some(host);
+            return Ok(());
         }
 
         Err(Error::Other(String::from("No Podman-Docker socket found")))

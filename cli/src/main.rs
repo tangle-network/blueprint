@@ -1,3 +1,4 @@
+use blueprint_manager::config::DEFAULT_PODMAN_HOST;
 use std::path::PathBuf;
 use cargo_tangle::command::{create, deploy};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, ProtocolSettings, SupportedChains};
@@ -27,6 +28,7 @@ use tangle_subxt::subxt_core::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::sp_arithmetic::per_things::Percent;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{Asset, AssetSecurityCommitment};
+use url::Url;
 use blueprint_crypto::KeyTypeId;
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto_core::KeyType;
@@ -187,10 +189,13 @@ pub enum BlueprintCommands {
         #[arg(short = 'n', long)]
         bootnodes: Option<Vec<String>>,
 
-        // TODO: Podman host arg
         /// Path to the protocol settings env file
         #[arg(short = 'f', long, default_value = "./settings.env")]
         settings_file: Option<PathBuf>,
+
+        /// The Podman host to use for containerized blueprints
+        #[arg(short, long, env = "PODMAN_HOST", default_value_t = DEFAULT_PODMAN_HOST.clone())]
+        podman_host: Url,
     },
 
     /// List service requests for a Tangle blueprint
@@ -455,6 +460,7 @@ async fn main() -> color_eyre::Result<()> {
                 data_dir,
                 bootnodes,
                 settings_file,
+                podman_host
             } => {
                 let settings_file =
                     settings_file.unwrap_or_else(|| PathBuf::from("./settings.env"));
@@ -558,6 +564,7 @@ async fn main() -> color_eyre::Result<()> {
                             ),
                             keystore_path: Some(config.keystore_uri.clone()),
                             data_dir: config.data_dir.clone(),
+                            podman_host: Some(podman_host)
                         };
 
                         // Run the blueprint

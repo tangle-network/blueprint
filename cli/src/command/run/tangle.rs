@@ -1,6 +1,6 @@
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
-use blueprint_manager::config::{BlueprintManagerConfig, DEFAULT_DOCKER_HOST};
+use blueprint_manager::config::{BlueprintManagerConfig, DEFAULT_PODMAN_HOST};
 use blueprint_manager::executor::run_blueprint_manager;
 use blueprint_runner::config::BlueprintEnvironment;
 use color_eyre::eyre::{Result, eyre};
@@ -76,7 +76,7 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         instance_id: Some(format!("Blueprint-{}", blueprint_id)),
         test_mode: false,
         preferred_source: Default::default(),
-        podman_host: opts.podman_host.unwrap_or(DEFAULT_DOCKER_HOST.clone()),
+        podman_host: opts.podman_host.unwrap_or(DEFAULT_PODMAN_HOST.clone()),
     };
 
     println!(
