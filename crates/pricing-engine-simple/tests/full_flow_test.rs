@@ -3,18 +3,19 @@ use std::sync::Arc;
 use blueprint_crypto::KeyType;
 use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_crypto_core::BytesEncoding;
+use blueprint_pricing_engine_simple_lib::pricing;
+use blueprint_pricing_engine_simple_lib::types::ResourceUnit;
 use blueprint_pricing_engine_simple_lib::{
     app::{init_operator_signer, init_price_cache},
     benchmark::{BenchmarkProfile, CpuBenchmarkResult},
     config::OperatorConfig,
     pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof},
-    pricing::{self, PriceModel},
+    pricing::{PriceModel, ResourcePricing},
     pricing_engine::{self, pricing_engine_server::PricingEngine},
     service::rpc::server::PricingEngineService,
     signer::QuotePayload,
-    types::ResourceUnit,
 };
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use serde_json;
 use tonic::Request;
 
@@ -33,7 +34,7 @@ fn create_test_config() -> OperatorConfig {
         benchmark_args: vec!["test".to_string()],
         benchmark_duration: 1,
         benchmark_interval: 1,
-        price_scaling_factor: 1000.0,
+        rate_multiplier: 1000.0,
         quote_validity_duration_secs: 300, // e.g., 5 minutes for testing
         keypair_path: "/tmp/test-keypair".to_string(),
         keystore_path: "/tmp/test-keystore".to_string(),
@@ -54,18 +55,18 @@ fn create_test_blueprint_id() -> u64 {
 fn create_test_price_model() -> PriceModel {
     PriceModel {
         resources: vec![
-            pricing::ResourcePricing {
+            ResourcePricing {
                 kind: ResourceUnit::CPU,
                 count: 2,
-                price_per_unit_wei: 500000,
+                price_per_unit_rate: 500000,
             },
-            pricing::ResourcePricing {
+            ResourcePricing {
                 kind: ResourceUnit::MemoryMB,
                 count: 1024,
-                price_per_unit_wei: 1000,
+                price_per_unit_rate: 1000,
             },
         ],
-        price_per_second_wei: 1000,
+        price_per_second_rate: 1000,
         generated_at: Utc::now(),
         benchmark_profile: None,
     }
@@ -104,7 +105,7 @@ async fn test_pricing_engine_components() -> blueprint_pricing_engine_simple_lib
 
     let retrieved_model = retrieved_model.unwrap();
     assert_eq!(
-        retrieved_model.price_per_second_wei, price_model.price_per_second_wei,
+        retrieved_model.price_per_second_rate, price_model.price_per_second_rate,
         "Retrieved price should match stored price"
     );
 
@@ -137,10 +138,10 @@ async fn test_pricing_engine_components() -> blueprint_pricing_engine_simple_lib
     };
 
     let calculated_price =
-        pricing::calculate_price(benchmark_profile.clone(), config.price_scaling_factor)?;
+        pricing::calculate_price(benchmark_profile.clone(), config.rate_multiplier)?;
 
     assert!(
-        calculated_price.price_per_second_wei > 0,
+        calculated_price.price_per_second_rate > 0,
         "Calculated price should be greater than zero"
     );
 
@@ -239,20 +240,21 @@ async fn test_rpc_get_price_flow() -> blueprint_pricing_engine_simple_lib::error
     // Verify signature
     let internal_payload_for_verification = QuotePayload {
         blueprint_id,
-        ttl_seconds: 3600,
-        total_cost_wei: quote_details.total_cost_wei.parse::<u128>().unwrap(),
+        ttl_seconds: quote_details.ttl_seconds,
+        total_cost_rate: quote_details.total_cost_rate.parse().unwrap_or(0), // Use the correct field
         expiry: quote_details.expiry,
-        timestamp: Utc::now().timestamp() as u64, // This is an approximation, server uses its own timestamp
+        timestamp: quote_details.timestamp, // Corrected: use u64 timestamp directly from quote
         resources: vec![
-            pricing::ResourcePricing {
+            // Example resources, adjust if needed based on actual quote
+            ResourcePricing {
                 kind: ResourceUnit::CPU,
                 count: 1,
-                price_per_unit_wei: 1_000_000,
+                price_per_unit_rate: 1_000_000,
             },
-            pricing::ResourcePricing {
+            ResourcePricing {
                 kind: ResourceUnit::MemoryMB,
                 count: 1024,
-                price_per_unit_wei: 500,
+                price_per_unit_rate: 500,
             },
         ],
     };
@@ -329,18 +331,18 @@ async fn test_resource_based_pricing() -> blueprint_pricing_engine_simple_lib::e
     // Create a price model with specific resource pricing
     let price_model = PriceModel {
         resources: vec![
-            pricing::ResourcePricing {
+            ResourcePricing {
                 kind: ResourceUnit::CPU,
                 count: 1,
-                price_per_unit_wei: 1_000_000,
+                price_per_unit_rate: 1_000_000,
             },
-            pricing::ResourcePricing {
+            ResourcePricing {
                 kind: ResourceUnit::MemoryMB,
                 count: 1024,
-                price_per_unit_wei: 500,
+                price_per_unit_rate: 500,
             },
         ],
-        price_per_second_wei: 1_512_000, // 1 CPU + 1024 MB memory
+        price_per_second_rate: 1_512_000, // 1 CPU + 1024 MB memory
         generated_at: Utc::now(),
         benchmark_profile: None,
     };
@@ -364,18 +366,18 @@ async fn test_resource_based_pricing() -> blueprint_pricing_engine_simple_lib::e
     // Test with different resource requirements
     let double_cpu_model = PriceModel {
         resources: vec![
-            pricing::ResourcePricing {
+            ResourcePricing {
                 kind: ResourceUnit::CPU,
                 count: 2,
-                price_per_unit_wei: 1_000_000,
+                price_per_unit_rate: 1_000_000,
             },
-            pricing::ResourcePricing {
+            ResourcePricing {
                 kind: ResourceUnit::MemoryMB,
                 count: 1024,
-                price_per_unit_wei: 500,
+                price_per_unit_rate: 500,
             },
         ],
-        price_per_second_wei: 2_512_000, // 2 CPU + 1024 MB memory
+        price_per_second_rate: 2_512_000, // 2 CPU + 1024 MB memory
         generated_at: Utc::now(),
         benchmark_profile: None,
     };

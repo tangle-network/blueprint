@@ -12,16 +12,16 @@ pub struct ResourcePricing {
     pub kind: ResourceUnit,
     /// Quantity of the resource
     pub count: u64,
-    /// Price per unit in wei
-    pub price_per_unit_wei: u128,
+    /// Price per unit in the smallest denomination of the chosen currency (e.g., wei, satoshi)
+    pub price_per_unit_rate: u128,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PriceModel {
     /// Pricing for different resource types
     pub resources: Vec<ResourcePricing>,
-    /// Total price in the smallest unit (e.g., Wei for Ethereum) per second of execution.
-    pub price_per_second_wei: u128,
+    /// Total price rate per second in the smallest unit (e.g., Wei for Ethereum).
+    pub price_per_second_rate: u128,
     /// Timestamp when this price was calculated/cached.
     pub generated_at: DateTime<Utc>,
     /// Optional: Include benchmark details used for pricing.
@@ -31,13 +31,13 @@ pub struct PriceModel {
 impl PriceModel {
     /// Calculate the total cost for a given TTL
     pub fn calculate_total_cost(&self, ttl_seconds: u64) -> u128 {
-        self.price_per_second_wei
+        self.price_per_second_rate
             .saturating_mul(ttl_seconds as u128)
     }
 }
 
 /// Calculates a price based on benchmark results and configuration.
-pub fn calculate_price(profile: BenchmarkProfile, scaling_factor: f64) -> Result<PriceModel> {
+pub fn calculate_price(profile: BenchmarkProfile, rate_multiplier: f64) -> Result<PriceModel> {
     let mut resources = Vec::new();
     let mut total_price_per_second = 0u128;
 
@@ -49,13 +49,15 @@ pub fn calculate_price(profile: BenchmarkProfile, scaling_factor: f64) -> Result
         .unwrap_or(0.0);
 
     if avg_cpu_cores > 0.0 {
-        let cpu_price = (avg_cpu_cores as f64 * scaling_factor).max(0.0).round() as u128;
+        let cpu_price = (avg_cpu_cores as f64 * rate_multiplier).max(0.0).round() as u128;
         total_price_per_second = total_price_per_second.saturating_add(cpu_price);
 
         resources.push(ResourcePricing {
             kind: ResourceUnit::CPU,
             count: avg_cpu_cores.ceil() as u64,
-            price_per_unit_wei: cpu_price / avg_cpu_cores.ceil() as u128,
+            // Ensure price_per_unit is not zero if avg_cpu_cores is non-zero but rounds to 0
+            // Use max(1) to avoid division by zero
+            price_per_unit_rate: cpu_price / (avg_cpu_cores.ceil() as u128).max(1),
         });
     }
 
@@ -67,7 +69,7 @@ pub fn calculate_price(profile: BenchmarkProfile, scaling_factor: f64) -> Result
 
     Ok(PriceModel {
         resources,
-        price_per_second_wei: total_price_per_second,
+        price_per_second_rate: total_price_per_second,
         generated_at: chrono::Utc::now(),
         benchmark_profile: Some(profile),
     })
@@ -86,12 +88,12 @@ pub fn load_pricing_from_toml(_path: &str) -> Result<HashMap<Option<u64>, Vec<Re
             ResourcePricing {
                 kind: ResourceUnit::CPU,
                 count: 1,
-                price_per_unit_wei: 1_000_000,
+                price_per_unit_rate: 1_000_000, // Example rate per CPU unit
             },
             ResourcePricing {
                 kind: ResourceUnit::MemoryMB,
                 count: 1024,
-                price_per_unit_wei: 500_000,
+                price_per_unit_rate: 500_000, // Example rate per 1024 MB
             },
         ],
     );
@@ -103,12 +105,12 @@ pub fn load_pricing_from_toml(_path: &str) -> Result<HashMap<Option<u64>, Vec<Re
             ResourcePricing {
                 kind: ResourceUnit::CPU,
                 count: 2,
-                price_per_unit_wei: 2_000_000,
+                price_per_unit_rate: 2_000_000,
             },
             ResourcePricing {
                 kind: ResourceUnit::MemoryMB,
                 count: 2048,
-                price_per_unit_wei: 1_000_000,
+                price_per_unit_rate: 1_000_000,
             },
         ],
     );

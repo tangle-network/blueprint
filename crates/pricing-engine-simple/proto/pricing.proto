@@ -48,7 +48,7 @@ message QuoteDetails {
   // Time-to-live for service in seconds
   uint64 ttl_seconds = 2;
   // Total cost in wei
-  string total_cost_wei = 3;
+  string total_cost_rate = 3;
   // Timestamp when quote was generated
   uint64 timestamp = 4;
   // Expiry timestamp
@@ -64,5 +64,5 @@ message ResourcePricing {
   // Quantity of the resource
   uint64 count = 2;
   // Price per unit in wei
-  string price_per_unit_wei = 3;
+  string price_per_unit_rate = 3; // Renamed from price_per_unit_wei
 }

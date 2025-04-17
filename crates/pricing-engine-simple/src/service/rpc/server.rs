@@ -2,7 +2,6 @@
 
 use crate::config::OperatorConfig;
 use crate::pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
-use crate::pricing::load_pricing_from_toml;
 use crate::signer::{
     OperatorSigner, QuotePayload as SignerQuotePayload, SignedQuote as SignerSignedQuote,
 };
@@ -66,61 +65,25 @@ impl PricingEngine for PricingEngineService {
         }
 
         // Check if we have a price model for this blueprint
-        let price_model = self.cache.get_price(blueprint_id).map_err(|e| {
-            error!("Cache lookup failed for {}: {}", blueprint_id, e);
-            Status::internal("Failed to access price cache")
-        })?;
-
-        // If no price model exists, try to load from pricing.toml or run benchmark
-        let price_model = match price_model {
-            Some(model) => model,
-            None => {
-                // Try to load from pricing.toml
-                let pricing_data = load_pricing_from_toml("pricing.toml").map_err(|e| {
-                    error!("Failed to load pricing data: {}", e);
-                    Status::internal("Failed to load pricing data")
-                })?;
-
-                // Check if we have specific pricing for this blueprint
-                let resources = pricing_data
-                    .get(&Some(blueprint_id))
-                    .or_else(|| pricing_data.get(&None)) // Fall back to default pricing
-                    .ok_or_else(|| {
-                        warn!("No pricing found for blueprint ID: {}", blueprint_id);
-                        Status::not_found(format!(
-                            "No pricing found for blueprint ID {}",
-                            blueprint_id
-                        ))
-                    })?;
-
-                // Create a price model from the resources
-                let mut total_price_per_second = 0u128;
-                for resource in resources {
-                    total_price_per_second = total_price_per_second.saturating_add(
-                        resource
-                            .price_per_unit_wei
-                            .saturating_mul(resource.count as u128),
-                    );
-                }
-
-                let model = crate::pricing::PriceModel {
-                    resources: resources.clone(),
-                    price_per_second_wei: total_price_per_second,
-                    generated_at: Utc::now(),
-                    benchmark_profile: None,
-                };
-
-                // Cache the model for future use
-                if let Err(e) = self.cache.store_price(blueprint_id, &model) {
-                    error!("Failed to cache price model: {}", e);
-                }
-
-                model
+        let price_model = match self.cache.get_price(blueprint_id) {
+            Ok(Some(model)) => model,
+            _ => {
+                warn!(
+                    "Price not found or cache error for blueprint ID: {}. Using defaults.",
+                    blueprint_id
+                );
+                // Fallback to default pricing or error
+                // For now, let's use a default PriceModel or return an error
+                // This part needs refinement based on desired behavior
+                return Err(Status::not_found(format!(
+                    "Price not found for blueprint ID: {}",
+                    blueprint_id
+                )));
             }
         };
 
         // Calculate total cost based on TTL
-        let total_cost_wei = price_model.calculate_total_cost(ttl_seconds);
+        let total_cost = price_model.calculate_total_cost(ttl_seconds);
 
         // Prepare the response
         let expiry_time = Utc::now().timestamp() as u64 + self.config.quote_validity_duration_secs;
@@ -130,10 +93,10 @@ impl PricingEngine for PricingEngineService {
         let proto_resources: Vec<ProtoResourcePricing> = price_model
             .resources
             .iter()
-            .map(|r| ProtoResourcePricing {
-                kind: format!("{:?}", r.kind),
-                count: r.count,
-                price_per_unit_wei: r.price_per_unit_wei.to_string(),
+            .map(|rp| ProtoResourcePricing {
+                kind: format!("{:?}", rp.kind), // Format ResourceUnit as String
+                count: rp.count,
+                price_per_unit_rate: rp.price_per_unit_rate.to_string(),
             })
             .collect();
 
@@ -141,7 +104,7 @@ impl PricingEngine for PricingEngineService {
         let signer_payload = SignerQuotePayload {
             blueprint_id,
             ttl_seconds,
-            total_cost_wei,
+            total_cost_rate: total_cost,
             resources: price_model.resources.clone(),
             expiry: expiry_time,
             timestamp,
@@ -173,7 +136,7 @@ impl PricingEngine for PricingEngineService {
         let quote_details = QuoteDetails {
             blueprint_id,
             ttl_seconds,
-            total_cost_wei: signed_quote.payload.total_cost_wei.to_string(),
+            total_cost_rate: signed_quote.payload.total_cost_rate.to_string(),
             timestamp: signed_quote.payload.timestamp,
             expiry: signed_quote.payload.expiry,
             resources: proto_resources,

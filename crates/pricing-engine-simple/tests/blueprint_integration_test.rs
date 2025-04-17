@@ -8,7 +8,7 @@ use blueprint_pricing_engine_simple_lib::{
     pricing::{PriceModel, ResourcePricing},
     pricing_engine,
     pricing_engine::pricing_engine_client::PricingEngineClient,
-    pricing_engine::pricing_engine_server::{PricingEngine, PricingEngineServer},
+    pricing_engine::pricing_engine_server::PricingEngineServer,
     service::rpc::server::PricingEngineService,
     types::ResourceUnit,
 };
@@ -83,7 +83,7 @@ async fn test_full_pricing_flow_with_blueprint() -> Result<()> {
 
         // Create a price model with different pricing based on operator index
         let mut price_model = create_test_price_model();
-        price_model.price_per_second_wei = 1000 * (i as u128 + 1); // Different prices for each operator
+        price_model.price_per_second_rate = 1000 * (i as u128 + 1); // Different prices for each operator
         price_cache.store_price(blueprint_id, &price_model)?;
 
         // Create a pricing engine service
@@ -184,7 +184,7 @@ async fn test_full_pricing_flow_with_blueprint() -> Result<()> {
         println!("  Operator ID: {:?}", response_ref.operator_id);
 
         if let Some(details) = &response_ref.quote_details {
-            println!("  Total Cost: {} wei", details.total_cost_wei);
+            println!("  Total Cost: {} wei", details.total_cost_rate);
             println!("  TTL: {} seconds", details.ttl_seconds);
             println!("  Timestamp: {}", details.timestamp);
             println!("  Expiry: {}", details.expiry);
@@ -206,15 +206,15 @@ async fn test_full_pricing_flow_with_blueprint() -> Result<()> {
 
         // Sort quotes by total cost
         quote_responses.sort_by(|a, b| {
-            let a_cost = a.1.total_cost_wei.parse::<u128>().unwrap_or(0);
-            let b_cost = b.1.total_cost_wei.parse::<u128>().unwrap_or(0);
+            let a_cost = a.1.total_cost_rate.parse::<u128>().unwrap_or(0);
+            let b_cost = b.1.total_cost_rate.parse::<u128>().unwrap_or(0);
             a_cost.cmp(&b_cost)
         });
 
         for (i, details, operator_id) in &quote_responses {
             println!(
                 "Operator {}: {} wei (ID: {:?})",
-                i, details.total_cost_wei, operator_id
+                i, details.total_cost_rate, operator_id
             );
         }
 
@@ -222,7 +222,7 @@ async fn test_full_pricing_flow_with_blueprint() -> Result<()> {
         if let Some((i, details, operator_id)) = quote_responses.first() {
             println!(
                 "\nCheapest quote is from Operator {}: {} wei (ID: {:?})",
-                i, details.total_cost_wei, operator_id
+                i, details.total_cost_rate, operator_id
             );
         }
     }
@@ -247,7 +247,7 @@ fn create_test_config() -> OperatorConfig {
         benchmark_args: vec!["benchmark".to_string()],
         benchmark_duration: 10,
         benchmark_interval: 1,
-        price_scaling_factor: 1.0,
+        rate_multiplier: 1.0,
         keypair_path: "/tmp/test-keypair".to_string(),
         rpc_timeout: 30,
         rpc_max_connections: 100,
@@ -258,17 +258,17 @@ fn create_test_config() -> OperatorConfig {
 // Helper function to create a test price model
 fn create_test_price_model() -> PriceModel {
     PriceModel {
-        price_per_second_wei: 1000,
+        price_per_second_rate: 1000,
         resources: vec![
             ResourcePricing {
                 kind: ResourceUnit::CPU,
                 count: 1,
-                price_per_unit_wei: 500,
+                price_per_unit_rate: 500,
             },
             ResourcePricing {
                 kind: ResourceUnit::MemoryMB,
                 count: 1024,
-                price_per_unit_wei: 100,
+                price_per_unit_rate: 100,
             },
         ],
         generated_at: Utc::now(),

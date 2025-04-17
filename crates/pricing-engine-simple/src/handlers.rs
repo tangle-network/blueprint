@@ -49,7 +49,7 @@ pub async fn handle_blueprint_update(
     }
 
     // Calculate Price
-    let price_model = calculate_price(benchmark_result, config.price_scaling_factor)?;
+    let price_model = calculate_price(benchmark_result, config.rate_multiplier)?;
     info!(
         "Calculated price model for {}: {:?}",
         blueprint_id, price_model

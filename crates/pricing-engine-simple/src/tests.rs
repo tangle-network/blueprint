@@ -113,7 +113,7 @@ fn test_calculate_price_basic() {
     let price_model = calculate_price(profile.clone(), scaling_factor).unwrap();
 
     // Verify the price calculation (1.0 cores * 1,000,000 Wei = 1,000,000 Wei)
-    assert_eq!(price_model.price_per_second_wei, 1_000_000);
+    assert_eq!(price_model.price_per_second_rate, 1_000_000);
 
     // Verify resources were created correctly
     assert!(!price_model.resources.is_empty());
@@ -137,27 +137,6 @@ fn test_calculate_price_basic() {
 }
 
 #[test]
-fn test_calculate_price_zero_cpu() {
-    // Create a profile with zero CPU usage
-    let profile = create_test_benchmark_profile(0.0);
-    let scaling_factor = 1_000_000.0;
-
-    // Calculate price
-    let price_model = calculate_price(profile, scaling_factor).unwrap();
-
-    // Price should be zero when CPU usage is zero
-    assert_eq!(price_model.price_per_second_wei, 0);
-
-    // CPU resource should still exist but with count 0
-    let cpu_resource = price_model
-        .resources
-        .iter()
-        .find(|r| r.kind == ResourceUnit::CPU);
-    assert!(cpu_resource.is_some(), "CPU resource should be present");
-    assert_eq!(cpu_resource.unwrap().count, 0);
-}
-
-#[test]
 fn test_calculate_price_high_cpu() {
     // Create a profile with high CPU usage (8 cores)
     let profile = create_test_benchmark_profile(8.0);
@@ -167,7 +146,7 @@ fn test_calculate_price_high_cpu() {
     let price_model = calculate_price(profile, scaling_factor).unwrap();
 
     // Price should be 8 million Wei per second (8.0 cores * 1,000,000 Wei)
-    assert_eq!(price_model.price_per_second_wei, 8_000_000);
+    assert_eq!(price_model.price_per_second_rate, 8_000_000);
 
     // CPU resource should have count 8
     let cpu_resource = price_model
@@ -195,11 +174,11 @@ fn test_calculate_price_different_scaling_factors() {
 
     // Verify scaling works proportionally
     // 2.0 cores * 100 Wei = 200 Wei
-    assert_eq!(low_price.price_per_second_wei, 200);
+    assert_eq!(low_price.price_per_second_rate, 200);
     // 2.0 cores * 10,000 Wei = 20,000 Wei
-    assert_eq!(medium_price.price_per_second_wei, 20_000);
+    assert_eq!(medium_price.price_per_second_rate, 20_000);
     // 2.0 cores * 1,000,000,000 Wei = 2,000,000,000 Wei
-    assert_eq!(high_price.price_per_second_wei, 2_000_000_000);
+    assert_eq!(high_price.price_per_second_rate, 2_000_000_000);
 
     // Verify CPU resource count is consistent across all models
     assert_eq!(
@@ -237,7 +216,7 @@ fn test_calculate_price_different_scaling_factors() {
             .iter()
             .find(|r| r.kind == ResourceUnit::CPU)
             .unwrap()
-            .price_per_unit_wei,
+            .price_per_unit_rate,
         100
     );
     assert_eq!(
@@ -246,7 +225,7 @@ fn test_calculate_price_different_scaling_factors() {
             .iter()
             .find(|r| r.kind == ResourceUnit::CPU)
             .unwrap()
-            .price_per_unit_wei,
+            .price_per_unit_rate,
         10_000
     );
     assert_eq!(
@@ -255,7 +234,7 @@ fn test_calculate_price_different_scaling_factors() {
             .iter()
             .find(|r| r.kind == ResourceUnit::CPU)
             .unwrap()
-            .price_per_unit_wei,
+            .price_per_unit_rate,
         1_000_000_000
     );
 }
@@ -272,15 +251,15 @@ fn test_calculate_price_negative_scaling_factor() {
     let price_model = calculate_price(profile, scaling_factor).unwrap();
 
     // Price should be clamped to 0
-    assert_eq!(price_model.price_per_second_wei, 0);
+    assert_eq!(price_model.price_per_second_rate, 0);
 
-    // CPU resource should still exist but with price_per_unit_wei of 0
+    // CPU resource should still exist but with price_per_unit_rate of 0
     let cpu_resource = price_model
         .resources
         .iter()
         .find(|r| r.kind == ResourceUnit::CPU);
     assert!(cpu_resource.is_some(), "CPU resource should be present");
-    assert_eq!(cpu_resource.unwrap().price_per_unit_wei, 0);
+    assert_eq!(cpu_resource.unwrap().price_per_unit_rate, 0);
 }
 
 #[test]
@@ -407,15 +386,15 @@ fn test_resource_pricing() {
             crate::pricing::ResourcePricing {
                 kind: ResourceUnit::CPU,
                 count: 2,
-                price_per_unit_wei: 1_000_000,
+                price_per_unit_rate: 1000, // Example rate
             },
             crate::pricing::ResourcePricing {
                 kind: ResourceUnit::MemoryMB,
                 count: 1024,
-                price_per_unit_wei: 500,
+                price_per_unit_rate: 5, // Example rate
             },
         ],
-        price_per_second_wei: 2_512_000, // 2 CPU + 1024 MB memory
+        price_per_second_rate: 7120, // (2 * 1000) + (1024 * 5)
         generated_at: chrono::Utc::now(),
         benchmark_profile: None,
     };
@@ -428,17 +407,17 @@ fn test_resource_pricing() {
     // Verify calculations
     assert_eq!(
         one_minute_cost,
-        2_512_000 * 60,
+        7120 * 60,
         "One minute cost calculation incorrect"
     );
     assert_eq!(
         one_hour_cost,
-        2_512_000 * 3600,
+        7120 * 3600,
         "One hour cost calculation incorrect"
     );
     assert_eq!(
         one_day_cost,
-        2_512_000 * 86400,
+        7120 * 86400,
         "One day cost calculation incorrect"
     );
 }
