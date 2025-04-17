@@ -197,6 +197,7 @@ pub(crate) fn check_blueprint_events(
         match evt {
             Ok(evt) => {
                 info!("Service initiated event: {evt:?}");
+                result.needs_update = true;
             }
             Err(err) => {
                 warn!("Error handling service initiated event: {err:?}");
