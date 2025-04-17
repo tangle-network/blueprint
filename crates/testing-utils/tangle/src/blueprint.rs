@@ -7,6 +7,11 @@ use tempfile::TempDir;
 /// This function creates a temporary directory and populates it with the files needed
 /// for the incredible-squaring blueprint. It returns the temporary directory and the path
 /// to the blueprint directory.
+///
+/// # Panics
+///
+/// - Uses expects for all errors, failing with a panic on any error when generating the blueprint files
+#[must_use]
 pub fn create_test_blueprint() -> (TempDir, PathBuf) {
     let temp_dir = TempDir::new().expect("Failed to create temporary directory");
     let blueprint_dir = temp_dir.path().join("test-blueprint");

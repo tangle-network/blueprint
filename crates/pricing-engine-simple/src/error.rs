@@ -1,4 +1,5 @@
 // src/error.rs
+use crate::types::ParseResourceUnitError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -48,6 +49,12 @@ pub enum PricingError {
     #[error("Resource requirement error: {0}")]
     ResourceRequirement(String),
 
+    #[error("TOML parsing error: {0}")]
+    TomlParsing(String),
+
+    #[error("Resource unit parsing error")]
+    ResourceUnitParsing,
+
     #[error("Other error: {0}")]
     Other(String),
 }
@@ -56,6 +63,20 @@ pub enum PricingError {
 impl From<blueprint_keystore::Error> for PricingError {
     fn from(err: blueprint_keystore::Error) -> Self {
         PricingError::Signing(format!("Keystore error: {:?}", err))
+    }
+}
+
+// Implement From<toml::de::Error> for PricingError
+impl From<toml::de::Error> for PricingError {
+    fn from(err: toml::de::Error) -> Self {
+        PricingError::TomlParsing(format!("TOML parsing error: {}", err))
+    }
+}
+
+// Implement From<ParseResourceUnitError> for PricingError
+impl From<ParseResourceUnitError> for PricingError {
+    fn from(_: ParseResourceUnitError) -> Self {
+        PricingError::ResourceUnitParsing
     }
 }
 

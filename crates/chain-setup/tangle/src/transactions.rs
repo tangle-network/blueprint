@@ -511,6 +511,7 @@ pub async fn request_service_for_operators<T: Signer<TangleConfig>>(
 /// # Errors
 ///
 /// Returns an error if the transaction fails
+#[allow(clippy::too_many_arguments)]
 pub async fn setup_operator_and_service_multiple<T: Signer<TangleConfig>>(
     clients: &[TestClient],
     sr25519_signers: &[T],

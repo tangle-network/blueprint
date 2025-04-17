@@ -78,6 +78,7 @@ impl<K: KeyType> WhitelistedKeys<K> {
         }
     }
 
+    #[must_use]
     pub fn new_from_hashset(keys: HashSet<VerificationIdentifierKey<K>>) -> Self {
         Self::new(keys.into_iter().collect())
     }
@@ -144,6 +145,7 @@ impl<K: KeyType> WhitelistedKeys<K> {
     }
 
     /// Check if the whitelist is empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -246,6 +248,7 @@ impl<K: KeyType> PeerManager<K> {
     ///
     /// # Returns
     /// A join handle for the spawned thread
+    #[must_use]
     pub fn spawn_whitelist_updater(
         self: Arc<Self>,
         whitelisted_keys_rx: Receiver<WhitelistedKeys<K>>,
@@ -254,7 +257,7 @@ impl<K: KeyType> PeerManager<K> {
             debug!("Starting whitelist updater thread");
             let receiver = whitelisted_keys_rx;
             while let Ok(whitelisted_keys) = receiver.recv() {
-                self.update_whitelist(whitelisted_keys);
+                self.update_whitelist(&whitelisted_keys);
             }
             debug!("Whitelist updater thread terminated");
         })
@@ -265,7 +268,7 @@ impl<K: KeyType> PeerManager<K> {
     ///
     /// # Arguments
     /// * `keys` - The new whitelist to update with
-    pub fn update_whitelist(&self, keys: WhitelistedKeys<K>) {
+    pub fn update_whitelist(&self, keys: &WhitelistedKeys<K>) {
         // Create a new Vec with keys from the input WhitelistedKeys
         let new_keys = keys.keys();
 
@@ -496,8 +499,8 @@ impl<K: KeyType> PeerManager<K> {
                     .keys()
                     .iter()
                     .position(|k| k == &*key)
-                    .unwrap();
-                ParticipantId(p_index as u16)
+                    .unwrap_or(0);
+                ParticipantId(u16::try_from(p_index).unwrap_or(0))
             })
     }
 }

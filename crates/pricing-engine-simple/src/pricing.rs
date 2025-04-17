@@ -5,6 +5,8 @@ use crate::types::ResourceUnit;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use toml;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ResourcePricing {
@@ -76,44 +78,112 @@ pub fn calculate_price(profile: BenchmarkProfile, rate_multiplier: f64) -> Resul
 }
 
 /// Load pricing from a pricing.toml file
-pub fn load_pricing_from_toml(_path: &str) -> Result<HashMap<Option<u64>, Vec<ResourcePricing>>> {
-    // This would parse a TOML file with pricing information
-    // For now, return a simple example
+pub fn load_pricing_from_toml(path: &str) -> Result<HashMap<Option<u64>, Vec<ResourcePricing>>> {
+    use std::str::FromStr;
+
+    // Parse the TOML file
+    let toml_content = fs::read_to_string(path)?;
+    let parsed_toml: toml::Value = toml::from_str(&toml_content)?;
+
     let mut pricing = HashMap::new();
 
-    // Default pricing (no specific blueprint)
-    pricing.insert(
-        None,
-        vec![
-            ResourcePricing {
-                kind: ResourceUnit::CPU,
-                count: 1,
-                price_per_unit_rate: 1_000_000, // Example rate per CPU unit
-            },
-            ResourcePricing {
-                kind: ResourceUnit::MemoryMB,
-                count: 1024,
-                price_per_unit_rate: 500_000, // Example rate per 1024 MB
-            },
-        ],
-    );
+    // Process default pricing if present
+    if let Some(default_table) = parsed_toml.get("default") {
+        if let Some(resources) = default_table.get("resources").and_then(|r| r.as_array()) {
+            let mut default_resources = Vec::new();
 
-    // Example specific blueprint pricing
-    pricing.insert(
-        Some(1),
-        vec![
-            ResourcePricing {
-                kind: ResourceUnit::CPU,
-                count: 2,
-                price_per_unit_rate: 2_000_000,
-            },
-            ResourcePricing {
-                kind: ResourceUnit::MemoryMB,
-                count: 2048,
-                price_per_unit_rate: 1_000_000,
-            },
-        ],
-    );
+            for resource in resources {
+                if let Some(resource_table) = resource.as_table() {
+                    // Extract resource kind
+                    let kind = if let Some(kind_str) =
+                        resource_table.get("kind").and_then(|k| k.as_str())
+                    {
+                        ResourceUnit::from_str(kind_str)?
+                    } else {
+                        continue; // Skip if kind is missing
+                    };
+
+                    // Extract count
+                    let count = resource_table
+                        .get("count")
+                        .and_then(|c| c.as_integer())
+                        .unwrap_or(1) as u64;
+
+                    // Extract price per unit rate
+                    let price_per_unit_rate = resource_table
+                        .get("price_per_unit_rate")
+                        .and_then(|p| {
+                            p.as_integer()
+                                .map(|int_val| int_val as u128)
+                                .or_else(|| p.as_float().map(|float_val| float_val as u128))
+                        })
+                        .unwrap_or(0);
+
+                    default_resources.push(ResourcePricing {
+                        kind,
+                        count,
+                        price_per_unit_rate,
+                    });
+                }
+            }
+
+            pricing.insert(None, default_resources);
+        }
+    }
+
+    // Process blueprint-specific pricing
+    for (key, value) in parsed_toml.as_table().unwrap_or(&toml::value::Table::new()) {
+        // Skip the default section as it's already processed
+        if key == "default" {
+            continue;
+        }
+
+        // Try to parse the key as a blueprint ID
+        if let Ok(blueprint_id) = key.parse::<u64>() {
+            if let Some(resources) = value.get("resources").and_then(|r| r.as_array()) {
+                let mut blueprint_resources = Vec::new();
+
+                for resource in resources {
+                    if let Some(resource_table) = resource.as_table() {
+                        // Extract resource kind
+                        let kind = if let Some(kind_str) =
+                            resource_table.get("kind").and_then(|k| k.as_str())
+                        {
+                            ResourceUnit::from_str(kind_str)?
+                        } else {
+                            continue; // Skip if kind is missing
+                        };
+
+                        // Extract count
+                        let count = resource_table
+                            .get("count")
+                            .and_then(|c| c.as_integer())
+                            .unwrap_or(1) as u64;
+
+                        // Extract price per unit rate
+                        let price_per_unit_rate = resource_table
+                            .get("price_per_unit_rate")
+                            .and_then(|p| {
+                                if let Some(int_val) = p.as_integer() {
+                                    Some(int_val as u128)
+                                } else {
+                                    p.as_float().map(|float_val| float_val as u128)
+                                }
+                            })
+                            .unwrap_or(0);
+
+                        blueprint_resources.push(ResourcePricing {
+                            kind,
+                            count,
+                            price_per_unit_rate,
+                        });
+                    }
+                }
+
+                pricing.insert(Some(blueprint_id), blueprint_resources);
+            }
+        }
+    }
 
     Ok(pricing)
 }
