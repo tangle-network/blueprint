@@ -403,7 +403,6 @@ fn test_resource_pricing() {
             },
         ],
         price_per_second_rate: 0.053_2, // (2 * 0.001) + (1024 * 0.00005)
-        generated_at: chrono::Utc::now(),
         benchmark_profile: None,
     };
 

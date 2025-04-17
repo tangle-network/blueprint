@@ -110,7 +110,6 @@ async fn test_default_pricing_config() -> Result<()> {
     let price_model = PriceModel {
         resources: default_resources.clone(),
         price_per_second_rate: expected_total,
-        generated_at: Utc::now(),
         benchmark_profile: None,
     };
 

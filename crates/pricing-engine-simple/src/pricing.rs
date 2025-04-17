@@ -4,7 +4,6 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use crate::benchmark::BenchmarkProfile;
 use crate::error::Result;
 use crate::types::ResourceUnit;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -29,8 +28,6 @@ pub struct PriceModel {
     pub resources: Vec<ResourcePricing>,
     /// Total price rate per second in USD with decimal precision
     pub price_per_second_rate: f64,
-    /// Timestamp when this price was calculated/cached.
-    pub generated_at: DateTime<Utc>,
     /// Optional: Include benchmark details used for pricing.
     pub benchmark_profile: Option<BenchmarkProfile>,
 }
@@ -82,39 +79,182 @@ pub fn calculate_price(profile: BenchmarkProfile, rate_multiplier: f64) -> Resul
     let mut resources = Vec::new();
     let mut total_price_per_second = 0.0;
 
+    // Set a default TTL of 1 second for per-second pricing
+    let ttl_seconds = 1;
+    
     // CPU pricing
-    let avg_cpu_cores = profile
-        .cpu_details
-        .as_ref()
-        .map(|cpu| cpu.avg_cores_used)
-        .unwrap_or(0.0);
-
-    if avg_cpu_cores > 0.0 {
-        // Convert f32 to f64 for calculations
-        let avg_cpu_cores_f64 = avg_cpu_cores as f64;
-        // Ensure non-negative price by using max(0.0, value)
-        let cpu_price = (avg_cpu_cores_f64 * rate_multiplier).max(0.0);
-        total_price_per_second += cpu_price;
-
-        resources.push(ResourcePricing {
-            kind: ResourceUnit::CPU,
-            count: avg_cpu_cores.ceil() as u64,
-            // Price per unit is the total price divided by the number of units
-            // Ensure non-negative price per unit
-            price_per_unit_rate: if avg_cpu_cores_f64 > 0.0 { (cpu_price / avg_cpu_cores_f64).max(0.0) } else { 0.0 },
-        });
+    if let Some(cpu_details) = &profile.cpu_details {
+        // Round up to nearest integer for CPU cores
+        let cpu_count = cpu_details.avg_cores_used.ceil() as u64;
+        if cpu_count > 0 {
+            // Base price per CPU core
+            let price_per_unit = rate_multiplier;
+            
+            // Calculate CPU price using the standard formula
+            let cpu_price = calculate_resource_price(
+                cpu_count,
+                price_per_unit,
+                ttl_seconds,
+                None,
+            );
+            
+            // Add to total price (divide by TTL to get per-second rate)
+            let cpu_price_per_second = cpu_price / (ttl_seconds as f64 * BLOCK_TIME);
+            total_price_per_second += cpu_price_per_second;
+            
+            // Add CPU resource to the resources list
+            resources.push(ResourcePricing {
+                kind: ResourceUnit::CPU,
+                count: cpu_count,
+                price_per_unit_rate: price_per_unit,
+            });
+        }
     }
 
-    // Memory pricing (example)
-    // Add memory pricing if available in the profile
+    // Memory pricing
+    if let Some(memory_details) = &profile.memory_details {
+        // Round up to nearest integer for memory MB
+        let memory_mb = memory_details.avg_memory_mb.ceil() as u64;
+        if memory_mb > 0 {
+            // Memory is typically cheaper than CPU
+            let price_per_unit = rate_multiplier * 0.05;
+            
+            // Calculate memory price using the standard formula
+            let memory_price = calculate_resource_price(
+                memory_mb,
+                price_per_unit,
+                ttl_seconds,
+                None,
+            );
+            
+            // Add to total price (divide by TTL to get per-second rate)
+            let memory_price_per_second = memory_price / (ttl_seconds as f64 * BLOCK_TIME);
+            total_price_per_second += memory_price_per_second;
+            
+            // Add memory resource to the resources list
+            resources.push(ResourcePricing {
+                kind: ResourceUnit::MemoryMB,
+                count: memory_mb,
+                price_per_unit_rate: price_per_unit,
+            });
+        }
+    }
 
-    // GPU pricing (example)
-    // Add GPU pricing if available in the profile
+    // Storage pricing
+    if let Some(storage_details) = &profile.storage_details {
+        // Convert GB to MB and round up
+        let storage_mb = (storage_details.storage_available_gb * 1024.0).ceil() as u64;
+        if storage_mb > 0 {
+            // Storage is typically cheaper than memory
+            let price_per_unit = rate_multiplier * 0.02;
+            
+            // Calculate storage price using the standard formula
+            let storage_price = calculate_resource_price(
+                storage_mb,
+                price_per_unit,
+                ttl_seconds,
+                None,
+            );
+            
+            // Add to total price (divide by TTL to get per-second rate)
+            let storage_price_per_second = storage_price / (ttl_seconds as f64 * BLOCK_TIME);
+            total_price_per_second += storage_price_per_second;
+            
+            // Add storage resource to the resources list
+            resources.push(ResourcePricing {
+                kind: ResourceUnit::StorageMB,
+                count: storage_mb,
+                price_per_unit_rate: price_per_unit,
+            });
+        }
+    }
 
+    // Network pricing
+    if let Some(network_details) = &profile.network_details {
+        // Network egress (outbound traffic)
+        let egress_mb = network_details.network_tx_mb.ceil() as u64;
+        if egress_mb > 0 {
+            // Egress is typically more expensive than ingress
+            let price_per_unit = rate_multiplier * 0.05;
+            
+            // Calculate egress price using the standard formula
+            let egress_price = calculate_resource_price(
+                egress_mb,
+                price_per_unit,
+                ttl_seconds,
+                None,
+            );
+            
+            // Add to total price (divide by TTL to get per-second rate)
+            let egress_price_per_second = egress_price / (ttl_seconds as f64 * BLOCK_TIME);
+            total_price_per_second += egress_price_per_second;
+            
+            // Add egress resource to the resources list
+            resources.push(ResourcePricing {
+                kind: ResourceUnit::NetworkEgressMB,
+                count: egress_mb,
+                price_per_unit_rate: price_per_unit,
+            });
+        }
+        
+        // Network ingress (inbound traffic)
+        let ingress_mb = network_details.network_rx_mb.ceil() as u64;
+        if ingress_mb > 0 {
+            // Ingress is typically cheaper than egress
+            let price_per_unit = rate_multiplier * 0.02;
+            
+            // Calculate ingress price using the standard formula
+            let ingress_price = calculate_resource_price(
+                ingress_mb,
+                price_per_unit,
+                ttl_seconds,
+                None,
+            );
+            
+            // Add to total price (divide by TTL to get per-second rate)
+            let ingress_price_per_second = ingress_price / (ttl_seconds as f64 * BLOCK_TIME);
+            total_price_per_second += ingress_price_per_second;
+            
+            // Add ingress resource to the resources list
+            resources.push(ResourcePricing {
+                kind: ResourceUnit::NetworkIngressMB,
+                count: ingress_mb,
+                price_per_unit_rate: price_per_unit,
+            });
+        }
+    }
+
+    // GPU pricing
+    if let Some(gpu_details) = &profile.gpu_details {
+        if gpu_details.gpu_available {
+            // GPUs are typically much more expensive than CPUs
+            let price_per_unit = rate_multiplier * 5.0;
+            
+            // Calculate GPU price using the standard formula
+            let gpu_price = calculate_resource_price(
+                1, // Assuming 1 GPU
+                price_per_unit,
+                ttl_seconds,
+                None,
+            );
+            
+            // Add to total price (divide by TTL to get per-second rate)
+            let gpu_price_per_second = gpu_price / (ttl_seconds as f64 * BLOCK_TIME);
+            total_price_per_second += gpu_price_per_second;
+            
+            // Add GPU resource to the resources list
+            resources.push(ResourcePricing {
+                kind: ResourceUnit::GPU,
+                count: 1,
+                price_per_unit_rate: price_per_unit,
+            });
+        }
+    }
+
+    // Create and return the price model
     Ok(PriceModel {
         resources,
         price_per_second_rate: total_price_per_second,
-        generated_at: chrono::Utc::now(),
         benchmark_profile: Some(profile),
     })
 }

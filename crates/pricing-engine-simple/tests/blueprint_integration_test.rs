@@ -168,7 +168,6 @@ resources = [
     let _price_model = PriceModel {
         resources: default_resources.clone(),
         price_per_second_rate: expected_total,
-        generated_at: Utc::now(),
         benchmark_profile: None,
     };
 
@@ -222,7 +221,6 @@ resources = [
                 let model = PriceModel {
                     resources: resources.clone(),
                     price_per_second_rate: price_per_second,
-                    generated_at: Utc::now(),
                     benchmark_profile: None,
                 };
                 

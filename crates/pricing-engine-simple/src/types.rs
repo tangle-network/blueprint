@@ -25,6 +25,8 @@ pub enum ResourceUnit {
     Invocation,
     /// Execution time in milliseconds
     ExecutionTimeMS,
+    /// Storage IO operations per second
+    StorageIOPS,
     /// Custom unit with a name
     Custom(String),
 }
@@ -41,6 +43,7 @@ impl core::fmt::Display for ResourceUnit {
             ResourceUnit::Request => write!(f, "Request"),
             ResourceUnit::Invocation => write!(f, "Invocation"),
             ResourceUnit::ExecutionTimeMS => write!(f, "ExecutionTimeMS"),
+            ResourceUnit::StorageIOPS => write!(f, "StorageIOPS"),
             ResourceUnit::Custom(name) => write!(f, "{}", name),
         }
     }
@@ -65,6 +68,7 @@ impl core::str::FromStr for ResourceUnit {
             "REQUEST" => Ok(ResourceUnit::Request),
             "INVOCATION" => Ok(ResourceUnit::Invocation),
             "EXECUTIONTIMEMS" => Ok(ResourceUnit::ExecutionTimeMS),
+            "STORAGEIOPS" => Ok(ResourceUnit::StorageIOPS),
             _ => Ok(ResourceUnit::Custom(s.to_string())),
         }
     }
