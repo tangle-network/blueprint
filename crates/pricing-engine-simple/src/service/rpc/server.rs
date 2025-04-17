@@ -96,7 +96,7 @@ impl PricingEngine for PricingEngineService {
             .map(|rp| ProtoResourcePricing {
                 kind: format!("{:?}", rp.kind), // Format ResourceUnit as String
                 count: rp.count,
-                price_per_unit_rate: rp.price_per_unit_rate.to_string(),
+                price_per_unit_rate: rp.price_per_unit_rate, // Now directly use f64
             })
             .collect();
 
@@ -136,7 +136,7 @@ impl PricingEngine for PricingEngineService {
         let quote_details = QuoteDetails {
             blueprint_id,
             ttl_seconds,
-            total_cost_rate: signed_quote.payload.total_cost_rate.to_string(),
+            total_cost_rate: signed_quote.payload.total_cost_rate, // Now directly use f64
             timestamp: signed_quote.payload.timestamp,
             expiry: signed_quote.payload.expiry,
             resources: proto_resources,

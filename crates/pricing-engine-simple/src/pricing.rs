@@ -1,4 +1,6 @@
 // src/pricing.rs
+use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityRequirement;
 use crate::benchmark::BenchmarkProfile;
 use crate::error::Result;
 use crate::types::ResourceUnit;
@@ -7,6 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use toml;
+
+/// The average block time in seconds
+pub const BLOCK_TIME: f64 = 6.0;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ResourcePricing {
@@ -37,6 +42,41 @@ impl PriceModel {
     }
 }
 
+/// Function that applies pricing adjustments based on the base cost (price * count)
+fn calculate_base_resource_cost(resource_count: u64, resource_price_rate: f64) -> f64 {
+    // We multiply the resource count by the price rate
+    resource_count as f64 * resource_price_rate
+}
+
+/// Function that applies time-based adjustments to the cost
+fn calculate_ttl_price_adjustment(time_blocks: u64) -> f64 {
+    // We multiply the input TTL by BLOCK_TIME
+    time_blocks as f64 * BLOCK_TIME
+}
+
+/// Function that applies security requirement adjustments to the cost
+fn calculate_security_rate_adjustment(_security_requirements: &Option<AssetSecurityRequirement<AssetId>>) -> f64 {
+    // TODO: Implement security requirement adjustments
+    1.0
+}
+
+/// Calculate the price for a specific resource based on count, rate, TTL, and security requirements
+/// Following the formula: calculate_base_resource_cost(cost * count) * calculate_ttl_price_adjustment(ttl * BLOCK_TIME) * calculate_security_rate_adjustment(security requirements * adjustment rate)
+pub fn calculate_resource_price(
+    count: u64,
+    price_per_unit_rate: f64,
+    ttl_seconds: u64,
+    security_requirements: Option<AssetSecurityRequirement<AssetId>>,
+) -> f64 {   
+    let adjusted_base_cost = calculate_base_resource_cost(count, price_per_unit_rate);
+
+    let adjusted_time_cost = calculate_ttl_price_adjustment(ttl_seconds);
+    
+    let security_factor = calculate_security_rate_adjustment(&security_requirements);
+    
+    adjusted_base_cost * adjusted_time_cost * security_factor
+}
+
 /// Calculates a price based on benchmark results and configuration.
 pub fn calculate_price(profile: BenchmarkProfile, rate_multiplier: f64) -> Result<PriceModel> {
     let mut resources = Vec::new();
@@ -50,14 +90,18 @@ pub fn calculate_price(profile: BenchmarkProfile, rate_multiplier: f64) -> Resul
         .unwrap_or(0.0);
 
     if avg_cpu_cores > 0.0 {
-        let cpu_price = avg_cpu_cores * rate_multiplier;
+        // Convert f32 to f64 for calculations
+        let avg_cpu_cores_f64 = avg_cpu_cores as f64;
+        // Ensure non-negative price by using max(0.0, value)
+        let cpu_price = (avg_cpu_cores_f64 * rate_multiplier).max(0.0);
         total_price_per_second += cpu_price;
 
         resources.push(ResourcePricing {
             kind: ResourceUnit::CPU,
             count: avg_cpu_cores.ceil() as u64,
             // Price per unit is the total price divided by the number of units
-            price_per_unit_rate: if avg_cpu_cores > 0.0 { cpu_price / avg_cpu_cores } else { 0.0 },
+            // Ensure non-negative price per unit
+            price_per_unit_rate: if avg_cpu_cores_f64 > 0.0 { (cpu_price / avg_cpu_cores_f64).max(0.0) } else { 0.0 },
         });
     }
 

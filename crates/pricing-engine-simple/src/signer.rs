@@ -12,7 +12,7 @@ pub type OperatorId = [u8; 32];
 pub struct QuotePayload {
     pub blueprint_id: BlueprintId,
     pub ttl_seconds: u64,
-    pub total_cost_rate: u128,
+    pub total_cost_rate: f64,
     pub resources: Vec<ResourcePricing>,
     /// Expiry timestamp (Unix epoch seconds)
     pub expiry: u64,

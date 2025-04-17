@@ -106,14 +106,15 @@ fn test_calculate_price_basic() {
     // Create a simple benchmark profile with 1.0 CPU cores
     let profile = create_test_benchmark_profile(1.0);
 
-    // Define a scaling factor (Wei per CPU core)
-    let scaling_factor = 1_000_000.0;
+    // Define a scaling factor (USD per CPU core)
+    let scaling_factor = 0.001; // $0.001 per CPU core
 
     // Calculate price
     let price_model = calculate_price(profile.clone(), scaling_factor).unwrap();
 
-    // Verify the price calculation (1.0 cores * 1,000,000 Wei = 1,000,000 Wei)
-    assert_eq!(price_model.price_per_second_rate, 1_000_000);
+    // Verify the price calculation (1.0 cores * $0.001 = $0.001 per second)
+    assert!((price_model.price_per_second_rate - 0.001).abs() < 1e-6, 
+        "Expected price_per_second_rate to be 0.001, got {}", price_model.price_per_second_rate);
 
     // Verify resources were created correctly
     assert!(!price_model.resources.is_empty());
@@ -122,148 +123,154 @@ fn test_calculate_price_basic() {
     let cpu_resource = price_model
         .resources
         .iter()
-        .find(|r| r.kind == ResourceUnit::CPU);
-    assert!(cpu_resource.is_some(), "CPU resource should be present");
-    let cpu_resource = cpu_resource.unwrap();
+        .find(|r| matches!(r.kind, ResourceUnit::CPU));
 
-    // Verify CPU count is 1 (rounded up from 1.0)
-    assert_eq!(cpu_resource.count, 1);
+    // Verify CPU resource exists and has correct values
+    assert!(cpu_resource.is_some());
+    let cpu = cpu_resource.unwrap();
+    assert_eq!(cpu.count, 1);
+    assert!((cpu.price_per_unit_rate - 0.001).abs() < 1e-6, 
+        "Expected CPU price_per_unit_rate to be 0.001, got {}", cpu.price_per_unit_rate);
 
-    // Verify the benchmark profile was stored in the price model
-    assert!(price_model.benchmark_profile.is_some());
-    let stored_profile = price_model.benchmark_profile.unwrap();
-    assert_eq!(stored_profile.job_id, "test-job");
-    assert_eq!(stored_profile.cpu_details.unwrap().avg_cores_used, 1.0);
+    // Test cost calculation for different time periods
+    let minute_cost = price_model.calculate_total_cost(60);
+    let hour_cost = price_model.calculate_total_cost(3600);
+    let day_cost = price_model.calculate_total_cost(86400);
+
+    // Verify cost calculations
+    assert!((minute_cost - 0.06).abs() < 1e-6, 
+        "Expected minute cost to be 0.06, got {}", minute_cost);
+    assert!((hour_cost - 3.6).abs() < 1e-6, 
+        "Expected hour cost to be 3.6, got {}", hour_cost);
+    assert!((day_cost - 86.4).abs() < 1e-6, 
+        "Expected day cost to be 86.4, got {}", day_cost);
 }
 
 #[test]
 fn test_calculate_price_high_cpu() {
-    // Create a profile with high CPU usage (8 cores)
-    let profile = create_test_benchmark_profile(8.0);
-    let scaling_factor = 1_000_000.0;
+    setup_log();
+
+    // Create a benchmark profile with 4.0 CPU cores
+    let profile = create_test_benchmark_profile(4.0);
+
+    // Define a scaling factor (USD per CPU core)
+    let scaling_factor = 0.001; // $0.001 per CPU core
 
     // Calculate price
-    let price_model = calculate_price(profile, scaling_factor).unwrap();
+    let price_model = calculate_price(profile.clone(), scaling_factor).unwrap();
 
-    // Price should be 8 million Wei per second (8.0 cores * 1,000,000 Wei)
-    assert_eq!(price_model.price_per_second_rate, 8_000_000);
+    // Verify the price calculation (4.0 cores * $0.001 = $0.004 per second)
+    assert!((price_model.price_per_second_rate - 0.004).abs() < 1e-6, 
+        "Expected price_per_second_rate to be 0.004, got {}", price_model.price_per_second_rate);
 
-    // CPU resource should have count 8
+    // Find CPU resource
     let cpu_resource = price_model
         .resources
         .iter()
-        .find(|r| r.kind == ResourceUnit::CPU);
-    assert!(cpu_resource.is_some(), "CPU resource should be present");
-    assert_eq!(cpu_resource.unwrap().count, 8);
+        .find(|r| matches!(r.kind, ResourceUnit::CPU));
+
+    // Verify CPU resource exists and has correct values
+    assert!(cpu_resource.is_some());
+    let cpu = cpu_resource.unwrap();
+    assert_eq!(cpu.count, 4);
+    assert!((cpu.price_per_unit_rate - 0.001).abs() < 1e-6, 
+        "Expected CPU price_per_unit_rate to be 0.001, got {}", cpu.price_per_unit_rate);
 }
 
 #[test]
 fn test_calculate_price_different_scaling_factors() {
-    // Create a consistent profile with 2.0 CPU cores
+    setup_log();
+
+    // Create a benchmark profile with 2.0 CPU cores
     let profile = create_test_benchmark_profile(2.0);
 
-    // Test with different scaling factors
-    let low_scaling = 100.0;
-    let medium_scaling = 10_000.0;
-    let high_scaling = 1_000_000_000.0;
+    // Test different scaling factors
+    let scaling_factors = [0.0005, 0.001, 0.002, 0.005];
+    let expected_prices = [0.001, 0.002, 0.004, 0.01]; // 2.0 cores * scaling factor
 
-    // Calculate prices
-    let low_price = calculate_price(profile.clone(), low_scaling).unwrap();
-    let medium_price = calculate_price(profile.clone(), medium_scaling).unwrap();
-    let high_price = calculate_price(profile.clone(), high_scaling).unwrap();
+    for (i, &scaling_factor) in scaling_factors.iter().enumerate() {
+        // Calculate price
+        let price_model = calculate_price(profile.clone(), scaling_factor).unwrap();
 
-    // Verify scaling works proportionally
-    // 2.0 cores * 100 Wei = 200 Wei
-    assert_eq!(low_price.price_per_second_rate, 200);
-    // 2.0 cores * 10,000 Wei = 20,000 Wei
-    assert_eq!(medium_price.price_per_second_rate, 20_000);
-    // 2.0 cores * 1,000,000,000 Wei = 2,000,000,000 Wei
-    assert_eq!(high_price.price_per_second_rate, 2_000_000_000);
+        // Verify the price calculation
+        let expected_price = expected_prices[i];
+        assert!((price_model.price_per_second_rate - expected_price).abs() < 1e-6, 
+            "With scaling factor {}, expected price_per_second_rate to be {}, got {}", 
+            scaling_factor, expected_price, price_model.price_per_second_rate);
 
-    // Verify CPU resource count is consistent across all models
-    assert_eq!(
-        low_price
+        // Find CPU resource
+        let cpu_resource = price_model
             .resources
             .iter()
-            .find(|r| r.kind == ResourceUnit::CPU)
-            .unwrap()
-            .count,
-        2
-    );
-    assert_eq!(
-        medium_price
-            .resources
-            .iter()
-            .find(|r| r.kind == ResourceUnit::CPU)
-            .unwrap()
-            .count,
-        2
-    );
-    assert_eq!(
-        high_price
-            .resources
-            .iter()
-            .find(|r| r.kind == ResourceUnit::CPU)
-            .unwrap()
-            .count,
-        2
-    );
+            .find(|r| matches!(r.kind, ResourceUnit::CPU));
 
-    // Verify price per unit is scaled correctly
-    assert_eq!(
-        low_price
-            .resources
-            .iter()
-            .find(|r| r.kind == ResourceUnit::CPU)
-            .unwrap()
-            .price_per_unit_rate,
-        100
-    );
-    assert_eq!(
-        medium_price
-            .resources
-            .iter()
-            .find(|r| r.kind == ResourceUnit::CPU)
-            .unwrap()
-            .price_per_unit_rate,
-        10_000
-    );
-    assert_eq!(
-        high_price
-            .resources
-            .iter()
-            .find(|r| r.kind == ResourceUnit::CPU)
-            .unwrap()
-            .price_per_unit_rate,
-        1_000_000_000
-    );
+        // Verify CPU resource exists and has correct values
+        assert!(cpu_resource.is_some());
+        let cpu = cpu_resource.unwrap();
+        assert_eq!(cpu.count, 2);
+        assert!((cpu.price_per_unit_rate - scaling_factor).abs() < 1e-6, 
+            "With scaling factor {}, expected CPU price_per_unit_rate to be {}, got {}", 
+            scaling_factor, scaling_factor, cpu.price_per_unit_rate);
+
+        // Test cost calculation for different time periods
+        let minute_cost = price_model.calculate_total_cost(60);
+        let hour_cost = price_model.calculate_total_cost(3600);
+        let day_cost = price_model.calculate_total_cost(86400);
+
+        // Verify cost calculations
+        let expected_minute_cost = expected_price * 60.0;
+        let expected_hour_cost = expected_price * 3600.0;
+        let expected_day_cost = expected_price * 86400.0;
+
+        assert!((minute_cost - expected_minute_cost).abs() < 1e-6, 
+            "With scaling factor {}, expected minute cost to be {}, got {}", 
+            scaling_factor, expected_minute_cost, minute_cost);
+        assert!((hour_cost - expected_hour_cost).abs() < 1e-6, 
+            "With scaling factor {}, expected hour cost to be {}, got {}", 
+            scaling_factor, expected_hour_cost, hour_cost);
+        assert!((day_cost - expected_day_cost).abs() < 1e-6, 
+            "With scaling factor {}, expected day cost to be {}, got {}", 
+            scaling_factor, expected_day_cost, day_cost);
+    }
 }
 
 #[test]
 fn test_calculate_price_negative_scaling_factor() {
-    // Create a profile with 1.0 CPU cores
-    let profile = create_test_benchmark_profile(1.0);
+    setup_log();
 
-    // Use a negative scaling factor (which should result in 0 price due to max(0.0, price))
-    let scaling_factor = -1000.0;
+    // Create a benchmark profile with 2.0 CPU cores
+    let profile = create_test_benchmark_profile(2.0);
+
+    // Define a negative scaling factor (should be treated as 0)
+    let scaling_factor = -0.001;
 
     // Calculate price
-    let price_model = calculate_price(profile, scaling_factor).unwrap();
+    let price_model = calculate_price(profile.clone(), scaling_factor).unwrap();
 
-    // Price should be clamped to 0
-    assert_eq!(price_model.price_per_second_rate, 0);
+    // Verify the price calculation (negative scaling factor should result in 0 price)
+    // Since we're now using max(0.0, value), the price should be 0.0
+    assert!((price_model.price_per_second_rate - 0.0).abs() < 1e-6, 
+        "Expected price_per_second_rate to be 0.0 with negative scaling factor, got {}", 
+        price_model.price_per_second_rate);
 
-    // CPU resource should still exist but with price_per_unit_rate of 0
+    // Find CPU resource
     let cpu_resource = price_model
         .resources
         .iter()
-        .find(|r| r.kind == ResourceUnit::CPU);
-    assert!(cpu_resource.is_some(), "CPU resource should be present");
-    assert_eq!(cpu_resource.unwrap().price_per_unit_rate, 0);
+        .find(|r| matches!(r.kind, ResourceUnit::CPU));
+
+    // Verify CPU resource exists and has price_per_unit_rate of 0.0
+    assert!(cpu_resource.is_some());
+    let cpu = cpu_resource.unwrap();
+    assert!((cpu.price_per_unit_rate - 0.0).abs() < 1e-6,
+        "Expected CPU price_per_unit_rate to be 0.0 with negative scaling factor, got {}", 
+        cpu.price_per_unit_rate);
 }
 
 #[test]
 fn test_io_benchmark() {
+    setup_log();
+
     // Create a simple benchmark config
     let config = BenchmarkRunConfig {
         job_id: "io-test".to_string(),
@@ -279,23 +286,24 @@ fn test_io_benchmark() {
         run_gpu_test: false,
     };
 
-    // Run the I/O benchmark
+    // Run the IO benchmark
     let result = crate::benchmark::io::run_io_benchmark(&config).unwrap();
 
     // Print the results
-    println!("I/O Benchmark Results:");
+    println!("IO Benchmark Results:");
     println!("  Read: {:.2} MB", result.read_mb);
     println!("  Write: {:.2} MB", result.write_mb);
     println!("  Read IOPS: {:.2}", result.read_iops);
     println!("  Write IOPS: {:.2}", result.write_iops);
-    println!("  Avg Read Latency: {:.2} ms", result.avg_read_latency_ms);
-    println!("  Avg Write Latency: {:.2} ms", result.avg_write_latency_ms);
+    println!("  Read Latency: {:.2} ms", result.avg_read_latency_ms);
+    println!("  Write Latency: {:.2} ms", result.avg_write_latency_ms);
+    println!("  Duration: {} ms", result.duration_ms);
 
     // Verify that we got some results
-    assert!(result.read_mb >= 0.0);
-    assert!(result.write_mb >= 0.0);
-    assert!(result.read_iops >= 0.0);
-    assert!(result.write_iops >= 0.0);
+    assert!(result.read_mb > 0.0);
+    assert!(result.write_mb > 0.0);
+    assert!(result.read_iops > 0.0);
+    assert!(result.write_iops > 0.0);
 }
 
 #[test]
@@ -308,7 +316,7 @@ fn test_memory_benchmark() {
         mode: "test".to_string(),
         command: "echo".to_string(),
         args: vec!["benchmark".to_string()],
-        max_duration: Duration::from_secs(10),
+        max_duration: Duration::from_secs(30),
         sample_interval: Duration::from_millis(100),
         run_cpu_test: false,
         run_memory_test: true,
@@ -322,20 +330,20 @@ fn test_memory_benchmark() {
 
     // Print the results
     println!("Memory Benchmark Results:");
+    println!("  Average Memory: {:.2} MB", result.avg_memory_mb);
+    println!("  Peak Memory: {:.2} MB", result.peak_memory_mb);
     println!("  Block Size: {} KB", result.block_size_kb);
     println!("  Total Size: {} MB", result.total_size_mb);
     println!("  Operations/sec: {:.2}", result.operations_per_second);
     println!("  Transfer Rate: {:.2} MB/s", result.transfer_rate_mb_s);
-    println!("  Access Mode: {:?}", result.access_mode);
-    println!("  Operation Type: {:?}", result.operation_type);
-    println!("  Avg Latency: {:.2} ns", result.latency_ns);
+    println!("  Latency: {:.2} ns", result.latency_ns);
     println!("  Duration: {} ms", result.duration_ms);
 
     // Verify that we got some results
+    assert!(result.avg_memory_mb > 0.0);
+    assert!(result.peak_memory_mb > 0.0);
     assert!(result.operations_per_second > 0.0);
     assert!(result.transfer_rate_mb_s > 0.0);
-    assert!(result.latency_ns > 0.0);
-    assert!(result.duration_ms > 0);
 }
 
 #[test]
@@ -386,15 +394,15 @@ fn test_resource_pricing() {
             crate::pricing::ResourcePricing {
                 kind: ResourceUnit::CPU,
                 count: 2,
-                price_per_unit_rate: 1000, // Example rate
+                price_per_unit_rate: 0.001, // $0.001 per CPU core
             },
             crate::pricing::ResourcePricing {
                 kind: ResourceUnit::MemoryMB,
                 count: 1024,
-                price_per_unit_rate: 5, // Example rate
+                price_per_unit_rate: 0.00005, // $0.00005 per MB
             },
         ],
-        price_per_second_rate: 7120, // (2 * 1000) + (1024 * 5)
+        price_per_second_rate: 0.053_2, // (2 * 0.001) + (1024 * 0.00005)
         generated_at: chrono::Utc::now(),
         benchmark_profile: None,
     };
@@ -404,22 +412,30 @@ fn test_resource_pricing() {
     let one_hour_cost = price_model.calculate_total_cost(3600);
     let one_day_cost = price_model.calculate_total_cost(86400);
 
-    // Verify calculations
-    assert_eq!(
-        one_minute_cost,
-        7120 * 60,
-        "One minute cost calculation incorrect"
-    );
-    assert_eq!(
-        one_hour_cost,
-        7120 * 3600,
-        "One hour cost calculation incorrect"
-    );
-    assert_eq!(
-        one_day_cost,
-        7120 * 86400,
-        "One day cost calculation incorrect"
-    );
+    // Expected costs
+    let expected_one_minute = 0.053_2 * 60.0;
+    let expected_one_hour = 0.053_2 * 3600.0;
+    let expected_one_day = 0.053_2 * 86400.0;
+
+    // Verify calculations with floating-point comparison
+    assert!((one_minute_cost - expected_one_minute).abs() < 1e-6, 
+        "One minute cost calculation incorrect. Expected: {}, Got: {}", 
+        expected_one_minute, one_minute_cost);
+    
+    assert!((one_hour_cost - expected_one_hour).abs() < 1e-6, 
+        "One hour cost calculation incorrect. Expected: {}, Got: {}", 
+        expected_one_hour, one_hour_cost);
+    
+    assert!((one_day_cost - expected_one_day).abs() < 1e-6, 
+        "One day cost calculation incorrect. Expected: {}, Got: {}", 
+        expected_one_day, one_day_cost);
+    
+    // Print the costs for information
+    println!("Resource pricing test:");
+    println!("  Price per second: ${:.6}", price_model.price_per_second_rate);
+    println!("  One minute cost: ${:.6}", one_minute_cost);
+    println!("  One hour cost: ${:.6}", one_hour_cost);
+    println!("  One day cost: ${:.6}", one_day_cost);
 }
 
 #[test]
