@@ -242,6 +242,26 @@ resources = [
 
         // Initialize the pricing config
         let pricing_config = init_pricing_config(config_file_path.to_str().unwrap()).await?;
+        
+        // Apply the rate multiplier to each resource's price
+        // This is test-only code to demonstrate different operator pricing
+        {
+            let mut pricing_map = pricing_config.lock().await;
+            
+            // Apply multiplier to default resources
+            if let Some(resources) = pricing_map.get_mut(&None) {
+                for resource in resources.iter_mut() {
+                    resource.price_per_unit_rate *= multiplier;
+                }
+            }
+            
+            // Apply multiplier to blueprint-specific resources if they exist
+            if let Some(resources) = pricing_map.get_mut(&Some(blueprint_id)) {
+                for resource in resources.iter_mut() {
+                    resource.price_per_unit_rate *= multiplier;
+                }
+            }
+        }
 
         // Initialize the operator signer
         let operator_signer = init_operator_signer(&config, &config.keystore_path)?;
