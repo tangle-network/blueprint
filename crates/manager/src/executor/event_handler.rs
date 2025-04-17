@@ -97,7 +97,12 @@ impl VerifiedBlueprint {
                             );
                         }
                         Status::Running => {
-                            error!("Received unexpected status: {status:?}");
+                            error!("Received unexpected status: {status:?}, aborting process...");
+                            if !handle.abort() {
+                                error!(
+                                    "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                                );
+                            }
                         }
                     }
                     continue;
