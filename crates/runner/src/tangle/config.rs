@@ -6,7 +6,6 @@ use blueprint_keystore::backends::Backend;
 use blueprint_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_keystore::crypto::tangle_pair_signer::pair_signer::PairSigner;
 use blueprint_keystore::crypto::tangle_pair_signer::sp_core;
-use blueprint_keystore::{Keystore, KeystoreConfig};
 use futures_util::future::select_ok;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use serde::{Deserialize, Serialize};
@@ -119,11 +118,7 @@ pub async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bo
     let client = get_client(env.ws_rpc_endpoint.as_str(), env.http_rpc_endpoint.as_str()).await?;
 
     // TODO: Improve key fetching logic
-    let keystore_path = env.clone().keystore_uri;
-    let keystore_config = KeystoreConfig::new()
-        .in_memory(false)
-        .fs_root(keystore_path);
-    let keystore = Keystore::new(keystore_config)?;
+    let keystore = env.keystore();
 
     // TODO: Key IDs
     let sr25519_key = keystore
@@ -162,11 +157,7 @@ pub async fn register_impl(
     let client = get_client(env.ws_rpc_endpoint.as_str(), env.http_rpc_endpoint.as_str()).await?;
 
     // TODO: Improve key fetching logic
-    let keystore_path = env.clone().keystore_uri;
-    let keystore_config = KeystoreConfig::new()
-        .in_memory(false)
-        .fs_root(keystore_path);
-    let keystore = Keystore::new(keystore_config)?;
+    let keystore = env.keystore();
 
     // TODO: Key IDs
     let sr25519_key = keystore
