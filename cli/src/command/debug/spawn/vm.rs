@@ -1,6 +1,7 @@
+use crate::command::debug::spawn::PtyIo;
 use blueprint_core::{error, info};
 use blueprint_manager::blueprint_auth::db::RocksDb;
-use blueprint_manager::config::BlueprintManagerConfig;
+use blueprint_manager::config::BlueprintManagerContext;
 use blueprint_manager::rt::hypervisor::net::NetworkManager;
 use blueprint_manager::rt::hypervisor::{ServiceVmConfig, net};
 use blueprint_manager::rt::service::Service;
@@ -11,41 +12,29 @@ use std::path::PathBuf;
 use std::{fs, io};
 use tokio::io::AsyncWriteExt;
 use tokio::task::JoinHandle;
+use blueprint_manager::rt::ResourceLimits;
 
-async fn setup_with_vm(
-    manager_config: &mut BlueprintManagerConfig,
+pub(super) async fn setup_with_vm(
+    ctx: &BlueprintManagerContext,
+    limits: ResourceLimits,
     service_name: &str,
     id: u32,
     binary: PathBuf,
-    db: RocksDb,
     env: BlueprintEnvVars,
     args: BlueprintArgs,
-) -> color_eyre::Result<(Service, VmPtyIo)> {
-    manager_config.verify_network_interface()?;
-
-    let network_candidates = manager_config
-        .default_address_pool
-        .hosts()
-        .filter(|ip| ip.octets()[3] != 0 && ip.octets()[3] != 255)
-        .collect();
-    let network_manager = NetworkManager::new(network_candidates).await.map_err(|e| {
-        error!("Failed to create network manager: {e}");
-        e
-    })?;
-
-    let service = Service::new(
+) -> color_eyre::Result<(Service, PtyIo)> {
+    let service = Service::new_vm(
+        ctx,
+        limits,
         ServiceVmConfig {
             id,
             pty: true,
             ..Default::default()
         },
-        network_manager,
-        manager_config.network_interface.clone().unwrap(),
-        db,
-        &manager_config.data_dir,
-        &manager_config.keystore_uri,
-        &manager_config.cache_dir,
-        &manager_config.runtime_dir,
+        &ctx.data_dir(),
+        &ctx.keystore_uri(),
+        &ctx.cache_dir(),
+        &ctx.runtime_dir(),
         service_name,
         binary,
         env,
@@ -84,7 +73,7 @@ async fn setup_with_vm(
         Ok(())
     });
 
-    let io_handles = VmPtyIo {
+    let io_handles = PtyIo {
         stdin_to_pty,
         pty_to_stdout,
     };
@@ -103,7 +92,7 @@ fn set_raw_mode(fd: &fs::File) -> io::Result<()> {
     Ok(())
 }
 
-async fn vm_shutdown(network_interface: &str) -> Result<()> {
+pub(super) async fn vm_shutdown(network_interface: &str) -> blueprint_manager::error::Result<()> {
     if let Err(e) = net::nftables::cleanup_firewall(network_interface) {
         error!("Failed to cleanup nftables rules: {e}");
     }

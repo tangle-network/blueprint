@@ -1,10 +1,14 @@
-use super::BlueprintSourceHandler;
+use super::{BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler};
 use crate::error::{Error, Result};
 use crate::sdk::utils::make_executable;
 use blueprint_core::trace;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
+use blueprint_runner::config::BlueprintEnvironment;
+use crate::config::BlueprintManagerContext;
+use crate::rt::ResourceLimits;
+use crate::rt::service::Service;
 
 pub struct TestSourceFetcher {
     pub fetcher: TestFetcher,
@@ -125,7 +129,12 @@ async fn get_git_repo_root_path_in<P: AsRef<Path>>(cwd: P) -> Result<PathBuf> {
 impl BlueprintSourceHandler for TestSourceFetcher {
     async fn fetch(&mut self, cache_dir: &Path) -> Result<PathBuf> {
         if let Some(binary_path) = &self.resolved_binary_path {
-            return Ok(binary_path.clone());
+            if binary_path.exists() {
+                return Ok(binary_path.clone());
+            }
+
+            // Re-resolve
+            self.resolved_binary_path = None;
         }
 
         let mut binary_path = self.get_binary(cache_dir).await?;
@@ -134,6 +143,34 @@ impl BlueprintSourceHandler for TestSourceFetcher {
         binary_path = make_executable(&binary_path)?;
         self.resolved_binary_path = Some(binary_path.clone());
         Ok(binary_path)
+    }
+
+    async fn spawn(
+        &mut self,
+        ctx: &BlueprintManagerContext,
+        limits: ResourceLimits,
+        blueprint_config: &BlueprintEnvironment,
+        id: u32,
+        env: BlueprintEnvVars,
+        args: BlueprintArgs,
+        sub_service_str: &str,
+        cache_dir: &Path,
+        runtime_dir: &Path,
+    ) -> Result<Service> {
+        let resolved_binary_path = self.fetch(cache_dir).await?;
+        Service::from_binary(
+            ctx,
+            limits,
+            blueprint_config,
+            id,
+            env,
+            args,
+            &resolved_binary_path,
+            sub_service_str,
+            cache_dir,
+            &runtime_dir,
+        )
+        .await
     }
 
     fn blueprint_id(&self) -> u64 {

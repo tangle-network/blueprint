@@ -1,11 +1,15 @@
 use crate::blueprint::native::FilteredBlueprint;
-use crate::config::BlueprintManagerConfig;
+use crate::config::{BlueprintManagerConfig, BlueprintManagerContext};
+use crate::rt::service::Service;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use std::path::{Path, PathBuf};
 use url::Url;
+use crate::rt::ResourceLimits;
 
 pub mod github;
 pub mod testing;
+#[cfg(feature = "containers")]
+pub mod container;
 
 #[auto_impl::auto_impl(Box)]
 #[dynosaur::dynosaur(pub(crate) DynBlueprintSource)]
@@ -14,6 +18,18 @@ pub trait BlueprintSourceHandler: Send + Sync {
         &mut self,
         cache_dir: &Path,
     ) -> impl Future<Output = crate::error::Result<PathBuf>> + Send;
+    fn spawn(
+        &mut self,
+        ctx: &BlueprintManagerContext,
+        limits: ResourceLimits,
+        blueprint_config: &BlueprintEnvironment,
+        id: u32,
+        env: BlueprintEnvVars,
+        args: BlueprintArgs,
+        sub_service_str: &str,
+        cache_dir: &Path,
+        runtime_dir: &Path,
+    ) -> impl Future<Output = crate::error::Result<Service>> + Send;
     fn blueprint_id(&self) -> u64;
     fn name(&self) -> String;
 }
@@ -47,9 +63,11 @@ impl BlueprintArgs {
     }
 
     #[must_use]
-    pub fn encode(&self) -> Vec<String> {
+    pub fn encode(&self, run: bool) -> Vec<String> {
         let mut arguments = vec![];
-        arguments.push("run".to_string());
+        if run {
+            arguments.push("run".to_string());
+        }
 
         if self.test_mode {
             arguments.push("--test-mode".to_string());
@@ -71,6 +89,8 @@ impl BlueprintArgs {
 pub struct BlueprintEnvVars {
     pub http_rpc_endpoint: Url,
     pub ws_rpc_endpoint: Url,
+    #[cfg(feature = "tee")]
+    pub kms_endpoint: Url,
     pub keystore_uri: String,
     pub data_dir: PathBuf,
     pub blueprint_id: u64,
@@ -92,8 +112,9 @@ impl BlueprintEnvVars {
         blueprint: &FilteredBlueprint,
         sub_service_str: &str,
     ) -> BlueprintEnvVars {
-        let base_data_dir = &manager_config.data_dir;
-        let data_dir = base_data_dir.join(format!("blueprint-{blueprint_id}-{sub_service_str}"));
+        let data_dir = manager_config
+            .data_dir()
+            .join(format!("blueprint-{blueprint_id}-{sub_service_str}"));
 
         let bootnodes = env
             .bootnodes
@@ -103,6 +124,8 @@ impl BlueprintEnvVars {
         BlueprintEnvVars {
             http_rpc_endpoint: env.http_rpc_endpoint.clone(),
             ws_rpc_endpoint: env.ws_rpc_endpoint.clone(),
+            #[cfg(feature = "tee")]
+            kms_endpoint: env.kms_url.clone(),
             keystore_uri: env.keystore_uri.to_string(),
             data_dir,
             blueprint_id,
@@ -120,6 +143,8 @@ impl BlueprintEnvVars {
         let BlueprintEnvVars {
             http_rpc_endpoint,
             ws_rpc_endpoint,
+            #[cfg(feature = "tee")]
+            kms_endpoint,
             keystore_uri,
             data_dir,
             blueprint_id,
@@ -142,6 +167,8 @@ impl BlueprintEnvVars {
         let mut env_vars = vec![
             ("HTTP_RPC_URL".to_string(), http_rpc_endpoint.to_string()),
             ("WS_RPC_URL".to_string(), ws_rpc_endpoint.to_string()),
+            #[cfg(feature = "tee")]
+            ("KMS_URL".to_string(), kms_endpoint.to_string()),
             ("KEYSTORE_URI".to_string(), keystore_uri.clone()),
             ("DATA_DIR".to_string(), data_dir.display().to_string()),
             ("BLUEPRINT_ID".to_string(), blueprint_id.to_string()),
