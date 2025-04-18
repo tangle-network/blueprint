@@ -60,7 +60,10 @@ impl VerifiedBlueprint {
                     &sub_service_str,
                 );
 
-                info!("Starting protocol: {sub_service_str} with args: {arguments:?}");
+                info!(
+                    "Starting protocol: {sub_service_str} with args: {}",
+                    arguments.join(" ")
+                );
 
                 // Now that the file is loaded, spawn the process
                 let mut handle = source.spawn(&sub_service_str, arguments, env_vars).await?;
@@ -199,6 +202,7 @@ pub(crate) fn check_blueprint_events(
         match evt {
             Ok(evt) => {
                 info!("Service initiated event: {evt:?}");
+                result.needs_update = true;
             }
             Err(err) => {
                 warn!("Error handling service initiated event: {err:?}");

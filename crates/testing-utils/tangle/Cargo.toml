@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-tangle-testing-utils"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.5"
 description = "Tangle-specific testing utilities for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true

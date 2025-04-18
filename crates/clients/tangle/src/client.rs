@@ -57,7 +57,8 @@ impl TangleClient {
         let keystore = Arc::new(Keystore::new(keystore_config)?);
 
         let rpc_url = config.ws_rpc_endpoint.as_str();
-        let client = TangleServicesClient::new(subxt::OnlineClient::from_url(rpc_url).await?);
+        let client =
+            TangleServicesClient::new(subxt::OnlineClient::from_insecure_url(rpc_url).await?);
 
         // TODO: Update once keystore is updated
         let account_id = keystore
