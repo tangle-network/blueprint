@@ -79,6 +79,12 @@ pub struct SourceCandidates {
 }
 
 impl SourceCandidates {
+    /// Determine all runtime sources available on this system
+    ///
+    /// # Errors
+    ///
+    /// If the `preferred_source` is not available on this system, or there is an error during its
+    /// detection. Errors that occur while searching for non-preferred sources are silently ignored.
     pub async fn load(preferred_source: SourceType, podman_host: Url) -> Result<SourceCandidates> {
         let mut ret = SourceCandidates {
             container: None,
@@ -104,7 +110,7 @@ impl SourceCandidates {
     }
 
     async fn determine_podman(&mut self, host: Url) -> Result<()> {
-        async fn check_server_header(server: Option<&HeaderValue>) -> bool {
+        fn check_server_header(server: Option<&HeaderValue>) -> bool {
             if let Some(server) = server {
                 if let Ok(server) = server.to_str() {
                     return server.to_lowercase().contains("libpod");
@@ -157,7 +163,7 @@ impl SourceCandidates {
                 .map_err(|e| Error::Other(format!("Unable to reach specified Podman host: {e}")))?
         };
 
-        if check_server_header(res.headers().get("Server")).await {
+        if check_server_header(res.headers().get("Server")) {
             self.container = Some(host);
             return Ok(());
         }
@@ -165,6 +171,7 @@ impl SourceCandidates {
         Err(Error::Other(String::from("No Podman-Docker socket found")))
     }
 
+    #[expect(clippy::unused_async, reason = "TBD")]
     async fn determine_wasm(&mut self) -> Result<bool> {
         // TODO: Verify WASM runtime installations
         Ok(true)

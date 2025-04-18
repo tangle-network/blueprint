@@ -247,6 +247,7 @@ pub(crate) fn check_blueprint_events(
     result
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_tangle_event(
     event: &TangleEvent,
     source_candidates: &SourceCandidates,

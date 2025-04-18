@@ -38,14 +38,12 @@ impl ContainerSource {
 /// Returns true if the given URL appears to refer to a local endpoint,
 /// using the OS's resolver configuration.
 async fn is_local_endpoint(raw_url: &str) -> bool {
-    let url = match Url::parse(raw_url) {
-        Ok(u) => u,
-        Err(_) => return false,
+    let Ok(url) = Url::parse(raw_url) else {
+        return false;
     };
 
-    let host = match url.host_str() {
-        Some(h) => h,
-        None => return false,
+    let Some(host) = url.host_str() else {
+        return false;
     };
 
     if host.eq_ignore_ascii_case("localhost") {
@@ -67,9 +65,8 @@ async fn is_local_endpoint(raw_url: &str) -> bool {
 
 /// Convert any local endpoints to `host.docker.internal`
 async fn adjust_url_for_container(raw_url: &str) -> String {
-    let mut url = match Url::parse(raw_url) {
-        Ok(u) => u,
-        Err(_) => return raw_url.to_owned(),
+    let Ok(mut url) = Url::parse(raw_url) else {
+        return raw_url.to_owned();
     };
 
     if is_local_endpoint(raw_url).await {
