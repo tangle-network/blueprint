@@ -47,6 +47,9 @@ jobs:
       - name: Verify Forge installation
         run: forge --version
 
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+
       - name: install rust
         uses: actions-rs/toolchain@v1
         with:
@@ -136,6 +139,9 @@ jobs:
 
       - name: Verify Forge installation
         run: forge --version
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3 
 
       - name: install rust
         uses: dtolnay/rust-toolchain@nightly
