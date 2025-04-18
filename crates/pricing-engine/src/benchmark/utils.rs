@@ -1,5 +1,3 @@
-// src/benchmark/utils.rs
-//
 // Utility functions for benchmarking
 
 use crate::error::{PricingError, Result};

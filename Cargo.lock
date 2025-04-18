@@ -3407,7 +3407,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-pricing-engine-simple"
+name = "blueprint-pricing-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",

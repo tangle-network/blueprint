@@ -1,5 +1,3 @@
-// src/benchmark/mod.rs
-//
 // Main module for benchmarking functionality
 // This module coordinates the various benchmark components
 

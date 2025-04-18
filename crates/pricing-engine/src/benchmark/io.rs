@@ -1,5 +1,3 @@
-// src/benchmark/io.rs
-//
 // I/O benchmarking module for measuring disk I/O performance
 
 use crate::error::{PricingError, Result};

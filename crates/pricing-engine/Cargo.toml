@@ -1,5 +1,5 @@
 [package]
-name = "blueprint-pricing-engine-simple"
+name = "blueprint-pricing-engine"
 version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 description = "Tangle Cloud Pricing Engine for service offerings"
 
 [lib]
-name = "blueprint_pricing_engine_simple_lib"
+name = "blueprint_pricing_engine_lib"
 path = "src/lib.rs"
 
 [[bin]]
@@ -73,7 +73,7 @@ num_cpus = { workspace = true }
 # Utilities
 # Add serde feature to chrono
 chrono = { workspace = true, features = ["serde", "clock"] }
-libc = { workspace = true }  # For direct I/O support
+libc = { workspace = true }                                  # For direct I/O support
 
 # Add tonic and prost for gRPC server
 tonic = { workspace = true, features = ["transport", "codegen", "prost"] }
@@ -99,4 +99,4 @@ tonic-build = { workspace = true, features = ["prost"] }
 [features]
 default = []
 tangle-listener = []
-std = [] # Add the std feature to fix warnings in types.rs
+std = []             # Add the std feature to fix warnings in types.rs

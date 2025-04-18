@@ -1,6 +1,6 @@
 // use std::sync::Arc;
 
-// use blueprint_pricing_engine_simple_lib::{
+// use blueprint_pricing_engine_lib::{
 //     app::{init_operator_signer, init_price_cache},
 //     config::OperatorConfig,
 //     error::Result,
@@ -135,7 +135,7 @@
 //         Ok(response) => response,
 //         Err(status) => {
 //             eprintln!("gRPC error: {}", status);
-//             return Err(blueprint_pricing_engine_simple_lib::error::PricingError::Other(
+//             return Err(blueprint_pricing_engine_lib::error::PricingError::Other(
 //                 format!("gRPC error: {}", status)
 //             ));
 //         }
@@ -253,7 +253,7 @@
 //             Ok(response) => response,
 //             Err(status) => {
 //                 eprintln!("gRPC error: {}", status);
-//                 return Err(blueprint_pricing_engine_simple_lib::error::PricingError::Other(
+//                 return Err(blueprint_pricing_engine_lib::error::PricingError::Other(
 //                     format!("gRPC error: {}", status)
 //                 ));
 //             }

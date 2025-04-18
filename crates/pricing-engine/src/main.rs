@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use tracing::info;
 
 // Import functions from the library
-use blueprint_pricing_engine_simple_lib::{
+use blueprint_pricing_engine_lib::{
     cleanup, error::Result, init_benchmark_cache, init_logging, init_operator_signer,
     init_pricing_config, load_operator_config, service::blockchain::event::BlockchainEvent,
     service::rpc::server::run_rpc_server, spawn_event_processor, start_blockchain_listener,

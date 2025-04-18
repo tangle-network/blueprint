@@ -1,5 +1,3 @@
-// src/benchmark/network.rs
-//
 // Network benchmarking module for measuring network performance
 
 use crate::error::{PricingError, Result};

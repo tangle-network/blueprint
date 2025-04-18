@@ -1,4 +1,3 @@
-// src/pow.rs
 use crate::error::Result;
 use sha2::{Digest, Sha256};
 use std::time::Duration;

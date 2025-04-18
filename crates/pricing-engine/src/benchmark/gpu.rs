@@ -1,5 +1,3 @@
-// src/benchmark/gpu.rs
-//
 // GPU benchmarking module for detecting GPU availability and memory
 
 use crate::error::Result;

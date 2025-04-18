@@ -1,4 +1,3 @@
-// src/error.rs
 use crate::types::ParseResourceUnitError;
 use thiserror::Error;
 
@@ -14,25 +13,19 @@ pub enum PricingError {
     Serialization(#[from] bincode::Error),
 
     #[error("Signing error: {0}")]
-    Signing(String),
+    Signing(#[from] blueprint_keystore::Error),
 
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
     #[error("Benchmark error: {0}")]
-    Benchmark(String), // Keep simple for now
+    Benchmark(String),
 
     #[error("Pricing calculation error: {0}")]
     Pricing(String),
 
     #[error("Invalid blueprint ID: {0}")]
     InvalidBlueprintId(String),
-
-    #[error("Price not found for blueprint: {0}")]
-    PriceNotFound(String),
-
-    #[error("Blockchain interaction error: {0}")]
-    Blockchain(String), // Placeholder for specific blockchain errors
 
     #[error("Initialization error: {0}")]
     Initialization(String),
@@ -50,34 +43,13 @@ pub enum PricingError {
     ResourceRequirement(String),
 
     #[error("TOML parsing error: {0}")]
-    TomlParsing(String),
+    TomlParsing(#[from] toml::de::Error),
 
     #[error("Resource unit parsing error")]
-    ResourceUnitParsing,
+    ResourceUnitParsing(#[from] ParseResourceUnitError),
 
     #[error("Other error: {0}")]
     Other(String),
-}
-
-// Implement From<blueprint_keystore::Error> for PricingError
-impl From<blueprint_keystore::Error> for PricingError {
-    fn from(err: blueprint_keystore::Error) -> Self {
-        PricingError::Signing(format!("Keystore error: {:?}", err))
-    }
-}
-
-// Implement From<toml::de::Error> for PricingError
-impl From<toml::de::Error> for PricingError {
-    fn from(err: toml::de::Error) -> Self {
-        PricingError::TomlParsing(format!("TOML parsing error: {}", err))
-    }
-}
-
-// Implement From<ParseResourceUnitError> for PricingError
-impl From<ParseResourceUnitError> for PricingError {
-    fn from(_: ParseResourceUnitError) -> Self {
-        PricingError::ResourceUnitParsing
-    }
 }
 
 pub type Result<T> = std::result::Result<T, PricingError>;

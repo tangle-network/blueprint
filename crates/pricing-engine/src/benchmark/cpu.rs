@@ -1,5 +1,3 @@
-// src/benchmark/cpu.rs
-//
 // CPU benchmarking module based on sysbench's CPU test
 
 use crate::error::Result;

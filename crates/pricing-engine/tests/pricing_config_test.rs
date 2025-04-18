@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use blueprint_pricing_engine_simple_lib::{
+use blueprint_pricing_engine_lib::{
     error::Result,
     pricing::{BLOCK_TIME, PriceModel, calculate_resource_price, load_pricing_from_toml},
     types::ResourceUnit,

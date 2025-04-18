@@ -5,9 +5,6 @@
 //! resource requirements and provider pricing models, supporting
 //! competitive bidding in a decentralized marketplace.
 
-// src/lib.rs
-
-// Define modules
 pub mod app;
 pub mod benchmark;
 pub mod benchmark_cache;
@@ -21,9 +18,20 @@ pub mod service;
 pub mod signer;
 pub mod types;
 
-// Re-export key types and functions for easier use by the binary or other crates
+pub mod pricing_engine {
+    include!(concat!(env!("OUT_DIR"), "/pricing_engine.rs"));
+}
+
+#[cfg(test)]
+mod tests;
+
+pub use app::{
+    cleanup, init_logging, init_operator_signer, load_operator_config, spawn_event_processor,
+    start_blockchain_listener, wait_for_shutdown,
+};
 pub use benchmark::cpu::CpuBenchmarkResult;
 pub use benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark, run_benchmark_suite};
+pub use benchmark_cache::BenchmarkCache;
 pub use cache::{BlueprintId, PriceCache};
 pub use config::{OperatorConfig, load_config, load_config_from_path};
 pub use error::{PricingError, Result};
@@ -34,21 +42,11 @@ pub use service::blockchain::event::BlockchainEvent;
 pub use service::blockchain::listener::EventListener;
 pub use signer::{OperatorId, OperatorSigner, QuotePayload, SignedQuote};
 
-// Re-export application-level functions
-pub use app::{
-    cleanup, init_logging, init_operator_signer, load_operator_config, spawn_event_processor,
-    start_blockchain_listener, wait_for_shutdown,
-};
-
-// Export the benchmark cache
-pub use crate::benchmark_cache::BenchmarkCache;
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
 
-// Add init_benchmark_cache function
 pub async fn init_benchmark_cache(config: &OperatorConfig) -> Result<Arc<BenchmarkCache>> {
     let cache_path = format!("{}/benchmark_cache", config.database_path);
     let cache = BenchmarkCache::new(cache_path)?;
@@ -56,7 +54,6 @@ pub async fn init_benchmark_cache(config: &OperatorConfig) -> Result<Arc<Benchma
     Ok(Arc::new(cache))
 }
 
-// Add init_pricing_config function
 pub async fn init_pricing_config(
     config_path: &str,
 ) -> Result<Arc<Mutex<HashMap<Option<u64>, Vec<ResourcePricing>>>>> {
@@ -64,11 +61,3 @@ pub async fn init_pricing_config(
     info!("Pricing configuration loaded from {}", config_path);
     Ok(Arc::new(Mutex::new(pricing_config)))
 }
-
-// Include generated gRPC code
-pub mod pricing_engine {
-    include!(concat!(env!("OUT_DIR"), "/pricing_engine.rs"));
-}
-
-#[cfg(test)]
-mod tests;

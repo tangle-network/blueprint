@@ -2,7 +2,7 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 
-use blueprint_pricing_engine_simple_lib::{
+use blueprint_pricing_engine_lib::{
     app::{init_benchmark_cache, init_operator_signer},
     benchmark::{
         BenchmarkProfile, CpuBenchmarkResult, GpuBenchmarkResult, IoBenchmarkResult,
@@ -144,9 +144,9 @@ resources = [
             operations_per_second: 1000.0,
             transfer_rate_mb_s: 2000.0,
             access_mode:
-                blueprint_pricing_engine_simple_lib::benchmark::MemoryAccessMode::Sequential,
+                blueprint_pricing_engine_lib::benchmark::MemoryAccessMode::Sequential,
             operation_type:
-                blueprint_pricing_engine_simple_lib::benchmark::MemoryOperationType::Read,
+                blueprint_pricing_engine_lib::benchmark::MemoryOperationType::Read,
             latency_ns: 50.0,
             duration_ms: 1000,
         }),
@@ -172,7 +172,7 @@ resources = [
             avg_write_latency_ms: 8.0,
             max_read_latency_ms: 10.0,
             max_write_latency_ms: 15.0,
-            test_mode: blueprint_pricing_engine_simple_lib::benchmark::io::IoTestMode::RndRw,
+            test_mode: blueprint_pricing_engine_lib::benchmark::io::IoTestMode::RndRw,
             block_size: 4096,
             total_file_size: 128 * 1024 * 1024, // 128 MB
             num_files: 2,

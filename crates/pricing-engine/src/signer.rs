@@ -1,4 +1,3 @@
-// src/signer.rs
 use crate::config::OperatorConfig;
 use crate::error::{PricingError, Result};
 use crate::pricing::ResourcePricing;
