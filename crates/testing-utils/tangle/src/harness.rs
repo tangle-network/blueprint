@@ -3,7 +3,7 @@ use crate::multi_node::MultiNodeTestEnv;
 use crate::{InputValue, OutputValue, keys::inject_tangle_key};
 use blueprint_chain_setup::tangle::testnet::SubstrateNode;
 use blueprint_chain_setup::tangle::transactions;
-use blueprint_chain_setup::tangle::transactions::setup_operator_and_service_multiple;
+use blueprint_chain_setup::tangle::transactions::setup_operators_with_service;
 use blueprint_client_tangle::client::TangleClient;
 use blueprint_contexts::tangle::TangleClientContext;
 use blueprint_core::debug;
@@ -393,7 +393,7 @@ where
                 all_preferences.push(node.preferences);
             }
 
-            setup_operator_and_service_multiple(
+            setup_operators_with_service(
                 &all_clients[..N],
                 &all_signers[..N],
                 blueprint_id,

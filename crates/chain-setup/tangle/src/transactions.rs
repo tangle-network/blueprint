@@ -512,7 +512,7 @@ pub async fn request_service_for_operators<T: Signer<TangleConfig>>(
 ///
 /// Returns an error if the transaction fails
 #[allow(clippy::too_many_arguments)]
-pub async fn setup_operator_and_service_multiple<T: Signer<TangleConfig>>(
+pub async fn setup_operators_with_service<T: Signer<TangleConfig>>(
     clients: &[TestClient],
     sr25519_signers: &[T],
     blueprint_id: u64,
