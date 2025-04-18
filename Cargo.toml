@@ -207,11 +207,9 @@ fs2 = { version = "0.4", default-features = false }
 lock_api = { version = "0.4.12", default-features = false }
 nix = { version = "0.29.0", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false }
-sysinfo = { version = "0.34.2", default-features = false }
 tempfile = { version = "3.13.0", default-features = false }
 uuid = { version = "1.16.0", default-features = false }
 blake3 = { version = "1.8.0", default-features = false }
-chrono = { version = "0.4.40", default-features = false }
 
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }
@@ -227,10 +225,27 @@ syn = { version = "2.0", default-features = false }
 trybuild = { version = "1.0", default-features = false }
 typed-builder = { version = "0.19", default-features = false }
 dirs = { version = "6.0.0", default-features = false }
-serial_test = { version = "3.2.0", default-features = false }
 indicatif = { version = "0.17.8", default-features = false }
 document-features = "0.2.11"
 rustversion = "1.0.20"
+
+# Time & Date
+time = { version = "0.3.41", default-features = false }
+chrono = { version = "0.4", default-features = false }
+
+# System & OS
+sysinfo = { version = "0.34.2", default-features = false }
+num_cpus = { version = "1.16", default-features = false }
+libc = { version = "0.2.147", default-features = false }
+
+# gRPC & Protocol Buffers
+tonic = { version = "0.11", default-features = false }
+prost = { version = "0.12", default-features = false }
+tonic-build = { version = "0.11", default-features = false }
+
+# Testing
+test-log = { version = "0.2", default-features = false }
+serial_test = { version = "3.2.0", default-features = false }
 
 # Alloy (EVM)
 alloy = { version = "0.12", default-features = false }
