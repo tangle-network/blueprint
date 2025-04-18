@@ -460,7 +460,7 @@ async fn main() -> color_eyre::Result<()> {
                 data_dir,
                 bootnodes,
                 settings_file,
-                podman_host
+                podman_host,
             } => {
                 let settings_file =
                     settings_file.unwrap_or_else(|| PathBuf::from("./settings.env"));

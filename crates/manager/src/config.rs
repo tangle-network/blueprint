@@ -4,12 +4,12 @@ use docktopus::bollard::system::Version;
 use docktopus::bollard::{API_DEFAULT_VERSION, Docker};
 use http_body_util::Full;
 use hyper::body::Bytes;
+use hyper::header::HeaderValue;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use hyper::header::HeaderValue;
 use tracing::error;
 use url::Url;
 
@@ -86,7 +86,7 @@ impl SourceCandidates {
             preferred_source,
         };
 
-        if let Err(e) = dbg!(ret.determine_podman(podman_host).await) {
+        if let Err(e) = ret.determine_podman(podman_host).await {
             if preferred_source == SourceType::Container {
                 error!("Podman not found, cannot use container source type as default: {e}");
                 return Err(e);
@@ -113,7 +113,7 @@ impl SourceCandidates {
             false
         }
 
-        let client = Docker::connect_with_unix_defaults()
+        let client = Docker::connect_with_local(host.as_str(), 20, API_DEFAULT_VERSION)
             .map_err(|e| Error::Other(e.to_string()))?;
 
         // Check the version, cheapest route
