@@ -54,6 +54,7 @@ impl From<BlueprintSource<'_>> for SubxtBlueprintSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
 pub enum WasmFetcher<'a> {
     /// A WASM binary that will be fetched from the IPFS.
     IPFS(Vec<u8>),
@@ -71,6 +72,7 @@ impl From<WasmFetcher<'_>> for SubxtWasmFetcher {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
 pub enum NativeFetcher<'a> {
     /// A blueprint that will be fetched from the IPFS.
     IPFS(Vec<u8>),
@@ -181,8 +183,7 @@ pub struct BlueprintBinary<'a> {
     pub os: OperatingSystem,
     /// The name of the binary.
     pub name: Cow<'a, str>,
-    /// The sha256 hash of the binary.
-    /// used to verify the downloaded binary.
+    /// The sha256 hash of the binary, used for verification.
     #[serde(default)]
     pub sha256: [u8; 32],
 }
