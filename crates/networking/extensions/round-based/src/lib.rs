@@ -252,29 +252,21 @@ where
                     MessageType::Broadcast
                 };
 
-                let sender_verification_id =
-                    match protocol_message.routing.sender.verification_id_key {
-                        Some(verification_id) => verification_id,
-                        None => {
-                            warn!("Received message from unknown participant");
-                            return Poll::Ready(Some(Err(NetworkError::UnknownPeer(
-                                "Failed to find verification ID key".to_string(),
-                            ))));
-                        }
-                    };
-                let sender_peer_id = match this
+                let Some(sender_verification_id) = protocol_message.routing.sender.verification_id_key else {
+                    warn!("Received message from unknown participant");
+                    return Poll::Ready(Some(Err(NetworkError::UnknownPeer(
+                        "Failed to find verification ID key".to_string(),
+                    ))));
+                };
+                let Some(sender_peer_id) = this
                     .handle
                     .peer_manager
-                    .get_peer_id_from_verification_id_key(&sender_verification_id)
-                {
-                    Some(peer_id) => peer_id,
-                    None => {
-                        warn!("Received message from unknown participant");
-                        return Poll::Ready(Some(Err(NetworkError::UnknownPeer(format!(
-                            "Failed to find peer ID for verification ID key: {:?}",
-                            sender_verification_id
-                        )))));
-                    }
+                    .get_peer_id_from_verification_id_key(&sender_verification_id) else {
+                    warn!("Received message from unknown participant");
+                    return Poll::Ready(Some(Err(NetworkError::UnknownPeer(format!(
+                        "Failed to find peer ID for verification ID key: {:?}",
+                        sender_verification_id
+                    )))));
                 };
 
                 let sender_party_index = match this
