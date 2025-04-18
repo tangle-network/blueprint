@@ -6,7 +6,7 @@ use crate::sdk::entry::SendFuture;
 use blueprint_clients::tangle::EventsClient;
 use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
-use blueprint_core::info;
+use blueprint_core::{info, warn};
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
@@ -135,6 +135,7 @@ impl Future for BlueprintManagerHandle {
 /// # Arguments
 ///
 /// * `blueprint_manager_config` - The configuration for the blueprint manager
+/// * `keystore` - The keystore to use for the blueprint manager
 /// * `gadget_config` - The configuration for the gadget
 /// * `shutdown_cmd` - The shutdown command for the blueprint manager
 ///
@@ -150,8 +151,9 @@ impl Future for BlueprintManagerHandle {
 ///
 /// * If the SR25519 or ECDSA keypair cannot be found
 #[allow(clippy::used_underscore_binding)]
-pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
+pub fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     blueprint_manager_config: BlueprintManagerConfig,
+    keystore: Keystore,
     env: BlueprintEnvironment,
     shutdown_cmd: F,
 ) -> color_eyre::Result<BlueprintManagerHandle> {
@@ -177,7 +179,6 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
 
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
-        let keystore = Keystore::new(KeystoreConfig::new().fs_root(&env.keystore_uri))?;
         let sr_key_pub = keystore.first_local::<SpSr25519>()?;
         let sr_pair = keystore.get_secret::<SpSr25519>(&sr_key_pub)?;
         let sr_key = TanglePairSigner::new(sr_pair.0);
@@ -196,7 +197,7 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
     let keystore_uri = env.keystore_uri.clone();
 
     let manager_task = async move {
-        let tangle_client = TangleClient::new(env.clone()).await?;
+        let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
         let services_client = tangle_client.services_client();
 
         // With the basics setup, we must now implement the main logic of the Blueprint Manager
@@ -291,6 +292,39 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
     Ok(handle)
 }
 
+/// Run the blueprint manager with the given configuration
+///
+/// # Arguments
+///
+/// * `blueprint_manager_config` - The configuration for the blueprint manager
+/// * `gadget_config` - The configuration for the gadget
+/// * `shutdown_cmd` - The shutdown command for the blueprint manager
+///
+/// # Returns
+///
+/// * A handle to the running blueprint manager
+///
+/// # Errors
+///
+/// * If the blueprint manager fails to start
+///
+/// # Panics
+///
+/// * If the SR25519 or ECDSA keypair cannot be found
+#[allow(clippy::used_underscore_binding)]
+pub fn run_blueprint_manager<F: SendFuture<'static, ()>>(
+    blueprint_manager_config: BlueprintManagerConfig,
+    env: BlueprintEnvironment,
+    shutdown_cmd: F,
+) -> color_eyre::Result<BlueprintManagerHandle> {
+    run_blueprint_manager_with_keystore(
+        blueprint_manager_config,
+        Keystore::new(KeystoreConfig::new().fs_root(&env.keystore_uri))?,
+        env,
+        shutdown_cmd,
+    )
+}
+
 /// * Query to get Vec<RpcServicesWithBlueprint>
 /// * For each `RpcServicesWithBlueprint`, fetch the associated gadget binary (fetch/download)
 ///   -> If the services field is empty, just emit and log inside the executed binary "that states a new service instance got created by one of these blueprints"
@@ -309,9 +343,20 @@ async fn handle_init(
         return Err(Error::InitialBlock);
     };
 
-    let operator_subscribed_blueprints = services_client
+    let maybe_operator_subscribed_blueprints = services_client
         .query_operator_blueprints(init_event.hash, sub_account_id.clone())
-        .await?;
+        .await;
+
+    let operator_subscribed_blueprints = match maybe_operator_subscribed_blueprints {
+        Ok(blueprints) => blueprints,
+        Err(err) => {
+            warn!(
+                "Failed to query operator blueprints: {}, did you register as an operator?",
+                err
+            );
+            blueprint_std::vec::Vec::new()
+        }
+    };
 
     info!(
         "Received {} initial blueprints this operator is registered to",

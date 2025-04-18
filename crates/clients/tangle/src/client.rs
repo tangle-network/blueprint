@@ -50,17 +50,27 @@ impl TangleClient {
     /// # Errors
     ///
     /// See [`Keystore::new()`]
+    /// See [`Self::with_keystore()`]
     pub async fn new(config: BlueprintEnvironment) -> std::result::Result<Self, Error> {
         let keystore_config =
             KeystoreConfig::new().fs_root(config.keystore_uri.replace("file://", ""));
 
-        let keystore = Arc::new(Keystore::new(keystore_config)?);
+        Self::with_keystore(config, Keystore::new(keystore_config)?).await
+    }
 
+    /// Create a new Tangle runtime client from an existing [`BlueprintEnvironment`] and a [`Keystore`].
+    ///
+    /// # Errors
+    ///
+    /// See [`subxt::OnlineClient::from_url()`]
+    pub async fn with_keystore(
+        config: BlueprintEnvironment,
+        keystore: Keystore,
+    ) -> std::result::Result<Self, Error> {
         let rpc_url = config.ws_rpc_endpoint.as_str();
         let client =
             TangleServicesClient::new(subxt::OnlineClient::from_insecure_url(rpc_url).await?);
 
-        // TODO: Update once keystore is updated
         let account_id = keystore
             .first_local::<SpSr25519>()
             .map_err(Error::Keystore)?
@@ -69,7 +79,7 @@ impl TangleClient {
             .into();
 
         Ok(Self {
-            keystore,
+            keystore: Arc::new(keystore),
             services_client: client,
             finality_notification_stream: Arc::new(tokio::sync::Mutex::new(None)),
             latest_finality_notification: Arc::new(tokio::sync::Mutex::new(None)),
