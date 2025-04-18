@@ -90,3 +90,4 @@ std = [
 	"libsecp256k1/std",
 ]
 testing = []
+test-utils = ["testing"]

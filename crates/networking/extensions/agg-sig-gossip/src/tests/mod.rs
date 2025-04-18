@@ -8,7 +8,7 @@ use blueprint_core::info;
 use blueprint_crypto::{KeyType, aggregation::AggregatableSignature};
 use blueprint_networking::{
     service_handle::NetworkServiceHandle,
-    test_utils::{create_whitelisted_nodes, setup_log, wait_for_all_handshakes},
+    test_utils::{TestNode, create_whitelisted_nodes, setup_log, wait_for_all_handshakes},
     types::ParticipantId,
 };
 use blueprint_std::{collections::HashMap, time::Duration};
@@ -35,7 +35,8 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     );
 
     // Create whitelisted nodes
-    let mut nodes = create_whitelisted_nodes::<S>(num_nodes, network_name, instance_name, false);
+    let mut nodes =
+        create_whitelisted_nodes::<S>(num_nodes, network_name, instance_name, false).await;
     info!("Created {} nodes successfully", nodes.len());
 
     // Start all nodes
@@ -48,14 +49,18 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     }
 
     // Convert handles to mutable references for wait_for_all_handshakes
-    let handle_refs: Vec<&mut NetworkServiceHandle<S>> = handles.iter_mut().collect();
+    let _handle_refs: Vec<&mut NetworkServiceHandle<S>> = handles.iter_mut().collect();
 
     // Wait for all handshakes to complete
     info!(
         "Waiting for handshake completion between {} nodes",
         nodes.len()
     );
-    wait_for_all_handshakes(&handle_refs, TEST_TIMEOUT).await;
+    wait_for_all_handshakes(
+        &nodes.iter().collect::<Vec<&TestNode<S>>>(),
+        TEST_TIMEOUT.as_secs(),
+    )
+    .await;
     info!("All handshakes completed successfully");
     info!("==================== STARTING PROTOCOL PHASE ====================");
 

@@ -2,12 +2,11 @@
 
 use crate::{
     discovery::peers::{VerificationIdentifierKey, WhitelistedKeys},
-    service_handle::NetworkServiceHandle,
     test_utils::{
         TestNode, create_whitelisted_nodes, init_tracing, wait_for_all_handshakes,
         wait_for_handshake_completion,
     },
-    types::{MessageRouting, ProtocolMessage},
+    types::{MessageRouting, ParticipantInfo, ProtocolMessage},
 };
 use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
 use libp2p::PeerId;
@@ -27,25 +26,25 @@ enum SummationMessage {
 }
 
 // Helper to create a protocol message
-fn create_protocol_message<T: Serialize>(
+fn create_protocol_message<T: Serialize, K: KeyType>(
     message: T,
     message_id: u64,
     round_id: u16,
     sender_peer_id: PeerId,
     target_peer: Option<PeerId>,
-) -> (MessageRouting, Vec<u8>) {
+) -> (MessageRouting<K>, Vec<u8>) {
     let payload = bincode::serialize(&message).expect("Failed to serialize message");
     let routing = MessageRouting {
         message_id,
         round_id,
-        sender: sender_peer_id,
-        recipient: target_peer,
+        sender: ParticipantInfo::<K>::new_with_peer_id(sender_peer_id),
+        recipient: target_peer.map(|peer_id| ParticipantInfo::<K>::new_with_peer_id(peer_id)),
     };
     (routing, payload)
 }
 
 // Helper to extract number from message
-fn extract_number_from_message(msg: &ProtocolMessage) -> u64 {
+fn extract_number_from_message<K: KeyType>(msg: &ProtocolMessage<K>) -> u64 {
     match bincode::deserialize::<SummationMessage>(&msg.payload).expect("Failed to deserialize") {
         SummationMessage::Number(n) => n,
         SummationMessage::Verification { .. } => panic!("Expected number message"),
@@ -53,7 +52,7 @@ fn extract_number_from_message(msg: &ProtocolMessage) -> u64 {
 }
 
 // Helper to extract sum from verification message
-fn extract_sum_from_verification(msg: &ProtocolMessage) -> u128 {
+fn extract_sum_from_verification<K: KeyType>(msg: &ProtocolMessage<K>) -> u128 {
     match bincode::deserialize::<SummationMessage>(&msg.payload).expect("Failed to deserialize") {
         SummationMessage::Verification { sum } => sum,
         SummationMessage::Number(_) => panic!("Expected verification message"),
@@ -77,7 +76,7 @@ async fn test_summation_protocol_basic() {
         "summation-basic",
         "v1.0.0",
         WhitelistedKeys::new_from_hashset(allowed_keys1),
-        vec![],
+        &[],
         false,
     );
 
@@ -89,7 +88,7 @@ async fn test_summation_protocol_basic() {
         "summation-basic",
         "v1.0.0",
         WhitelistedKeys::new_from_hashset(allowed_keys2),
-        vec![],
+        &[],
         Some(instance_key_pair2),
         None,
         false,
@@ -114,7 +113,7 @@ async fn test_summation_protocol_basic() {
 
     info!("Sending numbers via gossip");
     // Send numbers via gossip from node1 handle1
-    let (routing, payload) = create_protocol_message(
+    let (routing, payload) = create_protocol_message::<_, SpEcdsa>(
         SummationMessage::Number(num1),
         message_id,
         round_id,
@@ -126,7 +125,7 @@ async fn test_summation_protocol_basic() {
         .expect("Failed to send number from node1");
 
     // Send numbers via gossip from node2 handle2
-    let (routing, payload) = create_protocol_message(
+    let (routing, payload) = create_protocol_message::<_, SpEcdsa>(
         SummationMessage::Number(num2),
         message_id,
         round_id,
@@ -139,48 +138,46 @@ async fn test_summation_protocol_basic() {
 
     info!("Waiting for messages to be processed");
 
-    // Wait for messages and compute sums
-    let mut sum1 = num1;
-    let mut sum2 = num2;
-    let mut node1_received = false;
-    let mut node2_received = false;
-
+    // Wait for both nodes to receive the other's number
     timeout(TEST_TIMEOUT, async {
-        loop {
-            // Process incoming messages
+        let mut node1_received = false;
+        let mut node2_received = false;
+
+        while !node1_received || !node2_received {
             if let Some(msg) = handle1.next_protocol_message() {
-                if !node1_received {
-                    sum1 += extract_number_from_message(&msg);
-                    node1_received = true;
-                }
-            }
-            if let Some(msg) = handle2.next_protocol_message() {
-                if !node2_received {
-                    sum2 += extract_number_from_message(&msg);
-                    node2_received = true;
-                }
+                let num = extract_number_from_message::<SpEcdsa>(&msg);
+                assert_eq!(num, num2);
+                node1_received = true;
+                info!("Node 1 received number from node 2");
             }
 
-            // Check if both nodes have received messages
-            if node1_received && node2_received {
-                break;
+            if let Some(msg) = handle2.next_protocol_message() {
+                let num = extract_number_from_message::<SpEcdsa>(&msg);
+                assert_eq!(num, num1);
+                node2_received = true;
+                info!("Node 2 received number from node 1");
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if !node1_received || !node2_received {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
         }
     })
     .await
-    .expect("Timeout waiting for summation completion");
+    .expect("Timeout waiting for messages");
 
-    // -----------------------------------------------
+    // -------------------------------------------------
     //      ROUND 2: VERIFY NUMBERS AND GOSSIP
-    // -----------------------------------------------
+    // -------------------------------------------------
     let message_id = 1;
     let round_id = 1;
 
     info!("Verifying sums via P2P messages");
-    // Verify sums via P2P messages
-    let (routing, payload) = create_protocol_message(
-        SummationMessage::Verification { sum: sum1 as u128 },
+    // Node 1 sends verification to node 2
+    let (routing, payload) = create_protocol_message::<_, SpEcdsa>(
+        SummationMessage::Verification {
+            sum: u128::from(expected_sum),
+        },
         message_id,
         round_id,
         handle1.local_peer_id,
@@ -190,8 +187,11 @@ async fn test_summation_protocol_basic() {
         .send(routing, payload)
         .expect("Failed to send verification from node1");
 
-    let (routing, payload) = create_protocol_message(
-        SummationMessage::Verification { sum: sum2 as u128 },
+    // Node 2 sends verification to node 1
+    let (routing, payload) = create_protocol_message::<_, SpEcdsa>(
+        SummationMessage::Verification {
+            sum: u128::from(expected_sum),
+        },
         message_id,
         round_id,
         handle2.local_peer_id,
@@ -202,34 +202,33 @@ async fn test_summation_protocol_basic() {
         .expect("Failed to send verification from node2");
 
     info!("Waiting for verification messages");
-    // Wait for verification messages
+    // Wait for both nodes to receive verification
     timeout(TEST_TIMEOUT, async {
         let mut node1_verified = false;
         let mut node2_verified = false;
 
-        loop {
-            // Process verification messages
+        while !node1_verified || !node2_verified {
             if let Some(msg) = handle1.next_protocol_message() {
-                if !node1_verified {
-                    assert_eq!(extract_sum_from_verification(&msg), expected_sum as u128);
-                    node1_verified = true;
-                }
-            }
-            if let Some(msg) = handle2.next_protocol_message() {
-                if !node2_verified {
-                    assert_eq!(extract_sum_from_verification(&msg), expected_sum as u128);
-                    node2_verified = true;
-                }
+                let sum = extract_sum_from_verification::<SpEcdsa>(&msg);
+                assert_eq!(sum, u128::from(expected_sum));
+                node1_verified = true;
+                info!("Node 1 received verification from node 2");
             }
 
-            if node1_verified && node2_verified {
-                break;
+            if let Some(msg) = handle2.next_protocol_message() {
+                let sum = extract_sum_from_verification::<SpEcdsa>(&msg);
+                assert_eq!(sum, u128::from(expected_sum));
+                node2_verified = true;
+                info!("Node 2 received verification from node 1");
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if !node1_verified || !node2_verified {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
         }
     })
     .await
-    .expect("Timeout waiting for verification completion");
+    .expect("Timeout waiting for verification");
 
     info!("Summation protocol test completed successfully");
 }
@@ -238,58 +237,52 @@ async fn test_summation_protocol_basic() {
 #[serial_test::serial]
 async fn test_summation_protocol_multi_node() {
     init_tracing();
-    info!("Starting multi-node summation protocol test");
-
-    let network_name = "summation-multi-node";
+    let network_name = "summation-multi";
     let instance_id = "v1.0.0";
+    let num_nodes = 3;
 
-    // Create 3 nodes with whitelisted keys
-    info!("Creating whitelisted nodes");
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(3, network_name, instance_id, false).await;
-    info!("Created {} nodes successfully", nodes.len());
+    info!("Creating {} whitelisted nodes", num_nodes);
+    let mut nodes =
+        create_whitelisted_nodes::<SpEcdsa>(num_nodes, network_name, instance_id, false).await;
 
-    // Start all nodes
+    // Start all nodes and get handles
     info!("Starting all nodes");
-    let mut handles = Vec::new();
-    for (i, node) in nodes.iter_mut().enumerate() {
-        info!("Starting node {}", i);
-        handles.push(node.start().await.expect("Failed to start node"));
-        info!("Node {} started successfully", i);
+    let mut handles = Vec::with_capacity(nodes.len());
+    for node in &mut nodes {
+        handles.push(node.handle.clone());
     }
 
-    // Convert handles to mutable references
-    info!("Converting handles to mutable references");
-    let mut handles: Vec<&mut NetworkServiceHandle<SpEcdsa>> = handles.iter_mut().collect();
-    let handles_len = handles.len();
-    info!("Converted {} handles", handles_len);
+    info!("Waiting for all handshakes");
+    // Create a vector of references to TestNode for wait_for_all_handshakes
+    let node_refs: Vec<&TestNode<SpEcdsa>> = nodes.iter().collect();
+    wait_for_all_handshakes(&node_refs, 30).await;
 
-    // Wait for all handshakes to complete
-    info!(
-        "Waiting for handshake completion between {} nodes",
-        handles_len
-    );
-    wait_for_all_handshakes(&handles, TEST_TIMEOUT).await;
-    info!("All handshakes completed successfully");
+    let handles_len = handles.len();
+    info!("All {} nodes connected and verified", handles_len);
 
     // ----------------------------------------------
     //     ROUND 1: GENERATE NUMBERS AND GOSSIP
     // ----------------------------------------------
-
-    // Generate test numbers
-    let numbers = vec![42, 58, 100];
-    let expected_sum: u64 = numbers.iter().sum();
-    let message_id = 0;
-    let round_id = 0;
+    // Generate random numbers for each node
+    let mut numbers = Vec::with_capacity(handles_len);
+    let mut expected_sum = 0;
+    for i in 0..handles_len {
+        let num = (i + 1) as u64 * 10;
+        numbers.push(num);
+        expected_sum += num;
+    }
     info!(
-        "Generated test numbers: {:?}, expected sum: {}",
+        "Generated numbers: {:?}, expected sum: {}",
         numbers, expected_sum
     );
 
-    info!("Sending numbers via gossip");
     // Each node broadcasts its number
+    let message_id = 0;
+    let round_id = 0;
+
     for (i, handle) in handles.iter().enumerate() {
         info!("Node {} broadcasting number {}", i, numbers[i]);
-        let (routing, payload) = create_protocol_message(
+        let (routing, payload) = create_protocol_message::<_, SpEcdsa>(
             SummationMessage::Number(numbers[i]),
             message_id,
             round_id,
@@ -298,7 +291,7 @@ async fn test_summation_protocol_multi_node() {
         );
         handle
             .send(routing, payload)
-            .expect("Failed to send number");
+            .expect("Failed to broadcast number");
         info!("Node {} successfully broadcast its number", i);
         // Add a small delay between broadcasts to avoid message collisions
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -315,7 +308,7 @@ async fn test_summation_protocol_multi_node() {
             for (i, handle) in handles.iter_mut().enumerate() {
                 if let Some(msg) = handle.next_protocol_message() {
                     if received[i] < handles_len - 1 {
-                        let num = extract_number_from_message(&msg);
+                        let num = extract_number_from_message::<SpEcdsa>(&msg);
                         sums[i] += num;
                         received[i] += 1;
                         info!(
@@ -358,9 +351,9 @@ async fn test_summation_protocol_multi_node() {
                     "Node {} sending verification sum {} to node {}",
                     i, sums[i], j
                 );
-                let (routing, payload) = create_protocol_message(
+                let (routing, payload) = create_protocol_message::<_, SpEcdsa>(
                     SummationMessage::Verification {
-                        sum: sums[i] as u128,
+                        sum: u128::from(sums[i]),
                     },
                     message_id,
                     round_id,
@@ -382,12 +375,12 @@ async fn test_summation_protocol_multi_node() {
             for (i, handle) in handles.iter_mut().enumerate() {
                 if let Some(msg) = handle.next_protocol_message() {
                     if verified[i] < handles_len - 1 {
-                        let sum = extract_sum_from_verification(&msg);
+                        let sum = extract_sum_from_verification::<SpEcdsa>(&msg);
                         info!(
                             "Node {} received verification sum {}, expected {}",
                             i, sum, expected_sum
                         );
-                        assert_eq!(sum, expected_sum as u128);
+                        assert_eq!(sum, u128::from(expected_sum));
                         verified[i] += 1;
                         info!("Node {} verification count: {}", i, verified[i]);
                     }

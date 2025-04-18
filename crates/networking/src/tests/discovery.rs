@@ -1,6 +1,6 @@
 use crate::discovery::peers::WhitelistedKeys;
 use crate::test_utils::{
-    TestNode, create_whitelisted_nodes, init_tracing, wait_for_peer_discovery, wait_for_peer_info,
+    TestNode, create_whitelisted_nodes, init_tracing, wait_for_handle_peer_discovery,
 };
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
@@ -19,14 +19,14 @@ async fn test_peer_discovery_mdns() {
         network_name,
         instance_id,
         WhitelistedKeys::new_from_hashset(HashSet::new()),
-        vec![],
+        &[],
         false,
     );
     let mut node2 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
         WhitelistedKeys::new_from_hashset(HashSet::new()),
-        vec![],
+        &[],
         false,
     );
 
@@ -36,7 +36,7 @@ async fn test_peer_discovery_mdns() {
 
     // First wait for basic peer discovery (they see each other)
     let discovery_timeout = Duration::from_secs(20);
-    wait_for_peer_discovery(&[&handle1, &handle2], discovery_timeout)
+    wait_for_handle_peer_discovery(&[&handle1, &handle2], discovery_timeout)
         .await
         .expect("Basic peer discovery timed out");
 }
@@ -53,7 +53,7 @@ async fn test_peer_discovery_kademlia() {
         network_name,
         instance_id,
         WhitelistedKeys::new_from_hashset(HashSet::new()),
-        vec![],
+        &[],
         false,
     );
 
@@ -67,14 +67,14 @@ async fn test_peer_discovery_kademlia() {
         network_name,
         instance_id,
         WhitelistedKeys::new_from_hashset(HashSet::new()),
-        bootstrap_peers.clone(),
+        &bootstrap_peers,
         false,
     );
     let mut node3 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
         WhitelistedKeys::new_from_hashset(HashSet::new()),
-        bootstrap_peers.clone(),
+        &bootstrap_peers,
         false,
     );
 
@@ -134,7 +134,7 @@ async fn test_peer_info_updates() {
 
     // First wait for basic peer discovery (they see each other)
     let discovery_timeout = Duration::from_secs(30); // Increased timeout
-    match wait_for_peer_discovery(&[&handle1, &handle2], discovery_timeout).await {
+    match wait_for_handle_peer_discovery(&[&handle1, &handle2], discovery_timeout).await {
         Ok(()) => info!("Peer discovery successful"),
         Err(e) => {
             // Log peer states before failing
@@ -146,17 +146,45 @@ async fn test_peer_info_updates() {
 
     info!("Peers discovered each other, waiting for identify info...");
 
-    // Now wait for identify info to be populated
-    let identify_timeout = Duration::from_secs(30); // Increased timeout
-    wait_for_peer_info(&handle1, &handle2, identify_timeout).await;
+    // Wait for identify info to be populated
+    let identify_timeout = Duration::from_secs(10);
+    let start = std::time::Instant::now();
+
+    let mut node1_has_info = false;
+    let mut node2_has_info = false;
+
+    while start.elapsed() < identify_timeout && (!node1_has_info || !node2_has_info) {
+        if !node1_has_info {
+            if let Some(info) = handle1.peer_info(&node2.peer_id) {
+                if info.identify_info.is_some() {
+                    info!("Node1 has identify info about Node2: {:?}", info);
+                    node1_has_info = true;
+                }
+            }
+        }
+
+        if !node2_has_info {
+            if let Some(info) = handle2.peer_info(&node1.peer_id) {
+                if info.identify_info.is_some() {
+                    info!("Node2 has identify info about Node1: {:?}", info);
+                    node2_has_info = true;
+                }
+            }
+        }
+
+        if !node1_has_info || !node2_has_info {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    assert!(
+        node1_has_info,
+        "Node1 should have identify info about Node2"
+    );
+    assert!(
+        node2_has_info,
+        "Node2 should have identify info about Node1"
+    );
 
     info!("Test completed successfully - both nodes have identify info");
-
-    // Log final state
-    if let Some(info) = handle1.peer_info(&handle2.local_peer_id) {
-        info!("Node1's info about Node2: {:?}", info);
-    }
-    if let Some(info) = handle2.peer_info(&handle1.local_peer_id) {
-        info!("Node2's info about Node1: {:?}", info);
-    }
 }

@@ -84,7 +84,7 @@ async fn test_handshake_with_invalid_peer() {
         network_name,
         instance_id,
         WhitelistedKeys::new_from_hashset(HashSet::new()),
-        vec![],
+        &[],
         false,
     );
 
@@ -97,7 +97,7 @@ async fn test_handshake_with_invalid_peer() {
         network_name,
         instance_id,
         WhitelistedKeys::new_from_hashset(allowed_keys2),
-        vec![],
+        &[],
         false,
     );
 

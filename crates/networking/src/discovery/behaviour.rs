@@ -162,6 +162,8 @@ impl<K: KeyType> NetworkBehaviour for DiscoveryBehaviour<K> {
                     successes: 0,
                     failures: 0,
                     average_response_time: None,
+                    verified: false,
+                    verification_time: None,
                 }
             })
             .addresses

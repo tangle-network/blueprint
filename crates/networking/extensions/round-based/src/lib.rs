@@ -252,7 +252,9 @@ where
                     MessageType::Broadcast
                 };
 
-                let Some(sender_verification_id) = protocol_message.routing.sender.verification_id_key else {
+                let Some(sender_verification_id) =
+                    protocol_message.routing.sender.verification_id_key
+                else {
                     warn!("Received message from unknown participant");
                     return Poll::Ready(Some(Err(NetworkError::UnknownPeer(
                         "Failed to find verification ID key".to_string(),
@@ -261,7 +263,8 @@ where
                 let Some(sender_peer_id) = this
                     .handle
                     .peer_manager
-                    .get_peer_id_from_verification_id_key(&sender_verification_id) else {
+                    .get_peer_id_from_verification_id_key(&sender_verification_id)
+                else {
                     warn!("Received message from unknown participant");
                     return Poll::Ready(Some(Err(NetworkError::UnknownPeer(format!(
                         "Failed to find peer ID for verification ID key: {:?}",

@@ -1,11 +1,10 @@
 use crate::{
     discovery::peers::WhitelistedKeys,
-    service_handle::NetworkServiceHandle,
     test_utils::{
         TestNode, create_whitelisted_nodes, init_tracing, wait_for_all_handshakes,
         wait_for_handshake_completion,
     },
-    types::MessageRouting,
+    types::{MessageRouting, ParticipantId, ParticipantInfo},
 };
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
@@ -41,7 +40,10 @@ async fn test_gossip_between_verified_peers() {
     let routing = MessageRouting {
         message_id: 1,
         round_id: 0,
-        sender: handle1.local_peer_id,
+        sender: ParticipantInfo {
+            id: ParticipantId(1),
+            verification_id_key: None,
+        },
         recipient: None, // No specific recipient for gossip
     };
 
@@ -96,15 +98,20 @@ async fn test_multi_node_gossip() {
     }
 
     info!("Waiting for all handshakes to complete");
-    let handles_refs: Vec<&mut NetworkServiceHandle<SpEcdsa>> = handles.iter_mut().collect();
-    wait_for_all_handshakes(&handles_refs, TEST_TIMEOUT).await;
+    // Create a vector of TestNode references for wait_for_all_handshakes
+    let nodes_refs: Vec<&TestNode<SpEcdsa>> = nodes.iter().collect();
+    let timeout_secs = TEST_TIMEOUT.as_secs();
+    wait_for_all_handshakes(&nodes_refs, timeout_secs).await;
 
     // Create test message
     let test_payload = b"Multi-node gossip test".to_vec();
     let routing = MessageRouting {
         message_id: 1,
         round_id: 0,
-        sender: handles[0].local_peer_id,
+        sender: ParticipantInfo {
+            id: ParticipantId(1),
+            verification_id_key: None,
+        },
         recipient: None,
     };
 
@@ -154,14 +161,14 @@ async fn test_unverified_peer_gossip() {
         network_name,
         instance_id,
         WhitelistedKeys::new_from_hashset(HashSet::new()),
-        vec![],
+        &[],
         false,
     );
     let mut node2 = TestNode::<SpEcdsa>::new(
         network_name,
         instance_id,
         WhitelistedKeys::new_from_hashset(HashSet::new()),
-        vec![],
+        &[],
         false,
     );
 
@@ -174,7 +181,10 @@ async fn test_unverified_peer_gossip() {
     let routing = MessageRouting {
         message_id: 1,
         round_id: 0,
-        sender: handle1.local_peer_id,
+        sender: ParticipantInfo {
+            id: ParticipantId(1),
+            verification_id_key: None,
+        },
         recipient: None,
     };
 

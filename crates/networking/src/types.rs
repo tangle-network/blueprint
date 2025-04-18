@@ -56,6 +56,27 @@ pub struct ParticipantInfo<K: KeyType> {
     pub verification_id_key: Option<VerificationIdentifierKey<K>>,
 }
 
+impl<K: KeyType> ParticipantInfo<K> {
+    /// Create a new `ParticipantInfo` from a `PeerId`
+    /// This is primarily for testing purposes
+    #[must_use]
+    pub fn new_with_peer_id(peer_id: PeerId) -> Self {
+        // Use the last 2 bytes of the peer_id as the participant id
+        let bytes = peer_id.to_bytes();
+        let id_value = if bytes.len() >= 2 {
+            u16::from_be_bytes([bytes[bytes.len() - 2], bytes[bytes.len() - 1]])
+        } else {
+            // Fallback if peer_id is too short
+            0
+        };
+
+        Self {
+            id: ParticipantId(id_value),
+            verification_id_key: None,
+        }
+    }
+}
+
 /// A protocol message that can be sent over the network
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "K: KeyType")]

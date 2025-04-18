@@ -168,6 +168,10 @@ pub struct PeerInfo {
     pub failures: u32,
     /// Average response time for protocol requests
     pub average_response_time: Option<Duration>,
+    /// Whether the peer is verified
+    pub verified: bool,
+    /// Time of verification
+    pub verification_time: Option<SystemTime>,
 }
 
 impl Default for PeerInfo {
@@ -180,6 +184,8 @@ impl Default for PeerInfo {
             successes: 0,
             failures: 0,
             average_response_time: None,
+            verified: false,
+            verification_time: None,
         }
     }
 }
@@ -342,51 +348,19 @@ impl<K: KeyType> PeerManager<K> {
         self.verified_peers.insert(*peer_id);
     }
 
-    /// Check if a peer is verified
-    #[must_use]
-    pub fn is_peer_verified(&self, peer_id: &PeerId) -> bool {
-        self.verified_peers.contains(peer_id)
-    }
-
-    /// Ban a peer with optional expiration
-    pub fn ban_peer(&self, peer_id: PeerId, reason: impl Into<String>, duration: Option<Duration>) {
-        let expires_at = duration.map(|d| Instant::now() + d);
-
-        // Remove from active peers
-        self.remove_peer(&peer_id, "banned");
-
-        // Add to banned peers
-        self.banned_peers.insert(peer_id, expires_at);
-
-        let reason = reason.into();
-        debug!(%peer_id, %reason, "banned peer");
-        let _ = self.event_tx.send(PeerEvent::PeerBanned {
-            peer_id,
-            reason,
-            expires_at,
-        });
-    }
-
-    /// Bans a peer with the default duration(`1h`)
-    pub fn ban_peer_with_default_duration(&self, peer: PeerId, reason: impl Into<String>) {
-        const BAN_PEER_DURATION: Duration = Duration::from_secs(60 * 60); //1h
-        self.ban_peer(peer, reason, Some(BAN_PEER_DURATION));
-    }
-
-    /// Unban a peer
-    pub fn unban_peer(&self, peer_id: &PeerId) {
-        if self.banned_peers.remove(peer_id).is_some() {
-            debug!(%peer_id, "unbanned peer");
-            let _ = self
-                .event_tx
-                .send(PeerEvent::PeerUnbanned { peer_id: *peer_id });
-        }
-    }
-
     /// Check if a peer is banned
     #[must_use]
     pub fn is_banned(&self, peer_id: &PeerId) -> bool {
         self.banned_peers.contains_key(peer_id)
+    }
+
+    /// Check if a peer is verified
+    #[must_use]
+    pub fn is_peer_verified(&self, peer_id: &PeerId) -> bool {
+        self.verified_peers.contains(peer_id)
+            || self
+                .get_peer_info(peer_id)
+                .is_some_and(|info| info.verified)
     }
 
     /// Get peer information
@@ -429,6 +403,41 @@ impl<K: KeyType> PeerManager<K> {
             }
 
             tokio::time::sleep(Duration::from_secs(60)).await;
+        }
+    }
+
+    /// Ban a peer with optional expiration
+    pub fn ban_peer(&self, peer_id: PeerId, reason: impl Into<String>, duration: Option<Duration>) {
+        let expires_at = duration.map(|d| Instant::now() + d);
+
+        // Remove from active peers
+        self.remove_peer(&peer_id, "banned");
+
+        // Add to banned peers
+        self.banned_peers.insert(peer_id, expires_at);
+
+        let reason = reason.into();
+        debug!(%peer_id, %reason, "banned peer");
+        let _ = self.event_tx.send(PeerEvent::PeerBanned {
+            peer_id,
+            reason,
+            expires_at,
+        });
+    }
+
+    /// Bans a peer with the default duration(`1h`)
+    pub fn ban_peer_with_default_duration(&self, peer: PeerId, reason: impl Into<String>) {
+        const BAN_PEER_DURATION: Duration = Duration::from_secs(60 * 60); //1h
+        self.ban_peer(peer, reason, Some(BAN_PEER_DURATION));
+    }
+
+    /// Unban a peer
+    pub fn unban_peer(&self, peer_id: &PeerId) {
+        if self.banned_peers.remove(peer_id).is_some() {
+            debug!(%peer_id, "unbanned peer");
+            let _ = self
+                .event_tx
+                .send(PeerEvent::PeerUnbanned { peer_id: *peer_id });
         }
     }
 
@@ -502,5 +511,41 @@ impl<K: KeyType> PeerManager<K> {
                     .unwrap_or(0);
                 ParticipantId(u16::try_from(p_index).unwrap_or(0))
             })
+    }
+
+    /// Force verify a peer for testing purposes
+    ///
+    /// # Arguments
+    /// * `peer_id` - The peer ID to force verify
+    ///
+    /// This method should only be used in tests to bypass the normal verification process
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn force_verify_peer(&self, peer_id: &PeerId) {
+        debug!("Force verifying peer {}", peer_id);
+
+        // Get existing peer info or create a new one
+        let mut info = self.get_peer_info(peer_id).unwrap_or_default();
+
+        // Mark as verified
+        info.verified = true;
+        info.verification_time = Some(SystemTime::now());
+
+        // Update the peer info
+        self.update_peer(*peer_id, info);
+
+        // If we don't have a verification key linked, use a placeholder for testing
+        if !self.peer_ids_to_verification_id_keys.contains_key(peer_id) {
+            // Use the first available key from whitelist or create a dummy one if none available
+            let key = self.whitelisted_keys.get_by_index(0).unwrap_or_else(|| {
+                debug!("No whitelisted keys available, creating dummy key for testing");
+                // This is just for testing, so we use a placeholder
+                VerificationIdentifierKey::EvmAddress(Address::ZERO)
+            });
+
+            // Link the peer ID to the key
+            self.peer_ids_to_verification_id_keys
+                .insert(*peer_id, key.clone());
+            self.verification_id_keys_to_peer_ids.insert(key, *peer_id);
+        }
     }
 }
