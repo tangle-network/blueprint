@@ -195,7 +195,6 @@ async fn create_container_task(
         None
     };
 
-    let mut container = Container::new(client, image);
     let keystore_uri_absolute = std::path::absolute(&keystore_uri)?;
 
     let binds = vec![format!(
@@ -203,15 +202,15 @@ async fn create_container_task(
         keystore_uri_absolute.display()
     )];
 
-    if let Some(runtime) = runtime {
-        container = container.runtime(runtime);
-    }
-
     // TODO: Name the container `service_name`
-    container
+    let mut container = Container::new(client, image)
         .env(env_vars.into_iter().map(|(k, v)| format!("{k}={v}")))
         .binds(binds)
         .extra_hosts(["host.docker.internal:host-gateway"]);
+
+    if let Some(runtime) = runtime {
+        container = container.runtime(runtime);
+    }
 
     Ok(async move {
         let container_future = async {

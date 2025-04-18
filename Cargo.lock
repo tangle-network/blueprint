@@ -5734,8 +5734,9 @@ dependencies = [
 
 [[package]]
 name = "docktopus"
-version = "0.3.0"
-source = "git+https://github.com/tangle-network/dockworker.git?branch=serial%2Fextras#7fbf85923a0cb0d27ec318967df654355768a880"
+version = "0.4.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c90e5d912e601b76903b1329ecc40e56942d21c790ba6265a7b28812bebfd11"
 dependencies = [
  "async-trait",
  "bollard",
