@@ -23,8 +23,9 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     blueprint_sdk::info!("Starting the incredible squaring blueprint!");
 
     let env = BlueprintEnvironment::load()?;
-    let sr25519_signer = env.keystore().first_local::<SpSr25519>()?;
-    let sr25519_pair = env.keystore().get_secret::<SpSr25519>(&sr25519_signer)?;
+    let keystore = env.keystore();
+    let sr25519_signer = keystore.first_local::<SpSr25519>()?;
+    let sr25519_pair = keystore.get_secret::<SpSr25519>(&sr25519_signer)?;
     let st25519_signer = TanglePairSigner::new(sr25519_pair.0);
 
     let tangle_client = env.tangle_client().await?;
