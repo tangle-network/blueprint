@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.6](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.5...blueprint-manager-v0.3.0-alpha.6) - 2025-04-18
+
+### Added
+
+- allow for blueprint manage to take a keystore. (#888)
+- Blueprint Runner MVP 0 (#881)
+
 ## [0.3.0-alpha.5](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.4...blueprint-manager-v0.3.0-alpha.5) - 2025-04-16
 
 ### Other

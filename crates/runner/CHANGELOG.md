@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.1.0-alpha.4...blueprint-runner-v0.1.0-alpha.5) - 2025-04-18
+
+### Added
+
+- Blueprint Runner MVP 0 (#881)
+
 ## [0.1.0-alpha.4](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.1.0-alpha.3...blueprint-runner-v0.1.0-alpha.4) - 2025-04-15
 
 ### Other
