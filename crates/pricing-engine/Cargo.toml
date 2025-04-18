@@ -1,0 +1,102 @@
+[package]
+name = "blueprint-pricing-engine"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Tangle Cloud Pricing Engine for service offerings"
+
+[lib]
+name = "blueprint_pricing_engine_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pricing-engine-server"
+path = "src/main.rs"
+
+[dependencies]
+# Blueprint dependencies
+blueprint-core = { workspace = true, features = ["tracing"] }
+blueprint-crypto = { workspace = true }
+blueprint-crypto-core = { workspace = true }
+blueprint-keystore = { workspace = true, features = ["sp-core"] }
+blueprint-networking = { workspace = true }
+blueprint-runner = { workspace = true, features = ["std"] }
+blueprint-std = { workspace = true }
+
+# Misc dependencies
+clap = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+log = { workspace = true }
+scale-info = { workspace = true, features = ["derive"] }
+parity-scale-codec = { workspace = true, features = ["derive"] }
+uuid = { workspace = true, features = ["v4"] }
+hex = { workspace = true }
+anyhow = { workspace = true }
+toml = { workspace = true, features = ["parse"] }
+
+# Substrate RPC and runtime API dependencies
+jsonrpsee = { workspace = true, features = ["server", "macros", "http-client"] }
+
+# Use tangle-subxt for blockchain interaction
+tangle-subxt = { workspace = true, features = ["std"] }
+
+# Substrate chain
+sp-core = { workspace = true, features = ["serde"] }
+
+# Async
+futures = { workspace = true, features = ["thread-pool"] }
+tokio = { workspace = true, features = ["full"] }
+
+# Networking
+rand = { workspace = true, features = ["std", "std_rng"] }
+bincode = { workspace = true }
+tracing = { workspace = true }
+crossbeam-channel = { workspace = true }
+
+# P2P networking for RFQ and gossip
+libp2p = { workspace = true, features = ["gossipsub", "identify", "kad", "noise", "yamux", "tcp", "tokio", "dns"] }
+serde_with = { workspace = true }
+
+# Logging
+tracing-subscriber = { workspace = true }
+time = { workspace = true }
+
+# Benchmarking
+sysinfo = { workspace = true, features = ["system"] }
+num_cpus = { workspace = true }
+
+# Utilities
+# Add serde feature to chrono
+chrono = { workspace = true, features = ["serde", "clock"] }
+libc = { workspace = true }                                  # For direct I/O support
+
+# Add tonic and prost for gRPC server
+tonic = { workspace = true, features = ["transport", "codegen", "prost"] }
+prost = { workspace = true, features = ["prost-derive"] }
+
+# Proof of work
+sha2 = { workspace = true }
+
+# Combine dev-dependencies into one section and remove duplicates
+[dev-dependencies]
+test-log = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+serial_test = { workspace = true, features = ["async"] }
+blueprint-networking = { workspace = true, features = ["testing"] }
+blueprint-testing-utils = { workspace = true, features = ["tangle"] }
+blueprint-tangle-extra = { workspace = true, features = ["std"] }
+tempfile = { workspace = true }
+tonic = { workspace = true }
+
+[build-dependencies]
+tonic-build = { workspace = true, features = ["prost"] }
+
+[features]
+default = []
+tangle-listener = []
+std = []             # Add the std feature to fix warnings in types.rs

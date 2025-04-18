@@ -85,6 +85,9 @@ blueprint-client-evm = { version = "0.1.0-alpha.1", path = "./crates/clients/evm
 blueprint-client-tangle = { version = "0.1.0-alpha.5", path = "./crates/clients/tangle", default-features = false }
 blueprint-contexts = { version = "0.1.0-alpha.5", path = "./crates/contexts", default-features = false }
 
+# Pricing Engine
+blueprint-pricing-engine = { version = "0.1.0-alpha.1", path = "./crates/pricing-engine", default-features = false }
+
 # Macros
 blueprint-macros = { version = "0.1.0-alpha.1", path = "./crates/macros", default-features = false }
 blueprint-context-derive = { version = "0.1.0-alpha.3", path = "./crates/macros/context-derive", default-features = false }
