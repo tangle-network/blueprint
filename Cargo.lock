@@ -5735,6 +5735,7 @@ dependencies = [
 [[package]]
 name = "docktopus"
 version = "0.3.0"
+source = "git+https://github.com/tangle-network/dockworker.git?branch=serial%2Fextras#7fbf85923a0cb0d27ec318967df654355768a880"
 dependencies = [
  "async-trait",
  "bollard",
