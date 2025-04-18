@@ -1,4 +1,4 @@
-use blueprint_manager::config::DEFAULT_PODMAN_HOST;
+use blueprint_manager::config::DEFAULT_DOCKER_HOST;
 use std::path::PathBuf;
 use cargo_tangle::command::{create, deploy};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, ProtocolSettings, SupportedChains};
@@ -194,7 +194,7 @@ pub enum BlueprintCommands {
         settings_file: Option<PathBuf>,
 
         /// The Podman host to use for containerized blueprints
-        #[arg(short, long, env = "PODMAN_HOST", default_value_t = DEFAULT_PODMAN_HOST.clone())]
+        #[arg(short, long, env = "PODMAN_HOST", default_value_t = DEFAULT_DOCKER_HOST.clone())]
         podman_host: Url,
     },
 

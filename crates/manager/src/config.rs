@@ -13,8 +13,8 @@ use hyper::header::HeaderValue;
 use tracing::error;
 use url::Url;
 
-pub static DEFAULT_PODMAN_HOST: LazyLock<Url> =
-    LazyLock::new(|| Url::parse("unix:///run/podman/podman.sock").unwrap());
+pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =
+    LazyLock::new(|| Url::parse("unix:///var/run/docker.sock").unwrap());
 
 #[derive(Debug, Parser)]
 #[command(
@@ -50,7 +50,7 @@ pub struct BlueprintManagerConfig {
     #[arg(long, short, default_value_t)]
     pub preferred_source: SourceType,
     /// The location of the Podman-Docker socket
-    #[arg(long, short, default_value_t = DEFAULT_PODMAN_HOST.clone())]
+    #[arg(long, short, default_value_t = DEFAULT_DOCKER_HOST.clone())]
     pub podman_host: Url,
 }
 
@@ -86,7 +86,7 @@ impl SourceCandidates {
             preferred_source,
         };
 
-        if let Err(e) = ret.determine_podman(podman_host).await {
+        if let Err(e) = dbg!(ret.determine_podman(podman_host).await) {
             if preferred_source == SourceType::Container {
                 error!("Podman not found, cannot use container source type as default: {e}");
                 return Err(e);
@@ -113,8 +113,7 @@ impl SourceCandidates {
             false
         }
 
-
-        let client = Docker::connect_with_local(host.as_str(), 20, API_DEFAULT_VERSION)
+        let client = Docker::connect_with_unix_defaults()
             .map_err(|e| Error::Other(e.to_string()))?;
 
         // Check the version, cheapest route
@@ -125,14 +124,14 @@ impl SourceCandidates {
         if let Some(comps) = &ver.components {
             if comps
                 .iter()
-                .any(|c| c.name.to_lowercase().contains("podman"))
+                .any(|c| dbg!(c.name.to_lowercase()).contains("podman"))
             {
                 self.container = Some(host);
                 return Ok(());
             }
         }
         if let Some(platform) = &ver.platform {
-            if platform.name.to_lowercase().contains("podman") {
+            if dbg!(platform.name.to_lowercase()).contains("podman") {
                 self.container = Some(host);
                 return Ok(());
             }

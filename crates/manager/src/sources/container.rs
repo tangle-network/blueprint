@@ -167,6 +167,19 @@ impl BlueprintSourceHandler for ContainerSource {
     }
 }
 
+async fn detect_sysbox(client: &Docker) -> Result<bool> {
+    let info = client
+        .info()
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?;
+    if let Some(rts) = info.runtimes {
+        if rts.contains_key("sysbox-runc") {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 async fn create_container_task(
     client: Arc<Docker>,
     image: String,
@@ -176,6 +189,12 @@ async fn create_container_task(
     stop_rx: oneshot::Receiver<()>,
     service_name: String,
 ) -> Result<impl Future<Output = ()> + Send> {
+    let runtime = if matches!(detect_sysbox(&client).await, Ok(true)) {
+        Some("sysbox-runc")
+    } else {
+        None
+    };
+
     let mut container = Container::new(client, image);
     let keystore_uri_absolute = std::path::absolute(&keystore_uri)?;
 
@@ -184,6 +203,11 @@ async fn create_container_task(
         keystore_uri_absolute.display()
     )];
 
+    if let Some(runtime) = runtime {
+        container = container.runtime(runtime);
+    }
+
+    // TODO: Name the container `service_name`
     container
         .env(env_vars.into_iter().map(|(k, v)| format!("{k}={v}")))
         .binds(binds)
