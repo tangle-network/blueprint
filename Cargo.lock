@@ -3414,6 +3414,7 @@ dependencies = [
  "futures-util",
  "k256",
  "libp2p",
+ "sc-keystore",
  "serde",
  "tangle-subxt",
  "thiserror 2.0.12",

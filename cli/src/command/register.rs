@@ -81,6 +81,28 @@ pub async fn register(
 
     println!(
         "{}",
+        style(format!(
+            "PreRegistering for blueprint with ID: {}...",
+            blueprint_id
+        ))
+        .cyan()
+    );
+
+    let preregister_call = api::tx().services().pre_register(blueprint_id);
+    let preregister_res = client
+        .tx()
+        .sign_and_submit_then_watch_default(&preregister_call, &signer)
+        .await?;
+
+    // Wait for finalization instead of just in-block
+    let events = preregister_res.wait_for_finalized_success().await?;
+    info!(
+        "Successfully preregistered for blueprint with ID: {} with events: {:?}",
+        blueprint_id, events
+    );
+
+    println!(
+        "{}",
         style(format!("Registering for blueprint ID: {}...", blueprint_id)).cyan()
     );
     let registration_args = tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs::new();
