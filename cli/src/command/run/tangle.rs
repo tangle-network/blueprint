@@ -115,7 +115,7 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
     pb.enable_steady_tick(Duration::from_millis(100));
 
     let mut handle =
-        run_blueprint_manager(blueprint_manager_config, gadget_config, shutdown_signal)?;
+        run_blueprint_manager(blueprint_manager_config, gadget_config, shutdown_signal).await?;
 
     pb.finish_with_message("Blueprint initialized successfully!");
 

@@ -151,7 +151,7 @@ impl Future for BlueprintManagerHandle {
 ///
 /// * If the SR25519 or ECDSA keypair cannot be found
 #[allow(clippy::used_underscore_binding)]
-pub fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
+pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     blueprint_manager_config: BlueprintManagerConfig,
     keystore: Keystore,
     env: BlueprintEnvironment,
@@ -320,7 +320,7 @@ pub fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 ///
 /// * If the SR25519 or ECDSA keypair cannot be found
 #[allow(clippy::used_underscore_binding)]
-pub fn run_blueprint_manager<F: SendFuture<'static, ()>>(
+pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
     blueprint_manager_config: BlueprintManagerConfig,
     env: BlueprintEnvironment,
     shutdown_cmd: F,
@@ -331,6 +331,7 @@ pub fn run_blueprint_manager<F: SendFuture<'static, ()>>(
         env,
         shutdown_cmd,
     )
+    .await
 }
 
 /// * Query to get Vec<RpcServicesWithBlueprint>
