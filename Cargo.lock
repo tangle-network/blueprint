@@ -3411,7 +3411,6 @@ name = "blueprint-pricing-engine-simple"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "bincode",
  "blueprint-core",
  "blueprint-crypto",
@@ -3432,7 +3431,6 @@ dependencies = [
  "libp2p",
  "log",
  "num_cpus",
- "once_cell",
  "parity-scale-codec",
  "prost 0.12.6",
  "rand 0.8.5",
