@@ -143,10 +143,8 @@ resources = [
             total_size_mb: 1024,
             operations_per_second: 1000.0,
             transfer_rate_mb_s: 2000.0,
-            access_mode:
-                blueprint_pricing_engine_lib::benchmark::MemoryAccessMode::Sequential,
-            operation_type:
-                blueprint_pricing_engine_lib::benchmark::MemoryOperationType::Read,
+            access_mode: blueprint_pricing_engine_lib::benchmark::MemoryAccessMode::Sequential,
+            operation_type: blueprint_pricing_engine_lib::benchmark::MemoryOperationType::Read,
             latency_ns: 50.0,
             duration_ms: 1000,
         }),
