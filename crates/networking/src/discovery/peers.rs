@@ -397,6 +397,33 @@ impl<K: KeyType> PeerManager<K> {
         let whitelist = self.whitelisted_keys.read();
         whitelist.iter().position(|k| k == key)
     }
+
+    /// Get the verification key for an index in the whitelist
+    #[must_use]
+    pub fn get_key_from_whitelist_index(
+        &self,
+        index: usize,
+    ) -> Option<VerificationIdentifierKey<K>> {
+        self.whitelisted_keys.read().get(index).cloned()
+    }
+
+    /// Get the peer id for an index in the whitelist
+    #[must_use]
+    pub fn get_peer_id_from_whitelist_index(&self, index: usize) -> Option<PeerId> {
+        self.whitelisted_keys
+            .read()
+            .get(index)
+            .and_then(|k| self.get_peer_id_from_verification_id_key(k))
+    }
+
+    /// Get the index of a peer id in the whitelist
+    #[must_use]
+    pub fn get_whitelist_index_from_peer_id(&self, peer_id: &PeerId) -> Option<usize> {
+        self.whitelisted_keys
+            .read()
+            .iter()
+            .position(|k| self.get_peer_id_from_verification_id_key(k) == Some(*peer_id))
+    }
 }
 
 /// Update the average response time for a peer

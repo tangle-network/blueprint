@@ -141,7 +141,11 @@ where
                 message_id: msg_id,
                 round_id: round,
                 sender: this.handle.local_peer_id,
-                recipient: recipient.map(|p| p),
+                recipient: recipient.and_then(|p| {
+                    this.handle
+                        .peer_manager
+                        .get_peer_id_from_whitelist_index(p as usize)
+                }),
             },
             payload: serde_json::to_vec(&outgoing.msg).map_err(NetworkError::Serialization)?,
         };
@@ -203,26 +207,45 @@ where
                     MessageType::Broadcast
                 };
 
-                let sender = protocol_message.routing.sender.id.0;
+                let sender = protocol_message.routing.sender;
+                let sender_index = this
+                    .handle
+                    .peer_manager
+                    .get_whitelist_index_from_peer_id(&sender);
                 let id = protocol_message.routing.message_id;
 
-                tracing::trace!(
-                    i = %this.party_index,
-                    sender = ?sender,
-                    %id,
-                    protocol_id = %protocol_message.protocol,
-                    ?msg_type,
-                    size = %protocol_message.payload.len(),
-                    "Received message",
-                );
-                match serde_json::from_slice(&protocol_message.payload) {
-                    Ok(msg) => Poll::Ready(Some(Ok(Incoming {
-                        msg,
-                        sender,
-                        id,
-                        msg_type,
-                    }))),
-                    Err(e) => Poll::Ready(Some(Err(NetworkError::Serialization(e)))),
+                match sender_index {
+                    Some(sender_index) => match serde_json::from_slice(&protocol_message.payload) {
+                        Ok(msg) => {
+                            tracing::trace!(
+                                i = %this.party_index,
+                                sender = ?sender_index,
+                                %id,
+                                protocol_id = %protocol_message.protocol,
+                                ?msg_type,
+                                size = %protocol_message.payload.len(),
+                                "Received message",
+                            );
+                            Poll::Ready(Some(Ok(Incoming {
+                                msg,
+                                sender: sender_index as u16,
+                                id,
+                                msg_type,
+                            })))
+                        }
+                        Err(e) => Poll::Ready(Some(Err(NetworkError::Serialization(e)))),
+                    },
+                    None => {
+                        tracing::warn!(
+                            i = %this.party_index,
+                            sender = ?sender,
+                            %id,
+                            protocol_id = %protocol_message.protocol,
+                            "Received message from unknown sender; ignoring",
+                        );
+                        cx.waker().wake_by_ref();
+                        Poll::Pending
+                    }
                 }
             }
             None => {

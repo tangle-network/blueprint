@@ -19,6 +19,7 @@ const INSTANCE_NAME: &str = "1.0.0";
 const PROTOCOL_NAME: &str = "/gossip/1.0.0";
 
 #[tokio::test]
+#[serial_test::serial]
 async fn test_gossip_between_verified_peers() {
     setup_log();
     info!("Starting gossip test between verified peers");
@@ -42,12 +43,7 @@ async fn test_gossip_between_verified_peers() {
     let routing = MessageRouting {
         message_id: 1,
         round_id: 0,
-        sender: ParticipantInfo {
-            id: ParticipantId(1),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                node1.instance_key_pair.public(),
-            )),
-        },
+        sender: handle1.local_peer_id,
         recipient: None, // No specific recipient for gossip
     };
 
@@ -75,18 +71,14 @@ async fn test_gossip_between_verified_peers() {
     assert_eq!(received_message.protocol, PROTOCOL_NAME);
     assert_eq!(received_message.routing.message_id, 1);
     assert_eq!(received_message.routing.round_id, 0);
-    assert_eq!(
-        received_message.routing.sender.verification_id_key,
-        Some(VerificationIdentifierKey::InstancePublicKey(
-            node1.instance_key_pair.public()
-        ))
-    );
+    assert_eq!(received_message.routing.sender, node1.peer_id);
     assert!(received_message.routing.recipient.is_none());
 
     info!("Gossip test completed successfully");
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn test_multi_node_gossip() {
     setup_log();
     info!("Starting multi-node gossip test");
@@ -109,12 +101,7 @@ async fn test_multi_node_gossip() {
     let routing = MessageRouting {
         message_id: 1,
         round_id: 0,
-        sender: ParticipantInfo {
-            id: ParticipantId(0),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                nodes[0].instance_key_pair.public(),
-            )),
-        },
+        sender: handles[0].local_peer_id,
         recipient: None,
     };
 
@@ -126,6 +113,7 @@ async fn test_multi_node_gossip() {
     info!("Waiting for all nodes to receive the message");
     // Wait for all other nodes to receive the message
     timeout(TEST_TIMEOUT, async {
+        let first_handle_peer_id = handles[0].local_peer_id;
         for (i, handle) in handles.iter_mut().enumerate().skip(1) {
             let received = loop {
                 if let Some(msg) = handle.next_protocol_message() {
@@ -142,12 +130,7 @@ async fn test_multi_node_gossip() {
                 i
             );
             assert_eq!(received.protocol, PROTOCOL_NAME);
-            assert_eq!(
-                received.routing.sender.verification_id_key,
-                Some(VerificationIdentifierKey::InstancePublicKey(
-                    nodes[0].instance_key_pair.public()
-                ))
-            );
+            assert_eq!(received.routing.sender, first_handle_peer_id);
             info!("Node {} received the gossip message correctly", i);
         }
     })
@@ -158,6 +141,7 @@ async fn test_multi_node_gossip() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn test_unverified_peer_gossip() {
     setup_log();
     info!("Starting unverified peer gossip test");
@@ -187,12 +171,7 @@ async fn test_unverified_peer_gossip() {
     let routing = MessageRouting {
         message_id: 1,
         round_id: 0,
-        sender: ParticipantInfo {
-            id: ParticipantId(1),
-            verification_id_key: Some(VerificationIdentifierKey::InstancePublicKey(
-                node1.instance_key_pair.public(),
-            )),
-        },
+        sender: handle1.local_peer_id,
         recipient: None,
     };
 

@@ -3342,6 +3342,7 @@ dependencies = [
  "parking_lot 0.12.3",
  "serde",
  "serde_json",
+ "serial_test",
  "thiserror 2.0.12",
  "tokio",
  "tokio-stream",
