@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-sdk"
-version = "0.1.0-alpha.5"
+version = "0.1.0-alpha.6"
 description = "Blueprint SDK for building decentralized and distributed services."
 authors.workspace = true
 edition.workspace = true
@@ -102,7 +102,7 @@ tracing = [
     "blueprint-core/tracing",
     "blueprint-router/tracing",
     "blueprint-producers-extra/tracing",
-    "blueprint-tangle-extra?/tracing"
+    "blueprint-tangle-extra?/tracing",
 ]
 
 ##! ### Protocol Support
@@ -156,7 +156,7 @@ networking = [
     "blueprint-contexts/networking",
     "blueprint-keystore/std",
     "blueprint-context-derive?/networking",
-    "blueprint-runner/networking"
+    "blueprint-runner/networking",
 ]
 
 ## Enable [round-based] networking capability
@@ -170,17 +170,19 @@ round-based-compat = ["dep:blueprint-networking-round-based-extension"]
 local-store = ["blueprint-stores/local"]
 
 ## Enable all macros of subcrates
-macros = [
-    "dep:blueprint-macros",
-    "dep:blueprint-context-derive",
-    "blueprint-tangle-extra?/macros"
-]
+macros = ["dep:blueprint-macros", "dep:blueprint-context-derive", "blueprint-tangle-extra?/macros"]
 
 ## Enable build-time utilities
 build = ["dep:blueprint-build-utils", "macros"]
 
 ## Enable testing utilities
-testing = ["dep:blueprint-testing-utils", "dep:tempfile", "dep:blueprint-chain-setup", "std"]
+testing = [
+    "blueprint-networking/testing",
+    "dep:blueprint-testing-utils",
+    "dep:blueprint-chain-setup",
+    "dep:tempfile",
+    "std",
+]
 
 #! ### Extra producers
 

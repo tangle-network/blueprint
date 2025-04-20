@@ -206,6 +206,16 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
         self.blueprint_protocol.gossipsub.subscribe(&topic)
     }
 
+    /// Unsubscribe from a gossip topic
+    ///
+    /// # Errors
+    ///
+    /// See [`libp2p::gossipsub::SubscriptionError`]
+    pub fn unsubscribe(&mut self, topic: &str) -> bool {
+        let topic = Sha256Topic::new(topic);
+        self.blueprint_protocol.gossipsub.unsubscribe(&topic)
+    }
+
     /// Publish a message to a gossip topic
     ///
     /// # Errors

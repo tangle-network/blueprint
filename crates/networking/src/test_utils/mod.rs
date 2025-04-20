@@ -196,10 +196,10 @@ impl<K: KeyType> TestNode<K> {
         self.listen_addr.clone()
     }
 
-    /// Update the allowed keys for this node
-    pub fn update_allowed_keys(&self, allowed_keys: AllowedKeys<K>) {
+    /// Insert the allowed keys for this node
+    pub fn insert_allowed_keys(&self, allowed_keys: AllowedKeys<K>) {
         if let Some(service) = &self.service {
-            service.peer_manager.update_whitelisted_keys(allowed_keys);
+            service.peer_manager.insert_whitelisted_keys(allowed_keys);
         }
     }
 }
@@ -239,7 +239,7 @@ where
 ///
 /// Returns an error if the peer discovery timed out
 pub async fn wait_for_peer_discovery<K: KeyType>(
-    handles: &[&NetworkServiceHandle<K>],
+    handles: &[NetworkServiceHandle<K>],
     timeout: Duration,
 ) -> Result<(), &'static str> {
     info!("Waiting for peer discovery...");

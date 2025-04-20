@@ -4,13 +4,15 @@ use crate::{
     discovery::{
         PeerInfo, PeerManager,
         behaviour::{DerivedDiscoveryBehaviourEvent, DiscoveryEvent},
+        peers::VerificationIdentifierKey,
+        utils::get_address_from_compressed_pubkey,
     },
     error::Error,
     service_handle::NetworkServiceHandle,
     types::ProtocolMessage,
 };
 use alloy_primitives::Address;
-use blueprint_crypto::KeyType;
+use blueprint_crypto::{BytesEncoding, KeyType};
 use crossbeam_channel::{self, Receiver, SendError, Sender};
 use futures::StreamExt;
 use libp2p::{
@@ -183,6 +185,12 @@ pub enum NetworkMessage<K: KeyType> {
         topic: String,
         message: Vec<u8>,
     },
+    Subscribe {
+        topic: String,
+    },
+    Unsubscribe {
+        topic: String,
+    },
 }
 
 /// Configuration for the network service
@@ -235,6 +243,12 @@ pub struct NetworkService<K: KeyType> {
 pub enum AllowedKeys<K: KeyType> {
     EvmAddresses(blueprint_std::collections::HashSet<Address>),
     InstancePublicKeys(blueprint_std::collections::HashSet<K::Public>),
+}
+
+impl<K: KeyType> Default for AllowedKeys<K> {
+    fn default() -> Self {
+        Self::InstancePublicKeys(blueprint_std::collections::HashSet::new())
+    }
 }
 
 impl<K: KeyType> NetworkService<K> {
@@ -333,7 +347,7 @@ impl<K: KeyType> NetworkService<K> {
         let protocol_message_receiver = self.protocol_message_receiver.clone();
 
         // Create handle with new interface
-        let handle = NetworkServiceHandle::new(
+        let mut handle = NetworkServiceHandle::new(
             local_peer_id,
             self.swarm
                 .behaviour()
@@ -344,6 +358,21 @@ impl<K: KeyType> NetworkService<K> {
             network_sender,
             protocol_message_receiver,
         );
+
+        // Get our local verification key from the blueprint protocol behavior
+        let blueprint_protocol = &self.swarm.behaviour().blueprint_protocol;
+        let instance_key_pair = &blueprint_protocol.instance_key_pair;
+        let public_key = K::public_from_secret(instance_key_pair);
+
+        // Set the local verification key based on the type used for handshakes
+        let verification_key = if blueprint_protocol.use_address_for_handshake_verification {
+            let address = get_address_from_compressed_pubkey(&public_key.to_bytes());
+            VerificationIdentifierKey::EvmAddress(address)
+        } else {
+            VerificationIdentifierKey::InstancePublicKey(public_key)
+        };
+
+        handle.local_verification_key = Some(verification_key);
 
         // Add our own peer ID to the peer manager with all listening addresses
         let mut info = PeerInfo::default();
@@ -714,6 +743,21 @@ fn handle_network_message<K: KeyType>(
                 .map_err(|_| {
                     SendError(NetworkEventSendError::<K>::GossipSent { topic, message }.to_string())
                 })?;
+        }
+        NetworkMessage::Subscribe { topic } => {
+            debug!(%topic, "Subscribing to topic");
+            match swarm.behaviour_mut().blueprint_protocol.subscribe(&topic) {
+                Ok(_) => {}
+                Err(e) => {
+                    warn!(%topic, "Failed to subscribe to topic: {:?}", e);
+                }
+            }
+        }
+        NetworkMessage::Unsubscribe { topic } => {
+            debug!(%topic, "Unsubscribing from topic");
+            if !swarm.behaviour_mut().blueprint_protocol.unsubscribe(&topic) {
+                warn!(%topic, "Failed to unsubscribe from topic");
+            }
         }
     }
 
