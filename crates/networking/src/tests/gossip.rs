@@ -1,12 +1,11 @@
 use crate::{
-    discovery::peers::VerificationIdentifierKey,
     service::AllowedKeys,
     service_handle::NetworkServiceHandle,
     test_utils::{
         TestNode, create_whitelisted_nodes, setup_log, wait_for_all_handshakes,
         wait_for_handshake_completion,
     },
-    types::{MessageRouting, ParticipantId},
+    types::MessageRouting,
 };
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};

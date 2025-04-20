@@ -9,7 +9,6 @@ use blueprint_crypto::{KeyType, aggregation::AggregatableSignature};
 use blueprint_networking::{
     service_handle::NetworkServiceHandle,
     test_utils::{create_whitelisted_nodes, setup_log, wait_for_all_handshakes},
-    types::ParticipantId,
 };
 use blueprint_std::{collections::HashMap, time::Duration};
 
@@ -64,7 +63,7 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     let mut public_keys = HashMap::new();
     for (i, secret) in secrets.iter().enumerate() {
         let public_key = S::public_from_secret(secret);
-        public_keys.insert(ParticipantId(u16::try_from(i).unwrap()), public_key);
+        public_keys.insert(handles[i].local_peer_id, public_key);
         info!("Generated key pair for node {}", i);
     }
 
@@ -84,7 +83,7 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     info!("Starting protocol on {} nodes", num_nodes);
     for i in 0..num_nodes {
         let config = ProtocolConfig {
-            local_id: ParticipantId(u16::try_from(i).unwrap()),
+            network_handle: handles[i].clone(),
             max_participants: u16::try_from(num_nodes).unwrap(),
             num_aggregators,
             timeout: protocol_timeout,
@@ -104,18 +103,12 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
         let is_aggregator = protocol.is_aggregator();
         info!("Node {} is_aggregator: {}", i, is_aggregator);
 
-        let mut secret = secrets[i].clone();
-        let handle = handles[i].clone();
-        let public_keys_clone = public_keys.clone();
-
         info!("Node {} about to start protocol execution", i);
 
         let result = tokio::spawn(async move {
             info!("Node {} starting protocol execution", i);
             info!("Node {} preparing to sign and broadcast message", i);
-            let result = protocol
-                .run(message, &mut secret, &public_keys_clone, &handle)
-                .await;
+            let result = protocol.run(message).await;
 
             if result.is_ok() {
                 info!("Node {} protocol completed successfully", i);
@@ -148,7 +141,7 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
 
     for (i, result) in final_results.iter().enumerate() {
         let config = ProtocolConfig {
-            local_id: ParticipantId(u16::try_from(i).unwrap()),
+            network_handle: handles[i].clone(),
             max_participants: u16::try_from(num_nodes).unwrap(),
             num_aggregators,
             timeout: protocol_timeout,
@@ -159,7 +152,7 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
             crate::aggregator_selection::AggregatorSelector::new(config.num_aggregators);
 
         let is_aggregator = aggregator_selector.is_aggregator::<S>(
-            ParticipantId(u16::try_from(i).unwrap()),
+            handles[i].local_peer_id,
             &public_keys,
             message.as_ref(),
         );

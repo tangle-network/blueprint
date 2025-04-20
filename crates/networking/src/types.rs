@@ -5,22 +5,6 @@ use std::fmt::Display;
 /// Maximum allowed size for a message payload
 pub const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
 
-/// Unique identifier for a participant in the network
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ParticipantId(pub u16);
-
-impl From<ParticipantId> for u16 {
-    fn from(val: ParticipantId) -> Self {
-        val.0
-    }
-}
-
-impl Display for ParticipantId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "P{}", self.0)
-    }
-}
-
 /// Type of message delivery mechanism
 #[derive(Debug, Clone)]
 pub enum MessageDelivery {

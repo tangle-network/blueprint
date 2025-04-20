@@ -1,6 +1,5 @@
 use crate::{AggregationResult, participants::ParticipantSet};
 use blueprint_crypto::aggregation::AggregatableSignature;
-use blueprint_networking::types::ParticipantId;
 use blueprint_std::{
     collections::HashMap,
     fmt::{Display, Formatter, Result as FmtResult},

@@ -173,7 +173,6 @@ mod tests {
     use std::time::Duration;
 
     use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
-    use blueprint_networking::discovery::peers::VerificationIdentifierKey;
     use blueprint_networking::service::AllowedKeys;
     use blueprint_networking::test_utils::{TestNode, wait_for_peer_discovery};
     use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
@@ -268,16 +267,7 @@ mod tests {
             .await
             .unwrap();
 
-        let parties = HashMap::from_iter([
-            (
-                0,
-                VerificationIdentifierKey::InstancePublicKey(node1.instance_key_pair.public()),
-            ),
-            (
-                1,
-                VerificationIdentifierKey::InstancePublicKey(node2.instance_key_pair.public()),
-            ),
-        ]);
+        let parties = HashMap::from_iter([(0, node1.peer_id), (1, node2.peer_id)]);
 
         let node1_network = RoundBasedNetworkAdapter::new(handle1, 0, parties.clone(), instance_id);
         let node2_network = RoundBasedNetworkAdapter::new(handle2, 1, parties, instance_id);

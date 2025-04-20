@@ -65,6 +65,7 @@ impl NetworkReceiver {
 pub struct NetworkServiceHandle<K: KeyType> {
     pub local_peer_id: PeerId,
     pub blueprint_protocol_name: Arc<str>,
+    pub local_signing_key: K::Secret,
     pub sender: NetworkSender<K>,
     pub receiver: NetworkReceiver,
     pub peer_manager: Arc<PeerManager<K>>,
@@ -77,6 +78,7 @@ impl<K: KeyType> Clone for NetworkServiceHandle<K> {
         Self {
             local_peer_id: self.local_peer_id,
             blueprint_protocol_name: self.blueprint_protocol_name.clone(),
+            local_signing_key: self.local_signing_key.clone(),
             sender: self.sender.clone(),
             receiver: NetworkReceiver::new(self.receiver.protocol_message_receiver.clone()),
             peer_manager: self.peer_manager.clone(),
@@ -90,6 +92,7 @@ impl<K: KeyType> NetworkServiceHandle<K> {
     pub fn new(
         local_peer_id: PeerId,
         blueprint_protocol_name: String,
+        local_signing_key: K::Secret,
         peer_manager: Arc<PeerManager<K>>,
         network_message_sender: Sender<NetworkMessage<K>>,
         protocol_message_receiver: Receiver<ProtocolMessage>,
@@ -97,6 +100,7 @@ impl<K: KeyType> NetworkServiceHandle<K> {
         Self {
             local_peer_id,
             blueprint_protocol_name: Arc::from(blueprint_protocol_name),
+            local_signing_key,
             sender: NetworkSender::new(network_message_sender),
             receiver: NetworkReceiver::new(protocol_message_receiver),
             peer_manager,

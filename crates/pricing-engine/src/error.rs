@@ -13,7 +13,7 @@ pub enum PricingError {
     Serialization(#[from] bincode::Error),
 
     #[error("Signing error: {0}")]
-    Signing(#[from] blueprint_keystore::Error),
+    Signing(String),
 
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
@@ -50,6 +50,12 @@ pub enum PricingError {
 
     #[error("Other error: {0}")]
     Other(String),
+}
+
+impl From<blueprint_keystore::Error> for PricingError {
+    fn from(error: blueprint_keystore::Error) -> Self {
+        PricingError::Signing(format!("Error signing quote: {:?}", error))
+    }
 }
 
 pub type Result<T> = std::result::Result<T, PricingError>;

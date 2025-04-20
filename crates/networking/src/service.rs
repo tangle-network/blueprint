@@ -221,6 +221,8 @@ pub struct NetworkConfig<K: KeyType> {
 pub struct NetworkService<K: KeyType> {
     /// The libp2p swarm
     swarm: Swarm<GadgetBehaviour<K>>,
+    /// The local signing key
+    local_signing_key: K::Secret,
     /// Peer manager for tracking peer states
     pub(crate) peer_manager: Arc<PeerManager<K>>,
     /// Channel for sending messages to the network service
@@ -290,7 +292,7 @@ impl<K: KeyType> NetworkService<K> {
             network_name,
             blueprint_protocol_name: blueprint_protocol_name.clone(),
             local_key: local_key.clone(),
-            instance_key_pair,
+            instance_key_pair: instance_key_pair.clone(),
             target_peer_count,
             peer_manager: peer_manager.clone(),
             protocol_message_sender,
@@ -325,6 +327,7 @@ impl<K: KeyType> NetworkService<K> {
 
         Ok(Self {
             swarm,
+            local_signing_key: instance_key_pair,
             peer_manager,
             network_sender,
             network_receiver,
@@ -354,6 +357,7 @@ impl<K: KeyType> NetworkService<K> {
                 .blueprint_protocol
                 .blueprint_protocol_name
                 .clone(),
+            self.local_signing_key.clone(),
             self.peer_manager.clone(),
             network_sender,
             protocol_message_receiver,

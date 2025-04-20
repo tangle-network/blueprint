@@ -1,135 +1,118 @@
-use bitvec::prelude::*;
-use blueprint_networking::types::ParticipantId;
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-/// Efficient representation of participants using bitvec
+/// Set of participants using PeerId
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ParticipantSet {
-    /// Bit vector representation for quick membership checks
-    bitvec: BitVec,
-    /// Maximum participant ID
-    max_id: u16,
+    /// Underlying storage as a HashSet
+    participants: HashSet<PeerId>,
+    /// Maximum capacity in terms of participant count
+    max_participants: u16,
 }
 
 impl ParticipantSet {
-    /// Create a new participant set
+    /// Create a new participant set with the given maximum capacity
     #[must_use]
-    pub fn new(max_id: u16) -> Self {
+    pub fn new(max_participants: u16) -> Self {
         Self {
-            bitvec: bitvec![0; max_id as usize + 1],
-            max_id,
+            participants: HashSet::with_capacity(max_participants as usize),
+            max_participants,
         }
     }
 
     /// Add a participant to the set
-    pub fn add(&mut self, id: ParticipantId) -> bool {
-        if id.0 > self.max_id {
+    pub fn add(&mut self, id: PeerId) -> bool {
+        if self.participants.len() >= self.max_participants as usize {
             return false;
         }
 
-        let was_present = self.bitvec[id.0 as usize];
-        self.bitvec.set(id.0 as usize, true);
-        !was_present
+        self.participants.insert(id)
     }
 
     /// Remove a participant from the set
-    pub fn remove(&mut self, id: ParticipantId) -> bool {
-        if id.0 > self.max_id {
-            return false;
-        }
-
-        let was_present = self.bitvec[id.0 as usize];
-        self.bitvec.set(id.0 as usize, false);
-        was_present
+    pub fn remove(&mut self, id: &PeerId) -> bool {
+        self.participants.remove(id)
     }
 
     /// Check if a participant is in the set
     #[must_use]
-    pub fn contains(&self, id: &ParticipantId) -> bool {
-        if id.0 > self.max_id {
-            return false;
-        }
-
-        self.bitvec[id.0 as usize]
+    pub fn contains(&self, id: &PeerId) -> bool {
+        self.participants.contains(id)
     }
 
     /// Get the number of participants in the set
     #[must_use]
     pub fn len(&self) -> usize {
-        self.bitvec.count_ones()
+        self.participants.len()
     }
 
     /// Check if the set is empty
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.participants.is_empty()
     }
 
-    #[must_use]
     /// Convert to a `HashSet`
-    ///
-    /// # Panics
-    ///
-    /// Panics if the participant ID is greater than the `max_id`
-    pub fn to_hashset(&self) -> HashSet<ParticipantId> {
-        let mut result = HashSet::with_capacity(self.len());
-        for i in 0..=self.max_id as usize {
-            if self.bitvec[i] {
-                result.insert(ParticipantId(u16::try_from(i).unwrap()));
-            }
-        }
-        result
+    #[must_use]
+    pub fn to_hashset(&self) -> HashSet<PeerId> {
+        self.participants.clone()
     }
 
     /// Create from a `HashSet`
     #[must_use]
-    pub fn from_hashset(set: &HashSet<ParticipantId>, max_id: u16) -> Self {
-        let mut result = Self::new(max_id);
-        for &id in set {
-            result.add(id);
+    pub fn from_hashset(set: &HashSet<PeerId>, max_participants: u16) -> Self {
+        if set.len() > max_participants as usize {
+            let mut limited_set = HashSet::with_capacity(max_participants as usize);
+            for (i, peer_id) in set.iter().enumerate() {
+                if i >= max_participants as usize {
+                    break;
+                }
+                limited_set.insert(*peer_id);
+            }
+
+            Self {
+                participants: limited_set,
+                max_participants,
+            }
+        } else {
+            Self {
+                participants: set.clone(),
+                max_participants,
+            }
         }
-        result
     }
 
     /// Union with another set
-    ///
-    /// # Panics
-    ///
-    /// Panics if the sets have different `max_id`
     pub fn union(&mut self, other: &Self) {
-        assert_eq!(self.max_id, other.max_id, "Sets must have the same max_id");
-        self.bitvec |= &other.bitvec;
+        for peer_id in &other.participants {
+            if self.participants.len() >= self.max_participants as usize {
+                break;
+            }
+            self.participants.insert(*peer_id);
+        }
     }
 
     /// Intersection with another set
-    ///
-    /// # Panics
-    ///
-    /// Panics if the sets have different `max_id`
     pub fn intersection(&mut self, other: &Self) {
-        assert_eq!(self.max_id, other.max_id, "Sets must have the same max_id");
-        self.bitvec &= &other.bitvec;
+        self.participants = self
+            .participants
+            .intersection(&other.participants)
+            .cloned()
+            .collect();
     }
 
     /// Difference from another set
-    ///
-    /// # Panics
-    ///
-    /// Panics if the sets have different `max_id`
     pub fn difference(&mut self, other: &Self) {
-        assert_eq!(self.max_id, other.max_id, "Sets must have the same max_id");
-        self.bitvec &= !other.bitvec.clone();
+        self.participants = self
+            .participants
+            .difference(&other.participants)
+            .cloned()
+            .collect();
     }
 
     /// Iterate over participants in the set
-    ///
-    /// # Panics
-    ///
-    /// Panics if the participant ID is greater than the `max_id`
-    pub fn iter(&self) -> impl Iterator<Item = ParticipantId> + '_ {
-        self.bitvec
-            .iter_ones()
-            .map(|idx| ParticipantId(u16::try_from(idx).unwrap()))
+    pub fn iter(&self) -> impl Iterator<Item = PeerId> + '_ {
+        self.participants.iter().cloned()
     }
 }

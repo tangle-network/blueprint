@@ -1,8 +1,5 @@
 use blueprint_crypto::KeyType;
-use blueprint_networking::{
-    discovery::peers::VerificationIdentifierKey, service_handle::NetworkServiceHandle,
-    types::ProtocolMessage,
-};
+use blueprint_networking::{service_handle::NetworkServiceHandle, types::ProtocolMessage};
 use dashmap::DashMap;
 use futures::{Sink, Stream};
 use libp2p::PeerId;
@@ -62,6 +59,7 @@ where
     M: Serialize + DeserializeOwned,
     M: round_based::ProtocolMessage,
     K::Public: Unpin,
+    K::Secret: Unpin,
 {
     type Send = RoundBasedSender<M, K>;
     type Receive = RoundBasedReceiver<M, K>;
@@ -106,6 +104,7 @@ impl<M, K: KeyType> Sink<Outgoing<M>> for RoundBasedSender<M, K>
 where
     M: Serialize + round_based::ProtocolMessage + Clone + Unpin,
     K::Public: Unpin,
+    K::Secret: Unpin,
 {
     type Error = NetworkError;
 
@@ -127,7 +126,7 @@ where
             "Sending message",
         );
 
-        let (recipient, recipient_key) = match outgoing.recipient {
+        let (recipient, _) = match outgoing.recipient {
             MessageDestination::AllParties => (None, None),
             MessageDestination::OneParty(p) => {
                 let key = this.parties.get(&p).map(|k| k.clone());
@@ -191,6 +190,7 @@ impl<M, K: KeyType> Stream for RoundBasedReceiver<M, K>
 where
     M: DeserializeOwned + round_based::ProtocolMessage + Unpin,
     K::Public: Unpin,
+    K::Secret: Unpin,
 {
     type Item = Result<Incoming<M>, NetworkError>;
 

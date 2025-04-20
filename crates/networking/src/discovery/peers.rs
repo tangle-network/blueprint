@@ -59,6 +59,14 @@ impl<K: KeyType> VerificationIdentifierKey<K> {
             }
         }
     }
+
+    /// Turn into bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            VerificationIdentifierKey::EvmAddress(address) => address.0.0.to_vec(),
+            VerificationIdentifierKey::InstancePublicKey(public_key) => public_key.to_bytes(),
+        }
+    }
 }
 
 /// Information about a peer's connection and behavior
@@ -123,7 +131,7 @@ pub struct PeerManager<K: KeyType> {
     /// Banned peers with optional expiration time
     banned_peers: DashMap<PeerId, Option<Instant>>,
     /// Whitelisted keys for the peer manager, must remain ordered and provide stable ordering.
-    whitelisted_keys: Arc<RwLock<Vec<VerificationIdentifierKey<K>>>>,
+    pub whitelisted_keys: Arc<RwLock<Vec<VerificationIdentifierKey<K>>>>,
     /// Event sender for peer updates
     event_tx: broadcast::Sender<PeerEvent>,
 }

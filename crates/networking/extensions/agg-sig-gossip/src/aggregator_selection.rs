@@ -4,12 +4,12 @@ use crate::{
 };
 use blueprint_core::{debug, error, warn};
 use blueprint_crypto::{BytesEncoding, aggregation::AggregatableSignature};
-use blueprint_networking::types::ParticipantId;
 use blueprint_std::{
     collections::HashSet,
     collections::{HashMap, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
 };
+use libp2p::PeerId;
 
 /// Simplified mechanism for selecting aggregators in a deterministic way based on public keys.
 /// This approach ensures the selection is cryptographically tamper-resistant.
@@ -51,8 +51,8 @@ impl AggregatorSelector {
     /// Panics if the number of participants is greater than `u16::MAX`
     pub fn is_aggregator<S: AggregatableSignature>(
         &self,
-        participant_id: ParticipantId,
-        participants_with_keys: &HashMap<ParticipantId, S::Public>,
+        peer_id: PeerId,
+        participants_with_keys: &HashMap<PeerId, S::Public>,
         message_context: &[u8],
     ) -> bool {
         if participants_with_keys.is_empty() {
@@ -60,7 +60,7 @@ impl AggregatorSelector {
         }
 
         // We need the public key for this participant
-        let Some(public_key) = participants_with_keys.get(&participant_id) else {
+        let Some(public_key) = participants_with_keys.get(&peer_id) else {
             return false;
         };
 
@@ -74,7 +74,7 @@ impl AggregatorSelector {
         message_context.hash(&mut hasher);
 
         // Calculate the threshold based on number of participants and target aggregators
-        let total_participants = u16::try_from(participants_with_keys.len()).unwrap();
+        let total_participants = u16::try_from(participants_with_keys.len()).unwrap_or(u16::MAX);
         let selection_threshold = if total_participants <= self.target_aggregators {
             // If we have fewer participants than desired aggregators, everyone is an aggregator
             u64::MAX
@@ -93,9 +93,9 @@ impl AggregatorSelector {
     #[must_use]
     pub fn select_aggregators<S: AggregatableSignature>(
         &self,
-        participants_with_keys: &HashMap<ParticipantId, S::Public>,
+        participants_with_keys: &HashMap<PeerId, S::Public>,
         message_context: &[u8],
-    ) -> HashSet<ParticipantId> {
+    ) -> HashSet<PeerId> {
         participants_with_keys
             .keys()
             .filter(|&id| self.is_aggregator::<S>(*id, participants_with_keys, message_context))

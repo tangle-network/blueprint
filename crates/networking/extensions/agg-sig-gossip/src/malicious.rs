@@ -1,7 +1,7 @@
 use crate::{AggregationError, SignatureAggregationProtocol, SignatureWeight};
 use blueprint_crypto::aggregation::AggregatableSignature;
-use blueprint_networking::types::ParticipantId;
 use blueprint_std::collections::HashMap;
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
 /// Evidence of malicious behavior
@@ -36,12 +36,12 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     /// Returns an error if the evidence is invalid
     pub fn handle_malicious_report(
         &mut self,
-        operator: ParticipantId,
+        operator: PeerId,
         evidence: &MaliciousEvidence<S>,
-        public_keys: &HashMap<ParticipantId, S::Public>,
     ) -> Result<(), AggregationError> {
         // Verify the evidence and add to malicious set if so
-        let is_malicious = Self::verify_malicious_evidence(operator, evidence, public_keys)?;
+        let is_malicious =
+            Self::verify_malicious_evidence(operator, evidence, &self.participant_public_keys)?;
         if is_malicious {
             self.state.malicious.add(operator);
         }
@@ -65,9 +65,9 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     ///
     /// Returns an error if the evidence is invalid
     fn verify_malicious_evidence(
-        operator: ParticipantId,
+        operator: PeerId,
         evidence: &MaliciousEvidence<S>,
-        public_keys: &HashMap<ParticipantId, S::Public>,
+        public_keys: &HashMap<PeerId, S::Public>,
     ) -> Result<bool, AggregationError> {
         match evidence {
             MaliciousEvidence::InvalidSignature { signature, message } => {
@@ -108,11 +108,11 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     /// Returns evidence if equivocation is detected
     pub fn check_for_equivocation(
         &self,
-        participant_id: PeerId,
+        peer_id: PeerId,
         new_message: &[u8],
         new_signature: &S::Signature,
     ) -> Option<MaliciousEvidence<S>> {
-        if let Some((signature, message)) = self.state.seen_signatures.get(&participant_id) {
+        if let Some((signature, message)) = self.state.seen_signatures.get(&peer_id) {
             if signature == new_signature && message != new_message {
                 return Some(MaliciousEvidence::Equivocation {
                     signature1: signature.clone(),

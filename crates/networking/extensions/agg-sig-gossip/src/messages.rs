@@ -1,6 +1,6 @@
 use blueprint_crypto::aggregation::AggregatableSignature;
-use blueprint_networking::types::ParticipantId;
 use blueprint_std::{collections::HashSet, fmt::Debug};
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
 use crate::{MaliciousEvidence, ParticipantSet};
@@ -12,7 +12,7 @@ pub enum AggSigMessage<S: AggregatableSignature> {
     /// Initial signature share from a participant
     SignatureShare {
         /// The signer's ID, since we allow re-gossiping of signatures
-        signer_id: ParticipantId,
+        signer_id: PeerId,
         /// The signature
         signature: S::Signature,
         /// The message being signed
@@ -21,7 +21,7 @@ pub enum AggSigMessage<S: AggregatableSignature> {
     /// Report malicious behavior
     MaliciousReport {
         /// The accused operator
-        operator: ParticipantId,
+        operator: PeerId,
         /// Evidence of malicious behavior
         evidence: MaliciousEvidence<S>,
     },
@@ -34,7 +34,7 @@ pub enum AggSigMessage<S: AggregatableSignature> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AggregatorInfo {
     /// Set of designated aggregators for the current round
-    pub aggregators: HashSet<ParticipantId>,
+    pub aggregators: HashSet<PeerId>,
     /// Selection seed used to determine aggregators
     pub selection_seed: Vec<u8>,
 }

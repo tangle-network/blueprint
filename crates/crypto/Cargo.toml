@@ -61,4 +61,8 @@ hashing = [
 	"blueprint-crypto-hashing/sha3-hasher",
 	"blueprint-crypto-hashing/blake3-hasher",
 ]
-aggregation = ["blueprint-crypto-sp-core/aggregation"]
+aggregation = [
+	"blueprint-crypto-sp-core/aggregation",
+	"blueprint-crypto-bls/aggregation",
+	"blueprint-crypto-bn254/aggregation",
+]
