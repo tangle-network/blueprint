@@ -10,7 +10,7 @@ repository.workspace = true
 
 [dependencies]
 blueprint-core = { workspace = true }
-blueprint-crypto = { workspace = true }
+blueprint-crypto = { workspace = true, features = ["aggregation"] }
 blueprint-networking = { workspace = true }
 blueprint-std = { workspace = true }
 bincode = { workspace = true }

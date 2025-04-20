@@ -32,7 +32,7 @@ default = [
 	"sp-core",
 	"tangle-pair-signer",
 	"evm",
-	"hashing"
+	"hashing",
 ]
 std = [
 	"blueprint-crypto-core/std",
@@ -44,9 +44,7 @@ std = [
 	"blueprint-crypto-sp-core?/std",
 	"blueprint-crypto-tangle-pair-signer?/std",
 ]
-web = [
-	"blueprint-crypto-tangle-pair-signer?/web"
-]
+web = ["blueprint-crypto-tangle-pair-signer?/web"]
 
 k256 = ["dep:blueprint-crypto-k256", "blueprint-crypto-core/k256"]
 sr25519-schnorrkel = ["dep:blueprint-crypto-sr25519", "blueprint-crypto-core/sr25519-schnorrkel"]
@@ -56,12 +54,11 @@ bn254 = ["dep:blueprint-crypto-bn254", "blueprint-crypto-core/bn254"]
 sp-core = ["dep:blueprint-crypto-sp-core", "blueprint-crypto-core/tangle"]
 sp-core-bls = ["blueprint-crypto-sp-core/bls", "blueprint-crypto-core/tangle"]
 tangle-pair-signer = ["dep:blueprint-crypto-tangle-pair-signer"]
-evm = [
-	"blueprint-crypto-tangle-pair-signer?/evm"
-]
+evm = ["blueprint-crypto-tangle-pair-signer?/evm"]
 
 hashing = [
 	"blueprint-crypto-hashing/sha2-hasher",
 	"blueprint-crypto-hashing/sha3-hasher",
-	"blueprint-crypto-hashing/blake3-hasher"
+	"blueprint-crypto-hashing/blake3-hasher",
 ]
+aggregation = ["blueprint-crypto-sp-core/aggregation"]
