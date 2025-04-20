@@ -6,9 +6,10 @@ use crate::{
         TestNode, create_whitelisted_nodes, init_tracing, wait_for_all_handshakes,
         wait_for_handshake_completion,
     },
-    types::{MessageRouting, ParticipantId, ParticipantInfo, ProtocolMessage},
+    types::{MessageRouting, ParticipantId, ProtocolMessage},
 };
 use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
@@ -29,9 +30,9 @@ fn create_protocol_message<K: KeyType, T: Serialize>(
     message: T,
     message_id: u64,
     round_id: u16,
-    sender: ParticipantInfo<K>,
-    target_peer: Option<ParticipantInfo<K>>,
-) -> (MessageRouting<K>, Vec<u8>) {
+    sender: PeerId,
+    target_peer: Option<PeerId>,
+) -> (MessageRouting, Vec<u8>) {
     let payload = bincode::serialize(&message).expect("Failed to serialize message");
     let routing = MessageRouting {
         message_id,
@@ -43,7 +44,7 @@ fn create_protocol_message<K: KeyType, T: Serialize>(
 }
 
 // Helper to extract number from message
-fn extract_number_from_message<K: KeyType>(msg: &ProtocolMessage<K>) -> u64 {
+fn extract_number_from_message<K: KeyType>(msg: &ProtocolMessage) -> u64 {
     match bincode::deserialize::<SummationMessage>(&msg.payload).expect("Failed to deserialize") {
         SummationMessage::Number(n) => n,
         SummationMessage::Verification { .. } => panic!("Expected number message"),
@@ -51,7 +52,7 @@ fn extract_number_from_message<K: KeyType>(msg: &ProtocolMessage<K>) -> u64 {
 }
 
 // Helper to extract sum from verification message
-fn extract_sum_from_verification<K: KeyType>(msg: &ProtocolMessage<K>) -> u64 {
+fn extract_sum_from_verification<K: KeyType>(msg: &ProtocolMessage) -> u64 {
     match bincode::deserialize::<SummationMessage>(&msg.payload).expect("Failed to deserialize") {
         SummationMessage::Verification { sum } => sum,
         SummationMessage::Number(_) => panic!("Expected verification message"),

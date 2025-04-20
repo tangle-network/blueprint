@@ -5,6 +5,7 @@ use blueprint_std::{
     collections::HashMap,
     fmt::{Display, Formatter, Result as FmtResult},
 };
+use libp2p::PeerId;
 
 /// Protocol rounds for the signature aggregation protocol
 /// This makes the protocol flow more explicit and easier to debug
@@ -40,7 +41,7 @@ pub struct AggregationState<S: AggregatableSignature> {
     pub signatures_by_message: HashMap<Vec<u8>, ParticipantSet>,
 
     /// Set of participants and their signature and message
-    pub seen_signatures: HashMap<ParticipantId, (S::Signature, Vec<u8>)>,
+    pub seen_signatures: HashMap<PeerId, (S::Signature, Vec<u8>)>,
 
     /// Our own message we're signing (to differentiate from other messages we see)
     pub local_message: Vec<u8>,

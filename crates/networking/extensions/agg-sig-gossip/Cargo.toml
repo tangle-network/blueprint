@@ -24,6 +24,7 @@ dashmap = { workspace = true }
 crossbeam = { workspace = true }
 crossbeam-channel = { workspace = true }
 thiserror = { workspace = true }
+libp2p = { workspace = true, features = ["identify"] }
 
 [dev-dependencies]
 libp2p = { workspace = true, features = [

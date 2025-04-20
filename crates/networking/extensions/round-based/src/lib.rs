@@ -1,11 +1,11 @@
 use blueprint_crypto::KeyType;
 use blueprint_networking::{
-    discovery::peers::VerificationIdentifierKey,
-    service_handle::NetworkServiceHandle,
-    types::{ParticipantInfo, ProtocolMessage},
+    discovery::peers::VerificationIdentifierKey, service_handle::NetworkServiceHandle,
+    types::ProtocolMessage,
 };
 use dashmap::DashMap;
 use futures::{Sink, Stream};
+use libp2p::PeerId;
 use round_based::{Delivery, Incoming, MessageDestination, MessageType, Outgoing, PartyIndex};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
@@ -25,7 +25,7 @@ pub struct RoundBasedNetworkAdapter<M, K: KeyType> {
     /// Current party's index
     party_index: PartyIndex,
     /// Mapping of party indices to their public keys
-    parties: Arc<DashMap<PartyIndex, VerificationIdentifierKey<K>>>,
+    parties: Arc<DashMap<PartyIndex, PeerId>>,
     /// Counter for message IDs
     next_msg_id: Arc<AtomicU64>,
     /// Protocol identifier
@@ -42,7 +42,7 @@ where
     pub fn new(
         handle: NetworkServiceHandle<K>,
         party_index: PartyIndex,
-        parties: HashMap<PartyIndex, VerificationIdentifierKey<K>>,
+        parties: HashMap<PartyIndex, PeerId>,
         protocol_id: impl Into<String>,
     ) -> Self {
         Self {
@@ -96,7 +96,7 @@ where
 pub struct RoundBasedSender<M, K: KeyType> {
     handle: NetworkServiceHandle<K>,
     party_index: PartyIndex,
-    parties: Arc<DashMap<PartyIndex, VerificationIdentifierKey<K>>>,
+    parties: Arc<DashMap<PartyIndex, PeerId>>,
     next_msg_id: Arc<AtomicU64>,
     protocol_id: String,
     _phantom: std::marker::PhantomData<M>,
@@ -140,14 +140,8 @@ where
             routing: blueprint_networking::types::MessageRouting {
                 message_id: msg_id,
                 round_id: round,
-                sender: ParticipantInfo {
-                    id: blueprint_networking::types::ParticipantId(this.party_index),
-                    verification_id_key: this.parties.get(&this.party_index).map(|k| k.clone()),
-                },
-                recipient: recipient.map(|p| ParticipantInfo {
-                    id: blueprint_networking::types::ParticipantId(p),
-                    verification_id_key: recipient_key,
-                }),
+                sender: this.handle.local_peer_id,
+                recipient: recipient.map(|p| p),
             },
             payload: serde_json::to_vec(&outgoing.msg).map_err(NetworkError::Serialization)?,
         };

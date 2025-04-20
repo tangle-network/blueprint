@@ -108,7 +108,7 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     /// Returns evidence if equivocation is detected
     pub fn check_for_equivocation(
         &self,
-        participant_id: ParticipantId,
+        participant_id: PeerId,
         new_message: &[u8],
         new_signature: &S::Signature,
     ) -> Option<MaliciousEvidence<S>> {

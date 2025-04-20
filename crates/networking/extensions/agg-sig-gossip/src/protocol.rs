@@ -10,13 +10,14 @@ use blueprint_core::{error, info, warn};
 use blueprint_crypto::{aggregation::AggregatableSignature, hashing::blake3_256};
 use blueprint_networking::{
     service_handle::NetworkServiceHandle,
-    types::{MessageRouting, ParticipantId, ParticipantInfo, ProtocolMessage},
+    types::{MessageRouting, ParticipantId, ProtocolMessage},
 };
 use blueprint_std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     time::{Duration, Instant},
 };
+use libp2p::PeerId;
 use thiserror::Error;
 use tracing::debug;
 
@@ -51,8 +52,8 @@ pub enum AggregationError {
 /// Configuration for the aggregation protocol
 #[derive(Clone)]
 pub struct ProtocolConfig {
-    /// Local participant ID
-    pub local_id: ParticipantId,
+    /// Local peer id
+    pub local_id: PeerId,
 
     /// Maximum number of participants
     pub max_participants: u16,
@@ -69,12 +70,30 @@ pub struct ProtocolConfig {
 
 impl Default for ProtocolConfig {
     fn default() -> Self {
+        Self::new(
+            PeerId::random(),
+            100,
+            3,
+            "sig-agg".to_string(),
+            Duration::from_secs(5),
+        )
+    }
+}
+
+impl ProtocolConfig {
+    pub fn new(
+        local_id: PeerId,
+        max_participants: u16,
+        num_aggregators: u16,
+        protocol_id: String,
+        timeout: Duration,
+    ) -> Self {
         Self {
-            local_id: ParticipantId(0),
-            max_participants: 100,
-            num_aggregators: 3,
-            timeout: Duration::from_secs(5),
-            protocol_id: "sig-agg".to_string(),
+            local_id,
+            max_participants,
+            num_aggregators,
+            timeout,
+            protocol_id,
         }
     }
 }
@@ -148,8 +167,8 @@ where
     /// Handle a signature share from another participant
     fn handle_signature_share(
         &mut self,
-        sender_id: ParticipantId,
-        signer_id: ParticipantId,
+        sender_id: PeerId,
+        signer_id: PeerId,
         signature: S::Signature,
         message: Vec<u8>,
         public_keys: &HashMap<ParticipantId, S::Public>,
@@ -157,8 +176,8 @@ where
     ) -> Result<(), AggregationError> {
         debug!(
             "Node {} received signature from {} for message of length {}",
-            self.config.local_id.0,
-            sender_id.0,
+            self.config.local_id,
+            sender_id,
             message.len()
         );
 
@@ -166,7 +185,7 @@ where
         if self.has_seen_signature_for_message(signer_id, &message) {
             debug!(
                 "Node {} already has signature from {} for this message",
-                self.config.local_id.0, signer_id.0
+                self.config.local_id, signer_id
             );
             return Ok(());
         }
@@ -175,7 +194,7 @@ where
         if !Self::verify_signature(signer_id, &signature, &message, public_keys) {
             debug!(
                 "Node {} received invalid signature from {}",
-                self.config.local_id.0, signer_id.0
+                self.config.local_id, signer_id
             );
 
             // If the signature is invalid, mark sender as malicious
@@ -196,7 +215,7 @@ where
 
         debug!(
             "Node {} verified valid signature from {}",
-            self.config.local_id.0, sender_id.0
+            self.config.local_id, sender_id
         );
 
         // Check for equivocation (signing a new message with the same key)
@@ -210,7 +229,7 @@ where
         if !self.messages_re_gossiped.contains(&msg_hash) {
             debug!(
                 "Node {} re-gossiping signature from {}",
-                self.config.local_id.0, sender_id.0
+                self.config.local_id, sender_id
             );
             let share_msg = AggSigMessage::SignatureShare {
                 signer_id,
@@ -237,12 +256,12 @@ where
     /// Returns an error if serialization or the protocol fails
     pub fn handle_message(
         &mut self,
-        protocol_msg: &ProtocolMessage<S>,
+        protocol_msg: &ProtocolMessage,
         public_keys: &HashMap<ParticipantId, S::Public>,
         network_handle: &NetworkServiceHandle<S>,
     ) -> Result<(), AggregationError> {
         let routing = protocol_msg.routing.clone();
-        let sender_id = routing.sender.id;
+        let sender_id = routing.sender;
 
         // Deserialize the message
         let message = bincode::deserialize::<AggSigMessage<S>>(&protocol_msg.payload)?;
@@ -313,7 +332,7 @@ where
     /// * `signature` - The signature to verify
     /// * `message` - The message to verify the signature against
     fn verify_signature(
-        sender_id: ParticipantId,
+        sender_id: PeerId,
         signature: &S::Signature,
         message: &[u8],
         public_keys: &HashMap<ParticipantId, S::Public>,
@@ -321,7 +340,7 @@ where
         if let Some(public_key) = public_keys.get(&sender_id) {
             S::verify(public_key, message, signature)
         } else {
-            warn!("Missing public key for {}", sender_id.0);
+            warn!("Missing public key for {}", sender_id);
             false
         }
     }
@@ -358,7 +377,7 @@ where
         public_keys: &HashMap<ParticipantId, S::Public>,
         network_handle: &NetworkServiceHandle<S>,
     ) -> Result<AggregationResult<S>, AggregationError> {
-        debug!("Starting protocol run for node {}", self.config.local_id.0);
+        debug!("Starting protocol run for node {}", self.config.local_id);
         debug!("Protocol timeout set to {:?}", self.config.timeout);
 
         // Set the local message first to ensure all operations reference the correct message
@@ -377,14 +396,14 @@ where
 
         debug!(
             "Node {} is_aggregator: {}",
-            self.config.local_id.0,
+            self.config.local_id,
             self.is_aggregator()
         );
 
         // Sign and broadcast our signature to all participants
         debug!(
             "Node {} signing and broadcasting message",
-            self.config.local_id.0
+            self.config.local_id
         );
         self.sign_and_broadcast(message, signing_key, network_handle)?;
 
@@ -393,10 +412,7 @@ where
         let mut check_interval = tokio::time::interval(Duration::from_millis(100));
         let mut message_check_interval = tokio::time::interval(Duration::from_millis(50));
 
-        debug!(
-            "Node {} entering main protocol loop",
-            self.config.local_id.0
-        );
+        debug!("Node {} entering main protocol loop", self.config.local_id);
 
         loop {
             tokio::select! {
@@ -406,7 +422,7 @@ where
                     while let Some(protocol_msg) = network_handle_mut.next_protocol_message() {
                         debug!(
                             "Node {} received network message from {}",
-                            self.config.local_id.0,
+                            self.config.local_id,
                             protocol_msg.routing.sender.id.0
                         );
 
@@ -414,7 +430,7 @@ where
                         if let Err(e) = self.handle_message(&protocol_msg, public_keys, network_handle) {
                             warn!(
                                 "Node {} error handling message: {:?}",
-                                self.config.local_id.0, e
+                                self.config.local_id, e
                             );
                         }
                     }
@@ -434,7 +450,7 @@ where
                             let (highest_weight_message, highest_weight) = self.get_highest_weight_message();
                             debug!(
                                 "Node {} highest weight message: {:?} (weight {})",
-                                self.config.local_id.0,
+                                self.config.local_id,
                                 highest_weight_message.clone(),
                                 highest_weight
                             );
@@ -480,7 +496,7 @@ where
                 }
 
                 () = tokio::time::sleep_until(tokio::time::Instant::from_std(timeout)) => {
-                    debug!("Protocol timed out for node {}", self.config.local_id.0);
+                    debug!("Protocol timed out for node {}", self.config.local_id);
 
                     // On timeout, mark as completion round
                     let completion_round = ProtocolRound::Completion;
@@ -505,7 +521,7 @@ where
     ) {
         debug!(
             "Node {} adding signature from participant {} for message length {}",
-            self.config.local_id.0,
+            self.config.local_id,
             participant_id.0,
             message.len()
         );
@@ -526,7 +542,7 @@ where
             .insert(participant_id, (signature.clone(), message.to_vec()));
         debug!(
             "Node {} added signature from participant {} to signatures map",
-            self.config.local_id.0, participant_id.0
+            self.config.local_id, participant_id.0
         );
     }
 
@@ -534,24 +550,16 @@ where
     fn send_message(
         &self,
         message: &AggSigMessage<S>,
-        specific_recipient: Option<ParticipantId>,
+        recipient: Option<PeerId>,
         network_handle: &NetworkServiceHandle<S>,
     ) -> Result<(), AggregationError> {
         let payload = bincode::serialize(&message)?;
 
-        let recipient = specific_recipient.map(|id| ParticipantInfo {
-            id,
-            verification_id_key: None, // This would be filled in by the network layer
-        });
-
         let routing = MessageRouting {
             message_id: 0,
             round_id: 0,
-            sender: ParticipantInfo {
-                id: self.config.local_id,
-                verification_id_key: None, // This would be filled in by the network layer
-            },
-            recipient,
+            sender: self.config.local_id,
+            recipient: recipient,
         };
 
         // Send the message using the NetworkServiceHandle
@@ -567,19 +575,16 @@ where
         signing_key: &mut S::Secret,
         network_handle: &NetworkServiceHandle<S>,
     ) -> Result<(), AggregationError> {
-        info!("Node {} attempting to sign message", self.config.local_id.0);
+        info!("Node {} attempting to sign message", self.config.local_id);
 
         // Sign the message
         let signature = match S::sign_with_secret(signing_key, message) {
             Ok(sig) => {
-                info!(
-                    "Node {} successfully signed message",
-                    self.config.local_id.0
-                );
+                info!("Node {} successfully signed message", self.config.local_id);
                 sig
             }
             Err(e) => {
-                error!("Node {} signing error: {:?}", self.config.local_id.0, e);
+                error!("Node {} signing error: {:?}", self.config.local_id, e);
                 return Err(AggregationError::SigningError(format!(
                     "Failed to sign message: {:?}",
                     e
@@ -592,7 +597,7 @@ where
         self.add_signature(id, &signature, message);
         info!(
             "Node {} stored its signature in local state",
-            self.config.local_id.0
+            self.config.local_id
         );
 
         // Create and send the signature message
@@ -604,12 +609,12 @@ where
 
         info!(
             "Node {} broadcasting signature to network",
-            self.config.local_id.0
+            self.config.local_id
         );
         self.send_message(&sig_msg, None, network_handle)?;
         debug!(
             "Node {} successfully broadcasted signature",
-            self.config.local_id.0
+            self.config.local_id
         );
 
         Ok(())
