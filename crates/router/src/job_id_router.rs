@@ -2,7 +2,7 @@ use crate::boxed::BoxedIntoRoute;
 use crate::future::{Route, RouteFuture};
 use crate::routing::RouteId;
 use alloc::vec::Vec;
-use blueprint_core::{IntoJobId, IntoJobResult, Job, JobCall, JobId};
+use blueprint_core::{IntoJobResult, Job, JobCall, JobId};
 use core::{fmt, iter};
 use futures::stream::FuturesUnordered;
 use hashbrown::HashMap;
@@ -55,7 +55,7 @@ pub(super) struct JobIdRouter<Ctx> {
     prev_route_id: RouteId,
     // Routes that are *always* called, regardless of job ID
     always_routes: Vec<Handler<Ctx>>,
-    // Only used if `IS_FALLBACK` is true
+    // Only used if there are no matching routes *and* there are no always routes
     fallback: Option<Handler<Ctx>>,
 }
 
@@ -65,25 +65,25 @@ where
 {
     pub(super) fn route<I, J, T>(&mut self, job_id: I, job: J)
     where
-        I: IntoJobId,
+        I: Into<JobId>,
         J: Job<T, Ctx>,
         T: 'static,
     {
         let id = self.next_route_id();
-        self.job_to_route_id.insert(job_id.into_job_id(), id);
+        self.job_to_route_id.insert(job_id.into(), id);
         self.routes
             .insert(id, Handler::Boxed(BoxedIntoRoute::from_job(job)));
     }
 
     pub(super) fn route_service<I, T>(&mut self, job_id: I, service: T)
     where
-        I: IntoJobId,
+        I: Into<JobId>,
         T: Service<JobCall, Error = BoxError> + Clone + Send + Sync + 'static,
         T::Response: IntoJobResult,
         T::Future: Send + 'static,
     {
         let id = self.next_route_id();
-        self.job_to_route_id.insert(job_id.into_job_id(), id);
+        self.job_to_route_id.insert(job_id.into(), id);
         self.routes.insert(id, Handler::Route(Route::new(service)));
     }
 

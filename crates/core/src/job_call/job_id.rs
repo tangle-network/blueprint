@@ -3,32 +3,9 @@
 //! A Job Identifier is a unique identifier for each job registered with the system.
 //! It is used to identify a job and to route job calls to the appropriate job handler.
 //!
-//! A Job Id can be anything that implements `Into<JobId>`, and it is implemented for various primitive types.
+//! A job ID can be anything that implements `Into<JobId>`, and it is implemented for various primitive types.
 
 use alloc::string::ToString;
-
-/// Helper trait to convert types into `JobId`.
-///
-/// This trait can be implemented by types that can be converted into a `JobId`.
-/// Any type that implements `Into<JobId>` automatically implements this trait.
-///
-/// # Example
-/// ```
-/// use blueprint_core::IntoJobId;
-/// use blueprint_core::JobId;
-///
-/// let num: u64 = 42;
-/// let job_id = num.into_job_id(); // Convert u64 into JobId
-/// ```
-pub trait IntoJobId {
-    fn into_job_id(self) -> JobId;
-}
-
-impl<T: Into<JobId>> IntoJobId for T {
-    fn into_job_id(self) -> JobId {
-        self.into()
-    }
-}
 
 /// Job Identifier.
 #[derive(Clone, PartialEq, Eq, Hash, Copy)]
@@ -89,19 +66,19 @@ macro_rules! impl_from_numbers {
     ) => {
         $(
             impl From<$ty> for JobId {
-            #[inline]
-            fn from(value: $ty) -> Self {
-                let mut id = [0; 4];
-                id[3] = value as u64;
-                Self(id)
-            }
+                #[inline]
+                fn from(value: $ty) -> Self {
+                    let mut id = [0; 4];
+                    id[3] = value as u64;
+                    Self(id)
+                }
             }
 
             impl From<&$ty> for JobId {
-            #[inline]
-            fn from(value: &$ty) -> Self {
-                Self::from(*value)
-            }
+                #[inline]
+                fn from(value: &$ty) -> Self {
+                    Self::from(*value)
+                }
             }
 
             impl From<JobId> for $ty {

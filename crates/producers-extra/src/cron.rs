@@ -1,5 +1,5 @@
 use blueprint_core::error::BoxError;
-use blueprint_core::{Bytes, IntoJobId, JobCall, JobId};
+use blueprint_core::{Bytes, JobCall, JobId};
 use chrono::{TimeZone, Utc};
 use core::pin::Pin;
 use core::task::Poll;
@@ -54,7 +54,7 @@ impl CronJob {
     /// Create a new [`CronJob`], using the [`Utc`] timezone
     pub async fn new<I, S>(job_id: I, schedule: S) -> Result<Self, JobSchedulerError>
     where
-        I: IntoJobId,
+        I: Into<JobId>,
         S: AsRef<str>,
     {
         Self::new_tz(job_id, schedule, Utc).await
@@ -67,7 +67,7 @@ impl CronJob {
         timezone: Tz,
     ) -> Result<Self, JobSchedulerError>
     where
-        I: IntoJobId,
+        I: Into<JobId>,
         S: AsRef<str>,
         Tz: TimeZone,
     {
@@ -85,7 +85,7 @@ impl CronJob {
         scheduler.start().await?;
 
         Ok(Self {
-            job_id: job_id.into_job_id(),
+            job_id: job_id.into(),
             _scheduler: scheduler,
             rx,
         })
