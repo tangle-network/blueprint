@@ -54,9 +54,6 @@ async fn test_sign_and_verify_quote() -> Result<()> {
     // Create a test config
     let config = create_test_config();
 
-    // Create a temporary keystore directory
-    let temp_dir = tempfile::tempdir()?;
-
     // Initialize an operator signer with a new keypair
     // Use the correct method from K256Ecdsa to generate a keypair
     let secret = K256Ecdsa::generate_with_seed(None)
