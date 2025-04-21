@@ -15,7 +15,7 @@ pub trait SignatureWeight {
 
     /// Calculates the total weight of a set of participants
     fn calculate_weight(&self, participants: &HashSet<PeerId>) -> u64 {
-        participants.iter().map(|id| self.weight(&id)).sum()
+        participants.iter().map(|id| self.weight(id)).sum()
     }
 
     /// Checks if a set of participants meets the required threshold

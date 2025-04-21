@@ -33,8 +33,8 @@ where
 {
     pub fn new(
         handle: NetworkServiceHandle<K>,
-        party_index: PartyIndex,
-        parties: HashMap<PartyIndex, PeerId>,
+        _party_index: PartyIndex,
+        _parties: &HashMap<PartyIndex, PeerId>,
         protocol_id: impl Into<String>,
     ) -> Self {
         Self {
@@ -225,7 +225,7 @@ where
                             );
                             Poll::Ready(Some(Ok(Incoming {
                                 msg,
-                                sender: sender_index as u16,
+                                sender: u16::try_from(sender_index).unwrap_or(0),
                                 id,
                                 msg_type,
                             })))

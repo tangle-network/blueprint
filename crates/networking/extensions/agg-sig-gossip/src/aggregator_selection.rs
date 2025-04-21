@@ -131,9 +131,9 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
             Some(contributors) => {
                 // Filter out malicious contributors
                 let mut honest_contributors = HashSet::new();
-                for id in contributors.iter() {
-                    if !self.state.malicious.contains(&id) {
-                        honest_contributors.insert(id.clone());
+                for id in contributors {
+                    if !self.state.malicious.contains(id) {
+                        honest_contributors.insert(*id);
                     }
                 }
                 let total_weight = self.weight_scheme.calculate_weight(&honest_contributors);
@@ -167,18 +167,18 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
         // Collect signatures and public keys for verification
         let mut signatures = Vec::new();
         let mut public_keys = Vec::new();
-        for id in contributors.iter() {
-            let is_malicious = self.state.malicious.contains(&id);
+        for id in contributors {
+            let is_malicious = self.state.malicious.contains(id);
 
             if is_malicious {
                 continue;
             }
 
-            if let Some((sig, _)) = self.state.seen_signatures.get(&id) {
+            if let Some((sig, _)) = self.state.seen_signatures.get(id) {
                 signatures.push(sig.clone());
             }
 
-            if let Some(pk) = self.participant_public_keys.get(&id) {
+            if let Some(pk) = self.participant_public_keys.get(id) {
                 public_keys.push(pk.clone());
             }
         }

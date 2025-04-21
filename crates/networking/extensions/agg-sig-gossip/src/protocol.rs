@@ -138,8 +138,7 @@ where
         self.state
             .signatures_by_message
             .get(message)
-            .map(|sig_map| sig_map.contains(&peer_id))
-            .unwrap_or(false)
+            .is_some_and(|sig_map| sig_map.contains(&peer_id))
     }
 
     /// Handle a signature share from another participant
@@ -196,7 +195,7 @@ where
 
         debug!(
             "Node {} verified valid signature from {}",
-            self.config.network_handle.local_peer_id, sender_id
+            self.config.network_handle.local_peer_id, signer_id
         );
 
         // Check for equivocation (signing a new message with the same key)
@@ -490,7 +489,7 @@ where
             .state
             .signatures_by_message
             .entry(message.to_vec())
-            .or_insert_with(|| HashSet::new());
+            .or_default();
 
         // Add the signature
         sig_map.insert(peer_id);
@@ -517,7 +516,7 @@ where
             message_id: 0,
             round_id: 0,
             sender: self.config.network_handle.local_peer_id,
-            recipient: recipient,
+            recipient,
         };
 
         // Send the message using the NetworkServiceHandle

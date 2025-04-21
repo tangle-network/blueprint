@@ -74,11 +74,13 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     info!("==================== STARTING PROTOCOL PHASE ====================");
 
     // Generate keys for the signature aggregation protocol
+    let secrets = generate_keys_fn(num_nodes);
     let mut public_keys = HashMap::new();
-    for handle in handles.iter() {
-        let public_key = S::public_from_secret(&handle.local_signing_key);
+    for (i, secret) in secrets.iter().enumerate() {
+        let handle = handles[i].clone();
+        let public_key = S::public_from_secret(secret);
         public_keys.insert(handle.local_peer_id, public_key);
-        info!("Generated key pair for node {}", handle.local_peer_id);
+        info!("Generated key pair for node {}", i);
     }
 
     // Test message
@@ -96,9 +98,9 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     // Run the protocol directly on each node
     let mut results = Vec::new();
     info!("Starting protocol on {} nodes", num_nodes);
-    for i in 0..num_nodes {
+    for (i, handle) in handles.iter().enumerate().take(num_nodes) {
         let config = ProtocolConfig {
-            network_handle: handles[i].clone(),
+            network_handle: handle.clone(),
             num_aggregators,
             timeout: protocol_timeout,
         };

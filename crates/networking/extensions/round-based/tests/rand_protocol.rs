@@ -262,9 +262,9 @@ mod tests {
         info!("Handshakes completed.");
 
         let node1_network =
-            RoundBasedNetworkAdapter::new(handle_refs[0].clone(), 0, parties.clone(), instance_id);
+            RoundBasedNetworkAdapter::new(handle_refs[0].clone(), 0, &parties.clone(), instance_id);
         let node2_network =
-            RoundBasedNetworkAdapter::new(handle_refs[1].clone(), 1, parties, instance_id);
+            RoundBasedNetworkAdapter::new(handle_refs[1].clone(), 1, &parties, instance_id);
 
         let mut tasks = vec![];
         tasks.push(tokio::spawn(async move {

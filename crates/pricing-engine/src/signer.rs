@@ -58,8 +58,9 @@ impl<K: KeyType> OperatorSigner<K> {
         proof_of_work: Vec<u8>,
     ) -> Result<SignedQuote<K>> {
         let msg = payload.to_bytes()?;
-        let signature = K::sign_with_secret(&mut self.keypair, &msg)
-            .map_err(|e| PricingError::Signing(format!("Error signing quote: {:?}", msg)))?;
+        let signature = K::sign_with_secret(&mut self.keypair, &msg).map_err(|e| {
+            PricingError::Signing(format!("Error {:?} signing quote: {:?}", e, msg))
+        })?;
 
         Ok(SignedQuote {
             payload,
