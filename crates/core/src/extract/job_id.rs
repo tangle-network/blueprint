@@ -34,9 +34,6 @@ where
 
 #[cfg(test)]
 mod tests {
-
-    use crate::IntoJobId;
-
     use super::*;
 
     macro_rules! test_extract_job_id{
@@ -82,8 +79,8 @@ mod tests {
         }
     }
 
-    impl IntoJobId for MyCustomJobId {
-        fn into_job_id(self) -> crate::JobId {
+    impl From<MyCustomJobId> for crate::job_call::job_id::JobId {
+        fn from(_: MyCustomJobId) -> crate::JobId {
             42u64.into()
         }
     }

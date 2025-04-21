@@ -25,7 +25,7 @@ pub mod metadata;
 pub use self::error::Error;
 pub use self::ext_traits::{job_call::JobCallExt, job_call_parts::JobCallPartsExt};
 pub use self::extract::{FromJobCall, FromJobCallParts};
-pub use self::job_call::job_id::{IntoJobId, JobId};
+pub use self::job_call::job_id::JobId;
 pub use self::job_result::{IntoJobResult, IntoJobResultParts};
 pub use bytes::Bytes;
 pub use job::Job;
