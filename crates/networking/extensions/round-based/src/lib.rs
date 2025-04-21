@@ -19,10 +19,6 @@ use std::{
 pub struct RoundBasedNetworkAdapter<M, K: KeyType> {
     /// The underlying network handle
     handle: NetworkServiceHandle<K>,
-    /// Current party's index
-    party_index: PartyIndex,
-    /// Mapping of party indices to their public keys
-    parties: Arc<DashMap<PartyIndex, PeerId>>,
     /// Counter for message IDs
     next_msg_id: Arc<AtomicU64>,
     /// Protocol identifier
@@ -44,8 +40,6 @@ where
     ) -> Self {
         Self {
             handle,
-            party_index,
-            parties: Arc::new(DashMap::from_iter(parties)),
             next_msg_id: Arc::new(AtomicU64::new(0)),
             protocol_id: protocol_id.into(),
             _phantom: std::marker::PhantomData,
@@ -69,8 +63,6 @@ where
     fn split(self) -> (Self::Receive, Self::Send) {
         let RoundBasedNetworkAdapter {
             handle,
-            party_index,
-            parties,
             next_msg_id,
             protocol_id,
             ..
@@ -78,14 +70,12 @@ where
 
         let sender = RoundBasedSender {
             handle: handle.clone(),
-            party_index,
-            parties: parties.clone(),
             next_msg_id: next_msg_id.clone(),
             protocol_id: protocol_id.clone(),
             _phantom: std::marker::PhantomData,
         };
 
-        let receiver = RoundBasedReceiver::new(handle, party_index);
+        let receiver = RoundBasedReceiver::new(handle);
 
         (receiver, sender)
     }
@@ -93,8 +83,6 @@ where
 
 pub struct RoundBasedSender<M, K: KeyType> {
     handle: NetworkServiceHandle<K>,
-    party_index: PartyIndex,
-    parties: Arc<DashMap<PartyIndex, PeerId>>,
     next_msg_id: Arc<AtomicU64>,
     protocol_id: String,
     _phantom: std::marker::PhantomData<M>,
@@ -172,15 +160,13 @@ where
 
 pub struct RoundBasedReceiver<M, K: KeyType> {
     handle: NetworkServiceHandle<K>,
-    party_index: PartyIndex,
     _phantom: std::marker::PhantomData<M>,
 }
 
 impl<M, K: KeyType> RoundBasedReceiver<M, K> {
-    fn new(handle: NetworkServiceHandle<K>, party_index: PartyIndex) -> Self {
+    fn new(handle: NetworkServiceHandle<K>) -> Self {
         Self {
             handle,
-            party_index,
             _phantom: std::marker::PhantomData,
         }
     }
