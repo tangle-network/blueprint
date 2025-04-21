@@ -6,6 +6,8 @@ use crate::sdk::utils::make_executable;
 use blueprint_core::trace;
 use std::path::PathBuf;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
+use blueprint_runner::config::BlueprintEnvironment;
+use crate::config::SourceCandidates;
 
 pub struct TestSourceFetcher {
     pub fetcher: TestFetcher,
@@ -112,16 +114,18 @@ impl BlueprintSourceHandler for TestSourceFetcher {
 
     async fn spawn(
         &mut self,
+        _source_candidates: &SourceCandidates,
+        _env: &BlueprintEnvironment,
         service: &str,
         args: Vec<String>,
-        env: Vec<(String, String)>,
+        env_vars: Vec<(String, String)>,
     ) -> Result<ProcessHandle> {
         let binary = self.resolved_binary_path.as_ref().expect("should be set");
         let process_handle = tokio::process::Command::new(binary)
             .kill_on_drop(true)
             .stdin(std::process::Stdio::null())
             .current_dir(&std::env::current_dir()?)
-            .envs(env)
+            .envs(env_vars)
             .args(args)
             .spawn()?;
 
