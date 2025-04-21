@@ -5,7 +5,7 @@
 use alloy_primitives::B256;
 use blueprint_core::{
     __composite_rejection as composite_rejection, __define_rejection as define_rejection,
-    __impl_deref as impl_deref, FromJobCallParts, job_call::Parts as JobCallParts,
+    __impl_deref as impl_deref, FromJobCallParts, job::call::Parts as JobCallParts,
 };
 
 /// Block number extractor

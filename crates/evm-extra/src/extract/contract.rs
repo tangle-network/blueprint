@@ -10,7 +10,7 @@ use alloy_primitives::Address;
 use blueprint_core::{
     __composite_rejection as composite_rejection, __define_rejection as define_rejection,
     __impl_deref as impl_deref, __impl_from as impl_from, FromJobCallParts,
-    job_call::Parts as JobCallParts,
+    job::call::Parts as JobCallParts,
 };
 
 /// Extracts the contract address from the current job call.

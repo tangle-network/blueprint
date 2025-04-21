@@ -11,7 +11,7 @@ use crate::metadata::{MetadataMap, MetadataValue};
 /// # Example
 ///
 /// ```rust
-/// use blueprint_sdk::job_result::JobResultParts;
+/// use blueprint_sdk::job::result::JobResultParts;
 /// use blueprint_sdk::{IntoJobResult, IntoJobResultParts, JobResult};
 ///
 /// // Hypothetical helper type for setting a single metadata value

@@ -44,14 +44,18 @@
 use crate::{
     JobCall, JobResult,
     extract::{FromJobCall, FromJobCallParts},
-    job_result::IntoJobResult,
 };
 use alloc::boxed::Box;
 use core::{fmt, future::Future, marker::PhantomData, pin::Pin};
 use tower::{Layer, Service, ServiceExt};
 
+pub mod call;
 pub mod future;
-mod service;
+mod id;
+pub use id::*;
+pub mod result;
+pub mod service;
+use result::IntoJobResult;
 
 pub use self::service::JobService;
 

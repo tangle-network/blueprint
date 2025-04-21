@@ -6,7 +6,7 @@
 use core::convert::Infallible;
 
 use crate::FromJobCallParts;
-use crate::job_call::Parts as JobCallParts;
+use crate::job::call::Parts as JobCallParts;
 use crate::metadata::{MetadataMap, MetadataValue};
 
 /// Extractor for all metadata in the current [`JobCall`].

@@ -1,7 +1,7 @@
 use super::{FromJobCall, FromJobCallParts, JobCall};
 use crate::JobResult;
-use crate::job_call::Parts;
-use crate::job_result::IntoJobResult;
+use crate::job::call::Parts;
+use crate::job::result::IntoJobResult;
 use core::convert::Infallible;
 
 impl<Ctx> FromJobCallParts<Ctx> for ()
@@ -77,7 +77,7 @@ mod tests {
     use bytes::Bytes;
 
     use crate::extract::{FromJobCall, FromJobCallParts};
-    use crate::job_call::Parts as JobCallParts;
+    use crate::job::call::Parts as JobCallParts;
 
     struct JobId;
 

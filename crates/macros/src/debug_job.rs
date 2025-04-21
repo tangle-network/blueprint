@@ -445,7 +445,7 @@ fn check_is_job_result_parts(ty: &Type, ident: &Ident, index: usize) -> TokenStr
         #[allow(warnings)]
         #[allow(unreachable_code)]
         #[doc(hidden)]
-        fn #check_fn(parts: #ty) -> ::blueprint_sdk::job_result::Parts {
+        fn #check_fn(parts: #ty) -> ::blueprint_sdk::job::result::Parts {
             parts
         }
     }
@@ -471,7 +471,7 @@ fn check_into_job_result_parts(ty: &Type, ident: &Ident, index: usize) -> TokenS
     };
 
     let from_job_call_bound = quote_spanned! {span=>
-        #ty: ::blueprint_sdk::job_result::IntoJobResultParts
+        #ty: ::blueprint_sdk::job::result::IntoJobResultParts
     };
     quote_spanned! {span=>
         #[allow(warnings)]
@@ -705,7 +705,7 @@ fn check_output_impls_into_job_result(item_fn: &ItemFn) -> TokenStream {
             async fn #name() {
                 let value = #receiver #make_value_name().await;
                 fn check<T>(_: T)
-                    where T: ::blueprint_sdk::job_result::IntoJobResult
+                    where T: ::blueprint_sdk::job::result::IntoJobResult
                 {}
                 check(value);
             }
@@ -721,7 +721,7 @@ fn check_output_impls_into_job_result(item_fn: &ItemFn) -> TokenStream {
                 let value = #make_value_name().await;
 
                 fn check<T>(_: T)
-                where T: ::blueprint_sdk::job_result::IntoJobResult
+                where T: ::blueprint_sdk::job::result::IntoJobResult
                 {}
 
                 check(value);

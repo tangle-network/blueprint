@@ -1,5 +1,5 @@
 use crate::extract::{FromJobCallParts, FromRef};
-use crate::job_call::Parts;
+use crate::job::call::Parts;
 use core::{
     convert::Infallible,
     ops::{Deref, DerefMut},
@@ -134,7 +134,7 @@ use core::{
 ///
 /// ```rust
 /// use blueprint_sdk::extract::{FromJobCallParts, FromRef};
-/// use blueprint_sdk::job_call::Parts;
+/// use blueprint_sdk::job::call::Parts;
 /// use std::convert::Infallible;
 ///
 /// // the extractor your library provides

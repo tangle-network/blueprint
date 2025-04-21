@@ -18,22 +18,20 @@ pub mod ext_traits;
 pub mod extensions;
 pub mod extract;
 pub mod job;
-pub mod job_call;
-pub mod job_result;
 pub mod metadata;
 
-pub use self::error::Error;
-pub use self::ext_traits::{job_call::JobCallExt, job_call_parts::JobCallPartsExt};
-pub use self::extract::{FromJobCall, FromJobCallParts};
-pub use self::job_call::job_id::JobId;
-pub use self::job_result::{IntoJobResult, IntoJobResultParts};
 pub use bytes::Bytes;
+pub use error::Error;
+pub use ext_traits::{job_call::JobCallExt, job_call_parts::JobCallPartsExt};
+pub use extract::{FromJobCall, FromJobCallParts};
 pub use job::Job;
+pub use job::JobId;
+pub use job::result::{IntoJobResult, IntoJobResultParts};
 
 /// A type representing a job result with a body of type `bytes::Bytes`.
-pub type JobResult<T = Bytes> = crate::job_result::JobResult<T>;
+pub type JobResult<T = Bytes> = job::result::JobResult<T>;
 /// A type representing a job call with a body of type `bytes::Bytes`.
-pub type JobCall<T = Bytes> = crate::job_call::JobCall<T>;
+pub type JobCall<T = Bytes> = job::call::JobCall<T>;
 
 // Feature-gated tracing macros, used by the entire SDK
 macro_rules! tracing_macros {

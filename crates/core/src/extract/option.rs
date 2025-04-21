@@ -1,8 +1,8 @@
 use core::future::Future;
 
 use crate::extract::{FromJobCall, FromJobCallParts, JobCall, private};
-use crate::job_call::Parts;
-use crate::job_result::IntoJobResult;
+use crate::job::call::Parts;
+use crate::job::result::IntoJobResult;
 
 /// Customize the behavior of `Option<Self>` as a [`FromJobCallParts`]
 /// extractor.

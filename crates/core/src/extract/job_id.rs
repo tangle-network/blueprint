@@ -1,6 +1,6 @@
 //! Extracts the Job ID from the current job call.
 
-use crate::job_call::Parts as JobCallParts;
+use crate::job::call::Parts as JobCallParts;
 use crate::{FromJobCallParts, IntoJobResult};
 
 /// A Specialized extractor for the [`JobId`] of the current [`JobCall`].
@@ -79,7 +79,7 @@ mod tests {
         }
     }
 
-    impl From<MyCustomJobId> for crate::job_call::job_id::JobId {
+    impl From<MyCustomJobId> for crate::job::JobId {
         fn from(_: MyCustomJobId) -> crate::JobId {
             42u64.into()
         }

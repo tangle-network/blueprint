@@ -8,7 +8,7 @@ use alloc::collections::BTreeMap;
 
 use alloy_primitives::FixedBytes;
 use alloy_rpc_types::Log;
-use blueprint_core::{JobCall, extensions::Extensions, job_call::Parts, metadata::MetadataMap};
+use blueprint_core::{JobCall, extensions::Extensions, job::call::Parts, metadata::MetadataMap};
 use bytes::Bytes;
 pub use polling::{PollingConfig, PollingProducer};
 

@@ -8,7 +8,7 @@ use alloy_sol_types::SolEvent;
 use blueprint_core::{
     __composite_rejection as composite_rejection, __define_rejection as define_rejection,
     __impl_deref as impl_deref, __impl_deref_vec as impl_deref_vec, __impl_from as impl_from,
-    FromJobCallParts, job_call::Parts as JobCallParts,
+    FromJobCallParts, job::call::Parts as JobCallParts,
 };
 
 /// Extracts all events from the current block

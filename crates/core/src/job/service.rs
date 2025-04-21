@@ -1,8 +1,8 @@
 use super::Job;
+use super::call::JobCall;
 
 use crate::JobResult;
 use crate::error::BoxError;
-use crate::job_call::JobCall;
 use bytes::Bytes;
 use core::{
     fmt,

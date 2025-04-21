@@ -9,7 +9,7 @@ use alloc::format;
 
 use crate::FromJobCallParts;
 use crate::extract::OptionalFromJobCallParts;
-use crate::job_call::Parts as JobCallParts;
+use crate::job::call::Parts as JobCallParts;
 
 /// A Specialized extractor for the [`Extensions`] of the current [`JobCall`].
 ///
