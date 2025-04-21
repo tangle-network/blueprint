@@ -3383,9 +3383,11 @@ dependencies = [
 name = "blueprint-networking-round-based-extension"
 version = "0.1.0-alpha.3"
 dependencies = [
+ "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-core",
  "blueprint-networking",
+ "blueprint-std",
  "crossbeam",
  "crossbeam-channel",
  "dashmap",

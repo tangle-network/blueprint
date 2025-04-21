@@ -4,15 +4,13 @@ use crate::{
     discovery::{
         PeerInfo, PeerManager,
         behaviour::{DerivedDiscoveryBehaviourEvent, DiscoveryEvent},
-        peers::VerificationIdentifierKey,
-        utils::get_address_from_compressed_pubkey,
     },
     error::Error,
     service_handle::NetworkServiceHandle,
     types::ProtocolMessage,
 };
 use alloy_primitives::Address;
-use blueprint_crypto::{BytesEncoding, KeyType};
+use blueprint_crypto::KeyType;
 use crossbeam_channel::{self, Receiver, SendError, Sender};
 use futures::StreamExt;
 use libp2p::{
@@ -24,6 +22,17 @@ use libp2p::{
 use std::{collections::HashSet, fmt::Display, sync::Arc, time::Duration};
 use tracing::trace;
 use tracing::{debug, info, warn};
+
+pub enum AllowedKeys<K: KeyType> {
+    EvmAddresses(blueprint_std::collections::HashSet<Address>),
+    InstancePublicKeys(blueprint_std::collections::HashSet<K::Public>),
+}
+
+impl<K: KeyType> Default for AllowedKeys<K> {
+    fn default() -> Self {
+        Self::InstancePublicKeys(blueprint_std::collections::HashSet::new())
+    }
+}
 
 /// Events emitted by the network service
 #[derive(Debug)]
@@ -175,7 +184,7 @@ impl<K: KeyType> Display for NetworkEventSendError<K> {
 
 /// Network message types
 #[derive(Debug)]
-pub enum NetworkMessage<K: KeyType> {
+pub enum NetworkCommandMessage<K: KeyType> {
     InstanceRequest {
         peer: PeerId,
         request: InstanceMessageRequest<K>,
@@ -185,12 +194,8 @@ pub enum NetworkMessage<K: KeyType> {
         topic: String,
         message: Vec<u8>,
     },
-    Subscribe {
-        topic: String,
-    },
-    Unsubscribe {
-        topic: String,
-    },
+    SubscribeToTopic(String),
+    UnsubscribeFromTopic(String),
 }
 
 /// Configuration for the network service
@@ -226,9 +231,9 @@ pub struct NetworkService<K: KeyType> {
     /// Peer manager for tracking peer states
     pub(crate) peer_manager: Arc<PeerManager<K>>,
     /// Channel for sending messages to the network service
-    network_sender: Sender<NetworkMessage<K>>,
+    network_sender: Sender<NetworkCommandMessage<K>>,
     /// Channel for receiving messages from the network service
-    network_receiver: Receiver<NetworkMessage<K>>,
+    network_receiver: Receiver<NetworkCommandMessage<K>>,
     /// Channel for receiving messages from the network service
     protocol_message_receiver: Receiver<ProtocolMessage>,
     /// Channel for sending events to the network service
@@ -240,17 +245,6 @@ pub struct NetworkService<K: KeyType> {
     bootstrap_peers: HashSet<Multiaddr>,
     /// Channel for receiving allowed keys updates
     allowed_keys_rx: Receiver<AllowedKeys<K>>,
-}
-
-pub enum AllowedKeys<K: KeyType> {
-    EvmAddresses(blueprint_std::collections::HashSet<Address>),
-    InstancePublicKeys(blueprint_std::collections::HashSet<K::Public>),
-}
-
-impl<K: KeyType> Default for AllowedKeys<K> {
-    fn default() -> Self {
-        Self::InstancePublicKeys(blueprint_std::collections::HashSet::new())
-    }
 }
 
 impl<K: KeyType> NetworkService<K> {
@@ -340,7 +334,7 @@ impl<K: KeyType> NetworkService<K> {
     }
 
     /// Get a sender to send messages to the network service
-    pub fn network_sender(&self) -> Sender<NetworkMessage<K>> {
+    pub fn network_sender(&self) -> Sender<NetworkCommandMessage<K>> {
         self.network_sender.clone()
     }
 
@@ -350,7 +344,7 @@ impl<K: KeyType> NetworkService<K> {
         let protocol_message_receiver = self.protocol_message_receiver.clone();
 
         // Create handle with new interface
-        let mut handle = NetworkServiceHandle::new(
+        let handle = NetworkServiceHandle::new(
             local_peer_id,
             self.swarm
                 .behaviour()
@@ -362,21 +356,6 @@ impl<K: KeyType> NetworkService<K> {
             network_sender,
             protocol_message_receiver,
         );
-
-        // Get our local verification key from the blueprint protocol behavior
-        let blueprint_protocol = &self.swarm.behaviour().blueprint_protocol;
-        let instance_key_pair = &blueprint_protocol.instance_key_pair;
-        let public_key = K::public_from_secret(instance_key_pair);
-
-        // Set the local verification key based on the type used for handshakes
-        let verification_key = if blueprint_protocol.use_address_for_handshake_verification {
-            let address = get_address_from_compressed_pubkey(&public_key.to_bytes());
-            VerificationIdentifierKey::EvmAddress(address)
-        } else {
-            VerificationIdentifierKey::InstancePublicKey(public_key)
-        };
-
-        handle.local_verification_key = Some(verification_key);
 
         // Add our own peer ID to the peer manager with all listening addresses
         let mut info = PeerInfo::default();
@@ -417,7 +396,19 @@ impl<K: KeyType> NetworkService<K> {
             }
         }
 
+        // Track when we last attempted to retry handshakes
+        let mut last_handshake_retry = tokio::time::Instant::now();
+        // Retry unverified handshakes every 5 seconds
+        const HANDSHAKE_RETRY_INTERVAL: Duration = Duration::from_secs(3);
+
         loop {
+            // Check if we should retry handshakes for unverified peers
+            let now = tokio::time::Instant::now();
+            if now.duration_since(last_handshake_retry) >= HANDSHAKE_RETRY_INTERVAL {
+                self.retry_unverified_handshakes();
+                last_handshake_retry = now;
+            }
+
             tokio::select! {
                 swarm_event = self.swarm.select_next_some() => {
                     match swarm_event {
@@ -454,11 +445,35 @@ impl<K: KeyType> NetworkService<K> {
                         warn!("Failed to handle network message: {}", e);
                     }
                 }
+                // Add a short timeout to ensure we don't miss the handshake retry check
+                () = tokio::time::sleep(Duration::from_millis(100)) => {}
                 else => break,
             }
         }
 
         info!("Network service stopped");
+    }
+
+    /// Attempts to initiate handshakes with connected but unverified peers
+    fn retry_unverified_handshakes(&mut self) {
+        let connected_peers = self.swarm.behaviour().discovery.get_peers().clone();
+        for peer_id in connected_peers {
+            // Skip peers that are already verified or banned
+            if self.peer_manager.is_peer_verified(&peer_id) || self.peer_manager.is_banned(&peer_id)
+            {
+                continue;
+            }
+
+            debug!("Retrying handshake with unverified peer: {}", peer_id);
+            if let Err(e) = self
+                .swarm
+                .behaviour_mut()
+                .blueprint_protocol
+                .send_handshake(&peer_id)
+            {
+                debug!("Failed to retry handshake with peer {}: {:?}", peer_id, e);
+            }
+        }
     }
 
     /// Get the current listening address
@@ -696,12 +711,12 @@ fn handle_ping_event<K: KeyType>(
 /// Handle a network message
 fn handle_network_message<K: KeyType>(
     swarm: &mut Swarm<GadgetBehaviour<K>>,
-    msg: NetworkMessage<K>,
+    msg: NetworkCommandMessage<K>,
     peer_manager: &Arc<PeerManager<K>>,
     event_sender: &Sender<NetworkEvent<K>>,
 ) -> Result<(), Error> {
     match msg {
-        NetworkMessage::InstanceRequest { peer, request } => {
+        NetworkCommandMessage::InstanceRequest { peer, request } => {
             // Only send requests to verified peers
             if !peer_manager.is_peer_verified(&peer) {
                 warn!(%peer, "Attempted to send request to unverified peer");
@@ -725,7 +740,7 @@ fn handle_network_message<K: KeyType>(
                     )
                 })?;
         }
-        NetworkMessage::GossipMessage {
+        NetworkCommandMessage::GossipMessage {
             source,
             topic,
             message,
@@ -748,20 +763,11 @@ fn handle_network_message<K: KeyType>(
                     SendError(NetworkEventSendError::<K>::GossipSent { topic, message }.to_string())
                 })?;
         }
-        NetworkMessage::Subscribe { topic } => {
-            debug!(%topic, "Subscribing to topic");
-            match swarm.behaviour_mut().blueprint_protocol.subscribe(&topic) {
-                Ok(_) => {}
-                Err(e) => {
-                    warn!(%topic, "Failed to subscribe to topic: {:?}", e);
-                }
-            }
+        NetworkCommandMessage::SubscribeToTopic(topic) => {
+            swarm.behaviour_mut().blueprint_protocol.subscribe(&topic)?;
         }
-        NetworkMessage::Unsubscribe { topic } => {
-            debug!(%topic, "Unsubscribing from topic");
-            if !swarm.behaviour_mut().blueprint_protocol.unsubscribe(&topic) {
-                warn!(%topic, "Failed to unsubscribe from topic");
-            }
+        NetworkCommandMessage::UnsubscribeFromTopic(topic) => {
+            swarm.behaviour_mut().blueprint_protocol.unsubscribe(&topic);
         }
     }
 

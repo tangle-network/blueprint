@@ -2,7 +2,7 @@ use crate::types::MessageRouting;
 use crate::{
     blueprint_protocol::InstanceMessageRequest,
     discovery::{PeerInfo, PeerManager, peers::VerificationIdentifierKey},
-    service::NetworkMessage,
+    service::NetworkCommandMessage,
     types::ProtocolMessage,
 };
 use blueprint_crypto::KeyType;
@@ -15,12 +15,12 @@ use tracing::debug;
 /// Handle for sending outgoing messages to the network
 #[derive(Clone)]
 pub struct NetworkSender<K: KeyType> {
-    network_message_sender: Sender<NetworkMessage<K>>,
+    network_message_sender: Sender<NetworkCommandMessage<K>>,
 }
 
 impl<K: KeyType> NetworkSender<K> {
     #[must_use]
-    pub fn new(network_message_sender: Sender<NetworkMessage<K>>) -> Self {
+    pub fn new(network_message_sender: Sender<NetworkCommandMessage<K>>) -> Self {
         Self {
             network_message_sender,
         }
@@ -31,7 +31,7 @@ impl<K: KeyType> NetworkSender<K> {
     /// # Errors
     ///
     /// See [`crossbeam_channel::Sender::send`]
-    pub fn send_message(&self, message: NetworkMessage<K>) -> Result<(), String> {
+    pub fn send_message(&self, message: NetworkCommandMessage<K>) -> Result<(), String> {
         self.network_message_sender
             .send(message)
             .map_err(|e| e.to_string())
@@ -94,7 +94,7 @@ impl<K: KeyType> NetworkServiceHandle<K> {
         blueprint_protocol_name: String,
         local_signing_key: K::Secret,
         peer_manager: Arc<PeerManager<K>>,
-        network_message_sender: Sender<NetworkMessage<K>>,
+        network_message_sender: Sender<NetworkCommandMessage<K>>,
         protocol_message_receiver: Receiver<ProtocolMessage>,
     ) -> Self {
         Self {
@@ -149,20 +149,23 @@ impl<K: KeyType> NetworkServiceHandle<K> {
                     metadata: None,
                 };
 
-                self.send_network_message(NetworkMessage::InstanceRequest {
+                self.send_network_message(NetworkCommandMessage::InstanceRequest {
                     peer: recipient,
                     request: instance_message_request,
                 })?;
-                debug!("Sent outbound p2p `NetworkMessage` to {:?}", recipient);
+                debug!(
+                    "Sent outbound p2p `NetworkCommandMessage` to {:?}",
+                    recipient
+                );
             }
             None => {
-                let gossip_message = NetworkMessage::GossipMessage {
+                let gossip_message = NetworkCommandMessage::GossipMessage {
                     source: self.local_peer_id,
                     topic: self.blueprint_protocol_name.clone().to_string(),
                     message: raw_payload,
                 };
                 self.send_network_message(gossip_message)?;
-                debug!("Sent outbound gossip `NetworkMessage`");
+                debug!("Sent outbound gossip `NetworkCommandMessage`");
             }
         }
 
@@ -174,7 +177,7 @@ impl<K: KeyType> NetworkServiceHandle<K> {
     /// # Errors
     ///
     /// See [`crossbeam_channel::Sender::send`]
-    pub fn send_network_message(&self, message: NetworkMessage<K>) -> Result<(), String> {
+    pub fn send_network_message(&self, message: NetworkCommandMessage<K>) -> Result<(), String> {
         self.sender.send_message(message)
     }
 

@@ -13,6 +13,8 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+blueprint-std = { workspace = true }
+blueprint-core = { workspace = true, features = ["tracing"] }
 blueprint-crypto = { workspace = true }
 blueprint-networking = { workspace = true }
 round-based = { workspace = true }

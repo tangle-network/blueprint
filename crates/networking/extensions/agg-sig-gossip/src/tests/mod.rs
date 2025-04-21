@@ -74,12 +74,11 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     info!("==================== STARTING PROTOCOL PHASE ====================");
 
     // Generate keys for the signature aggregation protocol
-    let secrets = generate_keys_fn(num_nodes);
     let mut public_keys = HashMap::new();
-    for (i, secret) in secrets.iter().enumerate() {
-        let public_key = S::public_from_secret(&handles[i].local_signing_key);
-        public_keys.insert(handles[i].local_peer_id, public_key);
-        info!("Generated key pair for node {}", i);
+    for handle in handles.iter() {
+        let public_key = S::public_from_secret(&handle.local_signing_key);
+        public_keys.insert(handle.local_peer_id, public_key);
+        info!("Generated key pair for node {}", handle.local_peer_id);
     }
 
     // Test message
