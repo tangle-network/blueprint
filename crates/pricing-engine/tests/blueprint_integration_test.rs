@@ -185,7 +185,6 @@ resources = [
     };
 
     // Step 3: Calculate a price based on the benchmark profile and pricing data
-    // Default TTL in blocks (e.g., 1 hour with 6-second blocks = 600 blocks)
     let ttl_blocks = 600u64;
 
     let price_model = calculate_price(
@@ -195,7 +194,6 @@ resources = [
         ttl_blocks,
     )?;
 
-    // Debug: Print the calculated price model
     info!("\nCalculated Price Model:");
     info!("Total Cost Rate: ${:.6}", price_model.total_cost);
     for resource in &price_model.resources {
@@ -339,6 +337,13 @@ resources = [
                 },
             ],
             proof_of_work: proof.clone(),
+            security_requirements: Some(pricing_engine::AssetSecurityRequirements {
+                asset: Some(pricing_engine::Asset {
+                    asset_type: Some(pricing_engine::asset::AssetType::Custom(1234)),
+                }),
+                minimum_exposure_percent: 50,
+                maximum_exposure_percent: 80,
+            }),
         };
 
         info!("Requesting quote from operator {}", i);

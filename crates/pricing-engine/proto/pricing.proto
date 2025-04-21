@@ -9,6 +9,40 @@ service PricingEngine {
   rpc GetPrice (GetPriceRequest) returns (GetPriceResponse);
 }
 
+// Asset type definition
+enum AssetType {
+  CUSTOM = 0;
+  ERC20 = 1;
+}
+
+// Asset type definition
+message Asset {
+  oneof asset_type {
+    // Custom asset with a numeric identifier
+    uint64 custom = 1;
+    // ERC20 token with an H160 address
+    bytes erc20 = 2;
+  }
+}
+
+// Security requirements for an asset
+message AssetSecurityRequirements {
+  // The asset type
+  Asset asset = 1;
+  // Minimum exposure percentage (0-100)
+  uint32 minimum_exposure_percent = 2;
+  // Maximum exposure percentage (0-100)
+  uint32 maximum_exposure_percent = 3;
+}
+
+// Security commitment for an asset
+message AssetSecurityCommitment {
+  // The asset type
+  Asset asset = 1;
+  // Committed exposure percentage (0-100)
+  uint32 exposure_percent = 2;
+}
+
 // Request message for GetPrice RPC
 message GetPriceRequest {
   // The blueprint ID
@@ -19,6 +53,8 @@ message GetPriceRequest {
   bytes proof_of_work = 3;
   // Optional resource recommendations
   repeated ResourceRequirement resource_requirements = 4;
+  // Security requirements for assets
+  AssetSecurityRequirements security_requirements = 5;
 }
 
 // Resource requirement for a specific resource type
@@ -55,6 +91,8 @@ message QuoteDetails {
   uint64 expiry = 5;
   // Resource pricing details
   repeated ResourcePricing resources = 6;
+  // Security commitments for assets
+  AssetSecurityCommitment security_commitments = 7;
 }
 
 // Pricing for a specific resource type

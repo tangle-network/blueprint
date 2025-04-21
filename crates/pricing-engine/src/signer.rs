@@ -1,33 +1,17 @@
 use crate::config::OperatorConfig;
 use crate::error::{PricingError, Result};
-use crate::pricing::ResourcePricing;
+use crate::pricing_engine;
+use bincode;
 use blueprint_crypto::KeyType;
-use serde::{Deserialize, Serialize};
+use prost::Message;
+use sha2::{Digest, Sha256};
 
 pub type BlueprintId = u64;
 pub type OperatorId = [u8; 32];
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct QuotePayload {
-    pub blueprint_id: BlueprintId,
-    pub ttl_blocks: u64,
-    pub total_cost_rate: f64,
-    pub resources: Vec<ResourcePricing>,
-    /// Expiry timestamp (Unix epoch seconds)
-    pub expiry: u64,
-    /// Timestamp when the quote was generated (Unix epoch seconds)
-    pub timestamp: u64,
-}
-
-impl QuotePayload {
-    pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        bincode::serialize(self).map_err(PricingError::Serialization)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct SignedQuote<K: KeyType> {
-    pub payload: QuotePayload,
+    pub quote_details: pricing_engine::QuoteDetails,
     pub signature: K::Signature,
     pub operator_id: OperatorId,
     pub proof_of_work: Vec<u8>,
@@ -51,19 +35,21 @@ impl<K: KeyType> OperatorSigner<K> {
         })
     }
 
-    /// Signs a quote payload.
+    /// Signs a quote by hashing the proto message and signing the hash.
     pub fn sign_quote(
         &mut self,
-        payload: QuotePayload,
+        quote_details: pricing_engine::QuoteDetails,
         proof_of_work: Vec<u8>,
     ) -> Result<SignedQuote<K>> {
-        let msg = payload.to_bytes()?;
-        let signature = K::sign_with_secret(&mut self.keypair, &msg).map_err(|e| {
-            PricingError::Signing(format!("Error {:?} signing quote: {:?}", e, msg))
-        })?;
+        // Hash the quote details
+        let hash = hash_quote_details(&quote_details)?;
+
+        // Sign the hash
+        let signature = K::sign_with_secret(&mut self.keypair, &hash)
+            .map_err(|e| PricingError::Signing(format!("Error {:?} signing quote hash", e)))?;
 
         Ok(SignedQuote {
-            payload,
+            quote_details,
             signature,
             operator_id: self.operator_id,
             proof_of_work,
@@ -81,7 +67,28 @@ impl<K: KeyType> OperatorSigner<K> {
     }
 }
 
+/// Creates a deterministic hash of the quote details that can be reproduced in any language.
+/// Uses protobuf serialization followed by SHA-256 hashing.
+pub fn hash_quote_details(quote_details: &pricing_engine::QuoteDetails) -> Result<Vec<u8>> {
+    // Serialize the quote details using protobuf
+    let mut serialized = Vec::new();
+    quote_details.encode(&mut serialized).map_err(|e| {
+        PricingError::Serialization(Box::new(bincode::ErrorKind::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to encode protobuf: {:?}", e),
+        ))))
+    })?;
+
+    // Hash the serialized bytes using SHA-256
+    let mut hasher = Sha256::new();
+    hasher.update(&serialized);
+    let result = hasher.finalize();
+
+    Ok(result.to_vec())
+}
+
+/// Verify a quote signature by checking the signature against the hash of the quote details.
 pub fn verify_quote<K: KeyType>(quote: &SignedQuote<K>, public_key: &K::Public) -> Result<bool> {
-    let msg = quote.payload.to_bytes()?;
-    Ok(K::verify(public_key, &msg, &quote.signature))
+    let hash = hash_quote_details(&quote.quote_details)?;
+    Ok(K::verify(public_key, &hash, &quote.signature))
 }
