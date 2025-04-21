@@ -104,9 +104,14 @@ where
         let this = self.get_mut();
         let msg_id = this.next_msg_id.fetch_add(1, Ordering::Relaxed);
         let round = outgoing.msg.round();
+        let party_index = this
+            .handle
+            .peer_manager
+            .get_whitelist_index_from_peer_id(&this.handle.local_peer_id)
+            .unwrap_or_default();
 
         tracing::trace!(
-            i = %this.party_index,
+            i = %party_index,
             recipient = ?outgoing.recipient,
             %round,
             %msg_id,
@@ -117,7 +122,10 @@ where
         let (recipient, _) = match outgoing.recipient {
             MessageDestination::AllParties => (None, None),
             MessageDestination::OneParty(p) => {
-                let key = this.parties.get(&p).map(|k| k.clone());
+                let key = this
+                    .handle
+                    .peer_manager
+                    .get_peer_id_from_whitelist_index(p as usize);
                 (Some(p), key)
             }
         };
@@ -183,7 +191,11 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Get a mutable reference to self
         let this = self.get_mut();
-
+        let party_index = this
+            .handle
+            .peer_manager
+            .get_whitelist_index_from_peer_id(&this.handle.local_peer_id)
+            .unwrap_or_default();
         let next_protocol_message = this.handle.next_protocol_message();
         match next_protocol_message {
             Some(protocol_message) => {
@@ -204,7 +216,7 @@ where
                     Some(sender_index) => match serde_json::from_slice(&protocol_message.payload) {
                         Ok(msg) => {
                             tracing::trace!(
-                                i = %this.party_index,
+                                i = %party_index,
                                 sender = ?sender_index,
                                 %id,
                                 protocol_id = %protocol_message.protocol,
@@ -223,7 +235,7 @@ where
                     },
                     None => {
                         tracing::warn!(
-                            i = %this.party_index,
+                            i = %party_index,
                             sender = ?sender,
                             %id,
                             protocol_id = %protocol_message.protocol,
