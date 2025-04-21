@@ -93,7 +93,7 @@ check_blueprint() {
 cargo tangle blueprint deploy-mbsm
 
 # Step 6: Build the blueprint if needed
-if [ ! -f "target/debug/espresso-raas-blueprint-cli" ]; then
+if [ ! -f "target/debug/incredible-squaring-blueprint-bin" ]; then
     echo "Building blueprint..."
     cargo build --workspace
 else
