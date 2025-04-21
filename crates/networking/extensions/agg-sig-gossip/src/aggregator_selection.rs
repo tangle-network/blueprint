@@ -1,15 +1,15 @@
 use crate::{
-    AggregationError, AggregationResult, ParticipantSet, ProtocolRound,
-    SignatureAggregationProtocol, SignatureWeight,
+    AggregationError, AggregationResult, ProtocolRound, SignatureAggregationProtocol,
+    SignatureWeight,
 };
 use blueprint_core::{debug, error, warn};
 use blueprint_crypto::{BytesEncoding, aggregation::AggregatableSignature};
-use blueprint_networking::types::ParticipantId;
 use blueprint_std::{
     collections::HashSet,
     collections::{HashMap, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
 };
+use libp2p::PeerId;
 
 /// Simplified mechanism for selecting aggregators in a deterministic way based on public keys.
 /// This approach ensures the selection is cryptographically tamper-resistant.
@@ -51,8 +51,8 @@ impl AggregatorSelector {
     /// Panics if the number of participants is greater than `u16::MAX`
     pub fn is_aggregator<S: AggregatableSignature>(
         &self,
-        participant_id: ParticipantId,
-        participants_with_keys: &HashMap<ParticipantId, S::Public>,
+        peer_id: PeerId,
+        participants_with_keys: &HashMap<PeerId, S::Public>,
         message_context: &[u8],
     ) -> bool {
         if participants_with_keys.is_empty() {
@@ -60,7 +60,7 @@ impl AggregatorSelector {
         }
 
         // We need the public key for this participant
-        let Some(public_key) = participants_with_keys.get(&participant_id) else {
+        let Some(public_key) = participants_with_keys.get(&peer_id) else {
             return false;
         };
 
@@ -74,7 +74,7 @@ impl AggregatorSelector {
         message_context.hash(&mut hasher);
 
         // Calculate the threshold based on number of participants and target aggregators
-        let total_participants = u16::try_from(participants_with_keys.len()).unwrap();
+        let total_participants = u16::try_from(participants_with_keys.len()).unwrap_or(u16::MAX);
         let selection_threshold = if total_participants <= self.target_aggregators {
             // If we have fewer participants than desired aggregators, everyone is an aggregator
             u64::MAX
@@ -93,9 +93,9 @@ impl AggregatorSelector {
     #[must_use]
     pub fn select_aggregators<S: AggregatableSignature>(
         &self,
-        participants_with_keys: &HashMap<ParticipantId, S::Public>,
+        participants_with_keys: &HashMap<PeerId, S::Public>,
         message_context: &[u8],
-    ) -> HashSet<ParticipantId> {
+    ) -> HashSet<PeerId> {
         participants_with_keys
             .keys()
             .filter(|&id| self.is_aggregator::<S>(*id, participants_with_keys, message_context))
@@ -126,18 +126,22 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     pub fn check_threshold(
         &mut self,
         message: &[u8],
-    ) -> Result<Option<ParticipantSet>, AggregationError> {
+    ) -> Result<Option<HashSet<PeerId>>, AggregationError> {
         match self.state.signatures_by_message.get(message) {
             Some(contributors) => {
                 // Filter out malicious contributors
-                let mut honest_contributors = ParticipantSet::new(self.state.max_participants);
-                for id in contributors.iter() {
-                    if !self.state.malicious.contains(&id) {
-                        honest_contributors.add(id);
+                let mut honest_contributors = HashSet::new();
+                for id in contributors {
+                    if !self.state.malicious.contains(id) {
+                        honest_contributors.insert(*id);
                     }
                 }
                 let total_weight = self.weight_scheme.calculate_weight(&honest_contributors);
                 let threshold_weight = self.weight_scheme.threshold_weight();
+                debug!(
+                    "Total weight: {}, threshold weight: {}",
+                    total_weight, threshold_weight
+                );
                 // Check if we've met the threshold
                 if total_weight < threshold_weight {
                     if matches!(self.state.round, ProtocolRound::Completion) {
@@ -158,23 +162,23 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     #[allow(clippy::type_complexity)]
     fn collect_signatures_and_public_keys(
         &self,
-        contributors: &ParticipantSet,
+        contributors: &HashSet<PeerId>,
     ) -> Result<(Vec<S::Signature>, Vec<S::Public>), AggregationError> {
         // Collect signatures and public keys for verification
         let mut signatures = Vec::new();
         let mut public_keys = Vec::new();
-        for id in contributors.iter() {
-            let is_malicious = self.state.malicious.contains(&id);
+        for id in contributors {
+            let is_malicious = self.state.malicious.contains(id);
 
             if is_malicious {
                 continue;
             }
 
-            if let Some((sig, _)) = self.state.seen_signatures.get(&id) {
+            if let Some((sig, _)) = self.state.seen_signatures.get(id) {
                 signatures.push(sig.clone());
             }
 
-            if let Some(pk) = self.participant_public_keys.get(&id) {
+            if let Some(pk) = self.participant_public_keys.get(id) {
                 public_keys.push(pk.clone());
             }
         }
@@ -196,7 +200,7 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     pub fn aggregate_and_verify(
         &mut self,
         message: &[u8],
-        contributors: &ParticipantSet,
+        contributors: &HashSet<PeerId>,
         maybe_aggregated_signature: Option<S::AggregatedSignature>,
     ) -> Result<Option<AggregationResult<S>>, AggregationError> {
         let (signatures, public_keys) = self.collect_signatures_and_public_keys(contributors)?;

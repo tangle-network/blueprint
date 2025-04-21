@@ -1,10 +1,12 @@
-use crate::{AggregationResult, participants::ParticipantSet};
+use std::collections::HashSet;
+
+use crate::AggregationResult;
 use blueprint_crypto::aggregation::AggregatableSignature;
-use blueprint_networking::types::ParticipantId;
 use blueprint_std::{
     collections::HashMap,
     fmt::{Display, Formatter, Result as FmtResult},
 };
+use libp2p::PeerId;
 
 /// Protocol rounds for the signature aggregation protocol
 /// This makes the protocol flow more explicit and easier to debug
@@ -37,28 +39,25 @@ impl Display for ProtocolRound {
 pub struct AggregationState<S: AggregatableSignature> {
     /// Signatures received from participants, keyed by message and participant ID
     /// Map from message to map of participant IDs to signatures
-    pub signatures_by_message: HashMap<Vec<u8>, ParticipantSet>,
+    pub signatures_by_message: HashMap<Vec<u8>, HashSet<PeerId>>,
 
     /// Set of participants and their signature and message
-    pub seen_signatures: HashMap<ParticipantId, (S::Signature, Vec<u8>)>,
+    pub seen_signatures: HashMap<PeerId, (S::Signature, Vec<u8>)>,
 
     /// Our own message we're signing (to differentiate from other messages we see)
     pub local_message: Vec<u8>,
 
     /// Set of participants identified as malicious
-    pub malicious: ParticipantSet,
+    pub malicious: HashSet<PeerId>,
 
     /// Set of participants we've sent ACKs to
-    pub sent_acks: ParticipantSet,
+    pub sent_acks: HashSet<PeerId>,
 
     /// Current protocol round
     pub round: ProtocolRound,
 
     /// Verified aggregate result from a completion message
     pub verified_completion: Option<AggregationResult<S>>,
-
-    /// Maximum number of participants
-    pub max_participants: u16,
 
     /// Threshold weight
     pub threshold_weight: u64,
@@ -67,16 +66,15 @@ pub struct AggregationState<S: AggregatableSignature> {
 impl<S: AggregatableSignature> AggregationState<S> {
     /// Create a new aggregation state
     #[must_use]
-    pub fn new(max_participants: u16, threshold_weight: u64) -> Self {
+    pub fn new(threshold_weight: u64) -> Self {
         Self {
             signatures_by_message: HashMap::new(),
             local_message: Vec::new(),
-            malicious: ParticipantSet::new(max_participants),
+            malicious: HashSet::new(),
             seen_signatures: HashMap::new(),
-            sent_acks: ParticipantSet::new(max_participants),
+            sent_acks: HashSet::new(),
             round: ProtocolRound::Initialization,
             verified_completion: None,
-            max_participants,
             threshold_weight,
         }
     }

@@ -169,22 +169,26 @@ pub struct Blame {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
     use std::time::Duration;
 
-    use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
-    use blueprint_networking::discovery::peers::VerificationIdentifierKey;
-    use blueprint_networking::service::AllowedKeys;
-    use blueprint_networking::test_utils::{TestNode, wait_for_peer_discovery};
+    use blueprint_crypto::sp_core::SpEcdsa;
+    use blueprint_networking::service_handle::NetworkServiceHandle;
+    use blueprint_networking::test_utils::{create_whitelisted_nodes, wait_for_all_handshakes};
     use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
     use round_based::MpcParty;
     use tracing::{debug, info};
+    use tracing_subscriber::EnvFilter;
 
     use super::protocol_of_random_generation;
 
     fn init_tracing() {
+        // Force specific logging, ignore RUST_LOG
+        let filter = EnvFilter::new(
+            "blueprint_networking=info,blueprint_networking_round_based_extension=debug",
+        );
         let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .with_env_filter(filter)
             .with_target(true)
             .with_thread_ids(true)
             .with_file(true)
@@ -231,56 +235,36 @@ mod tests {
         init_tracing();
         let network_name = "rand-test-network";
         let instance_id = "rand-test-instance";
+        // Create whitelisted nodes
+        let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, network_name, instance_id, false);
+        info!("Created {} nodes successfully", nodes.len());
 
-        // Generate node2's key pair first
-        let instance_key_pair2 = SpEcdsa::generate_with_seed(None).unwrap();
-        let mut allowed_keys1 = HashSet::new();
-        allowed_keys1.insert(instance_key_pair2.public());
+        let parties = HashMap::from_iter([(0, nodes[0].peer_id), (1, nodes[1].peer_id)]);
 
-        // Create node1 with node2's key whitelisted
-        let mut node1 = TestNode::<SpEcdsa>::new(
-            network_name,
-            instance_id,
-            AllowedKeys::InstancePublicKeys(allowed_keys1),
-            vec![],
-            false,
-        );
+        // Start all nodes
+        info!("Starting all nodes");
+        let mut handles = Vec::new();
+        for (i, node) in nodes.iter_mut().enumerate() {
+            info!("Starting node {}", i);
+            handles.push(node.start().await.expect("Failed to start node"));
+            info!("Node {} started successfully", i);
+        }
 
-        // Create node2 with node1's key whitelisted and pre-generated key
-        let mut allowed_keys2 = HashSet::new();
-        allowed_keys2.insert(node1.instance_key_pair.public());
-        let mut node2 = TestNode::<SpEcdsa>::new_with_keys(
-            network_name,
-            instance_id,
-            AllowedKeys::InstancePublicKeys(allowed_keys2),
-            vec![],
-            Some(instance_key_pair2),
-            None,
-            false,
-        );
+        // Convert handles to mutable references for wait_for_all_handshakes
+        let handle_refs: Vec<&mut NetworkServiceHandle<SpEcdsa>> = handles.iter_mut().collect();
 
-        info!("Starting nodes");
-        // Start both nodes - this should trigger automatic handshake
-        let handle1 = node1.start().await.expect("Failed to start node1");
-        let handle2 = node2.start().await.expect("Failed to start node2");
+        // *** Add a small delay to allow initial network stabilization ***
+        tokio::time::sleep(Duration::from_millis(500)).await;
 
-        wait_for_peer_discovery(&[handle1.clone(), handle2.clone()], Duration::from_secs(5))
-            .await
-            .unwrap();
+        // Wait for all handshakes to complete
+        info!("Checking handshake completion...");
+        wait_for_all_handshakes(&handle_refs, Duration::from_secs(5)).await;
+        info!("Handshakes completed.");
 
-        let parties = HashMap::from_iter([
-            (
-                0,
-                VerificationIdentifierKey::InstancePublicKey(node1.instance_key_pair.public()),
-            ),
-            (
-                1,
-                VerificationIdentifierKey::InstancePublicKey(node2.instance_key_pair.public()),
-            ),
-        ]);
-
-        let node1_network = RoundBasedNetworkAdapter::new(handle1, 0, parties.clone(), instance_id);
-        let node2_network = RoundBasedNetworkAdapter::new(handle2, 1, parties, instance_id);
+        let node1_network =
+            RoundBasedNetworkAdapter::new(handle_refs[0].clone(), 0, &parties.clone(), instance_id);
+        let node2_network =
+            RoundBasedNetworkAdapter::new(handle_refs[1].clone(), 1, &parties, instance_id);
 
         let mut tasks = vec![];
         tasks.push(tokio::spawn(async move {

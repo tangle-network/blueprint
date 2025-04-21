@@ -1,11 +1,7 @@
 use blueprint_crypto::KeyType;
-use blueprint_networking::{
-    discovery::peers::VerificationIdentifierKey,
-    service_handle::NetworkServiceHandle,
-    types::{ParticipantInfo, ProtocolMessage},
-};
-use dashmap::DashMap;
+use blueprint_networking::{service_handle::NetworkServiceHandle, types::ProtocolMessage};
 use futures::{Sink, Stream};
+use libp2p::PeerId;
 use round_based::{Delivery, Incoming, MessageDestination, MessageType, Outgoing, PartyIndex};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
@@ -22,10 +18,6 @@ use std::{
 pub struct RoundBasedNetworkAdapter<M, K: KeyType> {
     /// The underlying network handle
     handle: NetworkServiceHandle<K>,
-    /// Current party's index
-    party_index: PartyIndex,
-    /// Mapping of party indices to their public keys
-    parties: Arc<DashMap<PartyIndex, VerificationIdentifierKey<K>>>,
     /// Counter for message IDs
     next_msg_id: Arc<AtomicU64>,
     /// Protocol identifier
@@ -41,14 +33,12 @@ where
 {
     pub fn new(
         handle: NetworkServiceHandle<K>,
-        party_index: PartyIndex,
-        parties: HashMap<PartyIndex, VerificationIdentifierKey<K>>,
+        _party_index: PartyIndex,
+        _parties: &HashMap<PartyIndex, PeerId>,
         protocol_id: impl Into<String>,
     ) -> Self {
         Self {
             handle,
-            party_index,
-            parties: Arc::new(DashMap::from_iter(parties)),
             next_msg_id: Arc::new(AtomicU64::new(0)),
             protocol_id: protocol_id.into(),
             _phantom: std::marker::PhantomData,
@@ -62,6 +52,7 @@ where
     M: Serialize + DeserializeOwned,
     M: round_based::ProtocolMessage,
     K::Public: Unpin,
+    K::Secret: Unpin,
 {
     type Send = RoundBasedSender<M, K>;
     type Receive = RoundBasedReceiver<M, K>;
@@ -71,8 +62,6 @@ where
     fn split(self) -> (Self::Receive, Self::Send) {
         let RoundBasedNetworkAdapter {
             handle,
-            party_index,
-            parties,
             next_msg_id,
             protocol_id,
             ..
@@ -80,14 +69,12 @@ where
 
         let sender = RoundBasedSender {
             handle: handle.clone(),
-            party_index,
-            parties: parties.clone(),
             next_msg_id: next_msg_id.clone(),
             protocol_id: protocol_id.clone(),
             _phantom: std::marker::PhantomData,
         };
 
-        let receiver = RoundBasedReceiver::new(handle, party_index);
+        let receiver = RoundBasedReceiver::new(handle);
 
         (receiver, sender)
     }
@@ -95,8 +82,6 @@ where
 
 pub struct RoundBasedSender<M, K: KeyType> {
     handle: NetworkServiceHandle<K>,
-    party_index: PartyIndex,
-    parties: Arc<DashMap<PartyIndex, VerificationIdentifierKey<K>>>,
     next_msg_id: Arc<AtomicU64>,
     protocol_id: String,
     _phantom: std::marker::PhantomData<M>,
@@ -106,6 +91,7 @@ impl<M, K: KeyType> Sink<Outgoing<M>> for RoundBasedSender<M, K>
 where
     M: Serialize + round_based::ProtocolMessage + Clone + Unpin,
     K::Public: Unpin,
+    K::Secret: Unpin,
 {
     type Error = NetworkError;
 
@@ -117,9 +103,14 @@ where
         let this = self.get_mut();
         let msg_id = this.next_msg_id.fetch_add(1, Ordering::Relaxed);
         let round = outgoing.msg.round();
+        let party_index = this
+            .handle
+            .peer_manager
+            .get_whitelist_index_from_peer_id(&this.handle.local_peer_id)
+            .unwrap_or_default();
 
         tracing::trace!(
-            i = %this.party_index,
+            i = %party_index,
             recipient = ?outgoing.recipient,
             %round,
             %msg_id,
@@ -127,10 +118,13 @@ where
             "Sending message",
         );
 
-        let (recipient, recipient_key) = match outgoing.recipient {
+        let (recipient, _) = match outgoing.recipient {
             MessageDestination::AllParties => (None, None),
             MessageDestination::OneParty(p) => {
-                let key = this.parties.get(&p).map(|k| k.clone());
+                let key = this
+                    .handle
+                    .peer_manager
+                    .get_peer_id_from_whitelist_index(p as usize);
                 (Some(p), key)
             }
         };
@@ -140,13 +134,11 @@ where
             routing: blueprint_networking::types::MessageRouting {
                 message_id: msg_id,
                 round_id: round,
-                sender: ParticipantInfo {
-                    id: blueprint_networking::types::ParticipantId(this.party_index),
-                    verification_id_key: this.parties.get(&this.party_index).map(|k| k.clone()),
-                },
-                recipient: recipient.map(|p| ParticipantInfo {
-                    id: blueprint_networking::types::ParticipantId(p),
-                    verification_id_key: recipient_key,
+                sender: this.handle.local_peer_id,
+                recipient: recipient.and_then(|p| {
+                    this.handle
+                        .peer_manager
+                        .get_peer_id_from_whitelist_index(p as usize)
                 }),
             },
             payload: serde_json::to_vec(&outgoing.msg).map_err(NetworkError::Serialization)?,
@@ -175,15 +167,13 @@ where
 
 pub struct RoundBasedReceiver<M, K: KeyType> {
     handle: NetworkServiceHandle<K>,
-    party_index: PartyIndex,
     _phantom: std::marker::PhantomData<M>,
 }
 
 impl<M, K: KeyType> RoundBasedReceiver<M, K> {
-    fn new(handle: NetworkServiceHandle<K>, party_index: PartyIndex) -> Self {
+    fn new(handle: NetworkServiceHandle<K>) -> Self {
         Self {
             handle,
-            party_index,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -193,13 +183,18 @@ impl<M, K: KeyType> Stream for RoundBasedReceiver<M, K>
 where
     M: DeserializeOwned + round_based::ProtocolMessage + Unpin,
     K::Public: Unpin,
+    K::Secret: Unpin,
 {
     type Item = Result<Incoming<M>, NetworkError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Get a mutable reference to self
         let this = self.get_mut();
-
+        let party_index = this
+            .handle
+            .peer_manager
+            .get_whitelist_index_from_peer_id(&this.handle.local_peer_id)
+            .unwrap_or_default();
         let next_protocol_message = this.handle.next_protocol_message();
         match next_protocol_message {
             Some(protocol_message) => {
@@ -209,26 +204,45 @@ where
                     MessageType::Broadcast
                 };
 
-                let sender = protocol_message.routing.sender.id.0;
+                let sender = protocol_message.routing.sender;
+                let sender_index = this
+                    .handle
+                    .peer_manager
+                    .get_whitelist_index_from_peer_id(&sender);
                 let id = protocol_message.routing.message_id;
 
-                tracing::trace!(
-                    i = %this.party_index,
-                    sender = ?sender,
-                    %id,
-                    protocol_id = %protocol_message.protocol,
-                    ?msg_type,
-                    size = %protocol_message.payload.len(),
-                    "Received message",
-                );
-                match serde_json::from_slice(&protocol_message.payload) {
-                    Ok(msg) => Poll::Ready(Some(Ok(Incoming {
-                        msg,
-                        sender,
-                        id,
-                        msg_type,
-                    }))),
-                    Err(e) => Poll::Ready(Some(Err(NetworkError::Serialization(e)))),
+                match sender_index {
+                    Some(sender_index) => match serde_json::from_slice(&protocol_message.payload) {
+                        Ok(msg) => {
+                            tracing::trace!(
+                                i = %party_index,
+                                sender = ?sender_index,
+                                %id,
+                                protocol_id = %protocol_message.protocol,
+                                ?msg_type,
+                                size = %protocol_message.payload.len(),
+                                "Received message",
+                            );
+                            Poll::Ready(Some(Ok(Incoming {
+                                msg,
+                                sender: u16::try_from(sender_index).unwrap_or(0),
+                                id,
+                                msg_type,
+                            })))
+                        }
+                        Err(e) => Poll::Ready(Some(Err(NetworkError::Serialization(e)))),
+                    },
+                    None => {
+                        tracing::warn!(
+                            i = %party_index,
+                            sender = ?sender,
+                            %id,
+                            protocol_id = %protocol_message.protocol,
+                            "Received message from unknown sender; ignoring",
+                        );
+                        cx.waker().wake_by_ref();
+                        Poll::Pending
+                    }
                 }
             }
             None => {

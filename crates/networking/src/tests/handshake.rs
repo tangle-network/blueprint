@@ -1,7 +1,7 @@
 use crate::service::AllowedKeys;
+use crate::test_utils::TestNode;
+use crate::test_utils::create_whitelisted_nodes;
 use crate::test_utils::setup_log;
-use crate::tests::TestNode;
-use crate::tests::create_whitelisted_nodes;
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
@@ -10,12 +10,13 @@ use tracing::info;
 const TEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[tokio::test]
+#[serial_test::serial]
 async fn test_automatic_handshake() {
     setup_log();
     info!("Starting automatic handshake test");
 
     // Create nodes with whitelisted keys
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, false).await;
+    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, "test-network", "test-instance", false);
     let mut node2 = nodes.pop().unwrap();
     let mut node1 = nodes.pop().unwrap();
 
@@ -58,6 +59,7 @@ async fn test_automatic_handshake() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn test_handshake_with_invalid_peer() {
     setup_log();
     info!("Starting invalid peer handshake test");

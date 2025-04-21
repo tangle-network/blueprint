@@ -1,10 +1,11 @@
-use crate::participants::ParticipantSet;
-use blueprint_networking::types::ParticipantId;
+use std::collections::HashSet;
+
+use libp2p::PeerId;
 
 /// Trait for weighting of participants in signature aggregation
 pub trait SignatureWeight {
     /// Returns the weight for a participant
-    fn weight(&self, participant_id: &ParticipantId) -> u64;
+    fn weight(&self, peer_id: &PeerId) -> u64;
 
     /// Returns the total weight of all participants
     fn total_weight(&self) -> u64;
@@ -13,12 +14,12 @@ pub trait SignatureWeight {
     fn threshold_weight(&self) -> u64;
 
     /// Calculates the total weight of a set of participants
-    fn calculate_weight(&self, participants: &ParticipantSet) -> u64 {
-        participants.iter().map(|id| self.weight(&id)).sum()
+    fn calculate_weight(&self, participants: &HashSet<PeerId>) -> u64 {
+        participants.iter().map(|id| self.weight(id)).sum()
     }
 
     /// Checks if a set of participants meets the required threshold
-    fn meets_threshold(&self, participants: &ParticipantSet) -> bool {
+    fn meets_threshold(&self, participants: &HashSet<PeerId>) -> bool {
         self.calculate_weight(participants) >= self.threshold_weight()
     }
 }
@@ -49,7 +50,7 @@ impl EqualWeight {
 }
 
 impl SignatureWeight for EqualWeight {
-    fn weight(&self, _participant_id: &ParticipantId) -> u64 {
+    fn weight(&self, _peer_id: &PeerId) -> u64 {
         1
     }
 
@@ -64,16 +65,13 @@ impl SignatureWeight for EqualWeight {
 
 /// A custom weight map implementation
 pub struct CustomWeight {
-    weights: std::collections::HashMap<ParticipantId, u64>,
+    weights: std::collections::HashMap<PeerId, u64>,
     threshold_weight: u64,
 }
 
 impl CustomWeight {
     #[must_use]
-    pub fn new(
-        weights: std::collections::HashMap<ParticipantId, u64>,
-        threshold_weight: u64,
-    ) -> Self {
+    pub fn new(weights: std::collections::HashMap<PeerId, u64>, threshold_weight: u64) -> Self {
         Self {
             weights,
             threshold_weight,
@@ -82,7 +80,7 @@ impl CustomWeight {
 }
 
 impl SignatureWeight for CustomWeight {
-    fn weight(&self, participant_id: &ParticipantId) -> u64 {
+    fn weight(&self, participant_id: &PeerId) -> u64 {
         *self.weights.get(participant_id).unwrap_or(&0)
     }
 

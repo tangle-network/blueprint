@@ -1,0 +1,77 @@
+# Default pricing configuration with all resource types
+# This file defines the pricing rates for all supported resource types
+# Rates are specified in USD with decimal precision
+
+[default]
+resources = [
+  # Compute resources
+  # CPU is a primary resource and priced at $0.001 per core per second
+  { kind = "CPU", count = 1, price_per_unit_rate = 0.001 },
+  
+  # Memory resources
+  # Priced at $0.00005 per MB per second (approximately $0.05 per GB per second)
+  { kind = "MemoryMB", count = 1024, price_per_unit_rate = 0.00005 },
+  
+  # Storage resources
+  # Priced at $0.00002 per MB per second (approximately $0.02 per GB per second)
+  { kind = "StorageMB", count = 1024, price_per_unit_rate = 0.00002 },
+  
+  # Network resources
+  # Egress (outbound) traffic is typically more expensive than ingress
+  { kind = "NetworkEgressMB", count = 1024, price_per_unit_rate = 0.00003 },
+  { kind = "NetworkIngressMB", count = 1024, price_per_unit_rate = 0.00001 },
+  
+  # Specialized hardware
+  # GPU is a premium resource and priced at $0.005 per unit per second
+  { kind = "GPU", count = 1, price_per_unit_rate = 0.005 },
+  
+  # Request-based pricing for API/FaaS services
+  { kind = "Request", count = 1000, price_per_unit_rate = 0.0001 },
+  
+  # Function invocation pricing for serverless
+  { kind = "Invocation", count = 1000, price_per_unit_rate = 0.0002 },
+  
+  # Execution time pricing for serverless/FaaS
+  { kind = "ExecutionTimeMS", count = 1000, price_per_unit_rate = 0.00001 }
+]
+
+# Example of blueprint-specific pricing
+# This demonstrates how to override pricing for specific blueprints
+[1]
+resources = [
+  # Higher-tier CPU pricing for compute-intensive blueprints
+  { kind = "CPU", count = 1, price_per_unit_rate = 0.0012 },
+  
+  # Higher memory allocation and pricing
+  { kind = "MemoryMB", count = 2048, price_per_unit_rate = 0.00006 },
+  
+  # Higher storage allocation
+  { kind = "StorageMB", count = 4096, price_per_unit_rate = 0.00002 },
+  
+  # Network pricing remains the same
+  { kind = "NetworkEgressMB", count = 1024, price_per_unit_rate = 0.00003 },
+  { kind = "NetworkIngressMB", count = 1024, price_per_unit_rate = 0.00001 },
+  
+  # GPU pricing for ML/AI workloads
+  { kind = "GPU", count = 1, price_per_unit_rate = 0.006 }
+]
+
+# Example of a high-performance blueprint pricing
+[2]
+resources = [
+  # Premium CPU pricing
+  { kind = "CPU", count = 1, price_per_unit_rate = 0.0015 },
+  
+  # High memory allocation
+  { kind = "MemoryMB", count = 4096, price_per_unit_rate = 0.00007 },
+  
+  # High storage allocation
+  { kind = "StorageMB", count = 8192, price_per_unit_rate = 0.00003 },
+  
+  # Higher network bandwidth
+  { kind = "NetworkEgressMB", count = 2048, price_per_unit_rate = 0.00004 },
+  { kind = "NetworkIngressMB", count = 2048, price_per_unit_rate = 0.00002 },
+  
+  # Multi-GPU configuration
+  { kind = "GPU", count = 2, price_per_unit_rate = 0.007 }
+]

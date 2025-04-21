@@ -1,0 +1,30 @@
+# config/operator.toml
+
+# Path for the key-value store database
+database_path = "data/operator_db" # Relative to where binary is run
+
+# Path to the operator's signing keypair file
+keypair_path = "config/operator_keypair.bin" # Relative to where binary is run
+
+# How long generated quotes are valid (e.g., "5m", "300s")
+quote_validity_duration = "5m"
+
+# Address and port for the gRPC server to bind to
+rpc_bind_address = "0.0.0.0:50051"
+
+# --- Benchmarking Configuration ---
+# Command to execute for benchmarking (needs refinement based on blueprint)
+benchmark_command = "sleep" # Example: use a wrapper script later
+
+# Default arguments for the benchmark command
+benchmark_args = ["2"] # Example: sleep for 2 seconds
+
+# Maximum duration to let the benchmark process run
+benchmark_duration = "10s"
+
+# How often to sample metrics during benchmark
+benchmark_interval = "1s"
+
+# --- Pricing Configuration ---
+# Factor to convert benchmark results (e.g., avg CPU core) to price units (e.g., Wei per second)
+price_scaling_factor = 100.0 # Example: 100 Wei per avg CPU core per second

@@ -59,6 +59,14 @@ impl<K: KeyType> VerificationIdentifierKey<K> {
             }
         }
     }
+
+    /// Turn into bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            VerificationIdentifierKey::EvmAddress(address) => address.0.0.to_vec(),
+            VerificationIdentifierKey::InstancePublicKey(public_key) => public_key.to_bytes(),
+        }
+    }
 }
 
 /// Information about a peer's connection and behavior
@@ -123,7 +131,7 @@ pub struct PeerManager<K: KeyType> {
     /// Banned peers with optional expiration time
     banned_peers: DashMap<PeerId, Option<Instant>>,
     /// Whitelisted keys for the peer manager, must remain ordered and provide stable ordering.
-    whitelisted_keys: Arc<RwLock<Vec<VerificationIdentifierKey<K>>>>,
+    pub whitelisted_keys: Arc<RwLock<Vec<VerificationIdentifierKey<K>>>>,
     /// Event sender for peer updates
     event_tx: broadcast::Sender<PeerEvent>,
 }
@@ -396,6 +404,33 @@ impl<K: KeyType> PeerManager<K> {
     ) -> Option<usize> {
         let whitelist = self.whitelisted_keys.read();
         whitelist.iter().position(|k| k == key)
+    }
+
+    /// Get the verification key for an index in the whitelist
+    #[must_use]
+    pub fn get_key_from_whitelist_index(
+        &self,
+        index: usize,
+    ) -> Option<VerificationIdentifierKey<K>> {
+        self.whitelisted_keys.read().get(index).cloned()
+    }
+
+    /// Get the peer id for an index in the whitelist
+    #[must_use]
+    pub fn get_peer_id_from_whitelist_index(&self, index: usize) -> Option<PeerId> {
+        self.whitelisted_keys
+            .read()
+            .get(index)
+            .and_then(|k| self.get_peer_id_from_verification_id_key(k))
+    }
+
+    /// Get the index of a peer id in the whitelist
+    #[must_use]
+    pub fn get_whitelist_index_from_peer_id(&self, peer_id: &PeerId) -> Option<usize> {
+        self.whitelisted_keys
+            .read()
+            .iter()
+            .position(|k| self.get_peer_id_from_verification_id_key(k) == Some(*peer_id))
     }
 }
 
