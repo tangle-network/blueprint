@@ -150,7 +150,7 @@ async-stream = { version = "0.3.6", default-features = false }
 
 # CLI & Configuration
 cargo-generate = { version = "0.23", default-features = false }
-clap = { version = "4.5.36" }
+clap = { version = "4.5.37" }
 clap-cargo = { version = "0.14", default-features = false }
 toml = { version = "0.8.19", default-features = false }
 dialoguer = { version = "0.11.0", default-features = false }
@@ -213,7 +213,8 @@ nix = { version = "0.29.0", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false }
 tempfile = { version = "3.13.0", default-features = false }
 uuid = { version = "1.16.0", default-features = false }
-blake3 = { version = "1.8.0", default-features = false }
+blake3 = { version = "1.8.2", default-features = false }
+chrono = { version = "0.4.40", default-features = false }
 
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }
@@ -304,7 +305,7 @@ dashmap = { version = "6.1.0", default-features = false }
 lru-mem = { version = "0.3.0", default-features = false }
 
 # Metrics
-metrics = { version = "0.24.1", default-features = false }
+metrics = { version = "0.24.2", default-features = false }
 
 [profile.dev.package.backtrace]
 opt-level = 3
