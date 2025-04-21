@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.6...blueprint-sdk-v0.1.0-alpha.7) - 2025-04-21
+
+### Other
+
+- Add network message for subscribe/unsubscribe for new topics (#845)
+
 ## [0.1.0-alpha.6](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.5...blueprint-sdk-v0.1.0-alpha.6) - 2025-04-18
 
 ### Other
