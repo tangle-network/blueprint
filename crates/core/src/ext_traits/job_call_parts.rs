@@ -1,10 +1,10 @@
 use crate::extract::FromJobCallParts;
-use crate::job_call::Parts;
+use crate::job::call::Parts;
 use core::future::Future;
 
 mod sealed {
     pub trait Sealed {}
-    impl Sealed for crate::job_call::Parts {}
+    impl Sealed for crate::job::call::Parts {}
 }
 
 /// Extension trait that adds additional methods to [`Parts`].
@@ -25,7 +25,7 @@ pub trait JobCallPartsExt: sealed::Sealed + Sized {
     /// ```
     /// use blueprint_sdk::extract::FromRef;
     /// use blueprint_sdk::{FromJobCallParts, JobCallPartsExt};
-    /// use blueprint_sdk::job_call::Parts;
+    /// use blueprint_sdk::job::call::Parts;
     ///
     /// struct MyExtractor {
     ///     requires_state: RequiresState,

@@ -1,7 +1,7 @@
 use blueprint_core::{
     __composite_rejection as composite_rejection, __define_rejection as define_rejection,
 };
-use blueprint_core::{FromJobCallParts, job_call::Parts as JobCallParts};
+use blueprint_core::{FromJobCallParts, job::call::Parts as JobCallParts};
 
 /// Extracts the current call id from the job call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

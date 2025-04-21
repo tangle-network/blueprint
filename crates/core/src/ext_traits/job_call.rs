@@ -130,7 +130,7 @@ impl JobCallExt for JobCall {
         E: FromJobCallParts<Ctx> + 'static,
         Ctx: Send + Sync,
     {
-        let mut call = crate::job_call::JobCall::default();
+        let mut call = JobCall::default();
         *call.job_id_mut() = self.job_id();
         *call.metadata_mut() = core::mem::take(self.metadata_mut());
         let (mut parts, ()) = call.into_parts();

@@ -1,6 +1,6 @@
 use blueprint_core::__composite_rejection as composite_rejection;
 use blueprint_core::__define_rejection as define_rejection;
-use blueprint_core::{FromJobCallParts, job_call::Parts as JobCallParts};
+use blueprint_core::{FromJobCallParts, job::call::Parts as JobCallParts};
 use tangle_subxt::subxt::events::Events;
 use tangle_subxt::subxt::events::StaticEvent;
 

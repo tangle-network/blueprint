@@ -1,10 +1,7 @@
-use job_id::JobId;
+use super::id::JobId;
 
 use crate::extensions::Extensions;
 use crate::metadata::{MetadataMap, MetadataValue};
-
-/// Job Identifiers
-pub mod job_id;
 
 /// Representation of a job call event
 ///
@@ -133,7 +130,7 @@ impl<T> JobCall<T> {
     ///
     /// ```rust
     /// use blueprint_sdk::JobCall;
-    /// use blueprint_sdk::job_call::Parts;
+    /// use blueprint_sdk::job::call::Parts;
     ///
     /// const MY_JOB_ID: u8 = 0;
     /// let parts = Parts::new(MY_JOB_ID);
@@ -194,7 +191,7 @@ impl<T> JobCall<T> {
     /// # Examples
     ///
     /// ```rust
-    /// use blueprint_sdk::job_call::JobCall;
+    /// use blueprint_sdk::job::call::JobCall;
     ///
     /// let call = JobCall::new(0, ());
     /// let new_call = call.map(|_| "Hello!");
