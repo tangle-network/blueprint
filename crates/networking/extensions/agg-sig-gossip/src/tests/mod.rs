@@ -5,15 +5,32 @@ use crate::{
     signature_weight::{EqualWeight, SignatureWeight},
 };
 use blueprint_core::info;
-use blueprint_crypto::{KeyType, aggregation::AggregatableSignature};
+use blueprint_crypto::{KeyType, aggregation::AggregatableSignature, hashing::blake3_256};
 use blueprint_networking::{
     service_handle::NetworkServiceHandle,
-    test_utils::{create_whitelisted_nodes, setup_log, wait_for_all_handshakes},
+    test_utils::{create_whitelisted_nodes, wait_for_all_handshakes},
 };
 use blueprint_std::{collections::HashMap, time::Duration};
+use tracing_subscriber::EnvFilter;
 
 // Constants for tests
 const TEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+pub fn setup_log() {
+    // Explicitly target logs for networking and the extension
+    let filter = EnvFilter::new(
+        "blueprint_networking=info,blueprint_networking_agg_sig_gossip_extension=debug",
+    );
+
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        // .with_test_writer() // Removed - prevents real-time logging
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_file(true)
+        .with_line_number(true)
+        .try_init();
+}
 
 // Generic function to run a signature aggregation test with any signature type
 async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
@@ -69,6 +86,7 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
 
     // Test message
     let message = b"test message";
+    let message_hash = blake3_256(message);
 
     // Increase timeout for testing
     let protocol_timeout = Duration::from_secs(15);
@@ -84,10 +102,8 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     for i in 0..num_nodes {
         let config = ProtocolConfig {
             network_handle: handles[i].clone(),
-            max_participants: u16::try_from(num_nodes).unwrap(),
             num_aggregators,
             timeout: protocol_timeout,
-            protocol_id: format!("{}-{}", network_name, instance_name),
         };
 
         let weight_scheme = EqualWeight::new(num_nodes, threshold_percentage);
@@ -97,7 +113,8 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
             weight_scheme.threshold_weight()
         );
 
-        let mut protocol = SignatureAggregationProtocol::new(config, weight_scheme);
+        let mut protocol =
+            SignatureAggregationProtocol::new(config, weight_scheme, public_keys.clone());
 
         // Check if this node is an aggregator
         let is_aggregator = protocol.is_aggregator();
@@ -107,8 +124,8 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
 
         let result = tokio::spawn(async move {
             info!("Node {} starting protocol execution", i);
-            info!("Node {} preparing to sign and broadcast message", i);
-            let result = protocol.run(message).await;
+            info!("Node {} preparing to sign and broadcast message hash", i);
+            let result = protocol.run(&message_hash).await;
 
             if result.is_ok() {
                 info!("Node {} protocol completed successfully", i);
@@ -142,10 +159,8 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     for (i, result) in final_results.iter().enumerate() {
         let config = ProtocolConfig {
             network_handle: handles[i].clone(),
-            max_participants: u16::try_from(num_nodes).unwrap(),
             num_aggregators,
             timeout: protocol_timeout,
-            protocol_id: format!("{}-{}", network_name, instance_name),
         };
 
         let aggregator_selector =

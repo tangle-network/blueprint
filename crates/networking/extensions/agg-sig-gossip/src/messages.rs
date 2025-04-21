@@ -1,9 +1,8 @@
+use crate::MaliciousEvidence;
 use blueprint_crypto::aggregation::AggregatableSignature;
 use blueprint_std::{collections::HashSet, fmt::Debug};
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
-
-use crate::{MaliciousEvidence, ParticipantSet};
 
 /// Protocol message types for signature aggregation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,9 +47,9 @@ pub struct AggregationResult<S: AggregatableSignature> {
     /// The aggregated signature
     pub signature: S::AggregatedSignature,
     /// Set of participants who contributed to the signature
-    pub contributors: ParticipantSet,
+    pub contributors: HashSet<PeerId>,
     /// Total weight of the aggregate signature
     pub total_weight: Option<u64>,
     /// Set of participants identified as malicious
-    pub malicious_participants: ParticipantSet,
+    pub malicious_participants: HashSet<PeerId>,
 }

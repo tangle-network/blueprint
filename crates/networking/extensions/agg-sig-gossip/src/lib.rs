@@ -1,4 +1,3 @@
-// Re-export main types
 mod protocol;
 pub use protocol::{AggregationError, ProtocolConfig, SignatureAggregationProtocol};
 
@@ -9,10 +8,6 @@ pub use protocol_state::{AggregationState, ProtocolRound};
 // Aggregator selection
 mod aggregator_selection;
 pub use aggregator_selection::AggregatorSelector;
-
-// Participant data structures
-mod participants;
-pub use participants::ParticipantSet;
 
 // Malicious detection
 mod malicious;

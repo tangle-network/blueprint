@@ -10,22 +10,6 @@ use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 use tracing::info;
 
-pub fn setup_log() {
-    use tracing_subscriber::filter::LevelFilter;
-    use tracing_subscriber::util::SubscriberInitExt;
-
-    let _ = tracing_subscriber::fmt::SubscriberBuilder::default()
-        .without_time()
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NONE)
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
-        .finish()
-        .try_init();
-}
-
 /// Test node configuration for network tests
 pub struct TestNode<K: KeyType> {
     pub service: Option<NetworkService<K>>,

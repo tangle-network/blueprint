@@ -1,4 +1,5 @@
-use crate::participants::ParticipantSet;
+use std::collections::HashSet;
+
 use libp2p::PeerId;
 
 /// Trait for weighting of participants in signature aggregation
@@ -13,12 +14,12 @@ pub trait SignatureWeight {
     fn threshold_weight(&self) -> u64;
 
     /// Calculates the total weight of a set of participants
-    fn calculate_weight(&self, participants: &ParticipantSet) -> u64 {
+    fn calculate_weight(&self, participants: &HashSet<PeerId>) -> u64 {
         participants.iter().map(|id| self.weight(&id)).sum()
     }
 
     /// Checks if a set of participants meets the required threshold
-    fn meets_threshold(&self, participants: &ParticipantSet) -> bool {
+    fn meets_threshold(&self, participants: &HashSet<PeerId>) -> bool {
         self.calculate_weight(participants) >= self.threshold_weight()
     }
 }

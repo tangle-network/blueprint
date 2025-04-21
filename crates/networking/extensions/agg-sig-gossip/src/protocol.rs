@@ -2,11 +2,10 @@ use crate::{
     MaliciousEvidence,
     aggregator_selection::AggregatorSelector,
     messages::{AggSigMessage, AggregationResult},
-    participants::ParticipantSet,
     protocol_state::{AggregationState, ProtocolRound},
     signature_weight::SignatureWeight,
 };
-use blueprint_core::{error, info, warn};
+use blueprint_core::{debug, error, warn};
 use blueprint_crypto::{aggregation::AggregatableSignature, hashing::blake3_256};
 use blueprint_networking::{
     service_handle::NetworkServiceHandle,
@@ -19,7 +18,6 @@ use blueprint_std::{
 };
 use libp2p::PeerId;
 use thiserror::Error;
-use tracing::debug;
 
 /// Error types for the aggregation protocol
 #[derive(Debug, Error)]
@@ -58,17 +56,11 @@ where
     /// Network handle
     pub network_handle: NetworkServiceHandle<S>,
 
-    /// Maximum number of participants
-    pub max_participants: u16,
-
     /// Number of aggregators to select
     pub num_aggregators: u16,
 
     /// Timeout for collecting signatures
     pub timeout: Duration,
-
-    /// Protocol ID for message routing
-    pub protocol_id: String,
 }
 
 impl<S> ProtocolConfig<S>
@@ -77,17 +69,13 @@ where
 {
     pub fn new(
         network_handle: NetworkServiceHandle<S>,
-        max_participants: u16,
         num_aggregators: u16,
-        protocol_id: String,
         timeout: Duration,
     ) -> Self {
         Self {
             network_handle,
-            max_participants,
             num_aggregators,
             timeout,
-            protocol_id,
         }
     }
 }
@@ -123,10 +111,14 @@ where
     W: SignatureWeight,
 {
     /// Create a new signature aggregation protocol instance
-    pub fn new(config: ProtocolConfig<S>, weight_scheme: W) -> Self {
+    pub fn new(
+        config: ProtocolConfig<S>,
+        weight_scheme: W,
+        participant_public_keys: HashMap<PeerId, S::Public>,
+    ) -> Self {
         // Create default state with threshold weight from the weight scheme
         let threshold_weight = weight_scheme.threshold_weight();
-        let state = AggregationState::new(config.max_participants, threshold_weight);
+        let state = AggregationState::new(threshold_weight);
 
         // Create aggregator selector with target number from config
         let aggregator_selector = AggregatorSelector::new(config.num_aggregators);
@@ -136,14 +128,9 @@ where
             config,
             weight_scheme,
             aggregator_selector,
-            participant_public_keys: HashMap::new(),
+            participant_public_keys,
             messages_re_gossiped: HashSet::new(),
         }
-    }
-
-    /// Get protocol ID for testing purposes
-    pub fn protocol_id(&self) -> &str {
-        &self.config.protocol_id
     }
 
     /// Check if we've already seen a signature from a participant for a specific message
@@ -180,6 +167,7 @@ where
         }
 
         // Verify the signature
+        debug!("PUBLIC KEYS: {:?}", self.participant_public_keys);
         if !Self::verify_signature(
             signer_id,
             &signature,
@@ -295,7 +283,7 @@ where
         peer_id: PeerId,
         evidence: MaliciousEvidence<S>,
     ) -> Result<(), AggregationError> {
-        self.state.malicious.add(peer_id);
+        self.state.malicious.insert(peer_id);
 
         // Create malicious report
         let report_msg = AggSigMessage::MaliciousReport {
@@ -354,11 +342,11 @@ where
     ///
     /// Returns an error if the protocol times out or if there is an error during the protocol
     pub async fn run(&mut self, message: &[u8]) -> Result<AggregationResult<S>, AggregationError> {
-        info!(
+        debug!(
             "Starting protocol run for node {}",
             self.config.network_handle.local_peer_id
         );
-        info!("Protocol timeout set to {:?}", self.config.timeout);
+        debug!("Protocol timeout set to {:?}", self.config.timeout);
 
         // Set the local message first to ensure all operations reference the correct message
         self.state.local_message = message.to_vec();
@@ -371,14 +359,14 @@ where
             .aggregator_selector
             .select_aggregators::<S>(&self.participant_public_keys, &self.state.local_message);
 
-        info!(
+        debug!(
             "Node {} is_aggregator: {}",
             self.config.network_handle.local_peer_id,
             self.is_aggregator()
         );
 
         // Sign and broadcast our signature to all participants
-        info!(
+        debug!(
             "Node {} signing and broadcasting message",
             self.config.network_handle.local_peer_id
         );
@@ -389,7 +377,7 @@ where
         let mut check_interval = tokio::time::interval(Duration::from_millis(100));
         let mut message_check_interval = tokio::time::interval(Duration::from_millis(50));
 
-        info!(
+        debug!(
             "Node {} entering main protocol loop",
             self.config.network_handle.local_peer_id
         );
@@ -399,7 +387,7 @@ where
                 _ = message_check_interval.tick() => {
                     // Check for incoming messages from the network
                     while let Some(protocol_msg) = self.config.network_handle.next_protocol_message() {
-                        info!(
+                        debug!(
                             "Node {} received network message from {}",
                             self.config.network_handle.local_peer_id,
                             protocol_msg.routing.sender
@@ -427,7 +415,7 @@ where
 
                             // Find the message with the highest total weight
                             let (highest_weight_message, highest_weight) = self.get_highest_weight_message();
-                            info!(
+                            debug!(
                                 "Node {} highest weight message: {:?} (weight {})",
                                 self.config.network_handle.local_peer_id,
                                 highest_weight_message.clone(),
@@ -442,11 +430,11 @@ where
                                         warn!("Failed to send completion message: {:?}", e);
                                     }
 
-                                    info!("Protocol completed successfully with highest weight message");
+                                    debug!("Protocol completed successfully with highest weight message");
                                     return Ok(result);
                                 }
                                 Ok(None) => {
-                                    info!(
+                                    debug!(
                                         "Highest weight message doesn't meet threshold yet"
                                     );
                                 }
@@ -456,7 +444,7 @@ where
                             }
                         }
                         ProtocolRound::Completion => {
-                            info!("Protocol already marked as completed");
+                            debug!("Protocol already marked as completed");
                             // Try one more time to build the result
                             return match self.build_result(message, &current_round) {
                                 Ok(Some(result)) => Ok(result),
@@ -472,7 +460,7 @@ where
                 }
 
                 () = tokio::time::sleep_until(tokio::time::Instant::from_std(timeout)) => {
-                    info!("Protocol timed out for node {}", self.config.network_handle.local_peer_id);
+                    debug!("Protocol timed out for node {}", self.config.network_handle.local_peer_id);
 
                     // On timeout, mark as completion round
                     let completion_round = ProtocolRound::Completion;
@@ -490,7 +478,7 @@ where
 
     /// New helper method to add a signature to our state
     fn add_signature(&mut self, peer_id: PeerId, signature: &S::Signature, message: &[u8]) {
-        info!(
+        debug!(
             "Node {} adding signature from participant {} for message length {}",
             self.config.network_handle.local_peer_id,
             peer_id,
@@ -502,16 +490,16 @@ where
             .state
             .signatures_by_message
             .entry(message.to_vec())
-            .or_insert_with(|| ParticipantSet::new(self.config.max_participants));
+            .or_insert_with(|| HashSet::new());
 
         // Add the signature
-        sig_map.add(peer_id);
+        sig_map.insert(peer_id);
 
         // Add the signature to the seen signatures map
         self.state
             .seen_signatures
             .insert(peer_id, (signature.clone(), message.to_vec()));
-        info!(
+        debug!(
             "Node {} added signature from participant {} to signatures map",
             self.config.network_handle.local_peer_id, peer_id
         );
@@ -541,7 +529,7 @@ where
 
     /// Sign a message and broadcast the signature
     fn sign_and_broadcast(&mut self, message: &[u8]) -> Result<(), AggregationError> {
-        info!(
+        debug!(
             "Node {} attempting to sign message",
             self.config.network_handle.local_peer_id
         );
@@ -550,7 +538,7 @@ where
         let signature =
             match S::sign_with_secret(&mut self.config.network_handle.local_signing_key, message) {
                 Ok(sig) => {
-                    info!(
+                    debug!(
                         "Node {} successfully signed message",
                         self.config.network_handle.local_peer_id
                     );
@@ -571,7 +559,7 @@ where
         // Store our signature
         let id = self.config.network_handle.local_peer_id;
         self.add_signature(id, &signature, message);
-        info!(
+        debug!(
             "Node {} stored its signature in local state",
             self.config.network_handle.local_peer_id
         );
@@ -583,7 +571,7 @@ where
             message: message.to_vec(),
         };
 
-        info!(
+        debug!(
             "Node {} broadcasting signature to network",
             self.config.network_handle.local_peer_id
         );

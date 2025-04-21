@@ -43,7 +43,7 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
         let is_malicious =
             Self::verify_malicious_evidence(operator, evidence, &self.participant_public_keys)?;
         if is_malicious {
-            self.state.malicious.add(operator);
+            self.state.malicious.insert(operator);
         }
 
         Ok(())

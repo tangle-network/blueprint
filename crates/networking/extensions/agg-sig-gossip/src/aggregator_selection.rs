@@ -1,6 +1,6 @@
 use crate::{
-    AggregationError, AggregationResult, ParticipantSet, ProtocolRound,
-    SignatureAggregationProtocol, SignatureWeight,
+    AggregationError, AggregationResult, ProtocolRound, SignatureAggregationProtocol,
+    SignatureWeight,
 };
 use blueprint_core::{debug, error, warn};
 use blueprint_crypto::{BytesEncoding, aggregation::AggregatableSignature};
@@ -126,14 +126,14 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     pub fn check_threshold(
         &mut self,
         message: &[u8],
-    ) -> Result<Option<ParticipantSet>, AggregationError> {
+    ) -> Result<Option<HashSet<PeerId>>, AggregationError> {
         match self.state.signatures_by_message.get(message) {
             Some(contributors) => {
                 // Filter out malicious contributors
-                let mut honest_contributors = ParticipantSet::new(self.state.max_participants);
+                let mut honest_contributors = HashSet::new();
                 for id in contributors.iter() {
                     if !self.state.malicious.contains(&id) {
-                        honest_contributors.add(id);
+                        honest_contributors.insert(id.clone());
                     }
                 }
                 let total_weight = self.weight_scheme.calculate_weight(&honest_contributors);
@@ -158,7 +158,7 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     #[allow(clippy::type_complexity)]
     fn collect_signatures_and_public_keys(
         &self,
-        contributors: &ParticipantSet,
+        contributors: &HashSet<PeerId>,
     ) -> Result<(Vec<S::Signature>, Vec<S::Public>), AggregationError> {
         // Collect signatures and public keys for verification
         let mut signatures = Vec::new();
@@ -196,7 +196,7 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     pub fn aggregate_and_verify(
         &mut self,
         message: &[u8],
-        contributors: &ParticipantSet,
+        contributors: &HashSet<PeerId>,
         maybe_aggregated_signature: Option<S::AggregatedSignature>,
     ) -> Result<Option<AggregationResult<S>>, AggregationError> {
         let (signatures, public_keys) = self.collect_signatures_and_public_keys(contributors)?;
