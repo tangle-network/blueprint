@@ -17,14 +17,12 @@ use tracing_subscriber::EnvFilter;
 const TEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub fn setup_log() {
-    // Explicitly target logs for networking and the extension
     let filter = EnvFilter::new(
         "blueprint_networking=info,blueprint_networking_agg_sig_gossip_extension=debug",
     );
 
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
-        // .with_test_writer() // Removed - prevents real-time logging
         .with_target(true)
         .with_thread_ids(true)
         .with_file(true)
