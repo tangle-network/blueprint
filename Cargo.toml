@@ -284,7 +284,7 @@ dashmap = { version = "6.1.0", default-features = false }
 lru-mem = { version = "0.3.0", default-features = false }
 
 # Metrics
-metrics = { version = "0.24.1", default-features = false }
+metrics = { version = "0.24.2", default-features = false }
 
 [profile.dev.package.backtrace]
 opt-level = 3
