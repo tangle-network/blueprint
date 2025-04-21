@@ -18,7 +18,6 @@ use blueprint_std::{
 };
 use libp2p::PeerId;
 use thiserror::Error;
-use tracing_subscriber::field::debug;
 
 /// Error types for the aggregation protocol
 #[derive(Debug, Error)]
