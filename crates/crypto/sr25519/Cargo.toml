@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-crypto-sr25519"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 description = "Schnorrkel sr25519 crypto primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
