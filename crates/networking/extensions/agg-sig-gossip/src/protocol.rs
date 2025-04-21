@@ -18,6 +18,7 @@ use blueprint_std::{
 };
 use libp2p::PeerId;
 use thiserror::Error;
+use tracing_subscriber::field::debug;
 
 /// Error types for the aggregation protocol
 #[derive(Debug, Error)]
@@ -599,7 +600,11 @@ where
     fn get_highest_weight_message(&self) -> (Vec<u8>, u64) {
         let mut highest_weight = 0;
         let mut highest_weight_message = Vec::new();
-
+        debug!("Calculating highest weight message");
+        debug!(
+            "Signatures by message: {:?}",
+            self.state.signatures_by_message
+        );
         for (message, sig_map) in &self.state.signatures_by_message {
             let weight = self.weight_scheme.calculate_weight(sig_map);
             if weight > highest_weight {

@@ -5,7 +5,7 @@ use libp2p::PeerId;
 /// Trait for weighting of participants in signature aggregation
 pub trait SignatureWeight {
     /// Returns the weight for a participant
-    fn weight(&self, participant_id: &PeerId) -> u64;
+    fn weight(&self, peer_id: &PeerId) -> u64;
 
     /// Returns the total weight of all participants
     fn total_weight(&self) -> u64;
@@ -50,7 +50,7 @@ impl EqualWeight {
 }
 
 impl SignatureWeight for EqualWeight {
-    fn weight(&self, _participant_id: &PeerId) -> u64 {
+    fn weight(&self, _peer_id: &PeerId) -> u64 {
         1
     }
 

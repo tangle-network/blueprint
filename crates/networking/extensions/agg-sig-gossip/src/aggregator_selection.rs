@@ -138,6 +138,10 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
                 }
                 let total_weight = self.weight_scheme.calculate_weight(&honest_contributors);
                 let threshold_weight = self.weight_scheme.threshold_weight();
+                debug!(
+                    "Total weight: {}, threshold weight: {}",
+                    total_weight, threshold_weight
+                );
                 // Check if we've met the threshold
                 if total_weight < threshold_weight {
                     if matches!(self.state.round, ProtocolRound::Completion) {

@@ -10,6 +10,16 @@ use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 use tracing::info;
 
+pub fn setup_log() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_file(true)
+        .with_line_number(true)
+        .try_init();
+}
+
 /// Test node configuration for network tests
 pub struct TestNode<K: KeyType> {
     pub service: Option<NetworkService<K>>,
