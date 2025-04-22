@@ -144,10 +144,8 @@ pub fn spawn_event_processor(
         while let Some(event) = event_rx.recv().await {
             info!("Received blockchain event: {:?}", event);
 
-            // Extract blueprint ID and determine if we need to update pricing
             let (blueprint_id, update_pricing) = match event {
                 BlockchainEvent::Registered(e) => (Some(e.blueprint_id), true),
-                BlockchainEvent::PriceTargetsUpdated(e) => (Some(e.blueprint_id), true),
                 _ => (None, false),
             };
 

@@ -14,9 +14,9 @@ use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::ContextConfig;
 use blueprint_runner::config::SupportedChains;
 use blueprint_runner::error::RunnerError;
-use blueprint_runner::tangle::config::PriceTargets;
 use blueprint_std::io;
 use blueprint_std::path::{Path, PathBuf};
+use blueprint_tangle_extra::util::build_operator_preferences;
 use std::marker::PhantomData;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::request::RequestArgs;
@@ -251,11 +251,10 @@ where
                 .first_local::<SpEcdsa>()
                 .map_err(|err| RunnerError::Other(err.to_string()))?;
 
-            let preferences = Preferences {
-                key: blueprint_runner::tangle::config::decompress_pubkey(&ecdsa_public.0.0)
-                    .unwrap(),
-                price_targets: PriceTargets::default().0,
-            };
+            let preferences = build_operator_preferences(
+                blueprint_runner::tangle::config::decompress_pubkey(&ecdsa_public.0.0).unwrap(),
+                "",
+            );
 
             nodes.push(NodeInfo {
                 env,
