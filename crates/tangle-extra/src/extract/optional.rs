@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize, Serializer};
 // TODO(serial): Document, warn against using `Option<T>` in tangle jobs
 #[derive(Deserialize, Copy, Eq, Hash)]
 #[serde(transparent)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 pub struct Optional<T: Default>(pub Option<T>);
 
 impl<T: PartialEq + Default> PartialEq for Optional<T> {
@@ -30,6 +31,7 @@ impl<T: Ord + Default> Ord for Optional<T> {
     }
 }
 
+#[allow(clippy::expl_impl_clone_on_copy)]
 impl<T: Clone + Default> Clone for Optional<T> {
     fn clone(&self) -> Self {
         Optional(self.0.clone())

@@ -3,8 +3,9 @@ use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize, Serializer};
 
 // TODO(serial): Document, warn against using `Vec<T>` in tangle jobs
-#[derive(Deserialize, Copy, Eq, Hash)]
+#[derive(Deserialize, Eq, Hash)]
 #[serde(transparent)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 pub struct List<T: Default>(pub Vec<T>);
 
 impl<T: PartialEq + Default> PartialEq for List<T> {
@@ -34,6 +35,12 @@ impl<T: Ord + Default> Ord for List<T> {
 impl<T: Clone + Default> Clone for List<T> {
     fn clone(&self) -> Self {
         List(self.0.clone())
+    }
+}
+
+impl<T: Default> Default for List<T> {
+    fn default() -> Self {
+        List(Vec::<T>::default())
     }
 }
 

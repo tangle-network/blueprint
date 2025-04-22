@@ -69,6 +69,7 @@ sc-keystore = { workspace = true, optional = true }
 sp-application-crypto = { workspace = true, optional = true }
 scale-info = { workspace = true, optional = true }
 parity-scale-codec = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

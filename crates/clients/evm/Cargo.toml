@@ -38,6 +38,7 @@ tokio = { workspace = true }
 
 # Metrics
 blueprint-metrics-rpc-calls = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-evm-extra = { path = "../../evm-extra" }
