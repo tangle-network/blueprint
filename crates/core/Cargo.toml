@@ -17,6 +17,7 @@ tower = { workspace = true, features = ["util"] }
 hashbrown = { workspace = true, default-features = false, features = ["default-hasher", "inline-more"] }
 tiny-keccak = { workspace = true, features = ["keccak"] }
 tracing = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-sdk = { path = "../sdk", features = ["std"] }

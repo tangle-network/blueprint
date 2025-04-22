@@ -1,6 +1,6 @@
 [workspace]
-resolver = "2"
-members = ["cli", "crates/*", "crates/networking/extensions/*", "examples/incredible-squaring-eigenlayer"]
+resolver = "3"
+members = ["cli", "crates/*", "crates/networking/extensions/*", "examples/incredible-squaring-eigenlayer", "workspace-hack"]
 
 [workspace.package]
 authors = ["Tangle Network"]

@@ -21,6 +21,7 @@ futures = { workspace = true }
 chrono = { workspace = true, optional = true }
 tokio-cron-scheduler = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

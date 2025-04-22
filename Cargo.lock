@@ -83,7 +83,7 @@ version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "once_cell",
  "version_check",
 ]
@@ -96,7 +96,7 @@ checksum = "e89da841a80418a9b391ebaea17f5c112ffaaa96f621d2c285b5174da76b9011"
 dependencies = [
  "cfg-if 1.0.0",
  "const-random",
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "once_cell",
  "version_check",
  "zerocopy 0.7.35",
@@ -2707,6 +2707,7 @@ dependencies = [
  "blueprint-std",
  "tokio",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2716,6 +2717,7 @@ dependencies = [
  "blueprint-std",
  "sysinfo",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2723,6 +2725,7 @@ name = "blueprint-build-utils"
 version = "0.1.0-alpha.1"
 dependencies = [
  "blueprint-std",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2732,6 +2735,7 @@ dependencies = [
  "blueprint-chain-setup-anvil",
  "blueprint-chain-setup-common",
  "blueprint-chain-setup-tangle",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2752,6 +2756,7 @@ dependencies = [
  "testcontainers",
  "thiserror 2.0.12",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2771,6 +2776,7 @@ dependencies = [
  "sp-core",
  "tangle-subxt",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2807,6 +2813,7 @@ dependencies = [
  "tangle-subxt",
  "thiserror 2.0.12",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2816,6 +2823,7 @@ dependencies = [
  "auto_impl",
  "blueprint-std",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2844,6 +2852,7 @@ dependencies = [
  "tokio-util 0.7.14",
  "tracing-subscriber 0.3.19",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2875,6 +2884,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2894,6 +2904,7 @@ dependencies = [
  "tangle-subxt",
  "thiserror 2.0.12",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2906,6 +2917,7 @@ dependencies = [
  "blueprint-client-tangle",
  "blueprint-std",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2924,6 +2936,7 @@ dependencies = [
  "syn 2.0.100",
  "tangle-subxt",
  "trybuild",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2937,6 +2950,7 @@ dependencies = [
  "blueprint-std",
  "proc-macro2",
  "tangle-subxt",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2953,6 +2967,7 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2969,6 +2984,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.19",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2985,6 +3001,7 @@ dependencies = [
  "blueprint-crypto-sr25519",
  "blueprint-crypto-tangle-pair-signer",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3003,6 +3020,7 @@ dependencies = [
  "sha2 0.10.8",
  "thiserror 2.0.12",
  "tnt-bls",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3024,6 +3042,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3034,6 +3053,7 @@ dependencies = [
  "clap",
  "serde",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3048,6 +3068,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3058,6 +3079,7 @@ dependencies = [
  "blueprint-std",
  "sha2 0.10.8",
  "sha3",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3074,6 +3096,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3096,6 +3119,7 @@ dependencies = [
  "sp-core",
  "thiserror 2.0.12",
  "tnt-bls",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3110,6 +3134,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3127,6 +3152,7 @@ dependencies = [
  "sp-runtime",
  "tangle-subxt",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3154,6 +3180,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3172,6 +3199,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3203,6 +3231,7 @@ dependencies = [
  "tower 0.5.2",
  "tracing-subscriber 0.3.19",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3250,6 +3279,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tnt-bls",
  "tokio",
+ "workspace-hack",
  "zeroize",
 ]
 
@@ -3266,6 +3296,7 @@ dependencies = [
  "syn 2.0.100",
  "tokio",
  "trybuild",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3304,6 +3335,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.19",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3311,6 +3343,7 @@ name = "blueprint-metrics"
 version = "0.1.0-alpha.2"
 dependencies = [
  "blueprint-metrics-rpc-calls",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3318,6 +3351,7 @@ name = "blueprint-metrics-rpc-calls"
 version = "0.1.0-alpha.2"
 dependencies = [
  "metrics",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3345,6 +3379,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3374,6 +3409,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3402,6 +3438,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3452,6 +3489,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.19",
  "uuid 1.16.0",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3464,6 +3502,7 @@ dependencies = [
  "futures",
  "tokio",
  "tokio-cron-scheduler",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3480,6 +3519,7 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "tracing-subscriber 0.3.19",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3517,6 +3557,7 @@ dependencies = [
  "tower 0.5.2",
  "tracing",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3552,6 +3593,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3563,6 +3605,7 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3574,6 +3617,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3582,6 +3626,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "blueprint-store-local-database",
  "thiserror 2.0.12",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3608,6 +3653,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tower 0.5.2",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3634,6 +3680,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3644,6 +3691,7 @@ dependencies = [
  "blueprint-core-testing-utils",
  "blueprint-eigenlayer-testing-utils",
  "blueprint-tangle-testing-utils",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -4200,6 +4248,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.19",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -4577,7 +4626,7 @@ dependencies = [
  "byteorder",
  "cfg-if 1.0.0",
  "const-hex",
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "hidapi-rusb",
  "js-sys",
  "log",
@@ -4705,7 +4754,7 @@ version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9d839f2a20b0aee515dc581a6172f2321f96cab76c1a38a4c584a194955390e"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "once_cell",
  "tiny-keccak",
 ]
@@ -7716,9 +7765,9 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.2.15"
+version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4567c8db10ae91089c99af84c68c38da3ec2f087c3f82960bcdbf3656b6f4d7"
+checksum = "335ff9f135e4384c8150d6f27c6daed433577f86b4750418338c01a1a2528592"
 dependencies = [
  "cfg-if 1.0.0",
  "js-sys",
@@ -9029,6 +9078,7 @@ dependencies = [
  "tokio-util 0.7.14",
  "tracing",
  "uuid 1.16.0",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -9705,7 +9755,7 @@ dependencies = [
  "either",
  "futures",
  "futures-timer",
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "libp2p-allow-block-list",
  "libp2p-autonat",
  "libp2p-connection-limits",
@@ -9859,7 +9909,7 @@ dependencies = [
  "fnv",
  "futures",
  "futures-timer",
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "hashlink",
  "hex_fmt",
  "libp2p-core",
@@ -15191,7 +15241,7 @@ version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
 ]
 
 [[package]]
@@ -15319,7 +15369,7 @@ version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba009ff324d1fc1b900bd1fdb31564febe58a8ccc8a6fdbb93b543d33b13ca43"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "libredox",
  "thiserror 1.0.69",
 ]
@@ -15330,7 +15380,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd6f9d3d47bdd2ad6945c5015a226ec6155d0bcdfd8f7cd29f86b71f8de99d2b"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "libredox",
  "thiserror 2.0.12",
 ]
@@ -15611,7 +15661,7 @@ checksum = "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7"
 dependencies = [
  "cc",
  "cfg-if 1.0.0",
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "libc",
  "untrusted 0.9.0",
  "windows-sys 0.52.0",
@@ -18624,7 +18674,7 @@ dependencies = [
  "finito",
  "frame-metadata 18.0.0",
  "futures",
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "hex",
  "impl-serde 0.5.0",
  "jsonrpsee",
@@ -18657,7 +18707,7 @@ version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b622b426e571fdd86b08ad0bec4ef0e323d937bb56ff5edcfaf4716f50384ca"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "heck 0.5.0",
  "parity-scale-codec",
  "proc-macro2",
@@ -18708,7 +18758,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "futures-util",
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "js-sys",
  "pin-project 1.1.10",
  "send_wrapper 0.6.0",
@@ -18767,7 +18817,7 @@ dependencies = [
  "bip39",
  "cfg-if 1.0.0",
  "crypto_secretbox",
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "hex",
  "hmac 0.12.1",
  "parity-scale-codec",
@@ -20038,7 +20088,7 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom 0.2.16",
  "serde",
 ]
 
@@ -21181,6 +21231,271 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f42320e61fe2cfd34354ecb597f86f413484a798ba44a8ca1165c58d42da6c1"
 dependencies = [
  "bitflags 2.9.0",
+]
+
+[[package]]
+name = "workspace-hack"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.11",
+ "aho-corasick",
+ "alloy-consensus",
+ "alloy-dyn-abi",
+ "alloy-eip7702",
+ "alloy-eips",
+ "alloy-json-abi",
+ "alloy-network",
+ "alloy-primitives 0.8.25",
+ "alloy-provider",
+ "alloy-rlp",
+ "alloy-rpc-client",
+ "alloy-rpc-types",
+ "alloy-rpc-types-eth",
+ "alloy-signer",
+ "alloy-signer-local",
+ "alloy-sol-macro 0.8.25",
+ "alloy-sol-macro-expander",
+ "alloy-sol-macro-input",
+ "alloy-sol-type-parser",
+ "alloy-sol-types 0.8.25",
+ "alloy-transport-http",
+ "anyhow",
+ "ark-bn254",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "ark-std 0.5.0",
+ "arrayvec 0.7.6",
+ "aws-credential-types",
+ "aws-sdk-kms",
+ "aws-smithy-async",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "backtrace",
+ "base64 0.22.1",
+ "base64ct",
+ "bip39",
+ "bitflags 2.9.0",
+ "bitvec",
+ "blake2",
+ "blake2b_simd",
+ "blake3",
+ "bollard",
+ "bounded-collections",
+ "bs58",
+ "bstr",
+ "byte-slice-cast",
+ "byteorder",
+ "bytes",
+ "cc",
+ "chrono",
+ "cid",
+ "clap",
+ "clap_builder",
+ "color-eyre",
+ "const-hex",
+ "crossbeam-epoch",
+ "crunchy",
+ "crypto-common",
+ "curve25519-dalek",
+ "data-encoding",
+ "der",
+ "derive_more 1.0.0",
+ "derive_more 2.0.1",
+ "derive_more-impl 1.0.0",
+ "dialoguer",
+ "digest 0.10.7",
+ "digest 0.9.0",
+ "displaydoc",
+ "ecdsa",
+ "ed25519",
+ "ed25519-dalek",
+ "ed25519-zebra",
+ "eigensdk",
+ "either",
+ "elliptic-curve",
+ "env_filter",
+ "env_logger 0.11.8",
+ "environmental",
+ "ethers-contract-abigen",
+ "fixed-hash",
+ "foldhash",
+ "form_urlencoded",
+ "frame-metadata 18.0.0",
+ "futures",
+ "futures-channel",
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-timer",
+ "futures-util",
+ "generic-array",
+ "getrandom 0.2.16",
+ "getrandom 0.3.2",
+ "getrandom_or_panic",
+ "hash-db",
+ "hash256-std-hasher",
+ "hashbrown 0.13.2",
+ "hashbrown 0.14.5",
+ "hashbrown 0.15.2",
+ "hex",
+ "hmac 0.12.1",
+ "httparse",
+ "hyper 0.14.32",
+ "hyper 1.6.0",
+ "hyper-rustls 0.24.2",
+ "hyper-rustls 0.27.5",
+ "hyper-util",
+ "idna",
+ "impl-codec 0.6.0",
+ "impl-codec 0.7.1",
+ "impl-serde 0.4.0",
+ "impl-serde 0.5.0",
+ "indexmap 2.9.0",
+ "indicatif",
+ "ipnet",
+ "itertools 0.13.0",
+ "itertools 0.14.0",
+ "jiff",
+ "js-sys",
+ "jsonrpsee",
+ "jsonrpsee-client-transport",
+ "jsonrpsee-core",
+ "k256",
+ "libc",
+ "libp2p",
+ "libp2p-swarm",
+ "libsecp256k1",
+ "libsecp256k1-core",
+ "log",
+ "memchr",
+ "merlin",
+ "multibase",
+ "multihash",
+ "nix 0.26.4",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "num-traits",
+ "num_enum",
+ "num_enum_derive",
+ "objc2-core-foundation",
+ "once_cell",
+ "parity-bip39",
+ "parity-scale-codec",
+ "parking_lot 0.12.3",
+ "pbkdf2 0.12.2",
+ "percent-encoding",
+ "pkcs8",
+ "polkadot-sdk",
+ "ppv-lite86",
+ "prettyplease",
+ "primitive-types 0.12.2",
+ "primitive-types 0.13.1",
+ "proc-macro2",
+ "prost 0.12.6",
+ "quote",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "regex",
+ "regex-automata 0.4.9",
+ "regex-syntax 0.8.5",
+ "reqwest 0.11.27",
+ "reqwest 0.12.15",
+ "ring 0.17.14",
+ "ripemd",
+ "round-based",
+ "ruint",
+ "rustix 1.0.5",
+ "rustls 0.21.12",
+ "rustls 0.23.26",
+ "rustls-webpki 0.103.1",
+ "scale-bits",
+ "scale-decode",
+ "scale-encode",
+ "scale-info",
+ "scale-info-derive",
+ "scale-value",
+ "schnorrkel",
+ "sec1",
+ "secp256k1 0.28.2",
+ "secp256k1 0.30.0",
+ "secp256k1-sys 0.10.1",
+ "security-framework-sys",
+ "semver 1.0.26",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "serde_with",
+ "serial_test",
+ "serial_test_derive",
+ "sha1",
+ "sha2 0.10.8",
+ "sha3",
+ "signature",
+ "smallvec",
+ "soketto",
+ "sp-application-crypto",
+ "sp-arithmetic",
+ "sp-core",
+ "sp-crypto-hashing",
+ "sp-debug-derive",
+ "sp-externalities",
+ "sp-io",
+ "sp-keystore",
+ "sp-runtime",
+ "sp-runtime-interface",
+ "sp-std",
+ "sp-storage",
+ "sp-tracing",
+ "sp-wasm-interface",
+ "sp-weights",
+ "spki",
+ "ss58-registry",
+ "substrate-bip39",
+ "subtle",
+ "subxt-codegen",
+ "subxt-core",
+ "subxt-macro",
+ "subxt-metadata",
+ "subxt-signer",
+ "syn 1.0.109",
+ "syn 2.0.100",
+ "sync_wrapper 1.0.2",
+ "sysinfo",
+ "tempfile",
+ "testcontainers",
+ "thiserror 2.0.12",
+ "time",
+ "tiny-keccak",
+ "tnt-bls",
+ "tokio",
+ "tokio-rustls 0.24.1",
+ "tokio-rustls 0.26.2",
+ "tokio-stream",
+ "tokio-util 0.7.14",
+ "toml 0.8.20",
+ "toml_datetime",
+ "toml_edit",
+ "tower 0.4.13",
+ "tower 0.5.2",
+ "tracing",
+ "tracing-core",
+ "tracing-subscriber 0.3.19",
+ "twox-hash",
+ "uint 0.10.0",
+ "uint 0.9.5",
+ "unicode-normalization",
+ "url",
+ "uuid 0.8.2",
+ "uuid 1.16.0",
+ "w3f-bls",
+ "wasm-bindgen",
+ "winnow",
+ "zeroize",
 ]
 
 [[package]]

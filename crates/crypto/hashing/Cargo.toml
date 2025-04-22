@@ -14,6 +14,7 @@ blueprint-std = { workspace = true }
 sha2 = { workspace = true, optional = true }
 sha3 = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 default = ["std", "sha2-hasher", "sha3-hasher", "blake3-hasher"]

@@ -21,6 +21,7 @@ paste = { workspace = true }
 thiserror = { workspace = true }
 
 sha2 = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-crypto-hashing = { path = "../hashing", features = ["sha2"] }

@@ -8,7 +8,6 @@ pub mod tests;
 
 use alloy_primitives::{Address, address};
 use alloy_sol_types::sol;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::sync::LazyLock;

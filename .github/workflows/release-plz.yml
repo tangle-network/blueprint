@@ -29,6 +29,17 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-hakari
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hakari
+
+      - name: Disable Hakari
+        run: |
+          cargo hakari disable
+          cargo hakari remove-deps -y
+
       - name: Run release-plz
         uses: MarcoIeni/release-plz-action@v0.5.102
         env:

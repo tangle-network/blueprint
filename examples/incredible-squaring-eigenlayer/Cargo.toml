@@ -53,6 +53,7 @@ thiserror = { workspace = true }
 jsonrpc-core = { workspace = true }
 jsonrpc-http-server = { workspace = true }
 num-bigint = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-sdk = { workspace = true, features = ["testing", "eigenlayer", "evm"] }
