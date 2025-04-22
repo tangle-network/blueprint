@@ -17,8 +17,6 @@ futures = { workspace = true }
 eigensdk = { workspace = true, features = ["crypto-bls", "services-blsaggregation"] }
 tracing = { workspace = true }
 color-eyre = { workspace = true }
-lazy_static = { workspace = true }
-lock_api = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["full"] }
 tokio-util = { workspace = true }
 sp-core = { workspace = true }
