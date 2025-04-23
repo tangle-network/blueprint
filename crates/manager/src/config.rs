@@ -130,14 +130,14 @@ impl SourceCandidates {
         if let Some(comps) = &ver.components {
             if comps
                 .iter()
-                .any(|c| dbg!(c.name.to_lowercase()).contains("podman"))
+                .any(|c| c.name.to_lowercase().contains("podman"))
             {
                 self.container = Some(host);
                 return Ok(());
             }
         }
         if let Some(platform) = &ver.platform {
-            if dbg!(platform.name.to_lowercase()).contains("podman") {
+            if platform.name.to_lowercase().contains("podman") {
                 self.container = Some(host);
                 return Ok(());
             }
