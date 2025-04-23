@@ -4,7 +4,8 @@ use blueprint_pricing_engine_lib::{
     config::OperatorConfig,
     error::{PricingError, Result},
     pricing_engine,
-    signer::{OperatorSigner, hash_quote_details, verify_quote},
+    signer::{hash_quote_details, verify_quote},
+    utils::u32_to_u128_bytes, OperatorSigner,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -114,7 +115,9 @@ fn create_test_quote_details() -> pricing_engine::QuoteDetails {
 
     let security_commitment = pricing_engine::AssetSecurityCommitment {
         asset: Some(pricing_engine::Asset {
-            asset_type: Some(pricing_engine::asset::AssetType::Custom(1234)),
+            asset_type: Some(pricing_engine::asset::AssetType::Custom(
+                u32_to_u128_bytes(1234)
+            )),
         }),
         exposure_percent: 50,
     };

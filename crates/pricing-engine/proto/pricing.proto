@@ -18,8 +18,8 @@ enum AssetType {
 // Asset type definition
 message Asset {
   oneof asset_type {
-    // Custom asset with a numeric identifier
-    uint64 custom = 1;
+    // Custom asset with a numeric identifier (u128 represented as 16 bytes)
+    bytes custom = 1;
     // ERC20 token with an H160 address
     bytes erc20 = 2;
   }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
-use std::{fs, str::FromStr};
+use std::fs;
 
 use blueprint_pricing_engine_lib::{
     app::{init_benchmark_cache, init_operator_signer},
@@ -13,20 +13,21 @@ use blueprint_pricing_engine_lib::{
     init_pricing_config,
     pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof},
     pricing::{calculate_price, load_pricing_from_toml},
-    pricing_engine::{self, QuoteDetails, pricing_engine_client::PricingEngineClient},
+    pricing_engine::{self, asset::AssetType, QuoteDetails, pricing_engine_client::PricingEngineClient},
     service::rpc::server::PricingEngineService,
+    utils::{bytes_to_u128, u32_to_u128_bytes},
 };
-
-use blueprint_chain_setup::tangle::transactions;
 use blueprint_core::{error, info, warn};
-use blueprint_tangle_extra::serde::BoundedVec;
+use blueprint_tangle_extra::serde::{new_bounded_string, BoundedVec};
 use blueprint_testing_utils::{
     setup_log,
     tangle::{TangleTestHarness, blueprint::create_test_blueprint, harness::SetupServicesOpts},
 };
 use chrono::Utc;
+use tangle_subxt::subxt::utils::H160;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::sp_arithmetic::per_things::Percent;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{Asset, AssetSecurityCommitment};
 use tangle_subxt::{
-    subxt::utils::AccountId32,
     tangle_testnet_runtime::api::{
         runtime_types::tangle_primitives::services::pricing::{PricingQuote, ResourcePricing},
         services::calls::types::{register::RegistrationArgs, request::RequestArgs},
@@ -312,7 +313,9 @@ resources = [
             proof_of_work: proof.clone(),
             security_requirements: Some(pricing_engine::AssetSecurityRequirements {
                 asset: Some(pricing_engine::Asset {
-                    asset_type: Some(pricing_engine::asset::AssetType::Custom(1234)),
+                    asset_type: Some(pricing_engine::asset::AssetType::Custom(
+                        u32_to_u128_bytes(1234)
+                    )),
                 }),
                 minimum_exposure_percent: 50,
                 maximum_exposure_percent: 80,
@@ -403,9 +406,10 @@ resources = [
 
             let signature_bytes: [u8; 65] = signature[..65].try_into().unwrap();
             let node_handles = test_env.node_handles().await;
-            let signer = node_handles.first().unwrap().signer;
-            let &account_id = signer.into_inner().account_id();
-            let quote_signatures = vec![(account_id, signature_bytes)];
+            let signer = node_handles.first().unwrap().signer.clone();
+            let signer = signer.into_inner();
+            let account_id = signer.account_id();
+            let quote_signatures = vec![(account_id.clone(), signature_bytes)];
 
             let QuoteDetails {
                 blueprint_id,
@@ -416,16 +420,47 @@ resources = [
                 timestamp,
                 expiry,
             } = quote_details;
-            let security_commitments = security_commitments.unwrap();
+            let security_commitment = security_commitments.clone().unwrap();
 
-            let resources = BoundedVec::try_from(resources.clone()).unwrap();
-            let security_commitments = BoundedVec::try_from(security_commitments.clone()).unwrap();
+
+            let mapped_resources: Vec<tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing> = resources
+                .iter()
+                .map(|resource| tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing {
+                    kind: new_bounded_string(resource.kind.clone()),
+                    count: resource.count,
+                    price_per_unit_rate: (resource.price_per_unit_rate * 1e6) as u64,
+                })
+                .collect();
+            let resources = BoundedVec::<ResourcePricing>(mapped_resources);
+            
+            let inner_asset_type = security_commitment.asset.unwrap().asset_type.unwrap();
+            let asset = match inner_asset_type{
+                AssetType::Custom(asset) => {
+                    // Convert bytes to u128 using our utility function
+                    let asset_id = bytes_to_u128(&asset);
+                    Asset::Custom(asset_id)
+                },
+                AssetType::Erc20(address) => {
+                    // Convert slice to fixed-size array first
+                    let address_bytes: [u8; 20] = address.as_slice().try_into()
+                        .expect("ERC20 address should be 20 bytes");
+                    Asset::Erc20(H160::from(address_bytes))
+                },
+            };
+            let exposure_percent = Percent(security_commitment.exposure_percent as u8);
+            let mapped_security_commitment = 
+                vec![tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment {
+                    asset,
+                    exposure_percent,
+                }];
+            
+            let security_commitments = BoundedVec::<AssetSecurityCommitment<u128>>(mapped_security_commitment.clone());
 
             let quotes = vec![PricingQuote {
                 blueprint_id: *blueprint_id,
                 ttl_blocks: *ttl_blocks,
                 resources,
-                security_commitments,
+                security_commitments: Some(security_commitments),
                 total_cost_rate: *total_cost_rate as u64,
                 timestamp: *timestamp,
                 expiry: *expiry,
@@ -438,7 +473,7 @@ resources = [
                     request_args,
                     quotes,
                     quote_signatures,
-                    security_commitments,
+                    mapped_security_commitment,
                     None,
                 )
                 .await

@@ -135,7 +135,7 @@ where
     pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
         // Start Local Tangle Node
         let node = blueprint_chain_setup::tangle::run(
-            blueprint_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
+            blueprint_chain_setup::tangle::NodeConfig::new(true).with_log_target("evm", "trace"),
         )
         .await
         .map_err(|e| Error::Setup(e.to_string()))?;
@@ -442,6 +442,19 @@ where
         .await
     }
 
+    /// Requests a service with a given blueprint using pricing quotes.
+    ///
+    /// # Arguments
+    /// * `blueprint_id` - The ID of the blueprint to request
+    /// * `request_args` - The arguments for the request
+    /// * `quotes` - The pricing quotes for the service
+    /// * `quote_signatures` - The signatures for the pricing quotes
+    /// * `security_commitments` - The security commitments for the service
+    /// * `optional_assets` - Optional asset security requirements (defaults to Custom(0) at 50%-80% if not provided)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the transaction fails
     pub async fn request_service_with_quotes(
         &self,
         blueprint_id: u64,

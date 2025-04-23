@@ -17,6 +17,7 @@ pub mod pricing;
 pub mod service;
 pub mod signer;
 pub mod types;
+pub mod utils;
 
 pub mod pricing_engine {
     include!(concat!(env!("OUT_DIR"), "/pricing_engine.rs"));
