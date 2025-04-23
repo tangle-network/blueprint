@@ -22,16 +22,11 @@ pub mod metadata;
 
 pub use bytes::Bytes;
 pub use error::Error;
-pub use ext_traits::{job_call::JobCallExt, job_call_parts::JobCallPartsExt};
+pub use ext_traits::job::{JobCallExt, JobCallPartsExt};
 pub use extract::{FromJobCall, FromJobCallParts};
-pub use job::Job;
-pub use job::JobId;
-pub use job::result::{IntoJobResult, IntoJobResultParts};
-
-/// A type representing a job result with a body of type `bytes::Bytes`.
-pub type JobResult<T = Bytes> = job::result::JobResult<T>;
-/// A type representing a job call with a body of type `bytes::Bytes`.
-pub type JobCall<T = Bytes> = job::call::JobCall<T>;
+pub use job::call::JobCall;
+pub use job::result::{IntoJobResult, IntoJobResultParts, JobResult};
+pub use job::{Job, JobId};
 
 // Feature-gated tracing macros, used by the entire SDK
 macro_rules! tracing_macros {

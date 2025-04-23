@@ -1,4 +1,4 @@
-use core::{error::Error as StdError, fmt};
+use core::fmt;
 
 /// Alias for a type-erased error type.
 pub type BoxError = alloc::boxed::Box<dyn core::error::Error + Send + Sync>;
@@ -30,8 +30,8 @@ impl fmt::Display for Error {
     }
 }
 
-impl StdError for Error {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+impl core::error::Error for Error {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         Some(&*self.inner)
     }
 }

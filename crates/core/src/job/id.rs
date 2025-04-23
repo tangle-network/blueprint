@@ -43,16 +43,14 @@ impl Default for JobId {
 }
 
 impl JobId {
-    /// The value zero. This is the only value that exists in all [`JobId`]
-    /// types.
+    /// The value zero.
     pub const ZERO: Self = Self([0; 4]);
 
-    /// The smallest value that can be represented by this integer type.
-    /// Synonym for [`Self::ZERO`].
+    /// The smallest value that can be represented by [`JobId`].
+    /// Alias for [`Self::ZERO`].
     pub const MIN: Self = Self::ZERO;
 
-    /// The largest value that can be represented by this integer type,
-    /// $2^{\mathtt{4}} − 1$.
+    /// The largest value that can be represented by [`JobId`].
     pub const MAX: Self = {
         let mut limbs = [u64::MAX; 4];
         limbs[4 - 1] &= u64::MAX;

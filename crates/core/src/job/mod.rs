@@ -1,5 +1,5 @@
 //! Async functions that can be used to handle jobs.
-// TODO: #![doc = include_str!("../docs/handlers_intro.md")]
+#![doc = include_str!("../../docs/jobs_intro.md")]
 //!
 //! Some examples of jobs:
 //!
@@ -30,16 +30,10 @@
 //! }
 //! ```
 //!
-//! Instead of a direct `String`, it makes sense to use intermediate error type
-//! that can ultimately be converted to `JobResult`. This allows using `?` operator
-//! in jobs. See those examples:
-//!
-//! * [`anyhow-error-response`][anyhow] for generic boxed errors
-//! * [`error-handling`][error-handling] for application-specific detailed errors
-//!
-//! [anyhow]: https://github.com/tokio-rs/axum/blob/main/examples/anyhow-error-response/src/main.rs
-//! [error-handling]: https://github.com/tokio-rs/axum/blob/main/examples/error-handling/src/main.rs
-// TODO: #![doc = include_str!("../docs/debugging_handler_type_errors.md")]
+//! Instead of a direct `String`, it makes sense to use an intermediate error type
+//! that can ultimately be converted to `JobResult`. This allows using the `?` operator
+//! in jobs.
+#![doc = include_str!("../../docs/debugging_job_type_errors.md")]
 
 use crate::{
     JobCall, JobResult,
@@ -62,7 +56,7 @@ pub use self::service::JobService;
 /// Trait for async functions that can be used to handle requests.
 ///
 /// You shouldn't need to depend on this trait directly. It is automatically
-/// implemented to closures of the right types.
+/// implemented for functions of the right types.
 ///
 /// See the [module docs](crate::job) for more details.
 ///
@@ -96,7 +90,7 @@ pub use self::service::JobService;
 /// {
 /// }
 /// ```
-// TODO: #[doc = include_str!("../docs/debugging_handler_type_errors.md")]
+#[doc = include_str!("../../docs/debugging_job_type_errors.md")]
 ///
 /// # Jobs that aren't functions
 ///
@@ -328,9 +322,7 @@ where
 
 /// Extension trait for [`Job`]s that don't have context.
 ///
-/// This provides convenience methods to convert the [`Job`] into a [`Service`] or [`MakeService`].
-///
-/// [`MakeService`]: tower::make::MakeService
+/// This provides convenience methods to convert the [`Job`] into a [`Service`].
 pub trait JobWithoutContextExt<T>: Job<T, ()> {
     /// Convert the handler into a [`Service`] and no context.
     fn into_service(self) -> JobService<Self, T, ()>;

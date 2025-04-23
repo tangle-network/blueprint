@@ -7,13 +7,9 @@ use core::{
 
 /// Extractor for context.
 ///
-/// See ["Accessing context in middleware"][context-from-middleware] for how to
-/// access context in middleware.
+/// Context is global and used in every request a router with context receives.
+/// For accessing data derived from calls, see [`Extension`].
 ///
-/// context is global and used in every request a router with context receives.
-/// For accessing data derived from requests, such as authorization data, see [`Extension`].
-///
-/// [context-from-middleware]: crate::middleware#accessing-context-in-middleware
 /// [`Extension`]: crate::extract::Extension
 ///
 /// # With `Router`
@@ -22,9 +18,9 @@ use core::{
 /// use blueprint_sdk::extract::Context;
 /// use blueprint_sdk::{Job, Router};
 ///
-/// // the application context
+/// // The application context
 /// //
-/// // here you can put configuration, database connection pools, or whatever
+/// // Here you can put configuration, database connection pools, or whatever
 /// // context you need
 /// #[derive(Clone)]
 /// struct AppContext {}
@@ -49,7 +45,7 @@ use core::{
 /// # let _: Router = app;
 /// ```
 ///
-/// Note that `context` is an extractor, so be sure to put it before any body
+/// Note that [`Context`] is an extractor, so be sure to put it before any body
 /// extractors, see ["the order of extractors"][order-of-extractors].
 ///
 /// [order-of-extractors]: crate::extract#the-order-of-extractors
@@ -75,7 +71,7 @@ use core::{
 ///
 /// # Sub-Contexts
 ///
-/// [`Context`] only allows a single context type but you can use [`FromRef`] to extract "sub-contexts":
+/// [`Context`] only allows a single context type, but you can use [`FromRef`] to extract "sub-contexts":
 ///
 /// ```
 /// use blueprint_sdk::Router;
@@ -191,6 +187,8 @@ use core::{
 ///     data: Arc<Mutex<String>>,
 /// }
 ///
+/// const MY_JOB_ID: u8 = 0;
+///
 /// async fn job(Context(context): Context<AppContext>) {
 ///     {
 ///         let mut data = context.data.lock().expect("mutex was poisoned");
@@ -204,7 +202,7 @@ use core::{
 ///     data: Arc::new(Mutex::new("foo".to_owned())),
 /// };
 ///
-/// let app = Router::new().route("/", job).with_context(context);
+/// let app = Router::new().route(MY_JOB_ID, job).with_context(context);
 /// # let _: Router = app;
 /// ```
 ///

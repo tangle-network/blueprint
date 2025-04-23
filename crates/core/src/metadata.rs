@@ -1,5 +1,4 @@
-//! Job Call Metadata is a collection of metadata that can be included in a job call to provide additional information to the job call.
-//! or a Job Result to provide additional context for the execution results.
+//! Metadata that can be included in a [`JobCall`] or [`JobResult`] to provide additional context.
 
 use core::convert::Infallible;
 use core::fmt;
@@ -12,12 +11,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use bytes::{Bytes, BytesMut};
 
-/// A typed metadata map that stores key-value pairs where keys are static strings.
-///
-/// This structure wraps a `BTreeMap` with string keys and generic values, providing
-/// a convenient way to store metadata with type safety. The keys are stored as
-/// `Cow<'static, str>` to allow both owned and borrowed strings without allocation
-/// when possible.
+/// A typed metadata map
 ///
 /// # Type Parameters
 ///
@@ -114,7 +108,7 @@ impl<T> MetadataMap<T> {
     }
 }
 
-/// Represents a Job Call metadata field value.
+/// Represents a [`JobCall`] metadata field value.
 ///
 /// To handle this, the `MetadataValue` is usable as a type and can be compared
 /// with strings and implements `Debug`. A `to_str` method is provided that returns

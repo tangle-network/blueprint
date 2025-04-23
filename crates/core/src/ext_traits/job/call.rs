@@ -76,16 +76,20 @@ pub trait JobCallExt: sealed::Sealed + Sized {
         E: FromJobCall<Ctx, M> + 'static,
         Ctx: Send + Sync;
 
-    /// Apply a parts extractor to this `JobCall`.
+    /// Apply a [`Parts`] extractor to this `JobCall`.
     ///
     /// This is just a convenience for `E::from_job_call_parts(parts, ctx)`.
+    ///
+    /// [`Parts`]: crate::job::call::Parts
     fn extract_parts<E>(&mut self) -> impl Future<Output = Result<E, E::Rejection>> + Send
     where
         E: FromJobCallParts<()> + 'static;
 
-    /// Apply a parts extractor that requires some state to this `Request`.
+    /// Apply a [`Parts`] extractor that requires some state to this `Request`.
     ///
     /// This is just a convenience for `E::from_job_call_parts(parts, ctx)`.
+    ///
+    /// [`Parts`]: crate::job::call::Parts
     fn extract_parts_with_context<'a, E, Ctx>(
         &'a mut self,
         ctx: &'a Ctx,
