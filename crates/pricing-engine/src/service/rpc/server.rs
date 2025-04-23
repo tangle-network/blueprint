@@ -69,8 +69,22 @@ impl PricingEngine for PricingEngineService {
             blueprint_id
         );
 
-        // Verify proof of work
-        let challenge = generate_challenge(blueprint_id, Utc::now().timestamp() as u64);
+        let current_timestamp = Utc::now().timestamp() as u64;
+        let challenge_timestamp = if req.challenge_timestamp > 0 {
+            if req.challenge_timestamp < current_timestamp.saturating_sub(30) {
+                warn!("Challenge timestamp is too old: {}", req.challenge_timestamp);
+                return Err(Status::invalid_argument("Challenge timestamp is too old"));
+            }
+            if req.challenge_timestamp > current_timestamp + 30 {
+                warn!("Challenge timestamp is too far in the future: {}", req.challenge_timestamp);
+                return Err(Status::invalid_argument("Challenge timestamp is too far in the future"));
+            }
+            req.challenge_timestamp
+        } else {
+            return Err(Status::invalid_argument("Challenge timestamp is missing or invalid"));
+        };
+
+        let challenge = generate_challenge(blueprint_id, challenge_timestamp);
         if !verify_proof(&challenge, &proof_of_work, DEFAULT_POW_DIFFICULTY).map_err(|e| {
             warn!("Failed to verify proof of work: {}", e);
             Status::invalid_argument("Invalid proof of work")

@@ -55,6 +55,8 @@ message GetPriceRequest {
   repeated ResourceRequirement resource_requirements = 4;
   // Security requirements for assets
   AssetSecurityRequirements security_requirements = 5;
+  // Timestamp used for generating the challenge
+  uint64 challenge_timestamp = 6;
 }
 
 // Resource requirement for a specific resource type

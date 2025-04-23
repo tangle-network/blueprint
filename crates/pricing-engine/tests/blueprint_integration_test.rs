@@ -293,10 +293,11 @@ resources = [
     let expected_total = price_model.total_cost;
     let expected_cost = expected_total * (ttl_blocks as f64);
 
-    let challenge = generate_challenge(blueprint_id, Utc::now().timestamp() as u64);
-    let proof = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
-
     for (i, client) in clients.iter_mut().enumerate() {
+        let challenge_timestamp = Utc::now().timestamp() as u64;
+        let challenge = generate_challenge(blueprint_id, challenge_timestamp);
+        let proof = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
+
         let request = pricing_engine::GetPriceRequest {
             blueprint_id,
             ttl_blocks,
@@ -310,7 +311,7 @@ resources = [
                     count: 1024,
                 },
             ],
-            proof_of_work: proof.clone(),
+            proof_of_work: proof,
             security_requirements: Some(pricing_engine::AssetSecurityRequirements {
                 asset: Some(pricing_engine::Asset {
                     asset_type: Some(pricing_engine::asset::AssetType::Custom(
@@ -320,6 +321,7 @@ resources = [
                 minimum_exposure_percent: 50,
                 maximum_exposure_percent: 80,
             }),
+            challenge_timestamp,
         };
 
         info!("Requesting quote from operator {}", i);
@@ -404,7 +406,17 @@ resources = [
                 operator_index, quote_details.total_cost_rate, operator_id
             );
 
-            let signature_bytes: [u8; 65] = signature[..65].try_into().unwrap();
+            let signature_bytes = if signature.len() == 65 {
+                signature[..65].try_into().unwrap()
+            } else if signature.len() == 64 {
+                let mut sig_array = [0u8; 65];
+                sig_array[0..64].copy_from_slice(&signature[..64]);
+                sig_array[64] = 0;
+                sig_array
+            } else {
+                panic!("Unexpected signature length: {}", signature.len());
+            };
+
             let node_handles = test_env.node_handles().await;
             let signer = node_handles.first().unwrap().signer.clone();
             let signer = signer.into_inner();
