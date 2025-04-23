@@ -17,6 +17,10 @@ use blueprint_runner::error::RunnerError;
 use blueprint_std::io;
 use blueprint_std::path::{Path, PathBuf};
 use blueprint_tangle_extra::util::build_operator_preferences;
+use tangle_subxt::subxt::utils::AccountId32;
+use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::PricingQuote;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{AssetSecurityCommitment, AssetSecurityRequirement};
 use std::marker::PhantomData;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::request::RequestArgs;
@@ -436,6 +440,31 @@ where
             request_args: RequestArgs::default(),
         })
         .await
+    }
+
+    pub async fn request_service_with_quotes(
+        &self,
+        blueprint_id: u64,
+        request_args: RequestArgs,
+        quotes: Vec<PricingQuote>,
+        quote_signatures: Vec<(AccountId32, [u8; 65])>,
+        security_commitments: Vec<AssetSecurityCommitment<AssetId>>,
+        optional_assets: Option<Vec<AssetSecurityRequirement<AssetId>>>,
+    ) -> Result<(), Error> {
+        transactions::request_service_with_quotes(
+            &self.client,
+            &self.sr25519_signer,
+            blueprint_id,
+            request_args,
+            quotes,
+            quote_signatures,
+            security_commitments,
+            optional_assets,
+        )
+        .await
+        .map_err(|e| Error::Setup(e.to_string()))?;
+
+        Ok(())
     }
 
     /// Submits a job to be executed

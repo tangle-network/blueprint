@@ -4,7 +4,7 @@ use crate::pricing_engine;
 use bincode;
 use blueprint_crypto::KeyType;
 use prost::Message;
-use sha2::{Digest, Sha256};
+use tiny_keccak::{Hasher, Keccak};
 
 pub type BlueprintId = u64;
 pub type OperatorId = [u8; 32];
@@ -68,7 +68,7 @@ impl<K: KeyType> OperatorSigner<K> {
 }
 
 /// Creates a deterministic hash of the quote details that can be reproduced in any language.
-/// Uses protobuf serialization followed by SHA-256 hashing.
+/// Uses protobuf serialization followed by keccak256 hashing for on-chain verification.
 pub fn hash_quote_details(quote_details: &pricing_engine::QuoteDetails) -> Result<Vec<u8>> {
     // Serialize the quote details using protobuf
     let mut serialized = Vec::new();
@@ -79,12 +79,13 @@ pub fn hash_quote_details(quote_details: &pricing_engine::QuoteDetails) -> Resul
         ))))
     })?;
 
-    // Hash the serialized bytes using SHA-256
-    let mut hasher = Sha256::new();
+    // Hash the serialized bytes using keccak256
+    let mut output = [0u8; 32];
+    let mut hasher = Keccak::v256();
     hasher.update(&serialized);
-    let result = hasher.finalize();
+    hasher.finalize(&mut output);
 
-    Ok(result.to_vec())
+    Ok(output.to_vec())
 }
 
 /// Verify a quote signature by checking the signature against the hash of the quote details.

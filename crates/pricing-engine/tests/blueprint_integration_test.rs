@@ -1,6 +1,6 @@
-use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
+use std::{fs, str::FromStr};
 
 use blueprint_pricing_engine_lib::{
     app::{init_benchmark_cache, init_operator_signer},
@@ -13,33 +13,33 @@ use blueprint_pricing_engine_lib::{
     init_pricing_config,
     pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof},
     pricing::{calculate_price, load_pricing_from_toml},
-    pricing_engine,
-    pricing_engine::pricing_engine_client::PricingEngineClient,
+    pricing_engine::{self, QuoteDetails, pricing_engine_client::PricingEngineClient},
     service::rpc::server::PricingEngineService,
 };
 
+use blueprint_chain_setup::tangle::transactions;
 use blueprint_core::{error, info, warn};
+use blueprint_tangle_extra::serde::BoundedVec;
 use blueprint_testing_utils::{
     setup_log,
     tangle::{TangleTestHarness, blueprint::create_test_blueprint, harness::SetupServicesOpts},
 };
 use chrono::Utc;
-use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::{
-    register::RegistrationArgs, request::RequestArgs,
+use tangle_subxt::{
+    subxt::utils::AccountId32,
+    tangle_testnet_runtime::api::{
+        runtime_types::tangle_primitives::services::pricing::{PricingQuote, ResourcePricing},
+        services::calls::types::{register::RegistrationArgs, request::RequestArgs},
+    },
 };
 use tempfile::tempdir;
 use tokio::time::sleep;
 
-/// Test the full flow with a blueprint on a local Tangle Testnet
-/// This test covers:
-/// 1. Loading and validating TOML pricing configuration
-/// 2. Setting up multiple pricing engines with different pricing strategies
-/// 3. Requesting and comparing quotes from different operators
+/// Test the full pricing and request flow with a blueprint on a local Tangle Testnet
 #[tokio::test]
 async fn test_full_pricing_flow_with_blueprint() -> Result<()> {
     setup_log();
 
-    // Start a Tangle Testnet with the Tangle Test Harness
     let (temp_dir, blueprint_dir) = create_test_blueprint();
     let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await.unwrap();
 
@@ -58,7 +58,6 @@ async fn test_full_pricing_flow_with_blueprint() -> Result<()> {
         .unwrap();
     test_env.initialize().await.unwrap();
 
-    // Step 1: Create and validate a TOML pricing configuration
     let pricing_toml_content = r#"
 # Default pricing configuration with all resource types
 [default]
@@ -90,17 +89,14 @@ resources = [
 ]
 "#;
 
-    // Write the TOML content to a file and validate it
     let config_temp_dir = tempdir()?;
     let config_file_path = config_temp_dir.path().join("pricing.toml");
     fs::write(&config_file_path, pricing_toml_content)?;
 
     info!("TOML configuration content:\n{}", pricing_toml_content);
 
-    // Load and validate the pricing data from TOML
     let pricing_data = load_pricing_from_toml(config_file_path.to_str().unwrap())?;
 
-    // Debug: Print all loaded pricing data
     info!("Loaded pricing data:");
     for (key, resources) in &pricing_data {
         let blueprint_id_str = match key {
@@ -116,7 +112,6 @@ resources = [
         }
     }
 
-    // Step 2: Create a benchmark profile
     let benchmark_profile = BenchmarkProfile {
         job_id: "test-job".to_string(),
         execution_mode: "native".to_string(),
@@ -184,7 +179,6 @@ resources = [
         }),
     };
 
-    // Step 3: Calculate a price based on the benchmark profile and pricing data
     let ttl_blocks = 600u64;
 
     let price_model = calculate_price(
@@ -203,12 +197,10 @@ resources = [
         );
     }
 
-    // Step 4: Set up multiple pricing engines with different pricing strategies
     let mut servers = Vec::new();
     let mut clients = Vec::new();
     let mut cleanup_paths = Vec::new();
 
-    // Create 3 different operators with different rate multipliers
     let rate_multipliers = [1.0, 1.2, 1.4];
 
     for (i, multiplier) in rate_multipliers.iter().enumerate() {
@@ -222,35 +214,27 @@ resources = [
             }
         };
 
-        // Create a unique config for each operator
         let mut config = create_test_config();
         config.rpc_port = port;
         config.rpc_bind_address = addr.clone();
         config.database_path = format!("./data/test_benchmark_cache_{}", i);
         config.keystore_path = format!("/tmp/test-keystore-{}", i);
 
-        // Initialize the benchmark cache
         let benchmark_cache = init_benchmark_cache(&Arc::new(config.clone())).await?;
 
-        // Store the benchmark profile in the cache
         benchmark_cache.store_profile(blueprint_id, &benchmark_profile)?;
 
-        // Initialize the pricing config
         let pricing_config = init_pricing_config(config_file_path.to_str().unwrap()).await?;
 
-        // Apply the rate multiplier to each resource's price
-        // This is test-only code to demonstrate different operator pricing
         {
             let mut pricing_map = pricing_config.lock().await;
 
-            // Apply multiplier to default resources
             if let Some(resources) = pricing_map.get_mut(&None) {
                 for resource in resources.iter_mut() {
                     resource.price_per_unit_rate *= multiplier;
                 }
             }
 
-            // Apply multiplier to blueprint-specific resources if they exist
             if let Some(resources) = pricing_map.get_mut(&Some(blueprint_id)) {
                 for resource in resources.iter_mut() {
                     resource.price_per_unit_rate *= multiplier;
@@ -258,10 +242,8 @@ resources = [
             }
         }
 
-        // Initialize the operator signer
         let operator_signer = init_operator_signer(&config, &config.keystore_path)?;
 
-        // Create the pricing engine service
         let service = PricingEngineService::new(
             Arc::new(config.clone()),
             benchmark_cache,
@@ -269,12 +251,10 @@ resources = [
             operator_signer,
         );
 
-        // Start the gRPC server
         let server = tonic::transport::Server::builder()
             .add_service(pricing_engine::pricing_engine_server::PricingEngineServer::new(service))
             .serve(socket_addr);
 
-        // Spawn the server in a background task
         let server_handle = tokio::spawn(async move {
             if let Err(e) = server.await {
                 error!("Server error: {}", e);
@@ -283,7 +263,6 @@ resources = [
 
         servers.push(server_handle);
 
-        // Connect to the server
         let client = loop {
             match tonic::transport::Endpoint::new(format!("http://{}", addr)) {
                 Ok(endpoint) => match endpoint.connect().await {
@@ -305,24 +284,18 @@ resources = [
         };
 
         clients.push(client);
-
-        // Add paths to clean up later
         cleanup_paths.push((config.database_path, config.keystore_path));
     }
 
-    // Step 5: Request quotes from all operators and compare
     let mut quote_responses = Vec::new();
 
-    // Calculate expected cost for a 1-hour TTL
     let expected_total = price_model.total_cost;
     let expected_cost = expected_total * (ttl_blocks as f64);
 
-    // Generate proof of work for the request
     let challenge = generate_challenge(blueprint_id, Utc::now().timestamp() as u64);
     let proof = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
 
     for (i, client) in clients.iter_mut().enumerate() {
-        // Create a request for the pricing engine
         let request = pricing_engine::GetPriceRequest {
             blueprint_id,
             ttl_blocks,
@@ -348,7 +321,6 @@ resources = [
 
         info!("Requesting quote from operator {}", i);
 
-        // Get a price quote from the pricing engine
         let response = match client.get_price(request).await {
             Ok(response) => response,
             Err(status) => {
@@ -359,9 +331,10 @@ resources = [
 
         let response_ref = response.get_ref();
 
-        // Print the response details
         info!("Received quote from operator {}:", i);
         info!("  Operator ID: {:?}", response_ref.operator_id);
+
+        let signature = response_ref.signature.clone();
 
         if let Some(details) = &response_ref.quote_details {
             info!("  Total Cost: ${:.6}", details.total_cost_rate);
@@ -369,28 +342,29 @@ resources = [
             info!("  Timestamp: {}", details.timestamp);
             info!("  Expiry: {}", details.expiry);
 
-            // Store the quote details for comparison
-            quote_responses.push((i, details.clone(), response_ref.operator_id.clone()));
+            quote_responses.push((
+                i,
+                details.clone(),
+                response_ref.operator_id.clone(),
+                signature,
+            ));
         } else {
             info!("  No quote details provided");
         }
     }
 
-    // Print a summary of all quotes
-    info!("\n=== Quote Summary ===");
     if quote_responses.is_empty() {
         info!("No quotes received from any operator");
     } else {
         info!("Received {} quotes:", quote_responses.len());
 
-        // Sort quotes by total cost
         quote_responses.sort_by(|a, b| {
             a.1.total_cost_rate
                 .partial_cmp(&b.1.total_cost_rate)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        for (i, details, operator_id) in &quote_responses {
+        for (i, details, operator_id, signature) in &quote_responses {
             info!(
                 "Operator {}: ${:.6} (ID: {:?})",
                 i, details.total_cost_rate, operator_id
@@ -398,7 +372,7 @@ resources = [
         }
 
         // Identify the cheapest quote
-        if let Some((i, details, operator_id)) = quote_responses.first() {
+        if let Some((i, details, operator_id, signature)) = quote_responses.first() {
             info!(
                 "\nCheapest quote is from Operator {}: ${:.6} (ID: {:?})",
                 i, details.total_cost_rate, operator_id
@@ -406,14 +380,95 @@ resources = [
         }
     }
 
-    // Step 6: Verify the total cost calculation
-    // Calculate expected cost for a given TTL in blocks
-    info!("\n=== Cost Calculation Verification ===");
     info!("Base price per block: ${:.6}", expected_total);
     info!(
         "Expected cost for {} blocks: ${:.6}",
         ttl_blocks, expected_cost
     );
+
+    if !quote_responses.is_empty() {
+        quote_responses.sort_by(|a, b| {
+            a.1.total_cost_rate
+                .partial_cmp(&b.1.total_cost_rate)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        if let Some((operator_index, quote_details, operator_id, signature)) =
+            quote_responses.first()
+        {
+            info!(
+                "Selected cheapest quote from Operator {}: ${:.6} (ID: {:?})",
+                operator_index, quote_details.total_cost_rate, operator_id
+            );
+
+            let signature_bytes: [u8; 65] = signature[..65].try_into().unwrap();
+            let node_handles = test_env.node_handles().await;
+            let signer = node_handles.first().unwrap().signer;
+            let &account_id = signer.into_inner().account_id();
+            let quote_signatures = vec![(account_id, signature_bytes)];
+
+            let QuoteDetails {
+                blueprint_id,
+                resources,
+                security_commitments,
+                ttl_blocks,
+                total_cost_rate,
+                timestamp,
+                expiry,
+            } = quote_details;
+            let security_commitments = security_commitments.unwrap();
+
+            let resources = BoundedVec::try_from(resources.clone()).unwrap();
+            let security_commitments = BoundedVec::try_from(security_commitments.clone()).unwrap();
+
+            let quotes = vec![PricingQuote {
+                blueprint_id: *blueprint_id,
+                ttl_blocks: *ttl_blocks,
+                resources,
+                security_commitments,
+                total_cost_rate: *total_cost_rate as u64,
+                timestamp: *timestamp,
+                expiry: *expiry,
+            }];
+
+            let request_args = RequestArgs::default();
+            harness
+                .request_service_with_quotes(
+                    *blueprint_id,
+                    request_args,
+                    quotes,
+                    quote_signatures,
+                    security_commitments,
+                    None,
+                )
+                .await
+                .unwrap();
+
+            let operators = test_env.nodes.read().await.len();
+            info!("Found {} operators in the test environment", operators);
+
+            if *operator_index < operators {
+                match harness.submit_job(*blueprint_id, 0, vec![]).await {
+                    Ok(job) => {
+                        info!("Service request submitted successfully!");
+                        info!("Job ID: {:?}", job);
+                    }
+                    Err(e) => {
+                        warn!("Failed to submit job: {:?}", e);
+                    }
+                }
+            } else {
+                warn!(
+                    "Selected operator index {} is out of bounds",
+                    operator_index
+                );
+            }
+        } else {
+            warn!("No quotes available to submit service request");
+        }
+    } else {
+        warn!("No quotes available to submit service request");
+    }
 
     // Clean up
     for (cache_path, keystore_path) in cleanup_paths {

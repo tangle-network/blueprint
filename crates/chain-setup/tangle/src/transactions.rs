@@ -18,6 +18,7 @@ use tangle_subxt::subxt::{
     utils::AccountId32,
 };
 use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::PricingQuote;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment;
 use tangle_subxt::tangle_testnet_runtime::api::{
     self,
@@ -501,6 +502,123 @@ pub async fn request_service_for_operators<T: Signer<TangleConfig>>(
     }
     Ok(new_service_id.saturating_sub(1))
 }
+
+/// Requests a service with a given blueprint.
+///
+/// This is meant for testing.
+///
+/// `user` will be the only permitted caller, and all `test_nodes` will be selected as operators.
+///
+/// # Errors
+///
+/// Returns an error if the transaction fails
+#[allow(clippy::cast_possible_truncation)]
+pub async fn request_service_with_quotes<T: Signer<TangleConfig>>(
+    client: &TestClient,
+    user: &T,
+    blueprint_id: u64,
+    request_args: RequestArgs,
+    quotes: Vec<PricingQuote>,
+    quote_signatures: Vec<(AccountId32, [u8; 65])>,
+    security_commitments: Vec<AssetSecurityCommitment<AssetId>>,
+    optional_assets: Option<Vec<AssetSecurityRequirement<AssetId>>>,
+) -> Result<(), TransactionError> {
+    let test_nodes: Vec<AccountId32> = quote_signatures.iter().map(|(id, _)| id.clone()).collect();
+    info!(requester = ?user.account_id(), ?test_nodes, %blueprint_id, "Requesting service");
+    let min_operators = test_nodes.len() as u32;
+    let security_requirements = optional_assets.unwrap_or_else(|| {
+        vec![AssetSecurityRequirement {
+            asset: Asset::Custom(0),
+            min_exposure_percent: Percent(50),
+            max_exposure_percent: Percent(80),
+        }]
+    });
+    let call = api::tx().services().request_with_signed_price_quotes(
+        None,
+        blueprint_id,
+        Vec::new(),
+        test_nodes,
+        request_args,
+        security_requirements,
+        1000,
+        Asset::Custom(0),
+        MembershipModel::Fixed { min_operators },
+        quote_signatures,
+        security_commitments,
+        quotes,
+    );
+    let res = client
+        .subxt_client()
+        .tx()
+        .sign_and_submit_then_watch_default(&call, user)
+        .await?;
+    wait_for_in_block_success(res).await?;
+    Ok(())
+}
+
+// pub async fn request_service_for_operators_with_quotes<T: Signer<TangleConfig>>(
+//     clients: &[TestClient],
+//     sr25519_signers: &[T],
+//     blueprint_id: u64,
+//     request_args: RequestArgs,
+//     quotes: Vec<PricingQuote>,
+//     quote_signatures: Vec<(AccountId32, [u8; 65])>,
+//     security_commitments: Vec<AssetSecurityCommitment<AssetId>>,
+//     optional_assets: Option<Vec<AssetSecurityRequirement<AssetId>>>,
+// ) -> Result<u64, TransactionError> {
+//     let alice_signer = sr25519_signers
+//         .first()
+//         .ok_or(TransactionError::Other("No signers".to_string()))?;
+
+//     let alice_client = clients
+//         .first()
+//         .ok_or(TransactionError::Other("No client".to_string()))?;
+
+//     // Get the current service ID before requesting new service
+//     let prev_service_id = get_next_service_id(alice_client).await?;
+
+//     request_service_with_quotes(
+//         alice_client,
+//         alice_signer,
+//         blueprint_id,
+//         request_args,
+//         quotes,
+//         quote_signatures,
+//         security_commitments,
+//         optional_assets,
+//     )
+//     .await?;
+
+//     // Approve the service request and wait for completion
+//     let request_id = get_next_request_id(alice_client).await?.saturating_sub(1);
+
+//     for (signer, client) in sr25519_signers.iter().zip(clients) {
+//         approve_service(client, signer, request_id, 50, None).await?;
+//     }
+
+//     // Get the new service ID from events
+//     let new_service_id = get_next_service_id(alice_client).await?;
+//     assert!(new_service_id > prev_service_id);
+
+//     // Verify the service belongs to our blueprint
+//     let service = alice_client
+//         .subxt_client()
+//         .storage()
+//         .at_latest()
+//         .await?
+//         .fetch(
+//             &api::storage()
+//                 .services()
+//                 .instances(new_service_id.saturating_sub(1)),
+//         )
+//         .await?
+//         .ok_or(TransactionError::ServiceNotFound)?;
+
+//     if service.blueprint != blueprint_id {
+//         return Err(TransactionError::ServiceIdMismatch);
+//     }
+//     Ok(new_service_id.saturating_sub(1))
+// }
 
 /// Setup operators and services for multiple nodes
 ///
