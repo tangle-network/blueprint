@@ -1,5 +1,4 @@
-//! A Smart extractor for all metadata in the current [`JobCall`].
-//!
+//! An extractor for all metadata in the current [`JobCall`].
 //!
 //! [`JobCall`]: crate::JobCall
 

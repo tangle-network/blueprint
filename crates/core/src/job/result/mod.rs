@@ -1,5 +1,6 @@
 use crate::error::Error;
 use crate::metadata::{MetadataMap, MetadataValue};
+use bytes::Bytes;
 
 mod into_job_result;
 mod into_job_result_parts;
@@ -8,16 +9,42 @@ pub use into_job_result::IntoJobResult;
 pub use into_job_result_parts::IntoJobResultParts;
 pub use into_job_result_parts::JobResultParts;
 
-// TODO(serial): More docs on this
 /// A special result type that indicates a job produced no result
 ///
 /// This is **not** the same as returning `None` or `()` from your [`Job`].
 ///
+/// It is useful for the following situations:
+///
+/// * Multiple parties are running a [`Job`], but only one should submit the result. All other parties
+///   should return [`Void`].
+/// * The [`Job`] doesn't produce anything to submit
+///
+/// This can also be used in a [`Result`] to return nothing in the success case but still allow for
+/// reporting errors:
+///
+/// ```rust
+/// use blueprint_core::error::BoxError;
+/// use blueprint_sdk::job::result::Void;
+///
+/// async fn my_job() -> Result<Void, BoxError> {
+///     Ok(Void)
+/// }
+/// ```
+///
 /// [`Job`]: crate::Job
 pub struct Void;
 
+/// The result of a [`Job`] call
+///
+/// This type is rarely used directly. It is produced by the [`IntoJobResult`] trait and given to
+/// [consumers].
+///
+/// See the [module docs](crate::job::result) for more details.
+///
+/// [`Job`]: crate::job::Job
+/// [consumers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/consumers/index.html
 #[derive(Debug, Clone)]
-pub enum JobResult<T, E = Error> {
+pub enum JobResult<T = Bytes, E = Error> {
     Ok { head: Parts, body: T },
     Err(E),
 }

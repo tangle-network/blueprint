@@ -1,7 +1,7 @@
 use super::id::JobId;
-
 use crate::extensions::Extensions;
 use crate::metadata::{MetadataMap, MetadataValue};
+use bytes::Bytes;
 
 /// Representation of a job call event
 ///
@@ -27,7 +27,7 @@ use crate::metadata::{MetadataMap, MetadataValue};
 /// [Producers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/producers/index.html
 /// [extract]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/extract/index.html
 #[derive(Clone, Debug)]
-pub struct JobCall<T> {
+pub struct JobCall<T = Bytes> {
     head: Parts,
     body: T,
 }
@@ -49,7 +49,7 @@ impl<T: Default> Default for JobCall<T> {
 pub struct Parts {
     /// The Job ID
     pub job_id: JobId,
-    /// Any metadata that were included in the job call
+    /// Any metadata that was included in the job call
     pub metadata: MetadataMap<MetadataValue>,
     /// The job call extensions
     pub extensions: Extensions,

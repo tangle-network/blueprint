@@ -16,9 +16,7 @@ use core::convert::Infallible;
 /// # Optional return value
 ///
 /// The [`into_job_result()`] method returns `Option<JobResult>`, as certain values can be considered
-/// "void", meaning that they don't produce a result. This is useful in the case of [`Job`]s that
-/// multiple parties are running, but only one party should submit the result. In this case, the
-/// other parties should return [`Void`] from their [`Job`]s.
+/// "void", meaning that they don't produce a result. See [`Void`].
 ///
 /// # Results
 ///
