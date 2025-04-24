@@ -1,6 +1,6 @@
+use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
-use std::fs;
 
 use blueprint_pricing_engine_lib::{
     app::{init_benchmark_cache, init_operator_signer},
@@ -24,7 +24,9 @@ use blueprint_testing_utils::{
     tangle::{TangleTestHarness, blueprint::create_test_blueprint, harness::SetupServicesOpts},
 };
 use chrono::Utc;
-use tangle_subxt::subxt::utils::H160;
+use sp_core::ecdsa;
+use tangle_subxt::subxt::utils::{H160, AccountId32};
+use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::sp_arithmetic::per_things::Percent;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{Asset, AssetSecurityCommitment};
 use tangle_subxt::{
@@ -35,6 +37,7 @@ use tangle_subxt::{
 };
 use tempfile::tempdir;
 use tokio::time::sleep;
+use tonic::transport::Channel;
 
 /// Test the full pricing and request flow with a blueprint on a local Tangle Testnet
 #[tokio::test]
@@ -50,11 +53,11 @@ async fn test_full_pricing_flow_with_blueprint() -> Result<()> {
     let setup_services_opts = SetupServicesOpts {
         exit_after_registration: false,
         skip_service_request: true,
-        registration_args: vec![RegistrationArgs::default(); 3].try_into().unwrap(),
+        registration_args: vec![RegistrationArgs::default(); 4].try_into().unwrap(),
         request_args: RequestArgs::default(),
     };
     let (mut test_env, _service_id, blueprint_id) = harness
-        .setup_services_with_options::<3>(setup_services_opts)
+        .setup_services_with_options::<4>(setup_services_opts)
         .await
         .unwrap();
     test_env.initialize().await.unwrap();
@@ -293,13 +296,32 @@ resources = [
     let expected_total = price_model.total_cost;
     let expected_cost = expected_total * (ttl_blocks as f64);
 
-    for (i, client) in clients.iter_mut().enumerate() {
-        let challenge_timestamp = Utc::now().timestamp() as u64;
-        let challenge = generate_challenge(blueprint_id, challenge_timestamp);
-        let proof = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
+    let operator_endpoints = vec![
+        "http://127.0.0.1:9000".to_string(),
+        "http://127.0.0.1:9001".to_string(),
+        "http://127.0.0.1:9002".to_string(),
+    ];
 
-        let request = pricing_engine::GetPriceRequest {
-            blueprint_id,
+    // Collect quotes from operators
+    for (operator_index, operator_endpoint) in operator_endpoints.iter().enumerate() {
+        // Skip operator 0 (Alice) as it will be the requester
+        if operator_index == 0 {
+            info!("Skipping operator 0 (Alice) as it will be the requester");
+            continue;
+        }
+
+        info!("Requesting quote from operator {}", operator_index);
+        let mut client = PricingEngineClient::new(
+            Channel::from_shared(operator_endpoint.clone())
+                .expect("Invalid URI")
+                .connect_lazy(),
+        );
+
+        // Generate a fresh timestamp for each quote request
+        let challenge_timestamp = Utc::now().timestamp() as u64;
+
+        let request = tonic::Request::new(pricing_engine::GetPriceRequest {
+            blueprint_id: blueprint_id as u64,
             ttl_blocks,
             resource_requirements: vec![
                 pricing_engine::ResourceRequirement {
@@ -311,87 +333,54 @@ resources = [
                     count: 1024,
                 },
             ],
-            proof_of_work: proof,
+            proof_of_work: generate_proof(
+                &generate_challenge(blueprint_id, challenge_timestamp),
+                DEFAULT_POW_DIFFICULTY,
+            )
+            .await?,
             security_requirements: Some(pricing_engine::AssetSecurityRequirements {
                 asset: Some(pricing_engine::Asset {
-                    asset_type: Some(pricing_engine::asset::AssetType::Custom(
-                        u32_to_u128_bytes(1234)
-                    )),
+                    asset_type: Some(pricing_engine::asset::AssetType::Custom(u32_to_u128_bytes(
+                        0,
+                    ))),
                 }),
                 minimum_exposure_percent: 50,
                 maximum_exposure_percent: 80,
             }),
             challenge_timestamp,
-        };
+        });
 
-        info!("Requesting quote from operator {}", i);
+        let response = client.get_price(request).await.unwrap();
+        let quote_details = response.get_ref().quote_details.clone().unwrap();
+        let signature = response.get_ref().signature.clone();
+        let operator_id = response.get_ref().operator_id.clone();
 
-        let response = match client.get_price(request).await {
-            Ok(response) => response,
-            Err(status) => {
-                error!("gRPC error from operator {}: {}", i, status);
-                continue;
-            }
-        };
+        info!(
+            "Received quote from operator {}: ${:.6} (ID: {:?})",
+            operator_index, quote_details.total_cost_rate, operator_id
+        );
 
-        let response_ref = response.get_ref();
+        // Print detailed information about the signature for debugging
+        info!("Signature length: {}", signature.len());
+        info!("Signature: {:?}", signature);
+        info!("Operator ID length: {}", operator_id.len());
+        info!("Operator ID: {:?}", operator_id);
 
-        info!("Received quote from operator {}:", i);
-        info!("  Operator ID: {:?}", response_ref.operator_id);
-
-        let signature = response_ref.signature.clone();
-
-        if let Some(details) = &response_ref.quote_details {
-            info!("  Total Cost: ${:.6}", details.total_cost_rate);
-            info!("  TTL: {} blocks", details.ttl_blocks);
-            info!("  Timestamp: {}", details.timestamp);
-            info!("  Expiry: {}", details.expiry);
-
-            quote_responses.push((
-                i,
-                details.clone(),
-                response_ref.operator_id.clone(),
-                signature,
-            ));
-        } else {
-            info!("  No quote details provided");
-        }
+        quote_responses.push((operator_index, quote_details, operator_id, signature));
     }
 
     if quote_responses.is_empty() {
         info!("No quotes received from any operator");
     } else {
         info!("Received {} quotes:", quote_responses.len());
-
-        quote_responses.sort_by(|a, b| {
-            a.1.total_cost_rate
-                .partial_cmp(&b.1.total_cost_rate)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        for (i, details, operator_id, signature) in &quote_responses {
+        for (i, details, operator_id, _signature) in &quote_responses {
             info!(
                 "Operator {}: ${:.6} (ID: {:?})",
                 i, details.total_cost_rate, operator_id
             );
         }
 
-        // Identify the cheapest quote
-        if let Some((i, details, operator_id, signature)) = quote_responses.first() {
-            info!(
-                "\nCheapest quote is from Operator {}: ${:.6} (ID: {:?})",
-                i, details.total_cost_rate, operator_id
-            );
-        }
-    }
-
-    info!("Base price per block: ${:.6}", expected_total);
-    info!(
-        "Expected cost for {} blocks: ${:.6}",
-        ttl_blocks, expected_cost
-    );
-
-    if !quote_responses.is_empty() {
+        // Sort quotes by total cost rate (cheapest first)
         quote_responses.sort_by(|a, b| {
             a.1.total_cost_rate
                 .partial_cmp(&b.1.total_cost_rate)
@@ -421,7 +410,8 @@ resources = [
             let signer = node_handles.first().unwrap().signer.clone();
             let signer = signer.into_inner();
             let account_id = signer.account_id();
-            let quote_signatures = vec![(account_id.clone(), signature_bytes)];
+            let operators = vec![account_id.clone()];
+            let quote_signatures = vec![signature_bytes.into()];
 
             let QuoteDetails {
                 blueprint_id,
@@ -431,9 +421,26 @@ resources = [
                 total_cost_rate,
                 timestamp,
                 expiry,
-            } = quote_details;
-            let security_commitment = security_commitments.clone().unwrap();
+            } = quote_details.clone();
 
+            // 3. Hash the quote details (similar to what happens in signer.rs)
+            // We can't directly use the same hashing function, but we can log the details
+            info!("Quote details being hashed:");
+            info!("  Blueprint ID: {}", blueprint_id);
+            info!("  TTL Blocks: {}", ttl_blocks);
+            info!("  Total Cost Rate: {}", total_cost_rate);
+            info!("  Timestamp: {}", timestamp);
+            info!("  Expiry: {}", expiry);
+            info!("  Resources count: {}", resources.len());
+            if let Some(sc) = &security_commitments {
+                info!(
+                    "  Security commitments count: {}",
+                    sc.asset.as_ref().map_or(0, |_| 1)
+                );
+            }
+
+            let security_commitment = security_commitments.clone().unwrap();
+            info!("Quote details: {:?}", quote_details);
 
             let mapped_resources: Vec<tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing> = resources
                 .iter()
@@ -443,46 +450,77 @@ resources = [
                     price_per_unit_rate: (resource.price_per_unit_rate * 1e6) as u64,
                 })
                 .collect();
-            let resources = BoundedVec::<ResourcePricing>(mapped_resources);
-            
+            let resources = BoundedVec::<ResourcePricing>(mapped_resources.clone());
+            info!("Mapped resources: {:?}", mapped_resources);
+
             let inner_asset_type = security_commitment.asset.unwrap().asset_type.unwrap();
-            let asset = match inner_asset_type{
+            let asset = match inner_asset_type {
                 AssetType::Custom(asset) => {
-                    // Convert bytes to u128 using our utility function
                     let asset_id = bytes_to_u128(&asset);
+                    info!("Asset ID: {}", asset_id);
                     Asset::Custom(asset_id)
-                },
+                }
                 AssetType::Erc20(address) => {
-                    // Convert slice to fixed-size array first
-                    let address_bytes: [u8; 20] = address.as_slice().try_into()
+                    let address_bytes: [u8; 20] = address
+                        .as_slice()
+                        .try_into()
                         .expect("ERC20 address should be 20 bytes");
+                    info!("ERC20 address: {:?}", address_bytes);
                     Asset::Erc20(H160::from(address_bytes))
-                },
+                }
             };
             let exposure_percent = Percent(security_commitment.exposure_percent as u8);
-            let mapped_security_commitment = 
+            info!("Exposure percent: {:?}", exposure_percent);
+            let mapped_security_commitment =
                 vec![tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment {
-                    asset,
+                    asset: asset.clone(),
                     exposure_percent,
                 }];
-            
-            let security_commitments = BoundedVec::<AssetSecurityCommitment<u128>>(mapped_security_commitment.clone());
+            info!(
+                "Mapped security commitment: {:?}",
+                mapped_security_commitment
+            );
+
+            let security_commitments =
+                BoundedVec::<AssetSecurityCommitment<u128>>(mapped_security_commitment.clone());
 
             let quotes = vec![PricingQuote {
-                blueprint_id: *blueprint_id,
-                ttl_blocks: *ttl_blocks,
-                resources,
-                security_commitments: Some(security_commitments),
-                total_cost_rate: *total_cost_rate as u64,
-                timestamp: *timestamp,
-                expiry: *expiry,
+                blueprint_id,
+                ttl_blocks,
+                resources: resources.clone(),
+                security_commitments: Some(security_commitments.clone()),
+                total_cost_rate: total_cost_rate as u64,
+                timestamp: timestamp,
+                expiry: expiry,
             }];
+            info!("Quotes: {:?}", quotes);
 
             let request_args = RequestArgs::default();
+            info!("Request args: {:?}", request_args);
+
+            info!(
+                "Submitting service request with requester account: {:?}",
+                harness.sr25519_signer.account_id()
+            );
+            info!("Using operator account: {:?}", account_id);
+
+            // Ensure security commitments match what's expected by the Tangle runtime
+            let mapped_security_commitment =
+                ec![tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment {
+                    asset: Asset::Custom(0), // Use a simple Custom(0) asset
+                    exposure_percent: Percent(50), // Use a simple 50% exposure
+                }];
+            info!(
+                "Using simplified security commitment: {:?}",
+                mapped_security_commitment
+            );
+
+            // Try with a try/catch to get more detailed error information
             harness
                 .request_service_with_quotes(
-                    *blueprint_id,
-                    request_args,
+                    blueprint_id,
+                    RequestArgs::default(), // Use default request args
+                    operators,
                     quotes,
                     quote_signatures,
                     mapped_security_commitment,
@@ -495,26 +533,24 @@ resources = [
             info!("Found {} operators in the test environment", operators);
 
             if *operator_index < operators {
-                match harness.submit_job(*blueprint_id, 0, vec![]).await {
+                match harness.submit_job(blueprint_id, 0, vec![]).await {
                     Ok(job) => {
                         info!("Service request submitted successfully!");
                         info!("Job ID: {:?}", job);
                     }
                     Err(e) => {
-                        warn!("Failed to submit job: {:?}", e);
+                        panic!("Failed to submit job: {e}");
                     }
                 }
             } else {
-                warn!(
+                panic!(
                     "Selected operator index {} is out of bounds",
                     operator_index
                 );
             }
         } else {
-            warn!("No quotes available to submit service request");
+            panic!("No quotes available to submit service request");
         }
-    } else {
-        warn!("No quotes available to submit service request");
     }
 
     // Clean up

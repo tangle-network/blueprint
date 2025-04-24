@@ -1,30 +1,30 @@
 //! Utility functions for the pricing engine
 
 /// Convert a u128 value to a 16-byte Vec<u8> in little-endian byte order
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `value` - The u128 value to convert
-/// 
+///
 /// # Returns
-/// 
+///
 /// A Vec<u8> containing the 16-byte little-endian representation of the u128 value
 pub fn u128_to_bytes(value: u128) -> Vec<u8> {
     value.to_le_bytes().to_vec()
 }
 
 /// Convert a byte slice to a u128 value, assuming little-endian byte order
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `bytes` - The byte slice to convert, must be exactly 16 bytes
-/// 
+///
 /// # Returns
-/// 
+///
 /// The u128 value represented by the bytes
-/// 
+///
 /// # Panics
-/// 
+///
 /// Panics if the byte slice is not exactly 16 bytes long
 pub fn bytes_to_u128(bytes: &[u8]) -> u128 {
     let mut array = [0u8; 16];
@@ -37,13 +37,13 @@ pub fn bytes_to_u128(bytes: &[u8]) -> u128 {
 
 /// Convert a u32 value to a 16-byte Vec<u8> in little-endian byte order
 /// This is useful when you have a u32 but need to store it as a u128 in bytes
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `value` - The u32 value to convert
-/// 
+///
 /// # Returns
-/// 
+///
 /// A Vec<u8> containing the 16-byte little-endian representation of the u32 value
 /// (with the higher order bytes set to 0)
 pub fn u32_to_u128_bytes(value: u32) -> Vec<u8> {

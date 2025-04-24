@@ -459,8 +459,9 @@ where
         &self,
         blueprint_id: u64,
         request_args: RequestArgs,
+        operators: Vec<AccountId32>,
         quotes: Vec<PricingQuote>,
-        quote_signatures: Vec<(AccountId32, [u8; 65])>,
+        quote_signatures: Vec<sp_core::ecdsa::Signature>,
         security_commitments: Vec<AssetSecurityCommitment<AssetId>>,
         optional_assets: Option<Vec<AssetSecurityRequirement<AssetId>>>,
     ) -> Result<(), Error> {
@@ -469,6 +470,7 @@ where
             &self.sr25519_signer,
             blueprint_id,
             request_args,
+            operators,
             quotes,
             quote_signatures,
             security_commitments,

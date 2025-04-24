@@ -1,11 +1,12 @@
 use blueprint_crypto::KeyType;
 use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_pricing_engine_lib::{
+    OperatorSigner,
     config::OperatorConfig,
     error::{PricingError, Result},
     pricing_engine,
     signer::{hash_quote_details, verify_quote},
-    utils::u32_to_u128_bytes, OperatorSigner,
+    utils::u32_to_u128_bytes,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -115,9 +116,9 @@ fn create_test_quote_details() -> pricing_engine::QuoteDetails {
 
     let security_commitment = pricing_engine::AssetSecurityCommitment {
         asset: Some(pricing_engine::Asset {
-            asset_type: Some(pricing_engine::asset::AssetType::Custom(
-                u32_to_u128_bytes(1234)
-            )),
+            asset_type: Some(pricing_engine::asset::AssetType::Custom(u32_to_u128_bytes(
+                1234,
+            ))),
         }),
         exposure_percent: 50,
     };

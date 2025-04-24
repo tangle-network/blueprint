@@ -72,16 +72,26 @@ impl PricingEngine for PricingEngineService {
         let current_timestamp = Utc::now().timestamp() as u64;
         let challenge_timestamp = if req.challenge_timestamp > 0 {
             if req.challenge_timestamp < current_timestamp.saturating_sub(30) {
-                warn!("Challenge timestamp is too old: {}", req.challenge_timestamp);
+                warn!(
+                    "Challenge timestamp is too old: {}",
+                    req.challenge_timestamp
+                );
                 return Err(Status::invalid_argument("Challenge timestamp is too old"));
             }
             if req.challenge_timestamp > current_timestamp + 30 {
-                warn!("Challenge timestamp is too far in the future: {}", req.challenge_timestamp);
-                return Err(Status::invalid_argument("Challenge timestamp is too far in the future"));
+                warn!(
+                    "Challenge timestamp is too far in the future: {}",
+                    req.challenge_timestamp
+                );
+                return Err(Status::invalid_argument(
+                    "Challenge timestamp is too far in the future",
+                ));
             }
             req.challenge_timestamp
         } else {
-            return Err(Status::invalid_argument("Challenge timestamp is missing or invalid"));
+            return Err(Status::invalid_argument(
+                "Challenge timestamp is missing or invalid",
+            ));
         };
 
         let challenge = generate_challenge(blueprint_id, challenge_timestamp);
