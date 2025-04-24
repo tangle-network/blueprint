@@ -506,7 +506,7 @@ resources = [
 
             // Ensure security commitments match what's expected by the Tangle runtime
             let mapped_security_commitment =
-                ec![tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment {
+                vec![tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment {
                     asset: Asset::Custom(0), // Use a simple Custom(0) asset
                     exposure_percent: Percent(50), // Use a simple 50% exposure
                 }];
