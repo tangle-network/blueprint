@@ -1,11 +1,11 @@
 use blueprint_core::error::BoxError;
 use thiserror::Error;
+use tokio::task::JoinError;
 
+/// Errors that can occur when constructing or operating a [`BlueprintRunner`](crate::BlueprintRunner)
 #[derive(Error, Debug)]
 pub enum RunnerError {
-    #[error("Protocol error: {0}")]
-    InvalidProtocol(String),
-
+    /// Unable to open/interact with the provided [`Keystore`](blueprint_keystore::Keystore)
     #[error("Keystore error: {0}")]
     Keystore(#[from] blueprint_keystore::Error),
 
@@ -13,56 +13,68 @@ pub enum RunnerError {
     #[error("Networking error: {0}")]
     Networking(#[from] blueprint_networking::error::Error),
 
-    #[error("Signature error: {0}")]
-    SignatureError(String),
-
-    #[error("Transaction error: {0}")]
-    TransactionError(String),
-
-    #[error("Not an active operator")]
-    NotActiveOperator,
-
-    #[error("Receive error: {0}")]
-    Recv(String),
-
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Unable to read/use the provided configuration values
     #[error("Configuration error: {0}")]
     Config(#[from] ConfigError),
 
-    #[error("Tangle error: {0}")]
-    Tangle(String),
-
+    /// The [`BlueprintRunner`] was configured without a [`Router`]
+    ///
+    /// [`BlueprintRunner`]: crate::BlueprintRunner
+    /// [`Router`]: blueprint_router::Router
     #[error("Blueprint runner configured without a router")]
     NoRouter,
+    /// The [`BlueprintRunner`] was configured without any [producers]
+    ///
+    /// [`BlueprintRunner`]: crate::BlueprintRunner
+    /// [producers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/producers/index.html
     #[error("Blueprint runner configured without any producers")]
     NoProducers,
 
+    /// An error occurred in a [`BackgroundService`]
+    ///
+    /// [`BackgroundService`]: crate::BackgroundService
     #[error("A background service failed: {0}")]
     BackgroundService(String),
 
+    /// Errors that occur during a [`Job`] call
+    ///
+    /// [`Job`]: blueprint_core::Job
     #[error("A job call failed: {0}")]
-    JobCall(String),
+    JobCall(#[from] JobCallError),
 
+    /// Errors that come from [producers]
+    ///
+    /// [producers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/producers/index.html
+    #[error("A producer failed: {0}")]
+    Producer(#[from] ProducerError),
+
+    /// Errors that come from [consumers]
+    ///
+    /// [consumers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/consumers/index.html
     #[error("A consumer failed: {0}")]
     Consumer(BoxError),
 
-    #[error("Generic error: {0}")]
-    Other(String),
+    // Protocols
+    /// [Tangle] protocol errors
+    ///
+    /// [Tangle]: https://tangle.tools
+    #[cfg(feature = "tangle")]
+    #[error("Tangle error: {0}")]
+    Tangle(#[from] crate::tangle::error::TangleError),
 
+    /// [Eigenlayer] protocol errors
+    ///
+    /// [Eigenlayer]: https://eigenlayer.xyz
+    #[cfg(feature = "eigenlayer")]
     #[error("EigenLayer error: {0}")]
-    Eigenlayer(String),
+    Eigenlayer(#[from] crate::eigenlayer::error::EigenlayerError),
 
-    #[error("Contract error: {0}")]
-    Contract(String),
-
-    #[error("AVS Registry error: {0}")]
-    AvsRegistry(String),
+    #[error("{0}")]
+    Other(#[from] Box<dyn core::error::Error + Send + Sync>),
 }
-
-// Convenience Result type
-pub type Result<T> = std::result::Result<T, RunnerError>;
 
 /// Errors that can occur while loading and using the blueprint configuration.
 #[derive(Debug, thiserror::Error)]
@@ -121,4 +133,32 @@ pub enum ConfigError {
 
     #[error("{0}")]
     Other(#[from] Box<dyn core::error::Error + Send + Sync>),
+}
+
+/// Errors that occur during a [`Job`] call
+///
+/// [`Job`]: blueprint_core::Job
+#[derive(Error, Debug)]
+pub enum JobCallError {
+    /// The job call completed and returned an error
+    #[error("Job call failed: {0}")]
+    JobFailed(Box<dyn core::error::Error + Send + Sync>),
+
+    /// The job call did not complete (canceled or panicked)
+    #[error("Job failed to finish: {0}")]
+    JobDidntFinish(JoinError),
+}
+
+/// Errors that come from [producers]
+///
+/// [producers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/producers/index.html
+#[derive(Error, Debug)]
+pub enum ProducerError {
+    /// The producer, when polled, produced an error
+    #[error("A producer failed to produce a value: {0}")]
+    Failed(Box<dyn core::error::Error + Send + Sync>),
+
+    /// The producer stream ended prematurely
+    #[error("A producer stream ended unexpectedly")]
+    StreamEnded,
 }

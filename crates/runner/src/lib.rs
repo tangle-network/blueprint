@@ -19,6 +19,7 @@ mod symbiotic;
 #[cfg(feature = "tangle")]
 pub mod tangle;
 
+use crate::error::{JobCallError, ProducerError};
 use blueprint_core::error::BoxError;
 use blueprint_core::{JobCall, JobResult};
 use blueprint_router::Router;
@@ -37,6 +38,9 @@ use tower::Service;
 /// Configuration for the blueprint registration procedure
 #[dynosaur::dynosaur(DynBlueprintConfig)]
 pub trait BlueprintConfig: Send + Sync {
+    /// The registration logic for this protocol
+    ///
+    /// By default, this will do nothing.
     fn register(
         &self,
         env: &BlueprintEnvironment,
@@ -45,6 +49,11 @@ pub trait BlueprintConfig: Send + Sync {
         async { Ok(()) }
     }
 
+    /// Determines whether this protocol requires registration
+    ///
+    /// This determines whether [`Self::register()`] is called.
+    ///
+    /// By default, this will return `true`.
     fn requires_registration(
         &self,
         env: &BlueprintEnvironment,
@@ -53,9 +62,9 @@ pub trait BlueprintConfig: Send + Sync {
         async { Ok(true) }
     }
 
-    /// Controls whether the runner should exit after registration
+    /// Determines whether the runner should exit after registration
     ///
-    /// Returns `true` if the runner should exit after registration, or `false` if it should continue
+    /// By default, this will return `true`.
     fn should_exit_after_registration(&self) -> bool {
         true // By default, runners exit after registration
     }
@@ -66,8 +75,35 @@ unsafe impl Sync for DynBlueprintConfig<'_> {}
 
 impl BlueprintConfig for () {}
 
+/// A background service to be handled by a [`BlueprintRunner`]
+///
+/// # Usage
+///
+/// ```rust
+/// use blueprint_runner::BackgroundService;
+/// use blueprint_runner::error::RunnerError;
+/// use tokio::sync::oneshot::{self, Receiver};
+///
+/// // A dummy background service that immediately returns
+/// #[derive(Clone)]
+/// pub struct FooBackgroundService;
+///
+/// impl BackgroundService for FooBackgroundService {
+///     async fn start(&self) -> Result<Receiver<Result<(), RunnerError>>, RunnerError> {
+///         let (tx, rx) = oneshot::channel();
+///         tokio::spawn(async move {
+///             let _ = tx.send(Ok(()));
+///         });
+///         Ok(rx)
+///     }
+/// }
+/// ```
 #[dynosaur::dynosaur(DynBackgroundService)]
 pub trait BackgroundService: Send + Sync {
+    /// Start this background service
+    ///
+    /// This method returns a one-shot [Receiver](oneshot::Receiver), that is used to indicate when
+    /// the service stops running, either by finishing (`Ok(())`) or by error (`Err(e)`).
     fn start(
         &self,
     ) -> impl Future<Output = Result<oneshot::Receiver<Result<(), Error>>, Error>> + Send;
@@ -81,6 +117,8 @@ type Producer =
 type Consumer = Arc<Mutex<Box<dyn Sink<JobResult, Error = BoxError> + Send + Unpin + 'static>>>;
 
 /// A builder for a [`BlueprintRunner`]
+///
+/// This is created with [`BlueprintRunner::builder()`].
 pub struct BlueprintRunnerBuilder<F> {
     config: Box<DynBlueprintConfig<'static>>,
     env: BlueprintEnvironment,
@@ -98,6 +136,36 @@ where
     /// Set the [`Router`] for this runner
     ///
     /// A [`Router`] is the only required field in a [`BlueprintRunner`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blueprint_runner::config::BlueprintEnvironment;
+    /// use blueprint_router::Router;
+    /// use blueprint_runner::BlueprintRunner;
+    /// use futures::future;
+    /// use tokio::sync::oneshot;
+    /// use tokio::sync::oneshot::Receiver;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let config = /* ... */
+    ///     # ();
+    ///     let router = Router::new().route(0, async || "Hello, world!");
+    ///
+    ///     // Load the blueprint environment
+    ///     let blueprint_env = BlueprintEnvironment::default();
+    ///
+    ///     let result = BlueprintRunner::builder(config, blueprint_env)
+    ///         // Add the router to the runner
+    ///         .router(router)
+    ///         // Then start it up...
+    ///         .run()
+    ///         .await;
+    ///
+    ///     // ...
+    /// }
+    /// ```
     #[must_use]
     pub fn router(mut self, router: Router) -> Self {
         self.router = Some(router);
@@ -137,6 +205,54 @@ where
     }
 
     /// Append a background service to the list
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blueprint_runner::config::BlueprintEnvironment;
+    /// use blueprint_router::Router;
+    /// use blueprint_runner::error::RunnerError;
+    /// use blueprint_runner::{BackgroundService, BlueprintRunner};
+    /// use futures::future;
+    /// use tokio::sync::oneshot;
+    /// use tokio::sync::oneshot::Receiver;
+    ///
+    /// // A dummy background service that immediately returns
+    /// #[derive(Clone)]
+    /// pub struct FooBackgroundService;
+    ///
+    /// impl BackgroundService for FooBackgroundService {
+    ///     async fn start(&self) -> Result<Receiver<Result<(), RunnerError>>, RunnerError> {
+    ///         let (tx, rx) = oneshot::channel();
+    ///         tokio::spawn(async move {
+    ///             let _ = tx.send(Ok(()));
+    ///         });
+    ///         Ok(rx)
+    ///     }
+    /// }
+    ///
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let config = /* ... */
+    ///     # ();
+    ///     let router = /* ... */
+    ///     # Router::new().route(0, async || "Hello, world!");
+    ///
+    ///     // Load the blueprint environment
+    ///     let blueprint_env = BlueprintEnvironment::default();
+    ///
+    ///     let result = BlueprintRunner::builder(config, blueprint_env)
+    ///         .router(router)
+    ///         // Add potentially many background services
+    ///         .background_service(FooBackgroundService)
+    ///         // Then start it up...
+    ///         .run()
+    ///         .await;
+    ///
+    ///     // ...
+    /// }
+    /// ```
     #[must_use]
     pub fn background_service(mut self, service: impl BackgroundService + 'static) -> Self {
         self.background_services
@@ -157,6 +273,36 @@ where
     /// [Producers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/producers/index.html
     /// [Consumers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/consumers/index.html
     /// [Background Services]: crate::BackgroundService
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blueprint_runner::config::BlueprintEnvironment;
+    /// use blueprint_router::Router;
+    /// use blueprint_runner::BlueprintRunner;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let config = /* ... */
+    ///     # ();
+    ///     let router = /* ... */
+    ///     # Router::new().route(0, async || "Hello, world!");
+    ///
+    ///     // Load the blueprint environment
+    ///     let blueprint_env = BlueprintEnvironment::default();
+    ///
+    ///     let result = BlueprintRunner::builder(config, blueprint_env)
+    ///         .router(router)
+    ///         // Specify what to do when an error occurs and the runner is shutting down.
+    ///         // That can be cleanup logic, finalizing database transactions, etc.
+    ///         .with_shutdown_handler(async { println!("Shutting down!") })
+    ///         // Then start it up...
+    ///         .run()
+    ///         .await;
+    ///
+    ///     // ...
+    /// }
+    /// ```
     pub fn with_shutdown_handler<F2>(self, handler: F2) -> BlueprintRunnerBuilder<F2>
     where
         F2: Future<Output = ()> + Send + 'static,
@@ -408,7 +554,6 @@ where
 
         let mut pending_jobs = FuturesUnordered::new();
 
-        // TODO: Stop using string errors
         loop {
             tokio::select! {
                 // Receive job calls from producer
@@ -425,12 +570,12 @@ where
                         Some(Err(e)) => {
                             blueprint_core::error!(target: "blueprint-runner", "Producer error: {:?}", e);
                             let _ = shutdown_tx.send(true);
-                            return Err(Error::JobCall(e.to_string()));
+                            return Err(ProducerError::Failed(e).into());
                         },
                         None => {
                             blueprint_core::error!(target: "blueprint-runner", "Producer stream ended unexpectedly");
                             let _ = shutdown_tx.send(true);
-                            return Err(Error::JobCall("Producer stream ended".into()));
+                            return Err(ProducerError::StreamEnded.into());
                         }
                     }
                 },
@@ -471,12 +616,12 @@ where
                         },
                         Ok(Err(e)) => {
                             blueprint_core::error!(target: "blueprint-runner", "Job call task failed: {:?}", e);
-                            return Err(Error::JobCall(e.to_string()));
+                            return Err(JobCallError::JobFailed(e).into());
                         },
                         Err(e) => {
                             blueprint_core::error!(target: "blueprint-runner", "Job call failed: {:?}", e);
                             let _ = shutdown_tx.send(true);
-                            return Err(Error::JobCall(e.to_string()));
+                            return Err(JobCallError::JobDidntFinish(e).into());
                         },
                     }
                 }

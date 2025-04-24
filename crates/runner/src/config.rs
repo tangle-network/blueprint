@@ -15,8 +15,6 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub trait ProtocolSettingsT: Sized + 'static {
-    type Settings;
-
     /// Load the protocol-specific settings from the given [`BlueprintSettings`].
     ///
     /// # Errors
@@ -25,8 +23,13 @@ pub trait ProtocolSettingsT: Sized + 'static {
     /// certain variables.
     fn load(settings: BlueprintSettings)
     -> Result<Self, Box<dyn core::error::Error + Send + Sync>>;
+
+    /// Get the protocol name as a `str`
+    ///
+    /// For example, [`TangleProtocolSettings`] will return `"tangle"`.
+    ///
+    /// [`TangleProtocolSettings`]: crate::tangle::config::TangleProtocolSettings
     fn protocol(&self) -> &'static str;
-    fn settings(&self) -> &Self::Settings;
 }
 
 /// The protocol on which a blueprint will be executed.
@@ -112,8 +115,6 @@ pub enum ProtocolSettings {
 }
 
 impl ProtocolSettingsT for ProtocolSettings {
-    type Settings = Self;
-
     fn load(
         settings: BlueprintSettings,
     ) -> Result<Self, Box<dyn core::error::Error + Send + Sync>> {
@@ -152,10 +153,6 @@ impl ProtocolSettingsT for ProtocolSettings {
             ProtocolSettings::Symbiotic => "symbiotic",
             _ => unreachable!("should be exhaustive"),
         }
-    }
-
-    fn settings(&self) -> &Self::Settings {
-        self
     }
 }
 

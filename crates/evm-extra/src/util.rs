@@ -97,6 +97,8 @@ pub fn get_provider_from_signer(key: &str, rpc_url: &str) -> RootProvider {
 ///
 /// - [`TransportErrorKind::custom_str("Invalid RPC URL")`] - If the provided RPC URL is invalid.
 /// - [`PendingTransactionError`] - If the receipt cannot be retrieved.
+///
+/// [`TransportResult`]: alloy_transport::TransportResult
 pub async fn wait_transaction(
     rpc_url: &str,
     tx_hash: FixedBytes<32>,

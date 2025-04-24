@@ -4,7 +4,7 @@ use super::binary::{BinarySourceFetcher, generate_running_process_status_handle}
 use crate::error::{Error, Result};
 use crate::gadget::native::get_blueprint_binary;
 use crate::sdk;
-use crate::sdk::utils::{get_download_url, hash_bytes_to_hex, make_executable, valid_file_exists};
+use crate::sdk::utils::{get_download_url, make_executable, valid_file_exists};
 use blueprint_core::info;
 use std::path::PathBuf;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::GithubFetcher;
