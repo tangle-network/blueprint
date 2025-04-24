@@ -78,7 +78,7 @@ impl VerifiedBlueprint {
                     )
                     .await?;
 
-                if handle.status() != Status::Running {
+                if handle.wait_for_status_change().await != Some(Status::Running) {
                     error!("Process did not start successfully");
                     continue;
                 }
