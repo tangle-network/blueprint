@@ -488,7 +488,7 @@ resources = [
                 blueprint_id,
                 ttl_blocks,
                 resources: resources.clone(),
-                security_commitments: Some(security_commitments.clone()),
+                security_commitments: security_commitments.clone(),
                 total_cost_rate: total_cost_rate as u64,
                 timestamp: timestamp,
                 expiry: expiry,

@@ -524,7 +524,7 @@ pub async fn request_service_with_quotes<T: Signer<TangleConfig>>(
     security_commitments: Vec<AssetSecurityCommitment<AssetId>>,
     optional_assets: Option<Vec<AssetSecurityRequirement<AssetId>>>,
 ) -> Result<(), TransactionError> {
-    // let quote_signatures = quote_signatures.into_iter().map(|s| s.into()).collect();
+    let quote_signatures = quote_signatures.into_iter().map(|s| s.into()).collect();
     info!(requester = ?user.account_id(), ?operators, %blueprint_id, "Requesting service");
     let min_operators = operators.len() as u32;
     let security_requirements = optional_assets.unwrap_or_else(|| {
@@ -544,9 +544,9 @@ pub async fn request_service_with_quotes<T: Signer<TangleConfig>>(
         1000,
         Asset::Custom(0),
         MembershipModel::Fixed { min_operators },
-        // quote_signatures,
-        security_commitments,
         quotes,
+        quote_signatures,
+        security_commitments,
     );
     let res = client
         .subxt_client()
