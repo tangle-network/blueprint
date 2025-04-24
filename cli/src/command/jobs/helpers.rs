@@ -257,12 +257,12 @@ pub(crate) fn prompt_for_job_params(param_types: &[FieldType]) -> Result<Vec<Inp
                     let inner_values = prompt_for_job_params(&[*field_type.clone()])?;
                     if let Some(inner_value) = inner_values.first() {
                         args.push(InputValue::Optional(
-                            FieldType::String,
+                            (**field_type).clone(),
                             Box::new(Some(inner_value.clone())),
                         ));
                     }
                 } else {
-                    args.push(InputValue::Optional(FieldType::String, Box::new(None)));
+                    args.push(InputValue::Optional((**field_type).clone(), Box::new(None)));
                 }
             }
             FieldType::Array(size, field_type) => {
