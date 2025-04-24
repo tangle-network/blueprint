@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::ImageRegistryFetcher;
 use tokio::process::Command;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{info, log, warn};
+use tracing::{error, info, log, warn};
 use blueprint_runner::config::BlueprintEnvironment;
 use std::future::Future;
 use url::Url;
@@ -212,8 +212,15 @@ async fn create_container_task(
     Ok(async move {
         let container_future = async {
             info!("Starting process execution for {service_name}");
+            let output = container.start(false).await;
+            if let Err(e) = output {
+                error!("Failed to start container for {service_name}: {e}");
+                let _ = status_tx.send(Status::Error);
+            }
+
             let _ = status_tx.send(Status::Running);
-            let output = container.start(true).await;
+
+            let output = container.wait().await;
             if output.is_ok() {
                 let _ = status_tx.send(Status::Finished);
             } else {

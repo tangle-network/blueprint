@@ -23,6 +23,7 @@ pub fn generate_running_process_status_handle(
 
     let task = async move {
         info!("Starting process execution for {service_name}");
+        let _ = status_tx.send(Status::Running);
         let output = process.wait_with_output().await;
         if output.is_ok() {
             let _ = status_tx.send(Status::Finished).ok();
