@@ -3,8 +3,8 @@ use crate::config::OperatorConfig;
 use crate::pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
 use crate::pricing::calculate_price;
 use crate::signer::{OperatorSigner, SignedQuote as SignerSignedQuote};
+use blueprint_crypto::sp_core::SpEcdsa;
 use blueprint_crypto::BytesEncoding;
-use blueprint_crypto::k256::K256Ecdsa;
 use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -22,7 +22,7 @@ pub struct PricingEngineService {
     benchmark_cache: Arc<BenchmarkCache>,
     pricing_config:
         Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
-    signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
+    signer: Arc<Mutex<OperatorSigner<SpEcdsa>>>,
 }
 
 impl PricingEngineService {
@@ -32,7 +32,7 @@ impl PricingEngineService {
         pricing_config: Arc<
             Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
         >,
-        signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
+        signer: Arc<Mutex<OperatorSigner<SpEcdsa>>>,
     ) -> Self {
         Self {
             config,
@@ -183,7 +183,7 @@ impl PricingEngine for PricingEngineService {
             })?;
 
         // Sign the quote using the hash-based approach
-        let signed_quote: SignerSignedQuote<K256Ecdsa> = match self
+        let signed_quote: SignerSignedQuote<SpEcdsa> = match self
             .signer
             .lock()
             .await
@@ -200,7 +200,7 @@ impl PricingEngine for PricingEngineService {
         let response = GetPriceResponse {
             quote_details: Some(signed_quote.quote_details),
             signature: signed_quote.signature.to_bytes().to_vec(),
-            operator_id: signed_quote.operator_id.to_vec(),
+            operator_id: signed_quote.operator_id.0.to_vec(),
             proof_of_work: signed_quote.proof_of_work,
         };
 
@@ -216,7 +216,7 @@ pub async fn run_rpc_server(
     pricing_config: Arc<
         Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
     >,
-    signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
+    signer: Arc<Mutex<OperatorSigner<SpEcdsa>>>,
 ) -> anyhow::Result<()> {
     let addr = config.rpc_bind_address.parse()?;
     info!("gRPC server listening on {}", addr);

@@ -423,8 +423,6 @@ resources = [
                 expiry,
             } = quote_details.clone();
 
-            // 3. Hash the quote details (similar to what happens in signer.rs)
-            // We can't directly use the same hashing function, but we can log the details
             info!("Quote details being hashed:");
             info!("  Blueprint ID: {}", blueprint_id);
             info!("  TTL Blocks: {}", ttl_blocks);
@@ -439,60 +437,7 @@ resources = [
                 );
             }
 
-            let security_commitment = security_commitments.clone().unwrap();
-            info!("Quote details: {:?}", quote_details);
-
-            let mapped_resources: Vec<tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing> = resources
-                .iter()
-                .map(|resource| tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing {
-                    kind: new_bounded_string(resource.kind.clone()),
-                    count: resource.count,
-                    price_per_unit_rate: (resource.price_per_unit_rate * 1e6) as u64,
-                })
-                .collect();
-            let resources = BoundedVec::<ResourcePricing>(mapped_resources.clone());
-            info!("Mapped resources: {:?}", mapped_resources);
-
-            let inner_asset_type = security_commitment.asset.unwrap().asset_type.unwrap();
-            let asset = match inner_asset_type {
-                AssetType::Custom(asset) => {
-                    let asset_id = bytes_to_u128(&asset);
-                    info!("Asset ID: {}", asset_id);
-                    Asset::Custom(asset_id)
-                }
-                AssetType::Erc20(address) => {
-                    let address_bytes: [u8; 20] = address
-                        .as_slice()
-                        .try_into()
-                        .expect("ERC20 address should be 20 bytes");
-                    info!("ERC20 address: {:?}", address_bytes);
-                    Asset::Erc20(H160::from(address_bytes))
-                }
-            };
-            let exposure_percent = Percent(security_commitment.exposure_percent as u8);
-            info!("Exposure percent: {:?}", exposure_percent);
-            let mapped_security_commitment =
-                vec![tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment {
-                    asset: asset.clone(),
-                    exposure_percent,
-                }];
-            info!(
-                "Mapped security commitment: {:?}",
-                mapped_security_commitment
-            );
-
-            let security_commitments =
-                BoundedVec::<AssetSecurityCommitment<u128>>(mapped_security_commitment.clone());
-
-            let quotes = vec![PricingQuote {
-                blueprint_id,
-                ttl_blocks,
-                resources: resources.clone(),
-                security_commitments: security_commitments.clone(),
-                total_cost_rate: total_cost_rate as u64,
-                timestamp: timestamp,
-                expiry: expiry,
-            }];
+            let quotes = vec![blueprint_pricing_engine_lib::utils::create_on_chain_quote_type(&quote_details)];
             info!("Quotes: {:?}", quotes);
 
             let request_args = RequestArgs::default();
@@ -519,7 +464,7 @@ resources = [
             harness
                 .request_service_with_quotes(
                     blueprint_id,
-                    RequestArgs::default(), // Use default request args
+                    RequestArgs::default(),
                     operators,
                     quotes,
                     quote_signatures,

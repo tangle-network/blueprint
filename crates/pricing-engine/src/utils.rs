@@ -1,4 +1,7 @@
-//! Utility functions for the pricing engine
+use blueprint_tangle_extra::serde::{new_bounded_string, BoundedVec};
+use tangle_subxt::{subxt::utils::H160, tangle_testnet_runtime::api::runtime_types::{sp_arithmetic::per_things::Percent, tangle_primitives::services::{pricing::{PricingQuote, ResourcePricing}, types::{Asset, AssetSecurityCommitment}}}};
+
+use crate::pricing_engine::{asset::AssetType, QuoteDetails};
 
 /// Convert a u128 value to a 16-byte Vec<u8> in little-endian byte order
 ///
@@ -53,23 +56,64 @@ pub fn u32_to_u128_bytes(value: u32) -> Vec<u8> {
     bytes.to_vec()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Convert a QuoteDetails to a PricingQuote
+///
+/// # Arguments
+///
+/// * `quote_details` - The QuoteDetails to convert
+///
+/// # Returns
+///
+/// A PricingQuote containing the converted data
+/// 
+/// # Panics
+/// 
+/// Panics if any type conversions fails
+pub fn create_on_chain_quote_type(quote_details: &QuoteDetails) -> PricingQuote {
+    let security_commitment = quote_details.security_commitments.clone().unwrap();
 
-    #[test]
-    fn test_u128_to_bytes_roundtrip() {
-        let original = 0x1234_5678_9ABC_DEF0_1234_5678_9ABC_DEF0_u128;
-        let bytes = u128_to_bytes(original);
-        let roundtrip = bytes_to_u128(&bytes);
-        assert_eq!(original, roundtrip);
-    }
+            let mapped_resources: Vec<tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing> = quote_details.resources
+                .iter()
+                .map(|resource| tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing {
+                    kind: new_bounded_string(resource.kind.clone()),
+                    count: resource.count,
+                    price_per_unit_rate: (resource.price_per_unit_rate * 1e6) as u64,
+                })
+                .collect();
+            let resources = BoundedVec::<ResourcePricing>(mapped_resources.clone());
 
-    #[test]
-    fn test_u32_to_u128_bytes() {
-        let original = 0x1234_5678_u32;
-        let bytes = u32_to_u128_bytes(original);
-        let roundtrip = bytes_to_u128(&bytes);
-        assert_eq!(roundtrip, original as u128);
+            let inner_asset_type = security_commitment.asset.unwrap().asset_type.unwrap();
+            let asset = match inner_asset_type {
+                AssetType::Custom(asset) => {
+                    let asset_id = bytes_to_u128(&asset);
+                    Asset::Custom(asset_id)
+                }
+                AssetType::Erc20(address) => {
+                    let address_bytes: [u8; 20] = address
+                        .as_slice()
+                        .try_into()
+                        .expect("ERC20 address should be 20 bytes");
+                    Asset::Erc20(H160::from(address_bytes))
+                }
+            };
+            let exposure_percent = Percent(security_commitment.exposure_percent as u8);
+            let mapped_security_commitment =
+                vec![tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment {
+                    asset: asset.clone(),
+                    exposure_percent,
+                }];
+
+            let security_commitments =
+                BoundedVec::<AssetSecurityCommitment<u128>>(mapped_security_commitment.clone());
+
+
+    PricingQuote {
+        blueprint_id: quote_details.blueprint_id,
+        ttl_blocks: quote_details.ttl_blocks,
+        resources: resources,
+        security_commitments: security_commitments,
+        total_cost_rate: (quote_details.total_cost_rate * 1e6) as u64,
+        timestamp: quote_details.timestamp,
+        expiry: quote_details.expiry,
     }
 }

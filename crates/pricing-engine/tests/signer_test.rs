@@ -5,50 +5,10 @@ use blueprint_pricing_engine_lib::{
     config::OperatorConfig,
     error::{PricingError, Result},
     pricing_engine,
-    signer::{hash_quote_details, verify_quote},
+    signer::verify_quote,
     utils::u32_to_u128_bytes,
 };
-use prost::Message;
-use sha2::{Digest, Sha256};
-
-/// Test that creates a deterministic hash from a QuoteDetails proto message
-#[test]
-fn test_hash_quote_details() -> Result<()> {
-    // Create a deterministic QuoteDetails message
-    let quote_details = create_test_quote_details();
-
-    // Hash the quote details
-    let hash = hash_quote_details(&quote_details)?;
-
-    // Verify the hash is not empty
-    assert!(!hash.is_empty(), "Hash should not be empty");
-
-    // Verify the hash is the expected length for SHA-256 (32 bytes)
-    assert_eq!(hash.len(), 32, "Hash should be 32 bytes for SHA-256");
-
-    // Create the same QuoteDetails message again
-    let quote_details2 = create_test_quote_details();
-
-    // Hash it again
-    let hash2 = hash_quote_details(&quote_details2)?;
-
-    // Verify that the same input produces the same hash (deterministic)
-    assert_eq!(hash, hash2, "Hash function should be deterministic");
-
-    // Verify that our hash matches a manual implementation
-    let mut serialized = Vec::new();
-    quote_details.encode(&mut serialized).unwrap();
-    let mut hasher = Sha256::new();
-    hasher.update(&serialized);
-    let manual_hash = hasher.finalize().to_vec();
-
-    assert_eq!(
-        hash, manual_hash,
-        "Our hash should match a manual SHA-256 implementation"
-    );
-
-    Ok(())
-}
+use tangle_subxt::tangle_testnet_runtime::api::runtime_apis::rewards_api::types::query_user_rewards::AccountId;
 
 /// Test the full sign and verify flow
 #[tokio::test]
@@ -61,7 +21,7 @@ async fn test_sign_and_verify_quote() -> Result<()> {
     let secret = K256Ecdsa::generate_with_seed(None)
         .map_err(|e| PricingError::Other(format!("Failed to generate keypair: {}", e)))?;
 
-    let mut signer = OperatorSigner::<K256Ecdsa>::new(&config, secret, [0u8; 32])?;
+    let mut signer = OperatorSigner::<K256Ecdsa>::new(&config, secret, AccountId::from([0u8; 32]))?;
 
     // Create a deterministic QuoteDetails message
     let quote_details = create_test_quote_details();

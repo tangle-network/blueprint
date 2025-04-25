@@ -1,13 +1,12 @@
 use crate::config::OperatorConfig;
 use crate::error::{PricingError, Result};
 use crate::pricing_engine;
-use bincode;
-use blueprint_crypto::KeyType;
-use prost::Message;
-use tiny_keccak::{Hasher, Keccak};
+use blueprint_crypto::{BytesEncoding, KeyType};
+use parity_scale_codec::Encode;
+use tangle_subxt::subxt::utils::AccountId32;
 
 pub type BlueprintId = u64;
-pub type OperatorId = [u8; 32];
+pub type OperatorId = AccountId32;
 
 #[derive(Debug, Clone)]
 pub struct SignedQuote<K: KeyType> {
@@ -23,7 +22,7 @@ pub struct OperatorSigner<K: KeyType> {
 }
 
 impl<K: KeyType> OperatorSigner<K> {
-    /// Loads a keypair from a file or generates a new one if it doesn't exist.
+    /// Creates a new Operator Signer
     pub fn new(
         _config: &OperatorConfig,
         keypair: K::Secret,
@@ -35,7 +34,7 @@ impl<K: KeyType> OperatorSigner<K> {
         })
     }
 
-    /// Signs a quote by hashing the proto message and signing the hash.
+    /// Returns a signed quote,made up of the quote details, signature, operator ID, and proof of work
     pub fn sign_quote(
         &mut self,
         quote_details: pricing_engine::QuoteDetails,
@@ -43,15 +42,51 @@ impl<K: KeyType> OperatorSigner<K> {
     ) -> Result<SignedQuote<K>> {
         // Hash the quote details
         let hash = hash_quote_details(&quote_details)?;
+        blueprint_core::info!("Hash: {:?}", hash);
 
         // Sign the hash
         let signature = K::sign_with_secret(&mut self.keypair, &hash)
             .map_err(|e| PricingError::Signing(format!("Error {:?} signing quote hash", e)))?;
+        // let signature_bytes = signature.clone().to_bytes();
+
+        // let public_key = K::public_from_secret(&self.keypair);
+
+        // let signature_bytes = if signature_bytes.len() == 65 {
+        //     signature_bytes[..65].try_into().unwrap()
+        // } else if signature_bytes.len() == 64 {
+        //     let mut sig_array = [0u8; 65];
+        //     sig_array[0..64].copy_from_slice(&signature_bytes[..64]);
+        //     sig_array[64] = 0;
+        //     sig_array
+        // } else {
+        //     panic!("Unexpected signature length: {}", signature_bytes.len());
+        // };
+        // blueprint_core::info!("Signature: {:?}", signature_bytes);
+
+        // let public_key_bytes = public_key.to_bytes();
+        // let public_key_bytes = if public_key_bytes.len() == 33 {
+        //     public_key_bytes[..33].try_into().unwrap()
+        // } else if public_key_bytes.len() == 32 {
+        //     let mut pub_array = [0u8; 33];
+        //     pub_array[0..32].copy_from_slice(&public_key_bytes);
+        //     pub_array[32] = 0;
+        //     pub_array
+        // } else {
+        //     panic!("Unexpected public key length: {}", public_key_bytes.len());
+        // };
+        // blueprint_core::info!("Public key: {:?}", public_key_bytes);
+        // assert!(sp_io::crypto::ecdsa_verify(&signature_bytes.into(), &hash, &public_key_bytes.into()));
+
+        // // assert!(sp_io::crypto::ecdsa_verify_prehashed(&signature_bytes.into(), &hash, &public_key_bytes.into()));
+
+        // // assert!(sp_io::crypto::ecdsa_verify(&signature.0, &hash, &public_key.0));
+
+        // assert!(K::verify(&public_key, &hash, &signature));
 
         Ok(SignedQuote {
             quote_details,
             signature,
-            operator_id: self.operator_id,
+            operator_id: self.operator_id.clone(),
             proof_of_work,
         })
     }
@@ -63,29 +98,16 @@ impl<K: KeyType> OperatorSigner<K> {
 
     /// Returns the operator ID
     pub fn operator_id(&self) -> OperatorId {
-        self.operator_id
+        self.operator_id.clone()
     }
 }
 
-/// Creates a deterministic hash of the quote details that can be reproduced in any language.
-/// Uses protobuf serialization followed by keccak256 hashing for on-chain verification.
-pub fn hash_quote_details(quote_details: &pricing_engine::QuoteDetails) -> Result<Vec<u8>> {
-    // Serialize the quote details using protobuf
-    let mut serialized = Vec::new();
-    quote_details.encode(&mut serialized).map_err(|e| {
-        PricingError::Serialization(Box::new(bincode::ErrorKind::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to encode protobuf: {:?}", e),
-        ))))
-    })?;
-
-    // Hash the serialized bytes using keccak256
-    let mut output = [0u8; 32];
-    let mut hasher = Keccak::v256();
-    hasher.update(&serialized);
-    hasher.finalize(&mut output);
-
-    Ok(output.to_vec())
+/// Creates a hash of the quote details for on-chain verification
+pub fn hash_quote_details(quote_details: &pricing_engine::QuoteDetails) -> Result<[u8; 32]> {
+    let on_chain_quote = crate::utils::create_on_chain_quote_type(quote_details);
+    let serialized = on_chain_quote.encode();
+    let keccak_hash = sp_core::keccak_256(&serialized);
+    Ok(keccak_hash)
 }
 
 /// Verify a quote signature by checking the signature against the hash of the quote details.
