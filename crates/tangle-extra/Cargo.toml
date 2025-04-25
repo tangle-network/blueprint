@@ -62,5 +62,5 @@ tracing = ["blueprint-core/tracing"]
 ## Enable access to the metadata types used in `blueprint.json` generation
 metadata-types = ["dep:cid", "dep:thiserror"]
 
-## Enable access to the [`blueprint!`](crate::blueprint) macro
+
 macros = ["dep:serde_json", "dep:cargo_metadata", "metadata-types"]

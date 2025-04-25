@@ -1,44 +1,39 @@
-use crate::error::RunnerError;
 use eigensdk::{
     client_avsregistry::error::AvsRegistryError, client_elcontracts::error::ElContractsError,
 };
 use thiserror::Error;
 
+/// Errors that can occur within the Eigenlayer protocol runner
 #[derive(Debug, Error)]
 pub enum EigenlayerError {
+    /// Errors from the Eigenlayer `AvsRegistry`
     #[error("AVS Registry error: {0}")]
     AvsRegistry(#[from] AvsRegistryError),
 
+    /// Errors that occur when interacting with contracts
     #[error("Contract error: {0}")]
     Contract(#[from] alloy_contract::Error),
 
+    /// Errors that occur when interacting with Eigenlayer contracts
     #[error("EL Contracts error: {0}")]
     ElContracts(#[from] ElContractsError),
 
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-
-    #[error("Configuration error: {0}")]
-    Config(String),
-
-    #[error("Registry error: {0}")]
-    Registry(String),
-
+    /// An error occured during operator registration
     #[error("Registration error: {0}")]
     Registration(String),
 
-    #[error("Task error: {0}")]
-    Task(String),
-
+    /// Unable to open/interact with the provided [`Keystore`](blueprint_keystore::Keystore)
     #[error("Keystore error: {0}")]
-    Keystore(String),
+    Keystore(#[from] blueprint_keystore::Error),
+
+    /// Errors that occur when interacting with possibly malformed keys
+    #[error("Crypto error: {0}")]
+    Crypto(#[from] blueprint_crypto::CryptoCoreError),
+
+    /// Unable to sign a message
+    #[error("Signature error: {0}")]
+    SignatureError(#[from] alloy_signer::Error),
 
     #[error("Other error: {0}")]
-    Other(String),
-}
-
-impl From<EigenlayerError> for RunnerError {
-    fn from(err: EigenlayerError) -> Self {
-        RunnerError::Eigenlayer(err.to_string())
-    }
+    Other(Box<dyn core::error::Error + Send + Sync>),
 }

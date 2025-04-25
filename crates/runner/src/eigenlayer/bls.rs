@@ -17,6 +17,7 @@ use blueprint_keystore::backends::bn254::Bn254Backend;
 use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
 use blueprint_keystore::crypto::k256::K256Ecdsa;
 
+/// Eigenlayer protocol configuration for BLS-based contracts
 #[derive(Clone, Copy)]
 pub struct EigenlayerBLSConfig {
     earnings_receiver_address: Address,
@@ -102,10 +103,10 @@ async fn register_bls_impl(
     let ecdsa_secret = env
         .keystore()
         .expose_ecdsa_secret(&ecdsa_public)?
-        .ok_or_else(|| RunnerError::Other("No ECDSA secret found".into()))?;
+        .ok_or_else(|| EigenlayerError::Other("No ECDSA secret found".into()))?;
     let operator_address = ecdsa_secret
         .alloy_address()
-        .map_err(|e| RunnerError::Eigenlayer(e.to_string()))?;
+        .map_err(|e| EigenlayerError::Crypto(e.into()))?;
 
     let operator_private_key = hex::encode(ecdsa_secret.0.to_bytes());
 
@@ -117,12 +118,11 @@ async fn register_bls_impl(
     let bn254_secret = env
         .keystore()
         .expose_bls_bn254_secret(&bn254_public)
-        .map_err(|e| EigenlayerError::Keystore(e.to_string()))?
-        .ok_or(EigenlayerError::Keystore(
-            "Missing BLS BN254 key".to_string(),
-        ))?;
+        .map_err(EigenlayerError::Keystore)?
+        // TODO: Add MissingKey variant to keystore error
+        .ok_or(EigenlayerError::Other("Missing BLS BN254 key".into()))?;
     let operator_bls_key = BlsKeyPair::new(bn254_secret.0.to_string())
-        .map_err(|e| EigenlayerError::Keystore(e.to_string()))?;
+        .map_err(|e| EigenlayerError::Other(e.into()))?;
 
     info!("Eigenlayer BLS Registration: Creating EL Chain Reader");
     let el_chain_reader = ELChainReader::new(
@@ -176,7 +176,7 @@ async fn register_bls_impl(
             "Operator registration failed for operator {}",
             operator_address
         );
-        return Err(RunnerError::Other("Operator registration failed".into()));
+        return Err(EigenlayerError::Registration("Operator registration failed".into()).into());
     }
 
     let amount = U256::from(5_000_000_000_000_000_000_000u128); // TODO: Make deposit amount configurable
@@ -197,10 +197,10 @@ async fn register_bls_impl(
         );
     } else {
         error!("AVS deposit failed for strategy {}", strategy_address);
-        return Err(RunnerError::Other("AVS deposit failed".into()));
+        return Err(EigenlayerError::Other("AVS deposit failed".into()).into());
     }
 
-    let allocation_delay = 0u32; // TODO: User-defined allocation delay 
+    let allocation_delay = 0u32; // TODO: User-defined allocation delay
     let provider = get_provider_http(&env.http_rpc_endpoint);
     let allocation_manager = AllocationManager::new(allocation_manager_address, provider);
     let allocation_delay_receipt = allocation_manager
@@ -221,9 +221,10 @@ async fn register_bls_impl(
             "Failed to set allocation delay for operator {}",
             operator_address
         );
-        return Err(RunnerError::Other(
+        return Err(EigenlayerError::Other(
             "Allocation Manager setAllocationDelay call failed".into(),
-        ));
+        )
+        .into());
     }
 
     // Stake tokens to the quorum
@@ -257,7 +258,7 @@ async fn register_bls_impl(
         info!("Successfully staked tokens to quorums {:?}", operator_sets);
     } else {
         error!("Failed to stake tokens to quorums");
-        return Err(RunnerError::Other("Quorum staking failed".into()));
+        return Err(EigenlayerError::Other("Quorum staking failed".into()).into());
     }
 
     info!("Operator BLS key pair: {:?}", operator_bls_key);
@@ -284,7 +285,7 @@ async fn register_bls_impl(
         info!("Registered to operator sets for Eigenlayer");
     } else {
         error!("Registration failed for operator sets");
-        return Err(RunnerError::Other("Registration failed".into()));
+        return Err(EigenlayerError::Registration("Registration failed".into()).into());
     }
 
     info!("If the terminal exits, you should re-run the runner to continue execution.");
@@ -300,10 +301,10 @@ async fn is_operator_registered(env: &BlueprintEnvironment) -> Result<bool, Runn
     let ecdsa_secret = env
         .keystore()
         .expose_ecdsa_secret(&ecdsa_public)?
-        .ok_or_else(|| RunnerError::Other("No ECDSA secret found".into()))?;
+        .ok_or_else(|| EigenlayerError::Other("No ECDSA secret found".into()))?;
     let operator_address = ecdsa_secret
         .alloy_address()
-        .map_err(|e| RunnerError::Eigenlayer(e.to_string()))?;
+        .map_err(|e| EigenlayerError::Crypto(e.into()))?;
 
     let avs_registry_reader = eigensdk::client_avsregistry::reader::AvsRegistryChainReader::new(
         get_test_logger(),
