@@ -3,20 +3,23 @@
 //! This module contains the high-level application logic that ties together
 //! the various components of the pricing engine.
 
+use blueprint_crypto::{
+    sp_core::{SpEcdsa, SpSr25519},
+    tangle_pair_signer::TanglePairSigner,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
-use blueprint_crypto::{sp_core::{SpEcdsa, SpSr25519}, tangle_pair_signer::TanglePairSigner};
 use tokio::sync::{Mutex, mpsc};
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
 use crate::{
+    OperatorSigner,
     benchmark_cache::BenchmarkCache,
-    config::{load_config_from_path, OperatorConfig},
+    config::{OperatorConfig, load_config_from_path},
     error::{PricingError, Result},
     handlers::handle_blueprint_update,
     service::blockchain::{event::BlockchainEvent, listener::EventListener},
-    OperatorSigner,
 };
 use tangle_subxt::subxt::tx::Signer;
 

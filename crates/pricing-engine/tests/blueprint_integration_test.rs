@@ -437,7 +437,9 @@ resources = [
                 );
             }
 
-            let quotes = vec![blueprint_pricing_engine_lib::utils::create_on_chain_quote_type(&quote_details)];
+            let quotes = vec![
+                blueprint_pricing_engine_lib::utils::create_on_chain_quote_type(&quote_details),
+            ];
             info!("Quotes: {:?}", quotes);
 
             let request_args = RequestArgs::default();
