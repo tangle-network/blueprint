@@ -118,8 +118,8 @@ pub fn create_on_chain_quote_type(quote_details: &QuoteDetails) -> PricingQuote 
     PricingQuote {
         blueprint_id: quote_details.blueprint_id,
         ttl_blocks: quote_details.ttl_blocks,
-        resources: resources,
-        security_commitments: security_commitments,
+        resources,
+        security_commitments,
         total_cost_rate: (quote_details.total_cost_rate * 1e6) as u64,
         timestamp: quote_details.timestamp,
         expiry: quote_details.expiry,

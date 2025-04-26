@@ -457,6 +457,7 @@ where
     /// # Errors
     ///
     /// Returns an error if the transaction fails
+    #[allow(clippy::too_many_arguments)]
     pub async fn request_service_with_quotes(
         &self,
         blueprint_id: u64,

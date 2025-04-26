@@ -1,7 +1,8 @@
-use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
+use std::{fs, path::PathBuf};
 
+use blueprint_core::{error, info, warn};
 use blueprint_pricing_engine_lib::{
     app::{init_benchmark_cache, init_operator_signer},
     benchmark::{
@@ -13,31 +14,34 @@ use blueprint_pricing_engine_lib::{
     init_pricing_config,
     pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof},
     pricing::{calculate_price, load_pricing_from_toml},
-    pricing_engine::{self, asset::AssetType, QuoteDetails, pricing_engine_client::PricingEngineClient},
+    pricing_engine::{self, QuoteDetails, pricing_engine_client::PricingEngineClient},
     service::rpc::server::PricingEngineService,
-    utils::{bytes_to_u128, u32_to_u128_bytes},
+    utils::u32_to_u128_bytes,
 };
-use blueprint_core::{error, info, warn};
-use blueprint_tangle_extra::serde::{new_bounded_string, BoundedVec};
 use blueprint_testing_utils::{
     setup_log,
-    tangle::{TangleTestHarness, blueprint::create_test_blueprint, harness::SetupServicesOpts},
+    tangle::{
+        TangleTestHarness, blueprint::create_test_blueprint, harness::SetupServicesOpts,
+        multi_node::NodeSlot,
+    },
 };
 use chrono::Utc;
-use sp_core::ecdsa;
-use tangle_subxt::subxt::utils::{H160, AccountId32};
+use sp_core::hexdisplay::AsBytesRef;
 use tangle_subxt::subxt::tx::Signer;
+use tangle_subxt::subxt::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::sp_arithmetic::per_things::Percent;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{Asset, AssetSecurityCommitment};
-use tangle_subxt::{
-    tangle_testnet_runtime::api::{
-        runtime_types::tangle_primitives::services::pricing::{PricingQuote, ResourcePricing},
-        services::calls::types::{register::RegistrationArgs, request::RequestArgs},
-    },
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::Asset;
+use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::{
+    register::RegistrationArgs, request::RequestArgs,
 };
 use tempfile::tempdir;
 use tokio::time::sleep;
 use tonic::transport::Channel;
+
+const OPERATOR_COUNT: usize = 4;
+const REQUESTER_INDEX: usize = 0;
+const RATE_MULTIPLIERS: [f64; 3] = [1.0, 1.2, 1.4];
+const BASE_PORT: u16 = 9000;
 
 /// Test the full pricing and request flow with a blueprint on a local Tangle Testnet
 #[tokio::test]
@@ -53,11 +57,13 @@ async fn test_full_pricing_flow_with_blueprint() -> Result<()> {
     let setup_services_opts = SetupServicesOpts {
         exit_after_registration: false,
         skip_service_request: true,
-        registration_args: vec![RegistrationArgs::default(); 4].try_into().unwrap(),
+        registration_args: vec![RegistrationArgs::default(); OPERATOR_COUNT]
+            .try_into()
+            .unwrap(),
         request_args: RequestArgs::default(),
     };
     let (mut test_env, _service_id, blueprint_id) = harness
-        .setup_services_with_options::<4>(setup_services_opts)
+        .setup_services_with_options::<OPERATOR_COUNT>(setup_services_opts)
         .await
         .unwrap();
     test_env.initialize().await.unwrap();
@@ -201,14 +207,23 @@ resources = [
         );
     }
 
+    let nodes = test_env.nodes.read().await.clone();
+
     let mut servers = Vec::new();
     let mut clients = Vec::new();
     let mut cleanup_paths = Vec::new();
+    let mut operator_endpoints = Vec::new();
 
-    let rate_multipliers = [1.0, 1.2, 1.4];
+    for i in 0..OPERATOR_COUNT {
+        error!("RUNNING THROUGH SETUP FOR OPERATOR {}", i);
 
-    for (i, multiplier) in rate_multipliers.iter().enumerate() {
-        let port = 9000 + i as u16;
+        // Skip the requester
+        if i == REQUESTER_INDEX {
+            continue;
+        }
+
+        let multiplier = RATE_MULTIPLIERS[i - 1];
+        let port = BASE_PORT + i as u16;
         let addr = format!("127.0.0.1:{}", port);
         let socket_addr = match addr.parse() {
             Ok(addr) => addr,
@@ -217,12 +232,23 @@ resources = [
                 continue;
             }
         };
+        operator_endpoints.push(format!("http://{}", addr));
+
+        let node_handle = match nodes[i].clone() {
+            NodeSlot::Occupied(node) => node,
+            NodeSlot::Empty => panic!("Node {} is not initialized", i),
+        };
+        let operator_env = node_handle.test_env.read().await.env.clone();
+        let database_path = operator_env
+            .data_dir
+            .clone()
+            .unwrap_or(PathBuf::from(format!("./data/test_benchmark_cache_{}", i)));
 
         let mut config = create_test_config();
         config.rpc_port = port;
         config.rpc_bind_address = addr.clone();
-        config.database_path = format!("./data/test_benchmark_cache_{}", i);
-        config.keystore_path = format!("/tmp/test-keystore-{}", i);
+        config.database_path = database_path.to_str().unwrap().to_string();
+        config.keystore_path = operator_env.keystore_uri.clone();
 
         let benchmark_cache = init_benchmark_cache(&Arc::new(config.clone())).await?;
 
@@ -293,20 +319,17 @@ resources = [
 
     let mut quote_responses = Vec::new();
 
-    let expected_total = price_model.total_cost;
-    let expected_cost = expected_total * (ttl_blocks as f64);
-
-    let operator_endpoints = vec![
-        "http://127.0.0.1:9000".to_string(),
-        "http://127.0.0.1:9001".to_string(),
-        "http://127.0.0.1:9002".to_string(),
-    ];
+    // let expected_total = price_model.total_cost;
+    // let expected_cost = expected_total * (ttl_blocks as f64);
 
     // Collect quotes from operators
     for (operator_index, operator_endpoint) in operator_endpoints.iter().enumerate() {
-        // Skip operator 0 (Alice) as it will be the requester
-        if operator_index == 0 {
-            info!("Skipping operator 0 (Alice) as it will be the requester");
+        // Skip the requester account
+        if operator_index == REQUESTER_INDEX {
+            info!(
+                "Skipping operator {} as it will be the requester",
+                operator_index
+            );
             continue;
         }
 
@@ -321,7 +344,7 @@ resources = [
         let challenge_timestamp = Utc::now().timestamp() as u64;
 
         let request = tonic::Request::new(pricing_engine::GetPriceRequest {
-            blueprint_id: blueprint_id as u64,
+            blueprint_id,
             ttl_blocks,
             resource_requirements: vec![
                 pricing_engine::ResourceRequirement {
@@ -406,11 +429,8 @@ resources = [
                 panic!("Unexpected signature length: {}", signature.len());
             };
 
-            let node_handles = test_env.node_handles().await;
-            let signer = node_handles.first().unwrap().signer.clone();
-            let signer = signer.into_inner();
-            let account_id = signer.account_id();
-            let operators = vec![account_id.clone()];
+            let operator_id_bytes: [u8; 32] = operator_id.as_bytes_ref().try_into().unwrap();
+            let operators = vec![AccountId32::from(operator_id_bytes)];
             let quote_signatures = vec![signature_bytes.into()];
 
             let QuoteDetails {
@@ -438,7 +458,7 @@ resources = [
             }
 
             let quotes = vec![
-                blueprint_pricing_engine_lib::utils::create_on_chain_quote_type(&quote_details),
+                blueprint_pricing_engine_lib::utils::create_on_chain_quote_type(quote_details),
             ];
             info!("Quotes: {:?}", quotes);
 
@@ -449,20 +469,15 @@ resources = [
                 "Submitting service request with requester account: {:?}",
                 harness.sr25519_signer.account_id()
             );
-            info!("Using operator account: {:?}", account_id);
+            info!("Using operator account: {:?}", operator_id);
 
-            // Ensure security commitments match what's expected by the Tangle runtime
+            // We are just using the default minimum for our test
             let mapped_security_commitment =
                 vec![tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment {
-                    asset: Asset::Custom(0), // Use a simple Custom(0) asset
-                    exposure_percent: Percent(50), // Use a simple 50% exposure
+                    asset: Asset::Custom(0),
+                    exposure_percent: Percent(50),
                 }];
-            info!(
-                "Using simplified security commitment: {:?}",
-                mapped_security_commitment
-            );
 
-            // Try with a try/catch to get more detailed error information
             harness
                 .request_service_with_quotes(
                     blueprint_id,

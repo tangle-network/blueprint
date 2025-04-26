@@ -1,7 +1,7 @@
 use crate::config::OperatorConfig;
 use crate::error::{PricingError, Result};
 use crate::pricing_engine;
-use blueprint_crypto::{BytesEncoding, KeyType};
+use blueprint_crypto::KeyType;
 use parity_scale_codec::Encode;
 use tangle_subxt::subxt::utils::AccountId32;
 
@@ -42,46 +42,10 @@ impl<K: KeyType> OperatorSigner<K> {
     ) -> Result<SignedQuote<K>> {
         // Hash the quote details
         let hash = hash_quote_details(&quote_details)?;
-        blueprint_core::info!("Hash: {:?}", hash);
 
         // Sign the hash
         let signature = K::sign_with_secret(&mut self.keypair, &hash)
             .map_err(|e| PricingError::Signing(format!("Error {:?} signing quote hash", e)))?;
-        // let signature_bytes = signature.clone().to_bytes();
-
-        // let public_key = K::public_from_secret(&self.keypair);
-
-        // let signature_bytes = if signature_bytes.len() == 65 {
-        //     signature_bytes[..65].try_into().unwrap()
-        // } else if signature_bytes.len() == 64 {
-        //     let mut sig_array = [0u8; 65];
-        //     sig_array[0..64].copy_from_slice(&signature_bytes[..64]);
-        //     sig_array[64] = 0;
-        //     sig_array
-        // } else {
-        //     panic!("Unexpected signature length: {}", signature_bytes.len());
-        // };
-        // blueprint_core::info!("Signature: {:?}", signature_bytes);
-
-        // let public_key_bytes = public_key.to_bytes();
-        // let public_key_bytes = if public_key_bytes.len() == 33 {
-        //     public_key_bytes[..33].try_into().unwrap()
-        // } else if public_key_bytes.len() == 32 {
-        //     let mut pub_array = [0u8; 33];
-        //     pub_array[0..32].copy_from_slice(&public_key_bytes);
-        //     pub_array[32] = 0;
-        //     pub_array
-        // } else {
-        //     panic!("Unexpected public key length: {}", public_key_bytes.len());
-        // };
-        // blueprint_core::info!("Public key: {:?}", public_key_bytes);
-        // assert!(sp_io::crypto::ecdsa_verify(&signature_bytes.into(), &hash, &public_key_bytes.into()));
-
-        // // assert!(sp_io::crypto::ecdsa_verify_prehashed(&signature_bytes.into(), &hash, &public_key_bytes.into()));
-
-        // // assert!(sp_io::crypto::ecdsa_verify(&signature.0, &hash, &public_key.0));
-
-        // assert!(K::verify(&public_key, &hash, &signature));
 
         Ok(SignedQuote {
             quote_details,
