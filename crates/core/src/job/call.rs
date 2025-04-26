@@ -1,10 +1,7 @@
-use job_id::{IntoJobId, JobId};
-
+use super::id::JobId;
 use crate::extensions::Extensions;
 use crate::metadata::{MetadataMap, MetadataValue};
-
-/// Job Identifiers
-pub mod job_id;
+use bytes::Bytes;
 
 /// Representation of a job call event
 ///
@@ -30,7 +27,7 @@ pub mod job_id;
 /// [Producers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/producers/index.html
 /// [extract]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/extract/index.html
 #[derive(Clone, Debug)]
-pub struct JobCall<T> {
+pub struct JobCall<T = Bytes> {
     head: Parts,
     body: T,
 }
@@ -52,7 +49,7 @@ impl<T: Default> Default for JobCall<T> {
 pub struct Parts {
     /// The Job ID
     pub job_id: JobId,
-    /// Any metadata that were included in the job call
+    /// Any metadata that was included in the job call
     pub metadata: MetadataMap<MetadataValue>,
     /// The job call extensions
     pub extensions: Extensions,
@@ -60,9 +57,9 @@ pub struct Parts {
 
 impl Parts {
     /// Create a new `Parts` with the given `job_id`
-    pub fn new<J: IntoJobId>(job_id: J) -> Self {
+    pub fn new<J: Into<JobId>>(job_id: J) -> Self {
         Self {
-            job_id: job_id.into_job_id(),
+            job_id: job_id.into(),
             metadata: MetadataMap::new(),
             extensions: Extensions::new(),
         }
@@ -113,14 +110,14 @@ impl<T> JobCall<T> {
     /// # Examples
     ///
     /// ```rust
-    /// use blueprint_sdk::{IntoJobId, JobCall};
+    /// use blueprint_sdk::JobCall;
     ///
     /// const MY_JOB_ID: u8 = 0;
     ///
     /// let call = JobCall::new(MY_JOB_ID, ());
-    /// assert_eq!(call.job_id(), MY_JOB_ID.into_job_id());
+    /// assert_eq!(call.job_id(), MY_JOB_ID.into());
     /// ```
-    pub fn new<J: IntoJobId>(job_id: J, body: T) -> Self {
+    pub fn new<J: Into<JobId>>(job_id: J, body: T) -> Self {
         Self {
             head: Parts::new(job_id),
             body,
@@ -132,14 +129,14 @@ impl<T> JobCall<T> {
     /// # Examples
     ///
     /// ```rust
-    /// use blueprint_sdk::job_call::Parts;
-    /// use blueprint_sdk::{IntoJobId, JobCall};
+    /// use blueprint_sdk::JobCall;
+    /// use blueprint_sdk::job::call::Parts;
     ///
     /// const MY_JOB_ID: u8 = 0;
     /// let parts = Parts::new(MY_JOB_ID);
     ///
     /// let call = JobCall::from_parts(parts, ());
-    /// assert_eq!(call.job_id(), MY_JOB_ID.into_job_id());
+    /// assert_eq!(call.job_id(), MY_JOB_ID.into());
     /// ```
     pub fn from_parts(parts: Parts, body: T) -> Self {
         Self { head: parts, body }
@@ -194,7 +191,7 @@ impl<T> JobCall<T> {
     /// # Examples
     ///
     /// ```rust
-    /// use blueprint_sdk::job_call::JobCall;
+    /// use blueprint_sdk::job::call::JobCall;
     ///
     /// let call = JobCall::new(0, ());
     /// let new_call = call.map(|_| "Hello!");

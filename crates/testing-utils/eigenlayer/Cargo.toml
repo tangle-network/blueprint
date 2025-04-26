@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-eigenlayer-testing-utils"
-version = "0.1.0-alpha.6"
+version = "0.1.0-alpha.7"
 description = "EigenLayer-specific testing utilities for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -26,3 +26,4 @@ alloy-provider = { workspace = true }
 eigensdk = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 url = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }

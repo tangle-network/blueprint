@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-networking"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 description = "Networking utilities for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -18,23 +18,17 @@ blueprint-std = { workspace = true }
 
 # Core dependencies
 alloy-primitives = { workspace = true }
-auto_impl = { workspace = true }
-blake3 = { workspace = true }
 dashmap = { workspace = true }
 libp2p = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
-tokio-stream = { workspace = true, features = ["time"] }
 futures = { workspace = true }
 tracing = { workspace = true }
 bincode = { workspace = true }
-lru-mem = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["alloc"] }
 hex = { workspace = true }
-itertools = { workspace = true, features = ["use_alloc"] }
 parking_lot = { workspace = true }
 thiserror = { workspace = true }
-anyhow = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 crossbeam-channel = { workspace = true }
 
@@ -43,8 +37,8 @@ libsecp256k1 = { workspace = true, features = ["static-context"] }
 
 # Crypto dependencies
 blueprint-crypto = { workspace = true, features = ["k256", "hashing"] }
-blueprint-crypto-core = { workspace = true, features = ["k256"] }
 k256 = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies.libp2p]
 workspace = true
@@ -75,8 +69,6 @@ blueprint-networking = { path = ".", features = ["testing"] }
 blueprint-crypto = { path = "../crypto", features = ["sp-core"] }
 blueprint-crypto-core = { path = "../crypto/core", features = ["tangle"] }
 tracing-subscriber = { workspace = true }
-lazy_static = { workspace = true }
-fastrand = "2.0"
 serial_test = { workspace = true }
 
 [features]

@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-tangle-extra"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 description = "Tangle Network extra utilities for Blueprint framework"
 authors.workspace = true
 edition.workspace = true
@@ -30,6 +30,7 @@ cargo_metadata = { workspace = true, optional = true }
 # Metadata types
 cid = { workspace = true, features = ["serde", "alloc"], optional = true }
 thiserror = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 color-eyre = { workspace = true, features = ["color-spantrace", "track-caller"] }
@@ -61,5 +62,5 @@ tracing = ["blueprint-core/tracing"]
 ## Enable access to the metadata types used in `blueprint.json` generation
 metadata-types = ["dep:cid", "dep:thiserror"]
 
-## Enable access to the [`blueprint!`](crate::blueprint) macro
+
 macros = ["dep:serde_json", "dep:cargo_metadata", "metadata-types"]

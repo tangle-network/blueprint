@@ -1,31 +1,18 @@
-use crate::error::RunnerError;
-
+/// Errors that can occur within the Tangle protocol runner
 #[derive(Debug, thiserror::Error)]
 pub enum TangleError {
-    #[error("Protocol error: {0}")]
-    Protocol(String),
-
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-
-    #[error("Configuration error: {0}")]
-    Config(String),
+    /// Attempted registration despite not being an active operator
+    #[error("Not an active operator")]
+    NotActiveOperator,
 
     #[error("Network error: {0}")]
-    Network(String),
+    Network(tangle_subxt::subxt::Error),
 
+    /// Unable to open/interact with the provided [`Keystore`](blueprint_keystore::Keystore)
     #[error("Keystore error: {0}")]
     Keystore(#[from] blueprint_keystore::Error),
 
-    #[error("Validation error: {0}")]
-    Validation(String),
-
-    #[error("Other error: {0}")]
-    Other(String),
-}
-
-impl From<TangleError> for RunnerError {
-    fn from(err: TangleError) -> Self {
-        RunnerError::Tangle(err.to_string())
-    }
+    /// Unable to decompress the provided ECDSA key
+    #[error("Unable to convert compressed ECDSA key to uncompressed key")]
+    DecompressEcdsaKey,
 }

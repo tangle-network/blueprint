@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::ImageRegistryFetcher;
 use tokio::process::Command;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{info, log, warn};
+use tracing::{error, info, log, warn};
 use blueprint_runner::config::BlueprintEnvironment;
 use std::future::Future;
 use url::Url;
@@ -63,14 +63,14 @@ async fn is_local_endpoint(raw_url: &str) -> bool {
     false
 }
 
-/// Convert any local endpoints to `host.docker.internal`
+/// Convert any local endpoints to `host.containers.internal`
 async fn adjust_url_for_container(raw_url: &str) -> String {
     let Ok(mut url) = Url::parse(raw_url) else {
         return raw_url.to_owned();
     };
 
     if is_local_endpoint(raw_url).await {
-        url.set_host(Some("172.17.0.1"))
+        url.set_host(Some("host.containers.internal"))
             .expect("Failed to set host in URL");
     }
     url.to_string()
@@ -123,7 +123,7 @@ impl BlueprintSourceHandler for ContainerSource {
         for (key, value) in env_vars {
             // The RPC endpoints need to be adjusted for containers, since they'll usually refer to
             // localhost when testing.
-            if key == "HTTP_RPC_ENDPOINT" || key == "WS_RPC_URL" {
+            if key == "HTTP_RPC_URL" || key == "WS_RPC_URL" {
                 let adjusted_value = adjust_url_for_container(&value).await;
                 adjusted_env_vars.push((key, adjusted_value));
             } else {
@@ -212,8 +212,15 @@ async fn create_container_task(
     Ok(async move {
         let container_future = async {
             info!("Starting process execution for {service_name}");
+            let output = container.start(false).await;
+            if let Err(e) = output {
+                error!("Failed to start container for {service_name}: {e}");
+                let _ = status_tx.send(Status::Error);
+            }
+
             let _ = status_tx.send(Status::Running);
-            let output = container.start(true).await;
+
+            let output = container.wait().await;
             if output.is_ok() {
                 let _ = status_tx.send(Status::Finished);
             } else {

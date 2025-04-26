@@ -1,6 +1,6 @@
 use super::{FromJobCall, FromJobCallParts, rejection::*};
 use crate::JobCall;
-use crate::job_call::Parts;
+use crate::job::call::Parts;
 use crate::metadata::{MetadataMap, MetadataValue};
 use alloc::string::String;
 use bytes::{Bytes, BytesMut};

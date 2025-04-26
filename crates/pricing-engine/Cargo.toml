@@ -82,6 +82,7 @@ prost = { workspace = true, features = ["prost-derive"] }
 
 # Proof of work
 sha2 = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 # Combine dev-dependencies into one section and remove duplicates
 [dev-dependencies]

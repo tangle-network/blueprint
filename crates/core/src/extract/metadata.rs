@@ -1,12 +1,11 @@
-//! A Smart extractor for all metadata in the current [`JobCall`].
-//!
+//! An extractor for all metadata in the current [`JobCall`].
 //!
 //! [`JobCall`]: crate::JobCall
 
 use core::convert::Infallible;
 
 use crate::FromJobCallParts;
-use crate::job_call::Parts as JobCallParts;
+use crate::job::call::Parts as JobCallParts;
 use crate::metadata::{MetadataMap, MetadataValue};
 
 /// Extractor for all metadata in the current [`JobCall`].

@@ -2,7 +2,7 @@ use crate::extract;
 use alloc::collections::VecDeque;
 use blueprint_core::JobCall;
 use blueprint_core::extensions::Extensions;
-use blueprint_core::job_call::Parts;
+use blueprint_core::job::call::Parts;
 use blueprint_core::metadata::{MetadataMap, MetadataValue};
 use core::future::Future;
 use core::pin::Pin;

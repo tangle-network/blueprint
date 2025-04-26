@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-eigenlayer-extra"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 description = "EigenLayer utilites for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -43,6 +43,7 @@ url = { workspace = true }
 # RPC server dependencies
 jsonrpc-core = { workspace = true }
 jsonrpc-http-server = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [features]
 default = ["std"]

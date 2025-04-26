@@ -16,6 +16,9 @@ use tangle_subxt::subxt::{OnlineClient, PolkadotConfig};
 use tangle_subxt::tangle_testnet_runtime::api;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
 
+/// Protocol settings for [Tangle]
+///
+/// [Tangle]: https://tangle.tools
 #[derive(Default, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct TangleProtocolSettings {
     /// The blueprint ID for the Tangle blueprint
@@ -27,8 +30,6 @@ pub struct TangleProtocolSettings {
 }
 
 impl ProtocolSettingsT for TangleProtocolSettings {
-    type Settings = Self;
-
     fn load(settings: BlueprintSettings) -> Result<Self, Box<dyn Error + Send + Sync>> {
         Ok(Self {
             blueprint_id: settings
@@ -83,8 +84,7 @@ impl BlueprintConfig for TangleConfig {
     }
 }
 
-#[allow(clippy::missing_errors_doc)] // TODO: should this even be public?
-pub async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
+async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
     let settings = env.protocol_settings.tangle()?;
 
     // Check if the operator is already registered
@@ -107,21 +107,18 @@ pub async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bo
         .storage()
         .at_latest()
         .await
-        .map_err(|e| <TangleError as Into<RunnerError>>::into(TangleError::Network(e.to_string())))?
+        .map_err(TangleError::Network)?
         .fetch(&operator_profile_query)
         .await
-        .map_err(|e| {
-            <TangleError as Into<RunnerError>>::into(TangleError::Network(e.to_string()))
-        })?;
+        .map_err(TangleError::Network)?;
     let is_registered =
         operator_profile.is_some_and(|p| p.blueprints.0.contains(&settings.blueprint_id));
 
     Ok(!is_registered)
 }
 
-#[allow(clippy::missing_errors_doc)] // TODO: should this even be public?
-pub async fn register_impl(
-    rpc_address: String,
+async fn register_impl(
+    price_targets: PriceTargets,
     registration_args: RegistrationArgs,
     env: &BlueprintEnvironment,
 ) -> Result<(), RunnerError> {
@@ -152,21 +149,18 @@ pub async fn register_impl(
         .storage()
         .at_latest()
         .await
-        .map_err(|e| <TangleError as Into<RunnerError>>::into(TangleError::Network(e.to_string())))?
+        .map_err(TangleError::Network)?
         .fetch(&operator_active_query)
         .await
-        .map_err(|e| {
-            <TangleError as Into<RunnerError>>::into(TangleError::Network(e.to_string()))
-        })?;
+        .map_err(TangleError::Network)?;
     if operator_active.is_none() {
-        return Err(RunnerError::NotActiveOperator);
+        return Err(TangleError::NotActiveOperator.into());
     }
 
     let blueprint_id = settings.blueprint_id;
 
-    let uncompressed_pk = decompress_pubkey(&ecdsa_key.0.0).ok_or_else(|| {
-        RunnerError::Other("Unable to convert compressed ECDSA key to uncompressed key".to_string())
-    })?;
+    let uncompressed_pk =
+        decompress_pubkey(&ecdsa_key.0.0).ok_or(TangleError::DecompressEcdsaKey)?;
     let xt = api::tx().services().register(
         blueprint_id,
         build_operator_preferences(uncompressed_pk, rpc_address),
@@ -177,9 +171,7 @@ pub async fn register_impl(
     // send the tx to the tangle and exit.
     let result = blueprint_tangle_extra::util::send(client, Arc::new(signer), xt)
         .await
-        .map_err(|e| {
-            <TangleError as Into<RunnerError>>::into(TangleError::Network(e.to_string()))
-        })?;
+        .map_err(TangleError::Network)?;
     blueprint_core::info!("Registered operator with hash: {:?}", result);
     Ok(())
 }
@@ -202,16 +194,15 @@ pub fn decompress_pubkey(compressed: &[u8; 33]) -> Option<[u8; 65]> {
     Some(result)
 }
 
-#[allow(clippy::missing_errors_doc)] // TODO: should this even be public?
-pub async fn get_client(
+async fn get_client(
     ws_url: &str,
     http_url: &str,
-) -> Result<Arc<OnlineClient<PolkadotConfig>>, RunnerError> {
+) -> Result<Arc<OnlineClient<PolkadotConfig>>, TangleError> {
     let task0 = OnlineClient::<PolkadotConfig>::from_url(ws_url);
     let task1 = OnlineClient::<PolkadotConfig>::from_url(http_url);
     let client = select_ok([Box::pin(task0), Box::pin(task1)])
         .await
-        .map_err(|e| <TangleError as Into<RunnerError>>::into(TangleError::Network(e.to_string())))?
+        .map_err(TangleError::Network)?
         .0;
     Ok(Arc::new(client))
 }

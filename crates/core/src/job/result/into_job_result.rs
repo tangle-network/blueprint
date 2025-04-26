@@ -1,7 +1,7 @@
+use super::Parts;
 use super::{IntoJobResultParts, JobResultParts, Void};
 use crate::JobResult;
 use crate::error::{BoxError, Error};
-use crate::job_result::Parts;
 use crate::metadata::{MetadataMap, MetadataValue};
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -16,9 +16,7 @@ use core::convert::Infallible;
 /// # Optional return value
 ///
 /// The [`into_job_result()`] method returns `Option<JobResult>`, as certain values can be considered
-/// "void", meaning that they don't produce a result. This is useful in the case of [`Job`]s that
-/// multiple parties are running, but only one party should submit the result. In this case, the
-/// other parties should return [`Void`] from their [`Job`]s.
+/// "void", meaning that they don't produce a result. See [`Void`].
 ///
 /// # Results
 ///
@@ -146,7 +144,7 @@ where
     }
 }
 
-impl<B> IntoJobResult for crate::job_result::JobResult<B>
+impl<B> IntoJobResult for super::JobResult<B>
 where
     B: Into<Bytes> + Send + 'static,
 {
@@ -271,7 +269,7 @@ where
     }
 }
 
-impl<R> IntoJobResult for (crate::job_result::JobResult<()>, R)
+impl<R> IntoJobResult for (super::JobResult<()>, R)
 where
     R: IntoJobResult,
 {
@@ -323,7 +321,7 @@ macro_rules! impl_into_job_result {
 
 
         #[allow(non_snake_case)]
-        impl<R, $($ty,)*> IntoJobResult for (crate::job_result::Parts, $($ty),*, R)
+        impl<R, $($ty,)*> IntoJobResult for (crate::job::result::Parts, $($ty),*, R)
         where
             $( $ty: IntoJobResultParts, )*
             R: IntoJobResult,
@@ -347,7 +345,7 @@ macro_rules! impl_into_job_result {
         }
 
         #[allow(non_snake_case)]
-        impl<R, $($ty,)*> IntoJobResult for (crate::job_result::JobResult<()>, $($ty),*, R)
+        impl<R, $($ty,)*> IntoJobResult for (crate::job::result::JobResult<()>, $($ty),*, R)
         where
             $( $ty: IntoJobResultParts, )*
             R: IntoJobResult,

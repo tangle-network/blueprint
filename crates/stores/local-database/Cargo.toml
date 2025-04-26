@@ -17,6 +17,7 @@ blueprint-std = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["alloc"] }
 thiserror = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 default = ["std"]

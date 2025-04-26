@@ -5,7 +5,7 @@ use alloc::boxed::Box;
 
 use crate::job_id_router::JobIdRouter;
 use crate::util::try_downcast;
-use blueprint_core::{IntoJobId, IntoJobResult, Job, JobCall, JobResult};
+use blueprint_core::{IntoJobResult, Job, JobCall, JobId, JobResult};
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -83,7 +83,7 @@ where
     #[track_caller]
     pub fn route<I, J, T>(self, job_id: I, job: J) -> Self
     where
-        I: IntoJobId,
+        I: Into<JobId>,
         J: Job<T, Ctx>,
         T: 'static,
     {

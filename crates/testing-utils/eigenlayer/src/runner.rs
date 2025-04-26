@@ -5,7 +5,7 @@ use blueprint_core_testing_utils::runner::{TestEnv, TestRunner};
 use blueprint_runner::BackgroundService;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::eigenlayer::bls::EigenlayerBLSConfig;
-use blueprint_runner::error::RunnerError as Error;
+use blueprint_runner::error::{JobCallError, RunnerError as Error};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
@@ -71,10 +71,7 @@ where
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // Just check if it failed immediately
-        let Some(handle) = guard.take() else {
-            return Err(Error::Eigenlayer("Failed to spawn runner task".to_string()));
-        };
-
+        let handle = guard.take().expect("value was just set");
         if !handle.is_finished() {
             // Put the handle back since the runner is still running
             *guard = Some(handle);
@@ -82,19 +79,16 @@ where
             return Ok(());
         }
 
-        blueprint_core::info!("Runner task finished OK");
+        blueprint_core::info!("Runner task finished");
         match handle.await {
             Ok(Ok(())) => Ok(()),
             Ok(Err(e)) => {
                 blueprint_core::error!("Runner failed during startup: {}", e);
-                Err(Error::Eigenlayer(format!(
-                    "Runner failed during startup: {}",
-                    e
-                )))
+                Err(e)
             }
             Err(e) => {
                 blueprint_core::error!("Runner task panicked: {}", e);
-                Err(Error::Eigenlayer(format!("Runner task panicked: {}", e)))
+                Err(JobCallError::JobDidntFinish(e).into())
             }
         }
     }

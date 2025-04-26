@@ -34,8 +34,6 @@ pub struct EigenlayerProtocolSettings {
 }
 
 impl ProtocolSettingsT for EigenlayerProtocolSettings {
-    type Settings = Self;
-
     fn load(settings: BlueprintSettings) -> Result<Self, Box<dyn Error + Send + Sync>> {
         Ok(EigenlayerProtocolSettings {
             allocation_manager_address: settings
@@ -76,10 +74,6 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
 
     fn protocol(&self) -> &'static str {
         "eigenlayer"
-    }
-
-    fn settings(&self) -> &Self::Settings {
-        self
     }
 }
 

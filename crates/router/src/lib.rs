@@ -15,7 +15,7 @@
 //! }
 //!
 //! // Give the job some kind of ID. Many types can be converted
-//! // into a [`JobId`]. See [`IntoJobId`] for more details
+//! // into a [`JobId`]. See [`JobId`] for more details
 //! const MY_JOB_ID: u32 = 0;
 //!
 //! let router = Router::new().route(MY_JOB_ID, my_job);
@@ -27,7 +27,6 @@
 //!
 //! - [`Job`](https://docs.rs/blueprint_sdk/latest/blueprint_sdk/trait.Job.html)
 //! - [`JobId`]
-//! - [`IntoJobId`](https://docs.rs/blueprint_sdk/latest/blueprint_sdk/trait.IntoJobId.html)
 //!
 //! [`JobId`]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/struct.JobId.html
 //!

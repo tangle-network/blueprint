@@ -1,5 +1,6 @@
 use crate::BlueprintConfig;
 use crate::config::BlueprintEnvironment;
+use crate::eigenlayer::error::EigenlayerError;
 use crate::error::RunnerError;
 use alloy_primitives::{Address, FixedBytes, U256, hex};
 use alloy_signer::Signer;
@@ -15,6 +16,7 @@ use eigensdk::utils::rewardsv2::middleware::ecdsastakeregistry::ECDSAStakeRegist
 use eigensdk::utils::rewardsv2::middleware::ecdsastakeregistry::ISignatureUtils::SignatureWithSaltAndExpiry;
 use std::str::FromStr;
 
+/// Eigenlayer protocol configuration for ECDSA-based contracts
 #[derive(Clone, Copy)]
 pub struct EigenlayerECDSAConfig {
     earnings_receiver_address: Address,
@@ -22,6 +24,7 @@ pub struct EigenlayerECDSAConfig {
 }
 
 impl EigenlayerECDSAConfig {
+    /// Create a new `EigenlayerECDSAConfig`
     #[must_use]
     pub fn new(earnings_receiver_address: Address, delegation_approver_address: Address) -> Self {
         Self {
@@ -54,10 +57,10 @@ async fn requires_registration_ecdsa_impl(env: &BlueprintEnvironment) -> Result<
     let ecdsa_secret = env
         .keystore()
         .expose_ecdsa_secret(&ecdsa_public)?
-        .ok_or_else(|| RunnerError::Other("No ECDSA secret found".into()))?;
+        .ok_or_else(|| EigenlayerError::Other("No ECDSA secret found".into()))?;
     let operator_address = ecdsa_secret
         .alloy_address()
-        .map_err(|e| RunnerError::Eigenlayer(e.to_string()))?;
+        .map_err(|e| EigenlayerError::Crypto(e.into()))?;
 
     let stake_registry_address = contract_addresses.stake_registry_address;
 
@@ -68,9 +71,10 @@ async fn requires_registration_ecdsa_impl(env: &BlueprintEnvironment) -> Result<
         .operatorRegistered(operator_address)
         .call()
         .await
+        .map_err(EigenlayerError::Contract)
     {
         Ok(is_registered) => Ok(!is_registered._0),
-        Err(e) => Err(RunnerError::Eigenlayer(e.to_string())),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -94,15 +98,15 @@ async fn register_ecdsa_impl(
     let ecdsa_secret = env
         .keystore()
         .expose_ecdsa_secret(&ecdsa_public)?
-        .ok_or_else(|| RunnerError::Other("No ECDSA secret found".into()))?;
+        .ok_or_else(|| EigenlayerError::Other("No ECDSA secret found".into()))?;
     let operator_address = ecdsa_secret
         .alloy_address()
-        .map_err(|e| RunnerError::Eigenlayer(e.to_string()))?;
+        .map_err(|e| EigenlayerError::Crypto(e.into()))?;
 
     let operator_private_key = hex::encode(ecdsa_secret.0.to_bytes());
     blueprint_core::info!("Operator private key: {}", operator_private_key);
     let wallet = PrivateKeySigner::from_str(&operator_private_key)
-        .map_err(|_| RunnerError::Other("Invalid private key".into()))?;
+        .map_err(|_| EigenlayerError::Other("Invalid private key".into()))?;
 
     let provider = get_provider_http(&env.http_rpc_endpoint);
 
@@ -141,7 +145,7 @@ async fn register_ecdsa_impl(
     let tx_hash = el_writer
         .register_as_operator(operator_details)
         .await
-        .map_err(|e| RunnerError::Eigenlayer(e.to_string()))?;
+        .map_err(EigenlayerError::ElContracts)?;
 
     blueprint_core::info!("Registered as operator for Eigenlayer {:?}", tx_hash);
 
@@ -168,12 +172,12 @@ async fn register_ecdsa_impl(
             sig_expiry,
         )
         .await
-        .map_err(|e| RunnerError::Other(e.to_string()))?;
+        .map_err(|e| EigenlayerError::Other(e.into()))?;
 
     let operator_signature = wallet
         .sign_hash(&msg_to_sign)
         .await
-        .map_err(|e| RunnerError::SignatureError(e.to_string()))?;
+        .map_err(EigenlayerError::SignatureError)?;
     let signing_key_address = wallet.address();
 
     let operator_signature_with_salt_and_expiry = SignatureWithSaltAndExpiry {
@@ -202,7 +206,9 @@ async fn register_ecdsa_impl(
         .operatorRegistered(operator_address)
         .call()
         .await
-        .map_err(|e| RunnerError::Eigenlayer(format!("Failed to check registration: {}", e)))?;
+        .map_err(|e| {
+            EigenlayerError::Registration(format!("Failed to check registration: {}", e))
+        })?;
 
     blueprint_core::info!("Operator Registration Status {:?}", is_registered._0);
     Ok(())

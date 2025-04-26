@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.9](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.8...cargo-tangle-v0.4.0-alpha.9) - 2025-04-22
+
+### Fixed
+
+- *(cargo-tangle)* stop always choosing eigenlayer bls template (#909)
+
+## [0.4.0-alpha.8](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.7...cargo-tangle-v0.4.0-alpha.8) - 2025-04-21
+
+### Added
+
+- impl pricing engine diff network updates (#890)
+- *(manager)* functional container sources (#883)
+
 ## [0.4.0-alpha.7](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.6...cargo-tangle-v0.4.0-alpha.7) - 2025-04-18
 
 ### Added

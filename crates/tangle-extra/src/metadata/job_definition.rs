@@ -80,10 +80,7 @@ pub trait IntoTangleFieldTypes {
     fn into_tangle_fields() -> Vec<FieldType>;
 }
 
-/// Implementation for [`Void`] type.
-///
-/// [Void]: blueprint_core::job_result::Void
-impl IntoTangleFieldTypes for blueprint_core::job_result::Void {
+impl IntoTangleFieldTypes for blueprint_core::job::result::Void {
     fn into_tangle_fields() -> Vec<FieldType> {
         Vec::from([FieldType::Void])
     }

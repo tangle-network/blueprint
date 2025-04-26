@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-crypto-k256"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 description = "k256 crypto primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -19,6 +19,7 @@ thiserror = { workspace = true }
 hex = { workspace = true, features = ["alloc"] }
 alloy-signer-local = { workspace = true }
 alloy-primitives = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["alloc"] }

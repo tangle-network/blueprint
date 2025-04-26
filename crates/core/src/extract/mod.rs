@@ -5,8 +5,8 @@
 //! [`blueprint_sdk::extract`]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/extract/index.html
 
 use crate::JobCall;
-use crate::job_call::Parts;
-use crate::job_result::IntoJobResult;
+use crate::job::call::Parts;
+use crate::job::result::IntoJobResult;
 use core::convert::Infallible;
 
 pub mod rejection;

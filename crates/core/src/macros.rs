@@ -231,7 +231,7 @@ macro_rules! __define_rejection {
             }
         }
 
-        impl $crate::job_result::IntoJobResult for $name {
+        impl $crate::job::result::IntoJobResult for $name {
             fn into_job_result(self) -> ::core::option::Option<$crate::JobResult> {
                 $crate::__log_rejection!(
                     rejection_type = $name,
@@ -280,7 +280,7 @@ macro_rules! __define_rejection {
             }
         }
 
-        impl $crate::job_result::IntoJobResult for $name {
+        impl $crate::job::result::IntoJobResult for $name {
             fn into_job_result(self) -> ::core::option::Option<$crate::JobResult> {
                 let body_text = self.body_text();
 
@@ -329,7 +329,7 @@ macro_rules! __composite_rejection {
             ),+
         }
 
-        impl $crate::job_result::IntoJobResult for $name {
+        impl $crate::job::result::IntoJobResult for $name {
             fn into_job_result(self) -> ::core::option::Option<$crate::JobResult> {
                 match self {
                     $(

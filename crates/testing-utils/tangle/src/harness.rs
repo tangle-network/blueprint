@@ -85,7 +85,7 @@ pub async fn generate_env_from_node_id(
     let keystore_path = test_dir.join(identity.to_ascii_lowercase());
     tokio::fs::create_dir_all(&keystore_path).await?;
     inject_tangle_key(&keystore_path, &format!("//{identity}"))
-        .map_err(|err| RunnerError::Other(err.to_string()))?;
+        .map_err(|err| RunnerError::Tangle(TangleError::Keystore(err)))?;
 
     // Create context config
     let context_config = ContextConfig::create_tangle_config(
@@ -99,9 +99,8 @@ pub async fn generate_env_from_node_id(
     );
 
     // Load environment
-    let mut env = BlueprintEnvironment::load_with_config(context_config)
-        .map_err(|e| Error::Setup(e.to_string()))
-        .map_err(|err| RunnerError::Other(err.to_string()))?;
+    let mut env =
+        BlueprintEnvironment::load_with_config(context_config).map_err(RunnerError::Config)?;
 
     // Always set test mode, dont require callers to set env vars
     env.test_mode = true;
@@ -250,12 +249,12 @@ where
             let client = env
                 .tangle_client()
                 .await
-                .map_err(|err| RunnerError::Other(err.to_string()))?;
+                .map_err(|err| RunnerError::Other(err.into()))?;
 
             let keystore = env.keystore();
             let ecdsa_public = keystore
                 .first_local::<SpEcdsa>()
-                .map_err(|err| RunnerError::Other(err.to_string()))?;
+                .map_err(|err| RunnerError::Tangle(TangleError::Keystore(err)))?;
 
             let preferences = build_operator_preferences(
                 blueprint_runner::tangle::config::decompress_pubkey(&ecdsa_public.0.0).unwrap(),
@@ -388,10 +387,10 @@ where
                 let keystore = node.env.keystore();
                 let sr25519_public = keystore
                     .first_local::<SpSr25519>()
-                    .map_err(|err| RunnerError::Other(err.to_string()))?;
+                    .map_err(|err| RunnerError::Tangle(TangleError::Keystore(err)))?;
                 let sr25519_pair = keystore
                     .get_secret::<SpSr25519>(&sr25519_public)
-                    .map_err(|err| RunnerError::Other(err.to_string()))?;
+                    .map_err(|err| RunnerError::Tangle(TangleError::Keystore(err)))?;
                 let sr25519_signer = TanglePairSigner::new(sr25519_pair.0);
                 all_clients.push(node.client);
                 all_signers.push(sr25519_signer);

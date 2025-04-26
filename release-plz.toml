@@ -1,6 +1,7 @@
 [workspace]
 allow_dirty = true         # allow updating repositories with uncommitted changes
 publish_allow_dirty = true # add `--allow-dirty` to `cargo publish`
+publish_no_verify = true   # add `--no-verify` to `cargo publish`
 publish_timeout = "10m"    # set a timeout for `cargo publish`
 
 [changelog]

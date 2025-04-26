@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-sdk"
-version = "0.1.0-alpha.6"
+version = "0.1.0-alpha.7"
 description = "Blueprint SDK for building decentralized and distributed services."
 authors.workspace = true
 edition.workspace = true
@@ -22,6 +22,8 @@ blueprint-keystore = { workspace = true }
 blueprint-clients = { workspace = true }
 blueprint-crypto = { workspace = true }
 blueprint-std = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
+
 # The keystore context is the only one that doesn't bring in extra dependencies, so we can always include it
 blueprint-contexts = { workspace = true, features = ["keystore"] }
 document-features = { workspace = true }

@@ -18,7 +18,7 @@ pub struct BlueprintType {
     pub tangle: bool,
 
     /// Create an EigenLayer blueprint
-    #[arg(long, value_name = "VARIANT", value_enum, num_args = 0..=1, default_value = "bls")]
+    #[arg(long, value_name = "VARIANT", value_enum, num_args = 0..=1, default_missing_value = "bls")]
     pub eigenlayer: Option<EigenlayerVariant>,
 }
 

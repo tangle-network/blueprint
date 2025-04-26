@@ -16,6 +16,7 @@ use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::Multiaddr;
 use blueprint_runner::error::RunnerError;
 use blueprint_runner::tangle::config::TangleConfig;
+use blueprint_runner::tangle::error::TangleError;
 use futures::future::join_all;
 use std::fmt::{Debug, Formatter};
 use std::str::FromStr;
@@ -593,10 +594,10 @@ where
         let keystore = env.keystore();
         let sr25519_public = keystore
             .first_local::<SpSr25519>()
-            .map_err(|err| RunnerError::Other(err.to_string()))?;
+            .map_err(|err| RunnerError::Tangle(TangleError::Keystore(err)))?;
         let sr25519_pair = keystore
             .get_secret::<SpSr25519>(&sr25519_public)
-            .map_err(|err| RunnerError::Other(err.to_string()))?;
+            .map_err(|err| RunnerError::Tangle(TangleError::Keystore(err)))?;
         let sr25519_signer = TanglePairSigner::new(sr25519_pair.0);
 
         // Create TangleTestEnv for this node

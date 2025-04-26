@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-clients"
-version = "0.1.0-alpha.6"
+version = "0.1.0-alpha.7"
 description = "Metapackage for Tangle Blueprint clients"
 authors.workspace = true
 edition.workspace = true
@@ -20,6 +20,7 @@ blueprint-client-core = { workspace = true }
 blueprint-std.workspace = true
 
 thiserror.workspace = true
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [features]
 default = ["std"]
