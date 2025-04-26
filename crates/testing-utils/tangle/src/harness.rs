@@ -14,6 +14,7 @@ use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::ContextConfig;
 use blueprint_runner::config::SupportedChains;
 use blueprint_runner::error::RunnerError;
+use blueprint_runner::tangle::error::TangleError;
 use blueprint_std::io;
 use blueprint_std::path::{Path, PathBuf};
 use blueprint_tangle_extra::util::build_operator_preferences;

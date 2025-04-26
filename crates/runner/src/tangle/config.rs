@@ -42,10 +42,6 @@ impl ProtocolSettingsT for TangleProtocolSettings {
     fn protocol(&self) -> &'static str {
         "tangle"
     }
-
-    fn settings(&self) -> &Self::Settings {
-        self
-    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -118,7 +114,7 @@ async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bool, 
 }
 
 async fn register_impl(
-    price_targets: PriceTargets,
+    rpc_address: String,
     registration_args: RegistrationArgs,
     env: &BlueprintEnvironment,
 ) -> Result<(), RunnerError> {
