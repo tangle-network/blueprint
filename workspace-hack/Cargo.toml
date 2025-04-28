@@ -201,7 +201,7 @@ sp-application-crypto = { version = "38" }
 sp-arithmetic = { version = "26", default-features = false, features = ["std"] }
 sp-core = { version = "34", features = ["bls-experimental"] }
 sp-crypto-hashing = { version = "0.1", default-features = false, features = ["std"] }
-sp-externalities = { version = "0.29", default-features = false, features = ["std"] }
+sp-externalities = { version = "0.30", default-features = false, features = ["std"] }
 sp-io = { version = "38", default-features = false, features = ["disable_oom", "disable_panic_handler", "std"] }
 sp-keystore = { version = "0.40" }
 sp-runtime = { version = "39", default-features = false, features = ["std"] }
@@ -446,7 +446,7 @@ sp-arithmetic = { version = "26", default-features = false, features = ["std"] }
 sp-core = { version = "34", features = ["bls-experimental"] }
 sp-crypto-hashing = { version = "0.1", default-features = false, features = ["std"] }
 sp-debug-derive = { version = "14", default-features = false, features = ["std"] }
-sp-externalities = { version = "0.29", default-features = false, features = ["std"] }
+sp-externalities = { version = "0.30", default-features = false, features = ["std"] }
 sp-io = { version = "38", default-features = false, features = ["disable_oom", "disable_panic_handler", "std"] }
 sp-keystore = { version = "0.40" }
 sp-runtime = { version = "39", default-features = false, features = ["std"] }
