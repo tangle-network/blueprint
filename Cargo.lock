@@ -5193,7 +5193,7 @@ dependencies = [
  "polkadot-runtime-parachains",
  "scale-info",
  "sp-core",
- "sp-externalities",
+ "sp-externalities 0.29.0",
  "sp-inherents",
  "sp-io",
  "sp-runtime",
@@ -5358,7 +5358,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "421f03af054aac7c89e87a49e47964886e53a8d7395990eab27b6f201d42524f"
 dependencies = [
- "sp-externalities",
+ "sp-externalities 0.29.0",
  "sp-runtime-interface",
  "sp-trie",
 ]
@@ -7230,7 +7230,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-runtime-interface",
- "sp-storage",
+ "sp-storage 21.0.0",
  "static_assertions",
 ]
 
@@ -13356,7 +13356,7 @@ dependencies = [
  "sp-inherents",
  "sp-io",
  "sp-runtime",
- "sp-storage",
+ "sp-storage 21.0.0",
  "sp-timestamp",
 ]
 
@@ -14535,7 +14535,7 @@ dependencies = [
  "sp-crypto-ec-utils",
  "sp-crypto-hashing",
  "sp-debug-derive",
- "sp-externalities",
+ "sp-externalities 0.29.0",
  "sp-genesis-builder",
  "sp-inherents",
  "sp-io",
@@ -14553,7 +14553,7 @@ dependencies = [
  "sp-state-machine",
  "sp-statement-store",
  "sp-std",
- "sp-storage",
+ "sp-storage 21.0.0",
  "sp-timestamp",
  "sp-tracing",
  "sp-transaction-pool",
@@ -14599,7 +14599,7 @@ dependencies = [
  "sp-offchain",
  "sp-runtime",
  "sp-session",
- "sp-storage",
+ "sp-storage 21.0.0",
  "sp-transaction-pool",
  "sp-version",
 ]
@@ -16220,7 +16220,7 @@ dependencies = [
  "schnellru",
  "sp-api",
  "sp-core",
- "sp-externalities",
+ "sp-externalities 0.29.0",
  "sp-io",
  "sp-panic-handler",
  "sp-runtime-interface",
@@ -17632,7 +17632,7 @@ dependencies = [
  "scale-info",
  "sp-api-proc-macro",
  "sp-core",
- "sp-externalities",
+ "sp-externalities 0.29.0",
  "sp-metadata-ir",
  "sp-runtime",
  "sp-runtime-interface",
@@ -17844,10 +17844,10 @@ dependencies = [
  "serde",
  "sp-crypto-hashing",
  "sp-debug-derive",
- "sp-externalities",
+ "sp-externalities 0.29.0",
  "sp-runtime-interface",
  "sp-std",
- "sp-storage",
+ "sp-storage 21.0.0",
  "ss58-registry",
  "substrate-bip39",
  "thiserror 1.0.69",
@@ -17930,7 +17930,18 @@ checksum = "a904407d61cb94228c71b55a9d3708e9d6558991f9e83bd42bd91df37a159d30"
 dependencies = [
  "environmental",
  "parity-scale-codec",
- "sp-storage",
+ "sp-storage 21.0.0",
+]
+
+[[package]]
+name = "sp-externalities"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30cbf059dce180a8bf8b6c8b08b6290fa3d1c7f069a60f1df038ab5dd5fc0ba6"
+dependencies = [
+ "environmental",
+ "parity-scale-codec",
+ "sp-storage 22.0.0",
 ]
 
 [[package]]
@@ -17977,7 +17988,7 @@ dependencies = [
  "secp256k1 0.28.2",
  "sp-core",
  "sp-crypto-hashing",
- "sp-externalities",
+ "sp-externalities 0.29.0",
  "sp-keystore",
  "sp-runtime-interface",
  "sp-state-machine",
@@ -18007,7 +18018,7 @@ dependencies = [
  "parity-scale-codec",
  "parking_lot 0.12.3",
  "sp-core",
- "sp-externalities",
+ "sp-externalities 0.29.0",
 ]
 
 [[package]]
@@ -18134,10 +18145,10 @@ dependencies = [
  "parity-scale-codec",
  "polkavm-derive 0.9.1",
  "primitive-types 0.12.2",
- "sp-externalities",
+ "sp-externalities 0.29.0",
  "sp-runtime-interface-proc-macro",
  "sp-std",
- "sp-storage",
+ "sp-storage 21.0.0",
  "sp-tracing",
  "sp-wasm-interface",
  "static_assertions",
@@ -18213,7 +18224,7 @@ dependencies = [
  "rand 0.8.5",
  "smallvec",
  "sp-core",
- "sp-externalities",
+ "sp-externalities 0.29.0",
  "sp-panic-handler",
  "sp-trie",
  "thiserror 1.0.69",
@@ -18239,7 +18250,7 @@ dependencies = [
  "sp-application-crypto",
  "sp-core",
  "sp-crypto-hashing",
- "sp-externalities",
+ "sp-externalities 0.29.0",
  "sp-runtime",
  "sp-runtime-interface",
  "thiserror 1.0.69",
@@ -18259,6 +18270,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99c82989b3a4979a7e1ad848aad9f5d0b4388f1f454cc131766526601ab9e8f8"
 dependencies = [
  "impl-serde 0.4.0",
+ "parity-scale-codec",
+ "ref-cast",
+ "serde",
+ "sp-debug-derive",
+]
+
+[[package]]
+name = "sp-storage"
+version = "22.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee3b70ca340e41cde9d2e069d354508a6e37a6573d66f7cc38f11549002f64ec"
+dependencies = [
+ "impl-serde 0.5.0",
  "parity-scale-codec",
  "ref-cast",
  "serde",
@@ -18332,7 +18356,7 @@ dependencies = [
  "scale-info",
  "schnellru",
  "sp-core",
- "sp-externalities",
+ "sp-externalities 0.29.0",
  "thiserror 1.0.69",
  "tracing",
  "trie-db",
@@ -21483,13 +21507,13 @@ dependencies = [
  "sp-core",
  "sp-crypto-hashing",
  "sp-debug-derive",
- "sp-externalities",
+ "sp-externalities 0.30.0",
  "sp-io",
  "sp-keystore",
  "sp-runtime",
  "sp-runtime-interface",
  "sp-std",
- "sp-storage",
+ "sp-storage 21.0.0",
  "sp-tracing",
  "sp-wasm-interface",
  "sp-weights",
