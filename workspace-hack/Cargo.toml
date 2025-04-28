@@ -207,7 +207,7 @@ sp-keystore = { version = "0.40" }
 sp-runtime = { version = "39", default-features = false, features = ["std"] }
 sp-runtime-interface = { version = "28", default-features = false, features = ["disable_target_static_assertions", "std"] }
 sp-std = { version = "14", default-features = false, features = ["std"] }
-sp-storage = { version = "21", default-features = false, features = ["std"] }
+sp-storage = { version = "22", default-features = false, features = ["std"] }
 sp-tracing = { version = "17", default-features = false, features = ["std"] }
 sp-wasm-interface = { version = "21", default-features = false, features = ["std"] }
 sp-weights = { version = "31", default-features = false, features = ["std"] }
@@ -452,7 +452,7 @@ sp-keystore = { version = "0.40" }
 sp-runtime = { version = "39", default-features = false, features = ["std"] }
 sp-runtime-interface = { version = "28", default-features = false, features = ["disable_target_static_assertions", "std"] }
 sp-std = { version = "14", default-features = false, features = ["std"] }
-sp-storage = { version = "21", default-features = false, features = ["std"] }
+sp-storage = { version = "22", default-features = false, features = ["std"] }
 sp-tracing = { version = "17", default-features = false, features = ["std"] }
 sp-wasm-interface = { version = "21", default-features = false, features = ["std"] }
 sp-weights = { version = "31", default-features = false, features = ["std"] }
