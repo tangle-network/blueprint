@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use blueprint_core::info;
 use blueprint_pricing_engine_lib::{
     error::Result,
     pricing::{BLOCK_TIME, PriceModel, calculate_resource_price, load_pricing_from_toml},
@@ -27,16 +28,16 @@ async fn test_default_pricing_config() -> Result<()> {
     // Load pricing data from TOML
     let pricing_data = load_pricing_from_toml(config_path.to_str().unwrap())?;
 
-    // Debug: Print all loaded pricing data
-    println!("Loaded pricing data from default configuration:");
+    // Print all loaded pricing data
+    info!("Loaded pricing data from default configuration:");
     for (key, resources) in &pricing_data {
         match key {
-            Some(id) => println!("  Blueprint ID: {}", id),
-            None => println!("  Default pricing"),
+            Some(id) => info!("  Blueprint ID: {}", id),
+            None => info!("  Default pricing"),
         }
 
         for resource in resources {
-            println!(
+            info!(
                 "    Resource: {}, Count: {}, Price: ${:.6} per unit",
                 resource.kind, resource.count, resource.price_per_unit_rate
             );
@@ -102,15 +103,15 @@ async fn test_default_pricing_config() -> Result<()> {
     );
 
     // Calculate total cost for default pricing
-    let mut expected_total: f64 = 0.0;
+    let mut total_cost: f64 = 0.0;
     for resource in default_resources {
-        expected_total += resource.price_per_unit_rate * resource.count as f64;
+        total_cost += resource.price_per_unit_rate * resource.count as f64;
     }
 
     // Create a price model from the resources
     let price_model = PriceModel {
         resources: default_resources.clone(),
-        total_cost: expected_total,
+        total_cost: total_cost,
         benchmark_profile: None,
     };
 
@@ -118,8 +119,8 @@ async fn test_default_pricing_config() -> Result<()> {
     let mut pricing_config = HashMap::new();
     pricing_config.insert(None::<u64>, default_resources.clone());
 
-    println!("Pricing verification successful");
-    println!("  Total cost: ${:.6} USD", price_model.total_cost);
+    info!("Pricing verification successful");
+    info!("  Total cost: ${:.6} USD", price_model.total_cost);
 
     Ok(())
 }
@@ -146,15 +147,15 @@ async fn test_resource_price_calculation() -> Result<()> {
         "Price calculation without security requirements failed"
     );
 
-    println!("Resource price calculation (no security):");
-    println!("  Count: {}", count);
-    println!("  Price per unit: ${:.6}", price_per_unit);
-    println!(
+    info!("Resource price calculation (no security):");
+    info!("  Count: {}", count);
+    info!("  Price per unit: ${:.6}", price_per_unit);
+    info!(
         "  TTL: {} blocks ({} seconds)",
         ttl_blocks,
         ttl_blocks as f64 * BLOCK_TIME
     );
-    println!("  Calculated price: ${:.6}", price_no_security);
+    info!("  Calculated price: ${:.6}", price_no_security);
 
     // Test with security requirements
     let security_requirements = AssetSecurityRequirement {
@@ -179,15 +180,15 @@ async fn test_resource_price_calculation() -> Result<()> {
         "Price calculation with security requirements failed"
     );
 
-    println!("Resource price calculation (with security):");
-    println!("  Count: {}", count);
-    println!("  Price per unit: ${:.6}", price_per_unit);
-    println!(
+    info!("Resource price calculation (with security):");
+    info!("  Count: {}", count);
+    info!("  Price per unit: ${:.6}", price_per_unit);
+    info!(
         "  TTL: {} blocks ({} seconds)",
         ttl_blocks,
         ttl_blocks as f64 * BLOCK_TIME
     );
-    println!("  Calculated price: ${:.6}", price_with_security);
+    info!("  Calculated price: ${:.6}", price_with_security);
 
     Ok(())
 }

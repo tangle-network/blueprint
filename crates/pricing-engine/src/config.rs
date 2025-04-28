@@ -8,20 +8,11 @@ pub struct OperatorConfig {
     /// Path to store database files (e.g., price cache)
     pub database_path: String,
 
-    /// Command to run for benchmarking
-    pub benchmark_command: String,
-
-    /// Arguments for the benchmark command
-    pub benchmark_args: Vec<String>,
-
     /// Maximum duration for benchmark runs (in seconds)
     pub benchmark_duration: u64,
 
     /// Interval for sampling metrics during benchmarks (in seconds)
     pub benchmark_interval: u64,
-
-    /// Path to the operator's keypair file
-    pub keypair_path: String,
 
     /// Path to the keystore directory
     pub keystore_path: String,
@@ -47,11 +38,8 @@ pub fn load_config() -> Result<OperatorConfig> {
     // For simplicity, we'll use hardcoded values
     Ok(OperatorConfig {
         database_path: "./data/price_cache".to_string(),
-        benchmark_command: "echo".to_string(),
-        benchmark_args: vec!["Simulated benchmark".to_string()],
         benchmark_duration: 60,
         benchmark_interval: 1,
-        keypair_path: "./data/operator_key".to_string(),
         keystore_path: "./data/keystore".to_string(),
         rpc_bind_address: "127.0.0.1".to_string(),
         rpc_port: 9000,

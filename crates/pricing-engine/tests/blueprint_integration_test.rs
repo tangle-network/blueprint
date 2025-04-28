@@ -10,7 +10,6 @@ use blueprint_pricing_engine_lib::{
         BenchmarkProfile, CpuBenchmarkResult, GpuBenchmarkResult, IoBenchmarkResult,
         MemoryBenchmarkResult, NetworkBenchmarkResult, StorageBenchmarkResult,
     },
-    config::OperatorConfig,
     error::Result,
     init_pricing_config,
     pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof},
@@ -48,7 +47,6 @@ const REQUESTER_INDEX: usize = 0;
 const RATE_MULTIPLIERS: [f64; 3] = [1.0, 1.2, 1.4];
 const BASE_PORT: u16 = 9000;
 
-/// Test the full pricing and request flow with a blueprint on a local Tangle Testnet
 #[tokio::test]
 async fn test_full_pricing_flow_with_blueprint() -> Result<()> {
     setup_log();
@@ -251,7 +249,7 @@ resources = [
             .clone()
             .unwrap_or(PathBuf::from(format!("./data/test_benchmark_cache_{}", i)));
 
-        let mut config = create_test_config();
+        let mut config = utils::create_test_config();
         config.rpc_port = port;
         config.rpc_bind_address = addr.clone();
         config.database_path = database_path.to_str().unwrap().to_string();
@@ -510,7 +508,11 @@ resources = [
 
     // Submit job and
     let job = match harness
-        .submit_job(service_id, utils::XSQUARE_JOB_ID, vec![InputValue::Uint64(5)])
+        .submit_job(
+            service_id,
+            utils::XSQUARE_JOB_ID,
+            vec![InputValue::Uint64(5)],
+        )
         .await
     {
         Ok(job) => {
@@ -538,22 +540,4 @@ resources = [
     }
 
     Ok(())
-}
-
-// Helper function to create a test configuration
-fn create_test_config() -> OperatorConfig {
-    OperatorConfig {
-        keystore_path: "/tmp/test-keystore".to_string(),
-        database_path: "./data/test_benchmark_cache".to_string(),
-        rpc_port: 9000,
-        rpc_bind_address: "127.0.0.1:9000".to_string(),
-        benchmark_command: "echo".to_string(),
-        benchmark_args: vec!["benchmark".to_string()],
-        benchmark_duration: 10,
-        benchmark_interval: 1,
-        keypair_path: "/tmp/test-keypair".to_string(),
-        rpc_timeout: 30,
-        rpc_max_connections: 100,
-        quote_validity_duration_secs: 300,
-    }
 }
