@@ -131,7 +131,7 @@ jiff = { version = "0.2" }
 js-sys = { version = "0.3" }
 jsonrpsee = { version = "0.24", default-features = false, features = ["async-client", "async-wasm-client", "client-web-transport", "client-ws-transport-tls", "http-client", "macros", "server", "wasm-client", "ws-client"] }
 jsonrpsee-client-transport = { version = "0.24", default-features = false, features = ["tls-rustls-platform-verifier", "web", "ws"] }
-jsonrpsee-core = { version = "0.24", features = ["async-client", "async-wasm-client", "http-helpers", "server"] }
+jsonrpsee-core = { version = "0.25", features = ["async-client", "async-wasm-client", "http-helpers", "server"] }
 k256 = { version = "0.13", features = ["pem", "serde"] }
 libc = { version = "0.2" }
 libp2p = { version = "0.55", default-features = false, features = ["autonat", "cbor", "dcutr", "dns", "gossipsub", "identify", "kad", "macros", "mdns", "noise", "ping", "quic", "relay", "request-response", "tcp", "tokio", "upnp", "yamux"] }
@@ -372,7 +372,7 @@ jiff = { version = "0.2" }
 js-sys = { version = "0.3" }
 jsonrpsee = { version = "0.24", default-features = false, features = ["async-client", "async-wasm-client", "client-web-transport", "client-ws-transport-tls", "http-client", "macros", "server", "wasm-client", "ws-client"] }
 jsonrpsee-client-transport = { version = "0.24", default-features = false, features = ["tls-rustls-platform-verifier", "web", "ws"] }
-jsonrpsee-core = { version = "0.24", features = ["async-client", "async-wasm-client", "http-helpers", "server"] }
+jsonrpsee-core = { version = "0.25", features = ["async-client", "async-wasm-client", "http-helpers", "server"] }
 k256 = { version = "0.13", features = ["pem", "serde"] }
 libc = { version = "0.2" }
 libp2p = { version = "0.55", default-features = false, features = ["autonat", "cbor", "dcutr", "dns", "gossipsub", "identify", "kad", "macros", "mdns", "noise", "ping", "quic", "relay", "request-response", "tcp", "tokio", "upnp", "yamux"] }
