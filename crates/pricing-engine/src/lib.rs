@@ -24,7 +24,7 @@ pub mod pricing_engine {
 }
 
 #[cfg(test)]
-mod tests;
+pub mod tests;
 
 pub use app::{
     cleanup, init_logging, init_operator_signer, load_operator_config, spawn_event_processor,

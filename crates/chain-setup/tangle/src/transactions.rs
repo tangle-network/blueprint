@@ -503,7 +503,7 @@ pub async fn request_service_for_operators<T: Signer<TangleConfig>>(
     Ok(new_service_id.saturating_sub(1))
 }
 
-/// Requests a service with a given blueprint.
+/// Requests a service with a given blueprint, returning the service ID.
 ///
 /// This is meant for testing.
 ///
@@ -523,7 +523,7 @@ pub async fn request_service_with_quotes<T: Signer<TangleConfig>>(
     quote_signatures: Vec<sp_core::ecdsa::Signature>,
     security_commitments: Vec<AssetSecurityCommitment<AssetId>>,
     optional_assets: Option<Vec<AssetSecurityRequirement<AssetId>>>,
-) -> Result<(), TransactionError> {
+) -> Result<u64, TransactionError> {
     let quote_signatures = quote_signatures.into_iter().map(|s| s.into()).collect();
     info!(requester = ?user.account_id(), ?operators, %blueprint_id, "Requesting service");
     let min_operators = operators.len() as u32;
@@ -534,6 +534,10 @@ pub async fn request_service_with_quotes<T: Signer<TangleConfig>>(
             max_exposure_percent: Percent(80),
         }]
     });
+
+    // Get the current service ID before requesting new service
+    let prev_service_id = get_next_service_id(client).await?;
+
     let call = api::tx().services().request_with_signed_price_quotes(
         None,
         blueprint_id,
@@ -554,7 +558,29 @@ pub async fn request_service_with_quotes<T: Signer<TangleConfig>>(
         .sign_and_submit_then_watch_default(&call, user)
         .await?;
     wait_for_in_block_success(res).await?;
-    Ok(())
+
+    // Get the new service ID from events
+    let new_service_id = get_next_service_id(client).await?;
+    assert!(new_service_id > prev_service_id);
+
+    // Verify the service belongs to our blueprint
+    let service = client
+        .subxt_client()
+        .storage()
+        .at_latest()
+        .await?
+        .fetch(
+            &api::storage()
+                .services()
+                .instances(new_service_id.saturating_sub(1)),
+        )
+        .await?
+        .ok_or(TransactionError::ServiceNotFound)?;
+
+    if service.blueprint != blueprint_id {
+        return Err(TransactionError::ServiceIdMismatch);
+    }
+    Ok(new_service_id.saturating_sub(1))
 }
 
 /// Setup operators and services for multiple nodes

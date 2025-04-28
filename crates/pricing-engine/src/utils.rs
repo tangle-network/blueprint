@@ -12,6 +12,16 @@ use tangle_subxt::{
 
 use crate::pricing_engine::{QuoteDetails, asset::AssetType};
 
+/// Pricing scale factor - used to convert floating point prices to integers
+///
+/// # Example
+///
+/// ```
+/// let price = 0.000001;
+/// let scaled_price = (price * PRICING_SCALE) as u64;
+/// ```
+const PRICING_SCALE: f64 = 1_000_000_000.0;
+
 /// Convert a u128 value to a 16-byte Vec<u8> in little-endian byte order
 ///
 /// # Arguments
@@ -86,7 +96,7 @@ pub fn create_on_chain_quote_type(quote_details: &QuoteDetails) -> PricingQuote 
                 .map(|resource| tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing {
                     kind: new_bounded_string(resource.kind.clone()),
                     count: resource.count,
-                    price_per_unit_rate: (resource.price_per_unit_rate * 1e6) as u64,
+                    price_per_unit_rate: (resource.price_per_unit_rate * PRICING_SCALE) as u128,
                 })
                 .collect();
     let resources = BoundedVec::<ResourcePricing>(mapped_resources.clone());
@@ -120,7 +130,7 @@ pub fn create_on_chain_quote_type(quote_details: &QuoteDetails) -> PricingQuote 
         ttl_blocks: quote_details.ttl_blocks,
         resources,
         security_commitments,
-        total_cost_rate: (quote_details.total_cost_rate * 1e6) as u64,
+        total_cost_rate: (quote_details.total_cost_rate * PRICING_SCALE) as u128,
         timestamp: quote_details.timestamp,
         expiry: quote_details.expiry,
     }

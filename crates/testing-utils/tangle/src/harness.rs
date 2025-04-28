@@ -467,7 +467,7 @@ where
         quote_signatures: Vec<sp_core::ecdsa::Signature>,
         security_commitments: Vec<AssetSecurityCommitment<AssetId>>,
         optional_assets: Option<Vec<AssetSecurityRequirement<AssetId>>>,
-    ) -> Result<(), Error> {
+    ) -> Result<u64, Error> {
         transactions::request_service_with_quotes(
             &self.client,
             &self.sr25519_signer,
@@ -480,9 +480,7 @@ where
             optional_assets,
         )
         .await
-        .map_err(|e| Error::Setup(e.to_string()))?;
-
-        Ok(())
+        .map_err(|e| Error::Setup(e.to_string()))
     }
 
     /// Submits a job to be executed

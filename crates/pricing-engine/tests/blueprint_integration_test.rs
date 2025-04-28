@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, path::PathBuf};
 
+use blueprint_core::Job;
 use blueprint_core::{error, info, warn};
 use blueprint_pricing_engine_lib::{
     app::{init_benchmark_cache, init_operator_signer},
@@ -18,6 +19,8 @@ use blueprint_pricing_engine_lib::{
     service::rpc::server::PricingEngineService,
     utils::u32_to_u128_bytes,
 };
+use blueprint_tangle_extra::layers::TangleLayer;
+use blueprint_testing_utils::tangle::{InputValue, OutputValue};
 use blueprint_testing_utils::{
     setup_log,
     tangle::{
@@ -37,6 +40,8 @@ use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::{
 use tempfile::tempdir;
 use tokio::time::sleep;
 use tonic::transport::Channel;
+
+mod utils;
 
 const OPERATOR_COUNT: usize = 4;
 const REQUESTER_INDEX: usize = 0;
@@ -213,6 +218,7 @@ resources = [
     let mut clients = Vec::new();
     let mut cleanup_paths = Vec::new();
     let mut operator_endpoints = Vec::new();
+    let mut node_handles = Vec::new();
 
     for i in 0..OPERATOR_COUNT {
         error!("RUNNING THROUGH SETUP FOR OPERATOR {}", i);
@@ -238,6 +244,7 @@ resources = [
             NodeSlot::Occupied(node) => node,
             NodeSlot::Empty => panic!("Node {} is not initialized", i),
         };
+        node_handles.push(node_handle.clone());
         let operator_env = node_handle.test_env.read().await.env.clone();
         let database_path = operator_env
             .data_dir
@@ -319,9 +326,6 @@ resources = [
 
     let mut quote_responses = Vec::new();
 
-    // let expected_total = price_model.total_cost;
-    // let expected_cost = expected_total * (ttl_blocks as f64);
-
     // Collect quotes from operators
     for (operator_index, operator_endpoint) in operator_endpoints.iter().enumerate() {
         // Skip the requester account
@@ -342,7 +346,6 @@ resources = [
 
         // Generate a fresh timestamp for each quote request
         let challenge_timestamp = Utc::now().timestamp() as u64;
-
         let request = tonic::Request::new(pricing_engine::GetPriceRequest {
             blueprint_id,
             ttl_blocks,
@@ -383,7 +386,6 @@ resources = [
             operator_index, quote_details.total_cost_rate, operator_id
         );
 
-        // Print detailed information about the signature for debugging
         info!("Signature length: {}", signature.len());
         info!("Signature: {:?}", signature);
         info!("Operator ID length: {}", operator_id.len());
@@ -393,127 +395,141 @@ resources = [
     }
 
     if quote_responses.is_empty() {
-        info!("No quotes received from any operator");
-    } else {
-        info!("Received {} quotes:", quote_responses.len());
-        for (i, details, operator_id, _signature) in &quote_responses {
-            info!(
-                "Operator {}: ${:.6} (ID: {:?})",
-                i, details.total_cost_rate, operator_id
-            );
-        }
-
-        // Sort quotes by total cost rate (cheapest first)
-        quote_responses.sort_by(|a, b| {
-            a.1.total_cost_rate
-                .partial_cmp(&b.1.total_cost_rate)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        if let Some((operator_index, quote_details, operator_id, signature)) =
-            quote_responses.first()
-        {
-            info!(
-                "Selected cheapest quote from Operator {}: ${:.6} (ID: {:?})",
-                operator_index, quote_details.total_cost_rate, operator_id
-            );
-
-            let signature_bytes = if signature.len() == 65 {
-                signature[..65].try_into().unwrap()
-            } else if signature.len() == 64 {
-                let mut sig_array = [0u8; 65];
-                sig_array[0..64].copy_from_slice(&signature[..64]);
-                sig_array[64] = 0;
-                sig_array
-            } else {
-                panic!("Unexpected signature length: {}", signature.len());
-            };
-
-            let operator_id_bytes: [u8; 32] = operator_id.as_bytes_ref().try_into().unwrap();
-            let operators = vec![AccountId32::from(operator_id_bytes)];
-            let quote_signatures = vec![signature_bytes.into()];
-
-            let QuoteDetails {
-                blueprint_id,
-                resources,
-                security_commitments,
-                ttl_blocks,
-                total_cost_rate,
-                timestamp,
-                expiry,
-            } = quote_details.clone();
-
-            info!("Quote details being hashed:");
-            info!("  Blueprint ID: {}", blueprint_id);
-            info!("  TTL Blocks: {}", ttl_blocks);
-            info!("  Total Cost Rate: {}", total_cost_rate);
-            info!("  Timestamp: {}", timestamp);
-            info!("  Expiry: {}", expiry);
-            info!("  Resources count: {}", resources.len());
-            if let Some(sc) = &security_commitments {
-                info!(
-                    "  Security commitments count: {}",
-                    sc.asset.as_ref().map_or(0, |_| 1)
-                );
-            }
-
-            let quotes = vec![
-                blueprint_pricing_engine_lib::utils::create_on_chain_quote_type(quote_details),
-            ];
-            info!("Quotes: {:?}", quotes);
-
-            let request_args = RequestArgs::default();
-            info!("Request args: {:?}", request_args);
-
-            info!(
-                "Submitting service request with requester account: {:?}",
-                harness.sr25519_signer.account_id()
-            );
-            info!("Using operator account: {:?}", operator_id);
-
-            // We are just using the default minimum for our test
-            let mapped_security_commitment =
-                vec![tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment {
-                    asset: Asset::Custom(0),
-                    exposure_percent: Percent(50),
-                }];
-
-            harness
-                .request_service_with_quotes(
-                    blueprint_id,
-                    RequestArgs::default(),
-                    operators,
-                    quotes,
-                    quote_signatures,
-                    mapped_security_commitment,
-                    None,
-                )
-                .await
-                .unwrap();
-
-            let operators = test_env.nodes.read().await.len();
-            info!("Found {} operators in the test environment", operators);
-
-            if *operator_index < operators {
-                match harness.submit_job(blueprint_id, 0, vec![]).await {
-                    Ok(job) => {
-                        info!("Service request submitted successfully!");
-                        info!("Job ID: {:?}", job);
-                    }
-                    Err(e) => {
-                        panic!("Failed to submit job: {e}");
-                    }
-                }
-            } else {
-                panic!(
-                    "Selected operator index {} is out of bounds",
-                    operator_index
-                );
-            }
-        } else {
-            panic!("No quotes available to submit service request");
-        }
+        panic!("No quotes received from any operator");
     }
+    info!("Received {} quotes:", quote_responses.len());
+    for (i, details, operator_id, _signature) in &quote_responses {
+        info!(
+            "Operator {}: ${:.6} (ID: {:?})",
+            i, details.total_cost_rate, operator_id
+        );
+    }
+
+    // Sort quotes by total cost rate (cheapest first)
+    quote_responses.sort_by(|a, b| {
+        a.1.total_cost_rate
+            .partial_cmp(&b.1.total_cost_rate)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let (operator_index, quote_details, operator_id, signature) = quote_responses
+        .first()
+        .expect("No quotes available to submit service request");
+
+    info!(
+        "Selected cheapest quote from Operator {}: ${:.6} (ID: {:?})",
+        operator_index, quote_details.total_cost_rate, operator_id
+    );
+
+    let signature_bytes = if signature.len() == 65 {
+        signature[..65].try_into().unwrap()
+    } else if signature.len() == 64 {
+        let mut sig_array = [0u8; 65];
+        sig_array[0..64].copy_from_slice(&signature[..64]);
+        sig_array[64] = 0;
+        sig_array
+    } else {
+        panic!("Unexpected signature length: {}", signature.len());
+    };
+
+    let operator_id_bytes: [u8; 32] = operator_id.as_bytes_ref().try_into().unwrap();
+    let operators = vec![AccountId32::from(operator_id_bytes)];
+    let quote_signatures = vec![signature_bytes.into()];
+
+    let QuoteDetails {
+        blueprint_id,
+        resources,
+        security_commitments,
+        ttl_blocks,
+        total_cost_rate,
+        timestamp,
+        expiry,
+    } = quote_details.clone();
+
+    info!("Quote details being hashed:");
+    info!("  Blueprint ID: {}", blueprint_id);
+    info!("  TTL Blocks: {}", ttl_blocks);
+    info!("  Total Cost Rate: {}", total_cost_rate);
+    info!("  Timestamp: {}", timestamp);
+    info!("  Expiry: {}", expiry);
+    info!("  Resources count: {}", resources.len());
+    if let Some(sc) = &security_commitments {
+        info!(
+            "  Security commitments count: {}",
+            sc.asset.as_ref().map_or(0, |_| 1)
+        );
+    }
+
+    let quotes =
+        vec![blueprint_pricing_engine_lib::utils::create_on_chain_quote_type(quote_details)];
+    info!("Quotes: {:?}", quotes);
+
+    let request_args = RequestArgs::default();
+    info!("Request args: {:?}", request_args);
+
+    info!(
+        "Submitting service request with requester account: {:?}",
+        harness.sr25519_signer.account_id()
+    );
+    info!("Using operator account: {:?}", operator_id);
+
+    // We are just using the minimum as the default for testing
+    let mapped_security_commitment =
+            vec![tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment {
+                asset: Asset::Custom(0),
+                exposure_percent: Percent(50),
+            }];
+
+    let service_id = harness
+        .request_service_with_quotes(
+            blueprint_id,
+            RequestArgs::default(),
+            operators,
+            quotes,
+            quote_signatures,
+            mapped_security_commitment,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let operators = test_env.nodes.read().await.len();
+    info!("Found {} operators in the test environment", operators);
+
+    assert!(
+        *operator_index < operators,
+        "Selected operator index {} is out of bounds",
+        operator_index
+    );
+
+    let operator_handle = node_handles[*operator_index].clone();
+    operator_handle
+        .add_job(utils::square.layer(TangleLayer))
+        .await;
+    operator_handle.start_runner(()).await.unwrap();
+
+    // Submit job and
+    let job = match harness
+        .submit_job(service_id, utils::XSQUARE_JOB_ID, vec![InputValue::Uint64(5)])
+        .await
+    {
+        Ok(job) => {
+            info!("Service request submitted successfully!");
+            info!("Job ID: {:?}", job);
+            assert_eq!(job.service_id, service_id);
+            job
+        }
+        Err(e) => {
+            panic!("Failed to submit job: {e}");
+        }
+    };
+
+    // Wait for job execution and verify results
+    let results = harness
+        .wait_for_job_execution(service_id, job)
+        .await
+        .unwrap();
+    harness.verify_job(&results, vec![OutputValue::Uint64(25)]);
 
     // Clean up
     for (cache_path, keystore_path) in cleanup_paths {
