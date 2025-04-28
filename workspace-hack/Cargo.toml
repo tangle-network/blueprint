@@ -216,7 +216,7 @@ ss58-registry = { version = "1", default-features = false, features = ["std"] }
 substrate-bip39 = { version = "0.6", default-features = false, features = ["std"] }
 subtle = { version = "2", default-features = false, features = ["i128", "std"] }
 subxt-core = { version = "0.39", default-features = false, features = ["std"] }
-subxt-metadata = { version = "0.39", default-features = false, features = ["std"] }
+subxt-metadata = { version = "0.41", default-features = false, features = ["std"] }
 subxt-signer = { version = "0.39", default-features = false, features = ["ecdsa", "sr25519", "std", "subxt", "web"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
@@ -463,7 +463,7 @@ subtle = { version = "2", default-features = false, features = ["i128", "std"] }
 subxt-codegen = { version = "0.39", features = ["web"] }
 subxt-core = { version = "0.39", default-features = false, features = ["std"] }
 subxt-macro = { version = "0.39", default-features = false, features = ["web"] }
-subxt-metadata = { version = "0.39", default-features = false, features = ["std"] }
+subxt-metadata = { version = "0.41", default-features = false, features = ["std"] }
 subxt-signer = { version = "0.39", default-features = false, features = ["ecdsa", "sr25519", "std", "subxt", "web"] }
 syn-dff4ba8e3ae991db = { package = "syn", version = "1", features = ["extra-traits", "full", "visit", "visit-mut"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
