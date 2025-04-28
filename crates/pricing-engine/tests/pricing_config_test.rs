@@ -111,7 +111,7 @@ async fn test_default_pricing_config() -> Result<()> {
     // Create a price model from the resources
     let price_model = PriceModel {
         resources: default_resources.clone(),
-        total_cost: total_cost,
+        total_cost,
         benchmark_profile: None,
     };
 
