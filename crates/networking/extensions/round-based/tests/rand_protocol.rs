@@ -1,8 +1,8 @@
 //! Simple protocol in which parties cooperate to generate randomness
 
+use blueprint_core::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, digest::Output};
-use blueprint_core::{debug, error, info};
 
 use round_based::rounds_router::{
     CompleteRoundError, RoundsRouter,
@@ -173,12 +173,12 @@ mod tests {
     use std::collections::HashMap;
     use std::time::Duration;
 
+    use blueprint_core::{debug, info};
     use blueprint_crypto::sp_core::SpEcdsa;
     use blueprint_networking::service_handle::NetworkServiceHandle;
     use blueprint_networking::test_utils::{create_whitelisted_nodes, wait_for_all_handshakes};
     use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
     use round_based::MpcParty;
-    use blueprint_core::{debug, info};
     use tracing_subscriber::EnvFilter;
 
     use super::protocol_of_random_generation;

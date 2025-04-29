@@ -1,6 +1,6 @@
+use blueprint_core::trace;
 use blueprint_crypto::KeyType;
 use blueprint_networking::{service_handle::NetworkServiceHandle, types::ProtocolMessage};
-use blueprint_core::trace;
 use futures::{Sink, Stream};
 use libp2p::PeerId;
 use round_based::{Delivery, Incoming, MessageDestination, MessageType, Outgoing, PartyIndex};
