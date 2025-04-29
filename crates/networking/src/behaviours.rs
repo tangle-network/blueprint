@@ -8,6 +8,7 @@ use crate::{
         config::DiscoveryConfig,
     },
 };
+use blueprint_core::{debug, info};
 use blueprint_crypto::KeyType;
 use crossbeam_channel::Sender;
 use libp2p::{
@@ -23,7 +24,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tracing::{debug, info};
 
 /// Events that can be emitted by the `GadgetBehavior`
 #[derive(Debug)]

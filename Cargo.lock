@@ -3360,6 +3360,7 @@ version = "0.1.0-alpha.4"
 dependencies = [
  "alloy-primitives 0.8.25",
  "bincode",
+ "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-core",
  "blueprint-networking",
@@ -3377,7 +3378,6 @@ dependencies = [
  "serial_test",
  "thiserror 2.0.12",
  "tokio",
- "tracing",
  "tracing-subscriber 0.3.19",
  "workspace-hack",
 ]

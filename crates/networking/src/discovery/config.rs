@@ -3,6 +3,7 @@ use super::{
     new_kademlia,
 };
 use crate::error::Error;
+use blueprint_core::warn;
 use blueprint_crypto::KeyType;
 use libp2p::{
     Multiaddr, PeerId, StreamProtocol, autonat, identify, identity::PublicKey, mdns, relay, upnp,
@@ -11,7 +12,6 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     time::Duration,
 };
-use tracing::warn;
 
 pub struct DiscoveryConfig<K: KeyType> {
     /// The local peer ID.

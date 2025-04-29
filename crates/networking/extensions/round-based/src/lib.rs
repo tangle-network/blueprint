@@ -1,5 +1,6 @@
 use blueprint_crypto::KeyType;
 use blueprint_networking::{service_handle::NetworkServiceHandle, types::ProtocolMessage};
+use blueprint_core::trace;
 use futures::{Sink, Stream};
 use libp2p::PeerId;
 use round_based::{Delivery, Incoming, MessageDestination, MessageType, Outgoing, PartyIndex};
@@ -109,7 +110,7 @@ where
             .get_whitelist_index_from_peer_id(&this.handle.local_peer_id)
             .unwrap_or_default();
 
-        tracing::trace!(
+        trace!(
             i = %party_index,
             recipient = ?outgoing.recipient,
             %round,
@@ -144,7 +145,7 @@ where
             payload: serde_json::to_vec(&outgoing.msg).map_err(NetworkError::Serialization)?,
         };
 
-        tracing::trace!(
+        trace!(
             %round,
             %msg_id,
             protocol_id = %this.protocol_id,
@@ -214,7 +215,7 @@ where
                 match sender_index {
                     Some(sender_index) => match serde_json::from_slice(&protocol_message.payload) {
                         Ok(msg) => {
-                            tracing::trace!(
+                            trace!(
                                 i = %party_index,
                                 sender = ?sender_index,
                                 %id,
@@ -233,7 +234,7 @@ where
                         Err(e) => Poll::Ready(Some(Err(NetworkError::Serialization(e)))),
                     },
                     None => {
-                        tracing::warn!(
+                        trace!(
                             i = %party_index,
                             sender = ?sender,
                             %id,
@@ -246,7 +247,7 @@ where
                 }
             }
             None => {
-                //tracing::trace!(i = %this.party_index, "No message received; the waker will wake us up when there is a new message");
+                //trace!(i = %this.party_index, "No message received; the waker will wake us up when there is a new message");
                 // In this case, tell the waker to wake us up when there is a new message
                 cx.waker().wake_by_ref();
                 Poll::Pending
