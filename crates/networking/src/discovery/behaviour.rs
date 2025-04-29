@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::error::Error;
+use blueprint_core::{debug, info, trace};
 use blueprint_crypto::KeyType;
 use libp2p::{
     autonat,
@@ -22,8 +23,6 @@ use libp2p::{
     upnp,
 };
 use tokio::time::Interval;
-use tracing::trace;
-use tracing::{debug, info};
 
 use super::PeerInfo;
 

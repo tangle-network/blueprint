@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 # Internal deps
 blueprint-std = { workspace = true }
+blueprint-core = { workspace = true, features = ["tracing"] }
 
 # Core dependencies
 alloy-primitives = { workspace = true }
@@ -22,7 +23,6 @@ dashmap = { workspace = true }
 libp2p = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
 futures = { workspace = true }
-tracing = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["alloc"] }

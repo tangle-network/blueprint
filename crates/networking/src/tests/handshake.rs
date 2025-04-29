@@ -2,10 +2,10 @@ use crate::service::AllowedKeys;
 use crate::test_utils::TestNode;
 use crate::test_utils::create_whitelisted_nodes;
 use crate::test_utils::setup_log;
+use blueprint_core::info;
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
-use tracing::info;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(5);
 

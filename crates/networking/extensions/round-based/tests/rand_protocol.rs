@@ -1,5 +1,6 @@
 //! Simple protocol in which parties cooperate to generate randomness
 
+use blueprint_core::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, digest::Output};
 
@@ -59,11 +60,11 @@ where
     let mut local_randomness = [0u8; 32];
     rng.fill_bytes(&mut local_randomness);
 
-    tracing::debug!(local_randomness = %hex::encode(local_randomness), "Generated local randomness");
+    debug!(local_randomness = %hex::encode(local_randomness), "Generated local randomness");
 
     // 2. Commit local randomness (broadcast m=sha256(randomness))
     let commitment = Sha256::digest(local_randomness);
-    tracing::debug!(commitment = %hex::encode(commitment), "Committed local randomness");
+    debug!(commitment = %hex::encode(commitment), "Committed local randomness");
     outgoing
         .send(Outgoing::broadcast(Msg::CommitMsg(CommitMsg {
             commitment,
@@ -71,7 +72,7 @@ where
         .await
         .map_err(Error::Round1Send)?;
 
-    tracing::debug!("Sent commitment and waiting for others to send theirs");
+    debug!("Sent commitment and waiting for others to send theirs");
 
     // 3. Receive committed randomness from other parties
     let commitments = rounds
@@ -79,10 +80,10 @@ where
         .await
         .map_err(Error::Round1Receive)?;
 
-    tracing::debug!("Received commitments from all parties");
+    debug!("Received commitments from all parties");
 
     // 4. Open local randomness
-    tracing::debug!("Opening local randomness");
+    debug!("Opening local randomness");
     outgoing
         .send(Outgoing::broadcast(Msg::DecommitMsg(DecommitMsg {
             randomness: local_randomness,
@@ -90,7 +91,7 @@ where
         .await
         .map_err(Error::Round2Send)?;
 
-    tracing::debug!("Sent decommitment and waiting for others to send theirs");
+    debug!("Sent decommitment and waiting for others to send theirs");
 
     // 5. Receive opened local randomness from other parties, verify them, and output protocol randomness
     let randomness = rounds
@@ -98,7 +99,7 @@ where
         .await
         .map_err(Error::Round2Receive)?;
 
-    tracing::debug!("Received decommitments from all parties");
+    debug!("Received decommitments from all parties");
 
     let mut guilty_parties = vec![];
     let mut output = local_randomness;
@@ -123,11 +124,11 @@ where
     }
 
     if guilty_parties.is_empty() {
-        tracing::debug!(output = %hex::encode(output), "Generated randomness");
-        tracing::info!("Randomness generation protocol completed successfully.");
+        debug!(output = %hex::encode(output), "Generated randomness");
+        info!("Randomness generation protocol completed successfully.");
         Ok(output)
     } else {
-        tracing::error!(guilty_parties = ?guilty_parties, "Some parties cheated");
+        error!(guilty_parties = ?guilty_parties, "Some parties cheated");
         Err(Error::PartiesOpenedRandomnessDoesntMatchCommitment { guilty_parties })
     }
 }
@@ -172,12 +173,12 @@ mod tests {
     use std::collections::HashMap;
     use std::time::Duration;
 
+    use blueprint_core::{debug, info};
     use blueprint_crypto::sp_core::SpEcdsa;
     use blueprint_networking::service_handle::NetworkServiceHandle;
     use blueprint_networking::test_utils::{create_whitelisted_nodes, wait_for_all_handshakes};
     use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
     use round_based::MpcParty;
-    use tracing::{debug, info};
     use tracing_subscriber::EnvFilter;
 
     use super::protocol_of_random_generation;

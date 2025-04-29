@@ -1,6 +1,7 @@
 use crate::{
     NetworkConfig, NetworkService, service::AllowedKeys, service_handle::NetworkServiceHandle,
 };
+use blueprint_core::info;
 use blueprint_crypto::KeyType;
 use libp2p::{
     Multiaddr, PeerId,
@@ -8,7 +9,6 @@ use libp2p::{
 };
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
-use tracing::info;
 
 pub fn setup_log() {
     let _ = tracing_subscriber::fmt()

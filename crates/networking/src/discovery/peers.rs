@@ -1,5 +1,6 @@
 use crate::service::AllowedKeys;
 use alloy_primitives::Address;
+use blueprint_core::debug;
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::KeyType;
 use blueprint_crypto::hashing::keccak_256;
@@ -14,7 +15,6 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use tokio::sync::broadcast;
-use tracing::debug;
 
 use super::utils::{get_address_from_pubkey, secp256k1_ecdsa_recover};
 

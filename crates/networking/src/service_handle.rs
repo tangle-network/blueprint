@@ -5,12 +5,12 @@ use crate::{
     service::NetworkCommandMessage,
     types::ProtocolMessage,
 };
+use blueprint_core::debug;
 use blueprint_crypto::KeyType;
 use crossbeam_channel::{self, Receiver, Sender};
 use libp2p::{Multiaddr, PeerId};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
-use tracing::debug;
 
 /// Handle for sending outgoing messages to the network
 #[derive(Clone)]
