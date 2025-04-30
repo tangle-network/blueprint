@@ -92,6 +92,9 @@ blueprint-pricing-engine = { version = "0.1.0", path = "./crates/pricing-engine"
 blueprint-macros = { version = "0.1.0-alpha.2", path = "./crates/macros", default-features = false }
 blueprint-context-derive = { version = "0.1.0-alpha.3", path = "./crates/macros/context-derive", default-features = false }
 
+# Quality of Service
+blueprint-qos = { version = "0.1.0-alpha.1", path = "./crates/qos", default-features = false }
+
 # Stores
 blueprint-stores = { version = "0.1.0-alpha.1", path = "./crates/stores", default-features = false }
 blueprint-store-local-database = { version = "0.1.0-alpha.1", path = "./crates/stores/local-database", default-features = false }

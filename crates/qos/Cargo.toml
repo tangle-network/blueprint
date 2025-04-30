@@ -1,0 +1,43 @@
+[package]
+name = "blueprint-qos"
+version = "0.1.0-alpha.1"
+description = "Quality of Service (QoS) module for Blueprint SDK"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+blueprint-core = { workspace = true, features = ["tracing"] }
+blueprint-runner = { workspace = true }
+blueprint-crypto = { workspace = true }
+blueprint-keystore = { workspace = true }
+blueprint-clients = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
+
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "time", "signal"] }
+tonic = { workspace = true, features = ["transport"] }
+prost = { workspace = true, features = ["prost-derive"] }
+sysinfo = { workspace = true }
+rand = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+
+[build-dependencies]
+tonic-build = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+    "blueprint-core/std",
+    "blueprint-runner/std",
+    "blueprint-crypto/std",
+    "blueprint-keystore/std",
+    "blueprint-clients/std",
+]

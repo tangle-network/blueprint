@@ -3506,6 +3506,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "blueprint-qos"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "blueprint-clients",
+ "blueprint-core",
+ "blueprint-crypto",
+ "blueprint-keystore",
+ "blueprint-runner",
+ "chrono",
+ "prost 0.12.6",
+ "rand 0.8.5",
+ "sysinfo",
+ "thiserror 2.0.12",
+ "tokio",
+ "tonic 0.11.0",
+ "tonic-build",
+ "tracing",
+ "workspace-hack",
+]
+
+[[package]]
 name = "blueprint-router"
 version = "0.1.0-alpha.2"
 dependencies = [
