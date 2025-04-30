@@ -7,12 +7,12 @@ use crate::{
     },
     types::{MessageRouting, ProtocolMessage},
 };
+use blueprint_core::info;
 use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
-use tracing::info;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(20);
 

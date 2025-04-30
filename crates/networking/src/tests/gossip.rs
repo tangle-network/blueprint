@@ -7,10 +7,10 @@ use crate::{
     },
     types::MessageRouting,
 };
+use blueprint_core::info;
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
-use tracing::info;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(10);
 const NETWORK_NAME: &str = "gossip";

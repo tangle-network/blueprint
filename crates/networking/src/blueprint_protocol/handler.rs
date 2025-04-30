@@ -1,9 +1,9 @@
 use std::time::{Duration, Instant};
 
 use alloy_primitives::Address;
+use blueprint_core::{debug, warn};
 use blueprint_crypto::{BytesEncoding, KeyType, hashing::keccak_256};
 use libp2p::{PeerId, request_response};
-use tracing::{debug, warn};
 
 use crate::blueprint_protocol::HandshakeMessage;
 use crate::discovery::peers::VerificationIdentifierKey;

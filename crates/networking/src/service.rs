@@ -10,6 +10,7 @@ use crate::{
     types::ProtocolMessage,
 };
 use alloy_primitives::Address;
+use blueprint_core::{debug, info, trace, warn};
 use blueprint_crypto::KeyType;
 use crossbeam_channel::{self, Receiver, SendError, Sender};
 use futures::StreamExt;
@@ -20,8 +21,6 @@ use libp2p::{
     swarm::{SwarmEvent, dial_opts::DialOpts},
 };
 use std::{collections::HashSet, fmt::Display, sync::Arc, time::Duration};
-use tracing::trace;
-use tracing::{debug, info, warn};
 
 pub enum AllowedKeys<K: KeyType> {
     EvmAddresses(blueprint_std::collections::HashSet<Address>),

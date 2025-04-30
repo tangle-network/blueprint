@@ -2,10 +2,10 @@ use crate::test_utils::{
     create_whitelisted_nodes, setup_log, wait_for_peer_discovery, wait_for_peer_info,
 };
 use crate::{service::AllowedKeys, test_utils::TestNode};
+use blueprint_core::info;
 use blueprint_crypto::sp_core::SpEcdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
-use tracing::info;
 
 #[tokio::test]
 #[serial_test::serial]
@@ -105,7 +105,7 @@ async fn test_peer_discovery_kademlia() {
     })
     .await
     {
-        Ok(()) => println!("All peers discovered each other through Kademlia"),
+        Ok(()) => info!("All peers discovered each other through Kademlia"),
         Err(e) => panic!("Kademlia peer discovery timed out: {e}"),
     }
 }

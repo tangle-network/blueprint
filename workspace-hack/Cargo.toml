@@ -131,7 +131,7 @@ jiff = { version = "0.2" }
 js-sys = { version = "0.3" }
 jsonrpsee = { version = "0.24", default-features = false, features = ["async-client", "async-wasm-client", "client-web-transport", "client-ws-transport-tls", "http-client", "macros", "server", "wasm-client", "ws-client"] }
 jsonrpsee-client-transport = { version = "0.24", default-features = false, features = ["tls-rustls-platform-verifier", "web", "ws"] }
-jsonrpsee-core = { version = "0.24", features = ["async-client", "async-wasm-client", "http-helpers", "server"] }
+jsonrpsee-core = { version = "0.25", features = ["async-client", "async-wasm-client", "http-helpers", "server"] }
 k256 = { version = "0.13", features = ["pem", "serde"] }
 libc = { version = "0.2" }
 libp2p = { version = "0.55", default-features = false, features = ["autonat", "cbor", "dcutr", "dns", "gossipsub", "identify", "kad", "macros", "mdns", "noise", "ping", "quic", "relay", "request-response", "tcp", "tokio", "upnp", "yamux"] }
@@ -201,13 +201,13 @@ sp-application-crypto = { version = "38" }
 sp-arithmetic = { version = "26", default-features = false, features = ["std"] }
 sp-core = { version = "34", features = ["bls-experimental"] }
 sp-crypto-hashing = { version = "0.1", default-features = false, features = ["std"] }
-sp-externalities = { version = "0.29", default-features = false, features = ["std"] }
+sp-externalities = { version = "0.30", default-features = false, features = ["std"] }
 sp-io = { version = "38", default-features = false, features = ["disable_oom", "disable_panic_handler", "std"] }
 sp-keystore = { version = "0.40" }
 sp-runtime = { version = "39", default-features = false, features = ["std"] }
 sp-runtime-interface = { version = "28", default-features = false, features = ["disable_target_static_assertions", "std"] }
 sp-std = { version = "14", default-features = false, features = ["std"] }
-sp-storage = { version = "21", default-features = false, features = ["std"] }
+sp-storage = { version = "22", default-features = false, features = ["std"] }
 sp-tracing = { version = "17", default-features = false, features = ["std"] }
 sp-wasm-interface = { version = "21", default-features = false, features = ["std"] }
 sp-weights = { version = "31", default-features = false, features = ["std"] }
@@ -372,7 +372,7 @@ jiff = { version = "0.2" }
 js-sys = { version = "0.3" }
 jsonrpsee = { version = "0.24", default-features = false, features = ["async-client", "async-wasm-client", "client-web-transport", "client-ws-transport-tls", "http-client", "macros", "server", "wasm-client", "ws-client"] }
 jsonrpsee-client-transport = { version = "0.24", default-features = false, features = ["tls-rustls-platform-verifier", "web", "ws"] }
-jsonrpsee-core = { version = "0.24", features = ["async-client", "async-wasm-client", "http-helpers", "server"] }
+jsonrpsee-core = { version = "0.25", features = ["async-client", "async-wasm-client", "http-helpers", "server"] }
 k256 = { version = "0.13", features = ["pem", "serde"] }
 libc = { version = "0.2" }
 libp2p = { version = "0.55", default-features = false, features = ["autonat", "cbor", "dcutr", "dns", "gossipsub", "identify", "kad", "macros", "mdns", "noise", "ping", "quic", "relay", "request-response", "tcp", "tokio", "upnp", "yamux"] }
@@ -446,13 +446,13 @@ sp-arithmetic = { version = "26", default-features = false, features = ["std"] }
 sp-core = { version = "34", features = ["bls-experimental"] }
 sp-crypto-hashing = { version = "0.1", default-features = false, features = ["std"] }
 sp-debug-derive = { version = "14", default-features = false, features = ["std"] }
-sp-externalities = { version = "0.29", default-features = false, features = ["std"] }
+sp-externalities = { version = "0.30", default-features = false, features = ["std"] }
 sp-io = { version = "38", default-features = false, features = ["disable_oom", "disable_panic_handler", "std"] }
 sp-keystore = { version = "0.40" }
 sp-runtime = { version = "39", default-features = false, features = ["std"] }
 sp-runtime-interface = { version = "28", default-features = false, features = ["disable_target_static_assertions", "std"] }
 sp-std = { version = "14", default-features = false, features = ["std"] }
-sp-storage = { version = "21", default-features = false, features = ["std"] }
+sp-storage = { version = "22", default-features = false, features = ["std"] }
 sp-tracing = { version = "17", default-features = false, features = ["std"] }
 sp-wasm-interface = { version = "21", default-features = false, features = ["std"] }
 sp-weights = { version = "31", default-features = false, features = ["std"] }

@@ -5,6 +5,7 @@ use crate::discovery::peers::VerificationIdentifierKey;
 use crate::discovery::utils::get_address_from_compressed_pubkey;
 use crate::types::ProtocolMessage;
 use bincode;
+use blueprint_core::{debug, error, info, warn};
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::KeyType;
 use crossbeam_channel::Sender;
@@ -25,7 +26,6 @@ use std::{
     task::Poll,
     time::{Duration, Instant},
 };
-use tracing::{debug, error, info, warn};
 
 #[derive(NetworkBehaviour)]
 pub struct DerivedBlueprintProtocolBehaviour<K: KeyType> {
