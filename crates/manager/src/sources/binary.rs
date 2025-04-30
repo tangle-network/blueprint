@@ -1,12 +1,15 @@
 use crate::sources::Status;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{info, warn};
 
 #[auto_impl::auto_impl(Box)]
 #[dynosaur::dynosaur(pub(crate) DynBinarySourceFetcher)]
 pub trait BinarySourceFetcher {
-    fn get_binary(&self) -> impl Future<Output = crate::error::Result<PathBuf>> + Send;
+    fn get_binary(
+        &mut self,
+        cache_dir: &Path,
+    ) -> impl Future<Output = crate::error::Result<PathBuf>> + Send;
 }
 
 unsafe impl Send for DynBinarySourceFetcher<'_> {}

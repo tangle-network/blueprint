@@ -50,6 +50,11 @@ hyper.workspace = true
 hyperlocal.workspace = true
 hyper-util.workspace = true
 http-body-util.workspace = true
+tar.workspace = true
+xz.workspace = true
+dirs.workspace = true
+cargo-dist-schema.workspace = true
+walkdir.workspace = true
 
 [package.metadata.dist]
 dist = false
