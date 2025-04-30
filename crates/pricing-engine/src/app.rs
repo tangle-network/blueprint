@@ -147,7 +147,6 @@ pub fn spawn_event_processor(
             // Extract blueprint ID and determine if we need to update pricing
             let (blueprint_id, update_pricing) = match event {
                 BlockchainEvent::Registered(e) => (Some(e.blueprint_id), true),
-                BlockchainEvent::PriceTargetsUpdated(e) => (Some(e.blueprint_id), true),
                 _ => (None, false),
             };
 

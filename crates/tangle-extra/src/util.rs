@@ -1,11 +1,33 @@
 #[cfg(test)]
 mod tests;
 
+use crate::serde::new_bounded_string;
 use alloc::sync::Arc;
 use tangle_subxt::subxt;
 use tangle_subxt::subxt::client::OnlineClientT;
 use tangle_subxt::subxt::error::TransactionError;
 use tangle_subxt::subxt::tx::{TxInBlock, TxStatus};
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::OperatorPreferences;
+
+/// Builds an `OperatorPreferences` from a key and an rpc address.
+///
+/// # Arguments
+///
+/// - `key`: The key of the operator.
+/// - `rpc_address`: The rpc address of the operator.
+///
+/// # Returns
+///
+/// - `OperatorPreferences`: The built `OperatorPreferences` instance.
+pub fn build_operator_preferences(
+    key: [u8; 65],
+    rpc_address: impl Into<String>,
+) -> OperatorPreferences {
+    let rpc_address_string: String = rpc_address.into();
+    let rpc_address = new_bounded_string(&rpc_address_string);
+
+    OperatorPreferences { key, rpc_address }
+}
 
 /// Extension trait for transaction progress handling.
 ///

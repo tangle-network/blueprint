@@ -95,9 +95,9 @@ pub enum BlueprintResourceRequirement {
     NetworkIngressMB(u64),
     /// GPU units
     GPU(u64),
-    /// Request count (for FaaS/API services)
+    /// Request count
     Request(u64),
-    /// Invocation count (for FaaS)
+    /// Invocation count
     Invocation(u64),
     /// Execution time in milliseconds
     ExecutionTimeMS(u64),
@@ -218,7 +218,9 @@ impl TryFrom<ServiceBlueprint<'_>> for SubxtServiceBlueprint {
             request_params: BoundedVec(request_params),
             // TODO: Not supported in the macro yet
             supported_membership_models: BoundedVec(vec![MembershipModelType::Fixed]),
-            recommended_resources: BoundedVec(recommended_resources.into_iter().map(Into::into).collect()),
+            recommended_resources: BoundedVec(
+                recommended_resources.into_iter().map(Into::into).collect(),
+            ),
         })
     }
 }

@@ -18,6 +18,7 @@ use tangle_subxt::subxt::{
     utils::AccountId32,
 };
 use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::PricingQuote;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment;
 use tangle_subxt::tangle_testnet_runtime::api::{
     self,
@@ -484,6 +485,86 @@ pub async fn request_service_for_operators<T: Signer<TangleConfig>>(
 
     // Verify the service belongs to our blueprint
     let service = alice_client
+        .subxt_client()
+        .storage()
+        .at_latest()
+        .await?
+        .fetch(
+            &api::storage()
+                .services()
+                .instances(new_service_id.saturating_sub(1)),
+        )
+        .await?
+        .ok_or(TransactionError::ServiceNotFound)?;
+
+    if service.blueprint != blueprint_id {
+        return Err(TransactionError::ServiceIdMismatch);
+    }
+    Ok(new_service_id.saturating_sub(1))
+}
+
+/// Requests a service with a given blueprint, returning the service ID.
+///
+/// This is meant for testing.
+///
+/// `user` will be the only permitted caller, and all `test_nodes` will be selected as operators.
+///
+/// # Errors
+///
+/// Returns an error if the transaction fails
+#[allow(clippy::cast_possible_truncation, clippy::too_many_arguments)]
+pub async fn request_service_with_quotes<T: Signer<TangleConfig>>(
+    client: &TestClient,
+    user: &T,
+    blueprint_id: u64,
+    request_args: RequestArgs,
+    operators: Vec<AccountId32>,
+    quotes: Vec<PricingQuote>,
+    quote_signatures: Vec<sp_core::ecdsa::Signature>,
+    security_commitments: Vec<AssetSecurityCommitment<AssetId>>,
+    optional_assets: Option<Vec<AssetSecurityRequirement<AssetId>>>,
+) -> Result<u64, TransactionError> {
+    let quote_signatures = quote_signatures.into_iter().map(|s| s.into()).collect();
+    info!(requester = ?user.account_id(), ?operators, %blueprint_id, "Requesting service");
+    let min_operators = operators.len() as u32;
+    let security_requirements = optional_assets.unwrap_or_else(|| {
+        vec![AssetSecurityRequirement {
+            asset: Asset::Custom(0),
+            min_exposure_percent: Percent(50),
+            max_exposure_percent: Percent(80),
+        }]
+    });
+
+    // Get the current service ID before requesting new service
+    let prev_service_id = get_next_service_id(client).await?;
+
+    let call = api::tx().services().request_with_signed_price_quotes(
+        None,
+        blueprint_id,
+        Vec::new(),
+        operators,
+        request_args,
+        security_requirements,
+        1000,
+        Asset::Custom(0),
+        MembershipModel::Fixed { min_operators },
+        quotes,
+        quote_signatures,
+        security_commitments,
+    );
+    let res = client
+        .subxt_client()
+        .tx()
+        .sign_and_submit_then_watch_default(&call, user)
+        .await?;
+    wait_for_in_block_success(res).await?;
+
+    // Get the new service ID from events
+    let new_service_id = get_next_service_id(client).await?;
+    assert!(new_service_id > prev_service_id);
+
+    // Verify the service belongs to our blueprint
+    let service = client
         .subxt_client()
         .storage()
         .at_latest()
