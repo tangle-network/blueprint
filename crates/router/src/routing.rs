@@ -22,9 +22,14 @@ use tower::{BoxError, Layer, Service};
 pub(crate) struct RouteId(pub u32);
 
 /// The router type for composing jobs and services.
+///
+/// `Router<Ctx>` means a router that is missing a context of type `Ctx` to be able to handle requests.
+/// Thus, only `Router<()>` (i.e. without missing context) can be passed to a [`BlueprintRunner`]. See [`Router::with_context()`] for more details.
+///
+/// [`BlueprintRunner`]: https://docs.rs/blueprint-runner/latest/blueprint_runner/struct.BlueprintRunner.html
 #[must_use]
 pub struct Router<Ctx = ()> {
-    inner: Arc<RouterInner<Ctx>>,
+    inner: Arc<JobIdRouter<Ctx>>,
 }
 
 impl<Ctx> Clone for Router<Ctx> {
@@ -33,10 +38,6 @@ impl<Ctx> Clone for Router<Ctx> {
             inner: Arc::clone(&self.inner),
         }
     }
-}
-
-struct RouterInner<Ctx> {
-    job_id_router: JobIdRouter<Ctx>,
 }
 
 impl<Ctx> Default for Router<Ctx>
@@ -51,7 +52,7 @@ where
 impl<Ctx> fmt::Debug for Router<Ctx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Router")
-            .field("job_id_router", &self.inner.job_id_router)
+            .field("inner", &self.inner)
             .finish()
     }
 }
@@ -65,16 +66,12 @@ where
     /// Unless you add additional routes this will ignore all requests.
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(RouterInner {
-                job_id_router: JobIdRouter::default(),
-            }),
+            inner: Arc::new(JobIdRouter::default()),
         }
     }
 
-    fn into_inner(self) -> RouterInner<Ctx> {
-        Arc::try_unwrap(self.inner).unwrap_or_else(|arc| RouterInner {
-            job_id_router: arc.job_id_router.clone(),
-        })
+    fn into_inner(self) -> JobIdRouter<Ctx> {
+        Arc::try_unwrap(self.inner).unwrap_or_else(|arc| arc.as_ref().clone())
     }
 
     /// Add a [`Job`] to the router, with the given job ID.
@@ -88,7 +85,7 @@ where
         T: 'static,
     {
         let mut inner = self.into_inner();
-        inner.job_id_router.route(job_id, job);
+        inner.route(job_id, job);
         Router {
             inner: Arc::new(inner),
         }
@@ -113,7 +110,7 @@ where
         };
 
         let mut inner = self.into_inner();
-        inner.job_id_router.route_service(job_id, service);
+        inner.route_service(job_id, service);
         Router {
             inner: Arc::new(inner),
         }
@@ -130,7 +127,7 @@ where
         T: 'static,
     {
         let mut inner = self.into_inner();
-        inner.job_id_router.always(job);
+        inner.always(job);
         Router {
             inner: Arc::new(inner),
         }
@@ -152,12 +149,38 @@ where
         T: 'static,
     {
         let mut inner = self.into_inner();
-        inner.job_id_router.fallback(job);
+        inner.fallback(job);
         Router {
             inner: Arc::new(inner),
         }
     }
 
+    /// Apply a [`tower::Layer`] to all routes in this `Router`
+    ///
+    /// See [`Job::layer()`]
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blueprint_sdk::{Job, Router};
+    /// use tower::limit::{ConcurrencyLimit, ConcurrencyLimitLayer};
+    ///
+    /// async fn job() { /* ... */
+    /// }
+    ///
+    /// async fn another_job() { /* ... */
+    /// }
+    ///
+    /// const JOB_ID: u32 = 0;
+    /// const ANOTHER_JOB_ID: u32 = 1;
+    ///
+    /// let app = Router::new()
+    ///     .route(JOB_ID, job)
+    ///     .route(ANOTHER_JOB_ID, another_job)
+    ///     // Limit concurrent calls to both `job` and `another_job` to 64
+    ///     .layer(ConcurrencyLimitLayer::new(64));
+    /// # let _: Router = app;
+    /// ```
     pub fn layer<L>(self, layer: L) -> Router<Ctx>
     where
         L: Layer<Route> + Clone + Send + Sync + 'static,
@@ -166,26 +189,23 @@ where
         <L::Service as Service<JobCall>>::Error: Into<BoxError> + 'static,
         <L::Service as Service<JobCall>>::Future: Send + 'static,
     {
-        let inner = self.into_inner().job_id_router.layer(layer);
+        let inner = self.into_inner().layer(layer);
         Router {
-            inner: Arc::new(RouterInner {
-                job_id_router: inner,
-            }),
+            inner: Arc::new(inner),
         }
     }
 
-    /// True if the router currently has at least one route added.
+    /// Whether the router currently has at least one route added.
     #[must_use]
     pub fn has_routes(&self) -> bool {
-        self.inner.job_id_router.has_routes()
+        self.inner.has_routes()
     }
 
+    #[doc = include_str!("../docs/with_context.md")]
     pub fn with_context<Ctx2>(self, context: Ctx) -> Router<Ctx2> {
-        let inner = self.into_inner().job_id_router.with_context(context);
+        let inner = self.into_inner().with_context(context);
         Router {
-            inner: Arc::new(RouterInner {
-                job_id_router: inner,
-            }),
+            inner: Arc::new(inner),
         }
     }
 
@@ -201,7 +221,7 @@ where
             body = ?call.body(),
             "routing a job call to inner routers"
         );
-        let (call, context) = match self.inner.job_id_router.call_with_context(call, context) {
+        let (call, context) = match self.inner.call_with_context(call, context) {
             Ok(matched_call_future) => {
                 blueprint_core::trace!(
                     target: "blueprint-router",
@@ -221,7 +241,6 @@ where
         );
 
         self.inner
-            .job_id_router
             .call_fallback(call, context)
             .map(|future| iter::once(future).collect::<FuturesUnordered<_>>())
     }

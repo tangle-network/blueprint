@@ -49,7 +49,7 @@ pub mod __private {
 mod boxed;
 pub mod future;
 mod job_id_router;
-pub mod routing;
+mod routing;
 mod util;
 
 #[cfg(test)]
@@ -57,4 +57,4 @@ pub(crate) mod test_helpers;
 #[cfg(test)]
 mod tests;
 
-pub use routing::Router;
+pub use routing::*;
