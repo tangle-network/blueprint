@@ -1,3 +1,8 @@
+//! Router future types
+//!
+//! You normally shouldn't need to care about the types in the module, unless composing a service
+//! on top of the SDK routes.
+
 use blueprint_core::{IntoJobResult, JobCall, JobResult};
 use bytes::Bytes;
 use core::{
@@ -102,6 +107,7 @@ pin_project! {
 }
 
 impl<E> RouteFuture<E> {
+    /// Create a new `RouteFuture`
     fn new(inner: Oneshot<BoxCloneSyncService<JobCall, Option<JobResult>, E>, JobCall>) -> Self {
         Self { inner }
     }
