@@ -218,7 +218,7 @@ pub async fn run_rpc_server(
     >,
     signer: Arc<Mutex<OperatorSigner<SpEcdsa>>>,
 ) -> anyhow::Result<()> {
-    let addr = config.rpc_bind_address.parse()?;
+    let addr = format!("{}:{}", config.rpc_bind_address, config.rpc_port).parse()?;
     info!("gRPC server listening on {}", addr);
 
     let pricing_service =

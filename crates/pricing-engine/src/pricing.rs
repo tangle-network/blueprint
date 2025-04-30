@@ -3,7 +3,6 @@ use crate::error::Result;
 use crate::types::ResourceUnit;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
 use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityRequirement;
 use toml;
@@ -260,12 +259,10 @@ pub fn calculate_price(
 }
 
 /// Load pricing from a pricing.toml file
-pub fn load_pricing_from_toml(path: &str) -> Result<HashMap<Option<u64>, Vec<ResourcePricing>>> {
+pub fn load_pricing_from_toml(content: &str) -> Result<HashMap<Option<u64>, Vec<ResourcePricing>>> {
     use std::str::FromStr;
 
-    // Parse the TOML file
-    let toml_content = fs::read_to_string(path)?;
-    let parsed_toml: toml::Value = toml::from_str(&toml_content)?;
+    let parsed_toml: toml::Value = toml::from_str(content)?;
 
     let mut pricing = HashMap::new();
 

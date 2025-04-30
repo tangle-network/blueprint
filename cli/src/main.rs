@@ -226,6 +226,9 @@ pub enum BlueprintCommands {
         /// The keystore URI to use
         #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
         keystore_uri: String,
+        /// The URL of the pricing RPC
+        #[arg(long, env = "PRICING_RPC_URL", default_value = "ws://127.0.0.1:9000")]
+        pricing_rpc_address: Url,
     },
 
     /// Accept a Tangle service request
@@ -587,7 +590,8 @@ async fn main() -> color_eyre::Result<()> {
                 ws_rpc_url,
                 blueprint_id,
                 keystore_uri,
-            } => register(ws_rpc_url, blueprint_id, keystore_uri).await?,
+                pricing_rpc_address,
+            } => register(ws_rpc_url, blueprint_id, keystore_uri, pricing_rpc_address).await?,
             BlueprintCommands::AcceptRequest {
                 ws_rpc_url,
                 min_exposure_percent,

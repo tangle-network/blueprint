@@ -6,7 +6,7 @@ use blueprint_keystore::backends::Backend;
 use blueprint_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_keystore::crypto::tangle_pair_signer::pair_signer::PairSigner;
 use blueprint_keystore::crypto::tangle_pair_signer::sp_core;
-use blueprint_tangle_extra::util::build_operator_preferences;
+use blueprint_tangle_extra::serde::new_bounded_string;
 use futures_util::future::select_ok;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use serde::{Deserialize, Serialize};
@@ -14,6 +14,7 @@ use std::error::Error;
 use std::sync::Arc;
 use tangle_subxt::subxt::{OnlineClient, PolkadotConfig};
 use tangle_subxt::tangle_testnet_runtime::api;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
 
 /// Protocol settings for [Tangle]
@@ -52,9 +53,9 @@ pub struct TangleConfig {
 
 impl TangleConfig {
     #[must_use]
-    pub fn new(rpc_address: String) -> Self {
+    pub fn new(rpc_address: impl Into<String>) -> Self {
         Self {
-            rpc_address,
+            rpc_address: rpc_address.into(),
             exit_after_register: true,
         }
     }
@@ -68,7 +69,7 @@ impl TangleConfig {
 
 impl BlueprintConfig for TangleConfig {
     async fn register(&self, env: &BlueprintEnvironment) -> Result<(), RunnerError> {
-        register_impl(self.rpc_address.clone(), vec![], env).await
+        register_impl(&self.rpc_address, vec![], env).await
     }
 
     async fn requires_registration(&self, env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
@@ -114,7 +115,7 @@ async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bool, 
 }
 
 async fn register_impl(
-    rpc_address: String,
+    rpc_address: &str,
     registration_args: RegistrationArgs,
     env: &BlueprintEnvironment,
 ) -> Result<(), RunnerError> {
@@ -159,7 +160,10 @@ async fn register_impl(
         decompress_pubkey(&ecdsa_key.0.0).ok_or(TangleError::DecompressEcdsaKey)?;
     let xt = api::tx().services().register(
         blueprint_id,
-        build_operator_preferences(uncompressed_pk, rpc_address),
+        services::types::OperatorPreferences {
+            key: uncompressed_pk,
+            rpc_address: new_bounded_string(rpc_address),
+        },
         registration_args,
         0,
     );
