@@ -19046,6 +19046,7 @@ checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 [[package]]
 name = "tangle-subxt"
 version = "0.15.0"
+source = "git+https://github.com/tangle-network/tangle.git#7bf60a617436e1796f2799ee8a9d073984f70f1e"
 dependencies = [
  "parity-scale-codec",
  "scale-info",

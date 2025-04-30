@@ -125,8 +125,7 @@ tnt-core-bytecode = { git = "https://github.com/tangle-network/tnt-core.git", br
 # Tangle-related dependencies
 # TODO: Switch back to release when tangle-subxt is published
 # tangle-subxt = { version = "0.15", default-features = false }
-# tangle-subxt = { git = "https://github.com/tangle-network/tangle.git", rev = "635a3a826138bfc749cc5ef28e24c8e7312d099f", default-features = false }
-tangle-subxt = { path = "../tangle/tangle-subxt", default-features = false }
+tangle-subxt = { git = "https://github.com/tangle-network/tangle.git", default-features = false }
 round-based = { version = "0.4.1", default-features = false }
 
 # Substrate dependencies
