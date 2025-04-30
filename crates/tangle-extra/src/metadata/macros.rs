@@ -1,4 +1,5 @@
 use super::types::blueprint::{BlueprintServiceManager, ServiceBlueprint, ServiceMetadata};
+use super::types::blueprint::BlueprintResourceRequirement;
 use crate::metadata::types::sources::{BlueprintSource, TestFetcher};
 use crate::metadata::types::job::JobDefinition;
 use serde::Deserialize;
@@ -11,6 +12,7 @@ pub mod ext {
     pub use tangle_subxt;
     pub use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
     pub use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::JobDefinition as SubxtJobDefinition;
+    pub use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing;
     pub use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::MembershipModelType;
 }
 
@@ -55,6 +57,7 @@ pub struct PartialBlueprintJson {
     master_manager_revision: Option<MasterBlueprintServiceManagerRevision>,
     #[expect(dead_code, reason = "Not yet used in blueprint.json")]
     supported_membership_models: Option<Vec<ext::MembershipModelType>>,
+    recommended_resources: Option<Vec<BlueprintResourceRequirement>>,
 }
 
 /// Resolves the path to the EVM contract JSON file by its name.
@@ -137,6 +140,7 @@ impl PartialBlueprintJson {
                 .master_manager_revision
                 .unwrap_or(MasterBlueprintServiceManagerRevision::Latest),
             sources: generate_sources_for_current_crate()?,
+            recommended_resources: self.recommended_resources.unwrap_or_default(),
         })
     }
 }
@@ -230,9 +234,11 @@ fn generate_sources_for_current_crate() -> Result<Vec<BlueprintSource<'static>>,
 /// * `manager`: The name of the smart contract that will manage the service (likely the UpperCamelCase version of your crate name)
 /// * `master_manager_revision`: The revision of the Master Blueprint Service Manager (MBSM), as a string
 /// * `supported_membership_models`: A list of the supported [`MembershipModelType`] variants
+/// * `recommended_resources`: A list of the recommended [`ResourcePricing`] variants
 ///
 /// [`FieldType`]: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::Field
 /// [`MembershipModelType`]: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::MembershipModelType
+/// [`ResourcePricing`]: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing
 #[macro_export]
 macro_rules! blueprint {
     ($($tt:tt)*) => {{
@@ -387,6 +393,13 @@ macro_rules! blueprint_inner {
         // TODO(serial): Generate supported membership models
         $crate::blueprint_inner!(@__CONSTRUCT $object $($rest)*)
     };
+    (@__CONSTRUCT $object:ident recommended_resources: $recommended_resources:expr , $($rest:tt)*) => {
+        $object.insert(
+            String::from("recommended_resources"),
+            $crate::metadata::macros::ext::serde_json::to_value($recommended_resources).expect("should serialize"),
+        );
+        $crate::blueprint_inner!(@__CONSTRUCT $object $($rest)*)
+    };
 
     // Error on invalid fields
     (@__CONSTRUCT $object:ident $unknown:ident: $value:expr , $($rest:tt)*) => {
@@ -401,6 +414,7 @@ mod tests {
     use super::*;
     use crate::extract::{List, TangleArg, TangleArgs2, TangleResult, Optional};
     use crate::metadata::types::job::JobMetadata;
+    use crate::metadata::types::blueprint::BlueprintResourceRequirement;
 
     #[derive(Default, serde::Deserialize, serde::Serialize)]
     struct MyCustomType {
@@ -578,6 +592,30 @@ mod tests {
                 FieldType::Uint64,
                 FieldType::Uint64,
             ])))]
+        );
+    }
+
+    #[test]
+    fn with_recommended_resources() {
+        let blueprint = blueprint! {
+            name: "test",
+            master_manager_revision: "Latest",
+            manager: { Evm = "TestBlueprint" },
+            recommended_resources: [
+                BlueprintResourceRequirement::CPU(2),
+                BlueprintResourceRequirement::MemoryMB(1024),
+                BlueprintResourceRequirement::StorageMB(10240),
+            ]
+        }
+        .unwrap();
+
+        assert_eq!(
+            blueprint.recommended_resources,
+            vec![
+                BlueprintResourceRequirement::CPU(2),
+                BlueprintResourceRequirement::MemoryMB(1024),
+                BlueprintResourceRequirement::StorageMB(10240),
+            ]
         );
     }
 

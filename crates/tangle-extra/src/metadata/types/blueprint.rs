@@ -4,6 +4,7 @@ use crate::serde::new_bounded_string;
 use alloc::borrow::Cow;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::BlueprintServiceManager as SubxtBlueprintServiceManager;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::MasterBlueprintServiceManagerRevision;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::ServiceBlueprint as SubxtServiceBlueprint;
@@ -78,6 +79,89 @@ impl TryFrom<BlueprintServiceManager> for SubxtBlueprintServiceManager {
     }
 }
 
+/// Helper type for specifying resource requirements in a blueprint
+/// This is used to make it easier to specify resource requirements in the blueprint macro
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum BlueprintResourceRequirement {
+    /// CPU cores or vCPUs
+    CPU(u64),
+    /// Memory in megabytes
+    MemoryMB(u64),
+    /// Storage in megabytes
+    StorageMB(u64),
+    /// Network egress in megabytes
+    NetworkEgressMB(u64),
+    /// Network ingress in megabytes
+    NetworkIngressMB(u64),
+    /// GPU units
+    GPU(u64),
+    /// Request count (for FaaS/API services)
+    Request(u64),
+    /// Invocation count (for FaaS)
+    Invocation(u64),
+    /// Execution time in milliseconds
+    ExecutionTimeMS(u64),
+    /// Storage IO operations per second
+    StorageIOPS(u64),
+}
+
+impl From<BlueprintResourceRequirement> for ResourcePricing {
+    fn from(value: BlueprintResourceRequirement) -> Self {
+        match value {
+            BlueprintResourceRequirement::CPU(count) => ResourcePricing {
+                kind: new_bounded_string("CPU"),
+                count,
+                price_per_unit_rate: 0,
+            },
+            BlueprintResourceRequirement::MemoryMB(count) => ResourcePricing {
+                kind: new_bounded_string("MemoryMB"),
+                count,
+                price_per_unit_rate: 0,
+            },
+            BlueprintResourceRequirement::StorageMB(count) => ResourcePricing {
+                kind: new_bounded_string("StorageMB"),
+                count,
+                price_per_unit_rate: 0,
+            },
+            BlueprintResourceRequirement::NetworkEgressMB(count) => ResourcePricing {
+                kind: new_bounded_string("NetworkEgressMB"),
+                count,
+                price_per_unit_rate: 0,
+            },
+            BlueprintResourceRequirement::NetworkIngressMB(count) => ResourcePricing {
+                kind: new_bounded_string("NetworkIngressMB"),
+                count,
+                price_per_unit_rate: 0,
+            },
+            BlueprintResourceRequirement::GPU(count) => ResourcePricing {
+                kind: new_bounded_string("GPU"),
+                count,
+                price_per_unit_rate: 0,
+            },
+            BlueprintResourceRequirement::Request(count) => ResourcePricing {
+                kind: new_bounded_string("Request"),
+                count,
+                price_per_unit_rate: 0,
+            },
+            BlueprintResourceRequirement::Invocation(count) => ResourcePricing {
+                kind: new_bounded_string("Invocation"),
+                count,
+                price_per_unit_rate: 0,
+            },
+            BlueprintResourceRequirement::ExecutionTimeMS(count) => ResourcePricing {
+                kind: new_bounded_string("ExecutionTimeMS"),
+                count,
+                price_per_unit_rate: 0,
+            },
+            BlueprintResourceRequirement::StorageIOPS(count) => ResourcePricing {
+                kind: new_bounded_string("StorageIOPS"),
+                count,
+                price_per_unit_rate: 0,
+            },
+        }
+    }
+}
+
 /// Mirror of [`ServiceBlueprint`] for un-deployed blueprints
 ///
 /// This only exists, as the [`ServiceBlueprint`] uses `Vec<u8>` instead of `String` for string fields,
@@ -105,6 +189,8 @@ pub struct ServiceBlueprint<'a> {
     pub request_params: Vec<FieldType>,
     /// The binary sources for the blueprint.
     pub sources: Vec<BlueprintSource<'a>>,
+    /// Recommended resources for running this blueprint
+    pub recommended_resources: Vec<BlueprintResourceRequirement>,
 }
 
 impl TryFrom<ServiceBlueprint<'_>> for SubxtServiceBlueprint {
@@ -119,6 +205,7 @@ impl TryFrom<ServiceBlueprint<'_>> for SubxtServiceBlueprint {
             registration_params,
             request_params,
             sources,
+            recommended_resources,
         } = value;
 
         Ok(SubxtServiceBlueprint {
@@ -131,6 +218,7 @@ impl TryFrom<ServiceBlueprint<'_>> for SubxtServiceBlueprint {
             request_params: BoundedVec(request_params),
             // TODO: Not supported in the macro yet
             supported_membership_models: BoundedVec(vec![MembershipModelType::Fixed]),
+            recommended_resources: BoundedVec(recommended_resources.into_iter().map(Into::into).collect()),
         })
     }
 }
