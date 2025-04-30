@@ -19,13 +19,5 @@ serde_json = { workspace = true, features = ["alloc"] }
 thiserror = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
-[features]
-default = ["std"]
-std = [
-    "blueprint-std/std",
-    "serde/std",
-    "serde_json/std",
-]
-
 [dev-dependencies]
 tempfile = "3.8"
