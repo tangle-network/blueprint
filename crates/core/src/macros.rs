@@ -53,6 +53,8 @@ macro_rules! all_the_tuples {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
 macro_rules! all_the_tuples_no_last_special_case {
     ($name:ident) => {
         $name!(T1);

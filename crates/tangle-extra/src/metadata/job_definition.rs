@@ -28,7 +28,7 @@
 //! ```
 //!
 //! [`Job`]: blueprint_core::Job
-
+use std::marker::PhantomData;
 use crate::serde::{BoundedVec, new_bounded_string};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::{
@@ -102,6 +102,8 @@ where
     }
 }
 
+struct HasArgs<T>(PhantomData<T>);
+
 /// Macro to implement [`IntoJobDefinition`] for functions with arguments.
 ///
 /// This macro generates implementations for functions with different numbers of arguments.
@@ -109,7 +111,7 @@ macro_rules! impl_into_job_definition {
     (
         [$($ty:ident),*], $last:ident
     ) => {
-        impl<F, Fut, Res, $($ty,)* $last> IntoJobDefinition<((), $($ty,)* $last,)> for F
+        impl<F, Fut, Res, $($ty,)* $last> IntoJobDefinition<HasArgs<((), $($ty,)* $last,)>> for F
         where
             F: FnOnce($($ty,)* $last,) -> Fut + Clone + Send + Sync + 'static,
             Fut: Future<Output = Res> + Send,
@@ -125,11 +127,33 @@ macro_rules! impl_into_job_definition {
             }
         }
     };
+    // Empty case, already covered above
+    (T1) => {};
+    (
+        $($ty:ident),*
+    ) => {
+        impl<F, Fut, Res, $($ty,)*> IntoJobDefinition<($($ty,)*)> for F
+        where
+            F: FnOnce($($ty,)*) -> Fut + Clone + Send + Sync + 'static,
+            Fut: Future<Output = Res> + Send,
+            Res: IntoTangleFieldTypes,
+        {
+            fn into_job_definition(self) -> JobDefinition {
+                JobDefinition {
+                    metadata: self.into_job_metadata(),
+                    params: BoundedVec(Vec::new()),
+                    result: BoundedVec(Res::into_tangle_fields()),
+                }
+            }
+        }
+    };
 }
 
 // Use the all_the_tuples macro from blueprint_core to generate implementations
 // for functions with different numbers of arguments.
 blueprint_core::all_the_tuples!(impl_into_job_definition);
+blueprint_core::all_the_tuples_no_last_special_case!(impl_into_job_definition);
+
 
 #[cfg(test)]
 #[allow(clippy::type_complexity)]
@@ -137,11 +161,7 @@ mod tests {
     use blueprint_core::extract::Context;
 
     use super::*;
-    use crate::extract::{
-        TangleArg, TangleArgs2, TangleArgs3, TangleArgs4, TangleArgs5, TangleArgs6, TangleArgs7,
-        TangleArgs8, TangleArgs9, TangleArgs10, TangleArgs11, TangleArgs12, TangleArgs13,
-        TangleArgs14, TangleArgs15, TangleArgs16, TangleResult,
-    };
+    use crate::extract::{TangleArg, TangleArgs2, TangleArgs3, TangleArgs4, TangleArgs5, TangleArgs6, TangleArgs7, TangleArgs8, TangleArgs9, TangleArgs10, TangleArgs11, TangleArgs12, TangleArgs13, TangleArgs14, TangleArgs15, TangleArgs16, TangleResult, ServiceId};
 
     macro_rules! count {
         ($val:ident, $($rest:tt)*) => {
@@ -170,6 +190,26 @@ mod tests {
         );
         assert!(empty.params.0.is_empty());
         assert_eq!(empty.result.0[0], FieldType::Uint64);
+    }
+
+    async fn no_tangle_args_has_extractors(
+        Context(ctx): Context<MyContext>,
+        ServiceId(service_id): ServiceId,
+    ) -> TangleResult<u64> {
+        TangleResult(0)
+    }
+
+    #[test]
+    fn no_tangle_args_with_extractors() {
+        let def = no_tangle_args_has_extractors.into_job_definition();
+        assert_eq!(
+            def.metadata.name.0.0,
+            b"blueprint_tangle_extra::metadata::job_definition::tests::no_tangle_args_has_extractors",
+            "expected no_tangle_args_has_extractors, got {}",
+            std::str::from_utf8(&def.metadata.name.0.0).unwrap()
+        );
+        assert!(def.params.0.is_empty());
+        assert_eq!(def.result.0[0], FieldType::Uint64);
     }
 
     #[derive(Debug, Default, Clone, Copy)]
