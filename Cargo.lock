@@ -5589,7 +5589,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.100",
 ]
 
 [[package]]
@@ -19110,8 +19110,9 @@ checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 
 [[package]]
 name = "tangle-subxt"
-version = "0.15.0"
-source = "git+https://github.com/tangle-network/tangle.git#7bf60a617436e1796f2799ee8a9d073984f70f1e"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49c437c708d4cf914dea0506eab85090cfca2e3a1ce09658ee7721b91085a64d"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -19424,8 +19425,8 @@ dependencies = [
 
 [[package]]
 name = "tnt-core-bytecode"
-version = "0.4.0"
-source = "git+https://github.com/tangle-network/tnt-core.git?branch=donovan%2Fpricing#e91a558d460d10567b9d36f1d9aa7a39606274d5"
+version = "0.5.0"
+source = "git+https://github.com/tangle-network/tnt-core.git#b48a92b286b822f8f94187ecf5362bd93c42a8fb"
 dependencies = [
  "serde_json",
 ]
