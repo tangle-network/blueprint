@@ -135,14 +135,12 @@ where
     pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
         // Start Local Tangle Node
         let node = blueprint_chain_setup::tangle::run(
-            blueprint_chain_setup::tangle::NodeConfig::new(true).with_log_target("evm", "trace"),
+            blueprint_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
         )
         .await
         .map_err(|e| Error::Setup(e.to_string()))?;
-        // let http_endpoint = Url::parse(&format!("http://127.0.0.1:{}", node.ws_port()))?;
-        // let ws_endpoint = Url::parse(&format!("ws://127.0.0.1:{}", node.ws_port()))?;
-        let http_endpoint = Url::parse("http://127.0.0.1:9944")?;
-        let ws_endpoint = Url::parse("ws://127.0.0.1:9944")?;
+        let http_endpoint = Url::parse(&format!("http://127.0.0.1:{}", node.ws_port()))?;
+        let ws_endpoint = Url::parse(&format!("ws://127.0.0.1:{}", node.ws_port()))?;
 
         // Alice idx = 0
         let alice_env = generate_env_from_node_id(
