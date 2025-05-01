@@ -4,7 +4,8 @@ use blueprint_crypto::sp_core::SpSr25519;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
-use blueprint_runner::tangle::config::{PriceTargets, decompress_pubkey};
+use blueprint_runner::tangle::config::decompress_pubkey;
+use blueprint_tangle_extra::util::build_operator_preferences;
 use color_eyre::Result;
 use dialoguer::console::style;
 use tangle_subxt::subxt::tx::Signer;
@@ -41,8 +42,12 @@ pub async fn register(
 
     let config = KeystoreConfig::new().fs_root(keystore_uri.clone());
     let keystore = Keystore::new(config).expect("Failed to create keystore");
-    let public = keystore.first_local::<SpSr25519>().unwrap();
-    let pair = keystore.get_secret::<SpSr25519>(&public).unwrap();
+    let public = keystore
+        .first_local::<SpSr25519>()
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to get public key: {}", e))?;
+    let pair = keystore
+        .get_secret::<SpSr25519>(&public)
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to get secret key: {}", e))?;
     let signer = TanglePairSigner::new(pair.0);
 
     // Get the account ID from the signer for display
@@ -60,11 +65,11 @@ pub async fn register(
         .first_local::<blueprint_crypto::sp_core::SpEcdsa>()
         .map_err(|e| color_eyre::eyre::eyre!("Missing ECDSA key: {}", e))?;
 
-    let preferences =
-        tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::Preferences {
-            key: decompress_pubkey(&ecdsa_public.0.0).unwrap(),
-            price_targets: PriceTargets::default().0,
-        };
+    let preferences = build_operator_preferences(
+        decompress_pubkey(&ecdsa_public.0.0)
+            .ok_or(color_eyre::eyre::eyre!("Failed to decompress public key"))?,
+        "",
+    );
 
     info!("Joining operators...");
     let join_call = api::tx()

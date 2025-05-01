@@ -18,7 +18,7 @@ use crate::command::register::register;
 use crate::command::service::accept::accept_request;
 use crate::command::service::reject::reject_request;
 use crate::command::service::request::request_service;
-use crate::tests::tangle::blueprint::create_test_blueprint;
+use blueprint_testing_utils::tangle::blueprint::create_test_blueprint;
 
 #[tokio::test]
 async fn test_register_request_and_list() -> Result<()> {

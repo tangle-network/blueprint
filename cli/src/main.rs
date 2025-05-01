@@ -194,7 +194,7 @@ pub enum BlueprintCommands {
         settings_file: Option<PathBuf>,
 
         /// The Podman host to use for containerized blueprints
-        #[arg(short, long, env = "PODMAN_HOST", default_value_t = DEFAULT_DOCKER_HOST.clone())]
+        #[arg(long, env = "PODMAN_HOST", default_value_t = DEFAULT_DOCKER_HOST.clone())]
         podman_host: Url,
     },
 

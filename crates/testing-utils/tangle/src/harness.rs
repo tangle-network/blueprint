@@ -14,10 +14,14 @@ use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::ContextConfig;
 use blueprint_runner::config::SupportedChains;
 use blueprint_runner::error::RunnerError;
-use blueprint_runner::tangle::config::PriceTargets;
 use blueprint_runner::tangle::error::TangleError;
 use blueprint_std::io;
 use blueprint_std::path::{Path, PathBuf};
+use blueprint_tangle_extra::util::build_operator_preferences;
+use tangle_subxt::subxt::utils::AccountId32;
+use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::PricingQuote;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{AssetSecurityCommitment, AssetSecurityRequirement};
 use std::marker::PhantomData;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::request::RequestArgs;
@@ -251,11 +255,10 @@ where
                 .first_local::<SpEcdsa>()
                 .map_err(|err| RunnerError::Tangle(TangleError::Keystore(err)))?;
 
-            let preferences = Preferences {
-                key: blueprint_runner::tangle::config::decompress_pubkey(&ecdsa_public.0.0)
-                    .unwrap(),
-                price_targets: PriceTargets::default().0,
-            };
+            let preferences = build_operator_preferences(
+                blueprint_runner::tangle::config::decompress_pubkey(&ecdsa_public.0.0).unwrap(),
+                "",
+            );
 
             nodes.push(NodeInfo {
                 env,
@@ -437,6 +440,45 @@ where
             request_args: RequestArgs::default(),
         })
         .await
+    }
+
+    /// Requests a service with a given blueprint using pricing quotes.
+    ///
+    /// # Arguments
+    /// * `blueprint_id` - The ID of the blueprint to request
+    /// * `request_args` - The arguments for the request
+    /// * `quotes` - The pricing quotes for the service
+    /// * `quote_signatures` - The signatures for the pricing quotes
+    /// * `security_commitments` - The security commitments for the service
+    /// * `optional_assets` - Optional asset security requirements (defaults to Custom(0) at 50%-80% if not provided)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the transaction fails
+    #[allow(clippy::too_many_arguments)]
+    pub async fn request_service_with_quotes(
+        &self,
+        blueprint_id: u64,
+        request_args: RequestArgs,
+        operators: Vec<AccountId32>,
+        quotes: Vec<PricingQuote>,
+        quote_signatures: Vec<sp_core::ecdsa::Signature>,
+        security_commitments: Vec<AssetSecurityCommitment<AssetId>>,
+        optional_assets: Option<Vec<AssetSecurityRequirement<AssetId>>>,
+    ) -> Result<u64, Error> {
+        transactions::request_service_with_quotes(
+            &self.client,
+            &self.sr25519_signer,
+            blueprint_id,
+            request_args,
+            operators,
+            quotes,
+            quote_signatures,
+            security_commitments,
+            optional_assets,
+        )
+        .await
+        .map_err(|e| Error::Setup(e.to_string()))
     }
 
     /// Submits a job to be executed

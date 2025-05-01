@@ -17,13 +17,14 @@ pub mod pricing;
 pub mod service;
 pub mod signer;
 pub mod types;
+pub mod utils;
 
 pub mod pricing_engine {
     include!(concat!(env!("OUT_DIR"), "/pricing_engine.rs"));
 }
 
 #[cfg(test)]
-mod tests;
+pub mod tests;
 
 pub use app::{
     cleanup, init_logging, init_operator_signer, load_operator_config, spawn_event_processor,
@@ -40,7 +41,8 @@ pub use pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify
 pub use pricing::{PriceModel, ResourcePricing, calculate_price, load_pricing_from_toml};
 pub use service::blockchain::event::BlockchainEvent;
 pub use service::blockchain::listener::EventListener;
-pub use signer::{OperatorId, OperatorSigner, QuotePayload, SignedQuote};
+pub use service::rpc::server::{PricingEngineService, run_rpc_server};
+pub use signer::{OperatorId, OperatorSigner, SignedQuote};
 
 use std::collections::HashMap;
 use std::sync::Arc;

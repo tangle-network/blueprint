@@ -3,6 +3,10 @@
 //! This module contains the high-level application logic that ties together
 //! the various components of the pricing engine.
 
+use blueprint_crypto::{
+    sp_core::{SpEcdsa, SpSr25519},
+    tangle_pair_signer::TanglePairSigner,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
@@ -10,14 +14,16 @@ use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
 use crate::{
+    OperatorSigner,
     benchmark_cache::BenchmarkCache,
     config::{OperatorConfig, load_config_from_path},
     error::{PricingError, Result},
     handlers::handle_blueprint_update,
-    service::blockchain::event::BlockchainEvent,
-    service::blockchain::listener::EventListener,
-    signer::OperatorSigner,
+    service::blockchain::{event::BlockchainEvent, listener::EventListener},
 };
+use tangle_subxt::subxt::tx::Signer;
+
+use blueprint_keystore::{Keystore, KeystoreConfig};
 
 use blueprint_keystore::backends::Backend;
 
@@ -75,12 +81,8 @@ pub async fn init_benchmark_cache(config: &Arc<OperatorConfig>) -> Result<Arc<Be
 pub fn init_operator_signer<P: AsRef<std::path::Path>>(
     config: &OperatorConfig,
     keystore_path: P,
-) -> Result<Arc<Mutex<OperatorSigner<blueprint_keystore::crypto::k256::K256Ecdsa>>>> {
-    use blueprint_crypto::BytesEncoding;
-    use blueprint_keystore::crypto::k256::K256Ecdsa;
-    use blueprint_keystore::{Keystore, KeystoreConfig};
-
-    info!("Initializing operator signer with K256Ecdsa");
+) -> Result<Arc<Mutex<OperatorSigner<SpEcdsa>>>> {
+    info!("Initializing operator signer with ECDSA");
 
     let keystore_path = keystore_path.as_ref();
     if !keystore_path.exists() {
@@ -92,43 +94,35 @@ pub fn init_operator_signer<P: AsRef<std::path::Path>>(
     let keystore_config = KeystoreConfig::new().fs_root(keystore_path);
     let keystore = Keystore::new(keystore_config)?;
 
-    // Get or generate the keypair
-    let public_key = match keystore.list_local::<K256Ecdsa>()? {
+    let ecdsa_public_key = match keystore.list_local::<SpEcdsa>()? {
         keys if !keys.is_empty() => {
-            info!("Using existing K256Ecdsa operator key");
+            info!("Using existing ECDSA operator key");
             keys[0]
         }
         _ => {
-            info!("Generating new K256Ecdsa operator key");
+            info!("Generating new ECDSA operator key");
             // Generate a new keypair
-            keystore.generate::<K256Ecdsa>(None)?
+            keystore.generate::<SpEcdsa>(None)?
         }
     };
+    let ecdsa_keypair = keystore.get_secret::<SpEcdsa>(&ecdsa_public_key)?;
 
-    // Get the secret key
-    let keypair = keystore.get_secret::<K256Ecdsa>(&public_key)?;
+    let sr25519_public_key = match keystore.list_local::<SpSr25519>()? {
+        keys if !keys.is_empty() => {
+            info!("Using existing SR25519 operator key");
+            keys[0]
+        }
+        _ => {
+            info!("Generating new SR25519 operator key");
+            // Generate a new keypair
+            keystore.generate::<SpSr25519>(None)?
+        }
+    };
+    let sr25519_keypair = keystore.get_secret::<SpSr25519>(&sr25519_public_key)?;
+    let signer = TanglePairSigner::new(sr25519_keypair.0);
+    let operator_id = signer.account_id();
 
-    // Create a deterministic operator ID from the public key
-    let mut operator_id = [0u8; 32];
-    let public_bytes = public_key.to_bytes();
-
-    // Copy the public key bytes to the operator ID, or hash them if needed
-    if public_bytes.len() >= 32 {
-        operator_id.copy_from_slice(&public_bytes[0..32]);
-    } else {
-        // If public key is shorter than 32 bytes, use a hash
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(&public_bytes);
-        operator_id.copy_from_slice(&hasher.finalize());
-    }
-
-    // Create the operator signer
-    let signer = OperatorSigner::new(config, keypair, operator_id)?;
-    info!(
-        "K256Ecdsa operator signer initialized with public key: {:?}",
-        signer.public_key()
-    );
+    let signer = OperatorSigner::new(config, ecdsa_keypair, operator_id)?;
 
     Ok(Arc::new(Mutex::new(signer)))
 }
@@ -144,10 +138,8 @@ pub fn spawn_event_processor(
         while let Some(event) = event_rx.recv().await {
             info!("Received blockchain event: {:?}", event);
 
-            // Extract blueprint ID and determine if we need to update pricing
             let (blueprint_id, update_pricing) = match event {
                 BlockchainEvent::Registered(e) => (Some(e.blueprint_id), true),
-                BlockchainEvent::PriceTargetsUpdated(e) => (Some(e.blueprint_id), true),
                 _ => (None, false),
             };
 
