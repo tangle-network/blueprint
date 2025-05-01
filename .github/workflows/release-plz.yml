@@ -40,6 +40,7 @@ jobs:
           cargo hakari disable
           cargo hakari remove-deps -y
 
+      - uses: ./.github/actions/free-disk-space
       - name: Run release-plz
         uses: MarcoIeni/release-plz-action@v0.5.102
         env:
