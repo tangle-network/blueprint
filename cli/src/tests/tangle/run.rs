@@ -10,7 +10,7 @@ use blueprint_testing_utils::setup_log;
 use blueprint_testing_utils::tangle::TangleTestHarness;
 use blueprint_testing_utils::tangle::blueprint::create_test_blueprint;
 use blueprint_testing_utils::tangle::harness::generate_env_from_node_id;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{Result, eyre};
 use tangle_subxt::subxt::tx::Signer;
 use tokio::fs;
 
@@ -21,11 +21,13 @@ use crate::command::run::tangle::{RunOpts, run_blueprint};
 use crate::command::service::accept::accept_request;
 use crate::command::service::request::request_service;
 use blueprint_chain_setup::tangle::deploy::{Opts as DeployOpts, deploy_to_tangle};
+// use crate::tests::utils::{wait_for_file_with_polling, wait_for_process_ready};
 
 #[tokio::test]
 async fn test_run_blueprint() -> Result<()> {
     color_eyre::install()?;
     setup_log();
+    info!("Starting test_run_blueprint");
 
     info!("Generating temporary Blueprint files");
     let (temp_dir, blueprint_dir) = create_test_blueprint();
@@ -75,6 +77,7 @@ async fn test_run_blueprint() -> Result<()> {
 
     let alice_account = harness.sr25519_signer.account_id();
 
+    info!("Deploying blueprint to Tangle");
     let deploy_opts = DeployOpts {
         pkg_name: None,
         http_rpc_url: harness.http_endpoint.to_string(),
@@ -85,7 +88,9 @@ async fn test_run_blueprint() -> Result<()> {
     };
 
     let blueprint_id = deploy_to_tangle(deploy_opts).await?;
+    info!("Blueprint deployed with ID: {}", blueprint_id);
 
+    info!("Registering blueprint");
     register(
         env.ws_rpc_endpoint.clone(),
         blueprint_id,
@@ -93,6 +98,7 @@ async fn test_run_blueprint() -> Result<()> {
     )
     .await?;
 
+    info!("Requesting service");
     request_service(
         env.ws_rpc_endpoint.clone(),
         blueprint_id,
@@ -105,10 +111,12 @@ async fn test_run_blueprint() -> Result<()> {
     .await?;
 
     let requests = list_requests(env.ws_rpc_endpoint.clone()).await?;
-    let request = requests.first().unwrap();
+    let request = requests.first().ok_or_else(|| eyre!("No requests found"))?;
     let request_id = request.0;
     let blueprint_id = request.1.blueprint;
+    info!("Found request ID: {}", request_id);
 
+    info!("Accepting request");
     accept_request(
         env.ws_rpc_endpoint.clone(),
         10,

@@ -72,6 +72,10 @@ tower = {{ version = "0.5.2", default-features = false }}
 [package.metadata.blueprint]
 manager = {{ Evm = "ExperimentalBlueprint" }}
 master_revision = "Latest"
+
+[profile.dev]
+opt-level = 0
+debug = false
 "#,
             crates_dir.display(),
         ),
