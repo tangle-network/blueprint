@@ -124,8 +124,8 @@ mod no_std {
     }
 
     impl ErrorKind {
-        pub(crate) fn as_str(&self) -> &'static str {
-            match *self {
+        pub(crate) fn as_str(self) -> &'static str {
+            match self {
                 ErrorKind::NotFound => "entity not found",
                 ErrorKind::PermissionDenied => "permission denied",
                 ErrorKind::ConnectionRefused => "connection refused",
@@ -149,7 +149,7 @@ mod no_std {
     }
 
     /// Intended for use for errors not exposed to the user, where allocating onto
-    /// the heap (for normal construction via Error::new) is too costly.
+    /// the heap (for normal construction via `Error::new`) is too costly.
     impl From<ErrorKind> for Error {
         /// Converts an [`ErrorKind`] into an [`Error`].
         ///
@@ -204,6 +204,7 @@ mod no_std {
             }
         }
 
+        #[must_use]
         pub fn get_ref(&self) -> Option<&(dyn error::Error + Send + Sync + 'static)> {
             match self.repr {
                 Repr::Simple(..) => None,
@@ -224,6 +225,7 @@ mod no_std {
         /// return [`Some`], otherwise it will return [`None`].
         ///
         /// [`new`]: Error::new
+        #[must_use]
         pub fn into_inner(self) -> Option<Box<dyn error::Error + Send + Sync>> {
             match self.repr {
                 Repr::Simple(..) => None,
@@ -232,6 +234,7 @@ mod no_std {
         }
 
         /// Returns the corresponding [`ErrorKind`] for this error.
+        #[must_use]
         pub fn kind(&self) -> ErrorKind {
             match self.repr {
                 Repr::Custom(ref c) => c.kind,
@@ -267,8 +270,8 @@ mod no_std {
         }
     }
 
-    fn _assert_error_is_sync_send() {
-        fn _is_sync_send<T: Sync + Send>() {}
-        _is_sync_send::<Error>();
+    fn assert_error_is_sync_send() {
+        fn is_sync_send<T: Sync + Send>() {}
+        is_sync_send::<Error>();
     }
 }
