@@ -123,7 +123,9 @@ cargo_metadata = { version = "0.18.1" }
 tnt-core-bytecode = { git = "https://github.com/tangle-network/tnt-core.git", default-features = false }
 
 # Tangle-related dependencies
-tangle-subxt = { version = "0.16", default-features = false }
+# TODO: Switch back to release when tangle-subxt 0.17 is published with recommended resources
+# tangle-subxt = { version = "0.16", default-features = false }
+tangle-subxt = { path = "./../tangle/tangle-subxt", default-features = false }
 round-based = { version = "0.4.1", default-features = false }
 
 # Substrate dependencies
