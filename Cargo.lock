@@ -6370,8 +6370,7 @@ dependencies = [
 [[package]]
 name = "eigenlayer-contract-deployer"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0ea2a88efb65a5a401947e1544f61f002cf50a28192854eb766fcfdb8f77390"
+source = "git+https://github.com/tangle-network/eigenlayer-contract-deployer.git?branch=new-release#58bd58cfcb895fbbe5fef0c87dbf6b0b05ab4b96"
 dependencies = [
  "alloy",
  "alloy-contract",
