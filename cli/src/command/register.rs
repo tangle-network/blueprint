@@ -5,7 +5,7 @@ use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_runner::tangle::config::decompress_pubkey;
-use blueprint_tangle_extra::util::build_operator_preferences;
+use blueprint_tangle_extra::serde::new_bounded_string;
 use color_eyre::Result;
 use dialoguer::console::style;
 use tangle_subxt::subxt::tx::Signer;
@@ -36,6 +36,7 @@ pub async fn register(
     ws_rpc_url: String,
     blueprint_id: u64,
     keystore_uri: String,
+    rpc_address: impl AsRef<str>,
     // keystore_password: Option<String>, // TODO: Add keystore password support
 ) -> Result<()> {
     let client = OnlineClient::from_url(ws_rpc_url.clone()).await?;
@@ -65,11 +66,11 @@ pub async fn register(
         .first_local::<blueprint_crypto::sp_core::SpEcdsa>()
         .map_err(|e| color_eyre::eyre::eyre!("Missing ECDSA key: {}", e))?;
 
-    let preferences = build_operator_preferences(
-        decompress_pubkey(&ecdsa_public.0.0)
-            .ok_or(color_eyre::eyre::eyre!("Failed to decompress public key"))?,
-        "",
-    );
+    let preferences =
+        tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::Preferences {
+            key: decompress_pubkey(&ecdsa_public.0.0).unwrap(),
+            rpc_address: new_bounded_string(rpc_address.as_ref()),
+        };
 
     info!("Joining operators...");
     let join_call = api::tx()

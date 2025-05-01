@@ -13,7 +13,7 @@ use blueprint_pricing_engine_lib::{
     error::Result,
     init_pricing_config,
     pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof},
-    pricing::{calculate_price, load_pricing_from_toml},
+    pricing::calculate_price,
     pricing_engine::{self, QuoteDetails, pricing_engine_client::PricingEngineClient},
     service::rpc::server::PricingEngineService,
     utils::u32_to_u128_bytes,
@@ -77,26 +77,26 @@ async fn test_full_pricing_flow_with_blueprint() -> Result<()> {
 resources = [
   # CPU is priced higher as it's a primary resource
   { kind = "CPU", count = 1, price_per_unit_rate = 0.000001 },
-  
+
   # Memory is priced lower per MB
   { kind = "MemoryMB", count = 1024, price_per_unit_rate = 0.00000005 },
-  
+
   # Storage is priced similar to memory but slightly cheaper
   { kind = "StorageMB", count = 1024, price_per_unit_rate = 0.00000002 },
-  
+
   # Network has different rates for ingress and egress
   { kind = "NetworkEgressMB", count = 1024, price_per_unit_rate = 0.00000003 },
   { kind = "NetworkIngressMB", count = 1024, price_per_unit_rate = 0.00000001 },
-  
+
   # GPU is a premium resource
   { kind = "GPU", count = 1, price_per_unit_rate = 0.000005 },
-  
+
   # Request-based pricing
   { kind = "Request", count = 1000, price_per_unit_rate = 0.0000001 },
-  
+
   # Function invocation pricing
   { kind = "Invocation", count = 1000, price_per_unit_rate = 0.0000002 },
-  
+
   # Execution time pricing
   { kind = "ExecutionTimeMS", count = 1000, price_per_unit_rate = 0.00000001 }
 ]
@@ -108,10 +108,11 @@ resources = [
 
     info!("TOML configuration content:\n{}", pricing_toml_content);
 
-    let pricing_data = load_pricing_from_toml(config_file_path.to_str().unwrap())?;
+    let pricing_data = init_pricing_config(config_file_path.to_str().unwrap()).await?;
+    let pricing_data = pricing_data.lock().await;
 
     info!("Loaded pricing data:");
-    for (key, resources) in &pricing_data {
+    for (key, resources) in &*pricing_data {
         let blueprint_id_str = match key {
             Some(id) => id.to_string(),
             None => "default".to_string(),
@@ -253,7 +254,7 @@ resources = [
         config.rpc_port = port;
         config.rpc_bind_address = addr.clone();
         config.database_path = database_path.to_str().unwrap().to_string();
-        config.keystore_path = operator_env.keystore_uri.clone();
+        config.keystore_path = PathBuf::from(&operator_env.keystore_uri);
 
         let benchmark_cache = init_benchmark_cache(&Arc::new(config.clone())).await?;
 

@@ -34,7 +34,7 @@ pub use benchmark::cpu::CpuBenchmarkResult;
 pub use benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark, run_benchmark_suite};
 pub use benchmark_cache::BenchmarkCache;
 pub use cache::{BlueprintId, PriceCache};
-pub use config::{OperatorConfig, load_config, load_config_from_path};
+pub use config::{OperatorConfig, load_config_from_path};
 pub use error::{PricingError, Result};
 pub use handlers::handle_blueprint_update;
 pub use pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
@@ -45,9 +45,13 @@ pub use service::rpc::server::{PricingEngineService, run_rpc_server};
 pub use signer::{OperatorId, OperatorSigner, SignedQuote};
 
 use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
+
+pub const DEFAULT_CONFIG: &str = include_str!("../config/default_pricing.toml");
 
 pub async fn init_benchmark_cache(config: &OperatorConfig) -> Result<Arc<BenchmarkCache>> {
     let cache_path = format!("{}/benchmark_cache", config.database_path);
@@ -57,9 +61,13 @@ pub async fn init_benchmark_cache(config: &OperatorConfig) -> Result<Arc<Benchma
 }
 
 pub async fn init_pricing_config(
-    config_path: &str,
+    config_path: impl AsRef<Path>,
 ) -> Result<Arc<Mutex<HashMap<Option<u64>, Vec<ResourcePricing>>>>> {
-    let pricing_config = pricing::load_pricing_from_toml(config_path)?;
-    info!("Pricing configuration loaded from {}", config_path);
+    let content = fs::read_to_string(config_path.as_ref())?;
+    let pricing_config = pricing::load_pricing_from_toml(&content)?;
+    info!(
+        "Pricing configuration loaded from {}",
+        config_path.as_ref().display()
+    );
     Ok(Arc::new(Mutex::new(pricing_config)))
 }

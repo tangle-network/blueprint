@@ -74,6 +74,7 @@ async fn test_register_request_and_list() -> Result<()> {
         env.ws_rpc_endpoint.clone(),
         blueprint_id,
         env.keystore_uri.clone(),
+        "",
     )
     .await?;
 
@@ -161,6 +162,7 @@ async fn test_accept_request() -> Result<()> {
         env.ws_rpc_endpoint.clone(),
         blueprint_id,
         env.keystore_uri.clone(),
+        "",
     )
     .await?;
 
@@ -261,6 +263,7 @@ async fn test_reject_request() -> Result<()> {
         env.ws_rpc_endpoint.clone(),
         blueprint_id,
         env.keystore_uri.clone(),
+        "",
     )
     .await?;
 
@@ -350,6 +353,7 @@ async fn test_submit_job() -> Result<()> {
         env.ws_rpc_endpoint.clone(),
         blueprint_id,
         env.keystore_uri.clone(),
+        "",
     )
     .await?;
 

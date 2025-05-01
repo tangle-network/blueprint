@@ -689,7 +689,7 @@ where
     }
 }
 
-fn find_open_tcp_bind_port() -> u16 {
+pub(crate) fn find_open_tcp_bind_port() -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("Should bind to localhost");
     let port = listener
         .local_addr()
