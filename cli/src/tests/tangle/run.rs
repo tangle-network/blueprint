@@ -8,6 +8,7 @@ use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_testing_utils::setup_log;
 use blueprint_testing_utils::tangle::TangleTestHarness;
+use blueprint_testing_utils::tangle::blueprint::create_test_blueprint;
 use blueprint_testing_utils::tangle::harness::generate_env_from_node_id;
 use color_eyre::eyre::Result;
 use tangle_subxt::subxt::tx::Signer;
@@ -19,7 +20,6 @@ use crate::command::register::register;
 use crate::command::run::tangle::{RunOpts, run_blueprint};
 use crate::command::service::accept::accept_request;
 use crate::command::service::request::request_service;
-use crate::tests::tangle::blueprint::create_test_blueprint;
 use blueprint_chain_setup::tangle::deploy::{Opts as DeployOpts, deploy_to_tangle};
 
 #[tokio::test]
