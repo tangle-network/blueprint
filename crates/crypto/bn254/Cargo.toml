@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-crypto-bn254"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 description = "Ark BN254 crypto primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -23,7 +23,6 @@ num-bigint = { workspace = true, features = ["serde"] }
 num-traits = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true, features = ["alloc"] }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-crypto-hashing = { path = "../hashing", features = ["sha3"] }

@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-evm-extra"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 description = "EVM extra utilities for Blueprint framework"
 authors.workspace = true
 edition.workspace = true
@@ -44,7 +44,6 @@ document-features = { workspace = true }
 thiserror = { workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 url = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

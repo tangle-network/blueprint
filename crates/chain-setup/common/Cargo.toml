@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-chain-setup-common"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 description = "Common chain setup utilities for use with the Blueprint SDK"
 authors.workspace = true
 edition.workspace = true
@@ -24,7 +24,6 @@ alloy-signer-local = { workspace = true }
 sp-core = { workspace = true }
 tangle-subxt = { workspace = true }
 thiserror = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 default = ["std"]
