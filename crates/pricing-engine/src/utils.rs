@@ -13,13 +13,6 @@ use tangle_subxt::{
 use crate::pricing_engine::{QuoteDetails, asset::AssetType};
 
 /// Pricing scale factor - used to convert floating point prices to integers
-///
-/// # Example
-///
-/// ```
-/// let price = 0.000001;
-/// let scaled_price = (price * PRICING_SCALE) as u64;
-/// ```
 const PRICING_SCALE: f64 = 1_000_000_000.0;
 
 /// Convert a u128 value to a 16-byte Vec<u8> in little-endian byte order
