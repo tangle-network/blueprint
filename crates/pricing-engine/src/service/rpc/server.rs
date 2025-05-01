@@ -2,11 +2,9 @@ use crate::benchmark_cache::BenchmarkCache;
 use crate::config::OperatorConfig;
 use crate::pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
 use crate::pricing::calculate_price;
-use crate::signer::{
-    OperatorSigner, QuotePayload as SignerQuotePayload, SignedQuote as SignerSignedQuote,
-};
+use crate::signer::{OperatorSigner, SignedQuote as SignerSignedQuote};
 use blueprint_crypto::BytesEncoding;
-use blueprint_crypto::k256::K256Ecdsa;
+use blueprint_crypto::sp_core::SpEcdsa;
 use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -14,7 +12,8 @@ use tonic::{Request, Response, Status, transport::Server};
 use tracing::{error, info, warn};
 
 use crate::pricing_engine::{
-    GetPriceRequest, GetPriceResponse, QuoteDetails, ResourcePricing as ProtoResourcePricing,
+    AssetSecurityCommitment, GetPriceRequest, GetPriceResponse, QuoteDetails,
+    ResourcePricing as ProtoResourcePricing,
     pricing_engine_server::{PricingEngine, PricingEngineServer},
 };
 
@@ -23,7 +22,7 @@ pub struct PricingEngineService {
     benchmark_cache: Arc<BenchmarkCache>,
     pricing_config:
         Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
-    signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
+    signer: Arc<Mutex<OperatorSigner<SpEcdsa>>>,
 }
 
 impl PricingEngineService {
@@ -33,13 +32,23 @@ impl PricingEngineService {
         pricing_config: Arc<
             Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
         >,
-        signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
+        signer: Arc<Mutex<OperatorSigner<SpEcdsa>>>,
     ) -> Self {
         Self {
             config,
             benchmark_cache,
             pricing_config,
             signer,
+        }
+    }
+
+    // Create a security commitment from a security requirement using the minimum exposure percent
+    fn create_security_commitment(
+        requirement: &crate::pricing_engine::AssetSecurityRequirements,
+    ) -> AssetSecurityCommitment {
+        AssetSecurityCommitment {
+            asset: requirement.asset.clone(),
+            exposure_percent: requirement.minimum_exposure_percent,
         }
     }
 }
@@ -60,8 +69,32 @@ impl PricingEngine for PricingEngineService {
             blueprint_id
         );
 
-        // Verify proof of work
-        let challenge = generate_challenge(blueprint_id, Utc::now().timestamp() as u64);
+        let current_timestamp = Utc::now().timestamp() as u64;
+        let challenge_timestamp = if req.challenge_timestamp > 0 {
+            if req.challenge_timestamp < current_timestamp.saturating_sub(30) {
+                warn!(
+                    "Challenge timestamp is too old: {}",
+                    req.challenge_timestamp
+                );
+                return Err(Status::invalid_argument("Challenge timestamp is too old"));
+            }
+            if req.challenge_timestamp > current_timestamp + 30 {
+                warn!(
+                    "Challenge timestamp is too far in the future: {}",
+                    req.challenge_timestamp
+                );
+                return Err(Status::invalid_argument(
+                    "Challenge timestamp is too far in the future",
+                ));
+            }
+            req.challenge_timestamp
+        } else {
+            return Err(Status::invalid_argument(
+                "Challenge timestamp is missing or invalid",
+            ));
+        };
+
+        let challenge = generate_challenge(blueprint_id, challenge_timestamp);
         if !verify_proof(&challenge, &proof_of_work, DEFAULT_POW_DIFFICULTY).map_err(|e| {
             warn!("Failed to verify proof of work: {}", e);
             Status::invalid_argument("Invalid proof of work")
@@ -75,11 +108,9 @@ impl PricingEngine for PricingEngineService {
             Ok(Some(profile)) => profile,
             _ => {
                 warn!(
-                    "Benchmark profile not found for blueprint ID: {}. Using defaults.",
+                    "Benchmark profile not found for blueprint ID: {}.",
                     blueprint_id
                 );
-                // Here you would typically run a benchmark or return an error
-                // For now, let's return an error
                 return Err(Status::not_found(format!(
                     "Benchmark profile not found for blueprint ID: {}",
                     blueprint_id
@@ -110,6 +141,13 @@ impl PricingEngine for PricingEngineService {
         // Get the total cost from the price model
         let total_cost = price_model.total_cost;
 
+        let security_commitment = match req.security_requirements {
+            Some(requirements) => Self::create_security_commitment(&requirements),
+            None => {
+                return Err(Status::invalid_argument("Missing security requirements"));
+            }
+        };
+
         // Prepare the response
         let expiry_time = Utc::now().timestamp() as u64 + self.config.quote_validity_duration_secs;
         let timestamp = Utc::now().timestamp() as u64;
@@ -119,20 +157,21 @@ impl PricingEngine for PricingEngineService {
             .resources
             .iter()
             .map(|rp| ProtoResourcePricing {
-                kind: format!("{:?}", rp.kind), // Format ResourceUnit as String
+                kind: format!("{:?}", rp.kind),
                 count: rp.count,
-                price_per_unit_rate: rp.price_per_unit_rate, // Now directly use f64
+                price_per_unit_rate: rp.price_per_unit_rate,
             })
             .collect();
 
-        // Create the quote payload
-        let signer_payload = SignerQuotePayload {
+        // Create the quote details directly using proto types
+        let quote_details = QuoteDetails {
             blueprint_id,
-            ttl_blocks, // Updated from ttl_seconds to ttl_blocks
+            ttl_blocks,
             total_cost_rate: total_cost,
-            resources: price_model.resources.clone(),
-            expiry: expiry_time,
             timestamp,
+            expiry: expiry_time,
+            resources: proto_resources,
+            security_commitments: Some(security_commitment),
         };
 
         // Generate proof of work for the response
@@ -143,12 +182,12 @@ impl PricingEngine for PricingEngineService {
                 Status::internal("Failed to generate proof of work")
             })?;
 
-        // Sign the quote
-        let signed_quote: SignerSignedQuote<K256Ecdsa> = match self
+        // Sign the quote using the hash-based approach
+        let signed_quote: SignerSignedQuote<SpEcdsa> = match self
             .signer
             .lock()
             .await
-            .sign_quote(signer_payload, response_pow.clone())
+            .sign_quote(quote_details.clone(), response_pow.clone())
         {
             Ok(quote) => quote,
             Err(e) => {
@@ -158,19 +197,10 @@ impl PricingEngine for PricingEngineService {
         };
 
         // Create the response
-        let quote_details = QuoteDetails {
-            blueprint_id,
-            ttl_blocks: signed_quote.payload.ttl_blocks, // Updated from ttl_seconds to ttl_blocks
-            total_cost_rate: signed_quote.payload.total_cost_rate,
-            timestamp: signed_quote.payload.timestamp,
-            expiry: signed_quote.payload.expiry,
-            resources: proto_resources,
-        };
-
         let response = GetPriceResponse {
-            quote_details: Some(quote_details),
+            quote_details: Some(signed_quote.quote_details),
             signature: signed_quote.signature.to_bytes().to_vec(),
-            operator_id: signed_quote.operator_id.to_vec(),
+            operator_id: signed_quote.operator_id.0.to_vec(),
             proof_of_work: signed_quote.proof_of_work,
         };
 
@@ -186,9 +216,9 @@ pub async fn run_rpc_server(
     pricing_config: Arc<
         Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
     >,
-    signer: Arc<Mutex<OperatorSigner<K256Ecdsa>>>,
+    signer: Arc<Mutex<OperatorSigner<SpEcdsa>>>,
 ) -> anyhow::Result<()> {
-    let addr = config.rpc_bind_address.parse()?;
+    let addr = format!("{}:{}", config.rpc_bind_address, config.rpc_port).parse()?;
     info!("gRPC server listening on {}", addr);
 
     let pricing_service =

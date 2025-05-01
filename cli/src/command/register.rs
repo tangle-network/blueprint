@@ -36,14 +36,19 @@ pub async fn register(
     ws_rpc_url: String,
     blueprint_id: u64,
     keystore_uri: String,
+    rpc_address: impl AsRef<str>,
     // keystore_password: Option<String>, // TODO: Add keystore password support
 ) -> Result<()> {
     let client = OnlineClient::from_url(ws_rpc_url.clone()).await?;
 
     let config = KeystoreConfig::new().fs_root(keystore_uri.clone());
     let keystore = Keystore::new(config).expect("Failed to create keystore");
-    let public = keystore.first_local::<SpSr25519>().unwrap();
-    let pair = keystore.get_secret::<SpSr25519>(&public).unwrap();
+    let public = keystore
+        .first_local::<SpSr25519>()
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to get public key: {}", e))?;
+    let pair = keystore
+        .get_secret::<SpSr25519>(&public)
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to get secret key: {}", e))?;
     let signer = TanglePairSigner::new(pair.0);
 
     // Get the account ID from the signer for display
@@ -64,7 +69,7 @@ pub async fn register(
     let preferences =
         tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::Preferences {
             key: decompress_pubkey(&ecdsa_public.0.0).unwrap(),
-            rpc_address: new_bounded_string(""),
+            rpc_address: new_bounded_string(rpc_address.as_ref()),
         };
 
     info!("Joining operators...");

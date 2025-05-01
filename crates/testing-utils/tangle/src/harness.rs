@@ -1,5 +1,5 @@
 use crate::Error;
-use crate::multi_node::MultiNodeTestEnv;
+use crate::multi_node::{find_open_tcp_bind_port, MultiNodeTestEnv};
 use crate::{InputValue, OutputValue, keys::inject_tangle_key};
 use blueprint_chain_setup::tangle::testnet::SubstrateNode;
 use blueprint_chain_setup::tangle::transactions;
@@ -17,12 +17,13 @@ use blueprint_runner::error::RunnerError;
 use blueprint_runner::tangle::error::TangleError;
 use blueprint_std::io;
 use blueprint_std::path::{Path, PathBuf};
-use blueprint_tangle_extra::util::build_operator_preferences;
 use tangle_subxt::subxt::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::PricingQuote;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{AssetSecurityCommitment, AssetSecurityRequirement};
+use blueprint_tangle_extra::serde::new_bounded_string;
 use std::marker::PhantomData;
+use std::sync::Arc;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::request::RequestArgs;
 use tangle_subxt::tangle_testnet_runtime::api::services::events::JobCalled;
@@ -31,7 +32,12 @@ use tangle_subxt::tangle_testnet_runtime::api::services::{
     events::JobResultSubmitted,
 };
 use tempfile::TempDir;
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
+use tracing::info;
 use url::Url;
+use blueprint_pricing_engine_lib::{init_benchmark_cache, init_operator_signer, load_pricing_from_toml, OperatorConfig, DEFAULT_CONFIG};
+use blueprint_pricing_engine_lib::service::rpc::server::run_rpc_server;
 
 pub const ENDOWED_TEST_NAMES: [&str; 10] = [
     "Alice",
@@ -204,6 +210,8 @@ struct NodeInfo {
     env: BlueprintEnvironment,
     client: TangleClient,
     preferences: Preferences,
+    // To keep the server alive
+    _pricing_rpc: JoinHandle<()>,
 }
 
 #[derive(Debug, Clone)]
@@ -255,15 +263,47 @@ where
                 .first_local::<SpEcdsa>()
                 .map_err(|err| RunnerError::Tangle(TangleError::Keystore(err)))?;
 
-            let preferences = build_operator_preferences(
-                blueprint_runner::tangle::config::decompress_pubkey(&ecdsa_public.0.0).unwrap(),
-                "",
-            );
+            let rpc_port = find_open_tcp_bind_port();
+            let rpc_address = format!("127.0.0.1:{rpc_port}");
+            info!("Binding node {name} to {rpc_address}");
+
+            let operator_config = OperatorConfig {
+                keystore_path: self.temp_dir.path().join(name),
+                rpc_port,
+                ..Default::default()
+            };
+
+            let benchmark_cache = init_benchmark_cache(&operator_config).await?;
+
+            let pricing_config = load_pricing_from_toml(DEFAULT_CONFIG)?;
+
+            let operator_signer =
+                init_operator_signer(&operator_config, &operator_config.keystore_path)?;
+
+            let pricing_rpc = tokio::spawn(async move {
+                if let Err(e) = run_rpc_server(
+                    Arc::new(operator_config),
+                    benchmark_cache,
+                    Arc::new(Mutex::new(pricing_config)),
+                    operator_signer,
+                )
+                .await
+                {
+                    tracing::error!("gRPC server error: {}", e);
+                }
+            });
+
+            let preferences = Preferences {
+                key: blueprint_runner::tangle::config::decompress_pubkey(&ecdsa_public.0.0)
+                    .unwrap(),
+                rpc_address: new_bounded_string(rpc_address),
+            };
 
             nodes.push(NodeInfo {
                 env,
                 client,
                 preferences,
+                _pricing_rpc: pricing_rpc,
             });
         }
 

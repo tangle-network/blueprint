@@ -7,8 +7,8 @@ use blueprint_core::error;
 use tangle_subxt::{
     subxt::{Config, events::Events},
     tangle_testnet_runtime::api::services::events::{
-        Registered, ServiceInitiated, ServiceRequestApproved, ServiceRequestRejected,
-        ServiceRequested, ServiceTerminated, Unregistered,
+        Registered, RpcAddressUpdated, ServiceInitiated, ServiceRequestApproved,
+        ServiceRequestRejected, ServiceRequested, ServiceTerminated, Unregistered,
     },
 };
 
@@ -20,6 +20,9 @@ pub enum BlockchainEvent {
 
     /// An operator has been unregistered
     Unregistered(Unregistered),
+
+    /// An operator's RPC address has been updated
+    RpcAddressUpdated(RpcAddressUpdated),
 
     /// A new service has been requested
     ServiceRequested(ServiceRequested),
@@ -54,6 +57,13 @@ pub async fn handle_events<T: Config>(events: Events<T>) -> Vec<BlockchainEvent>
         match event {
             Ok(event) => blockchain_events.push(BlockchainEvent::Unregistered(event)),
             Err(e) => error!("Error processing Unregistered event: {}", e),
+        }
+    }
+
+    for event in events.find::<RpcAddressUpdated>() {
+        match event {
+            Ok(event) => blockchain_events.push(BlockchainEvent::RpcAddressUpdated(event)),
+            Err(e) => error!("Error processing RpcAddressUpdated event: {}", e),
         }
     }
 

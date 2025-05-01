@@ -19,12 +19,12 @@ path = "src/main.rs"
 [dependencies]
 # Blueprint dependencies
 blueprint-core = { workspace = true, features = ["tracing"] }
-blueprint-crypto = { workspace = true }
+blueprint-crypto = { workspace = true, features = ["tangle-pair-signer"] }
 blueprint-crypto-core = { workspace = true }
 blueprint-keystore = { workspace = true, features = ["sp-core"] }
 blueprint-networking = { workspace = true }
-blueprint-runner = { workspace = true, features = ["std"] }
 blueprint-std = { workspace = true }
+blueprint-tangle-extra = { workspace = true, features = ["std"] }
 
 # Misc dependencies
 clap = { workspace = true }
@@ -38,15 +38,15 @@ uuid = { workspace = true, features = ["v4"] }
 hex = { workspace = true }
 anyhow = { workspace = true }
 toml = { workspace = true, features = ["parse"] }
+tiny-keccak = { workspace = true }
 
 # Substrate RPC and runtime API dependencies
 jsonrpsee = { workspace = true, features = ["server", "macros", "http-client"] }
-
-# Use tangle-subxt for blockchain interaction
 tangle-subxt = { workspace = true, features = ["std"] }
 
 # Substrate chain
 sp-core = { workspace = true, features = ["serde"] }
+sp-io = { workspace = true }
 
 # Async
 futures = { workspace = true, features = ["thread-pool"] }
@@ -71,11 +71,10 @@ sysinfo = { workspace = true, features = ["system"] }
 num_cpus = { workspace = true }
 
 # Utilities
-# Add serde feature to chrono
 chrono = { workspace = true, features = ["serde", "clock"] }
 libc = { workspace = true }                                  # For direct I/O support
 
-# Add tonic and prost for gRPC server
+# gRPC
 tonic = { workspace = true, features = ["transport", "codegen", "prost"] }
 prost = { workspace = true, features = ["prost-derive"] }
 
@@ -83,14 +82,14 @@ prost = { workspace = true, features = ["prost-derive"] }
 sha2 = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
-# Combine dev-dependencies into one section and remove duplicates
 [dev-dependencies]
 test-log = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 serial_test = { workspace = true, features = ["async"] }
 blueprint-networking = { workspace = true, features = ["testing"] }
 blueprint-testing-utils = { workspace = true, features = ["tangle"] }
-blueprint-tangle-extra = { workspace = true, features = ["std"] }
+blueprint-runner = { workspace = true, features = ["std", "tangle"] }
+blueprint-chain-setup = { workspace = true }
 tempfile = { workspace = true }
 tonic = { workspace = true }
 
@@ -100,4 +99,4 @@ tonic-build = { workspace = true, features = ["prost"] }
 [features]
 default = []
 tangle-listener = []
-std = []             # Add the std feature to fix warnings in types.rs
+std = []
