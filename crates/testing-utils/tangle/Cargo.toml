@@ -21,6 +21,7 @@ blueprint-crypto-tangle-pair-signer = { workspace = true, features = ["std", "ev
 blueprint-core-testing-utils = { workspace = true }
 blueprint-chain-setup = { workspace = true, features = ["std", "tangle"] }
 blueprint-keystore = { workspace = true, features = ["std", "tangle-full"] }
+blueprint-pricing-engine = { workspace = true, features = ["std", "tangle-listener"] }
 tnt-core-bytecode = { workspace = true }
 
 alloy-signer-local = { workspace = true }

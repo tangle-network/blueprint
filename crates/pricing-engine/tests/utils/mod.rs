@@ -7,6 +7,7 @@ use blueprint_runner::BackgroundService;
 use blueprint_runner::error::RunnerError;
 use blueprint_tangle_extra::extract::TangleArg;
 use blueprint_tangle_extra::extract::TangleResult;
+use std::path::PathBuf;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Receiver;
 
@@ -37,7 +38,7 @@ impl BackgroundService for FooBackgroundService {
 // Helper function to create a test configuration
 pub fn create_test_config() -> OperatorConfig {
     OperatorConfig {
-        keystore_path: "/tmp/test-keystore".to_string(),
+        keystore_path: PathBuf::from("/tmp/test-keystore"),
         database_path: "./data/test_benchmark_cache".to_string(),
         rpc_port: 9000,
         rpc_bind_address: "127.0.0.1:9000".to_string(),

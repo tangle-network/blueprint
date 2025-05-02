@@ -4,7 +4,8 @@ use std::path::Path;
 use blueprint_core::info;
 use blueprint_pricing_engine_lib::{
     error::Result,
-    pricing::{BLOCK_TIME, PriceModel, calculate_resource_price, load_pricing_from_toml},
+    init_pricing_config,
+    pricing::{BLOCK_TIME, PriceModel, calculate_resource_price},
     types::ResourceUnit,
 };
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::{
@@ -26,11 +27,12 @@ async fn test_default_pricing_config() -> Result<()> {
     );
 
     // Load pricing data from TOML
-    let pricing_data = load_pricing_from_toml(config_path.to_str().unwrap())?;
+    let pricing_data = init_pricing_config(config_path).await?;
+    let pricing_data = pricing_data.lock().await;
 
     // Print all loaded pricing data
     info!("Loaded pricing data from default configuration:");
-    for (key, resources) in &pricing_data {
+    for (key, resources) in &*pricing_data {
         match key {
             Some(id) => info!("  Blueprint ID: {}", id),
             None => info!("  Default pricing"),

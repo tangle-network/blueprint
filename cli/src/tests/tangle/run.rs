@@ -95,6 +95,7 @@ async fn test_run_blueprint() -> Result<()> {
         env.ws_rpc_endpoint.clone(),
         blueprint_id,
         env.keystore_uri.clone(),
+        "",
     )
     .await?;
 
