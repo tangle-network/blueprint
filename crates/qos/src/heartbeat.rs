@@ -4,10 +4,10 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Receiver};
 use tokio::time;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
-use crate::error::{Error, Result};
-use blueprint_runner::BackgroundService;
+use crate::error::Result;
+use blueprint_runner::{BackgroundService, error::RunnerError};
 
 /// Configuration for the heartbeat service
 #[derive(Clone, Debug)]
@@ -129,8 +129,8 @@ where
         &self,
     ) -> impl std::future::Future<
         Output = std::result::Result<
-            Receiver<std::result::Result<(), blueprint_core::error::BoxError>>,
-            blueprint_core::error::BoxError,
+            Receiver<std::result::Result<(), RunnerError>>,
+            RunnerError,
         >,
     > + Send {
         let config = self.config.clone();
@@ -150,7 +150,7 @@ where
 
                     if config.jitter_percent > 0 {
                         let jitter = thread_rng().gen_range(0..=config.jitter_percent) as u64;
-                        let jitter_ms = (config.interval_secs * jitter as u64 * 10) / 1000;
+                        let jitter_ms = (config.interval_secs * jitter * 10) / 1000;
                         if jitter_ms > 0 {
                             time::sleep(Duration::from_millis(jitter_ms)).await;
                         }

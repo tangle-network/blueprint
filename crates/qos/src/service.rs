@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use tonic::{Request, Response, Status, transport::Server};
-use tracing::{error, info, warn};
+use tracing::info;
 
 use crate::error::{Error, Result};
-use crate::metrics::{BlueprintMetrics, BlueprintStatus, MetricsProvider, SystemMetrics};
-use crate::proto::qos_metrics_server::{QoSMetrics, QoSMetricsServer};
+use crate::metrics::MetricsProvider;
+use crate::proto::qo_s_metrics_server::{QoSMetrics, QoSMetricsServer};
 use crate::proto::{
     BlueprintMetrics as ProtoBlueprintMetrics, GetBlueprintMetricsRequest,
     GetBlueprintMetricsResponse, GetHistoricalMetricsRequest, GetHistoricalMetricsResponse,

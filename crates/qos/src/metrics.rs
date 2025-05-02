@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tracing::{error, info, warn};
+use tracing::info;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 /// Configuration for the metrics service
 #[derive(Clone, Debug)]
@@ -218,7 +218,7 @@ impl DefaultMetricsProvider {
             loop {
                 interval.tick().await;
 
-                let sys_metrics = collect_system_metrics();
+                let sys_metrics = DefaultMetricsProvider::collect_system_metrics();
 
                 {
                     let mut metrics = system_metrics.write().unwrap();
@@ -256,6 +256,41 @@ impl DefaultMetricsProvider {
         });
 
         Ok(())
+    }
+
+    /// Collect system metrics
+    fn collect_system_metrics() -> SystemMetrics {
+        let mut sys = sysinfo::System::new_all();
+        sys.refresh_all();
+
+        // Use only the metrics that are definitely available
+        let memory_usage = sys.used_memory();
+        let total_memory = sys.total_memory();
+        
+        // Use global_cpu_usage as suggested in the error message
+        let cpu_usage = sys.global_cpu_usage();
+
+        // Set disk and network metrics to 0 for now
+        let disk_usage = 0;
+        let total_disk = 0;
+        let network_rx_bytes = 0;
+        let network_tx_bytes = 0;
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        SystemMetrics {
+            cpu_usage,
+            memory_usage,
+            total_memory,
+            disk_usage,
+            total_disk,
+            network_rx_bytes,
+            network_tx_bytes,
+            timestamp,
+        }
     }
 }
 
@@ -299,29 +334,5 @@ impl MetricsProvider for DefaultMetricsProvider {
     fn update_last_heartbeat(&self, timestamp: u64) {
         let mut status = self.blueprint_status.write().unwrap();
         status.last_heartbeat = Some(timestamp);
-    }
-}
-
-/// Collect system metrics using sysinfo
-fn collect_system_metrics() -> SystemMetrics {
-    let mut sys = sysinfo::System::new_all();
-    sys.refresh_all();
-
-    let cpu_usage = sys.global_cpu_info().cpu_usage();
-    let memory_usage = sys.used_memory();
-    let total_memory = sys.total_memory();
-
-    SystemMetrics {
-        cpu_usage,
-        memory_usage,
-        total_memory,
-        disk_usage: 0,
-        total_disk: 0,
-        network_rx_bytes: 0,
-        network_tx_bytes: 0,
-        timestamp: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
     }
 }

@@ -7,8 +7,6 @@ pub mod proto {
     tonic::include_proto!("qos");
 }
 
-use error::Error;
-
 /// Configuration for the QoS system
 #[derive(Clone, Debug)]
 pub struct QoSConfig {
