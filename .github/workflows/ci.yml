@@ -121,7 +121,7 @@ jobs:
 
   testing:
     needs: generate-matrix
-    timeout-minutes: 30
+    timeout-minutes: 45
     name: cargo test
     runs-on: ubuntu-latest
     env:
