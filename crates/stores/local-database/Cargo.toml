@@ -13,11 +13,11 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-blueprint-std = { workspace = true }
+blueprint-std = { workspace = true, features = ["std"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["alloc"] }
 thiserror = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
-tempfile = "3.8"
+tempfile = { workspace = true }

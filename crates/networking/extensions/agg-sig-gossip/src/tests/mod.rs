@@ -5,7 +5,7 @@ use crate::{
     signature_weight::{EqualWeight, SignatureWeight},
 };
 use blueprint_core::info;
-use blueprint_crypto::{KeyType, aggregation::AggregatableSignature, hashing::blake3_256};
+use blueprint_crypto::{aggregation::AggregatableSignature, hashing::blake3_256};
 use blueprint_networking::{
     service_handle::NetworkServiceHandle,
     test_utils::{create_whitelisted_nodes, wait_for_all_handshakes},
@@ -36,7 +36,6 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     threshold_percentage: u8,
     network_name: &str,
     instance_name: &str,
-    generate_keys_fn: impl Fn(usize) -> Vec<S::Secret>,
 ) where
     S::Secret: Clone,
     S::Public: Clone,
@@ -74,18 +73,24 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     info!("==================== STARTING PROTOCOL PHASE ====================");
 
     // Generate keys for the signature aggregation protocol
-    let secrets = generate_keys_fn(num_nodes);
     let mut public_keys = HashMap::new();
-    for (i, secret) in secrets.iter().enumerate() {
-        let handle = handles[i].clone();
-        let public_key = S::public_from_secret(secret);
-        public_keys.insert(handle.local_peer_id, public_key);
-        info!("Generated key pair for node {}", i);
+    for (i, handle) in handles.iter().enumerate().take(num_nodes) {
+        let public_key: S::Public = S::public_from_secret(&handle.local_signing_key);
+        public_keys.insert(handle.local_peer_id, public_key.clone());
+        info!(
+            "Generated key pair for node {} - peer_id: {}, public_key: {:?}",
+            i, handle.local_peer_id, public_key
+        );
+    }
+
+    // Log all peer IDs and their corresponding public keys
+    info!("Public keys mapping:");
+    for (peer_id, public_key) in &public_keys {
+        info!("Peer ID: {} -> Public key: {:?}", peer_id, public_key);
     }
 
     // Test message
     let message = b"test message";
-    let message_hash = blake3_256(message);
 
     // Increase timeout for testing
     let protocol_timeout = Duration::from_secs(15);
@@ -98,6 +103,9 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     // Run the protocol directly on each node
     let mut results = Vec::new();
     info!("Starting protocol on {} nodes", num_nodes);
+
+    let shared_message_hash = blake3_256(message);
+
     for (i, handle) in handles.iter().enumerate().take(num_nodes) {
         let config = ProtocolConfig {
             network_handle: handle.clone(),
@@ -124,7 +132,7 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
         let result = tokio::spawn(async move {
             info!("Node {} starting protocol execution", i);
             info!("Node {} preparing to sign and broadcast message hash", i);
-            let result = protocol.run(&message_hash).await;
+            let result = protocol.run(&shared_message_hash).await;
 
             if result.is_ok() {
                 info!("Node {} protocol completed successfully", i);
@@ -212,15 +220,6 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     info!("Signature aggregation test completed successfully");
 }
 
-fn generate_test_keys<K: KeyType>(num_keys: usize) -> Vec<K::Secret> {
-    let mut keys = Vec::with_capacity(num_keys);
-    for i in 0..num_keys {
-        let seed = [u8::try_from(i).unwrap(); 32];
-        keys.push(K::generate_with_seed(Some(&seed)).unwrap());
-    }
-    keys
-}
-
 // BLS Tests
 mod bls_tests {
     use super::*;
@@ -233,7 +232,6 @@ mod bls_tests {
             67, // 67% threshold (2 out of 3)
             "basic_bls381_aggregation",
             "1.0.0",
-            generate_test_keys::<SpBls381>,
         )
         .await;
     }
@@ -245,7 +243,6 @@ mod bls_tests {
             67, // 67% threshold (2 out of 3)
             "basic_bls377_aggregation",
             "1.0.0",
-            generate_test_keys::<SpBls377>,
         )
         .await;
     }
@@ -263,7 +260,6 @@ mod bn254_tests {
             67, // 67% threshold (2 out of 3)
             "basic_bn254_aggregation",
             "1.0.0",
-            generate_test_keys::<ArkBlsBn254>,
         )
         .await;
     }
@@ -280,7 +276,6 @@ mod w3f_bls_tests {
             67, // 67% threshold (2 out of 3),
             "basic_w3f_bls381_aggregation",
             "1.0.0",
-            generate_test_keys::<W3fBls381>,
         )
         .await;
     }
@@ -292,7 +287,6 @@ mod w3f_bls_tests {
             67, // 67% threshold (2 out of 3),
             "basic_w3f_bls377_aggregation",
             "1.0.0",
-            generate_test_keys::<W3fBls377>,
         )
         .await;
     }
