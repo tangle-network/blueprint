@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use blueprint_chain_setup::tangle::OutputValue;
 use blueprint_core::info;
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
