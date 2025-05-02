@@ -78,6 +78,11 @@ impl BinarySourceFetcher for TestSourceFetcher {
             blueprint_core::warn!("Failed to build binary");
             return Err(Error::BuildBinary(output));
         }
+        unsafe {
+            // Set the environment variable to indicate that the binary was built for testing
+            std::env::set_var("BLUEPRINT_BINARY_TEST_BUILD", "true");
+        }
+
         trace!("Successfully built binary");
 
         Ok(binary_path)
