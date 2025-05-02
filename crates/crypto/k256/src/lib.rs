@@ -12,6 +12,7 @@ use blueprint_crypto_core::{KeyType, KeyTypeId};
 use blueprint_std::UniformRand;
 use blueprint_std::hash::{Hash, Hasher};
 use blueprint_std::string::{String, ToString};
+use blueprint_std::vec::Vec; // Added Vec import
 use k256::ecdsa::signature::SignerMut;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};

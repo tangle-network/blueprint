@@ -6,6 +6,7 @@ use crate::signer::{OperatorSigner, SignedQuote as SignerSignedQuote};
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::sp_core::SpEcdsa;
 use chrono::Utc;
+use rust_decimal::prelude::ToPrimitive;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, transport::Server};
@@ -108,11 +109,11 @@ impl PricingEngine for PricingEngineService {
             Ok(Some(profile)) => profile,
             _ => {
                 warn!(
-                    "Benchmark profile not found for blueprint ID: {}.",
+                    "No benchmark profile found for blueprint ID: {}",
                     blueprint_id
                 );
                 return Err(Status::not_found(format!(
-                    "Benchmark profile not found for blueprint ID: {}",
+                    "No benchmark profile found for blueprint ID: {}",
                     blueprint_id
                 )));
             }
@@ -159,7 +160,8 @@ impl PricingEngine for PricingEngineService {
             .map(|rp| ProtoResourcePricing {
                 kind: format!("{:?}", rp.kind),
                 count: rp.count,
-                price_per_unit_rate: rp.price_per_unit_rate,
+                // Convert Decimal to f64 for the proto type
+                price_per_unit_rate: rp.price_per_unit_rate.to_f64().unwrap_or(0.0),
             })
             .collect();
 
@@ -167,7 +169,8 @@ impl PricingEngine for PricingEngineService {
         let quote_details = QuoteDetails {
             blueprint_id,
             ttl_blocks,
-            total_cost_rate: total_cost,
+            // Convert Decimal to f64 for the proto type
+            total_cost_rate: total_cost.to_f64().unwrap_or(0.0),
             timestamp,
             expiry: expiry_time,
             resources: proto_resources,

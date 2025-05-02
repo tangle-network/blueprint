@@ -91,7 +91,7 @@ pub fn init_operator_signer<P: AsRef<std::path::Path>>(
     }
 
     // Initialize the keystore
-    let keystore_config = KeystoreConfig::new().fs_root(keystore_path);
+    let keystore_config = KeystoreConfig::new();
     let keystore = Keystore::new(keystore_config)?;
 
     let ecdsa_public_key = match keystore.list_local::<SpEcdsa>()? {

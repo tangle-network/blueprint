@@ -1,4 +1,6 @@
 use blueprint_tangle_extra::serde::{BoundedVec, new_bounded_string};
+use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 use tangle_subxt::{
     subxt::utils::H160,
     tangle_testnet_runtime::api::runtime_types::{
@@ -12,8 +14,11 @@ use tangle_subxt::{
 
 use crate::pricing_engine::{QuoteDetails, asset::AssetType};
 
-/// Pricing scale factor - used to convert floating point prices to integers
-const PRICING_SCALE: f64 = 1_000_000_000.0;
+/// Pricing scale factor - used to convert decimal prices to integers
+// Cannot use Decimal::new in const, define it as a function instead
+fn pricing_scale() -> Decimal {
+    Decimal::new(1_000_000_000, 0)
+}
 
 /// Convert a u128 value to a 16-byte Vec<u8> in little-endian byte order
 ///
@@ -83,13 +88,18 @@ pub fn u32_to_u128_bytes(value: u32) -> Vec<u8> {
 /// Panics if any type conversions fails
 pub fn create_on_chain_quote_type(quote_details: &QuoteDetails) -> PricingQuote {
     let security_commitment = quote_details.security_commitments.clone().unwrap();
+    let scale = pricing_scale();
 
     let mapped_resources: Vec<tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing> = quote_details.resources
                 .iter()
-                .map(|resource| tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing {
-                    kind: new_bounded_string(resource.kind.clone()),
-                    count: resource.count,
-                    price_per_unit_rate: (resource.price_per_unit_rate * PRICING_SCALE) as u128,
+                .map(|resource| {
+                    // Convert f64 to Decimal for the calculation
+                    let price_rate = Decimal::try_from(resource.price_per_unit_rate).unwrap_or(Decimal::ZERO);
+                    tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::ResourcePricing {
+                        kind: new_bounded_string(resource.kind.clone()),
+                        count: resource.count,
+                        price_per_unit_rate: (price_rate * scale).to_u128().unwrap_or(0),
+                    }
                 })
                 .collect();
     let resources = BoundedVec::<ResourcePricing>(mapped_resources.clone());
@@ -118,12 +128,15 @@ pub fn create_on_chain_quote_type(quote_details: &QuoteDetails) -> PricingQuote 
     let security_commitments =
         BoundedVec::<AssetSecurityCommitment<u128>>(mapped_security_commitment.clone());
 
+    // Convert f64 to Decimal for the calculation
+    let total_cost_rate = Decimal::try_from(quote_details.total_cost_rate).unwrap_or(Decimal::ZERO);
+
     PricingQuote {
         blueprint_id: quote_details.blueprint_id,
         ttl_blocks: quote_details.ttl_blocks,
         resources,
         security_commitments,
-        total_cost_rate: (quote_details.total_cost_rate * PRICING_SCALE) as u128,
+        total_cost_rate: (total_cost_rate * scale).to_u128().unwrap_or(0),
         timestamp: quote_details.timestamp,
         expiry: quote_details.expiry,
     }

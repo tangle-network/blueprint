@@ -3466,6 +3466,7 @@ dependencies = [
  "parity-scale-codec",
  "prost 0.12.6",
  "rand 0.8.5",
+ "rust_decimal",
  "scale-info",
  "serde",
  "serde_json",
@@ -8807,7 +8808,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.57.0",
+ "windows-core 0.58.0",
 ]
 
 [[package]]
@@ -15075,7 +15076,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22505a5c94da8e3b7c2996394d1c933236c4d743e81a410bcca4e6989fc066a4"
 dependencies = [
  "bytes",
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.12.1",
  "log",
  "multimap",
@@ -15909,6 +15910,17 @@ dependencies = [
  "thiserror 1.0.69",
  "unicode-normalization",
  "uuid 0.8.2",
+]
+
+[[package]]
+name = "rust_decimal"
+version = "1.37.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "faa7de2ba56ac291bd90c6b9bece784a52ae1411f9506544b3eae36dd2356d50"
+dependencies = [
+ "arrayvec 0.7.6",
+ "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -19982,7 +19994,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "digest 0.10.7",
  "rand 0.8.5",
  "static_assertions",
