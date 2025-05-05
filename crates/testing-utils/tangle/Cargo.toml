@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-tangle-testing-utils"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 description = "Tangle-specific testing utilities for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -35,7 +35,6 @@ tempfile = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 blueprint-client-tangle = { workspace = true }
 url = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 default = ["tracing"]

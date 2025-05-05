@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.10](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.9...cargo-tangle-v0.4.0-alpha.10) - 2025-05-01
+
+### Added
+
+- *(pricing-engine)* finalized pricing engine implementation (#904)
+
+### Fixed
+
+- *(cargo-tangle)* properly encode optional fields (#921)
+
+### Other
+
+- remove unused dependencies (#915)
+
 ## [0.4.0-alpha.9](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.8...cargo-tangle-v0.4.0-alpha.9) - 2025-04-22
 
 ### Fixed

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.1.0...blueprint-pricing-engine-v0.1.1) - 2025-05-01
+
+### Added
+
+- *(pricing-engine)* finalized pricing engine implementation (#904)
+
+### Other
+
+- remove unused dependencies (#915)
+
 ## [0.1.0](https://github.com/tangle-network/blueprint/releases/tag/blueprint-pricing-engine-v0.1.0) - 2025-04-21
 
 ### Added

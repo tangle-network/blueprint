@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-manager"
-version = "0.3.0-alpha.7"
+version = "0.3.0-alpha.8"
 description = "Tangle Blueprint manager and Runner"
 authors.workspace = true
 edition.workspace = true
@@ -50,7 +50,6 @@ hyper.workspace = true
 hyperlocal.workspace = true
 hyper-util.workspace = true
 http-body-util.workspace = true
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [package.metadata.dist]
 dist = false

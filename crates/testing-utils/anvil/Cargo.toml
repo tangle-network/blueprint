@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-anvil-testing-utils"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 description = "Anvil testing utilities for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -24,7 +24,6 @@ alloy-rpc-types = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
 alloy-transport = { workspace = true }
 url = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 default = ["tracing"]

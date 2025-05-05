@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-tangle-extra"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 description = "Tangle Network extra utilities for Blueprint framework"
 authors.workspace = true
 edition.workspace = true
@@ -30,7 +30,6 @@ cargo_metadata = { workspace = true, optional = true }
 # Metadata types
 cid = { workspace = true, features = ["serde", "alloc"], optional = true }
 thiserror = { workspace = true, optional = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 color-eyre = { workspace = true, features = ["color-spantrace", "track-caller"] }

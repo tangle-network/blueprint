@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-runner"
-version = "0.1.0-alpha.6"
+version = "0.1.0-alpha.7"
 description = "Runner for the Blueprint SDK"
 authors.workspace = true
 edition.workspace = true
@@ -57,7 +57,6 @@ eigensdk = { workspace = true, features = [
     "client-avsregistry",
     "crypto-bls",
 ], optional = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-sdk = { path = "../sdk", features = ["std", "tangle"] }
