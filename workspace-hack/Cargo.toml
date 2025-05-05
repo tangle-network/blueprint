@@ -161,7 +161,7 @@ proc-macro2 = { version = "1" }
 prost = { version = "0.12", default-features = false, features = ["prost-derive", "std"] }
 quote = { version = "1" }
 rand = { version = "0.8", features = ["small_rng"] }
-rand_chacha = { version = "0.3" }
+rand_chacha = { version = "0.9" }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "dfa-search", "hybrid", "meta", "nfa", "perf", "unicode"] }
@@ -401,7 +401,7 @@ proc-macro2 = { version = "1" }
 prost = { version = "0.12", default-features = false, features = ["prost-derive", "std"] }
 quote = { version = "1" }
 rand = { version = "0.8", features = ["small_rng"] }
-rand_chacha = { version = "0.3" }
+rand_chacha = { version = "0.9" }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "dfa-search", "hybrid", "meta", "nfa", "perf", "unicode"] }
