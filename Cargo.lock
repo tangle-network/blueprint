@@ -3494,7 +3494,6 @@ dependencies = [
  "blueprint-evm-extra",
  "blueprint-keystore",
  "blueprint-networking",
- "blueprint-pricing-engine",
  "blueprint-router",
  "blueprint-sdk",
  "blueprint-std",
