@@ -456,7 +456,7 @@ spki = { version = "0.7", default-features = false, features = ["pem", "std"] }
 ss58-registry = { version = "1", default-features = false, features = ["std"] }
 substrate-bip39 = { version = "0.6", default-features = false, features = ["std"] }
 subtle = { version = "2", default-features = false, features = ["i128", "std"] }
-subxt-codegen = { version = "0.39", features = ["web"] }
+subxt-codegen = { version = "0.41", features = ["web"] }
 subxt-core = { version = "0.39", default-features = false, features = ["std"] }
 subxt-macro = { version = "0.39", default-features = false, features = ["web"] }
 subxt-metadata = { version = "0.39", default-features = false, features = ["std"] }
