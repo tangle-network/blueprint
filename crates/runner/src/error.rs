@@ -19,9 +19,6 @@ pub enum RunnerError {
     #[error(transparent)]
     AddrParse(#[from] std::net::AddrParseError),
 
-    #[error("Pricing engine error: {0}")]
-    Pricing(#[from] blueprint_pricing_engine_lib::PricingError),
-
     /// Unable to read/use the provided configuration values
     #[error("Configuration error: {0}")]
     Config(#[from] ConfigError),

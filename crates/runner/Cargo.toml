@@ -18,7 +18,6 @@ blueprint-router.workspace = true
 blueprint-std.workspace = true
 blueprint-keystore = { workspace = true }
 blueprint-crypto = { workspace = true }
-blueprint-pricing-engine = { workspace = true }
 futures-core.workspace = true
 futures-util.workspace = true
 tower.workspace = true
