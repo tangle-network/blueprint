@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-pricing-engine"
-version = "0.1.0"
+version = "0.1.1"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -82,16 +82,14 @@ prost = { workspace = true, features = ["prost-derive"] }
 
 # Proof of work
 sha2 = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 test-log = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-serial_test = { workspace = true, features = ["async"] }
-blueprint-networking = { workspace = true, features = ["testing"] }
-blueprint-testing-utils = { workspace = true, features = ["tangle"] }
-blueprint-runner = { workspace = true, features = ["std", "tangle"] }
-blueprint-chain-setup = { workspace = true }
+blueprint-networking = { path = "../networking", features = ["testing"] }
+blueprint-testing-utils = { path = "../testing-utils", features = ["tangle"] }
+blueprint-runner = { path = "../runner", features = ["std", "tangle"] }
+blueprint-chain-setup = { path = "../chain-setup" }
 tempfile = { workspace = true }
 tonic = { workspace = true }
 

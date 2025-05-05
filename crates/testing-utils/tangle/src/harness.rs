@@ -273,12 +273,16 @@ where
                 ..Default::default()
             };
 
-            let benchmark_cache = init_benchmark_cache(&operator_config).await?;
+            let benchmark_cache = init_benchmark_cache(&operator_config)
+                .await
+                .map_err(|e| RunnerError::Other(e.into()))?;
 
-            let pricing_config = load_pricing_from_toml(DEFAULT_CONFIG)?;
+            let pricing_config =
+                load_pricing_from_toml(DEFAULT_CONFIG).map_err(|e| RunnerError::Other(e.into()))?;
 
             let operator_signer =
-                init_operator_signer(&operator_config, &operator_config.keystore_path)?;
+                init_operator_signer(&operator_config, &operator_config.keystore_path)
+                    .map_err(|e| RunnerError::Other(e.into()))?;
 
             let pricing_rpc = tokio::spawn(async move {
                 if let Err(e) = run_rpc_server(

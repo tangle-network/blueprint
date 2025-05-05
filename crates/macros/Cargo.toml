@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-macros"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 description = "Macros for the Tangle Blueprint SDK"
 authors.workspace = true
 edition.workspace = true
@@ -30,7 +30,6 @@ syn = { workspace = true, features = [
 
 # EVM
 serde_json = { workspace = true, features = ["alloc"], optional = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-sdk = { path = "../sdk", features = ["macros", "std"] }
