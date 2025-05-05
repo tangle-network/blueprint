@@ -9,6 +9,9 @@ on:
     branches:
       - main
 
+env:
+  RELEASE_PLZ_LOG: TRACE
+
 jobs:
   release-plz:
     name: Release-plz
