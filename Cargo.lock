@@ -3433,7 +3433,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "serial_test",
  "sha2 0.10.9",
  "sp-core",
  "sp-io",
@@ -16870,7 +16869,6 @@ version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b258109f244e1d6891bf1053a55d63a5cd4f8f4c30cf9a1280989f80e7a1fa9"
 dependencies = [
- "futures",
  "once_cell",
  "parking_lot 0.12.3",
  "scc",
