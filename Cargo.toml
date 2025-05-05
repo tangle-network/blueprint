@@ -252,7 +252,7 @@ alloy-json-rpc = { version = "0.12", default-features = false }
 alloy-dyn-abi = { version = "0.8", default-features = false }
 alloy-sol-types = { version = "0.8", default-features = false }
 alloy-rlp = { version = "0.3", default-features = false }
-alloy-rpc-client = { version = "0.12", default-features = false }
+alloy-rpc-client = { version = "0.15", default-features = false }
 alloy-rpc-types = { version = "0.12", default-features = false }
 alloy-rpc-types-eth = { version = "0.12", default-features = false }
 alloy-provider = { version = "0.12", default-features = false, features = ["reqwest", "ws"] }
