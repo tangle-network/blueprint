@@ -33,7 +33,7 @@ alloy-signer = { version = "0.12", default-features = false, features = ["eip712
 alloy-signer-local = { version = "0.12", default-features = false, features = ["mnemonic"] }
 alloy-sol-type-parser = { version = "0.8", default-features = false, features = ["serde", "std"] }
 alloy-sol-types = { version = "0.8", features = ["eip712-serde", "json"] }
-alloy-transport-http = { version = "0.12", default-features = false, features = ["reqwest", "reqwest-default-tls"] }
+alloy-transport-http = { version = "0.15", default-features = false, features = ["reqwest", "reqwest-default-tls"] }
 anyhow = { version = "1" }
 ark-bn254 = { version = "0.5", features = ["std"] }
 ark-ec = { version = "0.5", features = ["std"] }
@@ -270,7 +270,7 @@ alloy-sol-macro-expander = { version = "0.8", default-features = false, features
 alloy-sol-macro-input = { version = "0.8", default-features = false, features = ["json"] }
 alloy-sol-type-parser = { version = "0.8", default-features = false, features = ["serde", "std"] }
 alloy-sol-types = { version = "0.8", features = ["eip712-serde", "json"] }
-alloy-transport-http = { version = "0.12", default-features = false, features = ["reqwest", "reqwest-default-tls"] }
+alloy-transport-http = { version = "0.15", default-features = false, features = ["reqwest", "reqwest-default-tls"] }
 anyhow = { version = "1" }
 ark-bn254 = { version = "0.5", features = ["std"] }
 ark-ec = { version = "0.5", features = ["std"] }
