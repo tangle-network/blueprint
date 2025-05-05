@@ -132,7 +132,7 @@ sp-io = { version = "38.0.1", default-features = false }
 sp-runtime = { version = "39.0.0", default-features = false }
 sp-keystore = { version = "0.40.0", default-features = false }
 sc-keystore = { version = "33.0.0", default-features = false }
-sp-application-crypto = { version = "38.0.0", default-features = false }
+sp-application-crypto = { version = "40.1.0", default-features = false }
 scale-info = { version = "2.11", default-features = false }
 parity-scale-codec = { version = "3.6", default-features = false }
 

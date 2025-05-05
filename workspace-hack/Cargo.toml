@@ -195,7 +195,7 @@ sha3 = { version = "0.10" }
 signature = { version = "2", default-features = false, features = ["digest", "rand_core", "std"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde", "union", "write"] }
 soketto = { version = "0.8", features = ["http"] }
-sp-application-crypto = { version = "38" }
+sp-application-crypto = { version = "40" }
 sp-arithmetic = { version = "26", default-features = false, features = ["std"] }
 sp-core = { version = "34", features = ["bls-experimental"] }
 sp-crypto-hashing = { version = "0.1", default-features = false, features = ["std"] }
@@ -437,7 +437,7 @@ sha3 = { version = "0.10" }
 signature = { version = "2", default-features = false, features = ["digest", "rand_core", "std"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde", "union", "write"] }
 soketto = { version = "0.8", features = ["http"] }
-sp-application-crypto = { version = "38" }
+sp-application-crypto = { version = "40" }
 sp-arithmetic = { version = "26", default-features = false, features = ["std"] }
 sp-core = { version = "34", features = ["bls-experimental"] }
 sp-crypto-hashing = { version = "0.1", default-features = false, features = ["std"] }
