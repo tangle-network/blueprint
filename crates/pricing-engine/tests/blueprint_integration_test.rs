@@ -28,6 +28,8 @@ use blueprint_testing_utils::{
     },
 };
 use chrono::Utc;
+use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 use sp_core::hexdisplay::AsBytesRef;
 use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::subxt::utils::AccountId32;
@@ -267,13 +269,13 @@ resources = [
 
             if let Some(resources) = pricing_map.get_mut(&None) {
                 for resource in resources.iter_mut() {
-                    resource.price_per_unit_rate *= multiplier;
+                    resource.price_per_unit_rate *= Decimal::from_f64(multiplier).unwrap();
                 }
             }
 
             if let Some(resources) = pricing_map.get_mut(&Some(blueprint_id)) {
                 for resource in resources.iter_mut() {
-                    resource.price_per_unit_rate *= multiplier;
+                    resource.price_per_unit_rate *= Decimal::from_f64(multiplier).unwrap();
                 }
             }
         }
