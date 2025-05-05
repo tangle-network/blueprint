@@ -9,7 +9,6 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use toml;
 
 /// The average block time in seconds
-// Cannot use Decimal::new in const, define it as a function instead
 pub fn block_time() -> Decimal {
     Decimal::new(6, 0)
 }
@@ -76,6 +75,7 @@ pub fn calculate_price(
     pricing_config: &HashMap<Option<u64>, Vec<ResourcePricing>>,
     blueprint_id: Option<u64>,
     ttl_blocks: u64,
+    security_requirements: Option<AssetSecurityRequirement<AssetId>>,
 ) -> Result<PriceModel> {
     let mut resources = Vec::new();
     let mut total_cost = Decimal::ZERO;
@@ -108,12 +108,11 @@ pub fn calculate_price(
                 .cloned()
                 .unwrap_or(Decimal::ZERO);
 
-            let _base_price = Decimal::from(cpu_count) * price_per_unit;
             let adjusted_price = calculate_resource_price(
                 cpu_count,
                 price_per_unit,
                 ttl_blocks,
-                None, // No security requirements for CPU
+                security_requirements.clone(),
             );
 
             resources.push(ResourcePricing {
@@ -137,12 +136,11 @@ pub fn calculate_price(
                 .cloned()
                 .unwrap_or(Decimal::ZERO);
 
-            let _base_price = Decimal::from(memory_mb) * price_per_unit;
             let adjusted_price = calculate_resource_price(
                 memory_mb,
                 price_per_unit,
                 ttl_blocks,
-                None, // No security requirements for memory
+                security_requirements.clone(),
             );
 
             resources.push(ResourcePricing {
@@ -166,12 +164,11 @@ pub fn calculate_price(
                 .cloned()
                 .unwrap_or(Decimal::ZERO);
 
-            let _base_price = Decimal::from(storage_mb) * price_per_unit;
             let adjusted_price = calculate_resource_price(
                 storage_mb,
                 price_per_unit,
                 ttl_blocks,
-                None, // No security requirements for storage
+                security_requirements.clone(),
             );
 
             resources.push(ResourcePricing {
@@ -195,12 +192,11 @@ pub fn calculate_price(
                 .cloned()
                 .unwrap_or(Decimal::ZERO);
 
-            let _base_price = Decimal::from(egress_mb) * price_per_unit;
             let adjusted_price = calculate_resource_price(
                 egress_mb,
                 price_per_unit,
                 ttl_blocks,
-                None, // No security requirements for network egress
+                security_requirements.clone(),
             );
 
             resources.push(ResourcePricing {
@@ -224,12 +220,11 @@ pub fn calculate_price(
                 .cloned()
                 .unwrap_or(Decimal::ZERO);
 
-            let _base_price = Decimal::from(ingress_mb) * price_per_unit;
             let adjusted_price = calculate_resource_price(
                 ingress_mb,
                 price_per_unit,
                 ttl_blocks,
-                None, // No security requirements for network ingress
+                security_requirements.clone(),
             );
 
             resources.push(ResourcePricing {
@@ -238,6 +233,31 @@ pub fn calculate_price(
                 price_per_unit_rate: price_per_unit,
             });
 
+            total_cost += adjusted_price;
+        }
+    }
+
+    // GPU pricing
+    if let Some(gpu_details) = &profile.gpu_details {
+        if gpu_details.gpu_available {
+            // Get the price per GPU unit from the configuration or use a default
+            let price_per_unit = resource_price_map
+                .get(&ResourceUnit::GPU)
+                .cloned()
+                .unwrap_or(Decimal::ZERO);
+
+            let adjusted_price = calculate_resource_price(
+                1,
+                price_per_unit,
+                ttl_blocks,
+                security_requirements.clone(),
+            );
+
+            resources.push(ResourcePricing {
+                kind: ResourceUnit::GPU,
+                count: 1, // TODO: Support multiple GPUs
+                price_per_unit_rate: price_per_unit,
+            });
             total_cost += adjusted_price;
         }
     }
@@ -286,7 +306,7 @@ pub fn load_pricing_from_toml(content: &str) -> Result<HashMap<Option<u64>, Vec<
                         .and_then(|p| {
                             p.as_float()
                                 .map(|f| Decimal::try_from(f).unwrap_or(Decimal::ZERO))
-                                .or_else(|| p.as_integer().map(|int_val| Decimal::from(int_val)))
+                                .or_else(|| p.as_integer().map(Decimal::from))
                         })
                         .unwrap_or(Decimal::ZERO);
 
@@ -337,9 +357,7 @@ pub fn load_pricing_from_toml(content: &str) -> Result<HashMap<Option<u64>, Vec<
                             .and_then(|p| {
                                 p.as_float()
                                     .map(|f| Decimal::try_from(f).unwrap_or(Decimal::ZERO))
-                                    .or_else(|| {
-                                        p.as_integer().map(|int_val| Decimal::from(int_val))
-                                    })
+                                    .or_else(|| p.as_integer().map(Decimal::from))
                             })
                             .unwrap_or(Decimal::ZERO);
 

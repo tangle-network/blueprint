@@ -2,11 +2,16 @@ use crate::benchmark_cache::BenchmarkCache;
 use crate::config::OperatorConfig;
 use crate::pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
 use crate::pricing::calculate_price;
+use crate::pricing_engine::asset::AssetType;
 use crate::signer::{OperatorSigner, SignedQuote as SignerSignedQuote};
+use crate::utils::bytes_to_u128;
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::sp_core::SpEcdsa;
 use chrono::Utc;
 use rust_decimal::prelude::ToPrimitive;
+use tangle_subxt::subxt::utils::H160;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::sp_arithmetic::per_things::Percent;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{Asset, AssetSecurityRequirement};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, transport::Server};
@@ -50,6 +55,37 @@ impl PricingEngineService {
         AssetSecurityCommitment {
             asset: requirement.asset.clone(),
             exposure_percent: requirement.minimum_exposure_percent,
+        }
+    }
+
+    fn create_security_requirement(
+        requirement: &crate::pricing_engine::AssetSecurityRequirements,
+    ) -> AssetSecurityRequirement<u128> {
+        let asset = requirement.asset.clone().unwrap().asset_type.unwrap();
+        let asset = match asset {
+            AssetType::Custom(asset_type) => {
+                let chain_asset_type = bytes_to_u128(&asset_type);
+                Asset::Custom(chain_asset_type)
+            }
+            AssetType::Erc20(asset_type) => Asset::Erc20(H160::from_slice(&asset_type)),
+        };
+        let minimum_percent = Percent(
+            requirement
+                .minimum_exposure_percent
+                .try_into()
+                .unwrap_or_default(),
+        );
+        let maximum_percent = Percent(
+            requirement
+                .maximum_exposure_percent
+                .try_into()
+                .unwrap_or_default(),
+        );
+
+        AssetSecurityRequirement {
+            asset,
+            min_exposure_percent: minimum_percent,
+            max_exposure_percent: maximum_percent,
         }
     }
 }
@@ -119,6 +155,15 @@ impl PricingEngine for PricingEngineService {
             }
         };
 
+        let security_requirements = match req.security_requirements {
+            Some(requirements) => requirements.clone(),
+            None => {
+                return Err(Status::invalid_argument("Missing security requirements"));
+            }
+        };
+
+        let security_requirement = Self::create_security_requirement(&security_requirements);
+
         // Get the pricing configuration
         let pricing_config = self.pricing_config.lock().await;
 
@@ -128,6 +173,7 @@ impl PricingEngine for PricingEngineService {
             &pricing_config,
             Some(blueprint_id),
             ttl_blocks,
+            Some(security_requirement),
         ) {
             Ok(model) => model,
             Err(e) => {
@@ -142,12 +188,7 @@ impl PricingEngine for PricingEngineService {
         // Get the total cost from the price model
         let total_cost = price_model.total_cost;
 
-        let security_commitment = match req.security_requirements {
-            Some(requirements) => Self::create_security_commitment(&requirements),
-            None => {
-                return Err(Status::invalid_argument("Missing security requirements"));
-            }
-        };
+        let security_commitment = Self::create_security_commitment(&security_requirements);
 
         // Prepare the response
         let expiry_time = Utc::now().timestamp() as u64 + self.config.quote_validity_duration_secs;

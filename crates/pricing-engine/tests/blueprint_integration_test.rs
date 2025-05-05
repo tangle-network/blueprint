@@ -202,6 +202,7 @@ resources = [
         &pricing_data,
         Some(blueprint_id),
         ttl_blocks,
+        None,
     )?;
 
     info!("\nCalculated Price Model:");
@@ -222,8 +223,6 @@ resources = [
     let mut node_handles = Vec::new();
 
     for i in 0..OPERATOR_COUNT {
-        error!("RUNNING THROUGH SETUP FOR OPERATOR {}", i);
-
         // Skip the requester
         if i == REQUESTER_INDEX {
             continue;
@@ -461,8 +460,9 @@ resources = [
         );
     }
 
-    let quotes =
-        vec![blueprint_pricing_engine_lib::utils::create_on_chain_quote_type(quote_details)];
+    let quotes = vec![
+        blueprint_pricing_engine_lib::utils::create_on_chain_quote_type(quote_details).unwrap(),
+    ];
     info!("Quotes: {:?}", quotes);
 
     let request_args = RequestArgs::default();

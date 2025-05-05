@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use blueprint_testing_utils::setup_log;
-use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 
 use crate::benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark_suite};
 use crate::pricing::{ResourcePricing, calculate_price};
@@ -144,7 +144,8 @@ fn test_calculate_price_basic() {
     let ttl_blocks = 600u64;
 
     // Calculate the price with the new block-based TTL
-    let price_model = calculate_price(profile.clone(), &pricing_config, None, ttl_blocks).unwrap();
+    let price_model =
+        calculate_price(profile.clone(), &pricing_config, None, ttl_blocks, None).unwrap();
 
     println!("Price Model: {:#?}", price_model);
 
@@ -248,7 +249,7 @@ fn test_calculate_price_high_cpu() {
     let _ttl_blocks = 600u64;
 
     // Calculate the price with a scaling factor of 1.0
-    let price_model = calculate_price(profile.clone(), &pricing_config, None, 600).unwrap();
+    let price_model = calculate_price(profile.clone(), &pricing_config, None, 600, None).unwrap();
 
     println!("Price Model (High CPU): {:#?}", price_model);
 
@@ -306,7 +307,8 @@ fn test_calculate_price_different_scaling_factors() {
 
     for &ttl in &ttl_values {
         // Calculate the price with the current TTL
-        let price_model = calculate_price(profile.clone(), &pricing_config, None, ttl).unwrap();
+        let price_model =
+            calculate_price(profile.clone(), &pricing_config, None, ttl, None).unwrap();
 
         println!("Price Model (TTL = {} blocks): {:#?}", ttl, price_model);
 
@@ -361,7 +363,7 @@ fn test_calculate_price_negative_scaling_factor() {
     let _ttl_blocks = 600u64;
 
     // Try to calculate the price with a negative price
-    let result = calculate_price(profile.clone(), &pricing_config, None, 600);
+    let result = calculate_price(profile.clone(), &pricing_config, None, 600, None);
 
     // The calculation might not fail with a negative price in the new implementation
     // So we'll just check the result instead of expecting an error
@@ -527,7 +529,8 @@ fn test_resource_pricing() {
 
     // Test total cost
     assert!(
-        (price_model.total_cost - Decimal::from_f64(0.0000532).unwrap()).abs() < Decimal::from_f64(1e-6).unwrap(),
+        (price_model.total_cost - Decimal::from_f64(0.0000532).unwrap()).abs()
+            < Decimal::from_f64(1e-6).unwrap(),
         "Expected total cost to be 0.0000532, got {}",
         price_model.total_cost
     );
