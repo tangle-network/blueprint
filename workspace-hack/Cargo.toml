@@ -127,7 +127,7 @@ itertools-582f2526e08bb6a0 = { package = "itertools", version = "0.14" }
 itertools-594e8ee84c453af0 = { package = "itertools", version = "0.13", default-features = false, features = ["use_std"] }
 jiff = { version = "0.2" }
 js-sys = { version = "0.3" }
-jsonrpsee = { version = "0.24", default-features = false, features = ["async-client", "async-wasm-client", "client-web-transport", "client-ws-transport-tls", "http-client", "macros", "server", "wasm-client", "ws-client"] }
+jsonrpsee = { version = "0.25", default-features = false, features = ["async-client", "async-wasm-client", "client-web-transport", "client-ws-transport-tls", "http-client", "macros", "server", "wasm-client", "ws-client"] }
 jsonrpsee-client-transport = { version = "0.24", default-features = false, features = ["tls-rustls-platform-verifier", "web", "ws"] }
 jsonrpsee-core = { version = "0.24", features = ["async-client", "async-wasm-client", "http-helpers", "server"] }
 k256 = { version = "0.13", features = ["pem", "serde"] }
@@ -366,7 +366,7 @@ itertools-582f2526e08bb6a0 = { package = "itertools", version = "0.14" }
 itertools-594e8ee84c453af0 = { package = "itertools", version = "0.13", default-features = false, features = ["use_std"] }
 jiff = { version = "0.2" }
 js-sys = { version = "0.3" }
-jsonrpsee = { version = "0.24", default-features = false, features = ["async-client", "async-wasm-client", "client-web-transport", "client-ws-transport-tls", "http-client", "macros", "server", "wasm-client", "ws-client"] }
+jsonrpsee = { version = "0.25", default-features = false, features = ["async-client", "async-wasm-client", "client-web-transport", "client-ws-transport-tls", "http-client", "macros", "server", "wasm-client", "ws-client"] }
 jsonrpsee-client-transport = { version = "0.24", default-features = false, features = ["tls-rustls-platform-verifier", "web", "ws"] }
 jsonrpsee-core = { version = "0.24", features = ["async-client", "async-wasm-client", "http-helpers", "server"] }
 k256 = { version = "0.13", features = ["pem", "serde"] }
