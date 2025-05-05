@@ -19352,7 +19352,8 @@ dependencies = [
 [[package]]
 name = "tnt-core-bytecode"
 version = "0.5.0"
-source = "git+https://github.com/tangle-network/tnt-core.git#b48a92b286b822f8f94187ecf5362bd93c42a8fb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3ce001313334d1db412784b7c46bb7f3dd571fe4502563c528120dea80b302f"
 dependencies = [
  "serde_json",
 ]
