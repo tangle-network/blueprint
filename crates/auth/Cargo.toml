@@ -1,0 +1,40 @@
+[package]
+name = "blueprint-auth"
+version = "0.1.0-alpha.1"
+description = "Blueprint HTTP/WS Authentication"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+hashbrown = { workspace = true, default-features = false, features = ["default-hasher", "inline-more"] }
+tiny-keccak = { workspace = true, features = ["keccak"] }
+tracing = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+hex = { workspace = true, features = ["serde"] }
+rand = { workspace = true }
+base64 = { workspace = true }
+crc32fast = { workspace = true }
+
+k256 = { workspace = true, features = ["ecdsa", "alloc", "serde", "pem"] }
+schnorrkel = { workspace = true }
+
+axum = { workspace = true, default-features = false, features = ["json"] }
+hyper-util = { workspace = true, features = ["client"] }
+
+
+[dev-dependencies]
+blueprint-sdk = { path = "../sdk", features = ["std"] }
+serde_json = { workspace = true, features = ["alloc"] }
+tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter"] }
+tokio = { workspace = true, features = ["full"] }
+
+[features]
+default = ["std", "tracing"]
+std = ["rand/std", "crc32fast/std", "k256/std", "schnorrkel/std", "base64/std"]
+tracing = []
