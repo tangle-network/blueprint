@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.8...blueprint-sdk-v0.1.0-alpha.9) - 2025-05-06
+
+### Other
+
+- updated the following local packages: blueprint-networking, blueprint-runner, blueprint-clients, blueprint-contexts, blueprint-chain-setup, blueprint-testing-utils, blueprint-networking-round-based-extension, blueprint-stores
+
 ## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.7...blueprint-sdk-v0.1.0-alpha.8) - 2025-05-01
 
 ### Other

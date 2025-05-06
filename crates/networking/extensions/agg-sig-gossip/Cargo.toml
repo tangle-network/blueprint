@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-networking-agg-sig-gossip-extension"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 description = "Signature aggregation extension for Blueprint SDK networking"
 authors.workspace = true
 edition.workspace = true
