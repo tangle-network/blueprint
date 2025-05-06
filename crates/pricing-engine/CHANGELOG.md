@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.1.1...blueprint-pricing-engine-v0.1.2) - 2025-05-06
+
+### Added
+
+- *(pricing-engine)* use rust-decimal (#961)
+
 ## [0.1.1](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.1.0...blueprint-pricing-engine-v0.1.1) - 2025-05-01
 
 ### Added
