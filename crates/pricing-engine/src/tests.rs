@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use blueprint_testing_utils::setup_log;
+use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 
 use crate::benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark_suite};
 use crate::pricing::{ResourcePricing, calculate_price};
@@ -113,27 +115,27 @@ fn test_calculate_price_basic() {
         ResourcePricing {
             kind: ResourceUnit::CPU,
             count: 1,
-            price_per_unit_rate: 0.000001,
+            price_per_unit_rate: Decimal::from_f64(0.000001).unwrap(),
         },
         ResourcePricing {
             kind: ResourceUnit::MemoryMB,
             count: 1024,
-            price_per_unit_rate: 0.00000005,
+            price_per_unit_rate: Decimal::from_f64(0.00000005).unwrap(),
         },
         ResourcePricing {
             kind: ResourceUnit::StorageMB,
             count: 1024,
-            price_per_unit_rate: 0.00000002,
+            price_per_unit_rate: Decimal::from_f64(0.00000002).unwrap(),
         },
         ResourcePricing {
             kind: ResourceUnit::NetworkIngressMB,
             count: 1024,
-            price_per_unit_rate: 0.00000001,
+            price_per_unit_rate: Decimal::from_f64(0.00000001).unwrap(),
         },
         ResourcePricing {
             kind: ResourceUnit::NetworkEgressMB,
             count: 1024,
-            price_per_unit_rate: 0.00000003,
+            price_per_unit_rate: Decimal::from_f64(0.00000003).unwrap(),
         },
     ];
     pricing_config.insert(None, default_resources);
@@ -142,7 +144,8 @@ fn test_calculate_price_basic() {
     let ttl_blocks = 600u64;
 
     // Calculate the price with the new block-based TTL
-    let price_model = calculate_price(profile.clone(), &pricing_config, None, ttl_blocks).unwrap();
+    let price_model =
+        calculate_price(profile.clone(), &pricing_config, None, ttl_blocks, None).unwrap();
 
     println!("Price Model: {:#?}", price_model);
 
@@ -158,7 +161,7 @@ fn test_calculate_price_basic() {
 
     // First, verify that the total cost is positive and reasonable
     assert!(
-        price_model.total_cost > 0.0,
+        price_model.total_cost > Decimal::from_f64(0.0).unwrap(),
         "Expected total cost to be positive, got {}",
         price_model.total_cost
     );
@@ -232,12 +235,12 @@ fn test_calculate_price_high_cpu() {
         ResourcePricing {
             kind: ResourceUnit::CPU,
             count: 1,
-            price_per_unit_rate: 0.000001,
+            price_per_unit_rate: Decimal::from_f64(0.000001).unwrap(),
         },
         ResourcePricing {
             kind: ResourceUnit::MemoryMB,
             count: 1024,
-            price_per_unit_rate: 0.00000005,
+            price_per_unit_rate: Decimal::from_f64(0.00000005).unwrap(),
         },
     ];
     pricing_config.insert(None, default_resources);
@@ -246,7 +249,7 @@ fn test_calculate_price_high_cpu() {
     let _ttl_blocks = 600u64;
 
     // Calculate the price with a scaling factor of 1.0
-    let price_model = calculate_price(profile.clone(), &pricing_config, None, 600).unwrap();
+    let price_model = calculate_price(profile.clone(), &pricing_config, None, 600, None).unwrap();
 
     println!("Price Model (High CPU): {:#?}", price_model);
 
@@ -267,7 +270,7 @@ fn test_calculate_price_high_cpu() {
 
     // Verify that the total cost is higher than the basic test
     assert!(
-        price_model.total_cost > 0.004, // 4 * 0.001 = 0.004 for CPU alone
+        price_model.total_cost > Decimal::from_f64(0.004).unwrap(), // 4 * 0.001 = 0.004 for CPU alone
         "Expected total cost to be higher than 0.004, got {}",
         price_model.total_cost
     );
@@ -286,12 +289,12 @@ fn test_calculate_price_different_scaling_factors() {
         ResourcePricing {
             kind: ResourceUnit::CPU,
             count: 1,
-            price_per_unit_rate: 0.000001,
+            price_per_unit_rate: Decimal::from_f64(0.000001).unwrap(),
         },
         ResourcePricing {
             kind: ResourceUnit::MemoryMB,
             count: 1024,
-            price_per_unit_rate: 0.00000005,
+            price_per_unit_rate: Decimal::from_f64(0.00000005).unwrap(),
         },
     ];
     pricing_config.insert(None, default_resources);
@@ -304,13 +307,14 @@ fn test_calculate_price_different_scaling_factors() {
 
     for &ttl in &ttl_values {
         // Calculate the price with the current TTL
-        let price_model = calculate_price(profile.clone(), &pricing_config, None, ttl).unwrap();
+        let price_model =
+            calculate_price(profile.clone(), &pricing_config, None, ttl, None).unwrap();
 
         println!("Price Model (TTL = {} blocks): {:#?}", ttl, price_model);
 
         // Verify that the price scales with TTL
         let base_price = price_model.total_cost;
-        let expected_total_cost = base_price * (ttl as f64);
+        let expected_total_cost = base_price * (Decimal::from_u64(ttl).unwrap());
 
         println!("Base price per block: ${:.6}", base_price);
         println!("Total cost for {} blocks: ${:.6}", ttl, expected_total_cost);
@@ -345,12 +349,12 @@ fn test_calculate_price_negative_scaling_factor() {
         ResourcePricing {
             kind: ResourceUnit::CPU,
             count: 1,
-            price_per_unit_rate: -0.000001, // Negative price!
+            price_per_unit_rate: Decimal::from_f64(-0.000001).unwrap(),
         },
         ResourcePricing {
             kind: ResourceUnit::MemoryMB,
             count: 1024,
-            price_per_unit_rate: 0.00000005,
+            price_per_unit_rate: Decimal::from_f64(0.00000005).unwrap(),
         },
     ];
     pricing_config.insert(None, default_resources);
@@ -359,7 +363,7 @@ fn test_calculate_price_negative_scaling_factor() {
     let _ttl_blocks = 600u64;
 
     // Try to calculate the price with a negative price
-    let result = calculate_price(profile.clone(), &pricing_config, None, 600);
+    let result = calculate_price(profile.clone(), &pricing_config, None, 600, None);
 
     // The calculation might not fail with a negative price in the new implementation
     // So we'll just check the result instead of expecting an error
@@ -372,7 +376,7 @@ fn test_calculate_price_negative_scaling_factor() {
             );
             // Just verify that the total cost is not negative
             assert!(
-                price_model.total_cost >= 0.0,
+                price_model.total_cost >= Decimal::from_f64(0.0).unwrap(),
                 "Expected total cost to be non-negative, got {}",
                 price_model.total_cost
             );
@@ -511,21 +515,22 @@ fn test_resource_pricing() {
             crate::pricing::ResourcePricing {
                 kind: ResourceUnit::CPU,
                 count: 2,
-                price_per_unit_rate: 0.000001, // $0.000001 per CPU core
+                price_per_unit_rate: Decimal::from_f64(0.000001).unwrap(), // $0.000001 per CPU core
             },
             crate::pricing::ResourcePricing {
                 kind: ResourceUnit::MemoryMB,
                 count: 1024,
-                price_per_unit_rate: 0.00000005, // $0.00000005 per MB
+                price_per_unit_rate: Decimal::from_f64(0.00000005).unwrap(), // $0.00000005 per MB
             },
         ],
-        total_cost: 0.0000532, // (2 * 0.000001) + (1024 * 0.00000005)
+        total_cost: Decimal::from_f64(0.0000532).unwrap(), // (2 * 0.000001) + (1024 * 0.00000005)
         benchmark_profile: None,
     };
 
     // Test total cost
     assert!(
-        (price_model.total_cost - 0.0000532).abs() < 1e-6,
+        (price_model.total_cost - Decimal::from_f64(0.0000532).unwrap()).abs()
+            < Decimal::from_f64(1e-6).unwrap(),
         "Expected total cost to be 0.0000532, got {}",
         price_model.total_cost
     );

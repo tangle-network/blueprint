@@ -12,6 +12,7 @@ use crate::{
 use alloy_primitives::Address;
 use blueprint_core::{debug, info, trace, warn};
 use blueprint_crypto::KeyType;
+use blueprint_std::{fmt::Display, sync::Arc, time::Duration};
 use crossbeam_channel::{self, Receiver, SendError, Sender};
 use futures::StreamExt;
 use libp2p::{
@@ -20,16 +21,16 @@ use libp2p::{
     kad, mdns, ping,
     swarm::{SwarmEvent, dial_opts::DialOpts},
 };
-use std::{collections::HashSet, fmt::Display, sync::Arc, time::Duration};
+use std::collections::HashSet;
 
 pub enum AllowedKeys<K: KeyType> {
-    EvmAddresses(blueprint_std::collections::HashSet<Address>),
-    InstancePublicKeys(blueprint_std::collections::HashSet<K::Public>),
+    EvmAddresses(HashSet<Address>),
+    InstancePublicKeys(HashSet<K::Public>),
 }
 
 impl<K: KeyType> Default for AllowedKeys<K> {
     fn default() -> Self {
-        Self::InstancePublicKeys(blueprint_std::collections::HashSet::new())
+        Self::InstancePublicKeys(HashSet::new())
     }
 }
 
@@ -113,7 +114,7 @@ pub enum NetworkEventSendError<K: KeyType> {
 }
 
 impl<K: KeyType> Display for NetworkEventSendError<K> {
-    fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             NetworkEventSendError::PeerConnected(peer) => {
                 write!(f, "Error sending Peer connected event: {}", peer)

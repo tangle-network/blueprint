@@ -5,9 +5,10 @@ use blueprint_core::info;
 use blueprint_pricing_engine_lib::{
     error::Result,
     init_pricing_config,
-    pricing::{BLOCK_TIME, PriceModel, calculate_resource_price},
+    pricing::{PriceModel, block_time, calculate_resource_price},
     types::ResourceUnit,
 };
+use rust_decimal::Decimal;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::{
     sp_arithmetic::per_things::Percent,
     tangle_primitives::services::types::{Asset, AssetSecurityRequirement},
@@ -40,7 +41,7 @@ async fn test_default_pricing_config() -> Result<()> {
 
         for resource in resources {
             info!(
-                "    Resource: {}, Count: {}, Price: ${:.6} per unit",
+                "    Resource: {}, Count: {}, Price: ${} per unit",
                 resource.kind, resource.count, resource.price_per_unit_rate
             );
         }
@@ -105,9 +106,9 @@ async fn test_default_pricing_config() -> Result<()> {
     );
 
     // Calculate total cost for default pricing
-    let mut total_cost: f64 = 0.0;
+    let mut total_cost = Decimal::ZERO;
     for resource in default_resources {
-        total_cost += resource.price_per_unit_rate * resource.count as f64;
+        total_cost += resource.price_per_unit_rate * Decimal::from(resource.count);
     }
 
     // Create a price model from the resources
@@ -122,7 +123,7 @@ async fn test_default_pricing_config() -> Result<()> {
     pricing_config.insert(None::<u64>, default_resources.clone());
 
     info!("Pricing verification successful");
-    info!("  Total cost: ${:.6} USD", price_model.total_cost);
+    info!("  Total cost: ${} USD", price_model.total_cost);
 
     Ok(())
 }
@@ -131,7 +132,7 @@ async fn test_default_pricing_config() -> Result<()> {
 async fn test_resource_price_calculation() -> Result<()> {
     // Test parameters
     let count = 4u64; // 4 units of a resource
-    let price_per_unit = 0.001; // $0.001 per unit
+    let price_per_unit = Decimal::new(1, 3); // $0.001 per unit
     let ttl_blocks = 600u64; // 600 blocks (equivalent to 1 hour with 6-second blocks)
 
     // Test without security requirements
@@ -142,7 +143,8 @@ async fn test_resource_price_calculation() -> Result<()> {
     // = 0.004 * (600 * 6.0) * 1.0
     // = 0.004 * 3600 * 1.0
     // = 14.4
-    let expected_price_no_security = 0.004 * (ttl_blocks as f64 * BLOCK_TIME) * 1.0;
+    let expected_price_no_security =
+        Decimal::new(4, 3) * (Decimal::from(ttl_blocks) * block_time()) * Decimal::ONE;
 
     assert_eq!(
         price_no_security, expected_price_no_security,
@@ -151,13 +153,13 @@ async fn test_resource_price_calculation() -> Result<()> {
 
     info!("Resource price calculation (no security):");
     info!("  Count: {}", count);
-    info!("  Price per unit: ${:.6}", price_per_unit);
+    info!("  Price per unit: ${}", price_per_unit);
     info!(
         "  TTL: {} blocks ({} seconds)",
         ttl_blocks,
-        ttl_blocks as f64 * BLOCK_TIME
+        Decimal::from(ttl_blocks) * block_time()
     );
-    info!("  Calculated price: ${:.6}", price_no_security);
+    info!("  Calculated price: ${}", price_no_security);
 
     // Test with security requirements
     let security_requirements = AssetSecurityRequirement {
@@ -184,13 +186,13 @@ async fn test_resource_price_calculation() -> Result<()> {
 
     info!("Resource price calculation (with security):");
     info!("  Count: {}", count);
-    info!("  Price per unit: ${:.6}", price_per_unit);
+    info!("  Price per unit: ${}", price_per_unit);
     info!(
         "  TTL: {} blocks ({} seconds)",
         ttl_blocks,
-        ttl_blocks as f64 * BLOCK_TIME
+        Decimal::from(ttl_blocks) * block_time()
     );
-    info!("  Calculated price: ${:.6}", price_with_security);
+    info!("  Calculated price: ${}", price_with_security);
 
     Ok(())
 }

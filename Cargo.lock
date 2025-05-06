@@ -3429,6 +3429,7 @@ dependencies = [
  "parity-scale-codec",
  "prost 0.12.6",
  "rand 0.8.5",
+ "rust_decimal",
  "scale-info",
  "serde",
  "serde_json",
@@ -15857,6 +15858,17 @@ dependencies = [
  "thiserror 1.0.69",
  "unicode-normalization",
  "uuid 0.8.2",
+]
+
+[[package]]
+name = "rust_decimal"
+version = "1.37.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "faa7de2ba56ac291bd90c6b9bece784a52ae1411f9506544b3eae36dd2356d50"
+dependencies = [
+ "arrayvec 0.7.6",
+ "num-traits",
+ "serde",
 ]
 
 [[package]]
