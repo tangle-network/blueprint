@@ -46,5 +46,5 @@ tempfile = { workspace = true }
 
 [features]
 default = ["std", "tracing"]
-std = ["rand/std", "crc32fast/std", "k256/std", "schnorrkel/std", "base64/std"]
+std = ["rand/std", "crc32fast/std", "k256/std", "schnorrkel/std", "base64/std", "prost/std"]
 tracing = []

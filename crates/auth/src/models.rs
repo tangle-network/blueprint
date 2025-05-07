@@ -55,7 +55,7 @@ impl ApiToken {
     }
 
     /// Saves the token to the database and returns the ID.
-    pub fn save(&self, db: &RocksDb) -> Result<u64, crate::Error> {
+    pub fn save(&mut self, db: &RocksDb) -> Result<u64, crate::Error> {
         let tokens_cf = db
             .cf_handle(cf::TOKENS_OPTS_CF)
             .ok_or(crate::Error::UnknownColumnFamily(cf::TOKENS_OPTS_CF))?;
@@ -69,7 +69,7 @@ impl ApiToken {
         }
     }
 
-    fn create(&self, db: &RocksDb) -> Result<u64, crate::Error> {
+    fn create(&mut self, db: &RocksDb) -> Result<u64, crate::Error> {
         let tokens_cf = db
             .cf_handle(cf::TOKENS_OPTS_CF)
             .ok_or(crate::Error::UnknownColumnFamily(cf::TOKENS_OPTS_CF))?;
@@ -111,6 +111,7 @@ impl ApiToken {
                 u64::from_be_bytes(id)
             })
             .unwrap_or(0u64);
+        self.id = next_id;
         let tokens_bytes = self.encode_to_vec();
         txn.put_cf(&tokens_cf, next_id.to_be_bytes(), tokens_bytes)?;
         // commit the transaction
@@ -145,11 +146,11 @@ mod tests {
         let db = RocksDb::open(tmp_dir.path(), &Default::default()).unwrap();
         let generator = ApiTokenGenerator::new();
         let token = generator.generate_token(&mut rng);
-        let token = ApiToken::from(token);
+        let mut token = ApiToken::from(token);
 
         // Save the token to the database
         let id = token.save(&db).unwrap();
-        assert_eq!(id, 0);
+        assert_eq!(id, 1);
 
         // Find the token by ID
         let found_token = ApiToken::find_token_id(id, &db).unwrap();
