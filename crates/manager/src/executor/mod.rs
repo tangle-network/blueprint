@@ -17,7 +17,6 @@ use color_eyre::eyre::OptionExt;
 use sp_core::{ecdsa, sr25519};
 use std::collections::HashMap;
 use std::future::Future;
-use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tangle_subxt::subxt::tx::Signer;

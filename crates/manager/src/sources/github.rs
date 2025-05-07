@@ -61,7 +61,7 @@ impl BinarySourceFetcher for GithubBinaryFetcher {
         );
 
         let archive_file_name = format!("archive-{tag_str}");
-        let mut archive_download_path = cache_dir.join(archive_file_name);
+        let archive_download_path = cache_dir.join(archive_file_name);
 
         // Check if the binary exists, if not download it
         if valid_file_exists(&archive_download_path, &expected_hash).await {
@@ -69,7 +69,7 @@ impl BinarySourceFetcher for GithubBinaryFetcher {
                 "Archive already exists at: {}",
                 archive_download_path.display()
             );
-            return Ok(PathBuf::from(archive_download_path));
+            return Ok(archive_download_path);
         }
 
         let urls = DownloadUrls::new(relevant_binary, &self.fetcher);
@@ -128,7 +128,7 @@ impl BinarySourceFetcher for GithubBinaryFetcher {
         file.write_all(&archive).await?;
         file.flush().await?;
 
-        Ok(PathBuf::from(archive_download_path))
+        Ok(archive_download_path)
     }
 }
 
