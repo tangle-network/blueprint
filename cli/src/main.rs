@@ -196,6 +196,12 @@ pub enum BlueprintCommands {
         /// The Podman host to use for containerized blueprints
         #[arg(long, env = "PODMAN_HOST", default_value_t = DEFAULT_DOCKER_HOST.clone())]
         podman_host: Url,
+
+        /// Whether to allow invalid GitHub attestations (binary integrity checks)
+        ///
+        /// This will also allow for running the manager without the GitHub CLI installed.
+        #[arg(long, env)]
+        allow_unchecked_attestations: bool,
     },
 
     /// List service requests for a Tangle blueprint
@@ -464,6 +470,7 @@ async fn main() -> color_eyre::Result<()> {
                 bootnodes,
                 settings_file,
                 podman_host,
+                allow_unchecked_attestations,
             } => {
                 let settings_file =
                     settings_file.unwrap_or_else(|| PathBuf::from("./settings.env"));
@@ -567,6 +574,7 @@ async fn main() -> color_eyre::Result<()> {
                             ),
                             keystore_path: Some(config.keystore_uri.clone()),
                             data_dir: config.data_dir.clone(),
+                            allow_unchecked_attestations,
                             podman_host: Some(podman_host)
                         };
 

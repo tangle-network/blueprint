@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-pricing-engine"
-version = "0.1.1"
+version = "0.1.2"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -72,7 +72,9 @@ num_cpus = { workspace = true }
 
 # Utilities
 chrono = { workspace = true, features = ["serde", "clock"] }
-libc = { workspace = true }                                  # For direct I/O support
+libc = { workspace = true }
+rust_decimal = { workspace = true, features = ["serde"] }
+
 
 # gRPC
 tonic = { workspace = true, features = ["transport", "codegen", "prost"] }

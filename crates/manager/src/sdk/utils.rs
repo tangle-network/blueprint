@@ -3,9 +3,6 @@ use blueprint_core::warn;
 use sha2::Digest;
 use std::path::{Path, PathBuf};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::BoundedString;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{
-    BlueprintBinary, GithubFetcher,
-};
 
 /// Converts a `BoundedString` to a `String`
 ///
@@ -29,7 +26,7 @@ pub fn hash_bytes_to_hex<T: AsRef<[u8]>>(input: T) -> String {
     hex::encode(hasher.finalize())
 }
 
-pub async fn valid_file_exists(path: &str, _expected_hash: &str) -> bool {
+pub async fn valid_file_exists(path: impl AsRef<Path>, _expected_hash: &str) -> bool {
     // The hash is sha3_256 of the binary
     if let Ok(_file) = tokio::fs::read(path).await {
         // TODO(HACK): Compute the SHA3-256
@@ -51,35 +48,6 @@ pub fn get_formatted_os_string() -> String {
         "linux" => "unknown-linux-gnu".to_string(),
         _ => os.to_string(),
     }
-}
-
-/// Constructs the GitHub release asset download URL for a given binary and fetcher
-///
-/// # Arguments
-/// * `binary` - The binary metadata containing name, OS, and architecture
-/// * `fetcher` - GitHub repository details including owner, repo name and tag
-///
-/// # Returns
-/// A formatted URL string pointing to the release asset download
-///
-/// # Panics
-/// * If the owner, repo, tag, binary name, OS, or architecture are not valid UTF-8
-#[must_use]
-pub fn get_download_url(binary: &BlueprintBinary, fetcher: &GithubFetcher) -> String {
-    let os = get_formatted_os_string();
-    let ext = if os == "windows" { ".exe" } else { "" };
-    let owner = String::from_utf8(fetcher.owner.0.0.clone()).expect("Should be a valid owner");
-    let repo = String::from_utf8(fetcher.repo.0.0.clone()).expect("Should be a valid repo");
-    let tag = String::from_utf8(fetcher.tag.0.0.clone()).expect("Should be a valid tag");
-    let binary_name =
-        String::from_utf8(binary.name.0.0.clone()).expect("Should be a valid binary name");
-    // let os_name = format!("{:?}", binary.os).to_lowercase();
-    // let arch_name = format!("{:?}", binary.arch).to_lowercase();
-    // TODO(HACK): https://github.com/<owner>/<repo>/releases/download/<tag>/<path>
-    // format!(
-    //     "https://github.com/{owner}/{repo}/releases/download/{tag}/{binary_name}-{os_name}-{arch_name}{ext}"
-    // )
-    format!("https://github.com/{owner}/{repo}/releases/download/{tag}/{binary_name}{ext}")
 }
 
 /// Makes a file executable by setting the executable permission bits on Unix systems.

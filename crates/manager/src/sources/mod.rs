@@ -1,6 +1,7 @@
 use crate::config::{BlueprintManagerConfig, SourceCandidates};
 use crate::gadget::native::FilteredBlueprint;
 use blueprint_runner::config::{BlueprintEnvironment, SupportedChains};
+use std::path::Path;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 pub mod binary;
@@ -52,7 +53,7 @@ impl ProcessHandle {
 #[auto_impl::auto_impl(Box)]
 #[dynosaur::dynosaur(pub(crate) DynBlueprintSource)]
 pub trait BlueprintSourceHandler: Send + Sync {
-    fn fetch(&mut self) -> impl Future<Output = crate::error::Result<()>> + Send;
+    fn fetch(&mut self, cache_dir: &Path) -> impl Future<Output = crate::error::Result<()>> + Send;
     fn spawn(
         &mut self,
         source_candidates: &SourceCandidates,

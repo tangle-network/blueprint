@@ -168,6 +168,14 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let _span = span.enter();
     info!("Starting blueprint manager ... waiting for start signal ...");
 
+    if !blueprint_manager_config.cache_dir.exists() {
+        info!(
+            "Cache directory does not exist, creating it at `{}`",
+            blueprint_manager_config.cache_dir.display()
+        );
+        std::fs::create_dir_all(&blueprint_manager_config.cache_dir)?;
+    }
+
     let data_dir = &blueprint_manager_config.data_dir;
     if !data_dir.exists() {
         info!(

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6](https://github.com/tangle-network/blueprint/compare/blueprint-networking-round-based-extension-v0.1.0-alpha.5...blueprint-networking-round-based-extension-v0.1.0-alpha.6) - 2025-05-06
+
+### Other
+
+- updated the following local packages: blueprint-networking, blueprint-networking
+
 ## [0.1.0-alpha.5](https://github.com/tangle-network/blueprint/compare/blueprint-networking-round-based-extension-v0.1.0-alpha.4...blueprint-networking-round-based-extension-v0.1.0-alpha.5) - 2025-05-01
 
 ### Fixed

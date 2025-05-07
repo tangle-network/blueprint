@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.9...blueprint-manager-v0.3.0-alpha.10) - 2025-05-07
+
+### Added
+
+- *(manager)* [**breaking**] support verifying binaries with gh attestations (#938)
+
+### Other
+
+- *(ci)* fixes from attestation pr (#964)
+
+## [0.3.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.8...blueprint-manager-v0.3.0-alpha.9) - 2025-05-06
+
+### Other
+
+- updated the following local packages: blueprint-networking, blueprint-runner, blueprint-clients
+
 ## [0.3.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.7...blueprint-manager-v0.3.0-alpha.8) - 2025-05-01
 
 ### Fixed

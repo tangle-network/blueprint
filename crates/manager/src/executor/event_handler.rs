@@ -34,6 +34,20 @@ impl VerifiedBlueprint {
         manager_config: &BlueprintManagerConfig,
         active_gadgets: &mut ActiveGadgets,
     ) -> Result<()> {
+        let cache_dir = manager_config.cache_dir.join(format!(
+            "{}-{}",
+            self.blueprint.blueprint_id, self.blueprint.name
+        ));
+        if let Err(e) = std::fs::create_dir_all(&cache_dir) {
+            error!(
+                "Failed to create cache directory for blueprint at {} (name: {}, id: {})",
+                cache_dir.display(),
+                self.blueprint.name,
+                self.blueprint.blueprint_id
+            );
+            return Err(e.into());
+        }
+
         for (index, source) in self.fetchers.iter_mut().enumerate() {
             let blueprint = &self.blueprint;
 
@@ -42,7 +56,7 @@ impl VerifiedBlueprint {
                 return Ok(());
             }
 
-            if let Err(e) = source.fetch().await {
+            if let Err(e) = source.fetch(&cache_dir).await {
                 error!(
                     "Failed to fetch blueprint from source {index}, attempting next available: {e}"
                 );
@@ -412,6 +426,7 @@ fn get_fetcher_candidates(
                         gh.clone(),
                         blueprint.blueprint_id,
                         blueprint.name.clone(),
+                        manager_opts.allow_unchecked_attestations,
                     );
                     fetcher_candidates.push(DynBlueprintSource::boxed(fetcher));
                 }

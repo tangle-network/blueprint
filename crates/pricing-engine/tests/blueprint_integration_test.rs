@@ -28,6 +28,8 @@ use blueprint_testing_utils::{
     },
 };
 use chrono::Utc;
+use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 use sp_core::hexdisplay::AsBytesRef;
 use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::subxt::utils::AccountId32;
@@ -200,6 +202,7 @@ resources = [
         &pricing_data,
         Some(blueprint_id),
         ttl_blocks,
+        None,
     )?;
 
     info!("\nCalculated Price Model:");
@@ -220,8 +223,6 @@ resources = [
     let mut node_handles = Vec::new();
 
     for i in 0..OPERATOR_COUNT {
-        error!("RUNNING THROUGH SETUP FOR OPERATOR {}", i);
-
         // Skip the requester
         if i == REQUESTER_INDEX {
             continue;
@@ -267,13 +268,13 @@ resources = [
 
             if let Some(resources) = pricing_map.get_mut(&None) {
                 for resource in resources.iter_mut() {
-                    resource.price_per_unit_rate *= multiplier;
+                    resource.price_per_unit_rate *= Decimal::from_f64(multiplier).unwrap();
                 }
             }
 
             if let Some(resources) = pricing_map.get_mut(&Some(blueprint_id)) {
                 for resource in resources.iter_mut() {
-                    resource.price_per_unit_rate *= multiplier;
+                    resource.price_per_unit_rate *= Decimal::from_f64(multiplier).unwrap();
                 }
             }
         }
@@ -459,8 +460,9 @@ resources = [
         );
     }
 
-    let quotes =
-        vec![blueprint_pricing_engine_lib::utils::create_on_chain_quote_type(quote_details)];
+    let quotes = vec![
+        blueprint_pricing_engine_lib::utils::create_on_chain_quote_type(quote_details).unwrap(),
+    ];
     info!("Quotes: {:?}", quotes);
 
     let request_args = RequestArgs::default();
