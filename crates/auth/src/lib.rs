@@ -9,6 +9,9 @@ pub mod proxy;
 /// Holds the authentication-related types.
 pub mod types;
 
+#[cfg(test)]
+mod test_client;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Error related to the ECDSA signature verification.
@@ -47,10 +50,10 @@ fn verify_challenge_ecdsa(
     signature: &[u8],
     pub_key: &[u8],
 ) -> Result<bool, Error> {
-    use k256::ecdsa::signature::Verifier;
+    use k256::ecdsa::signature::hazmat::PrehashVerifier;
     let pub_key = k256::ecdsa::VerifyingKey::from_sec1_bytes(pub_key)?;
     let signature = k256::ecdsa::Signature::try_from(signature)?;
-    Ok(pub_key.verify(challenge, &signature).is_ok())
+    Ok(pub_key.verify_prehash(challenge, &signature).is_ok())
 }
 
 /// Verifies the challenge solution using SR25519.

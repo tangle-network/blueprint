@@ -31,8 +31,13 @@ hyper-util = { workspace = true, features = ["client"] }
 [dev-dependencies]
 blueprint-sdk = { path = "../sdk", features = ["std"] }
 serde_json = { workspace = true, features = ["alloc"] }
-tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter"] }
+bytes = { workspace = true }
+tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter", "make"] }
 tokio = { workspace = true, features = ["full"] }
+axum = { workspace = true, features = ["json", "multipart", "http1", "tokio"] }
+reqwest = { workspace = true, features = ["json", "multipart"] }
+futures-util = { workspace = true }
+http = { workspace = true }
 
 [features]
 default = ["std", "tracing"]
