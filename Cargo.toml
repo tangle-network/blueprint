@@ -56,7 +56,7 @@ incredible-squaring-blueprint = { version = "0.1.1", path = "./examples/incredib
 incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./examples/incredible-squaring-eigenlayer", default-features = false }
 
 # Blueprint utils
-blueprint-manager = { version = "0.3.0-alpha.9", path = "./crates/manager", default-features = false }
+blueprint-manager = { version = "0.3.0-alpha.10", path = "./crates/manager", default-features = false }
 blueprint-build-utils = { version = "0.1.0-alpha.2", path = "./crates/build-utils", default-features = false }
 
 # Chain Setup
@@ -116,7 +116,7 @@ blueprint-eigenlayer-testing-utils = { version = "0.1.0-alpha.9", path = "./crat
 blueprint-metrics = { version = "0.1.0-alpha.3", path = "./crates/metrics", default-features = false }
 blueprint-metrics-rpc-calls = { version = "0.1.0-alpha.3", path = "./crates/metrics/rpc-calls", default-features = false }
 
-cargo-tangle = { version = "0.4.0-alpha.11", path = "./cli", default-features = false }
+cargo-tangle = { version = "0.4.0-alpha.12", path = "./cli", default-features = false }
 cargo_metadata = { version = "0.18.1" }
 tnt-core-bytecode = { version = "0.5.0", default-features = false }
 

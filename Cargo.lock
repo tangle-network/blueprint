@@ -3266,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager"
-version = "0.3.0-alpha.9"
+version = "0.3.0-alpha.10"
 dependencies = [
  "auto_impl",
  "blueprint-clients",
@@ -4173,7 +4173,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-tangle"
-version = "0.4.0-alpha.11"
+version = "0.4.0-alpha.12"
 dependencies = [
  "alloy-contract",
  "alloy-dyn-abi",
