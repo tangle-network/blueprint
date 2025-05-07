@@ -27,6 +27,10 @@ schnorrkel = { workspace = true }
 axum = { workspace = true, default-features = false, features = ["json"] }
 hyper-util = { workspace = true, features = ["client"] }
 
+# Database
+rocksdb = { workspace = true, features = ["lz4"] }
+prost = { workspace = true, features = ["derive"] }
+
 
 [dev-dependencies]
 blueprint-sdk = { path = "../sdk", features = ["std"] }
@@ -38,6 +42,7 @@ axum = { workspace = true, features = ["json", "multipart", "http1", "tokio"] }
 reqwest = { workspace = true, features = ["json", "multipart"] }
 futures-util = { workspace = true }
 http = { workspace = true }
+tempfile = { workspace = true }
 
 [features]
 default = ["std", "tracing"]

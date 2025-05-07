@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use axum::{extract::Request, response::Response, serve};
 use bytes::Bytes;
 use futures_util::future::BoxFuture;

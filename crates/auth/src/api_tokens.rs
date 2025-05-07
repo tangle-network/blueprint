@@ -2,6 +2,11 @@ use core::fmt::Display;
 
 use rand::{CryptoRng, RngCore};
 
+pub const CUSTOM_ENGINE: base64::engine::GeneralPurpose = base64::engine::GeneralPurpose::new(
+    &base64::alphabet::URL_SAFE,
+    base64::engine::general_purpose::NO_PAD,
+);
+
 /// API Token Generator That is responsible for generating API tokens.
 pub struct ApiTokenGenerator {
     /// The prefix to be used for the generated tokens.
@@ -13,7 +18,7 @@ pub struct GeneratedApiToken {
     /// The plaintext token that can be used for authentication through the API.
     plaintext: String,
     /// The hashed token that is stored in the database.
-    token: String,
+    pub(crate) token: String,
     /// The expiration time of the token in milliseconds since the epoch.
     /// If `None`, the token does not expire.
     expires_at: Option<i64>,
@@ -64,10 +69,6 @@ impl ApiTokenGenerator {
         expires_at: i64,
     ) -> GeneratedApiToken {
         use tiny_keccak::Hasher;
-        const CUSTOM_ENGINE: base64::engine::GeneralPurpose = base64::engine::GeneralPurpose::new(
-            &base64::alphabet::URL_SAFE,
-            base64::engine::general_purpose::NO_PAD,
-        );
         let mut token = vec![0u8; 40];
         rng.fill_bytes(&mut token);
         let checksum = crc32fast::hash(&token);

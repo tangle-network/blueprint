@@ -4,6 +4,10 @@ use rand::{CryptoRng, Rng};
 
 /// Generates API Tokens for the authentication process.
 pub mod api_tokens;
+/// The database module for the authentication process.
+pub mod db;
+/// Database models
+pub mod models;
 /// Authenticated Proxy Server built on top of Axum.
 pub mod proxy;
 /// Holds the authentication-related types.
@@ -20,6 +24,21 @@ pub enum Error {
     /// Error related to the SR25519 signature verification.
     #[error("Schnorrkel error: {0}")]
     Schnorrkel(schnorrkel::SignatureError),
+
+    #[error(transparent)]
+    RocksDB(#[from] rocksdb::Error),
+
+    #[error("Invalid database compaction style: {0}")]
+    InvalidDBCompactionStyle(String),
+
+    #[error("Invalid database compression type: {0}")]
+    InvalidDBCompressionType(String),
+
+    #[error("unknown database column family: {0}")]
+    UnknownColumnFamily(&'static str),
+
+    #[error(transparent)]
+    ProtobufDecode(#[from] prost::DecodeError),
 }
 
 /// Generates a random challenge string to be used in the authentication process.
