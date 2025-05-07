@@ -4,7 +4,7 @@ use super::binary::{BinarySourceFetcher, generate_running_process_status_handle}
 use crate::error::{Error, Result};
 use crate::sdk::utils::make_executable;
 use blueprint_core::trace;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
 use blueprint_runner::config::BlueprintEnvironment;
 use crate::config::SourceCandidates;
@@ -29,7 +29,7 @@ impl TestSourceFetcher {
 }
 
 impl BinarySourceFetcher for TestSourceFetcher {
-    async fn get_binary(&self) -> Result<PathBuf> {
+    async fn get_binary(&mut self, _cache_dir: &Path) -> Result<PathBuf> {
         let TestFetcher {
             cargo_package,
             base_path,
@@ -104,12 +104,12 @@ async fn get_git_repo_root_path() -> Result<PathBuf> {
 }
 
 impl BlueprintSourceHandler for TestSourceFetcher {
-    async fn fetch(&mut self) -> Result<()> {
+    async fn fetch(&mut self, cache_dir: &Path) -> Result<()> {
         if self.resolved_binary_path.is_some() {
             return Ok(());
         }
 
-        let mut binary_path = self.get_binary().await?;
+        let mut binary_path = self.get_binary(cache_dir).await?;
 
         // Ensure the binary is executable
         binary_path = make_executable(&binary_path)?;

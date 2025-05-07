@@ -1,3 +1,6 @@
+#![cfg(not(unix))]
+compile_error!("The blueprint manager cannot be run on non-unix systems");
+
 use blueprint_manager::config::BlueprintManagerConfig;
 use blueprint_manager::sdk::entry;
 use clap::Parser;

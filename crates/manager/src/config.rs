@@ -28,9 +28,12 @@ pub struct BlueprintManagerConfig {
     /// The path to the keystore
     #[arg(short = 'k', long)]
     pub keystore_uri: String,
-    /// The directory in which all gadgets will store their data
+    /// The directory in which all blueprints will store their data
     #[arg(long, short = 'd', default_value = "./data")]
     pub data_dir: PathBuf,
+    /// The cache directory for blueprint manager downloads
+    #[arg(long, short = 'd', default_value_os_t = default_cache_dir())]
+    pub cache_dir: PathBuf,
     /// The verbosity level, can be used multiple times to increase verbosity
     #[arg(long, short = 'v', action = clap::ArgAction::Count)]
     pub verbose: u8,
@@ -43,6 +46,11 @@ pub struct BlueprintManagerConfig {
     pub instance_id: Option<String>,
     #[arg(long, short = 't')]
     pub test_mode: bool,
+    /// Whether to allow invalid GitHub attestations (binary integrity checks)
+    ///
+    /// This will also allow for running the manager without the GitHub CLI installed.
+    #[arg(long)]
+    pub allow_unchecked_attestations: bool,
     /// The preferred way to run a blueprint.
     ///
     /// This is not a guarantee that the blueprint will use this method, as there may not be a source
@@ -52,6 +60,31 @@ pub struct BlueprintManagerConfig {
     /// The location of the Podman-Docker socket
     #[arg(long, short, default_value_t = DEFAULT_DOCKER_HOST.clone())]
     pub podman_host: Url,
+}
+
+fn default_cache_dir() -> PathBuf {
+    match dirs::cache_dir() {
+        Some(dir) => dir.join("blueprint-manager"),
+        None => PathBuf::from("./blueprint-manager-cache"),
+    }
+}
+
+impl Default for BlueprintManagerConfig {
+    fn default() -> Self {
+        Self {
+            gadget_config: None,
+            keystore_uri: "./keystore".into(),
+            data_dir: PathBuf::from("./data"),
+            cache_dir: default_cache_dir(),
+            verbose: 0,
+            pretty: false,
+            instance_id: None,
+            test_mode: false,
+            allow_unchecked_attestations: false,
+            preferred_source: SourceType::default(),
+            podman_host: DEFAULT_DOCKER_HOST.clone(),
+        }
+    }
 }
 
 #[derive(clap::ValueEnum, Debug, Copy, Clone, Default, PartialEq, Eq)]

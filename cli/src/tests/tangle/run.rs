@@ -137,6 +137,7 @@ async fn test_run_blueprint() -> Result<()> {
         signer: Some(harness.sr25519_signer.clone()),
         signer_evm: Some(harness.alloy_key.clone()),
         podman_host: None,
+        allow_unchecked_attestations: false,
     };
 
     let _run_task = tokio::spawn(async move { run_blueprint(run_opts).await });

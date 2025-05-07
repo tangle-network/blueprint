@@ -13,6 +13,7 @@ use blueprint_runner::config::BlueprintEnvironment;
 use std::future::Future;
 use url::Url;
 use std::net::IpAddr;
+use std::path::Path;
 use tokio::net::lookup_host;
 use crate::config::SourceCandidates;
 
@@ -78,7 +79,7 @@ async fn adjust_url_for_container(raw_url: &str) -> String {
 
 // TODO(serial): Stop using `Error::Other` everywhere.
 impl BlueprintSourceHandler for ContainerSource {
-    async fn fetch(&mut self) -> Result<()> {
+    async fn fetch(&mut self, _cache_dir: &Path) -> Result<()> {
         let registry = String::from_utf8(self.fetcher.registry.0.0.clone())
             .map_err(|e| Error::Other(e.to_string()))?;
         let image = String::from_utf8(self.fetcher.image.0.0.clone())

@@ -1,3 +1,5 @@
+use tangle_subxt::subxt::ext::jsonrpsee::core::__reexports::serde_json;
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -17,6 +19,10 @@ pub enum Error {
     BuildBinary(std::process::Output),
     #[error("Failed to fetch git root: {0:?}")]
     FetchGitRoot(std::process::Output),
+    #[error("Failed to verify attestation for GitHub release")]
+    AttestationFailed,
+    #[error("No GitHub CLI found, is it installed?")]
+    NoGithubCli,
 
     #[error("Failed to get initial block hash")]
     InitialBlock,
@@ -28,7 +34,11 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
+    WalkDir(#[from] walkdir::Error),
+    #[error(transparent)]
     Utf8(#[from] std::string::FromUtf8Error),
+    #[error(transparent)]
+    Serialization(#[from] serde_json::Error),
 
     #[error(transparent)]
     Request(#[from] reqwest::Error),

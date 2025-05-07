@@ -28,6 +28,10 @@ pub struct RunOpts {
     pub keystore_path: Option<String>,
     /// The data directory path
     pub data_dir: Option<PathBuf>,
+    /// Whether to allow invalid GitHub attestations (binary integrity checks)
+    ///
+    /// This will also allow for running the manager without the GitHub CLI installed.
+    pub allow_unchecked_attestations: bool,
     /// The Podman host to use for containerized blueprints
     pub podman_host: Option<Url>,
 }
@@ -75,6 +79,7 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         pretty: true,
         instance_id: Some(format!("Blueprint-{}", blueprint_id)),
         test_mode: false,
+        allow_unchecked_attestations: opts.allow_unchecked_attestations,
         preferred_source: SourceType::default(),
         podman_host: opts.podman_host.unwrap_or(DEFAULT_DOCKER_HOST.clone()),
     };

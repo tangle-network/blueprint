@@ -208,6 +208,9 @@ parking_lot = { version = "0.12.3", default-features = false }
 tempfile = { version = "3.13.0", default-features = false }
 uuid = { version = "1.16.0", default-features = false }
 blake3 = { version = "1.8.2", default-features = false }
+tar = "0.4.44"
+xz = "0.1.0"
+walkdir = "2.5.0"
 
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }
@@ -224,6 +227,7 @@ dirs = { version = "6.0.0", default-features = false }
 indicatif = { version = "0.17.8", default-features = false }
 document-features = "0.2.11"
 rustversion = "1.0.20"
+cargo-dist-schema = "0.28.0"
 
 # Time & Date
 time = { version = "0.3.41", default-features = false }

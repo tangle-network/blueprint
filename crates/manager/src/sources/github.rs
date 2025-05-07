@@ -1,14 +1,21 @@
+use std::fs::File;
 use super::BlueprintSourceHandler;
 use super::ProcessHandle;
 use super::binary::{BinarySourceFetcher, generate_running_process_status_handle};
 use crate::error::{Error, Result};
 use crate::gadget::native::get_blueprint_binary;
 use crate::sdk;
-use crate::sdk::utils::{get_download_url, make_executable, valid_file_exists};
+use crate::sdk::utils::{make_executable, valid_file_exists};
 use blueprint_core::info;
-use std::path::PathBuf;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::GithubFetcher;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use cargo_dist_schema::{ArtifactKind, AssetKind, DistManifest};
+use tangle_subxt::subxt::ext::jsonrpsee::core::__reexports::serde_json;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{BlueprintBinary, GithubFetcher};
+use tar::Archive;
 use tokio::io::AsyncWriteExt;
+use tracing::error;
+use xz::read::XzDecoder;
 use blueprint_runner::config::BlueprintEnvironment;
 use crate::config::SourceCandidates;
 
@@ -16,76 +23,164 @@ pub struct GithubBinaryFetcher {
     pub fetcher: GithubFetcher,
     pub blueprint_id: u64,
     pub gadget_name: String,
+    allow_unchecked_attestations: bool,
+    target_binary_name: Option<String>,
     resolved_binary_path: Option<PathBuf>,
 }
 
 impl GithubBinaryFetcher {
     #[must_use]
-    pub fn new(fetcher: GithubFetcher, blueprint_id: u64, gadget_name: String) -> Self {
+    pub fn new(
+        fetcher: GithubFetcher,
+        blueprint_id: u64,
+        gadget_name: String,
+        allow_unchecked_attestations: bool,
+    ) -> Self {
         GithubBinaryFetcher {
             fetcher,
             blueprint_id,
             gadget_name,
+            allow_unchecked_attestations,
+            target_binary_name: None,
             resolved_binary_path: None,
         }
     }
 }
 
 impl BinarySourceFetcher for GithubBinaryFetcher {
-    async fn get_binary(&self) -> Result<PathBuf> {
+    async fn get_binary(&mut self, cache_dir: &Path) -> Result<PathBuf> {
         let relevant_binary =
             get_blueprint_binary(&self.fetcher.binaries.0).ok_or(Error::NoMatchingBinary)?;
+        let relevant_binary_name = String::from_utf8(relevant_binary.name.0.0.clone())?;
+
         let expected_hash = sdk::utils::slice_32_to_sha_hex_string(relevant_binary.sha256);
-        let current_dir = std::env::current_dir()?;
 
         let tag_str = std::str::from_utf8(&self.fetcher.tag.0.0).map_or_else(
             |_| self.fetcher.tag.0.0.escape_ascii().to_string(),
             ToString::to_string,
         );
 
-        // TODO: !!! This is not going to work for multiple blueprints. There *will* be collisions.
-        let mut binary_download_path = format!("{}/protocol-{tag_str}", current_dir.display());
-
-        if cfg!(target_family = "windows") {
-            binary_download_path += ".exe";
-        }
+        let archive_file_name = format!("archive-{tag_str}");
+        let mut archive_download_path = cache_dir.join(archive_file_name);
 
         // Check if the binary exists, if not download it
-        if valid_file_exists(&binary_download_path, &expected_hash).await {
-            info!("Binary already exists at: {binary_download_path}");
-            return Ok(PathBuf::from(binary_download_path));
+        if valid_file_exists(&archive_download_path, &expected_hash).await {
+            info!(
+                "Archive already exists at: {}",
+                archive_download_path.display()
+            );
+            return Ok(PathBuf::from(archive_download_path));
         }
 
-        let url = get_download_url(relevant_binary, &self.fetcher);
-        info!("Downloading binary from {url} to {binary_download_path}");
+        let urls = DownloadUrls::new(relevant_binary, &self.fetcher);
+        info!("Downloading dist manifest from {}", urls.dist_manifest);
 
-        let download = reqwest::get(&url).await?.bytes().await?;
-        // let retrieved_hash = hash_bytes_to_hex(&download);
+        let Ok(manifest) = reqwest::get(urls.dist_manifest).await else {
+            error!(
+                "No dist manifest found for blueprint {} (id: {}, tag: {tag_str})",
+                self.blueprint_id, self.blueprint_id
+            );
+            return Err(Error::NoMatchingBinary);
+        };
 
-        // Write the binary to disk
-        let mut file = tokio::fs::File::create(&binary_download_path).await?;
-        file.write_all(&download).await?;
+        let manifest_contents = manifest.bytes().await?;
+        let manifest: DistManifest = serde_json::from_slice(manifest_contents.as_ref())?;
+
+        let mut found_asset = false;
+        for (_, artifact) in manifest.artifacts {
+            if !matches!(artifact.kind, ArtifactKind::ExecutableZip) {
+                continue;
+            }
+
+            for asset in artifact.assets {
+                if !matches!(asset.kind, AssetKind::Executable(_)) {
+                    continue;
+                }
+
+                if asset.name.is_some_and(|s| s == relevant_binary_name) {
+                    found_asset = true;
+                }
+            }
+        }
+
+        if !found_asset {
+            error!(
+                "Didn't find binary asset `{relevant_binary_name}` in manifest, malformed blueprint?"
+            );
+            return Err(Error::NoMatchingBinary);
+        }
+
+        self.target_binary_name = Some(relevant_binary_name);
+
+        info!(
+            "Downloading binary from {} to {}",
+            urls.binary_archive_url,
+            archive_download_path.display()
+        );
+
+        let archive = reqwest::get(&urls.binary_archive_url)
+            .await?
+            .bytes()
+            .await?;
+
+        // Write the archive to disk
+        let mut file = tokio::fs::File::create(&archive_download_path).await?;
+        file.write_all(&archive).await?;
         file.flush().await?;
 
-        // TODO(HACK)
-        // if retrieved_hash.trim() != expected_hash.trim() {
-        //     return Err(Error::HashMismatch {
-        //         expected: expected_hash,
-        //         actual: retrieved_hash,
-        //     });
-        // }
-
-        Ok(PathBuf::from(binary_download_path))
+        Ok(PathBuf::from(archive_download_path))
     }
 }
 
 impl BlueprintSourceHandler for GithubBinaryFetcher {
-    async fn fetch(&mut self) -> Result<()> {
+    async fn fetch(&mut self, cache_dir: &Path) -> Result<()> {
         if self.resolved_binary_path.is_some() {
             return Ok(());
         }
 
-        let mut binary_path = self.get_binary().await?;
+        let archive_path = self.get_binary(cache_dir).await?;
+
+        let owner =
+            String::from_utf8(self.fetcher.owner.0.0.clone()).expect("Should be a valid owner");
+        let repo =
+            String::from_utf8(self.fetcher.repo.0.0.clone()).expect("Should be a valid repo");
+
+        match verify_attestation(&owner, &repo, &archive_path) {
+            AttestationResult::Ok => {}
+            AttestationResult::NotMatching | AttestationResult::NoGithubCli
+                if self.allow_unchecked_attestations => {}
+            AttestationResult::NotMatching => return Err(Error::AttestationFailed),
+            AttestationResult::NoGithubCli => {
+                error!("No GitHub CLI found, unable to verify attestation.");
+                return Err(Error::NoGithubCli);
+            }
+        }
+
+        let tar_xz = File::open(&archive_path)?;
+        let tar = XzDecoder::new(tar_xz);
+        let mut archive = Archive::new(tar);
+
+        archive.unpack(cache_dir)?;
+
+        // sanity check that the binary actually there
+        let mut binary_path = None;
+        for entry in walkdir::WalkDir::new(cache_dir) {
+            let entry = entry?;
+            if !entry.file_type().is_file() {
+                continue;
+            }
+
+            if entry.file_name().to_str() != self.target_binary_name.as_deref() {
+                continue;
+            }
+
+            binary_path = Some(entry.path().to_path_buf());
+        }
+
+        let Some(mut binary_path) = binary_path else {
+            error!("Expected binary not found in the archive, bad manifest?");
+            return Err(Error::NoMatchingBinary);
+        };
 
         // Ensure the binary is executable
         binary_path = make_executable(&binary_path)?;
@@ -122,5 +217,58 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
 
     fn name(&self) -> String {
         self.gadget_name.clone()
+    }
+}
+
+struct DownloadUrls {
+    binary_archive_url: String,
+    dist_manifest: String,
+}
+
+impl DownloadUrls {
+    fn new(binary: &BlueprintBinary, fetcher: &GithubFetcher) -> Self {
+        let owner = String::from_utf8(fetcher.owner.0.0.clone()).expect("Should be a valid owner");
+        let repo = String::from_utf8(fetcher.repo.0.0.clone()).expect("Should be a valid repo");
+        let tag = String::from_utf8(fetcher.tag.0.0.clone()).expect("Should be a valid tag");
+        let binary_name =
+            String::from_utf8(binary.name.0.0.clone()).expect("Should be a valid binary name");
+        let os_name = format!("{:?}", binary.os).to_lowercase();
+        let arch_name = format!("{:?}", binary.arch).to_lowercase();
+        let binary_archive_url = format!(
+            "https://github.com/{owner}/{repo}/releases/download/{tag}/{binary_name}-{os_name}-{arch_name}.tar.xz"
+        );
+
+        let dist_manifest =
+            format!("https://github.com/{owner}/{repo}/releases/download/{tag}/dist-manifest.json");
+        Self {
+            binary_archive_url,
+            dist_manifest,
+        }
+    }
+}
+
+enum AttestationResult {
+    Ok,
+    NotMatching,
+    NoGithubCli,
+}
+
+fn verify_attestation(owner: &str, repo: &str, binary: impl AsRef<Path>) -> AttestationResult {
+    match Command::new("which").arg("gh").output() {
+        Ok(output) if output.status.success() => {}
+        Ok(_) | Err(_) => return AttestationResult::NoGithubCli,
+    }
+
+    let repo = format!("{owner}/{repo}");
+    match Command::new("gh")
+        .args(["attestation", "verify"])
+        .arg(binary.as_ref())
+        .arg("--repo")
+        .arg(repo)
+        .output()
+    {
+        Ok(output) if output.status.success() => AttestationResult::Ok,
+        Ok(_) => AttestationResult::NotMatching,
+        Err(_) => AttestationResult::NoGithubCli,
     }
 }
