@@ -1,4 +1,4 @@
-# Gadget Keystore
+# Blueprint Keystore
 
 A flexible and secure keystore implementation supporting multiple key types, storage backends, and remote signing capabilities.
 

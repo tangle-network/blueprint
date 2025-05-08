@@ -24,7 +24,7 @@ where
 }
 
 /// A random number generator that works in both std and `no_std` environments
-pub struct GadgetRng(RngImpl);
+pub struct BlueprintRng(RngImpl);
 
 #[cfg(feature = "std")]
 type RngImpl = rand::rngs::OsRng;
@@ -32,7 +32,7 @@ type RngImpl = rand::rngs::OsRng;
 #[cfg(not(feature = "std"))]
 type RngImpl = StdRng;
 
-impl GadgetRng {
+impl BlueprintRng {
     /// Create a new cryptographically secure random number generator
     #[must_use]
     pub fn new() -> Self {
@@ -64,16 +64,16 @@ impl GadgetRng {
     }
 }
 
-impl Default for GadgetRng {
+impl Default for BlueprintRng {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl CryptoRng for GadgetRng {}
+impl CryptoRng for BlueprintRng {}
 
 #[cfg(feature = "std")]
-impl RngCore for GadgetRng {
+impl RngCore for BlueprintRng {
     fn next_u32(&mut self) -> u32 {
         self.0.next_u32()
     }
@@ -89,7 +89,7 @@ impl RngCore for GadgetRng {
 }
 
 #[cfg(not(feature = "std"))]
-impl RngCore for GadgetRng {
+impl RngCore for BlueprintRng {
     fn next_u32(&mut self) -> u32 {
         self.0.r#gen()
     }
@@ -107,12 +107,12 @@ impl RngCore for GadgetRng {
 
 /// Create a deterministic RNG for testing
 #[must_use]
-pub fn test_rng() -> GadgetRng {
+pub fn test_rng() -> BlueprintRng {
     const TEST_SEED: [u8; 32] = [
         1, 0, 0, 0, 23, 0, 0, 0, 200, 1, 0, 0, 210, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0,
     ];
-    GadgetRng::from_seed(TEST_SEED)
+    BlueprintRng::from_seed(TEST_SEED)
 }
 
 #[cfg(test)]
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn test_rng_generates_different_values() {
-        let mut rng = GadgetRng::new();
+        let mut rng = BlueprintRng::new();
         assert_ne!(rng.next_u64(), rng.next_u64());
     }
 
@@ -129,8 +129,8 @@ mod tests {
     fn test_deterministic_rng() {
         #[cfg(not(feature = "std"))]
         {
-            let mut rng1 = GadgetRng::from_seed([1u8; 32]);
-            let mut rng2 = GadgetRng::from_seed([1u8; 32]);
+            let mut rng1 = BlueprintRng::from_seed([1u8; 32]);
+            let mut rng2 = BlueprintRng::from_seed([1u8; 32]);
             assert_eq!(rng1.next_u64(), rng2.next_u64());
         }
     }

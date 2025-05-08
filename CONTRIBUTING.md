@@ -1,6 +1,6 @@
-# Contributing to Tangle Network's Gadget Repository
+# Contributing to Tangle Network's Blueprint Repository
 
-Thank you for your interest in contributing to the Tangle Network Gadget project! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to the Tangle Network Blueprint project! This document provides guidelines and instructions for contributing.
 
 ## Table of Contents
 
@@ -45,8 +45,8 @@ Thank you for your interest in contributing to the Tangle Network Gadget project
 
 3. Clone the repository:
    ```bash
-   git clone https://github.com/tangle-network/gadget.git
-   cd gadget
+   git clone https://github.com/tangle-network/blueprint.git
+   cd blueprint
    ```
 
 ### Project Structure

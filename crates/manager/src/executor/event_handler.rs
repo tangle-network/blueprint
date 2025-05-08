@@ -1,7 +1,7 @@
 use crate::config::{BlueprintManagerConfig, SourceCandidates};
 use crate::error::{Error, Result};
-use crate::gadget::native::FilteredBlueprint;
-use crate::gadget::ActiveGadgets;
+use crate::blueprint::native::FilteredBlueprint;
+use crate::blueprint::ActiveBlueprints;
 use crate::sdk::utils::bounded_string_to_string;
 use crate::sources::github::GithubBinaryFetcher;
 use crate::sources::{process_arguments_and_env, BlueprintSourceHandler, DynBlueprintSource, Status};
@@ -30,9 +30,9 @@ impl VerifiedBlueprint {
     pub async fn start_services_if_needed(
         &mut self,
         source_candidates: &SourceCandidates,
-        gadget_config: &BlueprintEnvironment,
+        blueprint_config: &BlueprintEnvironment,
         manager_config: &BlueprintManagerConfig,
-        active_gadgets: &mut ActiveGadgets,
+        active_blueprints: &mut ActiveBlueprints,
     ) -> Result<()> {
         let cache_dir = manager_config.cache_dir.join(format!(
             "{}-{}",
@@ -52,7 +52,7 @@ impl VerifiedBlueprint {
             let blueprint = &self.blueprint;
 
             let blueprint_id = source.blueprint_id();
-            if active_gadgets.contains_key(&blueprint_id) {
+            if active_blueprints.contains_key(&blueprint_id) {
                 return Ok(());
             }
 
@@ -68,7 +68,7 @@ impl VerifiedBlueprint {
             for service_id in &blueprint.services {
                 let sub_service_str = format!("{service_str}-{service_id}");
                 let (arguments, env_vars) = process_arguments_and_env(
-                    gadget_config,
+                    blueprint_config,
                     manager_config,
                     blueprint_id,
                     *service_id,
@@ -85,7 +85,7 @@ impl VerifiedBlueprint {
                 let mut handle = source
                     .spawn(
                         source_candidates,
-                        gadget_config,
+                        blueprint_config,
                         &sub_service_str,
                         arguments,
                         env_vars,
@@ -132,7 +132,7 @@ impl VerifiedBlueprint {
                     continue;
                 }
 
-                active_gadgets
+                active_blueprints
                     .entry(blueprint_id)
                     .or_default()
                     .insert(*service_id, handle);
@@ -164,7 +164,7 @@ pub struct EventPollResult {
 
 pub(crate) fn check_blueprint_events(
     event: &TangleEvent,
-    active_gadgets: &mut ActiveGadgets,
+    active_blueprints: &mut ActiveBlueprints,
     account_id: &AccountId32,
 ) -> EventPollResult {
     let pre_registration_events = event.events.find::<PreRegistration>();
@@ -208,7 +208,7 @@ pub(crate) fn check_blueprint_events(
         match evt {
             Ok(evt) => {
                 info!("Unregistered event: {evt:?}");
-                if &evt.operator == account_id && active_gadgets.remove(&evt.blueprint_id).is_some()
+                if &evt.operator == account_id && active_blueprints.remove(&evt.blueprint_id).is_some()
                 {
                     info!("Removed services for blueprint_id: {}", evt.blueprint_id,);
 
@@ -266,9 +266,9 @@ pub(crate) async fn handle_tangle_event(
     event: &TangleEvent,
     source_candidates: &SourceCandidates,
     blueprints: &[RpcServicesWithBlueprint],
-    gadget_config: &BlueprintEnvironment,
+    blueprint_config: &BlueprintEnvironment,
     manager_config: &BlueprintManagerConfig,
-    active_gadgets: &mut ActiveGadgets,
+    active_blueprints: &mut ActiveBlueprints,
     poll_result: EventPollResult,
     client: &TangleServicesClient<TangleConfig>,
 ) -> Result<()> {
@@ -336,9 +336,9 @@ pub(crate) async fn handle_tangle_event(
         blueprint
             .start_services_if_needed(
                 source_candidates,
-                gadget_config,
+                blueprint_config,
                 manager_config,
-                active_gadgets,
+                active_blueprints,
             )
             .await?;
     }
@@ -347,7 +347,7 @@ pub(crate) async fn handle_tangle_event(
     let mut to_remove: Vec<(u64, u64)> = vec![];
 
     // Loop through every (blueprint_id, service_id) running. See if the service is still on-chain. If not, kill it and add it to to_remove
-    for (blueprint_id, process_handles) in &mut *active_gadgets {
+    for (blueprint_id, process_handles) in &mut *active_blueprints {
         for (service_id, process_handle) in process_handles {
             info!(
                 "Checking service for on-chain termination: bid={blueprint_id}//sid={service_id}"
@@ -378,12 +378,12 @@ pub(crate) async fn handle_tangle_event(
 
     for (blueprint_id, service_id) in to_remove {
         let mut should_delete_blueprint = false;
-        if let Some(gadgets) = active_gadgets.get_mut(&blueprint_id) {
+        if let Some(blueprints) = active_blueprints.get_mut(&blueprint_id) {
             warn!(
                 "Removing service that is no longer active on-chain or killed: bid={blueprint_id}//sid={service_id}"
             );
 
-            if let Some(process_handle) = gadgets.remove(&service_id) {
+            if let Some(process_handle) = blueprints.remove(&service_id) {
                 if process_handle.abort() {
                     warn!("Sent abort signal to service: bid={blueprint_id}//sid={service_id}");
                 } else {
@@ -393,13 +393,13 @@ pub(crate) async fn handle_tangle_event(
                 }
             }
 
-            if gadgets.is_empty() {
+            if blueprints.is_empty() {
                 should_delete_blueprint = true;
             }
         }
 
         if should_delete_blueprint {
-            active_gadgets.remove(&blueprint_id);
+            active_blueprints.remove(&blueprint_id);
         }
     }
 
@@ -416,8 +416,8 @@ fn get_fetcher_candidates(
     for (source_idx, blueprint_source) in blueprint.sources.iter().enumerate() {
         match &blueprint_source {
             BlueprintSource::Wasm { .. } => {
-                warn!("WASM gadgets are not supported yet");
-                return Err(Error::UnsupportedGadget);
+                warn!("WASM blueprints are not supported yet");
+                return Err(Error::UnsupportedBlueprint);
             }
 
             BlueprintSource::Native(native) => match native {
@@ -432,7 +432,7 @@ fn get_fetcher_candidates(
                 }
                 NativeFetcher::IPFS(_) => {
                     warn!("IPFS Native sources are not supported yet");
-                    return Err(Error::UnsupportedGadget);
+                    return Err(Error::UnsupportedBlueprint);
                 }
             },
 

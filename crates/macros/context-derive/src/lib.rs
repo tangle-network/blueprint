@@ -8,7 +8,7 @@
     unused_results,
     clippy::exhaustive_enums
 )]
-//! Proc-macros for deriving Context Extensions from [`gadget-sdk`](https://crates.io/crates/gadget-sdk) crate.
+//! Proc-macros for deriving Context Extensions from [`blueprint-sdk`](https://crates.io/crates/blueprint-sdk) crate.
 use proc_macro::TokenStream;
 
 /// Field information for the configuration field.
@@ -25,7 +25,7 @@ mod keystore;
 mod tangle;
 
 const CONFIG_TAG_NAME: &str = "config";
-const CONFIG_TAG_TYPE: &str = "gadget_config::BlueprintEnvironment";
+const CONFIG_TAG_TYPE: &str = "blueprint_config::BlueprintEnvironment";
 
 /// Derive macro for generating Context Extensions trait implementation for `KeystoreContext`.
 #[proc_macro_derive(KeystoreContext, attributes(config))]
