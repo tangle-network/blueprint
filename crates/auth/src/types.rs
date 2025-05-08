@@ -142,12 +142,26 @@ where
 }
 
 /// Represents the different types of cryptographic keys used in the authentication process.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    prost::Enumeration,
+)]
+#[repr(i32)]
 pub enum KeyType {
+    Unknown = 0,
     /// Ecdsa key type
-    Ecdsa,
+    Ecdsa = 1,
     /// Sr25519 key type
-    Sr25519,
+    Sr25519 = 2,
 }
 
 /// Represents the challenge request sent from the client to the server to request a challenge.
@@ -192,7 +206,7 @@ pub enum VerifyChallengeResponse {
     Verified {
         /// The access token to be used for authentication from now on
         access_token: String,
-        /// A unix timestamp in milliseconds since epoch at which the access token will expire
+        /// A UNIX timestamp in milliseconds since epoch at which the access token will expire
         expires_at: i64,
     },
     /// The challenge was not verified because the challenge has expired
@@ -200,7 +214,7 @@ pub enum VerifyChallengeResponse {
     /// The challenge was not verified because the signature is invalid
     InvalidSignature,
 
-    /// an unexpected error occurred during verification
+    /// An unexpected error occurred during verification
     UnexpectedError {
         /// The error message
         message: String,

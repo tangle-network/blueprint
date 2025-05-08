@@ -2,6 +2,8 @@ use core::fmt::Display;
 
 use rand::{CryptoRng, RngCore};
 
+use crate::types::ServiceId;
+
 pub const CUSTOM_ENGINE: base64::engine::GeneralPurpose = base64::engine::GeneralPurpose::new(
     &base64::alphabet::URL_SAFE,
     base64::engine::general_purpose::NO_PAD,
@@ -19,6 +21,8 @@ pub struct GeneratedApiToken {
     plaintext: String,
     /// The hashed token that is stored in the database.
     pub(crate) token: String,
+    /// The ID of the service that the token is associated with.
+    pub(crate) service_id: ServiceId,
     /// The expiration time of the token in milliseconds since the epoch.
     /// If `None`, the token does not expire.
     expires_at: Option<i64>,
@@ -55,18 +59,23 @@ impl ApiTokenGenerator {
         }
     }
 
-    /// Generates a new API token without an expiration time.
+    /// Generates a new API token without an expiration time for the given service ID.
     ///
     /// This is a convenience method that calls [`generate_token_with_expiration`](Self::generate_token_with_expiration) with an expiration time of 0.
-    pub fn generate_token<R: RngCore + CryptoRng>(&self, rng: &mut R) -> GeneratedApiToken {
-        self.generate_token_with_expiration(rng, 0)
+    pub fn generate_token<R: RngCore + CryptoRng>(
+        &self,
+        service_id: ServiceId,
+        rng: &mut R,
+    ) -> GeneratedApiToken {
+        self.generate_token_with_expiration(service_id, 0, rng)
     }
 
     /// Generates a new API token with the specified expiration time.
     pub fn generate_token_with_expiration<R: RngCore + CryptoRng>(
         &self,
-        rng: &mut R,
+        service_id: ServiceId,
         expires_at: i64,
+        rng: &mut R,
     ) -> GeneratedApiToken {
         use tiny_keccak::Hasher;
         let mut token = vec![0u8; 40];
@@ -85,6 +94,7 @@ impl ApiTokenGenerator {
         GeneratedApiToken {
             plaintext: token_str,
             token: base64::Engine::encode(&CUSTOM_ENGINE, output),
+            service_id,
             expires_at: if expires_at != 0 {
                 Some(expires_at)
             } else {
@@ -98,8 +108,8 @@ impl GeneratedApiToken {
     /// Get the plaintext token to be shared with the client with the given ID.
     ///
     /// The ID could be an incremental number to identify the token in the database, should be unique.
-    pub fn plaintext<I: AsRef<str>>(&self, id: I) -> String {
-        format!("{}|{}", self.plaintext, id.as_ref())
+    pub fn plaintext(&self, id: u64) -> String {
+        format!("{}|{}", self.plaintext, id)
     }
 
     /// Get the hashed token to be stored in the database.

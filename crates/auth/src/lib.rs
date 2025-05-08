@@ -39,6 +39,9 @@ pub enum Error {
 
     #[error(transparent)]
     ProtobufDecode(#[from] prost::DecodeError),
+
+    #[error("Unknown key type")]
+    UnknownKeyType,
 }
 
 /// Generates a random challenge string to be used in the authentication process.
@@ -58,6 +61,7 @@ pub fn verify_challenge(
     key_type: types::KeyType,
 ) -> Result<bool, Error> {
     match key_type {
+        types::KeyType::Unknown => Err(Error::UnknownKeyType),
         types::KeyType::Ecdsa => verify_challenge_ecdsa(challenge, signature, pub_key),
         types::KeyType::Sr25519 => verify_challenge_sr25519(challenge, signature, pub_key),
     }

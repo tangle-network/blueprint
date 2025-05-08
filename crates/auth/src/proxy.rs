@@ -1,6 +1,8 @@
+use std::path::Path;
+
 use axum::Json;
 use axum::{
-    Extension, Router,
+    Router,
     body::Body,
     extract::{Request, State},
     http::StatusCode,
@@ -11,39 +13,46 @@ use axum::{
 };
 use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor, rt::TokioTimer};
 
+use crate::api_tokens::ApiTokenGenerator;
+use crate::models::ApiTokenModel;
 use crate::types::ServiceId;
 
 type HTTPClient = hyper_util::client::legacy::Client<HttpConnector, Body>;
 
 pub struct AuthenticatedProxy {
     client: HTTPClient,
-    target_host_map: hashbrown::HashMap<ServiceId, Uri>,
+    db: crate::db::RocksDb,
 }
 
 #[derive(Clone, Debug)]
-struct TargetMap(hashbrown::HashMap<ServiceId, Uri>);
+pub struct AuthenticatedProxyState {
+    client: HTTPClient,
+    db: crate::db::RocksDb,
+}
 
 impl AuthenticatedProxy {
-    pub fn new(service_id: ServiceId, target_host: Uri) -> Self {
+    pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self, crate::Error> {
         let executer = TokioExecutor::new();
         let timer = TokioTimer::new();
         let client: HTTPClient = hyper_util::client::legacy::Builder::new(executer)
             .pool_idle_timeout(std::time::Duration::from_secs(60))
             .pool_timer(timer)
             .build(HttpConnector::new());
-        AuthenticatedProxy {
-            client,
-            target_host_map: hashbrown::HashMap::from([(service_id, target_host)]),
-        }
+        let db_config = crate::db::RocksDbConfig::default();
+        let db = crate::db::RocksDb::open(db_path, &db_config)?;
+        Ok(AuthenticatedProxy { client, db })
     }
 
     pub fn router(self) -> Router {
+        let state = AuthenticatedProxyState {
+            db: self.db,
+            client: self.client,
+        };
         Router::new()
             .route("/auth/challenge", post(auth_challenge))
             .route("/auth/verify", post(auth_verify))
             .fallback(any(reverse_proxy))
-            .layer(axum::Extension(self.client))
-            .layer(axum::Extension(TargetMap(self.target_host_map)))
+            .with_state(state)
     }
 }
 
@@ -67,8 +76,10 @@ async fn auth_challenge(
 /// Auth verify endpoint that handles authentication verification
 async fn auth_verify(
     service_id: ServiceId,
+    State(s): State<AuthenticatedProxyState>,
     Json(payload): Json<crate::types::VerifyChallengeRequest>,
 ) -> impl IntoResponse {
+    let mut rng = rand::thread_rng();
     // TODO: check public key of the sender.
     // Verify the challenge
     let result = crate::verify_challenge(
@@ -77,40 +88,47 @@ async fn auth_verify(
         &payload.challenge_request.pub_key,
         payload.challenge_request.key_type,
     );
+    // TODO: support API Token prefix
+    let token_gen = ApiTokenGenerator::new();
     match result {
         Ok(true) => {
-            // Generate an API token and send it to the user.
-            let token = String::from("token");
-            return (
+            let token = token_gen.generate_token(service_id, &mut rng);
+            let id = match ApiTokenModel::from(&token).save(&s.db) {
+                Ok(id) => id,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(crate::types::VerifyChallengeResponse::UnexpectedError {
+                            message: format!("Internal server error: {}", e),
+                        }),
+                    );
+                }
+            };
+            let plaintext = token.plaintext(id);
+            (
                 StatusCode::CREATED,
                 Json(crate::types::VerifyChallengeResponse::Verified {
-                    access_token: token,
+                    access_token: plaintext,
                     expires_at: 0,
                 }),
-            );
+            )
         }
-        Ok(false) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(crate::types::VerifyChallengeResponse::InvalidSignature),
-            );
-        }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(crate::types::VerifyChallengeResponse::UnexpectedError {
-                    message: format!("Internal server error: {}", e),
-                }),
-            );
-        }
-    };
+        Ok(false) => (
+            StatusCode::UNAUTHORIZED,
+            Json(crate::types::VerifyChallengeResponse::InvalidSignature),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(crate::types::VerifyChallengeResponse::UnexpectedError {
+                message: format!("Internal server error: {}", e),
+            }),
+        ),
+    }
 }
 
 /// Reverse proxy handler that forwards requests to the target host based on the service ID
 async fn reverse_proxy(
-    service_id: ServiceId,
-    Extension(client): Extension<HTTPClient>,
-    Extension(TargetMap(target_map)): Extension<TargetMap>,
+    State(s): State<AuthenticatedProxyState>,
     mut req: Request,
 ) -> Result<Response, StatusCode> {
     let target_host = target_map
@@ -130,7 +148,8 @@ async fn reverse_proxy(
     *req.uri_mut() = target_uri;
 
     // Forward the request to the target server
-    let response = client
+    let response = s
+        .client
         .request(req)
         .await
         .map_err(|_| StatusCode::BAD_GATEWAY)?;
@@ -140,6 +159,8 @@ async fn reverse_proxy(
 
 #[cfg(test)]
 mod tests {
+    use tempfile::tempdir;
+
     use super::*;
     use crate::{
         test_client::TestClient,
@@ -149,8 +170,8 @@ mod tests {
     #[tokio::test]
     async fn auth_flow_works() {
         let mut rng = rand::thread_rng();
-        let proxy =
-            AuthenticatedProxy::new(ServiceId::new(0), "http://localhost:8080".parse().unwrap());
+        let tmp = tempdir().unwrap();
+        let proxy = AuthenticatedProxy::new(tmp.path()).unwrap();
 
         let router = proxy.router();
         let client = TestClient::new(router);

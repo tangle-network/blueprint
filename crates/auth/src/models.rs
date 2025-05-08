@@ -3,30 +3,63 @@ use prost::Message;
 use crate::{
     api_tokens::{CUSTOM_ENGINE, GeneratedApiToken},
     db::{RocksDb, cf},
+    types::KeyType,
 };
 
 #[derive(prost::Message, Clone)]
-pub struct ApiToken {
+pub struct ApiTokenModel {
     /// The token ID.
-    #[prost(uint64, tag = "1")]
+    #[prost(uint64)]
     id: u64,
     /// The token hash.
-    #[prost(string, tag = "2")]
+    #[prost(string)]
     token: String,
+    /// The service ID this token is associated with.
+    #[prost(uint64)]
+    service_id: u64,
+    /// The sub-service ID this token is associated with (zero means no sub-service).
+    #[prost(uint64)]
+    sub_service_id: u64,
     /// The token's expiration time in milliseconds since the epoch.
     ///
     /// Zero means no expiration.
-    #[prost(int64, tag = "3")]
+    #[prost(int64)]
     pub expires_at: i64,
     /// Whether the token is expired.
-    #[prost(bool, tag = "4")]
+    #[prost(bool)]
     pub is_expired: bool,
     /// Whether the token is enabled.
-    #[prost(bool, tag = "5")]
+    #[prost(bool)]
     pub is_enabled: bool,
 }
 
-impl ApiToken {
+/// Represents a service model stored in the database.
+#[derive(prost::Message, Clone)]
+pub struct ServiceModel {
+    /// A List of service owners.
+    #[prost(message, repeated)]
+    owners: Vec<ServiceOwnerModel>,
+    /// The service upstream URL.
+    ///
+    /// This what the proxy will use to forward requests to the service.
+    #[prost(string)]
+    upstream_url: String,
+}
+
+/// A service owner model stored in the database.
+#[derive(prost::Message, Clone)]
+pub struct ServiceOwnerModel {
+    /// The Public key type.
+    ///
+    /// See [`KeyType`](crate::types::KeyType) for more details.
+    #[prost(enumeration = "KeyType")]
+    pub key_type: i32,
+    /// The public key bytes.
+    #[prost(bytes)]
+    pub key_bytes: Vec<u8>,
+}
+
+impl ApiTokenModel {
     /// Find a token by its ID in the database.
     pub fn find_token_id(id: u64, db: &RocksDb) -> Result<Option<Self>, crate::Error> {
         let cf = db
@@ -35,7 +68,7 @@ impl ApiToken {
         let token_opts_bytes = db.get_pinned_cf(&cf, id.to_be_bytes())?;
 
         token_opts_bytes
-            .map(|bytes| ApiToken::decode(bytes.as_ref()))
+            .map(|bytes| ApiTokenModel::decode(bytes.as_ref()))
             .transpose()
             .map_err(Into::into)
     }
@@ -121,12 +154,14 @@ impl ApiToken {
     }
 }
 
-impl From<GeneratedApiToken> for ApiToken {
-    fn from(token: GeneratedApiToken) -> Self {
+impl From<&GeneratedApiToken> for ApiTokenModel {
+    fn from(token: &GeneratedApiToken) -> Self {
         Self {
             id: 0,
+            token: token.token.clone(),
+            service_id: token.service_id.0,
+            sub_service_id: token.service_id.1,
             expires_at: token.expires_at().unwrap_or(0),
-            token: token.token,
             is_expired: false,
             is_enabled: true,
         }
@@ -135,7 +170,7 @@ impl From<GeneratedApiToken> for ApiToken {
 
 #[cfg(test)]
 mod tests {
-    use crate::api_tokens::ApiTokenGenerator;
+    use crate::{api_tokens::ApiTokenGenerator, types::ServiceId};
 
     use super::*;
 
@@ -144,16 +179,17 @@ mod tests {
         let mut rng = rand::thread_rng();
         let tmp_dir = tempfile::tempdir().unwrap();
         let db = RocksDb::open(tmp_dir.path(), &Default::default()).unwrap();
+        let service_id = ServiceId::new(1);
         let generator = ApiTokenGenerator::new();
-        let token = generator.generate_token(&mut rng);
-        let mut token = ApiToken::from(token);
+        let token = generator.generate_token(service_id, &mut rng);
+        let mut token = ApiTokenModel::from(&token);
 
         // Save the token to the database
         let id = token.save(&db).unwrap();
         assert_eq!(id, 1);
 
         // Find the token by ID
-        let found_token = ApiToken::find_token_id(id, &db).unwrap();
+        let found_token = ApiTokenModel::find_token_id(id, &db).unwrap();
         assert!(found_token.is_some());
         let found_token = found_token.unwrap();
         assert_eq!(found_token.id, id);

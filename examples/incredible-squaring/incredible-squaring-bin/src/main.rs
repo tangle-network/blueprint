@@ -61,6 +61,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
         // Every result will be passed to every consumer. It is the responsibility of the consumer
         // to determine whether or not to process a result.
         .consumer(tangle_consumer)
+        .on_heartbeat(custom_heartbeat)
         // Custom shutdown handlers
         //
         // Now users can specify what to do when an error occurs and the runner is shutting down.
