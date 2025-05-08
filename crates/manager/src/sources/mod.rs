@@ -1,5 +1,5 @@
-use crate::config::{BlueprintManagerConfig, SourceCandidates};
 use crate::blueprint::native::FilteredBlueprint;
+use crate::config::{BlueprintManagerConfig, SourceCandidates};
 use blueprint_runner::config::{BlueprintEnvironment, SupportedChains};
 use std::path::Path;
 use tokio::sync::mpsc::UnboundedReceiver;

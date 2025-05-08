@@ -208,7 +208,8 @@ pub(crate) fn check_blueprint_events(
         match evt {
             Ok(evt) => {
                 info!("Unregistered event: {evt:?}");
-                if &evt.operator == account_id && active_blueprints.remove(&evt.blueprint_id).is_some()
+                if &evt.operator == account_id
+                    && active_blueprints.remove(&evt.blueprint_id).is_some()
                 {
                     info!("Removed services for blueprint_id: {}", evt.blueprint_id,);
 

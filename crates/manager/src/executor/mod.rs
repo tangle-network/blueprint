@@ -1,7 +1,7 @@
+use crate::blueprint::ActiveBlueprints;
 use crate::config::{BlueprintManagerConfig, SourceCandidates};
 use crate::error::Error;
 use crate::error::Result;
-use crate::blueprint::ActiveBlueprints;
 use crate::sdk::entry::SendFuture;
 use blueprint_clients::tangle::EventsClient;
 use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
