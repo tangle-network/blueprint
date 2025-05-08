@@ -3,8 +3,12 @@ pub mod heartbeat;
 pub mod metrics;
 pub mod service;
 
+// pub mod proto {
+//     tonic::include_proto!("qos");
+// }
+
 pub mod proto {
-    tonic::include_proto!("qos");
+    include!(concat!(env!("OUT_DIR"), "/qos.rs"));
 }
 
 /// Configuration for the QoS system
