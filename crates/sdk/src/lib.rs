@@ -71,7 +71,10 @@ pub use blueprint_router::Router;
 
 #[cfg(feature = "macros")]
 pub mod macros {
-    pub use blueprint_context_derive as context;
+    pub mod context {
+        pub use blueprint_context_derive::*;
+    }
+
     pub use blueprint_macros::*;
 }
 
@@ -79,7 +82,10 @@ pub mod macros {
 
 #[cfg(feature = "tangle")]
 mod tangle_feat {
-    pub use blueprint_tangle_extra as tangle;
+    pub mod tangle {
+        pub use blueprint_tangle_extra::*;
+    }
+
     pub use tangle_subxt;
 }
 #[cfg(feature = "tangle")]
@@ -88,7 +94,9 @@ pub use tangle_feat::*;
 #[cfg(any(feature = "evm", feature = "eigenlayer"))]
 mod evm_feat {
     pub use alloy;
-    pub use blueprint_evm_extra as evm;
+    pub mod evm {
+        pub use blueprint_evm_extra::*;
+    }
 }
 #[cfg(any(feature = "evm", feature = "eigenlayer"))]
 pub use evm_feat::*;
@@ -97,7 +105,9 @@ pub use evm_feat::*;
 pub use eigensdk;
 
 #[cfg(feature = "eigenlayer")]
-pub use blueprint_eigenlayer_extra as eigenlayer;
+pub mod eigenlayer {
+    pub use blueprint_eigenlayer_extra::*;
+}
 
 // == Development utilities ==
 
@@ -105,9 +115,15 @@ pub use blueprint_eigenlayer_extra as eigenlayer;
 /// Testing utilities and helpers
 pub mod testing {
     /// Utilities for creating and interacting with local chains
-    pub use blueprint_chain_setup as chain_setup;
+    pub mod chain_setup {
+        pub use blueprint_chain_setup::*;
+    }
+
     /// General testing utilities for blueprints
-    pub use blueprint_testing_utils as utils;
+    pub mod utils {
+        pub use blueprint_testing_utils::*;
+    }
+
     /// Temporary file and directory management for tests
     pub use tempfile;
 }
@@ -116,14 +132,12 @@ pub mod testing {
 #[cfg(feature = "build")]
 /// Build-time utilities for blueprint compilation
 pub mod build {
-    /// Build utilities for blueprint compilation
-    pub use blueprint_build_utils as utils;
+    pub use blueprint_build_utils::*;
 }
 
 #[cfg(feature = "networking")]
 /// Networking utilities for blueprints
 pub mod networking {
-    /// Networking utilities for blueprints
     pub use blueprint_networking::*;
     #[cfg(feature = "round-based-compat")]
     pub use blueprint_networking_round_based_extension as round_based_compat;
