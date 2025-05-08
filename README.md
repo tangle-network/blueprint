@@ -104,7 +104,6 @@ tools for networking and testing.
 [`blueprint-producers-extra`]: https://docs.rs/blueprint-producers-extra
 [`blueprint-router`]: https://docs.rs/blueprint-router
 [`blueprint-runner`]: https://docs.rs/blueprint-runner
-[`blueprint-blueprint-serde`]: https://docs.rs/blueprint-blueprint-serde
 [`blueprint-std`]: https://docs.rs/blueprint-std
 [`blueprint-stores`]: https://docs.rs/blueprint-stores
 [`blueprint-store-local-database`]: https://docs.rs/blueprint-store-local-database
