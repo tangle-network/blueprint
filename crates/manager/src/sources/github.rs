@@ -17,6 +17,7 @@ use tokio::io::AsyncWriteExt;
 use tracing::error;
 use xz::read::XzDecoder;
 use blueprint_runner::config::BlueprintEnvironment;
+use crate::bridge::BridgeHandle;
 use crate::config::SourceCandidates;
 
 pub struct GithubBinaryFetcher {
@@ -190,6 +191,8 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
 
     async fn spawn(
         &mut self,
+        // TODO: bind bridge socket
+        _bridge: BridgeHandle,
         _source_candidates: &SourceCandidates,
         _env: &BlueprintEnvironment,
         service: &str,

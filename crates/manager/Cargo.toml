@@ -25,6 +25,7 @@ blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-networking = { workspace = true, features = ["std"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
+blueprint-manager-bridge.workspace = true
 
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
 docktopus = { workspace = true, features = ["deploy"] }
@@ -57,6 +58,8 @@ xz.workspace = true
 dirs.workspace = true
 cargo-dist-schema.workspace = true
 walkdir.workspace = true
+tonic.workspace = true
+tokio-stream = { workspace = true, features = ["net"] }
 
 [package.metadata.dist]
 dist = false
