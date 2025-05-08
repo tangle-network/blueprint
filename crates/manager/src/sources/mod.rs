@@ -1,4 +1,5 @@
 use crate::blueprint::native::FilteredBlueprint;
+use crate::bridge::BridgeHandle;
 use crate::config::{BlueprintManagerConfig, SourceCandidates};
 use blueprint_runner::config::{BlueprintEnvironment, SupportedChains};
 use std::path::Path;
@@ -56,6 +57,7 @@ pub trait BlueprintSourceHandler: Send + Sync {
     fn fetch(&mut self, cache_dir: &Path) -> impl Future<Output = crate::error::Result<()>> + Send;
     fn spawn(
         &mut self,
+        bridge: BridgeHandle,
         source_candidates: &SourceCandidates,
         env: &BlueprintEnvironment,
         service: &str,

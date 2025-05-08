@@ -17,6 +17,7 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use tangle_subxt::tangle_testnet_runtime::api::services::events::{
     JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
 };
+use crate::bridge::Bridge;
 use crate::sources::container::ContainerSource;
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
@@ -67,6 +68,8 @@ impl VerifiedBlueprint {
             let service_str = source.name();
             for service_id in &blueprint.services {
                 let sub_service_str = format!("{service_str}-{service_id}");
+                let bridge = Bridge::spawn(&manager_config.runtime_dir, &sub_service_str)?;
+
                 let (arguments, env_vars) = process_arguments_and_env(
                     blueprint_config,
                     manager_config,
@@ -84,6 +87,7 @@ impl VerifiedBlueprint {
                 // Now that the file is loaded, spawn the process
                 let mut handle = source
                     .spawn(
+                        bridge,
                         source_candidates,
                         blueprint_config,
                         &sub_service_str,

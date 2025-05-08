@@ -23,6 +23,8 @@ pub enum Error {
     AttestationFailed,
     #[error("No GitHub CLI found, is it installed?")]
     NoGithubCli,
+    #[error("Bridge error: {0}")]
+    Bridge(#[from] blueprint_manager_bridge::error::Error),
 
     #[error("Failed to get initial block hash")]
     InitialBlock,
