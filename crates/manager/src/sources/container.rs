@@ -15,6 +15,7 @@ use url::Url;
 use std::net::IpAddr;
 use std::path::Path;
 use tokio::net::lookup_host;
+use crate::bridge::BridgeHandle;
 use crate::config::SourceCandidates;
 
 pub struct ContainerSource {
@@ -103,6 +104,8 @@ impl BlueprintSourceHandler for ContainerSource {
 
     async fn spawn(
         &mut self,
+        // TODO: bind bridge socket
+        _bridge: BridgeHandle,
         source_candidates: &SourceCandidates,
         env: &BlueprintEnvironment,
         service: &str,

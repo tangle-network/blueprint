@@ -34,6 +34,9 @@ pub struct BlueprintManagerConfig {
     /// The cache directory for blueprint manager downloads
     #[arg(long, short = 'd', default_value_os_t = default_cache_dir())]
     pub cache_dir: PathBuf,
+    /// The runtime directory for manager-to-blueprint sockets
+    #[arg(long, short = 'd', default_value_os_t = default_runtime_dir())]
+    pub runtime_dir: PathBuf,
     /// The verbosity level, can be used multiple times to increase verbosity
     #[arg(long, short = 'v', action = clap::ArgAction::Count)]
     pub verbose: u8,
@@ -69,6 +72,13 @@ fn default_cache_dir() -> PathBuf {
     }
 }
 
+fn default_runtime_dir() -> PathBuf {
+    match dirs::runtime_dir() {
+        Some(dir) => dir.join("blueprint-manager"),
+        None => PathBuf::from("/run/blueprint-manager"),
+    }
+}
+
 impl Default for BlueprintManagerConfig {
     fn default() -> Self {
         Self {
@@ -76,6 +86,7 @@ impl Default for BlueprintManagerConfig {
             keystore_uri: "./keystore".into(),
             data_dir: PathBuf::from("./data"),
             cache_dir: default_cache_dir(),
+            runtime_dir: default_runtime_dir(),
             verbose: 0,
             pretty: false,
             instance_id: None,

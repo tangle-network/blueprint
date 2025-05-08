@@ -3348,6 +3348,7 @@ dependencies = [
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-keystore",
+ "blueprint-manager-bridge",
  "blueprint-networking",
  "blueprint-runner",
  "blueprint-std",
@@ -3374,12 +3375,28 @@ dependencies = [
  "tar",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-stream",
  "toml 0.8.22",
+ "tonic 0.11.0",
  "tracing",
  "tracing-subscriber 0.3.19",
  "url",
  "walkdir",
  "xz",
+]
+
+[[package]]
+name = "blueprint-manager-bridge"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "prost 0.12.6",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-stream",
+ "tonic 0.11.0",
+ "tonic-build",
+ "tower 0.5.2",
+ "uuid 1.16.0",
 ]
 
 [[package]]

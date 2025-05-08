@@ -4,6 +4,7 @@ members = [
     "cli",
     "crates/*",
     "crates/networking/extensions/*",
+    "crates/manager/bridge",
     "examples/incredible-squaring-eigenlayer",
     "workspace-hack",
 ]
@@ -63,6 +64,7 @@ incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./exampl
 
 # Blueprint utils
 blueprint-manager = { version = "0.3.0-alpha.13", path = "./crates/manager", default-features = false }
+blueprint-manager-bridge = { version = "0.1.0-alpha.1", path = "./crates/manager/bridge", default-features = false }
 blueprint-build-utils = { version = "0.1.0-alpha.3", path = "./crates/build-utils", default-features = false }
 
 # Chain Setup
@@ -148,6 +150,7 @@ futures = { version = "0.3.30", default-features = false }
 futures-util = { version = "0.3.31", default-features = false }
 futures-core = { version = "0.3.31", default-features = false }
 tokio = { version = "^1", default-features = false }
+tokio-stream = { version = "0.1.17", default-features = false }
 tokio-util = { version = "^0.7", default-features = false }
 tokio-cron-scheduler = { version = "0.13.0", default-features = false }
 pin-project-lite = "0.2.7"
