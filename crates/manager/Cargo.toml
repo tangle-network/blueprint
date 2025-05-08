@@ -24,6 +24,7 @@ blueprint-crypto = { workspace = true, features = ["std", "tangle-pair-signer"] 
 blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-networking = { workspace = true, features = ["std"] }
 blueprint-std = { workspace = true, features = ["std"] }
+blueprint-manager-bridge.workspace = true
 
 docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
@@ -55,6 +56,8 @@ xz.workspace = true
 dirs.workspace = true
 cargo-dist-schema.workspace = true
 walkdir.workspace = true
+tonic.workspace = true
+tokio-stream = { workspace = true, features = ["net"] }
 
 [package.metadata.dist]
 dist = false

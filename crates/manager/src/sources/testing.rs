@@ -7,6 +7,7 @@ use blueprint_core::trace;
 use std::path::{Path, PathBuf};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
 use blueprint_runner::config::BlueprintEnvironment;
+use crate::bridge::BridgeHandle;
 use crate::config::SourceCandidates;
 
 pub struct TestSourceFetcher {
@@ -119,6 +120,7 @@ impl BlueprintSourceHandler for TestSourceFetcher {
 
     async fn spawn(
         &mut self,
+        _bridge: BridgeHandle,
         _source_candidates: &SourceCandidates,
         _env: &BlueprintEnvironment,
         service: &str,
