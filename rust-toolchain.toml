@@ -1,4 +1,4 @@
 [toolchain]
-channel = "1.86"
+channel = "1.86"                               # Update the workspace rust-version as well
 components = ["cargo", "rustfmt", "clippy", "rust-src"]
 profile = "minimal"
