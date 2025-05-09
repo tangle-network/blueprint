@@ -1,14 +1,9 @@
 use super::BlueprintSourceHandler;
-use super::ProcessHandle;
-use super::binary::{BinarySourceFetcher, generate_running_process_status_handle};
 use crate::error::{Error, Result};
 use crate::sdk::utils::make_executable;
 use blueprint_core::trace;
 use std::path::{Path, PathBuf};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
-use blueprint_runner::config::BlueprintEnvironment;
-use crate::bridge::BridgeHandle;
-use crate::config::SourceCandidates;
 
 pub struct TestSourceFetcher {
     pub fetcher: TestFetcher,
@@ -27,9 +22,7 @@ impl TestSourceFetcher {
             resolved_binary_path: None,
         }
     }
-}
 
-impl BinarySourceFetcher for TestSourceFetcher {
     async fn get_binary(&mut self, _cache_dir: &Path) -> Result<PathBuf> {
         let TestFetcher {
             cargo_package,
@@ -89,6 +82,7 @@ impl BinarySourceFetcher for TestSourceFetcher {
         Ok(binary_path)
     }
 }
+
 async fn get_git_repo_root_path() -> Result<PathBuf> {
     // Run a process to determine the root directory for this repo
     let output = tokio::process::Command::new("git")
@@ -105,41 +99,17 @@ async fn get_git_repo_root_path() -> Result<PathBuf> {
 }
 
 impl BlueprintSourceHandler for TestSourceFetcher {
-    async fn fetch(&mut self, cache_dir: &Path) -> Result<()> {
-        if self.resolved_binary_path.is_some() {
-            return Ok(());
+    async fn fetch(&mut self, cache_dir: &Path) -> Result<PathBuf> {
+        if let Some(binary_path) = &self.resolved_binary_path {
+            return Ok(binary_path.clone());
         }
 
         let mut binary_path = self.get_binary(cache_dir).await?;
 
         // Ensure the binary is executable
         binary_path = make_executable(&binary_path)?;
-        self.resolved_binary_path = Some(binary_path);
-        Ok(())
-    }
-
-    async fn spawn(
-        &mut self,
-        _bridge: BridgeHandle,
-        _source_candidates: &SourceCandidates,
-        _env: &BlueprintEnvironment,
-        service: &str,
-        args: Vec<String>,
-        env_vars: Vec<(String, String)>,
-    ) -> Result<ProcessHandle> {
-        let binary = self.resolved_binary_path.as_ref().expect("should be set");
-        let process_handle = tokio::process::Command::new(binary)
-            .kill_on_drop(true)
-            .stdin(std::process::Stdio::null())
-            .current_dir(&std::env::current_dir()?)
-            .envs(env_vars)
-            .args(args)
-            .spawn()?;
-
-        let (status, abort_handle) =
-            generate_running_process_status_handle(process_handle, service);
-
-        Ok(ProcessHandle::new(status, abort_handle))
+        self.resolved_binary_path = Some(binary_path.clone());
+        Ok(binary_path)
     }
 
     fn blueprint_id(&self) -> u64 {
