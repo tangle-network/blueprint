@@ -12,10 +12,10 @@ pub struct FilteredBlueprint {
 }
 
 #[must_use]
-pub fn get_blueprint_binary(gadget_binaries: &[BlueprintBinary]) -> Option<&BlueprintBinary> {
+pub fn get_blueprint_binary(blueprint_binaries: &[BlueprintBinary]) -> Option<&BlueprintBinary> {
     let os = get_formatted_os_string().to_lowercase();
     let arch = std::env::consts::ARCH.to_lowercase();
-    for binary in gadget_binaries {
+    for binary in blueprint_binaries {
         let binary_str = format!("{:?}", binary.os).to_lowercase();
         if binary_str.contains(&os) || os.contains(&binary_str) || binary_str == os {
             let mut arch_str = format!("{:?}", binary.arch).to_lowercase();

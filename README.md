@@ -50,7 +50,7 @@ tools for networking and testing.
     * [`blueprint-crypto-sr25519`] - Utilities for working with sr25519 signatures and keys
     * [`blueprint-crypto-tangle-pair-signer`] - Pair signer type for Tangle
 * [`blueprint-keystore`] - Flexible keystore implementation, supporting local and remote signers
-* [`gadget-macros`] - Utility macros for simplifying blueprint development
+* [`blueprint-macros`] - Utility macros for simplifying blueprint development
 * [`blueprint-manager`] - A program executor that connects to the Tangle network and runs protocols dynamically on the fly
 * [`blueprint-metrics`] (**Meta-crate**) Utilities for collecting metrics
     * [`blueprint-metrics-rpc-calls`] - Utilities for collecting metrics from RPC calls
@@ -95,7 +95,7 @@ tools for networking and testing.
 [`blueprint-crypto-sr25519`]: https://docs.rs/blueprint-crypto-sr25519
 [`blueprint-crypto-tangle-pair-signer`]: https://docs.rs/blueprint-crypto-tangle-pair-signer
 [`blueprint-keystore`]: https://docs.rs/blueprint-keystore
-[`gadget-macros`]: https://docs.rs/gadget-macros
+[`blueprint-macros`]: https://docs.rs/blueprint-macros
 [`blueprint-manager`]: https://docs.rs/blueprint-manager
 [`blueprint-metrics`]: https://docs.rs/blueprint-metrics
 [`blueprint-metrics-rpc-calls`]: https://docs.rs/blueprint-metrics-rpc-calls
@@ -104,7 +104,6 @@ tools for networking and testing.
 [`blueprint-producers-extra`]: https://docs.rs/blueprint-producers-extra
 [`blueprint-router`]: https://docs.rs/blueprint-router
 [`blueprint-runner`]: https://docs.rs/blueprint-runner
-[`gadget-blueprint-serde`]: https://docs.rs/gadget-blueprint-serde
 [`blueprint-std`]: https://docs.rs/blueprint-std
 [`blueprint-stores`]: https://docs.rs/blueprint-stores
 [`blueprint-store-local-database`]: https://docs.rs/blueprint-store-local-database
@@ -148,7 +147,7 @@ You can install the Tangle CLI in two ways:
 Install the latest stable version of `cargo-tangle` using the installation script:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/tangle-network/gadget/releases/download/cargo-tangle/v0.1.1-beta.7/cargo-tangle-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/tangle-network/blueprint/releases/download/cargo-tangle/v0.1.1-beta.7/cargo-tangle-installer.sh | sh
 ```
 
 #### 🚩 **Option 2: Install from source**
@@ -156,7 +155,7 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/tangle-network/gadget/r
 Install the latest git version of `cargo-tangle` using the following command:
 
 ```bash
-cargo install cargo-tangle --git https://github.com/tangle-network/gadget --force
+cargo install cargo-tangle --git https://github.com/tangle-network/blueprint --force
 ```
 
 ### ✨ Creating Your First Blueprint

@@ -12,17 +12,17 @@ use crate::config::SourceCandidates;
 pub struct TestSourceFetcher {
     pub fetcher: TestFetcher,
     pub blueprint_id: u64,
-    pub gadget_name: String,
+    pub blueprint_name: String,
     resolved_binary_path: Option<PathBuf>,
 }
 
 impl TestSourceFetcher {
     #[must_use]
-    pub fn new(fetcher: TestFetcher, blueprint_id: u64, gadget_name: String) -> Self {
+    pub fn new(fetcher: TestFetcher, blueprint_id: u64, blueprint_name: String) -> Self {
         Self {
             fetcher,
             blueprint_id,
-            gadget_name,
+            blueprint_name,
             resolved_binary_path: None,
         }
     }
@@ -145,6 +145,6 @@ impl BlueprintSourceHandler for TestSourceFetcher {
     }
 
     fn name(&self) -> String {
-        self.gadget_name.clone()
+        self.blueprint_name.clone()
     }
 }

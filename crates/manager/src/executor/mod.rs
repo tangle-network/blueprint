@@ -1,7 +1,7 @@
+use crate::blueprint::ActiveBlueprints;
 use crate::config::{BlueprintManagerConfig, SourceCandidates};
 use crate::error::Error;
 use crate::error::Result;
-use crate::gadget::ActiveGadgets;
 use crate::sdk::entry::SendFuture;
 use blueprint_clients::tangle::EventsClient;
 use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
@@ -136,7 +136,7 @@ impl Future for BlueprintManagerHandle {
 ///
 /// * `blueprint_manager_config` - The configuration for the blueprint manager
 /// * `keystore` - The keystore to use for the blueprint manager
-/// * `gadget_config` - The configuration for the gadget
+/// * `env` - The environment configuration for the blueprint
 /// * `shutdown_cmd` - The shutdown command for the blueprint manager
 ///
 /// # Returns
@@ -206,7 +206,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
     let sub_account_id = tangle_key.account_id().clone();
 
-    let mut active_gadgets = HashMap::new();
+    let mut active_blueprints = HashMap::new();
 
     let keystore_uri = env.keystore_uri.clone();
 
@@ -223,7 +223,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
             services_client,
             &source_candidates,
             &sub_account_id,
-            &mut active_gadgets,
+            &mut active_blueprints,
             &env,
             &blueprint_manager_config,
         )
@@ -234,7 +234,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         while let Some(event) = tangle_client.next_event().await {
             let result = event_handler::check_blueprint_events(
                 &event,
-                &mut active_gadgets,
+                &mut active_blueprints,
                 &sub_account_id.clone(),
             );
 
@@ -250,7 +250,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
                 &operator_subscribed_blueprints,
                 &env,
                 &blueprint_manager_config,
-                &mut active_gadgets,
+                &mut active_blueprints,
                 result,
                 services_client,
             )
@@ -313,7 +313,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 /// # Arguments
 ///
 /// * `blueprint_manager_config` - The configuration for the blueprint manager
-/// * `gadget_config` - The configuration for the gadget
+/// * `env` - The environment configuration for the blueprint
 /// * `shutdown_cmd` - The shutdown command for the blueprint manager
 ///
 /// # Returns
@@ -343,15 +343,15 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
 }
 
 /// * Query to get Vec<RpcServicesWithBlueprint>
-/// * For each `RpcServicesWithBlueprint`, fetch the associated gadget binary (fetch/download)
+/// * For each `RpcServicesWithBlueprint`, fetch the associated blueprint binary (fetch/download)
 ///   -> If the services field is empty, just emit and log inside the executed binary "that states a new service instance got created by one of these blueprints"
-///   -> If the services field is not empty, for each service in RpcServicesWithBlueprint.services, spawn the gadget binary, using params to set the job type to listen to (in terms of our old language, each spawned service represents a single "`RoleType`")
+///   -> If the services field is not empty, for each service in RpcServicesWithBlueprint.services, spawn the blueprint binary, using params to set the job type to listen to (in terms of our old language, each spawned service represents a single "`RoleType`")
 async fn handle_init(
     tangle_runtime: &TangleClient,
     services_client: &TangleServicesClient<TangleConfig>,
     source_candidates: &SourceCandidates,
     sub_account_id: &AccountId32,
-    active_gadgets: &mut ActiveGadgets,
+    active_blueprints: &mut ActiveBlueprints,
     blueprint_env: &BlueprintEnvironment,
     blueprint_manager_config: &BlueprintManagerConfig,
 ) -> Result<Vec<RpcServicesWithBlueprint>> {
@@ -383,7 +383,7 @@ async fn handle_init(
 
     // Immediately poll, handling the initial state
     let poll_result =
-        event_handler::check_blueprint_events(&init_event, active_gadgets, sub_account_id);
+        event_handler::check_blueprint_events(&init_event, active_blueprints, sub_account_id);
 
     event_handler::handle_tangle_event(
         &init_event,
@@ -391,7 +391,7 @@ async fn handle_init(
         &operator_subscribed_blueprints,
         blueprint_env,
         blueprint_manager_config,
-        active_gadgets,
+        active_blueprints,
         poll_result,
         services_client,
     )

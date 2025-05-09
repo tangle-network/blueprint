@@ -25,9 +25,9 @@ use std::{
     time::Duration,
 };
 
-/// Events that can be emitted by the `GadgetBehavior`
+/// Events that can be emitted by the `BlueprintBehavior`
 #[derive(Debug)]
-pub enum GadgetEvent<K: KeyType> {
+pub enum BlueprintEvent<K: KeyType> {
     /// Discovery-related events
     Discovery(DiscoveryEvent),
     /// Ping events for connection liveness
@@ -37,7 +37,7 @@ pub enum GadgetEvent<K: KeyType> {
 }
 
 #[derive(NetworkBehaviour)]
-pub struct GadgetBehaviour<K: KeyType> {
+pub struct BlueprintBehaviour<K: KeyType> {
     /// Connection limits to prevent `DoS`
     connection_limits: connection_limits::Behaviour,
     /// Discovery mechanisms (Kademlia, mDNS, etc)
@@ -48,8 +48,8 @@ pub struct GadgetBehaviour<K: KeyType> {
     ping: ping::Behaviour,
 }
 
-/// Configuration for `GadgetBehaviour`
-pub struct GadgetBehaviourConfig<K: KeyType> {
+/// Configuration for `BlueprintBehaviour`
+pub struct BlueprintBehaviourConfig<K: KeyType> {
     /// Name of the network
     pub network_name: String,
     /// Name of the blueprint protocol
@@ -68,13 +68,13 @@ pub struct GadgetBehaviourConfig<K: KeyType> {
     pub using_evm_address_for_handshake_verification: bool,
 }
 
-impl<K: KeyType> GadgetBehaviour<K> {
-    /// Create a new `GadgetBehaviour`
+impl<K: KeyType> BlueprintBehaviour<K> {
+    /// Create a new `BlueprintBehaviour`
     ///
     /// # Errors
     ///
     /// See [`DiscoveryConfig::build()`]
-    pub fn new(config: GadgetBehaviourConfig<K>) -> Result<Self, Error> {
+    pub fn new(config: BlueprintBehaviourConfig<K>) -> Result<Self, Error> {
         let connection_limits = connection_limits::Behaviour::new(
             ConnectionLimits::default()
                 .with_max_pending_incoming(Some(config.target_peer_count))
@@ -109,7 +109,7 @@ impl<K: KeyType> GadgetBehaviour<K> {
             config.using_evm_address_for_handshake_verification,
         );
 
-        debug!("Created GadgetBehaviour with all components initialized");
+        debug!("Created BlueprintBehaviour with all components initialized");
         Ok(Self {
             connection_limits,
             discovery,

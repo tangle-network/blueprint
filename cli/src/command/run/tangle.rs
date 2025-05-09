@@ -54,23 +54,23 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         .blueprint_id
         .ok_or_else(|| eyre!("Blueprint ID is required"))?;
 
-    let mut gadget_config = BlueprintEnvironment::default();
-    gadget_config.http_rpc_endpoint = opts.http_rpc_url.clone();
-    gadget_config.ws_rpc_endpoint = opts.ws_rpc_url.clone();
+    let mut blueprint_config = BlueprintEnvironment::default();
+    blueprint_config.http_rpc_endpoint = opts.http_rpc_url.clone();
+    blueprint_config.ws_rpc_endpoint = opts.ws_rpc_url.clone();
 
     if let Some(keystore_path) = opts.keystore_path {
-        gadget_config.keystore_uri = keystore_path;
+        blueprint_config.keystore_uri = keystore_path;
     }
 
-    gadget_config.keystore_uri = std::path::absolute(&gadget_config.keystore_uri)?
+    blueprint_config.keystore_uri = std::path::absolute(&blueprint_config.keystore_uri)?
         .display()
         .to_string();
 
-    gadget_config.data_dir = opts.data_dir;
+    blueprint_config.data_dir = opts.data_dir;
 
     let blueprint_manager_config = BlueprintManagerConfig {
-        keystore_uri: gadget_config.keystore_uri.clone(),
-        data_dir: gadget_config
+        keystore_uri: blueprint_config.keystore_uri.clone(),
+        data_dir: blueprint_config
             .data_dir
             .clone()
             .unwrap_or_else(|| PathBuf::from("./data")),
@@ -118,7 +118,7 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
     pb.enable_steady_tick(Duration::from_millis(100));
 
     let mut handle =
-        run_blueprint_manager(blueprint_manager_config, gadget_config, shutdown_signal).await?;
+        run_blueprint_manager(blueprint_manager_config, blueprint_config, shutdown_signal).await?;
 
     pb.finish_with_message("Blueprint initialized successfully!");
 

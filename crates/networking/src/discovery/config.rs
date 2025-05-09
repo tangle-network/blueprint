@@ -54,7 +54,7 @@ impl<K: KeyType> DiscoveryConfig<K> {
             enable_upnp: true,     // Enable by default for better connectivity
             enable_relay: true,    // Enable by default for relay functionality
             network_name: network_name.into(),
-            protocol_version: String::from("gadget/1.0.0"), // Default version
+            protocol_version: String::from("blueprint/1.0.0"), // Default version
             _marker: blueprint_std::marker::PhantomData,
         }
     }
@@ -121,7 +121,7 @@ impl<K: KeyType> DiscoveryConfig<K> {
     pub fn build(self) -> Result<DiscoveryBehaviour<K>, Error> {
         let kademlia_opt = if self.enable_kademlia {
             let protocol = StreamProtocol::try_from_owned(format!(
-                "/gadget/kad/{}/kad/1.0.0",
+                "/blueprint/kad/{}/kad/1.0.0",
                 self.network_name
             ))?;
 
@@ -169,7 +169,7 @@ impl<K: KeyType> DiscoveryConfig<K> {
             mdns: mdns_opt.into(),
             identify: identify::Behaviour::new(
                 identify::Config::new(self.protocol_version, self.local_public_key)
-                    .with_agent_version(format!("gadget-{}", env!("CARGO_PKG_VERSION")))
+                    .with_agent_version(format!("blueprint-{}", env!("CARGO_PKG_VERSION")))
                     .with_push_listen_addr_updates(true),
             ),
             autonat: autonat::Behaviour::new(self.local_peer_id, autonat::Config::default()),

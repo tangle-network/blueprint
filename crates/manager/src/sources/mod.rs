@@ -1,5 +1,5 @@
+use crate::blueprint::native::FilteredBlueprint;
 use crate::config::{BlueprintManagerConfig, SourceCandidates};
-use crate::gadget::native::FilteredBlueprint;
 use blueprint_runner::config::{BlueprintEnvironment, SupportedChains};
 use std::path::Path;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -115,7 +115,7 @@ pub fn process_arguments_and_env(
         .iter()
         .fold(String::new(), |acc, bootnode| format!("{acc} {bootnode}"));
 
-    // Add required env vars for all child processes/gadgets
+    // Add required env vars for all child processes/blueprints
     let mut env_vars = vec![
         (
             "HTTP_RPC_URL".to_string(),

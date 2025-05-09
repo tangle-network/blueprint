@@ -3,7 +3,7 @@ use super::BlueprintSourceHandler;
 use super::ProcessHandle;
 use super::binary::{BinarySourceFetcher, generate_running_process_status_handle};
 use crate::error::{Error, Result};
-use crate::gadget::native::get_blueprint_binary;
+use crate::blueprint::native::get_blueprint_binary;
 use crate::sdk;
 use crate::sdk::utils::{make_executable, valid_file_exists};
 use blueprint_core::info;
@@ -22,7 +22,7 @@ use crate::config::SourceCandidates;
 pub struct GithubBinaryFetcher {
     pub fetcher: GithubFetcher,
     pub blueprint_id: u64,
-    pub gadget_name: String,
+    pub blueprint_name: String,
     allow_unchecked_attestations: bool,
     target_binary_name: Option<String>,
     resolved_binary_path: Option<PathBuf>,
@@ -33,13 +33,13 @@ impl GithubBinaryFetcher {
     pub fn new(
         fetcher: GithubFetcher,
         blueprint_id: u64,
-        gadget_name: String,
+        blueprint_name: String,
         allow_unchecked_attestations: bool,
     ) -> Self {
         GithubBinaryFetcher {
             fetcher,
             blueprint_id,
-            gadget_name,
+            blueprint_name,
             allow_unchecked_attestations,
             target_binary_name: None,
             resolved_binary_path: None,
@@ -216,7 +216,7 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
     }
 
     fn name(&self) -> String {
-        self.gadget_name.clone()
+        self.blueprint_name.clone()
     }
 }
 

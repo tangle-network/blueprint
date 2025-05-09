@@ -136,7 +136,7 @@ async fn register_ecdsa_impl(
     let operator_details = Operator {
         address: operator_address,
         delegation_approver_address,
-        metadata_url: "https://github.com/tangle-network/gadget".to_string(),
+        metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
         allocation_delay: Some(30), // TODO: Make allocation delay configurable
         _deprecated_earnings_receiver_address: Some(earnings_receiver_address),
         staker_opt_out_window_blocks: Some(staker_opt_out_window_blocks),

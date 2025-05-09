@@ -557,8 +557,8 @@ where
         self.test_env.write().await.add_background_service(service);
     }
 
-    pub async fn gadget_config(&self) -> BlueprintEnvironment {
-        self.test_env.read().await.get_gadget_config()
+    pub async fn blueprint_config(&self) -> BlueprintEnvironment {
+        self.test_env.read().await.get_blueprint_config()
     }
 }
 

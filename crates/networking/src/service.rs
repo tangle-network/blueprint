@@ -1,5 +1,5 @@
 use crate::{
-    behaviours::{GadgetBehaviour, GadgetBehaviourConfig, GadgetBehaviourEvent},
+    behaviours::{BlueprintBehaviour, BlueprintBehaviourConfig, BlueprintBehaviourEvent},
     blueprint_protocol::{BlueprintProtocolEvent, InstanceMessageRequest, InstanceMessageResponse},
     discovery::{
         PeerInfo, PeerManager,
@@ -225,7 +225,7 @@ pub struct NetworkConfig<K: KeyType> {
 
 pub struct NetworkService<K: KeyType> {
     /// The libp2p swarm
-    swarm: Swarm<GadgetBehaviour<K>>,
+    swarm: Swarm<BlueprintBehaviour<K>>,
     /// The local signing key
     local_signing_key: K::Secret,
     /// Peer manager for tracking peer states
@@ -252,7 +252,7 @@ impl<K: KeyType> NetworkService<K> {
     ///
     /// # Errors
     ///
-    /// * See [`GadgetBehaviour::new`]
+    /// * See [`BlueprintBehaviour::new`]
     /// * Bad `listen_addr` in the provided [`NetworkConfig`]
     #[allow(clippy::missing_panics_doc)] // Unwrapping an Infallible
     pub fn new(
@@ -282,7 +282,7 @@ impl<K: KeyType> NetworkService<K> {
         let (event_sender, event_receiver) = crossbeam_channel::unbounded();
 
         // Create the swarm
-        let gadget_behaviour_config = GadgetBehaviourConfig {
+        let blueprint_behaviour_config = BlueprintBehaviourConfig {
             network_name,
             blueprint_protocol_name: blueprint_protocol_name.clone(),
             local_key: local_key.clone(),
@@ -292,7 +292,7 @@ impl<K: KeyType> NetworkService<K> {
             protocol_message_sender,
             using_evm_address_for_handshake_verification,
         };
-        let behaviour = GadgetBehaviour::new(gadget_behaviour_config)?;
+        let behaviour = BlueprintBehaviour::new(blueprint_behaviour_config)?;
 
         let mut swarm = SwarmBuilder::with_existing_identity(local_key)
             .with_tokio()
@@ -484,20 +484,20 @@ impl<K: KeyType> NetworkService<K> {
 
 /// Handle a behaviour event
 fn handle_behaviour_event<K: KeyType>(
-    swarm: &mut Swarm<GadgetBehaviour<K>>,
+    swarm: &mut Swarm<BlueprintBehaviour<K>>,
     peer_manager: &Arc<PeerManager<K>>,
-    event: GadgetBehaviourEvent<K>,
+    event: BlueprintBehaviourEvent<K>,
     event_sender: &Sender<NetworkEvent<K>>,
 ) -> Result<(), Error> {
     match event {
-        GadgetBehaviourEvent::ConnectionLimits(_) => {}
-        GadgetBehaviourEvent::Discovery(discovery_event) => {
+        BlueprintBehaviourEvent::ConnectionLimits(_) => {}
+        BlueprintBehaviourEvent::Discovery(discovery_event) => {
             handle_discovery_event(swarm, peer_manager, discovery_event, event_sender)?;
         }
-        GadgetBehaviourEvent::BlueprintProtocol(blueprint_event) => {
+        BlueprintBehaviourEvent::BlueprintProtocol(blueprint_event) => {
             handle_blueprint_protocol_event(swarm, peer_manager, blueprint_event, event_sender)?;
         }
-        GadgetBehaviourEvent::Ping(ping_event) => {
+        BlueprintBehaviourEvent::Ping(ping_event) => {
             handle_ping_event(swarm, peer_manager, ping_event, event_sender)?;
         }
     }
@@ -507,7 +507,7 @@ fn handle_behaviour_event<K: KeyType>(
 
 /// Handle a discovery event
 fn handle_discovery_event<K: KeyType>(
-    swarm: &mut Swarm<GadgetBehaviour<K>>,
+    swarm: &mut Swarm<BlueprintBehaviour<K>>,
     peer_manager: &Arc<PeerManager<K>>,
     event: DiscoveryEvent,
     event_sender: &Sender<NetworkEvent<K>>,
@@ -617,7 +617,7 @@ fn handle_discovery_event<K: KeyType>(
 
 /// Handle a blueprint event
 fn handle_blueprint_protocol_event<K: KeyType>(
-    _swarm: &mut Swarm<GadgetBehaviour<K>>,
+    _swarm: &mut Swarm<BlueprintBehaviour<K>>,
     _peer_manager: &Arc<PeerManager<K>>,
     event: BlueprintProtocolEvent<K>,
     event_sender: &Sender<NetworkEvent<K>>,
@@ -681,7 +681,7 @@ fn handle_blueprint_protocol_event<K: KeyType>(
 /// Handle a ping event
 #[expect(clippy::unnecessary_wraps)]
 fn handle_ping_event<K: KeyType>(
-    _swarm: &mut Swarm<GadgetBehaviour<K>>,
+    _swarm: &mut Swarm<BlueprintBehaviour<K>>,
     _peer_manager: &Arc<PeerManager<K>>,
     event: ping::Event,
     _event_sender: &Sender<NetworkEvent<K>>,
@@ -710,7 +710,7 @@ fn handle_ping_event<K: KeyType>(
 
 /// Handle a network message
 fn handle_network_message<K: KeyType>(
-    swarm: &mut Swarm<GadgetBehaviour<K>>,
+    swarm: &mut Swarm<BlueprintBehaviour<K>>,
     msg: NetworkCommandMessage<K>,
     peer_manager: &Arc<PeerManager<K>>,
     event_sender: &Sender<NetworkEvent<K>>,
