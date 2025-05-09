@@ -1,12 +1,9 @@
 use crate::blueprint::native::FilteredBlueprint;
-use crate::bridge::BridgeHandle;
-use crate::config::{BlueprintManagerConfig, SourceCandidates};
+use crate::config::BlueprintManagerConfig;
 use blueprint_runner::config::{BlueprintEnvironment, SupportedChains};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::sync::mpsc::UnboundedReceiver;
 
-pub mod binary;
-pub mod container;
 pub mod github;
 pub mod testing;
 
@@ -54,16 +51,10 @@ impl ProcessHandle {
 #[auto_impl::auto_impl(Box)]
 #[dynosaur::dynosaur(pub(crate) DynBlueprintSource)]
 pub trait BlueprintSourceHandler: Send + Sync {
-    fn fetch(&mut self, cache_dir: &Path) -> impl Future<Output = crate::error::Result<()>> + Send;
-    fn spawn(
+    fn fetch(
         &mut self,
-        bridge: BridgeHandle,
-        source_candidates: &SourceCandidates,
-        env: &BlueprintEnvironment,
-        service: &str,
-        args: Vec<String>,
-        env_vars: Vec<(String, String)>,
-    ) -> impl Future<Output = crate::error::Result<ProcessHandle>> + Send;
+        cache_dir: &Path,
+    ) -> impl Future<Output = crate::error::Result<PathBuf>> + Send;
     fn blueprint_id(&self) -> u64;
     fn name(&self) -> String;
 }

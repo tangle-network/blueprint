@@ -1,4 +1,4 @@
-use crate::config::{BlueprintManagerConfig, SourceCandidates};
+use crate::config::BlueprintManagerConfig;
 use crate::error::{Error, Result};
 use crate::blueprint::native::FilteredBlueprint;
 use crate::blueprint::ActiveBlueprints;
@@ -17,8 +17,8 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use tangle_subxt::tangle_testnet_runtime::api::services::events::{
     JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
 };
-use crate::bridge::Bridge;
-use crate::sources::container::ContainerSource;
+use crate::rt::service::Service;
+use crate::rt::hypervisor::CHVmConfig;
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
 
@@ -30,7 +30,6 @@ pub struct VerifiedBlueprint {
 impl VerifiedBlueprint {
     pub async fn start_services_if_needed(
         &mut self,
-        source_candidates: &SourceCandidates,
         blueprint_config: &BlueprintEnvironment,
         manager_config: &BlueprintManagerConfig,
         active_blueprints: &mut ActiveBlueprints,
@@ -57,18 +56,20 @@ impl VerifiedBlueprint {
                 return Ok(());
             }
 
-            if let Err(e) = source.fetch(&cache_dir).await {
-                error!(
-                    "Failed to fetch blueprint from source {index}, attempting next available: {e}"
-                );
-                continue;
-            }
+            let binary_path = match source.fetch(&cache_dir).await {
+                Ok(binary_path) => binary_path,
+                Err(e) => {
+                    error!(
+                        "Failed to fetch blueprint from source {index}, attempting next available: {e}"
+                    );
+                    continue;
+                }
+            };
 
             // TODO(serial): Check preferred sources first
             let service_str = source.name();
             for service_id in &blueprint.services {
                 let sub_service_str = format!("{service_str}-{service_id}");
-                let bridge = Bridge::spawn(&manager_config.runtime_dir, &sub_service_str)?;
 
                 let (arguments, env_vars) = process_arguments_and_env(
                     blueprint_config,
@@ -84,62 +85,17 @@ impl VerifiedBlueprint {
                     arguments.join(" ")
                 );
 
-                // Now that the file is loaded, spawn the process
-                let mut handle = source
-                    .spawn(
-                        bridge,
-                        source_candidates,
-                        blueprint_config,
-                        &sub_service_str,
-                        arguments,
-                        env_vars,
-                    )
-                    .await?;
+                let mut service = Service::new(
+                    CHVmConfig,
+                    &manager_config.cache_dir,
+                    &manager_config.runtime_dir,
+                    &sub_service_str,
+                )?;
+                service.prepare(&binary_path, env_vars, arguments).await?;
 
-                if handle.wait_for_status_change().await != Some(Status::Running) {
-                    error!("Process did not start successfully");
-                    continue;
-                }
-
-                if blueprint.registration_mode {
-                    // We must wait for the process to exit successfully
-                    let Some(status) = handle.wait_for_status_change().await else {
-                        error!("Process status channel closed unexpectedly, aborting...");
-                        if !handle.abort() {
-                            error!(
-                                "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
-                            );
-                        }
-                        continue;
-                    };
-
-                    match status {
-                        Status::Finished => {
-                            info!(
-                                "***Protocol (registration mode) {sub_service_str} executed successfully***"
-                            );
-                        }
-                        Status::Error => {
-                            error!(
-                                "Protocol (registration mode) {sub_service_str} failed to execute: {status:?}"
-                            );
-                        }
-                        Status::Running => {
-                            error!("Process did not terminate successfully, aborting...");
-                            if !handle.abort() {
-                                error!(
-                                    "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
-                                );
-                            }
-                        }
-                    }
-                    continue;
-                }
-
-                active_blueprints
-                    .entry(blueprint_id)
-                    .or_default()
-                    .insert(*service_id, handle);
+                // TODO: start service
+                // TODO: verify service running
+                // TODO: add service to active blueprints
             }
 
             break;
@@ -269,7 +225,6 @@ pub(crate) fn check_blueprint_events(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_tangle_event(
     event: &TangleEvent,
-    source_candidates: &SourceCandidates,
     blueprints: &[RpcServicesWithBlueprint],
     blueprint_config: &BlueprintEnvironment,
     manager_config: &BlueprintManagerConfig,
@@ -339,12 +294,7 @@ pub(crate) async fn handle_tangle_event(
     // Step 3: Check to see if we need to start any new services
     for blueprint in &mut verified_blueprints {
         blueprint
-            .start_services_if_needed(
-                source_candidates,
-                blueprint_config,
-                manager_config,
-                active_blueprints,
-            )
+            .start_services_if_needed(blueprint_config, manager_config, active_blueprints)
             .await?;
     }
 
@@ -441,13 +391,8 @@ fn get_fetcher_candidates(
                 }
             },
 
-            BlueprintSource::Container(container) => {
-                let fetcher = ContainerSource::new(
-                    container.clone(),
-                    blueprint.blueprint_id,
-                    blueprint.name.clone(),
-                );
-                fetcher_candidates.push(DynBlueprintSource::boxed(fetcher));
+            BlueprintSource::Container(_) => {
+                unimplemented!("Container sources")
             }
 
             BlueprintSource::Testing(test) => {
