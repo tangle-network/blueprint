@@ -136,7 +136,7 @@ impl Future for BlueprintManagerHandle {
 ///
 /// * `blueprint_manager_config` - The configuration for the blueprint manager
 /// * `keystore` - The keystore to use for the blueprint manager
-/// * `blueprint_config` - The configuration for the blueprint
+/// * `env` - The environment configuration for the blueprint
 /// * `shutdown_cmd` - The shutdown command for the blueprint manager
 ///
 /// # Returns
@@ -313,7 +313,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 /// # Arguments
 ///
 /// * `blueprint_manager_config` - The configuration for the blueprint manager
-/// * `blueprint_config` - The configuration for the blueprint
+/// * `env` - The environment configuration for the blueprint
 /// * `shutdown_cmd` - The shutdown command for the blueprint manager
 ///
 /// # Returns
