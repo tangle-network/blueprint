@@ -1,5 +1,9 @@
-pub mod types;
+pub mod opentelemetry;
+pub mod prometheus;
 pub mod provider;
+pub mod service;
+pub mod types;
 
-pub use types::*;
 pub use provider::*;
+pub use service::*;
+pub use types::*;

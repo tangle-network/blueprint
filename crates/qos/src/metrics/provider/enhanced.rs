@@ -1,0 +1,351 @@
+use prometheus::Registry;
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::sync::RwLock;
+use tracing::{debug, error, info};
+
+use crate::error::Result;
+use crate::metrics::opentelemetry::{OpenTelemetryConfig, OpenTelemetryExporter};
+use crate::metrics::prometheus::{PrometheusCollector, PrometheusServer};
+use crate::metrics::types::{
+    BlueprintMetrics, BlueprintStatus, MetricsConfig, MetricsProvider, SystemMetrics,
+};
+
+/// Enhanced metrics provider that integrates Prometheus and OpenTelemetry
+pub struct EnhancedMetricsProvider {
+    /// System metrics
+    system_metrics: Arc<RwLock<Vec<SystemMetrics>>>,
+
+    /// Blueprint metrics
+    blueprint_metrics: Arc<RwLock<Vec<BlueprintMetrics>>>,
+
+    /// Blueprint status
+    blueprint_status: Arc<RwLock<BlueprintStatus>>,
+
+    /// Custom metrics
+    custom_metrics: Arc<RwLock<std::collections::HashMap<String, String>>>,
+
+    /// Prometheus collector
+    prometheus_collector: Arc<PrometheusCollector>,
+
+    /// OpenTelemetry exporter
+    opentelemetry_exporter: Arc<OpenTelemetryExporter>,
+
+    /// Prometheus server
+    prometheus_server: Arc<RwLock<Option<PrometheusServer>>>,
+
+    /// Configuration
+    config: MetricsConfig,
+
+    /// Start time
+    start_time: Instant,
+}
+
+impl EnhancedMetricsProvider {
+    /// Create a new enhanced metrics provider
+    pub fn new(metrics_config: MetricsConfig, otel_config: OpenTelemetryConfig) -> Result<Self> {
+        // Create a Prometheus registry
+        let registry = Registry::new();
+
+        // Create a Prometheus collector
+        let prometheus_collector = Arc::new(
+            PrometheusCollector::new(metrics_config.clone()).map_err(|e| {
+                crate::error::Error::Other(format!("Failed to create Prometheus collector: {}", e))
+            })?,
+        );
+
+        // Create an OpenTelemetry exporter
+        let opentelemetry_exporter = Arc::new(OpenTelemetryExporter::new(
+            registry.clone(),
+            otel_config,
+            &metrics_config,
+        )?);
+
+        // Initialize blueprint status
+        let mut blueprint_status = BlueprintStatus::default();
+        blueprint_status.service_id = metrics_config.service_id;
+        blueprint_status.blueprint_id = metrics_config.blueprint_id;
+
+        let provider = Self {
+            system_metrics: Arc::new(RwLock::new(Vec::new())),
+            blueprint_metrics: Arc::new(RwLock::new(Vec::new())),
+            blueprint_status: Arc::new(RwLock::new(blueprint_status)),
+            custom_metrics: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            prometheus_collector,
+            opentelemetry_exporter,
+            prometheus_server: Arc::new(RwLock::new(None)),
+            config: metrics_config,
+            start_time: Instant::now(),
+        };
+
+        Ok(provider)
+    }
+
+    /// Start the metrics collection
+    pub async fn start_collection(&self) -> Result<()> {
+        // Start the Prometheus server
+        let bind_address = self.config.bind_address.clone();
+        let registry = self.prometheus_collector.registry().clone();
+
+        let mut server = PrometheusServer::new(registry, bind_address);
+        server.start().await?;
+
+        if let Ok(mut prometheus_server) = self.prometheus_server.write().await {
+            *prometheus_server = Some(server);
+        } else {
+            error!("Failed to acquire prometheus_server write lock");
+            return Err(crate::error::Error::Other(
+                "Failed to acquire prometheus_server write lock".to_string(),
+            ));
+        }
+
+        // Start the metrics collection
+        let system_metrics = self.system_metrics.clone();
+        let blueprint_metrics = self.blueprint_metrics.clone();
+        let blueprint_status = self.blueprint_status.clone();
+        let custom_metrics = self.custom_metrics.clone();
+        let prometheus_collector = self.prometheus_collector.clone();
+        let start_time = self.start_time;
+        let config = self.config.clone();
+
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(config.collection_interval_secs));
+
+            loop {
+                interval.tick().await;
+
+                // Collect system metrics
+                let sys_metrics = Self::collect_system_metrics();
+
+                // Update Prometheus metrics
+                prometheus_collector.update_system_metrics(&sys_metrics);
+
+                // Store system metrics
+                {
+                    let mut metrics = match system_metrics.write().await {
+                        Ok(lock) => lock,
+                        Err(e) => {
+                            error!("Failed to acquire system_metrics write lock: {}", e);
+                            continue;
+                        }
+                    };
+                    metrics.push(sys_metrics);
+                    if metrics.len() > config.max_history {
+                        metrics.remove(0);
+                    }
+                }
+
+                // Collect blueprint metrics
+                let mut bp_metrics = BlueprintMetrics::default();
+                {
+                    let custom = match custom_metrics.read().await {
+                        Ok(lock) => lock,
+                        Err(e) => {
+                            error!("Failed to acquire custom_metrics read lock: {}", e);
+                            continue;
+                        }
+                    };
+                    bp_metrics.custom_metrics = custom.clone();
+                }
+
+                // Store blueprint metrics
+                {
+                    let mut metrics = match blueprint_metrics.write().await {
+                        Ok(lock) => lock,
+                        Err(e) => {
+                            error!("Failed to acquire blueprint_metrics write lock: {}", e);
+                            continue;
+                        }
+                    };
+                    metrics.push(bp_metrics);
+                    if metrics.len() > config.max_history {
+                        metrics.remove(0);
+                    }
+                }
+
+                // Update blueprint status
+                {
+                    let mut status = match blueprint_status.write().await {
+                        Ok(lock) => lock,
+                        Err(e) => {
+                            error!("Failed to acquire blueprint_status write lock: {}", e);
+                            continue;
+                        }
+                    };
+                    status.uptime = start_time.elapsed().as_secs();
+                    status.timestamp = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+
+                    // Update Prometheus metrics
+                    prometheus_collector.update_blueprint_status(&status);
+                }
+
+                debug!("Collected metrics");
+            }
+        });
+
+        info!("Started metrics collection");
+        Ok(())
+    }
+
+    /// Collect system metrics
+    fn collect_system_metrics() -> SystemMetrics {
+        let mut sys = sysinfo::System::new_all();
+        sys.refresh_all();
+
+        let memory_usage = sys.used_memory();
+        let total_memory = sys.total_memory();
+        let cpu_usage = sys.global_cpu_usage();
+
+        // TODO: Implement disk and network metrics collection
+        let disk_usage = 0;
+        let total_disk = 0;
+        let network_rx_bytes = 0;
+        let network_tx_bytes = 0;
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        SystemMetrics {
+            cpu_usage,
+            memory_usage,
+            total_memory,
+            disk_usage,
+            total_disk,
+            network_rx_bytes,
+            network_tx_bytes,
+            timestamp,
+        }
+    }
+
+    /// Record job execution
+    pub fn record_job_execution(&self, job_id: u64, execution_time: f64) {
+        self.prometheus_collector.record_job_execution(
+            job_id,
+            self.config.service_id,
+            self.config.blueprint_id,
+            execution_time,
+        );
+    }
+
+    /// Record job error
+    pub fn record_job_error(&self, job_id: u64, error_type: &str) {
+        self.prometheus_collector.record_job_error(
+            job_id,
+            self.config.service_id,
+            self.config.blueprint_id,
+            error_type,
+        );
+    }
+
+    /// Get the OpenTelemetry exporter
+    pub fn opentelemetry_exporter(&self) -> Arc<OpenTelemetryExporter> {
+        self.opentelemetry_exporter.clone()
+    }
+
+    /// Get the Prometheus collector
+    pub fn prometheus_collector(&self) -> Arc<PrometheusCollector> {
+        self.prometheus_collector.clone()
+    }
+}
+
+#[tonic::async_trait]
+impl MetricsProvider for EnhancedMetricsProvider {
+    fn get_system_metrics(&self) -> SystemMetrics {
+        match futures::executor::block_on(self.system_metrics.read()) {
+            Ok(guard) => guard.last().cloned().unwrap_or_default(),
+            Err(e) => {
+                error!("Failed to acquire system_metrics read lock: {}", e);
+                SystemMetrics::default()
+            }
+        }
+    }
+
+    fn get_blueprint_metrics(&self) -> BlueprintMetrics {
+        match futures::executor::block_on(self.blueprint_metrics.read()) {
+            Ok(guard) => guard.last().cloned().unwrap_or_default(),
+            Err(e) => {
+                error!("Failed to acquire blueprint_metrics read lock: {}", e);
+                BlueprintMetrics::default()
+            }
+        }
+    }
+
+    fn get_blueprint_status(&self) -> BlueprintStatus {
+        match futures::executor::block_on(self.blueprint_status.read()) {
+            Ok(guard) => guard.clone(),
+            Err(e) => {
+                error!("Failed to acquire blueprint_status read lock: {}", e);
+                BlueprintStatus::default()
+            }
+        }
+    }
+
+    fn get_system_metrics_history(&self) -> Vec<SystemMetrics> {
+        match futures::executor::block_on(self.system_metrics.read()) {
+            Ok(guard) => guard.clone(),
+            Err(e) => {
+                error!("Failed to acquire system_metrics read lock: {}", e);
+                Vec::new()
+            }
+        }
+    }
+
+    fn get_blueprint_metrics_history(&self) -> Vec<BlueprintMetrics> {
+        match futures::executor::block_on(self.blueprint_metrics.read()) {
+            Ok(guard) => guard.clone(),
+            Err(e) => {
+                error!("Failed to acquire blueprint_metrics read lock: {}", e);
+                Vec::new()
+            }
+        }
+    }
+
+    fn add_custom_metric(&self, key: String, value: String) {
+        let prometheus_collector = self.prometheus_collector.clone();
+        let custom_metrics = self.custom_metrics.clone();
+
+        tokio::spawn(async move {
+            if let Ok(mut metrics) = custom_metrics.write().await {
+                metrics.insert(key.clone(), value.clone());
+                prometheus_collector.add_custom_metric(key, value).await;
+            } else {
+                error!("Failed to acquire custom_metrics write lock");
+            }
+        });
+    }
+
+    fn set_blueprint_status(&self, status_code: u32, status_message: Option<String>) {
+        let blueprint_status = self.blueprint_status.clone();
+        let prometheus_collector = self.prometheus_collector.clone();
+
+        tokio::spawn(async move {
+            if let Ok(mut status) = blueprint_status.write().await {
+                status.status_code = status_code;
+                status.status_message = status_message;
+                prometheus_collector.update_blueprint_status(&status);
+            } else {
+                error!("Failed to acquire blueprint_status write lock");
+            }
+        });
+    }
+
+    fn update_last_heartbeat(&self, timestamp: u64) {
+        let blueprint_status = self.blueprint_status.clone();
+        let prometheus_collector = self.prometheus_collector.clone();
+
+        tokio::spawn(async move {
+            if let Ok(mut status) = blueprint_status.write().await {
+                status.last_heartbeat = Some(timestamp);
+                prometheus_collector.update_blueprint_status(&status);
+            } else {
+                error!("Failed to acquire blueprint_status write lock");
+            }
+        });
+    }
+}

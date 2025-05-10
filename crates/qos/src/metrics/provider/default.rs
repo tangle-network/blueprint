@@ -2,8 +2,11 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::info;
 
-use crate::metrics::types::{MetricsConfig, SystemMetrics, BlueprintMetrics, BlueprintStatus, MetricsProvider};
+use crate::metrics::types::{
+    BlueprintMetrics, BlueprintStatus, MetricsConfig, MetricsProvider, SystemMetrics,
+};
 
+/// Default metrics provider implementation
 pub struct DefaultMetricsProvider {
     system_metrics: Arc<RwLock<Vec<SystemMetrics>>>,
     blueprint_metrics: Arc<RwLock<Vec<BlueprintMetrics>>>,
@@ -14,6 +17,7 @@ pub struct DefaultMetricsProvider {
 }
 
 impl DefaultMetricsProvider {
+    /// Create a new default metrics provider
     pub fn new(config: MetricsConfig) -> Self {
         Self {
             system_metrics: Arc::new(RwLock::new(Vec::new())),
@@ -25,6 +29,7 @@ impl DefaultMetricsProvider {
         }
     }
 
+    /// Start collecting metrics
     pub fn start_collection(&self) -> crate::error::Result<()> {
         let system_metrics = self.system_metrics.clone();
         let blueprint_metrics = self.blueprint_metrics.clone();
@@ -34,7 +39,8 @@ impl DefaultMetricsProvider {
         let config = self.config.clone();
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(config.collection_interval_secs));
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(config.collection_interval_secs));
             loop {
                 interval.tick().await;
                 let sys_metrics = DefaultMetricsProvider::collect_system_metrics();
@@ -66,7 +72,10 @@ impl DefaultMetricsProvider {
                     let mut metrics = match blueprint_metrics.write() {
                         Ok(lock) => lock,
                         Err(e) => {
-                            tracing::error!("Failed to acquire blueprint_metrics write lock: {}", e);
+                            tracing::error!(
+                                "Failed to acquire blueprint_metrics write lock: {}",
+                                e
+                            );
                             continue;
                         }
                     };
@@ -95,6 +104,7 @@ impl DefaultMetricsProvider {
         Ok(())
     }
 
+    /// Collect system metrics
     fn collect_system_metrics() -> SystemMetrics {
         let mut sys = sysinfo::System::new_all();
         sys.refresh_all();

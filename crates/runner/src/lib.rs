@@ -204,6 +204,63 @@ where
         self
     }
 
+    /// Add a heartbeat service as a background service
+    ///
+    /// This method is a convenience wrapper around `background_service` specifically for
+    /// adding a heartbeat service from the QoS crate. The heartbeat service will send
+    /// periodic heartbeats to the chain or other monitoring systems.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use blueprint_qos::heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatService};
+    /// use blueprint_router::Router;
+    /// use blueprint_runner::BlueprintRunner;
+    /// use blueprint_runner::config::BlueprintEnvironment;
+    /// use std::sync::Arc;
+    ///
+    /// // Define a custom heartbeat consumer
+    /// struct MyHeartbeatConsumer;
+    ///
+    /// #[tonic::async_trait]
+    /// impl HeartbeatConsumer for MyHeartbeatConsumer {
+    ///     async fn send_heartbeat(
+    ///         &self,
+    ///         status: &blueprint_qos::heartbeat::HeartbeatStatus,
+    ///     ) -> Result<(), blueprint_qos::error::Error> {
+    ///         // Send heartbeat to the chain or other monitoring systems
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let env = BlueprintEnvironment::load()?;
+    /// let router = Router::new();
+    ///
+    /// // Create a heartbeat service with custom consumer
+    /// let config = HeartbeatConfig::default();
+    /// let consumer = Arc::new(MyHeartbeatConsumer);
+    /// let heartbeat_service = HeartbeatService::new(config, consumer);
+    ///
+    /// BlueprintRunner::builder((), env)
+    ///     .router(router)
+    ///     .heartbeat_service(heartbeat_service)
+    ///     .run()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn heartbeat_service<C>(
+        self,
+        service: blueprint_qos::heartbeat::HeartbeatService<C>,
+    ) -> Self
+    where
+        C: Send + Sync + 'static,
+    {
+        self.background_service(service)
+    }
+
     /// Append a background service to the list
     ///
     /// # Examples

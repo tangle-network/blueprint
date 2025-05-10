@@ -128,10 +128,7 @@ where
     fn start(
         &self,
     ) -> impl std::future::Future<
-        Output = std::result::Result<
-            Receiver<std::result::Result<(), RunnerError>>,
-            RunnerError,
-        >,
+        Output = std::result::Result<Receiver<std::result::Result<(), RunnerError>>, RunnerError>,
     > + Send {
         let config = self.config.clone();
         let running = self.running.clone();
