@@ -1,9 +1,11 @@
+use axum::http::uri;
 use prost::Message;
 
 use crate::{
+    Error,
     api_tokens::{CUSTOM_ENGINE, GeneratedApiToken},
     db::{RocksDb, cf},
-    types::KeyType,
+    types::{KeyType, ServiceId},
 };
 
 #[derive(prost::Message, Clone)]
@@ -20,14 +22,11 @@ pub struct ApiTokenModel {
     /// The sub-service ID this token is associated with (zero means no sub-service).
     #[prost(uint64)]
     sub_service_id: u64,
-    /// The token's expiration time in milliseconds since the epoch.
+    /// The token's expiration time in seconds since the epoch.
     ///
     /// Zero means no expiration.
-    #[prost(int64)]
-    pub expires_at: i64,
-    /// Whether the token is expired.
-    #[prost(bool)]
-    pub is_expired: bool,
+    #[prost(uint64)]
+    pub expires_at: u64,
     /// Whether the token is enabled.
     #[prost(bool)]
     pub is_enabled: bool,
@@ -36,6 +35,9 @@ pub struct ApiTokenModel {
 /// Represents a service model stored in the database.
 #[derive(prost::Message, Clone)]
 pub struct ServiceModel {
+    /// The service API Key prefix.
+    #[prost(string)]
+    api_key_prefix: String,
     /// A List of service owners.
     #[prost(message, repeated)]
     owners: Vec<ServiceOwnerModel>,
@@ -82,7 +84,7 @@ impl ApiTokenModel {
         let mut output = [0u8; 32];
         hasher.finalize(&mut output);
 
-        let token_hash = base64::Engine::encode(&CUSTOM_ENGINE, &output);
+        let token_hash = base64::Engine::encode(&CUSTOM_ENGINE, output);
 
         self.token == token_hash
     }
@@ -152,6 +154,35 @@ impl ApiTokenModel {
 
         Ok(next_id)
     }
+
+    /// Returns the token expiration time in milliseconds since the epoch.
+    /// Zero means no expiration.
+    pub fn expires_at(&self) -> Option<u64> {
+        if self.expires_at == 0 {
+            None
+        } else {
+            Some(self.expires_at)
+        }
+    }
+
+    /// Checks if the token is expired.
+    pub fn is_expired(&self) -> bool {
+        if self.expires_at == 0 {
+            return false;
+        }
+        let now = std::time::SystemTime::now();
+        let since_epoch = now
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+
+        let now = since_epoch.as_secs();
+        self.expires_at < now
+    }
+
+    /// Return the service ID associated with this token.
+    pub fn service_id(&self) -> ServiceId {
+        ServiceId::new(self.service_id).with_subservice(self.sub_service_id)
+    }
 }
 
 impl From<&GeneratedApiToken> for ApiTokenModel {
@@ -162,9 +193,69 @@ impl From<&GeneratedApiToken> for ApiTokenModel {
             service_id: token.service_id.0,
             sub_service_id: token.service_id.1,
             expires_at: token.expires_at().unwrap_or(0),
-            is_expired: false,
             is_enabled: true,
         }
+    }
+}
+
+impl ServiceModel {
+    /// Find a service by its ID in the database.
+    pub fn find_by_id(id: ServiceId, db: &RocksDb) -> Result<Option<Self>, crate::Error> {
+        let cf = db
+            .cf_handle(cf::SERVICES_USER_KEYS_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(cf::SERVICES_USER_KEYS_CF))?;
+        let service_bytes = db.get_pinned_cf(&cf, id.to_be_bytes())?;
+
+        service_bytes
+            .map(|bytes| ServiceModel::decode(bytes.as_ref()))
+            .transpose()
+            .map_err(Into::into)
+    }
+
+    /// Saves the service to the database at the given ID.
+    pub fn save(&self, id: ServiceId, db: &RocksDb) -> Result<(), crate::Error> {
+        let cf = db
+            .cf_handle(cf::SERVICES_USER_KEYS_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(cf::SERVICES_USER_KEYS_CF))?;
+        let service_bytes = self.encode_to_vec();
+        db.put_cf(&cf, id.to_be_bytes(), service_bytes)?;
+        Ok(())
+    }
+
+    pub fn api_key_prefix(&self) -> &str {
+        &self.api_key_prefix
+    }
+
+    /// Checks if the service has a specific owner.
+    pub fn is_owner(&self, key_type: KeyType, key_bytes: &[u8]) -> bool {
+        self.owners
+            .iter()
+            .any(|owner| owner.key_type == key_type as i32 && owner.key_bytes == key_bytes)
+    }
+
+    /// Adds a new owner to the service.
+    pub fn add_owner(&mut self, key_type: KeyType, key_bytes: Vec<u8>) {
+        let owner = ServiceOwnerModel {
+            key_type: key_type as i32,
+            key_bytes,
+        };
+        self.owners.push(owner);
+    }
+
+    /// Removes an owner from the service.
+    pub fn remove_owner(&mut self, key_type: KeyType, key_bytes: &[u8]) {
+        self.owners
+            .retain(|owner| !(owner.key_type == key_type as i32 && owner.key_bytes == key_bytes));
+    }
+
+    /// Returns the list of owners.
+    pub fn owners(&self) -> &[ServiceOwnerModel] {
+        &self.owners
+    }
+
+    /// Returns the upstream URL.
+    pub fn upstream_url(&self) -> Result<uri::Uri, Error> {
+        self.upstream_url.parse::<uri::Uri>().map_err(Into::into)
     }
 }
 
@@ -195,7 +286,6 @@ mod tests {
         assert_eq!(found_token.id, id);
         assert_eq!(found_token.token, token.token);
         assert_eq!(found_token.expires_at, token.expires_at);
-        assert_eq!(found_token.is_expired, token.is_expired);
         assert_eq!(found_token.is_enabled, token.is_enabled);
     }
 }

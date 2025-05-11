@@ -3,11 +3,10 @@ use serde::{Deserialize, Serialize};
 /// Common headers used in the authentication process.
 pub mod headers {
     pub const AUTHORIZATION: &str = "Authorization";
-    pub const AUTHORIZATION_BEARER: &str = "Bearer";
     pub const X_SERVICE_ID: &str = "X-Service-Id";
 }
 
-/// Represents the ID of a service in the authentication process.
+/// Represents the ID a service in the authentication process.
 ///
 /// The `ServiceId` is a tuple of two `u64` values, which can be used to uniquely identify a service.
 /// The first `u64` represents the main service ID, while the second `u64` represents a sub-service or a specific instance of the service.
@@ -49,6 +48,33 @@ impl ServiceId {
     /// Returns `true` if the sub-service ID is not zero, indicating that it is a specific instance of the service.
     pub fn has_sub_id(&self) -> bool {
         self.1 != 0
+    }
+
+    /// Converts the `ServiceId` to a big-endian byte array.
+    pub const fn to_be_bytes(&self) -> [u8; 16] {
+        let mut bytes = [0u8; 16];
+        let hi = self.0.to_be_bytes();
+        let lo = self.1.to_be_bytes();
+        let mut i = 0;
+        while i < 16 {
+            bytes[i] = hi[i];
+            bytes[i + 8] = lo[i];
+            i += 1;
+        }
+        bytes
+    }
+
+    /// Creates a `ServiceId` from a big-endian byte array.
+    pub const fn from_be_bytes(bytes: [u8; 16]) -> Self {
+        let mut hi = [0u8; 8];
+        let mut lo = [0u8; 8];
+        let mut i = 0;
+        while i < 16 {
+            hi[i] = bytes[i];
+            lo[i] = bytes[i + 8];
+            i += 1;
+        }
+        ServiceId(u64::from_be_bytes(hi), u64::from_be_bytes(lo))
     }
 }
 
@@ -130,13 +156,11 @@ where
 
         match header_str.parse::<ServiceId>() {
             Ok(service_id) => Ok(service_id),
-            Err(_) => {
-                return Err((
-                    StatusCode::BAD_REQUEST,
-                    "Invalid X-Service-Id header; not a valid ServiceId",
-                )
-                    .into_response());
-            }
+            Err(_) => Err((
+                StatusCode::BAD_REQUEST,
+                "Invalid X-Service-Id header; not a valid ServiceId",
+            )
+                .into_response()),
         }
     }
 }
@@ -182,7 +206,7 @@ pub struct ChallengeResponse {
     pub challenge: [u8; 32],
     /// Expires at timestamp in milliseconds since epoch
     /// the time when the challenge will expire and should not be used anymore
-    pub expires_at: i64,
+    pub expires_at: u64,
 }
 
 /// Represents the challenge solution sent from the client to the server after signing the challenge string.
@@ -197,22 +221,31 @@ pub struct VerifyChallengeRequest {
     /// The signed challenge string sent from the client to the server
     #[serde(with = "hex")]
     pub signature: Vec<u8>,
+    /// The timestamp in seconds since epoch at which the token will expire
+    pub expires_at: u64,
 }
 
 /// Represents the response sent from the server to the client after verifying the challenge solution.
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "status", content = "data")]
 pub enum VerifyChallengeResponse {
     /// The challenge was verified successfully
     Verified {
         /// The access token to be used for authentication from now on
         access_token: String,
         /// A UNIX timestamp in milliseconds since epoch at which the access token will expire
-        expires_at: i64,
+        expires_at: u64,
     },
     /// The challenge was not verified because the challenge has expired
     Expired,
     /// The challenge was not verified because the signature is invalid
     InvalidSignature,
+
+    /// The challenge was not verified because the service ID is not found
+    ServiceNotFound,
+
+    /// The challenge was not verified because the service ID is not authorized
+    Unauthorized,
 
     /// An unexpected error occurred during verification
     UnexpectedError {

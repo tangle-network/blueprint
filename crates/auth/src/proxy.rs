@@ -1,3 +1,4 @@
+use std::ops::Add;
 use std::path::Path;
 
 use axum::Json;
@@ -13,9 +14,9 @@ use axum::{
 };
 use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor, rt::TokioTimer};
 
-use crate::api_tokens::ApiTokenGenerator;
-use crate::models::ApiTokenModel;
-use crate::types::ServiceId;
+use crate::api_tokens::{ApiToken, ApiTokenGenerator};
+use crate::models::{ApiTokenModel, ServiceModel};
+use crate::types::{ServiceId, VerifyChallengeResponse};
 
 type HTTPClient = hyper_util::client::legacy::Client<HttpConnector, Body>;
 
@@ -59,17 +60,28 @@ impl AuthenticatedProxy {
 /// Auth challenge endpoint that handles authentication challenges
 async fn auth_challenge(
     service_id: ServiceId,
+    State(s): State<AuthenticatedProxyState>,
     Json(payload): Json<crate::types::ChallengeRequest>,
 ) -> Result<Json<crate::types::ChallengeResponse>, StatusCode> {
     let mut rng = rand::thread_rng();
-    // TODO: check for the public key of the sender.
-    let _public_key = payload.pub_key;
+    let service = ServiceModel::find_by_id(service_id, &s.db)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let public_key = payload.pub_key;
+    if !service.is_owner(payload.key_type, &public_key) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
     let challenge = crate::generate_challenge(&mut rng);
-    // Implement the logic for the auth challenge endpoint
+    let now = std::time::SystemTime::now();
+    let expires_at = now
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .add(std::time::Duration::from_secs(30))
+        .as_secs();
     Ok(Json(crate::types::ChallengeResponse {
         challenge,
-        // TODO: Support Expires_at
-        expires_at: 0,
+        expires_at,
     }))
 }
 
@@ -80,19 +92,45 @@ async fn auth_verify(
     Json(payload): Json<crate::types::VerifyChallengeRequest>,
 ) -> impl IntoResponse {
     let mut rng = rand::thread_rng();
-    // TODO: check public key of the sender.
+    let service = match ServiceModel::find_by_id(service_id, &s.db) {
+        Ok(Some(service)) => service,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(VerifyChallengeResponse::UnexpectedError {
+                    message: "Service not found".to_string(),
+                }),
+            );
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(crate::types::VerifyChallengeResponse::UnexpectedError {
+                    message: format!("Internal server error: {}", e),
+                }),
+            );
+        }
+    };
+
+    let public_key = payload.challenge_request.pub_key;
+    if !service.is_owner(payload.challenge_request.key_type, &public_key) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(crate::types::VerifyChallengeResponse::Unauthorized),
+        );
+    }
     // Verify the challenge
     let result = crate::verify_challenge(
         &payload.challenge,
         &payload.signature,
-        &payload.challenge_request.pub_key,
+        &public_key,
         payload.challenge_request.key_type,
     );
-    // TODO: support API Token prefix
-    let token_gen = ApiTokenGenerator::new();
+    let token_gen = ApiTokenGenerator::with_prefix(service.api_key_prefix());
     match result {
         Ok(true) => {
-            let token = token_gen.generate_token(service_id, &mut rng);
+            let token =
+                token_gen.generate_token_with_expiration(service_id, payload.expires_at, &mut rng);
             let id = match ApiTokenModel::from(&token).save(&s.db) {
                 Ok(id) => id,
                 Err(e) => {
@@ -128,12 +166,23 @@ async fn auth_verify(
 
 /// Reverse proxy handler that forwards requests to the target host based on the service ID
 async fn reverse_proxy(
+    ApiToken(token_id, token_str): ApiToken,
     State(s): State<AuthenticatedProxyState>,
     mut req: Request,
 ) -> Result<Response, StatusCode> {
-    let target_host = target_map
-        .get(&service_id)
-        .ok_or(StatusCode::PRECONDITION_FAILED)?;
+    let token = match ApiTokenModel::find_token_id(token_id, &s.db) {
+        Ok(Some(token)) if token.is(&token_str) && !token.is_expired() && token.is_enabled => token,
+        Ok(Some(_)) | Ok(None) => return Err(StatusCode::UNAUTHORIZED),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+    let service = match ServiceModel::find_by_id(token.service_id(), &s.db) {
+        Ok(Some(service)) => service,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+    let target_host = service
+        .upstream_url()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let path = req.uri().path();
     let path_query = req
@@ -213,6 +262,7 @@ mod tests {
             challenge: res.challenge,
             signature: signature.to_vec(),
             challenge_request: req,
+            expires_at: 0,
         };
 
         let res = client

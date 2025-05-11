@@ -42,6 +42,9 @@ pub enum Error {
 
     #[error("Unknown key type")]
     UnknownKeyType,
+
+    #[error(transparent)]
+    Uri(#[from] axum::http::uri::InvalidUri),
 }
 
 /// Generates a random challenge string to be used in the authentication process.
