@@ -56,7 +56,7 @@ impl ServiceId {
         let hi = self.0.to_be_bytes();
         let lo = self.1.to_be_bytes();
         let mut i = 0;
-        while i < 16 {
+        while i < 8 {
             bytes[i] = hi[i];
             bytes[i + 8] = lo[i];
             i += 1;
@@ -69,7 +69,7 @@ impl ServiceId {
         let mut hi = [0u8; 8];
         let mut lo = [0u8; 8];
         let mut i = 0;
-        while i < 16 {
+        while i < 8 {
             hi[i] = bytes[i];
             lo[i] = bytes[i + 8];
             i += 1;
@@ -252,4 +252,104 @@ pub enum VerifyChallengeResponse {
         /// The error message
         message: String,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_service_id_creation() {
+        // Create with just main ID
+        let service_id = ServiceId::new(42);
+        assert_eq!(service_id.0, 42);
+        assert_eq!(service_id.1, 0);
+
+        // Create with main ID and add subservice
+        let service_id = ServiceId::new(42).with_subservice(7);
+        assert_eq!(service_id.0, 42);
+        assert_eq!(service_id.1, 7);
+
+        // Create from tuple
+        let service_id = ServiceId::from((42, 7));
+        assert_eq!(service_id.0, 42);
+        assert_eq!(service_id.1, 7);
+    }
+
+    #[test]
+    fn test_service_id_accessors() {
+        let service_id = ServiceId(42, 7);
+
+        assert_eq!(service_id.id(), 42);
+        assert_eq!(service_id.sub_id(), 7);
+        assert!(service_id.has_sub_id());
+
+        let service_id = ServiceId(42, 0);
+        assert!(!service_id.has_sub_id());
+    }
+
+    #[test]
+    fn test_service_id_bytes_conversion() {
+        let service_id = ServiceId(42, 7);
+
+        let bytes = service_id.to_be_bytes();
+        assert_eq!(bytes.len(), 16);
+
+        let reconstructed = ServiceId::from_be_bytes(bytes);
+        assert_eq!(reconstructed, service_id);
+
+        // Test with different values
+        let service_id = ServiceId(0xDEADBEEF, 0xCAFEBABE);
+        let bytes = service_id.to_be_bytes();
+        let reconstructed = ServiceId::from_be_bytes(bytes);
+        assert_eq!(reconstructed, service_id);
+    }
+
+    #[test]
+    fn test_service_id_parsing() {
+        // Valid formats
+        assert_eq!("42".parse::<ServiceId>().unwrap(), ServiceId(42, 0));
+        assert_eq!("42:7".parse::<ServiceId>().unwrap(), ServiceId(42, 7));
+
+        // Invalid formats
+        let empty_result = "".parse::<ServiceId>();
+        assert!(empty_result.is_err());
+
+        assert!(matches!(
+            "abc".parse::<ServiceId>(),
+            Err(ServiceIdParseError::ParseInt(_))
+        ));
+        assert!(matches!(
+            "42:7:9".parse::<ServiceId>(),
+            Err(ServiceIdParseError::Malformed)
+        ));
+        assert!(matches!(
+            "42:abc".parse::<ServiceId>(),
+            Err(ServiceIdParseError::ParseInt(_))
+        ));
+    }
+
+    #[test]
+    fn test_service_id_display() {
+        assert_eq!(ServiceId(42, 0).to_string(), "42:0");
+        assert_eq!(ServiceId(42, 7).to_string(), "42:7");
+    }
+
+    #[test]
+    fn test_key_type_conversion() {
+        // Test KeyType to i32 conversion (as used in the ServiceOwnerModel)
+        assert_eq!(KeyType::Unknown as i32, 0);
+        assert_eq!(KeyType::Ecdsa as i32, 1);
+        assert_eq!(KeyType::Sr25519 as i32, 2);
+
+        // Test i32 to KeyType conversion (using transmute for simplicity in tests)
+        let key_type: KeyType = unsafe { std::mem::transmute(1i32) };
+        assert_eq!(key_type, KeyType::Ecdsa);
+    }
+
+    #[test]
+    fn test_headers_constants() {
+        assert_eq!(headers::AUTHORIZATION, "Authorization");
+        assert_eq!(headers::X_SERVICE_ID, "X-Service-Id");
+    }
 }

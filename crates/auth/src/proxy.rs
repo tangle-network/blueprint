@@ -222,11 +222,23 @@ mod tests {
         let tmp = tempdir().unwrap();
         let proxy = AuthenticatedProxy::new(tmp.path()).unwrap();
 
-        let router = proxy.router();
-        let client = TestClient::new(router);
+        // Create a service in the database first
+        let service_id = ServiceId::new(0);
+        let mut service = crate::models::ServiceModel {
+            api_key_prefix: "test_".to_string(),
+            owners: Vec::new(),
+            upstream_url: "http://localhost:8080".to_string(),
+        };
 
         let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
         let public_key = signing_key.verifying_key().to_sec1_bytes();
+
+        // Add the owner to the service
+        service.add_owner(KeyType::Ecdsa, public_key.clone().into());
+        service.save(service_id, &proxy.db).unwrap();
+
+        let router = proxy.router();
+        let client = TestClient::new(router);
 
         // Step 1
         let req = ChallengeRequest {
@@ -236,7 +248,7 @@ mod tests {
 
         let res = client
             .post("/auth/challenge")
-            .header(headers::X_SERVICE_ID, ServiceId::new(0).to_string())
+            .header(headers::X_SERVICE_ID, service_id.to_string())
             .json(&req)
             .await;
 

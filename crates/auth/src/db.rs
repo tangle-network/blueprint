@@ -178,3 +178,110 @@ fn adder_merge_operator(
     let result = sum.to_be_bytes().to_vec();
     Some(result)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rocksdb_config_default() {
+        let config = RocksDbConfig::default();
+
+        assert!(config.create_if_missing);
+        assert!(config.create_missing_column_families);
+        assert_eq!(config.compression_type, Some("none".to_string()));
+        assert!(!config.enable_statistics);
+
+        // Check that parallelism is reasonable (should be at least 1)
+        assert!(config.parallelism >= 1);
+    }
+
+    #[test]
+    fn test_rocksdb_open() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let config = RocksDbConfig::default();
+
+        let db_result = RocksDb::open(tmp_dir.path(), &config);
+        assert!(db_result.is_ok());
+
+        let db = db_result.unwrap();
+
+        // Verify that DB opened successfully by testing a simple put/get
+        let cf_names = vec![
+            cf::SEQ_CF.to_string(),
+            cf::USER_TOKENS_CF.to_string(),
+            cf::TOKENS_OPTS_CF.to_string(),
+            cf::SERVICES_USER_KEYS_CF.to_string(),
+        ];
+
+        // Check that we can get each column family
+        for name in cf_names {
+            let cf_handle = db.cf_handle(&name);
+            assert!(cf_handle.is_some());
+        }
+    }
+
+    #[test]
+    fn test_rocksdb_compression_types() {
+        // Test valid compression types
+        assert!(compression_type_from_str("none").is_ok());
+        assert!(compression_type_from_str("lz4").is_ok());
+        assert!(compression_type_from_str("snappy").is_ok());
+        assert!(compression_type_from_str("zlib").is_ok());
+        assert!(compression_type_from_str("zstd").is_ok());
+        assert!(compression_type_from_str("bz2").is_ok());
+        assert!(compression_type_from_str("lz4hc").is_ok());
+
+        // Case insensitivity
+        assert!(compression_type_from_str("LZ4").is_ok());
+        assert!(compression_type_from_str("Snappy").is_ok());
+
+        // Invalid compression type
+        let invalid = compression_type_from_str("invalid_compression");
+        assert!(invalid.is_err());
+        assert!(format!("{}", invalid.unwrap_err()).contains("Invalid"));
+    }
+
+    #[test]
+    fn test_rocksdb_compaction_styles() {
+        // Test valid compaction styles
+        assert!(compaction_style_from_str("level").is_ok());
+        assert!(compaction_style_from_str("universal").is_ok());
+        assert!(compaction_style_from_str("fifo").is_ok());
+
+        // Case insensitivity
+        assert!(compaction_style_from_str("LEVEL").is_ok());
+        assert!(compaction_style_from_str("Universal").is_ok());
+
+        // Invalid compaction style
+        let invalid = compaction_style_from_str("invalid_compaction");
+        assert!(invalid.is_err());
+        assert!(format!("{}", invalid.unwrap_err()).contains("Invalid"));
+    }
+
+    #[test]
+    fn test_adder_merge_operator() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let config = RocksDbConfig::default();
+        let db = RocksDb::open(tmp_dir.path(), &config).unwrap();
+
+        let seq_cf = db.cf_handle(cf::SEQ_CF).unwrap();
+
+        // Test merge operation with sequence counter
+        let result = db.merge_cf(&seq_cf, b"test_counter", 1u64.to_be_bytes());
+        assert!(result.is_ok());
+
+        let result = db.merge_cf(&seq_cf, b"test_counter", 2u64.to_be_bytes());
+        assert!(result.is_ok());
+
+        let value = db.get_cf(&seq_cf, b"test_counter").unwrap();
+        assert!(value.is_some());
+
+        // Convert the value to u64, should be 3 (1 + 2)
+        let bytes = value.unwrap();
+        let mut value_bytes = [0u8; 8];
+        value_bytes.copy_from_slice(&bytes);
+        let value = u64::from_be_bytes(value_bytes);
+        assert_eq!(value, 3);
+    }
+}

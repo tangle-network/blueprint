@@ -37,15 +37,15 @@ pub struct ApiTokenModel {
 pub struct ServiceModel {
     /// The service API Key prefix.
     #[prost(string)]
-    api_key_prefix: String,
+    pub(crate) api_key_prefix: String,
     /// A List of service owners.
     #[prost(message, repeated)]
-    owners: Vec<ServiceOwnerModel>,
+    pub(crate) owners: Vec<ServiceOwnerModel>,
     /// The service upstream URL.
     ///
     /// This what the proxy will use to forward requests to the service.
     #[prost(string)]
-    upstream_url: String,
+    pub(crate) upstream_url: String,
 }
 
 /// A service owner model stored in the database.

@@ -233,3 +233,127 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::ServiceId;
+    use axum::extract::FromRequestParts;
+    use axum::http::{Request, header::AUTHORIZATION};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn test_api_token_generator_new() {
+        let generator = ApiTokenGenerator::new();
+        let token = generator.generate_token(ServiceId::new(1), &mut rand::thread_rng());
+        assert!(!token.token.is_empty());
+    }
+
+    #[test]
+    fn test_api_token_generator_with_prefix() {
+        let prefix = "test-prefix-";
+        let generator = ApiTokenGenerator::with_prefix(prefix);
+        let mut rng = rand::thread_rng();
+
+        // Generate token with prefix
+        let token1 = generator.generate_token(ServiceId::new(1), &mut rng);
+
+        // Generate token without prefix for comparison
+        let plain_generator = ApiTokenGenerator::new();
+        let token2 = plain_generator.generate_token(ServiceId::new(1), &mut rng);
+
+        // Tokens should be different due to prefix
+        assert_ne!(token1.token, token2.token);
+    }
+
+    #[test]
+    fn test_token_expiration() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let expiry = now + 3600; // 1 hour from now
+
+        let generator = ApiTokenGenerator::new();
+        let mut rng = rand::thread_rng();
+
+        // Token with expiration
+        let token_with_expiry =
+            generator.generate_token_with_expiration(ServiceId::new(1), expiry, &mut rng);
+
+        // Token without expiration
+        let token_without_expiry = generator.generate_token(ServiceId::new(1), &mut rng);
+
+        // Check expiration times
+        assert_eq!(token_with_expiry.expires_at(), Some(expiry));
+        assert_eq!(token_without_expiry.expires_at(), None);
+    }
+
+    #[test]
+    fn test_plaintext_token() {
+        let generator = ApiTokenGenerator::new();
+        let mut rng = rand::thread_rng();
+        let token = generator.generate_token(ServiceId::new(1), &mut rng);
+
+        let id = 42;
+        let plaintext = token.plaintext(id);
+
+        // Plaintext should be formatted as "id|token"
+        assert!(plaintext.starts_with(&format!("{}|", id)));
+        assert!(plaintext.len() > 3); // At least "id|t"
+    }
+
+    #[test]
+    fn test_api_token_display() {
+        let token = ApiToken(123, "test-token".to_string());
+        assert_eq!(token.to_string(), "123|test-token");
+    }
+
+    #[tokio::test]
+    async fn test_api_token_from_request() {
+        // Create a request and extract parts
+        let req = Request::builder()
+            .header(
+                AUTHORIZATION,
+                "Bearer 123|RmFrZVRva2VuVGhhdElzQmFzZTY0RW5jb2RlZA",
+            )
+            .body(())
+            .unwrap();
+        let (mut parts, _) = req.into_parts();
+
+        // Test successful extraction
+        let result: Result<ApiToken, _> = ApiToken::from_request_parts(&mut parts, &()).await;
+        assert!(result.is_ok());
+        let token = result.unwrap();
+        assert_eq!(token.0, 123);
+        assert_eq!(token.1, "RmFrZVRva2VuVGhhdElzQmFzZTY0RW5jb2RlZA");
+
+        // Test missing Authorization header
+        let req = Request::builder().body(()).unwrap();
+        let (mut parts, _) = req.into_parts();
+        let result: Result<ApiToken, _> = ApiToken::from_request_parts(&mut parts, &()).await;
+        assert!(result.is_err());
+
+        // Test invalid Authorization format
+        let req = Request::builder()
+            .header(AUTHORIZATION, "Basic 123:password")
+            .body(())
+            .unwrap();
+        let (mut parts, _) = req.into_parts();
+        let result: Result<ApiToken, _> = ApiToken::from_request_parts(&mut parts, &()).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_base64_custom_engine() {
+        let input = b"This is a test string for base64 encoding";
+        let encoded = base64::Engine::encode(&CUSTOM_ENGINE, input);
+        let decoded = base64::Engine::decode(&CUSTOM_ENGINE, &encoded).unwrap();
+        assert_eq!(decoded, input);
+
+        // The encoding should be URL-safe with no padding
+        assert!(!encoded.contains('+'));
+        assert!(!encoded.contains('/'));
+        assert!(!encoded.contains('='));
+    }
+}

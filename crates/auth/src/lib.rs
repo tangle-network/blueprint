@@ -98,3 +98,157 @@ fn verify_challenge_sr25519(
         .map_err(Error::Schnorrkel)?;
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::types::KeyType;
+    use k256::ecdsa::SigningKey;
+
+    #[test]
+    fn test_generate_challenge() {
+        // Test with system RNG
+        let mut rng = rand::thread_rng();
+        let challenge1 = generate_challenge(&mut rng);
+
+        // Generate another challenge with the same RNG
+        let challenge2 = generate_challenge(&mut rng);
+
+        // Challenges should be different
+        assert_ne!(challenge1, challenge2);
+
+        // Should produce a non-zero challenge
+        assert_ne!(challenge1, [0u8; 32]);
+    }
+
+    #[test]
+    fn test_verify_challenge_ecdsa_valid() {
+        let mut rng = rand::thread_rng();
+
+        // Generate a random challenge
+        let challenge = generate_challenge(&mut rng);
+
+        // Generate a key pair
+        let signing_key = SigningKey::random(&mut rng);
+        let verification_key = signing_key.verifying_key();
+        let public_key = verification_key.to_sec1_bytes();
+
+        // Sign the challenge
+        let signature = &signing_key.sign_prehash_recoverable(&challenge).unwrap().0;
+
+        // Verify the signature
+        let result =
+            verify_challenge_ecdsa(&challenge, signature.to_bytes().as_slice(), &public_key);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_verify_challenge_ecdsa_invalid_signature() {
+        let mut rng = rand::thread_rng();
+
+        // Generate random challenges
+        let challenge = generate_challenge(&mut rng);
+        let different_challenge = generate_challenge(&mut rng);
+
+        // Generate a key pair
+        let signing_key = SigningKey::random(&mut rng);
+        let verification_key = signing_key.verifying_key();
+        let public_key = verification_key.to_sec1_bytes();
+
+        // Sign a different challenge
+        let signature = &signing_key
+            .sign_prehash_recoverable(&different_challenge)
+            .unwrap()
+            .0;
+        // Verification should fail because signature doesn't match the challenge
+        let result =
+            verify_challenge_ecdsa(&challenge, signature.to_bytes().as_slice(), &public_key);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn test_verify_challenge_ecdsa_invalid_key() {
+        let mut rng = rand::thread_rng();
+
+        // Generate a random challenge
+        let challenge = generate_challenge(&mut rng);
+
+        // Generate a key pair
+        let signing_key = SigningKey::random(&mut rng);
+
+        // Generate a different key pair
+        let different_signing_key = SigningKey::random(&mut rng);
+        let different_verification_key = different_signing_key.verifying_key();
+        let different_public_key = different_verification_key.to_sec1_bytes();
+
+        // Sign with first key
+        let signature = &signing_key.sign_prehash_recoverable(&challenge).unwrap().0;
+
+        // Verify with second key - should fail
+        let result = verify_challenge_ecdsa(
+            &challenge,
+            signature.to_bytes().as_slice(),
+            &different_public_key,
+        );
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn test_verify_challenge_unknown_key_type() {
+        let mut rng = rand::thread_rng();
+        let challenge = generate_challenge(&mut rng);
+        let result = verify_challenge(&challenge, &[0u8; 64], &[0u8; 33], KeyType::Unknown);
+        assert!(matches!(result, Err(Error::UnknownKeyType)));
+    }
+
+    #[test]
+    fn test_verify_challenge_integration() {
+        let mut rng = rand::thread_rng();
+
+        // Generate a random challenge
+        let challenge = generate_challenge(&mut rng);
+
+        // Generate an ECDSA key pair
+        let signing_key = SigningKey::random(&mut rng);
+        let verification_key = signing_key.verifying_key();
+        let public_key = verification_key.to_sec1_bytes();
+
+        // Sign the challenge with ECDSA
+        let signature = &signing_key.sign_prehash_recoverable(&challenge).unwrap().0;
+
+        // Verify via the main verify_challenge function
+        let result = verify_challenge(
+            &challenge,
+            signature.to_bytes().as_slice(),
+            &public_key,
+            KeyType::Ecdsa,
+        );
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    // Note: For SR25519, we'll do a basic test since we can't easily create valid signatures in tests
+    #[test]
+    fn test_verify_challenge_sr25519_error_handling() {
+        let mut rng = rand::thread_rng();
+        let challenge = generate_challenge(&mut rng);
+
+        // Create invalid signature and public key data
+        let invalid_signature = [0u8; 64];
+        let invalid_pub_key = [0u8; 32];
+
+        // This should return an error since the signature and public key are invalid
+        let result = verify_challenge_sr25519(&challenge, &invalid_signature, &invalid_pub_key);
+        assert!(result.is_err());
+
+        // Verify the error is a Schnorrkel error
+        match result {
+            Err(Error::Schnorrkel(_)) => assert!(true),
+            _ => panic!("Expected Schnorrkel error"),
+        }
+    }
+}
