@@ -10,28 +10,28 @@ A simple blueprint that only has one job that takes **x** and returns **x<sup>2<
 cargo build -p incredible-squaring-blueprint
 ```
 
-## Running the Gadget
+## Running the Blueprint
 
-- To run the gadget on Local Tangle Network, make sure you have tangle running on your local machine first by running
+- To run the blueprint on Local Tangle Network, make sure you have tangle running on your local machine first by running
   the following command:
 
 ```bash
 bash ./scripts/run-standalone-local.sh --clean
 ```
 
-- Add Alice to your local keystore, so that the gadget can use it to sign transactions:
+- Add Alice to your local keystore, so that the blueprint can use it to sign transactions:
 
 ```bash
  echo -n "e5be9a5092b81bca64be81d212e7f2f9eba183bb7a90954f7b76361f6edb5c0a" > target/keystore/0000d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d
 ```
 
-- Then, use the following command to run the gadget that uses the blueprint:
+- Then, use the following command to run the blueprint that uses the blueprint:
 
 ```bash
-RUST_LOG=incredible_squaring_gadget,gadget_sdk=trace,error cargo run -p incredible-squaring-blueprint -- run --url=ws://localhost:9944 --base-path=./target/keystore --blueprint-id=0 --service-id=0 --target-addr=0.0.0.0 --target-port=<bind-port>
+RUST_LOG=blueprint_sdk=trace,error cargo run -p incredible-squaring-blueprint -- run --url=ws://localhost:9944 --base-path=./target/keystore --blueprint-id=0 --service-id=0 --target-addr=0.0.0.0 --target-port=<bind-port>
 ```
 
-That's it! You should see the gadget running and listening for incoming requests on the Local Tangle Network.
+That's it! You should see the blueprint running and listening for incoming requests on the Local Tangle Network.
 
 ## Deploying the Blueprint to the Tangle
 

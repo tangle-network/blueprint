@@ -1,7 +1,7 @@
 use blueprint_context_derive::{
     EVMProviderContext, KeystoreContext, ServicesContext, TangleClientContext,
 };
-use blueprint_sdk::clients::GadgetServicesClient as _;
+use blueprint_sdk::clients::BlueprintServicesClient as _;
 use blueprint_sdk::contexts::instrumented_evm_client::EvmInstrumentedClientContext as _;
 use blueprint_sdk::contexts::keystore::KeystoreContext as _;
 use blueprint_sdk::contexts::services::ServicesContext as _;

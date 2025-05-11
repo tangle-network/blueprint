@@ -22,9 +22,9 @@ pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =
     about = "An program executor that connects to the Tangle network and runs protocols dynamically on the fly"
 )]
 pub struct BlueprintManagerConfig {
-    /// The path to the gadget configuration file
+    /// The path to the blueprint configuration file
     #[arg(short = 's', long)]
-    pub gadget_config: Option<PathBuf>,
+    pub blueprint_config: Option<PathBuf>,
     /// The path to the keystore
     #[arg(short = 'k', long)]
     pub keystore_uri: String,
@@ -72,7 +72,7 @@ fn default_cache_dir() -> PathBuf {
 impl Default for BlueprintManagerConfig {
     fn default() -> Self {
         Self {
-            gadget_config: None,
+            blueprint_config: None,
             keystore_uri: "./keystore".into(),
             data_dir: PathBuf::from("./data"),
             cache_dir: default_cache_dir(),

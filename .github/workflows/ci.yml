@@ -47,9 +47,6 @@ jobs:
       - name: Verify Forge installation
         run: forge --version
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-
       - name: install rust
         uses: actions-rs/toolchain@v1
         with:
@@ -140,9 +137,6 @@ jobs:
       - name: Verify Forge installation
         run: forge --version
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3 
-
       - name: install rust
         uses: dtolnay/rust-toolchain@nightly
         with:
@@ -151,6 +145,11 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           cache-on-failure: "true"
+      
+      - name: install protobuf and gmp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
 
       - uses: taiki-e/install-action@v2
         with:

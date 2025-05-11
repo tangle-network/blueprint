@@ -1,4 +1,4 @@
-#![cfg(not(unix))]
+#[cfg(not(unix))]
 compile_error!("The blueprint manager cannot be run on non-unix systems");
 
 use blueprint_manager::config::BlueprintManagerConfig;
@@ -16,16 +16,16 @@ async fn main() -> color_eyre::Result<()> {
     entry::setup_blueprint_manager_logger(
         blueprint_manager_config.verbose,
         blueprint_manager_config.pretty,
-        "gadget",
+        "blueprint",
     )?;
 
     // TODO: blueprint-manager CLI mode
     eprintln!("TODO: blueprint-manager CLI mode");
     return Ok(());
 
-    // let gadget_config_settings = std::fs::read_to_string(gadget_config)?;
-    // let gadget_config: GadgetConfig =
-    //     toml::from_str(&gadget_config_settings).map_err(|err| msg_to_error(err.to_string()))?;
+    // let blueprint_config_settings = std::fs::read_to_string(blueprint_config)?;
+    // let blueprint_config: BlueprintConfig =
+    //     toml::from_str(&blueprint_config_settings).map_err(|err| msg_to_error(err.to_string()))?;
     //
     // // Allow CTRL-C to shutdown this CLI application instance
     // let shutdown_signal = async move {
@@ -33,7 +33,7 @@ async fn main() -> color_eyre::Result<()> {
     // };
     //
     // let handle =
-    //     run_blueprint_manager(blueprint_manager_config, gadget_config, shutdown_signal).await?;
+    //     run_blueprint_manager(blueprint_manager_config, blueprint_config, shutdown_signal).await?;
     // handle.await?;
     //
     // Ok(())

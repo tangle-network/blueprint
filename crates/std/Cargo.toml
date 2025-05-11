@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-std"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 description = "Re-exports of core/std for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true

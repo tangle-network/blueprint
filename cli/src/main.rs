@@ -156,7 +156,7 @@ pub enum BlueprintCommands {
         target: DeployTarget,
     },
 
-    /// Run a gadget
+    /// Run a blueprint
     #[command(visible_alias = "r")]
     Run {
         /// The protocol to run (eigenlayer or tangle)

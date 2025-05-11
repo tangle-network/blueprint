@@ -9,7 +9,7 @@ pub enum Error {
     #[error("No testing fetcher found for blueprint, despite operating in test mode")]
     NoTestFetcher,
     #[error("Blueprint does not contain a supported fetcher")]
-    UnsupportedGadget,
+    UnsupportedBlueprint,
 
     #[error("Unable to find matching binary")]
     NoMatchingBinary,

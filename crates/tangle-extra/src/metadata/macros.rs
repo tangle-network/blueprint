@@ -168,7 +168,7 @@ fn generate_sources_for_current_crate() -> Result<Vec<BlueprintSource<'static>>,
             None => Vec::new(),
         };
     } else {
-        eprintln!("[WARN] No gadget metadata found in the Cargo.toml.");
+        eprintln!("[WARN] No blueprint metadata found in the Cargo.toml.");
         eprintln!("[WARN] For more information, see: <TODO>");
     }
 
@@ -185,7 +185,7 @@ fn generate_sources_for_current_crate() -> Result<Vec<BlueprintSource<'static>>,
         }));
     }
 
-    assert_ne!(sources.len(), 0, "No sources found for the gadget");
+    assert_ne!(sources.len(), 0, "No sources found for the blueprint");
     Ok(sources)
 }
 

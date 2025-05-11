@@ -93,7 +93,7 @@ pub trait TestEnv: Sized {
     fn add_background_service<B>(&mut self, service: B)
     where
         B: BackgroundService + Send + 'static;
-    fn get_gadget_config(&self) -> BlueprintEnvironment;
+    fn get_blueprint_config(&self) -> BlueprintEnvironment;
 
     /// Start the runner
     ///

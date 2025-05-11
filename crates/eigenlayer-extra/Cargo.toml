@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-eigenlayer-extra"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 description = "EigenLayer utilites for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true

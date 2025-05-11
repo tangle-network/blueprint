@@ -13,8 +13,8 @@ Before you begin, ensure you have the following installed:
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/tangle-network/gadget.git
-   cd gadget
+   git clone https://github.com/tangle-network/blueprint.git
+   cd blueprint
    ```
    
 2. Install Anvil:
@@ -36,5 +36,5 @@ cargo build --release -p incredible-squaring-blueprint-eigenlayer
 - We have a test for running this AVS Blueprint on a local Anvil Testnet. You can run the test with the following:
 
 ```bash
-RUST_LOG=gadget=trace cargo test --package incredible-squaring-blueprint-eigenlayer test_eigenlayer_incredible_squaring_blueprint -- --nocapture
+RUST_LOG=blueprint_sdk=trace cargo test --package incredible-squaring-blueprint-eigenlayer test_eigenlayer_incredible_squaring_blueprint -- --nocapture
 ```
