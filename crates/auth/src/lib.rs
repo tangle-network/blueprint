@@ -247,7 +247,7 @@ mod tests {
 
         // Verify the error is a Schnorrkel error
         match result {
-            Err(Error::Schnorrkel(_)) => assert!(true),
+            Err(Error::Schnorrkel(_)) => {}
             _ => panic!("Expected Schnorrkel error"),
         }
     }
