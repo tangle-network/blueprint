@@ -147,7 +147,7 @@ async fn auth_verify(
                 StatusCode::CREATED,
                 Json(crate::types::VerifyChallengeResponse::Verified {
                     access_token: plaintext,
-                    expires_at: 0,
+                    expires_at: payload.expires_at,
                 }),
             )
         }
