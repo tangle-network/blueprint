@@ -69,7 +69,7 @@ pub struct Dashboard {
 
     /// Dashboard schema version
     #[serde(default = "default_schema_version")]
-    pub schemaVersion: u64,
+    pub schema_version: u64,
 
     /// Dashboard version
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -109,7 +109,7 @@ pub struct Panel {
     pub datasource: Option<DataSource>,
 
     /// Panel grid position
-    pub gridPos: GridPos,
+    pub grid_pos: GridPos,
 
     /// Panel targets (queries)
     #[serde(default)]
@@ -121,7 +121,7 @@ pub struct Panel {
 
     /// Panel field config
     #[serde(default)]
-    pub fieldConfig: FieldConfig,
+    pub field_config: FieldConfig,
 }
 
 /// Data source model for Grafana panels
@@ -155,7 +155,7 @@ pub struct GridPos {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Target {
     /// Target reference ID
-    pub refId: String,
+    pub ref_id: String,
 
     /// Target expression (query)
     pub expr: String,
@@ -264,11 +264,11 @@ struct DashboardCreateRequest {
 
     /// Folder ID
     #[serde(skip_serializing_if = "Option::is_none")]
-    folderId: Option<u64>,
+    folder_id: Option<u64>,
 
     /// Folder UID
     #[serde(skip_serializing_if = "Option::is_none")]
-    folderUid: Option<String>,
+    folder_uid: Option<String>,
 
     /// Message
     message: String,
@@ -318,8 +318,8 @@ impl GrafanaClient {
 
         let request = DashboardCreateRequest {
             dashboard,
-            folderId: folder_id.or(self.config.org_id),
-            folderUid: None,
+            folder_id: folder_id.or(self.config.org_id),
+            folder_uid: None,
             message: message.to_string(),
             overwrite: true,
         };
@@ -417,7 +417,7 @@ impl GrafanaClient {
             tags: vec!["blueprint".to_string(), "tangle".to_string()],
             timezone: "browser".to_string(),
             refresh: Some("10s".to_string()),
-            schemaVersion: 36,
+            schema_version: 36,
             version: None,
             panels: Vec::new(),
         };
@@ -431,7 +431,7 @@ impl GrafanaClient {
                 ds_type: "prometheus".to_string(),
                 uid: prometheus_datasource.to_string(),
             }),
-            gridPos: GridPos {
+            grid_pos: GridPos {
                 x: 0,
                 y: 0,
                 w: 12,
@@ -439,7 +439,7 @@ impl GrafanaClient {
             },
             targets: vec![
                 Target {
-                    refId: "A".to_string(),
+                    ref_id: "A".to_string(),
                     expr: format!(
                         "blueprint_cpu_usage{{service_id=\"{}\",blueprint_id=\"{}\"}}",
                         service_id, blueprint_id
@@ -447,7 +447,7 @@ impl GrafanaClient {
                     datasource: None,
                 },
                 Target {
-                    refId: "B".to_string(),
+                    ref_id: "B".to_string(),
                     expr: format!(
                         "blueprint_memory_usage{{service_id=\"{}\",blueprint_id=\"{}\"}}",
                         service_id, blueprint_id
@@ -456,7 +456,7 @@ impl GrafanaClient {
                 },
             ],
             options: HashMap::new(),
-            fieldConfig: FieldConfig::default(),
+            field_config: FieldConfig::default(),
         };
 
         // Add job metrics panel
@@ -468,7 +468,7 @@ impl GrafanaClient {
                 ds_type: "prometheus".to_string(),
                 uid: prometheus_datasource.to_string(),
             }),
-            gridPos: GridPos {
+            grid_pos: GridPos {
                 x: 12,
                 y: 0,
                 w: 12,
@@ -476,7 +476,7 @@ impl GrafanaClient {
             },
             targets: vec![
                 Target {
-                    refId: "A".to_string(),
+                    ref_id: "A".to_string(),
                     expr: format!(
                         "blueprint_job_executions{{service_id=\"{}\",blueprint_id=\"{}\"}}",
                         service_id, blueprint_id
@@ -484,7 +484,7 @@ impl GrafanaClient {
                     datasource: None,
                 },
                 Target {
-                    refId: "B".to_string(),
+                    ref_id: "B".to_string(),
                     expr: format!(
                         "blueprint_job_errors{{service_id=\"{}\",blueprint_id=\"{}\"}}",
                         service_id, blueprint_id
@@ -493,7 +493,7 @@ impl GrafanaClient {
                 },
             ],
             options: HashMap::new(),
-            fieldConfig: FieldConfig::default(),
+            field_config: FieldConfig::default(),
         };
 
         // Add logs panel
@@ -505,14 +505,14 @@ impl GrafanaClient {
                 ds_type: "loki".to_string(),
                 uid: loki_datasource.to_string(),
             }),
-            gridPos: GridPos {
+            grid_pos: GridPos {
                 x: 0,
                 y: 8,
                 w: 24,
                 h: 8,
             },
             targets: vec![Target {
-                refId: "A".to_string(),
+                ref_id: "A".to_string(),
                 expr: format!(
                     "{{service=\"blueprint\",service_id=\"{}\",blueprint_id=\"{}\"}}",
                     service_id, blueprint_id
@@ -520,7 +520,7 @@ impl GrafanaClient {
                 datasource: None,
             }],
             options: HashMap::new(),
-            fieldConfig: FieldConfig::default(),
+            field_config: FieldConfig::default(),
         };
 
         // Add heartbeat panel
@@ -532,14 +532,14 @@ impl GrafanaClient {
                 ds_type: "prometheus".to_string(),
                 uid: prometheus_datasource.to_string(),
             }),
-            gridPos: GridPos {
+            grid_pos: GridPos {
                 x: 0,
                 y: 16,
                 w: 8,
                 h: 4,
             },
             targets: vec![Target {
-                refId: "A".to_string(),
+                ref_id: "A".to_string(),
                 expr: format!(
                     "blueprint_last_heartbeat{{service_id=\"{}\",blueprint_id=\"{}\"}}",
                     service_id, blueprint_id
@@ -547,7 +547,7 @@ impl GrafanaClient {
                 datasource: None,
             }],
             options: HashMap::new(),
-            fieldConfig: FieldConfig::default(),
+            field_config: FieldConfig::default(),
         };
 
         // Add status panel
@@ -559,14 +559,14 @@ impl GrafanaClient {
                 ds_type: "prometheus".to_string(),
                 uid: prometheus_datasource.to_string(),
             }),
-            gridPos: GridPos {
+            grid_pos: GridPos {
                 x: 8,
                 y: 16,
                 w: 8,
                 h: 4,
             },
             targets: vec![Target {
-                refId: "A".to_string(),
+                ref_id: "A".to_string(),
                 expr: format!(
                     "blueprint_status_code{{service_id=\"{}\",blueprint_id=\"{}\"}}",
                     service_id, blueprint_id
@@ -574,7 +574,7 @@ impl GrafanaClient {
                 datasource: None,
             }],
             options: HashMap::new(),
-            fieldConfig: FieldConfig::default(),
+            field_config: FieldConfig::default(),
         };
 
         // Add uptime panel
@@ -586,14 +586,14 @@ impl GrafanaClient {
                 ds_type: "prometheus".to_string(),
                 uid: prometheus_datasource.to_string(),
             }),
-            gridPos: GridPos {
+            grid_pos: GridPos {
                 x: 16,
                 y: 16,
                 w: 8,
                 h: 4,
             },
             targets: vec![Target {
-                refId: "A".to_string(),
+                ref_id: "A".to_string(),
                 expr: format!(
                     "blueprint_uptime{{service_id=\"{}\",blueprint_id=\"{}\"}}",
                     service_id, blueprint_id
@@ -601,7 +601,7 @@ impl GrafanaClient {
                 datasource: None,
             }],
             options: HashMap::new(),
-            fieldConfig: FieldConfig::default(),
+            field_config: FieldConfig::default(),
         };
 
         // Add panels to dashboard
