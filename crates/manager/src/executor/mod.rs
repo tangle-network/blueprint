@@ -176,6 +176,14 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         std::fs::create_dir_all(&blueprint_manager_config.cache_dir)?;
     }
 
+    if !blueprint_manager_config.runtime_dir.exists() {
+        info!(
+            "Runtime directory does not exist, creating it at `{}`",
+            blueprint_manager_config.runtime_dir.display()
+        );
+        std::fs::create_dir_all(&blueprint_manager_config.runtime_dir)?;
+    }
+
     let data_dir = &blueprint_manager_config.data_dir;
     if !data_dir.exists() {
         info!(
