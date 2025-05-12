@@ -87,7 +87,7 @@ impl VerifiedBlueprint {
 
                 let mut service = Service::new(
                     CHVmConfig,
-                    &manager_config.cache_dir,
+                    &cache_dir,
                     &manager_config.runtime_dir,
                     &sub_service_str,
                     &binary_path,

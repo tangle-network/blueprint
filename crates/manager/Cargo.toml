@@ -61,7 +61,7 @@ walkdir.workspace = true
 tonic.workspace = true
 tokio-stream = { workspace = true, features = ["net"] }
 cloud-hypervisor-client = { workspace = true }
-ext2.workspace = true
+fatfs.workspace = true
 
 [package.metadata.dist]
 dist = false

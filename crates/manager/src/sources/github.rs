@@ -2,7 +2,6 @@ use std::fs::File;
 use super::BlueprintSourceHandler;
 use crate::error::{Error, Result};
 use crate::blueprint::native::get_blueprint_binary;
-use crate::sdk;
 use crate::sdk::utils::{make_executable, valid_file_exists};
 use blueprint_core::info;
 use std::path::{Path, PathBuf};
@@ -12,7 +11,7 @@ use tangle_subxt::subxt::ext::jsonrpsee::core::__reexports::serde_json;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{BlueprintBinary, GithubFetcher};
 use tar::Archive;
 use tokio::io::AsyncWriteExt;
-use tracing::error;
+use tracing::{error, warn};
 use xz::read::XzDecoder;
 
 pub struct GithubBinaryFetcher {
@@ -45,25 +44,38 @@ impl GithubBinaryFetcher {
     async fn get_binary(&mut self, cache_dir: &Path) -> Result<PathBuf> {
         let relevant_binary =
             get_blueprint_binary(&self.fetcher.binaries.0).ok_or(Error::NoMatchingBinary)?;
-        let relevant_binary_name = String::from_utf8(relevant_binary.name.0.0.clone())?;
-
-        let expected_hash = sdk::utils::slice_32_to_sha_hex_string(relevant_binary.sha256);
 
         let tag_str = std::str::from_utf8(&self.fetcher.tag.0.0).map_or_else(
             |_| self.fetcher.tag.0.0.escape_ascii().to_string(),
             ToString::to_string,
         );
 
+        const DIST_MANIFEST_NAME: &str = "dist.json";
+
+        let relevant_binary_name = String::from_utf8(relevant_binary.name.0.0.clone())?;
+
         let archive_file_name = format!("archive-{tag_str}");
         let archive_download_path = cache_dir.join(archive_file_name);
+        let dist_manifest_path = cache_dir.join(DIST_MANIFEST_NAME);
+
+        let has_archive = valid_file_exists(&archive_download_path).await;
+        let has_manifest = valid_file_exists(&dist_manifest_path).await;
 
         // Check if the binary exists, if not download it
-        if valid_file_exists(&archive_download_path, &expected_hash).await {
+        if has_archive && has_manifest {
             info!(
                 "Archive already exists at: {}",
                 archive_download_path.display()
             );
+
+            self.target_binary_name = Some(relevant_binary_name);
             return Ok(archive_download_path);
+        }
+
+        if has_archive || has_manifest {
+            warn!("Missing archive or manifest, re-downloading...");
+            let _ = tokio::fs::remove_file(&archive_download_path).await;
+            let _ = tokio::fs::remove_file(&dist_manifest_path).await;
         }
 
         let urls = DownloadUrls::new(relevant_binary, &self.fetcher);
@@ -78,6 +90,8 @@ impl GithubBinaryFetcher {
         };
 
         let manifest_contents = manifest.bytes().await?;
+        std::fs::write(&dist_manifest_path, &manifest_contents)?;
+
         let manifest: DistManifest = serde_json::from_slice(manifest_contents.as_ref())?;
 
         let mut found_asset = false;
@@ -169,6 +183,7 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
             }
 
             binary_path = Some(entry.path().to_path_buf());
+            break;
         }
 
         let Some(mut binary_path) = binary_path else {
@@ -205,8 +220,12 @@ impl DownloadUrls {
             String::from_utf8(binary.name.0.0.clone()).expect("Should be a valid binary name");
         let os_name = format!("{:?}", binary.os).to_lowercase();
         let arch_name = format!("{:?}", binary.arch).to_lowercase();
-        let binary_archive_url = format!(
-            "https://github.com/{owner}/{repo}/releases/download/{tag}/{binary_name}-{os_name}-{arch_name}.tar.xz"
+        // let binary_archive_url = format!(
+        //     "https://github.com/{owner}/{repo}/releases/download/{tag}/{binary_name}-{os_name}-{arch_name}.tar.xz"
+        // );
+
+        let binary_archive_url = String::from(
+            "https://github.com/tangle-network/hyperlane-validator-blueprint/releases/download/0.1.0/hyperlane-validator-blueprint-bin-x86_64-unknown-linux-gnu.tar.xz",
         );
 
         let dist_manifest =

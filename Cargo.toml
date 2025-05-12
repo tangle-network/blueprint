@@ -227,7 +227,7 @@ blake3 = { version = "1.8.2", default-features = false }
 tar = "0.4.44"
 xz = "0.1.0"
 walkdir = "2.5.0"
-ext2 = "0.1.1"
+fatfs = "0.3.6"
 
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }

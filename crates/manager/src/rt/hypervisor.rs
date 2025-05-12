@@ -2,10 +2,11 @@ use crate::error::{Error, Result};
 use cloud_hypervisor_client::apis::DefaultApi;
 use cloud_hypervisor_client::models::{DiskConfig, VmConfig};
 use cloud_hypervisor_client::{SocketBasedApiClient, socket_based_api_client};
-use ext2::Ext2;
+use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
 use hyper::StatusCode;
-use std::fs::File;
-use std::io::Write;
+use std::fs;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::process::{Child, Command};
@@ -52,28 +53,38 @@ impl HypervisorInstance {
         env_vars: Vec<(String, String)>,
         arguments: Vec<String>,
     ) -> Result<()> {
-        const IMG_SIZE: u64 = 16 * 1024 * 1024;
+        // Leave 64 KiB for FAT overhead
+        const IMG_OVERHEAD: u64 = 64 * 1024;
+        // Make at *least* 1 MiB images
+        const MIN_IMG_SIZE: u64 = 1 * 1024 * 1024;
 
-        let mut img = File::create(&self.binary_image_path)?;
-        img.set_len(IMG_SIZE)?;
+        let binary_meta = fs::metadata(&binary_path)?;
 
-        Command::new("mkfs.ext2")
-            .args(["-q", "-F", &self.binary_image_path.display().to_string()])
-            .status()
-            .await?;
+        let file_data_len = binary_meta.len() + IMG_OVERHEAD;
+        let img_len = file_data_len.next_power_of_two().max(MIN_IMG_SIZE);
 
-        let mut fs = Ext2::new(&mut img)?;
+        let mut img = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .read(true)
+            .write(true)
+            .open(&self.binary_image_path)?;
+        img.set_len(img_len)?;
 
-        fs.create_dir("/srv")?;
-        {
-            let mut host_bin = File::open(binary_path.as_ref())?;
-            let mut guest_bin = fs.create("/srv/service")?;
-            std::io::copy(&mut host_bin, &mut guest_bin)?;
+        fatfs::format_volume(&mut img, FormatVolumeOptions::new())?;
 
-            let mut launch_script = fs.create("/srv/launch")?;
-            let launcher_script_content = Self::build_launcher_script(env_vars, arguments);
-            write!(&mut launch_script, "{launcher_script_content}")?;
-        }
+        let fs = FileSystem::new(&mut img, FsOptions::new())?;
+        let root = fs.root_dir();
+
+        std::io::copy(
+            &mut File::open(&binary_path)?,
+            &mut root.create_file("service")?,
+        )?;
+
+        let launcher_script_content = Self::build_launcher_script(env_vars, arguments);
+
+        let mut l = root.create_file("launch")?;
+        l.write_all(launcher_script_content.as_bytes())?;
 
         Ok(())
     }
@@ -103,6 +114,7 @@ impl HypervisorInstance {
         binary_path: impl AsRef<Path>,
         env_vars: Vec<(String, String)>,
         arguments: Vec<String>,
+        service_name: &str,
     ) -> Result<()> {
         let Some(_conf) = self.vm_conf.take() else {
             error!("Service already created!");
@@ -110,7 +122,11 @@ impl HypervisorInstance {
         };
 
         self.create_binary_image(binary_path, env_vars, arguments)
-            .await?;
+            .await
+            .map_err(|e| {
+                error!("Error creating binary image: {}", e);
+                e
+            })?;
 
         let vm_conf = VmConfig {
             cpus: None,
@@ -147,10 +163,10 @@ impl HypervisorInstance {
         };
 
         let client = self.client().await?;
-        client
-            .create_vm(vm_conf)
-            .await
-            .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
+        client.create_vm(vm_conf).await.map_err(|e| {
+            error!("Failed to create VM: {e:?}");
+            Error::Hypervisor(format!("{e:?}"))
+        })?;
 
         Ok(())
     }
@@ -160,10 +176,10 @@ impl HypervisorInstance {
             .client()
             .await
             .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
-        client
-            .boot_vm()
-            .await
-            .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
+        client.boot_vm().await.map_err(|e| {
+            error!("Failed to boot VM: {e:?}");
+            Error::Hypervisor(format!("{e:?}"))
+        })?;
 
         Ok(())
     }

@@ -26,7 +26,7 @@ pub fn hash_bytes_to_hex<T: AsRef<[u8]>>(input: T) -> String {
     hex::encode(hasher.finalize())
 }
 
-pub async fn valid_file_exists(path: impl AsRef<Path>, _expected_hash: &str) -> bool {
+pub async fn valid_file_exists(path: impl AsRef<Path>) -> bool {
     // The hash is sha3_256 of the binary
     if let Ok(_file) = tokio::fs::read(path).await {
         // TODO(HACK): Compute the SHA3-256
