@@ -4,7 +4,7 @@ use crate::blueprint::native::FilteredBlueprint;
 use crate::blueprint::ActiveBlueprints;
 use crate::sdk::utils::bounded_string_to_string;
 use crate::sources::github::GithubBinaryFetcher;
-use crate::sources::{process_arguments_and_env, BlueprintSourceHandler, DynBlueprintSource, Status};
+use crate::sources::{process_arguments_and_env, BlueprintSourceHandler, DynBlueprintSource};
 use crate::sources::testing::TestSourceFetcher;
 use blueprint_clients::tangle::client::{TangleConfig, TangleEvent};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
@@ -17,7 +17,7 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use tangle_subxt::tangle_testnet_runtime::api::services::events::{
     JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
 };
-use crate::rt::service::Service;
+use crate::rt::service::{Service, Status};
 use crate::rt::hypervisor::CHVmConfig;
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
@@ -90,12 +90,69 @@ impl VerifiedBlueprint {
                     &manager_config.cache_dir,
                     &manager_config.runtime_dir,
                     &sub_service_str,
-                )?;
-                service.prepare(&binary_path, env_vars, arguments).await?;
+                    &binary_path,
+                    env_vars,
+                    arguments,
+                )
+                .await?;
 
-                // TODO: start service
+                service.start().await?;
                 // TODO: verify service running
-                // TODO: add service to active blueprints
+                // Now that the file is loaded, spawn the process
+                //                 let mut handle = source
+                //                     .spawn(
+                //                         source_candidates,
+                //                         blueprint_config,
+                //                         &sub_service_str,
+                //                         arguments,
+                //                         env_vars,
+                //                     )
+                //                     .await?;
+                //
+                //                 if handle.wait_for_status_change().await != Some(Status::Running) {
+                //                     error!("Process did not start successfully");
+                //                     continue;
+                //                 }
+                //
+                //                 if blueprint.registration_mode {
+                //                     // We must wait for the process to exit successfully
+                //                     let Some(status) = handle.wait_for_status_change().await else {
+                //                         error!("Process status channel closed unexpectedly, aborting...");
+                //                         if !handle.abort() {
+                //                             error!(
+                //                                 "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                //                             );
+                //                         }
+                //                         continue;
+                //                     };
+                //
+                //                     match status {
+                //                         Status::Finished => {
+                //                             info!(
+                //                                 "***Protocol (registration mode) {sub_service_str} executed successfully***"
+                //                             );
+                //                         }
+                //                         Status::Error => {
+                //                             error!(
+                //                                 "Protocol (registration mode) {sub_service_str} failed to execute: {status:?}"
+                //                             );
+                //                         }
+                //                         Status::Running => {
+                //                             error!("Process did not terminate successfully, aborting...");
+                //                             if !handle.abort() {
+                //                                 error!(
+                //                                     "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
+                //                                 );
+                //                             }
+                //                         }
+                //                     }
+                //                     continue;
+                //                 }
+
+                active_blueprints
+                    .entry(blueprint_id)
+                    .or_default()
+                    .insert(*service_id, service);
             }
 
             break;
@@ -322,7 +379,7 @@ pub(crate) async fn handle_tangle_event(
 
             // Check to see if any process handles have died
             if !to_remove.contains(&(*blueprint_id, *service_id))
-                && process_handle.status() != Status::Running
+                && !matches!(process_handle.status(), Ok(Status::Running))
             {
                 // By removing any killed processes, we will auto-restart them on the next finality notification if required
                 warn!("Killing service that has died to allow for auto-restart");
@@ -339,13 +396,8 @@ pub(crate) async fn handle_tangle_event(
             );
 
             if let Some(process_handle) = blueprints.remove(&service_id) {
-                if process_handle.abort() {
-                    warn!("Sent abort signal to service: bid={blueprint_id}//sid={service_id}");
-                } else {
-                    error!(
-                        "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
-                    );
-                }
+                warn!("Sending abort signal to service: bid={blueprint_id}//sid={service_id}");
+                process_handle.shutdown().await?;
             }
 
             if blueprints.is_empty() {

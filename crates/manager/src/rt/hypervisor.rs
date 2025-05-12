@@ -3,11 +3,14 @@ use cloud_hypervisor_client::apis::DefaultApi;
 use cloud_hypervisor_client::models::{DiskConfig, VmConfig};
 use cloud_hypervisor_client::{SocketBasedApiClient, socket_based_api_client};
 use ext2::Ext2;
+use hyper::StatusCode;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::process::{Child, Command};
-use tracing::error;
+use tokio::time::sleep;
+use tracing::{error, info, warn};
 
 pub struct CHVmConfig;
 
@@ -176,18 +179,53 @@ impl HypervisorInstance {
     }
 
     pub async fn shutdown(mut self) -> Result<()> {
+        const VM_SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(10);
+
         let client = self
             .client()
             .await
             .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
+
+        // Wait for the VM to power down (sends SIGINT to the blueprint)
         client
-            .shutdown_vmm()
+            .power_button_vm()
             .await
             .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
 
-        self.handle.wait().await?;
+        let shutdown_task = async {
+            loop {
+                let r = client.vm_info_get().await;
+                match r {
+                    Ok(_info) => sleep(Duration::from_millis(500)).await,
+                    Err(cloud_hypervisor_client::apis::Error::Api(
+                        cloud_hypervisor_client::apis::ApiError {
+                            code: StatusCode::NOT_FOUND,
+                            ..
+                        },
+                    )) => return Ok(()),
+                    Err(e) => return Err(Error::Hypervisor(format!("{e:?}"))),
+                }
+            }
+        };
+
+        info!("Attempting to shutdown VM...");
+        if tokio::time::timeout(VM_SHUTDOWN_GRACE_PERIOD, shutdown_task)
+            .await
+            .is_err()
+        {
+            warn!("Unable to shutdown VM");
+        }
 
         let _ = std::fs::remove_file(self.sock_path);
+
+        if let Err(e) = client.shutdown_vmm().await {
+            error!("Unable to gracefully shutdown VM manager, killing process: {e:?}");
+            self.handle.kill().await?;
+            return Ok(());
+        }
+
+        // VM manager shutting down, process will exit with it
+        self.handle.wait().await?;
 
         Ok(())
     }
