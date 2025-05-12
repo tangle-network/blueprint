@@ -1,5 +1,7 @@
+use opentelemetry::global::meter_provider;
 use opentelemetry::metrics::{MeterProvider, Unit};
 use opentelemetry_prometheus::PrometheusExporter;
+use opentelemetry_sdk::metrics::reader::MetricReader;
 use opentelemetry_sdk::metrics::{MeterProviderBuilder, PeriodicReader};
 use prometheus::Registry;
 use std::sync::Arc;
@@ -35,7 +37,7 @@ impl Default for OpenTelemetryConfig {
 /// OpenTelemetry exporter
 pub struct OpenTelemetryExporter {
     /// Prometheus exporter
-    exporter: PrometheusExporter,
+    // exporter: PrometheusExporter,
     /// Meter provider
     meter_provider: Arc<opentelemetry_sdk::metrics::MeterProvider>,
     /// Meter
@@ -57,30 +59,22 @@ impl OpenTelemetryExporter {
             .build()
             .map_err(|e| Error::Other(format!("Failed to create OpenTelemetry exporter: {}", e)))?;
 
-        // Create a periodic reader for the exporter
-        let reader = PeriodicReader::builder(exporter.clone(), opentelemetry_sdk::runtime::Tokio)
-            .with_interval(std::time::Duration::from_secs(
-                metrics_config.collection_interval_secs,
-            ))
+        let meter_provider = MeterProviderBuilder::default()
+            .with_reader(exporter)
             .build();
-
-        // Create a meter provider
-        let meter_provider = MeterProviderBuilder::default().with_reader(reader).build();
 
         let meter_provider = Arc::new(meter_provider);
 
         // Create a meter
-        let meter = meter_provider
-            .meter(format!(
-                "{}_{}",
-                otel_config.service_name, otel_config.service_version
-            ))
-            .with_unit(Unit::new("1"));
+        let meter = meter_provider.meter(format!(
+            "{}_{}",
+            otel_config.service_name, otel_config.service_version
+        ));
 
         info!("Created OpenTelemetry exporter");
 
         Ok(Self {
-            exporter,
+            // exporter,
             meter_provider,
             meter,
             config: otel_config,
@@ -97,16 +91,16 @@ impl OpenTelemetryExporter {
         self.meter_provider.clone()
     }
 
-    /// Get the Prometheus exporter
-    pub fn prometheus_exporter(&self) -> &PrometheusExporter {
-        &self.exporter
-    }
+    // /// Get the Prometheus exporter
+    // pub fn prometheus_exporter(&self) -> &PrometheusExporter {
+    //     &self.exporter
+    // }
 
     /// Create a counter
     pub fn create_counter(
         &self,
-        name: &str,
-        description: &str,
+        name: String,
+        description: String,
     ) -> opentelemetry::metrics::Counter<u64> {
         self.meter
             .u64_counter(name)
@@ -117,8 +111,8 @@ impl OpenTelemetryExporter {
     /// Create a counter with attributes
     pub fn create_counter_with_attributes(
         &self,
-        name: &str,
-        description: &str,
+        name: String,
+        description: String,
     ) -> opentelemetry::metrics::Counter<u64> {
         self.meter
             .u64_counter(name)
@@ -129,8 +123,8 @@ impl OpenTelemetryExporter {
     /// Create a histogram
     pub fn create_histogram(
         &self,
-        name: &str,
-        description: &str,
+        name: String,
+        description: String,
     ) -> opentelemetry::metrics::Histogram<f64> {
         self.meter
             .f64_histogram(name)
@@ -141,11 +135,11 @@ impl OpenTelemetryExporter {
     /// Create a gauge
     pub fn create_gauge(
         &self,
-        name: &str,
-        description: &str,
-    ) -> opentelemetry::metrics::Gauge<f64> {
+        name: String,
+        description: String,
+    ) -> opentelemetry::metrics::ObservableGauge<f64> {
         self.meter
-            .f64_gauge(name)
+            .f64_observable_gauge(name)
             .with_description(description)
             .init()
     }
@@ -153,8 +147,8 @@ impl OpenTelemetryExporter {
     /// Create an up-down counter
     pub fn create_up_down_counter(
         &self,
-        name: &str,
-        description: &str,
+        name: String,
+        description: String,
     ) -> opentelemetry::metrics::UpDownCounter<i64> {
         self.meter
             .i64_up_down_counter(name)

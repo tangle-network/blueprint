@@ -3,7 +3,7 @@ syntax = "proto3";
 package qos;
 
 // QoS service for blueprint monitoring
-service QoSMetrics {
+service QosMetrics {
   // Get the current status of a blueprint
   rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
   

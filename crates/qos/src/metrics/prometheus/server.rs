@@ -58,8 +58,10 @@ impl PrometheusServer {
         info!("Starting Prometheus metrics server on {}", addr);
 
         tokio::spawn(async move {
-            let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-            axum::serve(listener, app)
+            let listener = std::net::TcpListener::bind(&addr).unwrap();
+            axum::Server::from_tcp(listener)
+                .unwrap()
+                .serve(app.into_make_service())
                 .with_graceful_shutdown(async {
                     rx.await.ok();
                 })

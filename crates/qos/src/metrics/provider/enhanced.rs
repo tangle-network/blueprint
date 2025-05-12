@@ -90,14 +90,17 @@ impl EnhancedMetricsProvider {
         let mut server = PrometheusServer::new(registry, bind_address);
         server.start().await?;
 
-        if let Ok(mut prometheus_server) = self.prometheus_server.write().await {
-            *prometheus_server = Some(server);
-        } else {
-            error!("Failed to acquire prometheus_server write lock");
-            return Err(crate::error::Error::Other(
-                "Failed to acquire prometheus_server write lock".to_string(),
-            ));
-        }
+        let mut prometheus_server = self.prometheus_server.write().await;
+        *prometheus_server = Some(server);
+
+        // if let Ok(mut prometheus_server) = self.prometheus_server.write().await {
+        //     *prometheus_server = Some(server);
+        // } else {
+        //     error!("Failed to acquire prometheus_server write lock");
+        //     return Err(crate::error::Error::Other(
+        //         "Failed to acquire prometheus_server write lock".to_string(),
+        //     ));
+        // }
 
         // Start the metrics collection
         let system_metrics = self.system_metrics.clone();
@@ -122,66 +125,34 @@ impl EnhancedMetricsProvider {
                 prometheus_collector.update_system_metrics(&sys_metrics);
 
                 // Store system metrics
-                {
-                    let mut metrics = match system_metrics.write().await {
-                        Ok(lock) => lock,
-                        Err(e) => {
-                            error!("Failed to acquire system_metrics write lock: {}", e);
-                            continue;
-                        }
-                    };
-                    metrics.push(sys_metrics);
-                    if metrics.len() > config.max_history {
-                        metrics.remove(0);
-                    }
+                let mut metrics = system_metrics.write().await;
+                metrics.push(sys_metrics);
+                if metrics.len() > config.max_history {
+                    metrics.remove(0);
                 }
 
                 // Collect blueprint metrics
                 let mut bp_metrics = BlueprintMetrics::default();
-                {
-                    let custom = match custom_metrics.read().await {
-                        Ok(lock) => lock,
-                        Err(e) => {
-                            error!("Failed to acquire custom_metrics read lock: {}", e);
-                            continue;
-                        }
-                    };
-                    bp_metrics.custom_metrics = custom.clone();
-                }
+                let custom = custom_metrics.read().await;
+                bp_metrics.custom_metrics = custom.clone();
 
                 // Store blueprint metrics
-                {
-                    let mut metrics = match blueprint_metrics.write().await {
-                        Ok(lock) => lock,
-                        Err(e) => {
-                            error!("Failed to acquire blueprint_metrics write lock: {}", e);
-                            continue;
-                        }
-                    };
-                    metrics.push(bp_metrics);
-                    if metrics.len() > config.max_history {
-                        metrics.remove(0);
-                    }
+                let mut metrics = blueprint_metrics.write().await;
+                metrics.push(bp_metrics);
+                if metrics.len() > config.max_history {
+                    metrics.remove(0);
                 }
 
                 // Update blueprint status
-                {
-                    let mut status = match blueprint_status.write().await {
-                        Ok(lock) => lock,
-                        Err(e) => {
-                            error!("Failed to acquire blueprint_status write lock: {}", e);
-                            continue;
-                        }
-                    };
-                    status.uptime = start_time.elapsed().as_secs();
-                    status.timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
+                let mut status = blueprint_status.write().await;
+                status.uptime = start_time.elapsed().as_secs();
+                status.timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
 
-                    // Update Prometheus metrics
-                    prometheus_collector.update_blueprint_status(&status);
-                }
+                // Update Prometheus metrics
+                prometheus_collector.update_blueprint_status(&status);
 
                 debug!("Collected metrics");
             }
@@ -257,53 +228,28 @@ impl EnhancedMetricsProvider {
 #[tonic::async_trait]
 impl MetricsProvider for EnhancedMetricsProvider {
     fn get_system_metrics(&self) -> SystemMetrics {
-        match futures::executor::block_on(self.system_metrics.read()) {
-            Ok(guard) => guard.last().cloned().unwrap_or_default(),
-            Err(e) => {
-                error!("Failed to acquire system_metrics read lock: {}", e);
-                SystemMetrics::default()
-            }
-        }
+        let guard = futures::executor::block_on(self.system_metrics.read());
+        guard.last().cloned().unwrap_or_default()
     }
 
     fn get_blueprint_metrics(&self) -> BlueprintMetrics {
-        match futures::executor::block_on(self.blueprint_metrics.read()) {
-            Ok(guard) => guard.last().cloned().unwrap_or_default(),
-            Err(e) => {
-                error!("Failed to acquire blueprint_metrics read lock: {}", e);
-                BlueprintMetrics::default()
-            }
-        }
+        let guard = futures::executor::block_on(self.blueprint_metrics.read());
+        guard.last().cloned().unwrap_or_default()
     }
 
     fn get_blueprint_status(&self) -> BlueprintStatus {
-        match futures::executor::block_on(self.blueprint_status.read()) {
-            Ok(guard) => guard.clone(),
-            Err(e) => {
-                error!("Failed to acquire blueprint_status read lock: {}", e);
-                BlueprintStatus::default()
-            }
-        }
+        let guard = futures::executor::block_on(self.blueprint_status.read());
+        guard.clone()
     }
 
     fn get_system_metrics_history(&self) -> Vec<SystemMetrics> {
-        match futures::executor::block_on(self.system_metrics.read()) {
-            Ok(guard) => guard.clone(),
-            Err(e) => {
-                error!("Failed to acquire system_metrics read lock: {}", e);
-                Vec::new()
-            }
-        }
+        let guard = futures::executor::block_on(self.system_metrics.read());
+        guard.clone()
     }
 
     fn get_blueprint_metrics_history(&self) -> Vec<BlueprintMetrics> {
-        match futures::executor::block_on(self.blueprint_metrics.read()) {
-            Ok(guard) => guard.clone(),
-            Err(e) => {
-                error!("Failed to acquire blueprint_metrics read lock: {}", e);
-                Vec::new()
-            }
-        }
+        let guard = futures::executor::block_on(self.blueprint_metrics.read());
+        guard.clone()
     }
 
     fn add_custom_metric(&self, key: String, value: String) {
@@ -311,12 +257,9 @@ impl MetricsProvider for EnhancedMetricsProvider {
         let custom_metrics = self.custom_metrics.clone();
 
         tokio::spawn(async move {
-            if let Ok(mut metrics) = custom_metrics.write().await {
-                metrics.insert(key.clone(), value.clone());
-                prometheus_collector.add_custom_metric(key, value).await;
-            } else {
-                error!("Failed to acquire custom_metrics write lock");
-            }
+            let mut metrics = custom_metrics.write().await;
+            metrics.insert(key.clone(), value.clone());
+            prometheus_collector.add_custom_metric(key, value).await;
         });
     }
 
@@ -325,13 +268,10 @@ impl MetricsProvider for EnhancedMetricsProvider {
         let prometheus_collector = self.prometheus_collector.clone();
 
         tokio::spawn(async move {
-            if let Ok(mut status) = blueprint_status.write().await {
-                status.status_code = status_code;
-                status.status_message = status_message;
-                prometheus_collector.update_blueprint_status(&status);
-            } else {
-                error!("Failed to acquire blueprint_status write lock");
-            }
+            let mut status = blueprint_status.write().await;
+            status.status_code = status_code;
+            status.status_message = status_message;
+            prometheus_collector.update_blueprint_status(&status);
         });
     }
 
@@ -340,12 +280,9 @@ impl MetricsProvider for EnhancedMetricsProvider {
         let prometheus_collector = self.prometheus_collector.clone();
 
         tokio::spawn(async move {
-            if let Ok(mut status) = blueprint_status.write().await {
-                status.last_heartbeat = Some(timestamp);
-                prometheus_collector.update_blueprint_status(&status);
-            } else {
-                error!("Failed to acquire blueprint_status write lock");
-            }
+            let mut status = blueprint_status.write().await;
+            status.last_heartbeat = Some(timestamp);
+            prometheus_collector.update_blueprint_status(&status);
         });
     }
 }

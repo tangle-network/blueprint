@@ -44,12 +44,8 @@ impl PrometheusCollector {
         let registry = Registry::new();
 
         // Register process metrics
-        prometheus::process_collector::ProcessCollector::for_self()
-            .map_err(|e| {
-                error!("Failed to create process collector: {}", e);
-                e
-            })?
-            .collect();
+        let process_collector = prometheus::process_collector::ProcessCollector::for_self();
+        registry.register(Box::new(process_collector))?;
 
         // System metrics
         let cpu_usage = Gauge::new("blueprint_cpu_usage", "CPU usage percentage")?;
@@ -163,10 +159,13 @@ impl PrometheusCollector {
         blueprint_id: u64,
         execution_time: f64,
     ) {
+        let job_id_str = job_id.to_string();
+        let service_id_str = service_id.to_string();
+        let blueprint_id_str = blueprint_id.to_string();
         let labels = [
-            job_id.to_string(),
-            service_id.to_string(),
-            blueprint_id.to_string(),
+            job_id_str.as_str(),
+            service_id_str.as_str(),
+            blueprint_id_str.as_str(),
         ];
 
         self.job_executions.with_label_values(&labels).inc();
@@ -191,11 +190,14 @@ impl PrometheusCollector {
         blueprint_id: u64,
         error_type: &str,
     ) {
+        let job_id_str = job_id.to_string();
+        let service_id_str = service_id.to_string();
+        let blueprint_id_str = blueprint_id.to_string();
         let labels = [
-            job_id.to_string(),
-            service_id.to_string(),
-            blueprint_id.to_string(),
-            error_type.to_string(),
+            job_id_str.as_str(),
+            service_id_str.as_str(),
+            blueprint_id_str.as_str(),
+            error_type,
         ];
 
         self.job_errors.with_label_values(&labels).inc();
@@ -211,21 +213,14 @@ impl PrometheusCollector {
 
     /// Add custom metric
     pub async fn add_custom_metric(&self, key: String, value: String) {
-        if let Ok(mut custom_metrics) = self.custom_metrics.write().await {
-            custom_metrics.insert(key.clone(), value.clone());
-            debug!(key = key, value = value, "Added custom metric");
-        } else {
-            error!("Failed to acquire custom_metrics write lock");
-        }
+        let mut custom_metrics = self.custom_metrics.write().await;
+        custom_metrics.insert(key.clone(), value.clone());
+        debug!(key = key, value = value, "Added custom metric");
     }
 
     /// Get custom metrics
     pub async fn get_custom_metrics(&self) -> std::collections::HashMap<String, String> {
-        if let Ok(custom_metrics) = self.custom_metrics.read().await {
-            custom_metrics.clone()
-        } else {
-            error!("Failed to acquire custom_metrics read lock");
-            std::collections::HashMap::new()
-        }
+        let custom_metrics = self.custom_metrics.read().await;
+        custom_metrics.clone()
     }
 }

@@ -7,7 +7,7 @@ use tokio::time;
 use tracing::{error, info};
 
 use crate::error::Result;
-use blueprint_runner::{BackgroundService, error::RunnerError};
+// use blueprint_runner::{BackgroundService, error::RunnerError};
 
 /// Configuration for the heartbeat service
 #[derive(Clone, Debug)]
@@ -121,54 +121,54 @@ where
     }
 }
 
-impl<C> BackgroundService for HeartbeatService<C>
-where
-    C: HeartbeatConsumer,
-{
-    fn start(
-        &self,
-    ) -> impl std::future::Future<
-        Output = std::result::Result<Receiver<std::result::Result<(), RunnerError>>, RunnerError>,
-    > + Send {
-        let config = self.config.clone();
-        let running = self.running.clone();
-        let service = self.clone();
+// impl<C> BackgroundService for HeartbeatService<C>
+// where
+//     C: HeartbeatConsumer,
+// {
+//     fn start(
+//         &self,
+//     ) -> impl std::future::Future<
+//         Output = std::result::Result<Receiver<std::result::Result<(), RunnerError>>, RunnerError>,
+//     > + Send {
+//         let config = self.config.clone();
+//         let running = self.running.clone();
+//         let service = self.clone();
 
-        async move {
-            let (tx, rx) = oneshot::channel();
+//         async move {
+//             let (tx, rx) = oneshot::channel();
 
-            *running.lock().await = true;
+//             *running.lock().await = true;
 
-            tokio::spawn(async move {
-                let mut interval = time::interval(Duration::from_secs(config.interval_secs));
+//             tokio::spawn(async move {
+//                 let mut interval = time::interval(Duration::from_secs(config.interval_secs));
 
-                loop {
-                    interval.tick().await;
+//                 loop {
+//                     interval.tick().await;
 
-                    if config.jitter_percent > 0 {
-                        let jitter = thread_rng().gen_range(0..=config.jitter_percent) as u64;
-                        let jitter_ms = (config.interval_secs * jitter * 10) / 1000;
-                        if jitter_ms > 0 {
-                            time::sleep(Duration::from_millis(jitter_ms)).await;
-                        }
-                    }
+//                     if config.jitter_percent > 0 {
+//                         let jitter = thread_rng().gen_range(0..=config.jitter_percent) as u64;
+//                         let jitter_ms = (config.interval_secs * jitter * 10) / 1000;
+//                         if jitter_ms > 0 {
+//                             time::sleep(Duration::from_millis(jitter_ms)).await;
+//                         }
+//                     }
 
-                    if !*running.lock().await {
-                        break;
-                    }
+//                     if !*running.lock().await {
+//                         break;
+//                     }
 
-                    if let Err(e) = service.send_heartbeat().await {
-                        error!("Failed to send heartbeat: {}", e);
-                    }
-                }
+//                     if let Err(e) = service.send_heartbeat().await {
+//                         error!("Failed to send heartbeat: {}", e);
+//                     }
+//                 }
 
-                let _ = tx.send(Ok(()));
-            });
+//                 let _ = tx.send(Ok(()));
+//             });
 
-            Ok(rx)
-        }
-    }
-}
+//             Ok(rx)
+//         }
+//     }
+// }
 
 impl<C> Clone for HeartbeatService<C>
 where
@@ -184,39 +184,39 @@ where
     }
 }
 
-/// Implementation of HeartbeatConsumer for Tangle
-#[cfg(feature = "tangle")]
-pub mod tangle {
-    use super::*;
-    use blueprint_clients::tangle::client::TangleClient;
-    use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+// /// Implementation of HeartbeatConsumer for Tangle
+// #[cfg(feature = "tangle")]
+// pub mod tangle {
+//     use super::*;
+//     use blueprint_clients::tangle::client::TangleClient;
+//     use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 
-    /// Tangle heartbeat consumer
-    pub struct TangleHeartbeatConsumer<S> {
-        client: TangleClient,
+//     /// Tangle heartbeat consumer
+//     pub struct TangleHeartbeatConsumer<S> {
+//         client: TangleClient,
 
-        signer: S,
-    }
+//         signer: S,
+//     }
 
-    impl<S> TangleHeartbeatConsumer<S> {
-        /// Create a new Tangle heartbeat consumer
-        pub fn new(client: TangleClient, signer: S) -> Self {
-            Self { client, signer }
-        }
-    }
+//     impl<S> TangleHeartbeatConsumer<S> {
+//         /// Create a new Tangle heartbeat consumer
+//         pub fn new(client: TangleClient, signer: S) -> Self {
+//             Self { client, signer }
+//         }
+//     }
 
-    impl<S> HeartbeatConsumer for TangleHeartbeatConsumer<S>
-    where
-        S: Send + Sync + Clone + 'static,
-    {
-        async fn send_heartbeat(&self, status: &HeartbeatStatus) -> Result<()> {
-            info!(
-                service_id = status.service_id,
-                blueprint_id = status.blueprint_id,
-                "Sending heartbeat to Tangle chain"
-            );
+//     impl<S> HeartbeatConsumer for TangleHeartbeatConsumer<S>
+//     where
+//         S: Send + Sync + Clone + 'static,
+//     {
+//         async fn send_heartbeat(&self, status: &HeartbeatStatus) -> Result<()> {
+//             info!(
+//                 service_id = status.service_id,
+//                 blueprint_id = status.blueprint_id,
+//                 "Sending heartbeat to Tangle chain"
+//             );
 
-            Ok(())
-        }
-    }
-}
+//             Ok(())
+//         }
+//     }
+// }

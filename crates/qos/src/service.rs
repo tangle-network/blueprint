@@ -4,7 +4,7 @@ use tracing::info;
 
 use crate::error::{Error, Result};
 use crate::metrics::MetricsProvider;
-use crate::proto::qos_metrics_server::{QoSMetrics, QoSMetricsServer};
+use crate::proto::qos_metrics_server::{QosMetrics, QosMetricsServer};
 use crate::proto::{
     BlueprintMetrics as ProtoBlueprintMetrics, GetBlueprintMetricsRequest,
     GetBlueprintMetricsResponse, GetHistoricalMetricsRequest, GetHistoricalMetricsResponse,
@@ -14,11 +14,11 @@ use crate::proto::{
 
 /// QoS metrics service implementation
 #[derive(Debug)]
-pub struct QoSMetricsService<T> {
+pub struct QosMetricsService<T> {
     provider: Arc<T>,
 }
 
-impl<T> QoSMetricsService<T>
+impl<T> QosMetricsService<T>
 where
     T: MetricsProvider,
 {
@@ -29,7 +29,7 @@ where
 }
 
 #[tonic::async_trait]
-impl<T> QoSMetrics for QoSMetricsService<T>
+impl<T> QosMetrics for QosMetricsService<T>
 where
     T: MetricsProvider,
 {
@@ -193,8 +193,8 @@ where
 
     info!("QoS metrics server listening on {}", addr);
 
-    let service = QoSMetricsService::new(provider);
-    let server = QoSMetricsServer::new(service);
+    let service = QosMetricsService::new(provider);
+    let server = QosMetricsServer::new(service);
 
     Server::builder()
         .add_service(server)

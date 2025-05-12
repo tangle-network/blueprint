@@ -1,12 +1,12 @@
 use std::sync::Arc;
-use tokio::sync::oneshot::{self, Receiver};
+// use tokio::sync::oneshot::{self, Receiver};
 use tracing::{error, info};
 
-use blueprint_runner::{BackgroundService, error::RunnerError};
+// use blueprint_runner::{BackgroundService, error::RunnerError};
 
 use crate::QoSConfig;
 use crate::error::Result;
-use crate::heartbeat::{HeartbeatConfig, HeartbeatService};
+use crate::heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatService};
 use crate::logging::{GrafanaClient, GrafanaConfig, LokiConfig, init_loki_logging};
 use crate::metrics::opentelemetry::OpenTelemetryConfig;
 use crate::metrics::provider::EnhancedMetricsProvider;
@@ -33,7 +33,7 @@ pub struct QoSService<C> {
 
 impl<C> QoSService<C>
 where
-    C: Send + Sync + 'static,
+    C: HeartbeatConsumer + Send + Sync + 'static,
 {
     /// Create a new QoS service with heartbeat, metrics, and optional Loki/Grafana integration
     pub fn new(config: QoSConfig, heartbeat_consumer: Arc<C>) -> Result<Self> {
@@ -192,40 +192,40 @@ where
     }
 }
 
-#[tonic::async_trait]
-impl<C> BackgroundService for QoSService<C>
-where
-    C: Send + Sync + 'static,
-{
-    async fn start(&self) -> std::result::Result<Receiver<()>, RunnerError> {
-        // Create a channel for shutdown
-        let (tx, rx) = oneshot::channel();
+// #[tonic::async_trait]
+// impl<C> BackgroundService for QoSService<C>
+// where
+//     C: Send + Sync + 'static,
+// {
+//     async fn start(&self) -> std::result::Result<Receiver<()>, RunnerError> {
+//         // Create a channel for shutdown
+//         let (tx, rx) = oneshot::channel();
 
-        // Start the heartbeat service if available
-        if let Some(heartbeat_service) = &self.heartbeat_service {
-            heartbeat_service.start().await.map_err(|e| {
-                RunnerError::BackgroundServiceError(format!(
-                    "Failed to start heartbeat service: {}",
-                    e
-                ))
-            })?;
-        }
+//         // Start the heartbeat service if available
+//         if let Some(heartbeat_service) = &self.heartbeat_service {
+//             heartbeat_service.start().await.map_err(|e| {
+//                 RunnerError::BackgroundServiceError(format!(
+//                     "Failed to start heartbeat service: {}",
+//                     e
+//                 ))
+//             })?;
+//         }
 
-        // Start the metrics service if available
-        if let Some(metrics_service) = &self.metrics_service {
-            metrics_service.start().await.map_err(|e| {
-                RunnerError::BackgroundServiceError(format!(
-                    "Failed to start metrics service: {}",
-                    e
-                ))
-            })?;
-        }
+//         // Start the metrics service if available
+//         if let Some(metrics_service) = &self.metrics_service {
+//             metrics_service.start().await.map_err(|e| {
+//                 RunnerError::BackgroundServiceError(format!(
+//                     "Failed to start metrics service: {}",
+//                     e
+//                 ))
+//             })?;
+//         }
 
-        info!("Started QoS service");
+//         info!("Started QoS service");
 
-        Ok(rx)
-    }
-}
+//         Ok(rx)
+//     }
+// }
 
 /// Builder for QoS service
 pub struct QoSServiceBuilder<C> {
@@ -239,7 +239,7 @@ pub struct QoSServiceBuilder<C> {
 
 impl<C> QoSServiceBuilder<C>
 where
-    C: Send + Sync + 'static,
+    C: HeartbeatConsumer + Send + Sync + 'static,
 {
     /// Create a new QoS service builder
     pub fn new() -> Self {
@@ -339,7 +339,7 @@ where
 
 impl<C> Default for QoSServiceBuilder<C>
 where
-    C: Send + Sync + 'static,
+    C: HeartbeatConsumer + Send + Sync + 'static,
 {
     fn default() -> Self {
         Self::new()

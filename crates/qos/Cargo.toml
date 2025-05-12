@@ -14,10 +14,10 @@ workspace = true
 
 [dependencies]
 blueprint-core = { workspace = true, features = ["tracing"] }
-blueprint-runner = { workspace = true }
+# blueprint-runner = { workspace = true }
 blueprint-crypto = { workspace = true }
 blueprint-keystore = { workspace = true }
-blueprint-clients = { workspace = true }
+# blueprint-clients = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 thiserror = { workspace = true }
@@ -59,9 +59,9 @@ tonic-build = { workspace = true, features = ["prost"] }
 default = ["std"]
 std = [
     "blueprint-core/std",
-    "blueprint-runner/std",
+    # "blueprint-runner/std",
     "blueprint-crypto/std",
     "blueprint-keystore/std",
-    "blueprint-clients/std",
+    # "blueprint-clients/std",
 ]
-tangle = ["blueprint-clients/tangle"]
+# tangle = ["blueprint-clients/tangle"]
