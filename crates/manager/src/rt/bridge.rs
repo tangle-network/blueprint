@@ -7,6 +7,7 @@ use tokio::net::UnixListener;
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::{Request, Response, transport::Server};
+use tracing::error;
 
 pub struct BridgeHandle {
     sock_path: PathBuf,
@@ -40,7 +41,13 @@ impl Bridge {
         let sock_name = format!("{}.sock", self.service_name);
         let sock_path = self.runtime_dir.join(&sock_name);
         let _ = std::fs::remove_file(&sock_path);
-        let listener = UnixListener::bind(&sock_path)?;
+        let listener = UnixListener::bind(&sock_path).map_err(|e| {
+            error!(
+                "Failed to bind bridge socket at {}: {e}",
+                sock_path.display()
+            );
+            e
+        })?;
 
         let handle = tokio::task::spawn(async move {
             Server::builder()
