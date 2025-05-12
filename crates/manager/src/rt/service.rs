@@ -4,6 +4,13 @@ use crate::error::Result;
 use std::path::Path;
 use tracing::error;
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Status {
+    Running,
+    Finished,
+    Error,
+}
+
 enum BridgeState {
     Inactive(Bridge),
     Started(BridgeHandle),
@@ -15,18 +22,26 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn new(
+    pub async fn new(
         vm_conf: CHVmConfig,
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
+        binary_path: impl AsRef<Path>,
+        env_vars: Vec<(String, String)>,
+        arguments: Vec<String>,
     ) -> Result<Service> {
-        let hypervisor = HypervisorInstance::new(
+        let mut hypervisor = HypervisorInstance::new(
             vm_conf,
             cache_dir.as_ref(),
             runtime_dir.as_ref(),
             service_name,
         )?;
+
+        hypervisor
+            .prepare(binary_path.as_ref(), env_vars, arguments)
+            .await?;
+
         let bridge = Bridge::new(runtime_dir.as_ref().to_path_buf(), service_name.to_string());
 
         Ok(Self {
@@ -35,16 +50,9 @@ impl Service {
         })
     }
 
-    pub async fn prepare(
-        &mut self,
-        binary_path: impl AsRef<Path>,
-        env_vars: Vec<(String, String)>,
-        arguments: Vec<String>,
-    ) -> Result<()> {
-        self.hypervisor
-            .prepare(binary_path.as_ref(), env_vars, arguments)
-            .await?;
-        Ok(())
+    pub fn status(&self) -> Result<Status> {
+        // TODO: A way to actually check the status
+        Ok(Status::Running)
     }
 
     pub async fn start(&mut self) -> Result<()> {
