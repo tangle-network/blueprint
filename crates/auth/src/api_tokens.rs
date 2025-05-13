@@ -149,19 +149,15 @@ impl ApiToken {
 
     /// Parses a string into an `ApiToken`.
     fn from_str(s: &str) -> Result<ApiToken, ParseApiTokenError> {
-        // Use an iterator to avoid allocations
         let mut parts = s.splitn(3, '|');
 
-        // Get the ID part (first segment)
         let id_part = parts.next().ok_or(ParseApiTokenError::MalformedToken)?;
         let id = id_part
             .parse::<u64>()
             .map_err(|_| ParseApiTokenError::InvalidTokenId)?;
 
-        // Get the token part (second segment)
         let token_part = parts.next().ok_or(ParseApiTokenError::MalformedToken)?;
 
-        // Check if it is a valid base64 token
         if base64::Engine::decode(&CUSTOM_ENGINE, token_part).is_err() {
             return Err(ParseApiTokenError::MalformedToken);
         }
@@ -171,7 +167,6 @@ impl ApiToken {
             return Err(ParseApiTokenError::MalformedToken);
         }
 
-        // Use Cow to avoid allocation when parsing temporary strings
         Ok(ApiToken::new(id, token_part))
     }
 }

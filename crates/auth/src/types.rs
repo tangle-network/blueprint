@@ -10,9 +10,6 @@ pub mod headers {
 ///
 /// The `ServiceId` is a tuple of two `u64` values, which can be used to uniquely identify a service.
 /// The first `u64` represents the main service ID, while the second `u64` represents a sub-service or a specific instance of the service.
-///
-/// This structure is useful for identifying services in a distributed system, where multiple instances of the same service may co-exist on the
-/// same service instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ServiceId(pub u64, pub u64);
 
