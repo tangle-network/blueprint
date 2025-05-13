@@ -1,6 +1,12 @@
 [workspace]
 resolver = "3"
-members = ["cli", "crates/*", "crates/networking/extensions/*", "examples/incredible-squaring-eigenlayer", "workspace-hack"]
+members = [
+    "cli",
+    "crates/*",
+    "crates/networking/extensions/*",
+    "examples/incredible-squaring-eigenlayer",
+    "workspace-hack",
+]
 
 [workspace.package]
 authors = ["Tangle Network"]
@@ -95,6 +101,7 @@ blueprint-context-derive = { version = "0.1.0-alpha.5", path = "./crates/macros/
 # Stores
 blueprint-stores = { version = "0.1.0-alpha.4", path = "./crates/stores", default-features = false }
 blueprint-store-local-database = { version = "0.1.0-alpha.4", path = "./crates/stores/local-database", default-features = false }
+rocksdb = { version = "0.23.0", default-features = false }
 
 # SDK
 blueprint-keystore = { version = "0.1.0-alpha.7", path = "./crates/keystore", default-features = false }
@@ -166,6 +173,7 @@ sha2 = { version = "0.10.8", default-features = false }
 sha3 = { version = "0.10.8", default-features = false }
 tnt-bls = { version = "0.1.8", default-features = false }
 tiny-keccak = { version = "2.0.2", default-features = false }
+crc32fast = { version = "1.4", default-features = false }
 
 # Data Structures & Serialization
 bitvec = { version = "1.0.1", default-features = false, features = ["atomic", "alloc"] }
@@ -178,6 +186,7 @@ serde_test = { version = "1.0.177", default-features = false }
 dynosaur = { version = "0.2.0", default-features = false }
 bytes = { version = "1.10.1", default-features = false }
 hashbrown = { version = "0.15.2", default-features = false }
+base64 = { version = "0.22.0", default-features = false }
 rust_decimal = { version = "1.32", default-features = false }
 
 # Error Handling & Logging
@@ -195,13 +204,15 @@ jsonrpc-core = { version = "18.0.0", default-features = false }
 jsonrpc-http-server = { version = "18.0.0", default-features = false }
 libp2p = { version = "0.55.0", default-features = false }
 reqwest = { version = "0.12.7", default-features = false }
+http = { version = "1.0.0", default-features = false }
 url = { version = "2.5.2", default-features = false }
 serde_with = { version = "3.12.0", default-features = false }
 hyper = { version = "1.6.0", default-features = false }
 hyperlocal = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.11", default-features = false }
-http-body-util = {version = "0.1.3", default-features = false }
+http-body-util = { version = "0.1.3", default-features = false }
 dashmap = { version = "6.1.0", default-features = false }
+axum = { version = "0.8", default-features = false }
 
 # System & OS
 parking_lot = { version = "0.12.3", default-features = false }
