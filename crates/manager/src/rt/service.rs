@@ -17,12 +17,14 @@ enum BridgeState {
 }
 
 pub struct Service {
+    manager_id: u32,
     hypervisor: HypervisorInstance,
     bridge: Option<BridgeState>,
 }
 
 impl Service {
     pub async fn new(
+        id: u32,
         vm_conf: CHVmConfig,
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
@@ -31,6 +33,8 @@ impl Service {
         env_vars: Vec<(String, String)>,
         arguments: Vec<String>,
     ) -> Result<Service> {
+        let bridge = Bridge::new(runtime_dir.as_ref().to_path_buf(), service_name.to_string());
+
         let mut hypervisor = HypervisorInstance::new(
             vm_conf,
             cache_dir.as_ref(),
@@ -39,12 +43,18 @@ impl Service {
         )?;
 
         hypervisor
-            .prepare(binary_path.as_ref(), env_vars, arguments, service_name)
+            .prepare(
+                id,
+                bridge.socket_path(),
+                binary_path.as_ref(),
+                env_vars,
+                arguments,
+                service_name,
+            )
             .await?;
 
-        let bridge = Bridge::new(runtime_dir.as_ref().to_path_buf(), service_name.to_string());
-
         Ok(Self {
+            manager_id: id,
             hypervisor,
             bridge: Some(BridgeState::Inactive(bridge)),
         })
@@ -61,16 +71,16 @@ impl Service {
             return Ok(());
         };
 
-        let bridge_handle = bridge.spawn().map_err(|e| {
-            error!("Failed to spawn manager <-> service bridge: {e}");
-            e
-        })?;
-        self.bridge = Some(BridgeState::Started(bridge_handle));
-
         self.hypervisor.start().await.map_err(|e| {
             error!("Failed to start hypervisor: {e}");
             e
         })?;
+
+        let bridge_handle = bridge.spawn(self.manager_id).await.map_err(|e| {
+            error!("Failed to spawn manager <-> service bridge: {e}");
+            e
+        })?;
+        self.bridge = Some(BridgeState::Started(bridge_handle));
 
         Ok(())
     }
