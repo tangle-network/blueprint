@@ -1,8 +1,5 @@
 use std::sync::Arc;
-// use tokio::sync::oneshot::{self, Receiver};
 use tracing::{error, info};
-
-// use blueprint_runner::{BackgroundService, error::RunnerError};
 
 use crate::QoSConfig;
 use crate::error::Result;
@@ -191,41 +188,6 @@ where
         }
     }
 }
-
-// #[tonic::async_trait]
-// impl<C> BackgroundService for QoSService<C>
-// where
-//     C: Send + Sync + 'static,
-// {
-//     async fn start(&self) -> std::result::Result<Receiver<()>, RunnerError> {
-//         // Create a channel for shutdown
-//         let (tx, rx) = oneshot::channel();
-
-//         // Start the heartbeat service if available
-//         if let Some(heartbeat_service) = &self.heartbeat_service {
-//             heartbeat_service.start().await.map_err(|e| {
-//                 RunnerError::BackgroundServiceError(format!(
-//                     "Failed to start heartbeat service: {}",
-//                     e
-//                 ))
-//             })?;
-//         }
-
-//         // Start the metrics service if available
-//         if let Some(metrics_service) = &self.metrics_service {
-//             metrics_service.start().await.map_err(|e| {
-//                 RunnerError::BackgroundServiceError(format!(
-//                     "Failed to start metrics service: {}",
-//                     e
-//                 ))
-//             })?;
-//         }
-
-//         info!("Started QoS service");
-
-//         Ok(rx)
-//     }
-// }
 
 /// Builder for QoS service
 pub struct QoSServiceBuilder<C> {

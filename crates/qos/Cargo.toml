@@ -14,10 +14,8 @@ workspace = true
 
 [dependencies]
 blueprint-core = { workspace = true, features = ["tracing"] }
-# blueprint-runner = { workspace = true }
 blueprint-crypto = { workspace = true }
 blueprint-keystore = { workspace = true }
-# blueprint-clients = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 thiserror = { workspace = true }
@@ -28,29 +26,19 @@ sysinfo = { workspace = true }
 rand = { workspace = true }
 chrono = { workspace = true }
 tracing = { workspace = true }
-
-# Prometheus metrics
-prometheus = { version = "0.13", features = ["process"] }
-
-# OpenTelemetry
-opentelemetry = { version = "0.20", features = ["metrics", "rt-tokio"] }
-opentelemetry-prometheus = "0.13"
-opentelemetry_sdk = { version = "0.20", features = ["metrics", "rt-tokio"] }
-
-# HTTP server for Prometheus metrics
-axum = { version = "0.6", features = ["tokio"] }
+prometheus = { workspace = true, features = ["process"] }
+opentelemetry = { workspace = true, features = ["metrics", "rt-tokio"] }
+opentelemetry-prometheus = { workspace = true }
+opentelemetry_sdk = { workspace = true, features = ["metrics", "rt-tokio"] }
+axum = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
-
-# Loki logging
-tracing-loki = { version = "0.2" }
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tracing-opentelemetry = "0.21"
-
-# Grafana integration
+tracing-loki = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+tracing-opentelemetry = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-reqwest = { version = "0.11", features = ["json"] }
-uuid = { version = "1.4", features = ["v4"] }
+reqwest = { workspace = true, features = ["json"] }
+uuid = { workspace = true, features = ["v4"] }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
@@ -59,9 +47,6 @@ tonic-build = { workspace = true, features = ["prost"] }
 default = ["std"]
 std = [
     "blueprint-core/std",
-    # "blueprint-runner/std",
     "blueprint-crypto/std",
     "blueprint-keystore/std",
-    # "blueprint-clients/std",
 ]
-# tangle = ["blueprint-clients/tangle"]

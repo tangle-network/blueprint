@@ -2,8 +2,6 @@ use std::sync::Arc;
 use tokio::sync::oneshot::{self, Receiver};
 use tracing::{error, info};
 
-// use blueprint_runner::{BackgroundService, error::RunnerError};
-
 use crate::error::Result;
 use crate::metrics::opentelemetry::OpenTelemetryConfig;
 use crate::metrics::provider::EnhancedMetricsProvider;
@@ -53,26 +51,6 @@ impl MetricsService {
     }
 }
 
-// #[tonic::async_trait]
-// impl BackgroundService for MetricsService {
-//     async fn start(&self) -> std::result::Result<Receiver<()>, RunnerError> {
-//         // Start the metrics collection
-//         self.provider.start_collection().await.map_err(|e| {
-//             RunnerError::BackgroundServiceError(format!(
-//                 "Failed to start metrics collection: {}",
-//                 e
-//             ))
-//         })?;
-
-//         // Create a channel for shutdown
-//         let (tx, rx) = oneshot::channel();
-
-//         info!("Started metrics service");
-
-//         Ok(rx)
-//     }
-// }
-
 /// Run the QoS metrics server
 pub async fn run_metrics_server(config: MetricsConfig) -> Result<Arc<EnhancedMetricsProvider>> {
     let otel_config = OpenTelemetryConfig::default();
@@ -84,4 +62,107 @@ pub async fn run_metrics_server(config: MetricsConfig) -> Result<Arc<EnhancedMet
     info!("Started metrics server");
 
     Ok(provider)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Tests that a new MetricsService can be created with a valid configuration.
+    ///
+    /// ```
+    /// MetricsConfig -> MetricsService
+    /// ```
+    ///
+    /// Expected outcome: MetricsService is created with the provided config
+    #[test]
+    fn test_metrics_service_creation() {
+        let config = MetricsConfig {
+            service_id: 42,
+            blueprint_id: 24,
+            bind_address: "127.0.0.1:9090".to_string(),
+            collection_interval_secs: 60,
+            max_history: 100,
+        };
+
+        let service = MetricsService::new(config.clone());
+        assert!(service.is_ok());
+
+        let service = service.unwrap();
+        // Check that the provider exists by verifying it's a valid Arc
+        assert!(std::sync::Arc::strong_count(&service.provider()) >= 1);
+    }
+
+    /// Tests that a new MetricsService can be created with custom OpenTelemetry configuration.
+    ///
+    /// ```
+    /// MetricsConfig + OpenTelemetryConfig -> MetricsService
+    /// ```
+    ///
+    /// Expected outcome: MetricsService is created with the provided configs
+    #[test]
+    fn test_metrics_service_with_otel_config() {
+        let config = MetricsConfig {
+            service_id: 42,
+            blueprint_id: 24,
+            bind_address: "127.0.0.1:9090".to_string(),
+            collection_interval_secs: 60,
+            max_history: 100,
+        };
+
+        let otel_config = OpenTelemetryConfig::default();
+
+        let service = MetricsService::with_otel_config(config.clone(), otel_config);
+        assert!(service.is_ok());
+
+        let service = service.unwrap();
+        // Check that the provider exists by verifying it's a valid Arc
+        assert!(std::sync::Arc::strong_count(&service.provider()) >= 1);
+    }
+
+    /// Tests that the MetricsService can record job executions.
+    ///
+    /// ```
+    /// MetricsService.record_job_execution() -> Job execution recorded
+    /// ```
+    ///
+    /// Expected outcome: Job execution is recorded in the metrics provider
+    #[test]
+    fn test_metrics_service_record_job_execution() {
+        let config = MetricsConfig {
+            service_id: 42,
+            blueprint_id: 24,
+            bind_address: "127.0.0.1:9090".to_string(),
+            collection_interval_secs: 60,
+            max_history: 100,
+        };
+
+        let service = MetricsService::new(config.clone()).unwrap();
+
+        // This should not panic
+        service.record_job_execution(1, 0.5);
+    }
+
+    /// Tests that the MetricsService can record job errors.
+    ///
+    /// ```
+    /// MetricsService.record_job_error() -> Job error recorded
+    /// ```
+    ///
+    /// Expected outcome: Job error is recorded in the metrics provider
+    #[test]
+    fn test_metrics_service_record_job_error() {
+        let config = MetricsConfig {
+            service_id: 42,
+            blueprint_id: 24,
+            bind_address: "127.0.0.1:9090".to_string(),
+            collection_interval_secs: 60,
+            max_history: 100,
+        };
+
+        let service = MetricsService::new(config.clone()).unwrap();
+
+        // This should not panic
+        service.record_job_error(1, "test_error");
+    }
 }

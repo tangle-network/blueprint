@@ -241,6 +241,15 @@ tonic = { version = "0.11", default-features = false }
 prost = { version = "0.12", default-features = false }
 tonic-build = { version = "0.11", default-features = false }
 
+# Quality of Service
+prometheus = { version = "0.13", default-features = false }
+opentelemetry = { version = "0.20", default-features = false }
+opentelemetry-prometheus = "0.13"
+opentelemetry_sdk = { version = "0.20", default-features = false }
+axum = { version = "0.6", default-features = false }
+tracing-loki = { version = "0.2", default-features = false }
+tracing-opentelemetry = "0.21"
+
 # Testing
 test-log = { version = "0.2", default-features = false }
 serial_test = { version = "3.2.0", default-features = false }

@@ -630,3 +630,44 @@ impl GrafanaClient {
             .await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Tests that the GrafanaConfig default implementation returns a valid configuration.
+    ///
+    /// ```
+    /// GrafanaConfig::default() -> Valid config
+    /// ```
+    ///
+    /// Expected outcome: Default config has reasonable values
+    #[test]
+    fn test_grafana_config_default() {
+        let config = GrafanaConfig::default();
+        assert_eq!(config.url, "http://localhost:3000");
+        assert_eq!(config.api_key, "");
+        assert_eq!(config.org_id, None);
+        assert_eq!(config.folder, None);
+    }
+
+    /// Tests that a new GrafanaClient can be created with a valid configuration.
+    ///
+    /// ```
+    /// GrafanaConfig -> GrafanaClient
+    /// ```
+    ///
+    /// Expected outcome: GrafanaClient is created with the provided config
+    #[test]
+    fn test_grafana_client_creation() {
+        let config = GrafanaConfig {
+            url: "http://localhost:3000".to_string(),
+            api_key: "test_key".to_string(),
+            org_id: Some(1),
+            folder: None,
+        };
+
+        let _client = GrafanaClient::new(config.clone());
+        // Just test that the client can be created without panicking
+    }
+}

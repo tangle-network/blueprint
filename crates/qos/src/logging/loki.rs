@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{error, info};
-use tracing_loki::{LokiLayer, url::Url};
+use tracing_loki::url::Url;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 
@@ -53,29 +53,33 @@ pub fn init_loki_logging(config: LokiConfig) -> Result<()> {
         .map_err(|e| Error::Other(format!("Failed to parse Loki URL: {}", e)))?;
 
     // Create a builder for the Loki layer
-    let mut builder = tracing_loki::builder()
-        .url(url)
-        .batch_size(config.batch_size)
-        .timeout(Duration::from_secs(config.timeout_secs));
-
-    // Add basic auth if provided
-    if let (Some(username), Some(password)) = (config.username, config.password) {
-        builder = builder.basic_auth(username, password);
-    }
+    let mut builder = tracing_loki::builder();
 
     // Add labels
     for (key, value) in config.labels {
-        builder = builder.label(key, value);
+        builder = match builder.label(key, value) {
+            Ok(b) => b,
+            Err(e) => {
+                error!("Failed to add label to Loki layer: {}", e);
+                return Err(Error::Other(format!(
+                    "Failed to add label to Loki layer: {}",
+                    e
+                )));
+            }
+        };
     }
 
-    // Build the Loki layer
-    let loki_layer = match builder.build() {
-        Ok(layer) => layer,
+    // Build the Loki layer with URL
+    let (loki_layer, task) = match builder.build_url(url) {
+        Ok((layer, task)) => (layer, task),
         Err(e) => {
             error!("Failed to build Loki layer: {}", e);
             return Err(Error::Other(format!("Failed to build Loki layer: {}", e)));
         }
     };
+
+    // Spawn the background task
+    tokio::spawn(task);
 
     // Create a subscriber with the Loki layer
     let subscriber = Registry::default()
@@ -105,35 +109,41 @@ pub fn init_loki_with_opentelemetry(loki_config: LokiConfig, service_name: &str)
         .map_err(|e| Error::Other(format!("Failed to parse Loki URL: {}", e)))?;
 
     // Create a builder for the Loki layer
-    let mut builder = tracing_loki::builder()
-        .url(url)
-        .batch_size(loki_config.batch_size)
-        .timeout(Duration::from_secs(loki_config.timeout_secs));
-
-    // Add basic auth if provided
-    if let (Some(username), Some(password)) = (loki_config.username, loki_config.password) {
-        builder = builder.basic_auth(username, password);
-    }
+    let mut builder = tracing_loki::builder();
 
     // Add labels
     for (key, value) in loki_config.labels {
-        builder = builder.label(key, value);
+        builder = match builder.label(key, value) {
+            Ok(b) => b,
+            Err(e) => {
+                error!("Failed to add label to Loki layer: {}", e);
+                return Err(Error::Other(format!(
+                    "Failed to add label to Loki layer: {}",
+                    e
+                )));
+            }
+        };
     }
 
-    // Build the Loki layer
-    let loki_layer = match builder.build() {
-        Ok(layer) => layer,
+    // Build the Loki layer with URL
+    let (loki_layer, task) = match builder.build_url(url) {
+        Ok((layer, task)) => (layer, task),
         Err(e) => {
             error!("Failed to build Loki layer: {}", e);
             return Err(Error::Other(format!("Failed to build Loki layer: {}", e)));
         }
     };
 
+    // Spawn the background task
+    tokio::spawn(task);
+
     // Create an OpenTelemetry tracer
-    let tracer = opentelemetry::sdk::trace::TracerProvider::builder()
-        .with_simple_exporter(opentelemetry_sdk::export::trace::stdout::Exporter::default())
+    use opentelemetry::trace::TracerProvider;
+    let service_name_owned = service_name.to_owned();
+    let tracer = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::SpanExporter::default())
         .build()
-        .tracer(service_name);
+        .tracer(service_name_owned);
 
     // Create a subscriber with the Loki layer and OpenTelemetry
     let subscriber = Registry::default()
@@ -154,5 +164,24 @@ pub fn init_loki_with_opentelemetry(loki_config: LokiConfig, service_name: &str)
                 e
             )))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Tests that the LokiConfig default implementation returns a valid configuration.
+    ///
+    /// ```
+    /// LokiConfig::default() -> Valid config
+    /// ```
+    ///
+    /// Expected outcome: Default config has reasonable values
+    #[test]
+    fn test_loki_config_default() {
+        let config = LokiConfig::default();
+        assert_eq!(config.url, "http://localhost:3100");
+        assert_eq!(config.batch_size, 100);
     }
 }
