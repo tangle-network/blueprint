@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-client-tangle"
-version = "0.1.0-alpha.11"
+version = "0.1.0-alpha.12"
 description = "Tangle client for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
