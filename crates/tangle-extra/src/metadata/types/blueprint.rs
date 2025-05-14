@@ -131,6 +131,8 @@ impl TryFrom<ServiceBlueprint<'_>> for SubxtServiceBlueprint {
             request_params: BoundedVec(request_params),
             // TODO: Not supported in the macro yet
             supported_membership_models: BoundedVec(vec![MembershipModelType::Fixed]),
+            // TODO: Not supported in the macro yet
+            recommended_resources: BoundedVec(vec![]),
         })
     }
 }
