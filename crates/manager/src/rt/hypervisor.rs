@@ -1,12 +1,12 @@
 use crate::error::{Error, Result};
 use cloud_hypervisor_client::apis::DefaultApi;
-use cloud_hypervisor_client::models::{DiskConfig, VmConfig};
+use cloud_hypervisor_client::models::{DiskConfig, PayloadConfig, VmConfig, VsockConfig};
 use cloud_hypervisor_client::{SocketBasedApiClient, socket_based_api_client};
 use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
 use hyper::StatusCode;
 use std::fs;
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::process::{Child, Command};
@@ -111,6 +111,8 @@ impl HypervisorInstance {
 
     pub async fn prepare(
         &mut self,
+        manager_service_id: u32,
+        bridge_socket_path: impl AsRef<Path>,
         binary_path: impl AsRef<Path>,
         env_vars: Vec<(String, String)>,
         arguments: Vec<String>,
@@ -131,14 +133,31 @@ impl HypervisorInstance {
         let vm_conf = VmConfig {
             cpus: None,
             memory: None,
-            payload: Default::default(),
+            payload: PayloadConfig {
+                firmware: None,
+                // TODO
+                kernel: Some(String::from("/home/alex/Downloads/hypervisor-fw")),
+                cmdline: None,
+                initramfs: None,
+                igvm: None,
+                host_data: None,
+            },
             rate_limit_groups: None,
-            disks: Some(vec![DiskConfig {
-                path: Some(self.binary_image_path.display().to_string()),
-                readonly: Some(true),
-                direct: Some(true),
-                ..DiskConfig::default()
-            }]),
+            disks: Some(vec![
+                DiskConfig {
+                    // TODO
+                    path: Some(String::from("/home/alex/Downloads/debian-base.qcow2")),
+                    readonly: Some(false),
+                    direct: Some(true),
+                    ..DiskConfig::default()
+                },
+                DiskConfig {
+                    path: Some(self.binary_image_path.display().to_string()),
+                    readonly: Some(true),
+                    direct: Some(true),
+                    ..DiskConfig::default()
+                },
+            ]),
             net: None,
             rng: None,
             balloon: None,
@@ -149,7 +168,11 @@ impl HypervisorInstance {
             debug_console: None,
             devices: None,
             vdpa: None,
-            vsock: None,
+            vsock: Some(VsockConfig {
+                cid: manager_service_id as i64,
+                socket: bridge_socket_path.as_ref().to_string_lossy().into(),
+                ..Default::default()
+            }),
             sgx_epc: None,
             numa: None,
             iommu: None,
@@ -232,7 +255,7 @@ impl HypervisorInstance {
             warn!("Unable to shutdown VM");
         }
 
-        let _ = std::fs::remove_file(self.sock_path);
+        let _ = fs::remove_file(self.sock_path);
 
         if let Err(e) = client.shutdown_vmm().await {
             error!("Unable to gracefully shutdown VM manager, killing process: {e:?}");

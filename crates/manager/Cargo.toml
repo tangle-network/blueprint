@@ -60,6 +60,8 @@ tonic.workspace = true
 tokio-stream = { workspace = true, features = ["net"] }
 cloud-hypervisor-client = { workspace = true }
 fatfs.workspace = true
+tokio-vsock.workspace = true
+pin-project-lite.workspace = true
 
 [package.metadata.dist]
 dist = false

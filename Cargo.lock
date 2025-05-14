@@ -3367,6 +3367,7 @@ dependencies = [
  "itertools 0.14.0",
  "libp2p",
  "parking_lot 0.12.3",
+ "pin-project-lite",
  "reqwest 0.12.15",
  "serde",
  "sha2 0.10.9",
@@ -3376,6 +3377,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tokio-stream",
+ "tokio-vsock",
  "toml 0.8.22",
  "tonic 0.11.0",
  "tracing",
@@ -10815,6 +10817,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "memoffset"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "memory-db"
 version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11223,6 +11234,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "cfg_aliases",
  "libc",
+ "memoffset 0.9.1",
 ]
 
 [[package]]
@@ -19796,6 +19808,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-vsock"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1824fc0300433f400df6b6264a9ab00ba93f39d38c3157fb5f05183476c4af10"
+dependencies = [
+ "bytes",
+ "futures",
+ "libc",
+ "tokio",
+ "vsock",
+]
+
+[[package]]
 name = "toml"
 version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20420,6 +20445,16 @@ name = "vsimd"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c3082ca00d5a5ef149bb8b555a72ae84c9c59f7250f013ac822ac2e49b19c64"
+
+[[package]]
+name = "vsock"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e8b4d00e672f147fc86a09738fadb1445bd1c0a40542378dfb82909deeee688"
+dependencies = [
+ "libc",
+ "nix 0.29.0",
+]
 
 [[package]]
 name = "w3f-bls"
