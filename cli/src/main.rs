@@ -299,6 +299,9 @@ pub enum BlueprintCommands {
         /// The keystore URI to use
         #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
         keystore_uri: String,
+        /// Optional path to a JSON file containing job parameters
+        #[arg(long)]
+        params_file: Option<String>,
     },
 
     /// Submit a job to a service
@@ -634,6 +637,7 @@ async fn main() -> color_eyre::Result<()> {
                 target_operators,
                 value,
                 keystore_uri,
+                params_file,
             } => {
                 request_service(
                     ws_rpc_url,
@@ -643,6 +647,7 @@ async fn main() -> color_eyre::Result<()> {
                     target_operators,
                     value,
                     keystore_uri,
+                    params_file,
                 )
                 .await?;
             }
