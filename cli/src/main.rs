@@ -299,7 +299,7 @@ pub enum BlueprintCommands {
         /// The keystore URI to use
         #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
         keystore_uri: String,
-        /// Optional path to a JSON file containing job parameters
+        /// Optional path to a JSON file containing request parameters
         #[arg(long)]
         params_file: Option<String>,
     },
