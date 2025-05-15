@@ -9,7 +9,7 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::sp_arithmetic::per
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{
     Asset, AssetSecurityRequirement, MembershipModel,
 };
-use tracing::info;
+use blueprint_core::info;
 use crate::command::jobs::helpers::{load_job_args_from_file, prompt_for_job_params};
 use crate::wait_for_in_block_success;
 use tangle_subxt::subxt::utils::AccountId32;
