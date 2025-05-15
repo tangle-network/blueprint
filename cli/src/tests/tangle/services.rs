@@ -86,6 +86,7 @@ async fn test_register_request_and_list() -> Result<()> {
         vec![alice_account],
         0,
         deployment_env.keystore_uri.clone(),
+        None,
     )
     .await;
     assert!(request_result.is_ok());
@@ -174,6 +175,7 @@ async fn test_accept_request() -> Result<()> {
         vec![alice_account],
         0,
         deployment_env.keystore_uri.clone(),
+        None,
     )
     .await;
     assert!(request_result.is_ok());
@@ -275,6 +277,7 @@ async fn test_reject_request() -> Result<()> {
         vec![alice_account],
         0,
         deployment_env.keystore_uri.clone(),
+        None,
     )
     .await;
     assert!(request_result.is_ok());
@@ -365,6 +368,7 @@ async fn test_submit_job() -> Result<()> {
         vec![alice_account.clone()],
         0,
         deployment_env.keystore_uri.clone(),
+        None,
     )
     .await?;
 
