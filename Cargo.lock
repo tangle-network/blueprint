@@ -2456,6 +2456,16 @@ checksum = "6107fe1be6682a68940da878d9e9f5e90ca5745b3dec9fd1bb393c8777d4f581"
 
 [[package]]
 name = "base64"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5032d51da2741729bfdaeb2664d9b8c6d9fd1e2b90715c660b6def36628499c2"
+dependencies = [
+ "byteorder",
+ "safemem",
+]
+
+[[package]]
+name = "base64"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3441f0f7b02788e948e47f457ca01f1d7e6d92c693bc132c22b087d3141c03ff"
@@ -3348,15 +3358,18 @@ dependencies = [
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-keystore",
+ "blueprint-manager-bridge",
  "blueprint-networking",
  "blueprint-runner",
  "blueprint-std",
  "cargo-dist-schema",
  "clap",
+ "cloud-hypervisor-client",
  "color-eyre",
  "dirs 6.0.0",
  "docktopus",
  "dynosaur",
+ "fatfs",
  "futures",
  "hex",
  "http-body-util",
@@ -3366,6 +3379,7 @@ dependencies = [
  "itertools 0.14.0",
  "libp2p",
  "parking_lot 0.12.3",
+ "pin-project-lite",
  "reqwest 0.12.15",
  "serde",
  "sha2 0.10.9",
@@ -3374,12 +3388,29 @@ dependencies = [
  "tar",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-stream",
+ "tokio-vsock",
  "toml 0.8.22",
+ "tonic 0.11.0",
  "tracing",
  "tracing-subscriber 0.3.19",
  "url",
  "walkdir",
  "xz",
+]
+
+[[package]]
+name = "blueprint-manager-bridge"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "prost 0.12.6",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-stream",
+ "tonic 0.11.0",
+ "tonic-build",
+ "tower 0.5.2",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -4539,6 +4570,27 @@ name = "clap_lex"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
+
+[[package]]
+name = "cloud-hypervisor-client"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99431617db7b7cb67d477004477bc481f59aadf3c436f02408f48f15c4679bcc"
+dependencies = [
+ "base64 0.7.0",
+ "futures",
+ "http 0.2.12",
+ "http-body-util",
+ "hyper 1.6.0",
+ "hyper-util",
+ "hyperlocal",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "serde_with",
+ "url",
+ "uuid 1.16.0",
+]
 
 [[package]]
 name = "cmake"
@@ -7126,6 +7178,18 @@ dependencies = [
  "arrayvec 0.7.6",
  "auto_impl",
  "bytes",
+]
+
+[[package]]
+name = "fatfs"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05669f8e7e2d7badc545c513710f0eba09c2fbef683eb859fd79c46c355048e0"
+dependencies = [
+ "bitflags 1.3.2",
+ "byteorder",
+ "chrono",
+ "log",
 ]
 
 [[package]]
@@ -10798,6 +10862,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "memoffset"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "memory-db"
 version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11206,6 +11279,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "cfg_aliases",
  "libc",
+ "memoffset 0.9.1",
 ]
 
 [[package]]
@@ -16356,6 +16430,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "safemem"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e27a8b19b835f7aea908818e871f5cc3a5a186550c30773be987e155e8163d8f"
+
+[[package]]
 name = "salsa20"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19779,6 +19859,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-vsock"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1824fc0300433f400df6b6264a9ab00ba93f39d38c3157fb5f05183476c4af10"
+dependencies = [
+ "bytes",
+ "futures",
+ "libc",
+ "tokio",
+ "vsock",
+]
+
+[[package]]
 name = "toml"
 version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20378,6 +20471,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "458f7a779bf54acc9f347480ac654f68407d3aab21269a6e3c9f922acd9e2da9"
 dependencies = [
  "getrandom 0.3.3",
+ "serde",
 ]
 
 [[package]]
@@ -20403,6 +20497,16 @@ name = "vsimd"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c3082ca00d5a5ef149bb8b555a72ae84c9c59f7250f013ac822ac2e49b19c64"
+
+[[package]]
+name = "vsock"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e8b4d00e672f147fc86a09738fadb1445bd1c0a40542378dfb82909deeee688"
+dependencies = [
+ "libc",
+ "nix 0.29.0",
+]
 
 [[package]]
 name = "w3f-bls"

@@ -1,0 +1,102 @@
+use super::bridge::{Bridge, BridgeHandle};
+use super::hypervisor::{CHVmConfig, HypervisorInstance};
+use crate::error::Result;
+use std::path::Path;
+use tracing::error;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Status {
+    Running,
+    Finished,
+    Error,
+}
+
+enum BridgeState {
+    Inactive(Bridge),
+    Started(BridgeHandle),
+}
+
+pub struct Service {
+    manager_id: u32,
+    hypervisor: HypervisorInstance,
+    bridge: Option<BridgeState>,
+}
+
+impl Service {
+    pub async fn new(
+        id: u32,
+        vm_conf: CHVmConfig,
+        cache_dir: impl AsRef<Path>,
+        runtime_dir: impl AsRef<Path>,
+        service_name: &str,
+        binary_path: impl AsRef<Path>,
+        env_vars: Vec<(String, String)>,
+        arguments: Vec<String>,
+    ) -> Result<Service> {
+        let bridge = Bridge::new(runtime_dir.as_ref().to_path_buf(), service_name.to_string());
+
+        let mut hypervisor = HypervisorInstance::new(
+            vm_conf,
+            cache_dir.as_ref(),
+            runtime_dir.as_ref(),
+            service_name,
+        )?;
+
+        hypervisor
+            .prepare(
+                id,
+                bridge.socket_path(),
+                binary_path.as_ref(),
+                env_vars,
+                arguments,
+                service_name,
+            )
+            .await?;
+
+        Ok(Self {
+            manager_id: id,
+            hypervisor,
+            bridge: Some(BridgeState::Inactive(bridge)),
+        })
+    }
+
+    pub fn status(&self) -> Result<Status> {
+        // TODO: A way to actually check the status
+        Ok(Status::Running)
+    }
+
+    pub async fn start(&mut self) -> Result<()> {
+        let Some(BridgeState::Inactive(bridge)) = self.bridge.take() else {
+            error!("Service already started!");
+            return Ok(());
+        };
+
+        self.hypervisor.start().await.map_err(|e| {
+            error!("Failed to start hypervisor: {e}");
+            e
+        })?;
+
+        let bridge_handle = bridge.spawn(self.manager_id).await.map_err(|e| {
+            error!("Failed to spawn manager <-> service bridge: {e}");
+            e
+        })?;
+        self.bridge = Some(BridgeState::Started(bridge_handle));
+
+        Ok(())
+    }
+
+    pub async fn shutdown(mut self) -> Result<()> {
+        let Some(BridgeState::Started(bridge)) = self.bridge.take() else {
+            error!("Service not running!");
+            return Ok(());
+        };
+
+        self.hypervisor.shutdown().await.map_err(|e| {
+            error!("Failed to shut down hypervisor: {e}");
+            e
+        })?;
+        bridge.shutdown();
+
+        Ok(())
+    }
+}

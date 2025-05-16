@@ -1,5 +1,5 @@
 use crate::blueprint::ActiveBlueprints;
-use crate::config::{BlueprintManagerConfig, SourceCandidates};
+use crate::config::BlueprintManagerConfig;
 use crate::error::Error;
 use crate::error::Result;
 use crate::sdk::entry::SendFuture;
@@ -176,6 +176,14 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         std::fs::create_dir_all(&blueprint_manager_config.cache_dir)?;
     }
 
+    if !blueprint_manager_config.runtime_dir.exists() {
+        info!(
+            "Runtime directory does not exist, creating it at `{}`",
+            blueprint_manager_config.runtime_dir.display()
+        );
+        std::fs::create_dir_all(&blueprint_manager_config.runtime_dir)?;
+    }
+
     let data_dir = &blueprint_manager_config.data_dir;
     if !data_dir.exists() {
         info!(
@@ -184,12 +192,6 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         );
         std::fs::create_dir_all(data_dir)?;
     }
-
-    let source_candidates = SourceCandidates::load(
-        blueprint_manager_config.preferred_source,
-        blueprint_manager_config.podman_host.clone(),
-    )
-    .await?;
 
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
@@ -221,7 +223,6 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         let mut operator_subscribed_blueprints = handle_init(
             &tangle_client,
             services_client,
-            &source_candidates,
             &sub_account_id,
             &mut active_blueprints,
             &env,
@@ -246,7 +247,6 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
             event_handler::handle_tangle_event(
                 &event,
-                &source_candidates,
                 &operator_subscribed_blueprints,
                 &env,
                 &blueprint_manager_config,
@@ -349,7 +349,6 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
 async fn handle_init(
     tangle_runtime: &TangleClient,
     services_client: &TangleServicesClient<TangleConfig>,
-    source_candidates: &SourceCandidates,
     sub_account_id: &AccountId32,
     active_blueprints: &mut ActiveBlueprints,
     blueprint_env: &BlueprintEnvironment,
@@ -387,7 +386,6 @@ async fn handle_init(
 
     event_handler::handle_tangle_event(
         &init_event,
-        source_candidates,
         &operator_subscribed_blueprints,
         blueprint_env,
         blueprint_manager_config,
