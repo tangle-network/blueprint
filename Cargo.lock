@@ -4248,7 +4248,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-tangle"
-version = "0.4.0-alpha.15"
+version = "0.4.0-alpha.16"
 dependencies = [
  "alloy-contract",
  "alloy-dyn-abi",
