@@ -44,4 +44,6 @@ pub enum Error {
     Request(#[from] reqwest::Error),
     #[error(transparent)]
     TangleClient(#[from] blueprint_clients::tangle::error::Error),
+    #[error(transparent)]
+    Auth(#[from] blueprint_auth::Error),
 }

@@ -50,10 +50,16 @@ impl AuthenticatedProxy {
             client: self.client,
         };
         Router::new()
-            .route("/auth/challenge", post(auth_challenge))
-            .route("/auth/verify", post(auth_verify))
+            .nest("/v1", Self::internal_api_router_v1())
             .fallback(any(reverse_proxy))
             .with_state(state)
+    }
+
+    /// Internal API router for version 1
+    pub fn internal_api_router_v1() -> Router<AuthenticatedProxyState> {
+        Router::new()
+            .route("/auth/challenge", post(auth_challenge))
+            .route("/auth/verify", post(auth_verify))
     }
 }
 
@@ -247,7 +253,7 @@ mod tests {
         };
 
         let res = client
-            .post("/auth/challenge")
+            .post("/v1/auth/challenge")
             .header(headers::X_SERVICE_ID, service_id.to_string())
             .json(&req)
             .await;
@@ -278,7 +284,7 @@ mod tests {
         };
 
         let res = client
-            .post("/auth/verify")
+            .post("/v1/auth/verify")
             .header(headers::X_SERVICE_ID, ServiceId::new(0).to_string())
             .json(&req)
             .await;

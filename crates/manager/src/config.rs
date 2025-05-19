@@ -8,6 +8,7 @@ use hyper::header::HeaderValue;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use std::fmt::Display;
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use tracing::error;
@@ -19,7 +20,7 @@ pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =
 #[derive(Debug, Parser)]
 #[command(
     name = "Blueprint Manager",
-    about = "An program executor that connects to the Tangle network and runs protocols dynamically on the fly"
+    about = "An program executor that connects to the Tangle network and runs blueprints dynamically on the fly"
 )]
 pub struct BlueprintManagerConfig {
     /// The path to the blueprint configuration file
@@ -60,6 +61,9 @@ pub struct BlueprintManagerConfig {
     /// The location of the Podman-Docker socket
     #[arg(long, short, default_value_t = DEFAULT_DOCKER_HOST.clone())]
     pub podman_host: Url,
+    /// Authentication proxy options
+    #[command(flatten)]
+    pub auth_proxy_opts: AuthProxyOpts,
 }
 
 fn default_cache_dir() -> PathBuf {
@@ -83,6 +87,7 @@ impl Default for BlueprintManagerConfig {
             allow_unchecked_attestations: false,
             preferred_source: SourceType::default(),
             podman_host: DEFAULT_DOCKER_HOST.clone(),
+            auth_proxy_opts: AuthProxyOpts::default(),
         }
     }
 }
@@ -208,5 +213,25 @@ impl SourceCandidates {
     async fn determine_wasm(&mut self) -> Result<bool> {
         // TODO: Verify WASM runtime installations
         Ok(true)
+    }
+}
+
+/// The options for the auth proxy
+#[derive(Debug, Parser, Clone)]
+pub struct AuthProxyOpts {
+    /// The host on which the auth proxy will listen
+    #[arg(long, default_value = "0.0.0.0")]
+    pub auth_proxy_host: IpAddr,
+    /// The port on which the auth proxy will listen
+    #[arg(long, default_value_t = 8276)]
+    pub auth_proxy_port: u16,
+}
+
+impl Default for AuthProxyOpts {
+    fn default() -> Self {
+        Self {
+            auth_proxy_host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            auth_proxy_port: 8276, // T9 Mapping of TBPM (Tangle Blueprint Manager)
+        }
     }
 }
