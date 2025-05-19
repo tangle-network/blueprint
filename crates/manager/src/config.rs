@@ -20,7 +20,7 @@ pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =
 #[derive(Debug, Parser)]
 #[command(
     name = "Blueprint Manager",
-    about = "An program executor that connects to the Tangle network and runs blueprints dynamically on the fly"
+    about = "A program executor that connects to the Tangle network and runs blueprints dynamically on the fly"
 )]
 pub struct BlueprintManagerConfig {
     /// The path to the blueprint configuration file
