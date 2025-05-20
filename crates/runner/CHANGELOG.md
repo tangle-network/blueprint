@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.1.0-alpha.10...blueprint-runner-v0.1.0-alpha.11) - 2025-05-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.1.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.1.0-alpha.9...blueprint-runner-v0.1.0-alpha.10) - 2025-05-13
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.1.0-alpha.8...blueprint-runner-v0.1.0-alpha.9) - 2025-05-09
+
+### Other
+
+- remove gadget references (#967)
+
+## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.1.0-alpha.7...blueprint-runner-v0.1.0-alpha.8) - 2025-05-06
+
+### Other
+
+- updated the following local packages: blueprint-networking
+
+## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.1.0-alpha.6...blueprint-runner-v0.1.0-alpha.7) - 2025-05-01
+
+### Added
+
+- *(pricing-engine)* finalized pricing engine implementation (#904)
+
+### Other
+
+- *(runner)* document crate (#920)
+- remove unused dependencies (#915)
+
 ## [0.1.0-alpha.6](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.1.0-alpha.5...blueprint-runner-v0.1.0-alpha.6) - 2025-04-21
 
 ### Added

@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-tangle-testing-utils"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.12"
 description = "Tangle-specific testing utilities for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -21,6 +21,7 @@ blueprint-crypto-tangle-pair-signer = { workspace = true, features = ["std", "ev
 blueprint-core-testing-utils = { workspace = true }
 blueprint-chain-setup = { workspace = true, features = ["std", "tangle"] }
 blueprint-keystore = { workspace = true, features = ["std", "tangle-full"] }
+blueprint-pricing-engine = { workspace = true, features = ["std", "tangle-listener"] }
 tnt-core-bytecode = { workspace = true }
 
 alloy-signer-local = { workspace = true }
@@ -34,7 +35,6 @@ tempfile = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 blueprint-client-tangle = { workspace = true }
 url = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 default = ["tracing"]

@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-networking-v0.1.0-alpha.8...blueprint-networking-v0.1.0-alpha.9) - 2025-05-14
+
+### Other
+
+- updated the following local packages: blueprint-crypto
+
+## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-networking-v0.1.0-alpha.7...blueprint-networking-v0.1.0-alpha.8) - 2025-05-13
+
+### Other
+
+- updated the following local packages: blueprint-crypto
+
+## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-networking-v0.1.0-alpha.6...blueprint-networking-v0.1.0-alpha.7) - 2025-05-09
+
+### Other
+
+- remove gadget references (#967)
+
+## [0.1.0-alpha.6](https://github.com/tangle-network/blueprint/compare/blueprint-networking-v0.1.0-alpha.5...blueprint-networking-v0.1.0-alpha.6) - 2025-05-06
+
+### Added
+
+- *(pricing-engine)* use rust-decimal (#961)
+
+## [0.1.0-alpha.5](https://github.com/tangle-network/blueprint/compare/blueprint-networking-v0.1.0-alpha.4...blueprint-networking-v0.1.0-alpha.5) - 2025-05-01
+
+### Fixed
+
+- *(blueprint-networking)* use blueprint-core log macros (#934)
+
+### Other
+
+- remove unused dependencies (#915)
+
 ## [0.1.0-alpha.4](https://github.com/tangle-network/blueprint/compare/blueprint-networking-v0.1.0-alpha.3...blueprint-networking-v0.1.0-alpha.4) - 2025-04-21
 
 ### Added

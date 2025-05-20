@@ -16,6 +16,9 @@ pub enum RunnerError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    #[error(transparent)]
+    AddrParse(#[from] std::net::AddrParseError),
+
     /// Unable to read/use the provided configuration values
     #[error("Configuration error: {0}")]
     Config(#[from] ConfigError),

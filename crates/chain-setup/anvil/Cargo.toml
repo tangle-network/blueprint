@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-chain-setup-anvil"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.12"
 description = "Anvil-specific chain setup utilities"
 authors.workspace = true
 edition.workspace = true
@@ -24,7 +24,6 @@ testcontainers = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tempfile = { workspace = true}
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 
 [features]

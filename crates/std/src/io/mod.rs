@@ -113,13 +113,13 @@ pub trait Read {
                 Err(e) => return Err(e),
             }
         }
-        if !buf.is_empty() {
+        if buf.is_empty() {
+            Ok(())
+        } else {
             Err(Error::new(
                 ErrorKind::UnexpectedEof,
                 "failed to fill whole buffer",
             ))
-        } else {
-            Ok(())
         }
     }
 
@@ -477,7 +477,12 @@ where
 {
     fn get_buf(&mut self) -> Result<&[u8]> {
         let amt = cmp::min(self.pos, self.inner.as_ref().len() as u64);
-        Ok(&self.inner.as_ref()[(amt as usize)..])
+        Ok(&self.inner.as_ref()[usize::try_from(amt).map_err(|_| {
+            Error::new(
+                ErrorKind::InvalidInput,
+                "cursor position exceeds maximum possible vector length",
+            )
+        })?..])
     }
 }
 
@@ -508,7 +513,13 @@ impl Write for Cursor<Vec<u8>> {
 #[inline]
 fn slice_write(pos_mut: &mut u64, slice: &mut [u8], buf: &[u8]) -> Result<usize> {
     let pos = cmp::min(*pos_mut, slice.len() as u64);
-    let amt = (&mut slice[(pos as usize)..]).write(buf)?;
+    let amt = (&mut slice[usize::try_from(pos).map_err(|_| {
+        Error::new(
+            ErrorKind::InvalidInput,
+            "cursor position exceeds maximum possible vector length",
+        )
+    })?..])
+        .write(buf)?;
     *pos_mut += amt as u64;
     Ok(amt)
 }

@@ -1,5 +1,5 @@
 use crate::Error;
-use crate::multi_node::MultiNodeTestEnv;
+use crate::multi_node::{find_open_tcp_bind_port, MultiNodeTestEnv};
 use crate::{InputValue, OutputValue, keys::inject_tangle_key};
 use blueprint_chain_setup::tangle::testnet::SubstrateNode;
 use blueprint_chain_setup::tangle::transactions;
@@ -14,11 +14,16 @@ use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::ContextConfig;
 use blueprint_runner::config::SupportedChains;
 use blueprint_runner::error::RunnerError;
-use blueprint_runner::tangle::config::PriceTargets;
 use blueprint_runner::tangle::error::TangleError;
 use blueprint_std::io;
 use blueprint_std::path::{Path, PathBuf};
+use tangle_subxt::subxt::utils::AccountId32;
+use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::PricingQuote;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{AssetSecurityCommitment, AssetSecurityRequirement};
+use blueprint_tangle_extra::serde::new_bounded_string;
 use std::marker::PhantomData;
+use std::sync::Arc;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::request::RequestArgs;
 use tangle_subxt::tangle_testnet_runtime::api::services::events::JobCalled;
@@ -27,7 +32,12 @@ use tangle_subxt::tangle_testnet_runtime::api::services::{
     events::JobResultSubmitted,
 };
 use tempfile::TempDir;
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
+use tracing::info;
 use url::Url;
+use blueprint_pricing_engine_lib::{init_benchmark_cache, init_operator_signer, load_pricing_from_toml, OperatorConfig, DEFAULT_CONFIG};
+use blueprint_pricing_engine_lib::service::rpc::server::run_rpc_server;
 
 pub const ENDOWED_TEST_NAMES: [&str; 10] = [
     "Alice",
@@ -200,6 +210,8 @@ struct NodeInfo {
     env: BlueprintEnvironment,
     client: TangleClient,
     preferences: Preferences,
+    // To keep the server alive
+    _pricing_rpc: JoinHandle<()>,
 }
 
 #[derive(Debug, Clone)]
@@ -251,16 +263,51 @@ where
                 .first_local::<SpEcdsa>()
                 .map_err(|err| RunnerError::Tangle(TangleError::Keystore(err)))?;
 
+            let rpc_port = find_open_tcp_bind_port();
+            let rpc_address = format!("127.0.0.1:{rpc_port}");
+            info!("Binding node {name} to {rpc_address}");
+
+            let operator_config = OperatorConfig {
+                keystore_path: self.temp_dir.path().join(name),
+                rpc_port,
+                ..Default::default()
+            };
+
+            let benchmark_cache = init_benchmark_cache(&operator_config)
+                .await
+                .map_err(|e| RunnerError::Other(e.into()))?;
+
+            let pricing_config =
+                load_pricing_from_toml(DEFAULT_CONFIG).map_err(|e| RunnerError::Other(e.into()))?;
+
+            let operator_signer =
+                init_operator_signer(&operator_config, &operator_config.keystore_path)
+                    .map_err(|e| RunnerError::Other(e.into()))?;
+
+            let pricing_rpc = tokio::spawn(async move {
+                if let Err(e) = run_rpc_server(
+                    Arc::new(operator_config),
+                    benchmark_cache,
+                    Arc::new(Mutex::new(pricing_config)),
+                    operator_signer,
+                )
+                .await
+                {
+                    tracing::error!("gRPC server error: {}", e);
+                }
+            });
+
             let preferences = Preferences {
                 key: blueprint_runner::tangle::config::decompress_pubkey(&ecdsa_public.0.0)
                     .unwrap(),
-                price_targets: PriceTargets::default().0,
+                rpc_address: new_bounded_string(rpc_address),
             };
 
             nodes.push(NodeInfo {
                 env,
                 client,
                 preferences,
+                _pricing_rpc: pricing_rpc,
             });
         }
 
@@ -437,6 +484,45 @@ where
             request_args: RequestArgs::default(),
         })
         .await
+    }
+
+    /// Requests a service with a given blueprint using pricing quotes.
+    ///
+    /// # Arguments
+    /// * `blueprint_id` - The ID of the blueprint to request
+    /// * `request_args` - The arguments for the request
+    /// * `quotes` - The pricing quotes for the service
+    /// * `quote_signatures` - The signatures for the pricing quotes
+    /// * `security_commitments` - The security commitments for the service
+    /// * `optional_assets` - Optional asset security requirements (defaults to Custom(0) at 50%-80% if not provided)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the transaction fails
+    #[allow(clippy::too_many_arguments)]
+    pub async fn request_service_with_quotes(
+        &self,
+        blueprint_id: u64,
+        request_args: RequestArgs,
+        operators: Vec<AccountId32>,
+        quotes: Vec<PricingQuote>,
+        quote_signatures: Vec<sp_core::ecdsa::Signature>,
+        security_commitments: Vec<AssetSecurityCommitment<AssetId>>,
+        optional_assets: Option<Vec<AssetSecurityRequirement<AssetId>>>,
+    ) -> Result<u64, Error> {
+        transactions::request_service_with_quotes(
+            &self.client,
+            &self.sr25519_signer,
+            blueprint_id,
+            request_args,
+            operators,
+            quotes,
+            quote_signatures,
+            security_commitments,
+            optional_assets,
+        )
+        .await
+        .map_err(|e| Error::Setup(e.to_string()))
     }
 
     /// Submits a job to be executed

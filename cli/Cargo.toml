@@ -1,6 +1,6 @@
 [package]
 name = "cargo-tangle"
-version = "0.4.0-alpha.9"
+version = "0.4.0-alpha.15"
 description = "A command-line tool to create and deploy blueprints on Tangle Network"
 authors.workspace = true
 edition.workspace = true
@@ -67,7 +67,6 @@ alloy-contract = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-transport = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 blueprint-keystore = { workspace = true, features = ["bn254"] }

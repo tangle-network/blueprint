@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-crypto-ed25519"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.6"
 description = "Zebra ed25519 crypto primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -17,7 +17,6 @@ serde = { workspace = true }
 serde_bytes = { workspace = true, features = ["alloc"] }
 hex = { workspace = true }
 thiserror = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["alloc"] }

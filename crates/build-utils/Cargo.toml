@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-build-utils"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.3"
 description = "Tangle Blueprint build utils"
 authors.workspace = true
 edition.workspace = true
@@ -14,4 +14,3 @@ workspace = true
 
 [dependencies]
 blueprint-std = { workspace = true, features = ["std"] }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }

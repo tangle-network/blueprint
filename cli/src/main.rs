@@ -53,6 +53,7 @@ struct Cli {
     command: Commands,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Blueprint subcommand
@@ -156,7 +157,7 @@ pub enum BlueprintCommands {
         target: DeployTarget,
     },
 
-    /// Run a gadget
+    /// Run a blueprint
     #[command(visible_alias = "r")]
     Run {
         /// The protocol to run (eigenlayer or tangle)
@@ -194,8 +195,14 @@ pub enum BlueprintCommands {
         settings_file: Option<PathBuf>,
 
         /// The Podman host to use for containerized blueprints
-        #[arg(short, long, env = "PODMAN_HOST", default_value_t = DEFAULT_DOCKER_HOST.clone())]
+        #[arg(long, env = "PODMAN_HOST", default_value_t = DEFAULT_DOCKER_HOST.clone())]
         podman_host: Url,
+
+        /// Whether to allow invalid GitHub attestations (binary integrity checks)
+        ///
+        /// This will also allow for running the manager without the GitHub CLI installed.
+        #[arg(long, env)]
+        allow_unchecked_attestations: bool,
     },
 
     /// List service requests for a Tangle blueprint
@@ -226,6 +233,9 @@ pub enum BlueprintCommands {
         /// The keystore URI to use
         #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
         keystore_uri: String,
+        /// The URL of the pricing RPC
+        #[arg(long, env = "PRICING_RPC_URL", default_value = "ws://127.0.0.1:9000")]
+        pricing_rpc_address: Url,
     },
 
     /// Accept a Tangle service request
@@ -289,6 +299,9 @@ pub enum BlueprintCommands {
         /// The keystore URI to use
         #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
         keystore_uri: String,
+        /// Optional path to a JSON file containing request parameters
+        #[arg(long)]
+        params_file: Option<String>,
     },
 
     /// Submit a job to a service
@@ -461,6 +474,7 @@ async fn main() -> color_eyre::Result<()> {
                 bootnodes,
                 settings_file,
                 podman_host,
+                allow_unchecked_attestations,
             } => {
                 let settings_file =
                     settings_file.unwrap_or_else(|| PathBuf::from("./settings.env"));
@@ -564,6 +578,7 @@ async fn main() -> color_eyre::Result<()> {
                             ),
                             keystore_path: Some(config.keystore_uri.clone()),
                             data_dir: config.data_dir.clone(),
+                            allow_unchecked_attestations,
                             podman_host: Some(podman_host)
                         };
 
@@ -587,7 +602,8 @@ async fn main() -> color_eyre::Result<()> {
                 ws_rpc_url,
                 blueprint_id,
                 keystore_uri,
-            } => register(ws_rpc_url, blueprint_id, keystore_uri).await?,
+                pricing_rpc_address,
+            } => register(ws_rpc_url, blueprint_id, keystore_uri, pricing_rpc_address).await?,
             BlueprintCommands::AcceptRequest {
                 ws_rpc_url,
                 min_exposure_percent,
@@ -621,6 +637,7 @@ async fn main() -> color_eyre::Result<()> {
                 target_operators,
                 value,
                 keystore_uri,
+                params_file,
             } => {
                 request_service(
                     ws_rpc_url,
@@ -630,6 +647,7 @@ async fn main() -> color_eyre::Result<()> {
                     target_operators,
                     value,
                     keystore_uri,
+                    params_file,
                 )
                 .await?;
             }

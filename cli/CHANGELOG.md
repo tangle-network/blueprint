@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.15](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.14...cargo-tangle-v0.4.0-alpha.15) - 2025-05-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.4.0-alpha.14](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.13...cargo-tangle-v0.4.0-alpha.14) - 2025-05-13
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.4.0-alpha.13](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.12...cargo-tangle-v0.4.0-alpha.13) - 2025-05-09
+
+### Other
+
+- remove gadget references (#967)
+
+## [0.4.0-alpha.12](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.11...cargo-tangle-v0.4.0-alpha.12) - 2025-05-07
+
+### Added
+
+- *(manager)* [**breaking**] support verifying binaries with gh attestations (#938)
+
+### Other
+
+- *(ci)* fixes from attestation pr (#964)
+
+## [0.4.0-alpha.11](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.10...cargo-tangle-v0.4.0-alpha.11) - 2025-05-06
+
+### Other
+
+- updated the following local packages: blueprint-runner, blueprint-clients, blueprint-contexts, blueprint-chain-setup, blueprint-manager, blueprint-testing-utils, blueprint-testing-utils
+
+## [0.4.0-alpha.10](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.9...cargo-tangle-v0.4.0-alpha.10) - 2025-05-01
+
+### Added
+
+- *(pricing-engine)* finalized pricing engine implementation (#904)
+
+### Fixed
+
+- *(cargo-tangle)* properly encode optional fields (#921)
+
+### Other
+
+- remove unused dependencies (#915)
+
 ## [0.4.0-alpha.9](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.8...cargo-tangle-v0.4.0-alpha.9) - 2025-04-22
 
 ### Fixed

@@ -1,12 +1,12 @@
-use crate::config::{BlueprintManagerConfig, SourceCandidates};
+use crate::blueprint::ActiveBlueprints;
+use crate::config::{AuthProxyOpts, BlueprintManagerConfig, SourceCandidates};
 use crate::error::Error;
 use crate::error::Result;
-use crate::gadget::ActiveGadgets;
 use crate::sdk::entry::SendFuture;
 use blueprint_clients::tangle::EventsClient;
 use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
-use blueprint_core::{info, warn};
+use blueprint_core::{error, info, warn};
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
@@ -17,6 +17,7 @@ use color_eyre::eyre::OptionExt;
 use sp_core::{ecdsa, sr25519};
 use std::collections::HashMap;
 use std::future::Future;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tangle_subxt::subxt::tx::Signer;
@@ -136,7 +137,7 @@ impl Future for BlueprintManagerHandle {
 ///
 /// * `blueprint_manager_config` - The configuration for the blueprint manager
 /// * `keystore` - The keystore to use for the blueprint manager
-/// * `gadget_config` - The configuration for the gadget
+/// * `env` - The environment configuration for the blueprint
 /// * `shutdown_cmd` - The shutdown command for the blueprint manager
 ///
 /// # Returns
@@ -168,6 +169,14 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let _span = span.enter();
     info!("Starting blueprint manager ... waiting for start signal ...");
 
+    if !blueprint_manager_config.cache_dir.exists() {
+        info!(
+            "Cache directory does not exist, creating it at `{}`",
+            blueprint_manager_config.cache_dir.display()
+        );
+        std::fs::create_dir_all(&blueprint_manager_config.cache_dir)?;
+    }
+
     let data_dir = &blueprint_manager_config.data_dir;
     if !data_dir.exists() {
         info!(
@@ -183,6 +192,11 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     )
     .await?;
 
+    // Create the auth proxy task
+    let auth_proxy_task = run_auth_proxy(
+        data_dir.clone(),
+        blueprint_manager_config.auth_proxy_opts.clone(),
+    );
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
         let sr_key_pub = keystore.first_local::<SpSr25519>()?;
@@ -198,7 +212,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
     let sub_account_id = tangle_key.account_id().clone();
 
-    let mut active_gadgets = HashMap::new();
+    let mut active_blueprints = HashMap::new();
 
     let keystore_uri = env.keystore_uri.clone();
 
@@ -215,7 +229,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
             services_client,
             &source_candidates,
             &sub_account_id,
-            &mut active_gadgets,
+            &mut active_blueprints,
             &env,
             &blueprint_manager_config,
         )
@@ -226,7 +240,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         while let Some(event) = tangle_client.next_event().await {
             let result = event_handler::check_blueprint_events(
                 &event,
-                &mut active_gadgets,
+                &mut active_blueprints,
                 &sub_account_id.clone(),
             );
 
@@ -242,7 +256,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
                 &operator_subscribed_blueprints,
                 &env,
                 &blueprint_manager_config,
-                &mut active_gadgets,
+                &mut active_blueprints,
                 result,
                 services_client,
             )
@@ -277,6 +291,9 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
             res0 = manager_task => {
                 Err(Report::msg(format!("Blueprint Manager Closed Unexpectedly: {res0:?}")))
             },
+            res1 = auth_proxy_task => {
+                Err(Report::msg(format!("Auth Proxy Closed Unexpectedly: {res1:?}")))
+            },
 
             () = shutdown_task => {
                 Ok(())
@@ -305,7 +322,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 /// # Arguments
 ///
 /// * `blueprint_manager_config` - The configuration for the blueprint manager
-/// * `gadget_config` - The configuration for the gadget
+/// * `env` - The environment configuration for the blueprint
 /// * `shutdown_cmd` - The shutdown command for the blueprint manager
 ///
 /// # Returns
@@ -335,15 +352,15 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
 }
 
 /// * Query to get Vec<RpcServicesWithBlueprint>
-/// * For each `RpcServicesWithBlueprint`, fetch the associated gadget binary (fetch/download)
+/// * For each `RpcServicesWithBlueprint`, fetch the associated blueprint binary (fetch/download)
 ///   -> If the services field is empty, just emit and log inside the executed binary "that states a new service instance got created by one of these blueprints"
-///   -> If the services field is not empty, for each service in RpcServicesWithBlueprint.services, spawn the gadget binary, using params to set the job type to listen to (in terms of our old language, each spawned service represents a single "`RoleType`")
+///   -> If the services field is not empty, for each service in RpcServicesWithBlueprint.services, spawn the blueprint binary, using params to set the job type to listen to (in terms of our old language, each spawned service represents a single "`RoleType`")
 async fn handle_init(
     tangle_runtime: &TangleClient,
     services_client: &TangleServicesClient<TangleConfig>,
     source_candidates: &SourceCandidates,
     sub_account_id: &AccountId32,
-    active_gadgets: &mut ActiveGadgets,
+    active_blueprints: &mut ActiveBlueprints,
     blueprint_env: &BlueprintEnvironment,
     blueprint_manager_config: &BlueprintManagerConfig,
 ) -> Result<Vec<RpcServicesWithBlueprint>> {
@@ -375,7 +392,7 @@ async fn handle_init(
 
     // Immediately poll, handling the initial state
     let poll_result =
-        event_handler::check_blueprint_events(&init_event, active_gadgets, sub_account_id);
+        event_handler::check_blueprint_events(&init_event, active_blueprints, sub_account_id);
 
     event_handler::handle_tangle_event(
         &init_event,
@@ -383,11 +400,50 @@ async fn handle_init(
         &operator_subscribed_blueprints,
         blueprint_env,
         blueprint_manager_config,
-        active_gadgets,
+        active_blueprints,
         poll_result,
         services_client,
     )
     .await?;
 
     Ok(operator_subscribed_blueprints)
+}
+
+/// Runs the authentication proxy server.
+///
+/// This function sets up and runs an authenticated proxy server that listens on the configured host and port.
+/// It creates necessary directories for the proxy's database and then starts the server.
+///
+/// # Arguments
+///
+/// * `data_dir` - The path to the data directory where the proxy's database will be stored.
+/// * `auth_proxy_opts` - Configuration options for the authentication proxy, including host and port.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - It fails to create the necessary directories for the database.
+/// - It fails to bind to the specified host and port.
+/// - The Axum server encounters an error during operation.
+async fn run_auth_proxy(data_dir: PathBuf, auth_proxy_opts: AuthProxyOpts) -> Result<()> {
+    let db_path = data_dir.join("private").join("auth-proxy").join("db");
+    tokio::fs::create_dir_all(&db_path).await?;
+
+    let proxy = blueprint_auth::proxy::AuthenticatedProxy::new(&db_path)?;
+    let router = proxy.router();
+    let listener = tokio::net::TcpListener::bind((
+        auth_proxy_opts.auth_proxy_host,
+        auth_proxy_opts.auth_proxy_port,
+    ))
+    .await?;
+    info!(
+        "Auth proxy listening on {}:{}",
+        auth_proxy_opts.auth_proxy_host, auth_proxy_opts.auth_proxy_port
+    );
+    let result = axum::serve(listener, router).await;
+    if let Err(err) = result {
+        error!("Auth proxy error: {err}");
+    }
+
+    Ok(())
 }

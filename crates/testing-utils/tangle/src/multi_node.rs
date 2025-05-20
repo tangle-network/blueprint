@@ -557,8 +557,8 @@ where
         self.test_env.write().await.add_background_service(service);
     }
 
-    pub async fn gadget_config(&self) -> BlueprintEnvironment {
-        self.test_env.read().await.get_gadget_config()
+    pub async fn blueprint_config(&self) -> BlueprintEnvironment {
+        self.test_env.read().await.get_blueprint_config()
     }
 }
 
@@ -689,7 +689,7 @@ where
     }
 }
 
-fn find_open_tcp_bind_port() -> u16 {
+pub(crate) fn find_open_tcp_bind_port() -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("Should bind to localhost");
     let port = listener
         .local_addr()

@@ -6,6 +6,7 @@ use blueprint_keystore::backends::Backend;
 use blueprint_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_keystore::crypto::tangle_pair_signer::pair_signer::PairSigner;
 use blueprint_keystore::crypto::tangle_pair_signer::sp_core;
+use blueprint_tangle_extra::serde::new_bounded_string;
 use futures_util::future::select_ok;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,6 @@ use std::sync::Arc;
 use tangle_subxt::subxt::{OnlineClient, PolkadotConfig};
 use tangle_subxt::tangle_testnet_runtime::api;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::PriceTargets as TanglePriceTargets;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
 
 /// Protocol settings for [Tangle]
@@ -45,43 +45,17 @@ impl ProtocolSettingsT for TangleProtocolSettings {
     }
 }
 
-/// Wrapper for `tangle_subxt`'s [`PriceTargets`]
-///
-/// This provides a [`Default`] impl for a zeroed-out [`PriceTargets`].
-///
-/// [`PriceTargets`]: tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::PriceTargets
-#[derive(Clone, Debug)]
-pub struct PriceTargets(pub TanglePriceTargets);
-
-impl From<TanglePriceTargets> for PriceTargets {
-    fn from(t: TanglePriceTargets) -> Self {
-        PriceTargets(t)
-    }
-}
-
-impl Default for PriceTargets {
-    fn default() -> Self {
-        Self(TanglePriceTargets {
-            cpu: 0,
-            mem: 0,
-            storage_hdd: 0,
-            storage_ssd: 0,
-            storage_nvme: 0,
-        })
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct TangleConfig {
-    pub price_targets: PriceTargets,
+    pub rpc_address: String,
     pub exit_after_register: bool,
 }
 
 impl TangleConfig {
     #[must_use]
-    pub fn new(price_targets: PriceTargets) -> Self {
+    pub fn new(rpc_address: impl Into<String>) -> Self {
         Self {
-            price_targets,
+            rpc_address: rpc_address.into(),
             exit_after_register: true,
         }
     }
@@ -95,7 +69,7 @@ impl TangleConfig {
 
 impl BlueprintConfig for TangleConfig {
     async fn register(&self, env: &BlueprintEnvironment) -> Result<(), RunnerError> {
-        register_impl(self.price_targets.clone(), vec![], env).await
+        register_impl(&self.rpc_address, vec![], env).await
     }
 
     async fn requires_registration(&self, env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
@@ -141,7 +115,7 @@ async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bool, 
 }
 
 async fn register_impl(
-    price_targets: PriceTargets,
+    rpc_address: &str,
     registration_args: RegistrationArgs,
     env: &BlueprintEnvironment,
 ) -> Result<(), RunnerError> {
@@ -188,7 +162,7 @@ async fn register_impl(
         blueprint_id,
         services::types::OperatorPreferences {
             key: uncompressed_pk,
-            price_targets: price_targets.clone().0,
+            rpc_address: new_bounded_string(rpc_address),
         },
         registration_args,
         0,

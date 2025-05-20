@@ -4,7 +4,7 @@ use super::binary::{BinarySourceFetcher, generate_running_process_status_handle}
 use crate::error::{Error, Result};
 use crate::sdk::utils::make_executable;
 use blueprint_core::trace;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
 use blueprint_runner::config::BlueprintEnvironment;
 use crate::config::SourceCandidates;
@@ -12,24 +12,24 @@ use crate::config::SourceCandidates;
 pub struct TestSourceFetcher {
     pub fetcher: TestFetcher,
     pub blueprint_id: u64,
-    pub gadget_name: String,
+    pub blueprint_name: String,
     resolved_binary_path: Option<PathBuf>,
 }
 
 impl TestSourceFetcher {
     #[must_use]
-    pub fn new(fetcher: TestFetcher, blueprint_id: u64, gadget_name: String) -> Self {
+    pub fn new(fetcher: TestFetcher, blueprint_id: u64, blueprint_name: String) -> Self {
         Self {
             fetcher,
             blueprint_id,
-            gadget_name,
+            blueprint_name,
             resolved_binary_path: None,
         }
     }
 }
 
 impl BinarySourceFetcher for TestSourceFetcher {
-    async fn get_binary(&self) -> Result<PathBuf> {
+    async fn get_binary(&mut self, _cache_dir: &Path) -> Result<PathBuf> {
         let TestFetcher {
             cargo_package,
             base_path,
@@ -78,6 +78,11 @@ impl BinarySourceFetcher for TestSourceFetcher {
             blueprint_core::warn!("Failed to build binary");
             return Err(Error::BuildBinary(output));
         }
+        unsafe {
+            // Set the environment variable to indicate that the binary was built for testing
+            std::env::set_var("BLUEPRINT_BINARY_TEST_BUILD", "true");
+        }
+
         trace!("Successfully built binary");
 
         Ok(binary_path)
@@ -99,12 +104,12 @@ async fn get_git_repo_root_path() -> Result<PathBuf> {
 }
 
 impl BlueprintSourceHandler for TestSourceFetcher {
-    async fn fetch(&mut self) -> Result<()> {
+    async fn fetch(&mut self, cache_dir: &Path) -> Result<()> {
         if self.resolved_binary_path.is_some() {
             return Ok(());
         }
 
-        let mut binary_path = self.get_binary().await?;
+        let mut binary_path = self.get_binary(cache_dir).await?;
 
         // Ensure the binary is executable
         binary_path = make_executable(&binary_path)?;
@@ -140,6 +145,6 @@ impl BlueprintSourceHandler for TestSourceFetcher {
     }
 
     fn name(&self) -> String {
-        self.gadget_name.clone()
+        self.blueprint_name.clone()
     }
 }

@@ -55,7 +55,7 @@ where
             .add_background_service(service);
     }
 
-    fn get_gadget_config(&self) -> BlueprintEnvironment {
+    fn get_blueprint_config(&self) -> BlueprintEnvironment {
         self.env.clone()
     }
 

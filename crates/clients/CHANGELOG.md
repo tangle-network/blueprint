@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-clients-v0.1.0-alpha.11...blueprint-clients-v0.1.0-alpha.12) - 2025-05-14
+
+### Other
+
+- updated the following local packages: blueprint-client-tangle, blueprint-client-eigenlayer
+
+## [0.1.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-clients-v0.1.0-alpha.10...blueprint-clients-v0.1.0-alpha.11) - 2025-05-13
+
+### Other
+
+- updated the following local packages: blueprint-client-eigenlayer, blueprint-client-tangle
+
+## [0.1.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-clients-v0.1.0-alpha.9...blueprint-clients-v0.1.0-alpha.10) - 2025-05-09
+
+### Other
+
+- updated the following local packages: blueprint-std, blueprint-client-core, blueprint-client-tangle, blueprint-client-eigenlayer, blueprint-client-evm
+
+## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-clients-v0.1.0-alpha.8...blueprint-clients-v0.1.0-alpha.9) - 2025-05-06
+
+### Other
+
+- updated the following local packages: blueprint-client-eigenlayer, blueprint-client-tangle
+
+## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-clients-v0.1.0-alpha.7...blueprint-clients-v0.1.0-alpha.8) - 2025-05-01
+
+### Other
+
+- remove unused dependencies (#915)
+
 ## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-clients-v0.1.0-alpha.6...blueprint-clients-v0.1.0-alpha.7) - 2025-04-21
 
 ### Other

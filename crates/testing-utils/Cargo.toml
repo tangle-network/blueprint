@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-testing-utils"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.12"
 description = "Testing utilities metapackage for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -17,7 +17,6 @@ blueprint-core-testing-utils = { workspace = true }
 blueprint-anvil-testing-utils = { workspace = true, optional = true }
 blueprint-tangle-testing-utils = { workspace = true, optional = true }
 blueprint-eigenlayer-testing-utils = { workspace = true, optional = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [features]
 default = []

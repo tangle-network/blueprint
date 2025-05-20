@@ -1,13 +1,12 @@
 mod error;
-
 pub use error::Error;
-use std::io::ErrorKind;
 
 use blueprint_std::collections::HashMap;
 use blueprint_std::fs;
 use blueprint_std::path::{Path, PathBuf};
 use blueprint_std::sync::Mutex;
 use serde::{Serialize, de::DeserializeOwned};
+use std::io::ErrorKind;
 
 /// A local database for storing key-value pairs.
 ///
@@ -177,7 +176,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use blueprint_std::fs;
     use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 

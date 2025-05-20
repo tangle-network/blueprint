@@ -1,5 +1,28 @@
-// TODO: Document
-//! Blueprint SDK
+//! ![Tangle Network Banner](https://raw.githubusercontent.com/tangle-network/tangle/refs/heads/main/assets/Tangle%20%20Banner.png)
+//!
+//! <h1 align="center">Blueprint SDK</h1>
+//!
+//! <p align="center"><em>A comprehensive toolkit for building, deploying, and managing blueprints on the Tangle Network.</em></p>
+//!
+//! <p align="center">
+//! <a href="https://github.com/tangle-network/blueprint/actions"><img src="https://img.shields.io/github/actions/workflow/status/tangle-network/blueprint/ci.yml?branch=main&logo=github" alt="Build Status"></a>
+//! <a href="https://github.com/tangle-network/blueprint/releases"><img src="https://img.shields.io/github/v/release/tangle-network/blueprint?sort=semver&filter=blueprint-sdk-*&display_name=release" alt="Latest Release"></a>
+//! <a href="https://github.com/tangle-network/blueprint/blob/main/LICENSE"><img src="https://img.shields.io/crates/l/blueprint-sdk" alt="License"></a>
+//! <a href="https://discord.com/invite/cv8EfJu3Tn"><img src="https://img.shields.io/discord/833784453251596298?label=Discord" alt="Discord"></a>
+//! <a href="https://t.me/tanglenet"><img src="https://img.shields.io/endpoint?color=neon&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Ftanglenet" alt="Telegram"></a>
+//! </p>
+//!
+//! ## Overview
+//!
+//! Blueprints are Infrastructure-as-Code templates that allow developers to quickly build crypto services. The Blueprint SDK
+//! comes equipped with a variety of tools, from event listeners and p2p networking to flexible keystores, allowing you to rapidly
+//! prototype distributed systems. With these tools, developers can get started building anything from oracles to bridge
+//! security systems, zk prover networks, AI agent orchestration systems. Deploy these applications on the [Tangle Network], [Eigenlayer], or natively.
+//!
+//! We also have a [documentation site](https://docs.tangle.tools/) on all things Tangle to help you get started.
+//!
+//! [Tangle Network]: https://tangle.tools
+//! [Eigenlayer]: https://eigenlayer.xyz
 //!
 //! ## Features
 #![doc = document_features::document_features!()]
@@ -48,7 +71,10 @@ pub use blueprint_router::Router;
 
 #[cfg(feature = "macros")]
 pub mod macros {
-    pub use blueprint_context_derive as context;
+    pub mod context {
+        pub use blueprint_context_derive::*;
+    }
+
     pub use blueprint_macros::*;
 }
 
@@ -56,7 +82,10 @@ pub mod macros {
 
 #[cfg(feature = "tangle")]
 mod tangle_feat {
-    pub use blueprint_tangle_extra as tangle;
+    pub mod tangle {
+        pub use blueprint_tangle_extra::*;
+    }
+
     pub use tangle_subxt;
 }
 #[cfg(feature = "tangle")]
@@ -65,7 +94,9 @@ pub use tangle_feat::*;
 #[cfg(any(feature = "evm", feature = "eigenlayer"))]
 mod evm_feat {
     pub use alloy;
-    pub use blueprint_evm_extra as evm;
+    pub mod evm {
+        pub use blueprint_evm_extra::*;
+    }
 }
 #[cfg(any(feature = "evm", feature = "eigenlayer"))]
 pub use evm_feat::*;
@@ -74,7 +105,9 @@ pub use evm_feat::*;
 pub use eigensdk;
 
 #[cfg(feature = "eigenlayer")]
-pub use blueprint_eigenlayer_extra as eigenlayer;
+pub mod eigenlayer {
+    pub use blueprint_eigenlayer_extra::*;
+}
 
 // == Development utilities ==
 
@@ -82,9 +115,15 @@ pub use blueprint_eigenlayer_extra as eigenlayer;
 /// Testing utilities and helpers
 pub mod testing {
     /// Utilities for creating and interacting with local chains
-    pub use blueprint_chain_setup as chain_setup;
+    pub mod chain_setup {
+        pub use blueprint_chain_setup::*;
+    }
+
     /// General testing utilities for blueprints
-    pub use blueprint_testing_utils as utils;
+    pub mod utils {
+        pub use blueprint_testing_utils::*;
+    }
+
     /// Temporary file and directory management for tests
     pub use tempfile;
 }
@@ -93,14 +132,12 @@ pub mod testing {
 #[cfg(feature = "build")]
 /// Build-time utilities for blueprint compilation
 pub mod build {
-    /// Build utilities for blueprint compilation
-    pub use blueprint_build_utils as utils;
+    pub use blueprint_build_utils::*;
 }
 
 #[cfg(feature = "networking")]
 /// Networking utilities for blueprints
 pub mod networking {
-    /// Networking utilities for blueprints
     pub use blueprint_networking::*;
     #[cfg(feature = "round-based-compat")]
     pub use blueprint_networking_round_based_extension as round_based_compat;

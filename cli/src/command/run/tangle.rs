@@ -1,6 +1,6 @@
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
-use blueprint_manager::config::{BlueprintManagerConfig, DEFAULT_DOCKER_HOST, SourceType};
+use blueprint_manager::config::{BlueprintManagerConfig, DEFAULT_DOCKER_HOST};
 use blueprint_manager::executor::run_blueprint_manager;
 use blueprint_runner::config::BlueprintEnvironment;
 use color_eyre::eyre::{Result, eyre};
@@ -28,6 +28,10 @@ pub struct RunOpts {
     pub keystore_path: Option<String>,
     /// The data directory path
     pub data_dir: Option<PathBuf>,
+    /// Whether to allow invalid GitHub attestations (binary integrity checks)
+    ///
+    /// This will also allow for running the manager without the GitHub CLI installed.
+    pub allow_unchecked_attestations: bool,
     /// The Podman host to use for containerized blueprints
     pub podman_host: Option<Url>,
 }
@@ -50,33 +54,32 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         .blueprint_id
         .ok_or_else(|| eyre!("Blueprint ID is required"))?;
 
-    let mut gadget_config = BlueprintEnvironment::default();
-    gadget_config.http_rpc_endpoint = opts.http_rpc_url.clone();
-    gadget_config.ws_rpc_endpoint = opts.ws_rpc_url.clone();
+    let mut blueprint_config = BlueprintEnvironment::default();
+    blueprint_config.http_rpc_endpoint = opts.http_rpc_url.clone();
+    blueprint_config.ws_rpc_endpoint = opts.ws_rpc_url.clone();
 
     if let Some(keystore_path) = opts.keystore_path {
-        gadget_config.keystore_uri = keystore_path;
+        blueprint_config.keystore_uri = keystore_path;
     }
 
-    gadget_config.keystore_uri = std::path::absolute(&gadget_config.keystore_uri)?
+    blueprint_config.keystore_uri = std::path::absolute(&blueprint_config.keystore_uri)?
         .display()
         .to_string();
 
-    gadget_config.data_dir = opts.data_dir;
+    blueprint_config.data_dir = opts.data_dir;
 
     let blueprint_manager_config = BlueprintManagerConfig {
-        gadget_config: None,
-        keystore_uri: gadget_config.keystore_uri.clone(),
-        data_dir: gadget_config
+        keystore_uri: blueprint_config.keystore_uri.clone(),
+        data_dir: blueprint_config
             .data_dir
             .clone()
             .unwrap_or_else(|| PathBuf::from("./data")),
         verbose: 2,
         pretty: true,
         instance_id: Some(format!("Blueprint-{}", blueprint_id)),
-        test_mode: false,
-        preferred_source: SourceType::default(),
+        allow_unchecked_attestations: opts.allow_unchecked_attestations,
         podman_host: opts.podman_host.unwrap_or(DEFAULT_DOCKER_HOST.clone()),
+        ..Default::default()
     };
 
     println!(
@@ -115,7 +118,7 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
     pb.enable_steady_tick(Duration::from_millis(100));
 
     let mut handle =
-        run_blueprint_manager(blueprint_manager_config, gadget_config, shutdown_signal).await?;
+        run_blueprint_manager(blueprint_manager_config, blueprint_config, shutdown_signal).await?;
 
     pb.finish_with_message("Blueprint initialized successfully!");
 

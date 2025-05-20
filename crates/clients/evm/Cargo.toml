@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-client-evm"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.4"
 description = "EVM client for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -38,7 +38,6 @@ tokio = { workspace = true }
 
 # Metrics
 blueprint-metrics-rpc-calls = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-evm-extra = { path = "../../evm-extra" }

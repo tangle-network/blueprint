@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-chain-setup-tangle"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.12"
 description = "Tangle-specific chain setup utilities"
 authors.workspace = true
 edition.workspace = true
@@ -52,7 +52,6 @@ tangle-subxt = { workspace = true }
 
 thiserror = { workspace = true }
 cargo_metadata = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 default = ["std"]

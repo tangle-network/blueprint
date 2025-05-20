@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-client-eigenlayer"
-version = "0.1.0-alpha.6"
+version = "0.1.0-alpha.11"
 description = "Eigenlayer client for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -40,7 +40,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 url = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-chain-setup-anvil = { path = "../../chain-setup/anvil" }

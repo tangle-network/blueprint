@@ -6,7 +6,7 @@ use blueprint_std::hash::Hash;
 pub type OperatorSet<K, V> = std::collections::BTreeMap<K, V>;
 
 #[auto_impl::auto_impl(&, Arc)]
-pub trait GadgetServicesClient: Send + Sync + 'static {
+pub trait BlueprintServicesClient: Send + Sync + 'static {
     /// The ID of for operators at the blueprint/application layer. Typically a cryptograpgic key in the form of a point on
     /// some elliptic curve, e.g., an ECDSA public key (point). However, this is not required.
     type PublicApplicationIdentity: Eq + PartialEq + Hash + Ord + PartialOrd + Send + Sync + 'static;

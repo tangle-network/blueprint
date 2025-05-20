@@ -10,7 +10,7 @@ use subxt::PolkadotConfig;
 use tangle_subxt::subxt;
 use tangle_subxt::tangle_testnet_runtime::api;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::pallet_multi_asset_delegation::types::operator::OperatorMetadata;
-use blueprint_client_core::{GadgetServicesClient, OperatorSet};
+use blueprint_client_core::{BlueprintServicesClient, OperatorSet};
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_crypto_sp_core::{SpEcdsa, SpSr25519};
 use blueprint_keystore::{Keystore, KeystoreConfig};
@@ -257,7 +257,7 @@ impl EventsClient<TangleEvent> for TangleClient {
 
 pub type BlueprintId = u64;
 
-impl GadgetServicesClient for TangleClient {
+impl BlueprintServicesClient for TangleClient {
     type PublicApplicationIdentity = ecdsa::Public;
     type PublicAccountIdentity = AccountId32;
     type Id = BlueprintId;

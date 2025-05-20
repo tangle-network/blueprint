@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-store-local-database"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.4"
 description = "Local database storage provider for the Blueprint SDK"
 authors.workspace = true
 edition.workspace = true
@@ -13,19 +13,10 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-blueprint-std = { workspace = true }
+blueprint-std = { workspace = true, features = ["std"] }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true, features = ["alloc"] }
+serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
-
-[features]
-default = ["std"]
-std = [
-    "blueprint-std/std",
-    "serde/std",
-    "serde_json/std",
-]
 
 [dev-dependencies]
-tempfile = "3.8"
+tempfile = { workspace = true }

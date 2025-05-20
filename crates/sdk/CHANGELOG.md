@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.11...blueprint-sdk-v0.1.0-alpha.12) - 2025-05-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.1.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.10...blueprint-sdk-v0.1.0-alpha.11) - 2025-05-13
+
+### Other
+
+- updated the following local packages: blueprint-runner, blueprint-macros, blueprint-crypto-tangle-pair-signer, blueprint-crypto, blueprint-keystore, blueprint-networking, blueprint-clients, blueprint-contexts, blueprint-chain-setup, blueprint-testing-utils, blueprint-eigenlayer-extra, blueprint-networking-round-based-extension
+
+## [0.1.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.9...blueprint-sdk-v0.1.0-alpha.10) - 2025-05-09
+
+### Other
+
+- *(blueprint-sdk)* improve re-exports (#972)
+
+## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.8...blueprint-sdk-v0.1.0-alpha.9) - 2025-05-06
+
+### Other
+
+- updated the following local packages: blueprint-networking, blueprint-runner, blueprint-clients, blueprint-contexts, blueprint-chain-setup, blueprint-testing-utils, blueprint-networking-round-based-extension, blueprint-stores
+
+## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.7...blueprint-sdk-v0.1.0-alpha.8) - 2025-05-01
+
+### Other
+
+- *(blueprint-sdk)* add intro to docs (#918)
+- remove unused dependencies (#915)
+
 ## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.6...blueprint-sdk-v0.1.0-alpha.7) - 2025-04-21
 
 ### Other

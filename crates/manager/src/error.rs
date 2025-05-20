@@ -1,3 +1,5 @@
+use tangle_subxt::subxt::ext::jsonrpsee::core::__reexports::serde_json;
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -7,7 +9,7 @@ pub enum Error {
     #[error("No testing fetcher found for blueprint, despite operating in test mode")]
     NoTestFetcher,
     #[error("Blueprint does not contain a supported fetcher")]
-    UnsupportedGadget,
+    UnsupportedBlueprint,
 
     #[error("Unable to find matching binary")]
     NoMatchingBinary,
@@ -17,6 +19,10 @@ pub enum Error {
     BuildBinary(std::process::Output),
     #[error("Failed to fetch git root: {0:?}")]
     FetchGitRoot(std::process::Output),
+    #[error("Failed to verify attestation for GitHub release")]
+    AttestationFailed,
+    #[error("No GitHub CLI found, is it installed?")]
+    NoGithubCli,
 
     #[error("Failed to get initial block hash")]
     InitialBlock,
@@ -28,10 +34,16 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
+    WalkDir(#[from] walkdir::Error),
+    #[error(transparent)]
     Utf8(#[from] std::string::FromUtf8Error),
+    #[error(transparent)]
+    Serialization(#[from] serde_json::Error),
 
     #[error(transparent)]
     Request(#[from] reqwest::Error),
     #[error(transparent)]
     TangleClient(#[from] blueprint_clients::tangle::error::Error),
+    #[error(transparent)]
+    Auth(#[from] blueprint_auth::Error),
 }

@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.13](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.12...blueprint-manager-v0.3.0-alpha.13) - 2025-05-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.3.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.11...blueprint-manager-v0.3.0-alpha.12) - 2025-05-13
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.3.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.10...blueprint-manager-v0.3.0-alpha.11) - 2025-05-09
+
+### Fixed
+
+- *(manager)* correct platform check (#970)
+
+### Other
+
+- remove gadget references (#967)
+
+## [0.3.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.9...blueprint-manager-v0.3.0-alpha.10) - 2025-05-07
+
+### Added
+
+- *(manager)* [**breaking**] support verifying binaries with gh attestations (#938)
+
+### Other
+
+- *(ci)* fixes from attestation pr (#964)
+
+## [0.3.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.8...blueprint-manager-v0.3.0-alpha.9) - 2025-05-06
+
+### Other
+
+- updated the following local packages: blueprint-networking, blueprint-runner, blueprint-clients
+
+## [0.3.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.7...blueprint-manager-v0.3.0-alpha.8) - 2025-05-01
+
+### Fixed
+
+- *(manager)* handle github sources (#922)
+- *(manager)* set correct host for local endpoints (#919)
+
+### Other
+
+- *(runner)* document crate (#920)
+- remove unused dependencies (#915)
+
 ## [0.3.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.6...blueprint-manager-v0.3.0-alpha.7) - 2025-04-21
 
 ### Added

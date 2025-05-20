@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-stores"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.4"
 description = "Storage providers for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -15,11 +15,14 @@ workspace = true
 [dependencies]
 blueprint-store-local-database = { workspace = true, optional = true }
 thiserror.workspace = true
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
+document-features = { workspace = true }
 
 [features]
-default = ["std", "local"]
-std = [
-    "blueprint-store-local-database?/std",
-]
+default = ["local"]
+
+## Enable the local KV store
 local = ["dep:blueprint-store-local-database"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

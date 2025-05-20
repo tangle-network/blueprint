@@ -1,33 +1,16 @@
 use crate::config::OperatorConfig;
 use crate::error::{PricingError, Result};
-use crate::pricing::ResourcePricing;
+use crate::pricing_engine;
 use blueprint_crypto::KeyType;
-use serde::{Deserialize, Serialize};
+use parity_scale_codec::Encode;
+use tangle_subxt::subxt::utils::AccountId32;
 
 pub type BlueprintId = u64;
-pub type OperatorId = [u8; 32];
+pub type OperatorId = AccountId32;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct QuotePayload {
-    pub blueprint_id: BlueprintId,
-    pub ttl_blocks: u64,
-    pub total_cost_rate: f64,
-    pub resources: Vec<ResourcePricing>,
-    /// Expiry timestamp (Unix epoch seconds)
-    pub expiry: u64,
-    /// Timestamp when the quote was generated (Unix epoch seconds)
-    pub timestamp: u64,
-}
-
-impl QuotePayload {
-    pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        bincode::serialize(self).map_err(PricingError::Serialization)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct SignedQuote<K: KeyType> {
-    pub payload: QuotePayload,
+    pub quote_details: pricing_engine::QuoteDetails,
     pub signature: K::Signature,
     pub operator_id: OperatorId,
     pub proof_of_work: Vec<u8>,
@@ -39,7 +22,7 @@ pub struct OperatorSigner<K: KeyType> {
 }
 
 impl<K: KeyType> OperatorSigner<K> {
-    /// Loads a keypair from a file or generates a new one if it doesn't exist.
+    /// Creates a new Operator Signer
     pub fn new(
         _config: &OperatorConfig,
         keypair: K::Secret,
@@ -51,21 +34,23 @@ impl<K: KeyType> OperatorSigner<K> {
         })
     }
 
-    /// Signs a quote payload.
+    /// Returns a signed quote,made up of the quote details, signature, operator ID, and proof of work
     pub fn sign_quote(
         &mut self,
-        payload: QuotePayload,
+        quote_details: pricing_engine::QuoteDetails,
         proof_of_work: Vec<u8>,
     ) -> Result<SignedQuote<K>> {
-        let msg = payload.to_bytes()?;
-        let signature = K::sign_with_secret(&mut self.keypair, &msg).map_err(|e| {
-            PricingError::Signing(format!("Error {:?} signing quote: {:?}", e, msg))
-        })?;
+        // Hash the quote details
+        let hash = hash_quote_details(&quote_details)?;
+
+        // Sign the hash
+        let signature = K::sign_with_secret(&mut self.keypair, &hash)
+            .map_err(|e| PricingError::Signing(format!("Error {:?} signing quote hash", e)))?;
 
         Ok(SignedQuote {
-            payload,
+            quote_details,
             signature,
-            operator_id: self.operator_id,
+            operator_id: self.operator_id.clone(),
             proof_of_work,
         })
     }
@@ -77,11 +62,20 @@ impl<K: KeyType> OperatorSigner<K> {
 
     /// Returns the operator ID
     pub fn operator_id(&self) -> OperatorId {
-        self.operator_id
+        self.operator_id.clone()
     }
 }
 
+/// Creates a hash of the quote details for on-chain verification
+pub fn hash_quote_details(quote_details: &pricing_engine::QuoteDetails) -> Result<[u8; 32]> {
+    let on_chain_quote = crate::utils::create_on_chain_quote_type(quote_details)?;
+    let serialized = on_chain_quote.encode();
+    let keccak_hash = sp_core::keccak_256(&serialized);
+    Ok(keccak_hash)
+}
+
+/// Verify a quote signature by checking the signature against the hash of the quote details.
 pub fn verify_quote<K: KeyType>(quote: &SignedQuote<K>, public_key: &K::Public) -> Result<bool> {
-    let msg = quote.payload.to_bytes()?;
-    Ok(K::verify(public_key, &msg, &quote.signature))
+    let hash = hash_quote_details(&quote.quote_details)?;
+    Ok(K::verify(public_key, &hash, &quote.signature))
 }

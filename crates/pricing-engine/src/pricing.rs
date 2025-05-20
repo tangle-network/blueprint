@@ -1,15 +1,17 @@
 use crate::benchmark::BenchmarkProfile;
 use crate::error::Result;
 use crate::types::ResourceUnit;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
 use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityRequirement;
 use toml;
 
 /// The average block time in seconds
-pub const BLOCK_TIME: f64 = 6.0;
+pub fn block_time() -> Decimal {
+    Decimal::new(6, 0)
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ResourcePricing {
@@ -18,7 +20,7 @@ pub struct ResourcePricing {
     /// Quantity of the resource
     pub count: u64,
     /// Price per unit in USD with decimal precision (e.g., 0.00005 USD per MB)
-    pub price_per_unit_rate: f64,
+    pub price_per_unit_rate: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -26,40 +28,40 @@ pub struct PriceModel {
     /// Pricing for different resource types
     pub resources: Vec<ResourcePricing>,
     /// Total cost in USD with decimal precision
-    pub total_cost: f64,
+    pub total_cost: Decimal,
     /// Optional: Include benchmark details used for pricing.
     pub benchmark_profile: Option<BenchmarkProfile>,
 }
 
 /// Function that applies pricing adjustments based on the base cost (price * count)
-fn calculate_base_resource_cost(resource_count: u64, resource_price_rate: f64) -> f64 {
+fn calculate_base_resource_cost(resource_count: u64, resource_price_rate: Decimal) -> Decimal {
     // We multiply the resource count by the price rate
-    resource_count as f64 * resource_price_rate
+    Decimal::from(resource_count) * resource_price_rate
 }
 
 /// Calculate the time-based price adjustment factor based on TTL in blocks
 /// Each block represents BLOCK_TIME seconds
-fn calculate_ttl_price_adjustment(time_blocks: u64) -> f64 {
+fn calculate_ttl_price_adjustment(time_blocks: u64) -> Decimal {
     // We multiply the input TTL by BLOCK_TIME
-    time_blocks as f64 * BLOCK_TIME
+    Decimal::from(time_blocks) * block_time()
 }
 
 /// Function that applies security requirement adjustments to the cost
 fn calculate_security_rate_adjustment(
     _security_requirements: &Option<AssetSecurityRequirement<AssetId>>,
-) -> f64 {
+) -> Decimal {
     // TODO: Implement security requirement adjustments
-    1.0
+    Decimal::ONE
 }
 
 /// Calculate the price for a specific resource based on count, rate, TTL, and security requirements
 /// Following the formula: calculate_base_resource_cost(cost * count) * calculate_ttl_price_adjustment(time_blocks) * calculate_security_rate_adjustment(security requirements)
 pub fn calculate_resource_price(
     count: u64,
-    price_per_unit_rate: f64,
+    price_per_unit_rate: Decimal,
     ttl_blocks: u64,
     security_requirements: Option<AssetSecurityRequirement<AssetId>>,
-) -> f64 {
+) -> Decimal {
     let adjusted_base_cost = calculate_base_resource_cost(count, price_per_unit_rate);
     let adjusted_time_cost = calculate_ttl_price_adjustment(ttl_blocks);
     let security_factor = calculate_security_rate_adjustment(&security_requirements);
@@ -73,9 +75,10 @@ pub fn calculate_price(
     pricing_config: &HashMap<Option<u64>, Vec<ResourcePricing>>,
     blueprint_id: Option<u64>,
     ttl_blocks: u64,
+    security_requirements: Option<AssetSecurityRequirement<AssetId>>,
 ) -> Result<PriceModel> {
     let mut resources = Vec::new();
-    let mut total_cost = 0.0;
+    let mut total_cost = Decimal::ZERO;
 
     // Get the appropriate pricing configuration based on blueprint ID or default
     let resource_pricing = pricing_config
@@ -89,7 +92,7 @@ pub fn calculate_price(
         })?;
 
     // Create a map for quick lookup of resource pricing
-    let mut resource_price_map: HashMap<ResourceUnit, f64> = HashMap::new();
+    let mut resource_price_map: HashMap<ResourceUnit, Decimal> = HashMap::new();
     for resource in resource_pricing {
         resource_price_map.insert(resource.kind.clone(), resource.price_per_unit_rate);
     }
@@ -102,49 +105,51 @@ pub fn calculate_price(
             // Get the price per CPU core from the configuration or use a default
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::CPU)
-                .copied()
-                .unwrap_or(0.001); // Fallback value
+                .cloned()
+                .unwrap_or(Decimal::ZERO);
 
-            // Calculate the base price and apply TTL adjustment
-            let base_price = cpu_count as f64 * price_per_unit;
-            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
+            let adjusted_price = calculate_resource_price(
+                cpu_count,
+                price_per_unit,
+                ttl_blocks,
+                security_requirements.clone(),
+            );
 
-            // Add to total cost
-            total_cost += time_adjusted_price;
-
-            // Add CPU resource to the resources list
             resources.push(ResourcePricing {
                 kind: ResourceUnit::CPU,
                 count: cpu_count,
                 price_per_unit_rate: price_per_unit,
             });
+
+            total_cost += adjusted_price;
         }
     }
 
     // Memory pricing
     if let Some(memory_details) = &profile.memory_details {
-        // Round up to nearest integer for memory MB
+        // Round up to nearest MB
         let memory_mb = memory_details.avg_memory_mb.ceil() as u64;
         if memory_mb > 0 {
-            // Get the price per memory MB from the configuration or use a default
+            // Get the price per MB from the configuration or use a default
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::MemoryMB)
-                .copied()
-                .unwrap_or(0.00005); // Fallback value
+                .cloned()
+                .unwrap_or(Decimal::ZERO);
 
-            // Calculate the base price and apply TTL adjustment
-            let base_price = memory_mb as f64 * price_per_unit;
-            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
+            let adjusted_price = calculate_resource_price(
+                memory_mb,
+                price_per_unit,
+                ttl_blocks,
+                security_requirements.clone(),
+            );
 
-            // Add to total cost
-            total_cost += time_adjusted_price;
-
-            // Add memory resource to the resources list
             resources.push(ResourcePricing {
                 kind: ResourceUnit::MemoryMB,
                 count: memory_mb,
                 price_per_unit_rate: price_per_unit,
             });
+
+            total_cost += adjusted_price;
         }
     }
 
@@ -153,76 +158,82 @@ pub fn calculate_price(
         // Convert GB to MB and round up
         let storage_mb = (storage_details.storage_available_gb * 1024.0).ceil() as u64;
         if storage_mb > 0 {
-            // Get the price per storage MB from the configuration or use a default
+            // Get the price per MB from the configuration or use a default
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::StorageMB)
-                .copied()
-                .unwrap_or(0.00002); // Fallback value
+                .cloned()
+                .unwrap_or(Decimal::ZERO);
 
-            // Calculate the base price and apply TTL adjustment
-            let base_price = storage_mb as f64 * price_per_unit;
-            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
+            let adjusted_price = calculate_resource_price(
+                storage_mb,
+                price_per_unit,
+                ttl_blocks,
+                security_requirements.clone(),
+            );
 
-            // Add to total cost
-            total_cost += time_adjusted_price;
-
-            // Add storage resource to the resources list
             resources.push(ResourcePricing {
                 kind: ResourceUnit::StorageMB,
                 count: storage_mb,
                 price_per_unit_rate: price_per_unit,
             });
+
+            total_cost += adjusted_price;
         }
     }
 
-    // Network pricing
+    // Network egress pricing
     if let Some(network_details) = &profile.network_details {
         // Network egress (outbound traffic)
         let egress_mb = network_details.network_tx_mb.ceil() as u64;
         if egress_mb > 0 {
-            // Get the price per network egress MB from the configuration or use a default
+            // Get the price per MB from the configuration or use a default
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::NetworkEgressMB)
-                .copied()
-                .unwrap_or(0.00003); // Fallback value
+                .cloned()
+                .unwrap_or(Decimal::ZERO);
 
-            // Calculate the base price and apply TTL adjustment
-            let base_price = egress_mb as f64 * price_per_unit;
-            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
+            let adjusted_price = calculate_resource_price(
+                egress_mb,
+                price_per_unit,
+                ttl_blocks,
+                security_requirements.clone(),
+            );
 
-            // Add to total cost
-            total_cost += time_adjusted_price;
-
-            // Add egress resource to the resources list
             resources.push(ResourcePricing {
                 kind: ResourceUnit::NetworkEgressMB,
                 count: egress_mb,
                 price_per_unit_rate: price_per_unit,
             });
-        }
 
+            total_cost += adjusted_price;
+        }
+    }
+
+    // Network ingress pricing
+    if let Some(network_details) = &profile.network_details {
         // Network ingress (inbound traffic)
         let ingress_mb = network_details.network_rx_mb.ceil() as u64;
         if ingress_mb > 0 {
-            // Get the price per network ingress MB from the configuration or use a default
+            // Get the price per MB from the configuration or use a default
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::NetworkIngressMB)
-                .copied()
-                .unwrap_or(0.00001); // Fallback value
+                .cloned()
+                .unwrap_or(Decimal::ZERO);
 
-            // Calculate the base price and apply TTL adjustment
-            let base_price = ingress_mb as f64 * price_per_unit;
-            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
+            let adjusted_price = calculate_resource_price(
+                ingress_mb,
+                price_per_unit,
+                ttl_blocks,
+                security_requirements.clone(),
+            );
 
-            // Add to total cost
-            total_cost += time_adjusted_price;
-
-            // Add ingress resource to the resources list
             resources.push(ResourcePricing {
                 kind: ResourceUnit::NetworkIngressMB,
                 count: ingress_mb,
                 price_per_unit_rate: price_per_unit,
             });
+
+            total_cost += adjusted_price;
         }
     }
 
@@ -232,26 +243,26 @@ pub fn calculate_price(
             // Get the price per GPU unit from the configuration or use a default
             let price_per_unit = resource_price_map
                 .get(&ResourceUnit::GPU)
-                .copied()
-                .unwrap_or(0.005); // Fallback value
+                .cloned()
+                .unwrap_or(Decimal::ZERO);
 
-            // Calculate the base price and apply TTL adjustment
-            let base_price = 1.0 * price_per_unit;
-            let time_adjusted_price = base_price * calculate_ttl_price_adjustment(ttl_blocks);
+            let adjusted_price = calculate_resource_price(
+                1,
+                price_per_unit,
+                ttl_blocks,
+                security_requirements.clone(),
+            );
 
-            // Add to total cost
-            total_cost += time_adjusted_price;
-
-            // Add GPU resource to the resources list
             resources.push(ResourcePricing {
                 kind: ResourceUnit::GPU,
-                count: 1, // Assuming 1 GPU
+                count: 1, // TODO: Support multiple GPUs
                 price_per_unit_rate: price_per_unit,
             });
+            total_cost += adjusted_price;
         }
     }
 
-    // Create and return the price model
+    // Return the price model
     Ok(PriceModel {
         resources,
         total_cost,
@@ -260,12 +271,10 @@ pub fn calculate_price(
 }
 
 /// Load pricing from a pricing.toml file
-pub fn load_pricing_from_toml(path: &str) -> Result<HashMap<Option<u64>, Vec<ResourcePricing>>> {
+pub fn load_pricing_from_toml(content: &str) -> Result<HashMap<Option<u64>, Vec<ResourcePricing>>> {
     use std::str::FromStr;
 
-    // Parse the TOML file
-    let toml_content = fs::read_to_string(path)?;
-    let parsed_toml: toml::Value = toml::from_str(&toml_content)?;
+    let parsed_toml: toml::Value = toml::from_str(content)?;
 
     let mut pricing = HashMap::new();
 
@@ -291,14 +300,15 @@ pub fn load_pricing_from_toml(path: &str) -> Result<HashMap<Option<u64>, Vec<Res
                         .and_then(|c| c.as_integer())
                         .unwrap_or(1) as u64;
 
-                    // Extract price per unit rate as float
+                    // Extract price per unit rate as Decimal
                     let price_per_unit_rate = resource_table
                         .get("price_per_unit_rate")
                         .and_then(|p| {
                             p.as_float()
-                                .or_else(|| p.as_integer().map(|int_val| int_val as f64))
+                                .map(|f| Decimal::try_from(f).unwrap_or(Decimal::ZERO))
+                                .or_else(|| p.as_integer().map(Decimal::from))
                         })
-                        .unwrap_or(0.0);
+                        .unwrap_or(Decimal::ZERO);
 
                     default_resources.push(ResourcePricing {
                         kind,
@@ -341,14 +351,15 @@ pub fn load_pricing_from_toml(path: &str) -> Result<HashMap<Option<u64>, Vec<Res
                             .and_then(|c| c.as_integer())
                             .unwrap_or(1) as u64;
 
-                        // Extract price per unit rate as float
+                        // Extract price per unit rate as Decimal
                         let price_per_unit_rate = resource_table
                             .get("price_per_unit_rate")
                             .and_then(|p| {
                                 p.as_float()
-                                    .or_else(|| p.as_integer().map(|int_val| int_val as f64))
+                                    .map(|f| Decimal::try_from(f).unwrap_or(Decimal::ZERO))
+                                    .or_else(|| p.as_integer().map(Decimal::from))
                             })
-                            .unwrap_or(0.0);
+                            .unwrap_or(Decimal::ZERO);
 
                         blueprint_resources.push(ResourcePricing {
                             kind,

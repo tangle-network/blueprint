@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-client-core"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.3"
 description = "Core primitives for Tangle Blueprint clients"
 authors.workspace = true
 edition.workspace = true
@@ -16,7 +16,6 @@ workspace = true
 blueprint-std = { workspace = true }
 auto_impl = { workspace = true }
 thiserror = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 default = ["std"]

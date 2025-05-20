@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4](https://github.com/tangle-network/blueprint/compare/blueprint-stores-v0.1.0-alpha.3...blueprint-stores-v0.1.0-alpha.4) - 2025-05-09
+
+### Other
+
+- updated the following local packages: blueprint-store-local-database
+
+## [0.1.0-alpha.3](https://github.com/tangle-network/blueprint/compare/blueprint-stores-v0.1.0-alpha.2...blueprint-stores-v0.1.0-alpha.3) - 2025-05-06
+
+### Other
+
+- updated the following local packages: blueprint-store-local-database
+
+## [0.1.0-alpha.2](https://github.com/tangle-network/blueprint/compare/blueprint-stores-v0.1.0-alpha.1...blueprint-stores-v0.1.0-alpha.2) - 2025-05-01
+
+### Other
+
+- *(stores)* document crate (#930)
+- remove unused dependencies (#915)
+
 ## [0.1.0-alpha.1](https://github.com/tangle-network/blueprint/releases/tag/blueprint-stores-v0.1.0-alpha.1) - 2025-04-08
 
 ### Other

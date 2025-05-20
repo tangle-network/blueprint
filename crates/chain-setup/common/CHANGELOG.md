@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-common-v0.1.0-alpha.11...blueprint-chain-setup-common-v0.1.0-alpha.12) - 2025-05-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.1.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-common-v0.1.0-alpha.10...blueprint-chain-setup-common-v0.1.0-alpha.11) - 2025-05-13
+
+### Other
+
+- updated the following local packages: blueprint-crypto-tangle-pair-signer, blueprint-crypto, blueprint-keystore, blueprint-networking, blueprint-clients, blueprint-contexts
+
+## [0.1.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-common-v0.1.0-alpha.9...blueprint-chain-setup-common-v0.1.0-alpha.10) - 2025-05-09
+
+### Other
+
+- updated the following local packages: blueprint-std, blueprint-keystore, blueprint-networking, blueprint-tangle-extra, blueprint-crypto-tangle-pair-signer, blueprint-crypto, blueprint-clients, blueprint-contexts
+
+## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-common-v0.1.0-alpha.8...blueprint-chain-setup-common-v0.1.0-alpha.9) - 2025-05-06
+
+### Other
+
+- updated the following local packages: blueprint-networking, blueprint-clients, blueprint-contexts
+
+## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-common-v0.1.0-alpha.7...blueprint-chain-setup-common-v0.1.0-alpha.8) - 2025-05-01
+
+### Other
+
+- remove unused dependencies (#915)
+
 ## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-common-v0.1.0-alpha.6...blueprint-chain-setup-common-v0.1.0-alpha.7) - 2025-04-21
 
 ### Other

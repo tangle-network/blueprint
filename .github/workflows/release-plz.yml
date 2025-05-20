@@ -9,10 +9,13 @@ on:
     branches:
       - main
 
+env:
+  RELEASE_PLZ_LOG: TRACE
+
 jobs:
   release-plz:
     name: Release-plz
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       # Generating a GitHub token, so that PRs and tags created by
       # the release-plz-action can trigger actions workflows.
@@ -40,6 +43,7 @@ jobs:
           cargo hakari disable
           cargo hakari remove-deps -y
 
+      - uses: ./.github/actions/free-disk-space
       - name: Run release-plz
         uses: MarcoIeni/release-plz-action@v0.5.102
         env:

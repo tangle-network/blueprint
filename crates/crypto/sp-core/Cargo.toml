@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-crypto-sp-core"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.6"
 description = "sp-core crypto primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -25,7 +25,6 @@ ark-serialize = { workspace = true, optional = true }
 blueprint-crypto-bls = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 tnt-bls = { workspace = true, optional = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-crypto-sp-core = { path = ".", features = ["std", "bls"] }

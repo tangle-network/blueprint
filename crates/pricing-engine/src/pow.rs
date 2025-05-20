@@ -1,4 +1,6 @@
-use crate::error::Result;
+use crate::error::{PricingError, Result};
+use bincode;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::Duration;
 
@@ -8,14 +10,25 @@ pub const DEFAULT_POW_DIFFICULTY: u32 = 20;
 /// Default time limit for proof of work generation
 pub const DEFAULT_POW_TIME_LIMIT: Duration = Duration::from_secs(10);
 
+/// A proof of work containing both the hash and the nonce used to generate it
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Proof {
+    /// The hash result
+    pub hash: Vec<u8>,
+    /// The nonce used to generate the hash
+    pub nonce: u64,
+}
+
 /// Generate a proof of work for the given challenge
 pub async fn generate_proof(challenge: &[u8], difficulty: u32) -> Result<Vec<u8>> {
     let mut nonce: u64 = 0;
 
     loop {
-        let proof = create_proof(challenge, nonce);
-        if check_difficulty(&proof, difficulty) {
-            return Ok(proof);
+        let hash = calculate_hash(challenge, nonce);
+        if check_difficulty(&hash, difficulty) {
+            // Return serialized proof containing both hash and nonce
+            let proof = Proof { hash, nonce };
+            return bincode::serialize(&proof).map_err(PricingError::Serialization);
         }
         nonce += 1;
 
@@ -27,13 +40,24 @@ pub async fn generate_proof(challenge: &[u8], difficulty: u32) -> Result<Vec<u8>
 }
 
 /// Verify a proof of work against the given challenge
-pub fn verify_proof(_challenge: &[u8], proof: &[u8], difficulty: u32) -> Result<bool> {
-    // Verify the proof meets the difficulty requirement
-    Ok(check_difficulty(proof, difficulty))
+pub fn verify_proof(challenge: &[u8], proof_bytes: &[u8], difficulty: u32) -> Result<bool> {
+    // Deserialize the proof
+    let proof: Proof = bincode::deserialize(proof_bytes).map_err(PricingError::Serialization)?;
+
+    // First check if the hash meets the difficulty requirement
+    if !check_difficulty(&proof.hash, difficulty) {
+        return Ok(false);
+    }
+
+    // Recalculate the hash using the challenge and nonce
+    let recalculated_hash = calculate_hash(challenge, proof.nonce);
+
+    // Verify the recalculated hash matches the one in the proof
+    Ok(recalculated_hash == proof.hash)
 }
 
-/// Create a proof by hashing the challenge with a nonce
-fn create_proof(challenge: &[u8], nonce: u64) -> Vec<u8> {
+/// Calculate a hash from a challenge and nonce
+fn calculate_hash(challenge: &[u8], nonce: u64) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(challenge);
     hasher.update(nonce.to_be_bytes());

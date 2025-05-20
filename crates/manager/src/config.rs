@@ -8,6 +8,7 @@ use hyper::header::HeaderValue;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use std::fmt::Display;
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use tracing::error;
@@ -19,18 +20,21 @@ pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =
 #[derive(Debug, Parser)]
 #[command(
     name = "Blueprint Manager",
-    about = "An program executor that connects to the Tangle network and runs protocols dynamically on the fly"
+    about = "A program executor that connects to the Tangle network and runs blueprints dynamically on the fly"
 )]
 pub struct BlueprintManagerConfig {
-    /// The path to the gadget configuration file
+    /// The path to the blueprint configuration file
     #[arg(short = 's', long)]
-    pub gadget_config: Option<PathBuf>,
+    pub blueprint_config: Option<PathBuf>,
     /// The path to the keystore
     #[arg(short = 'k', long)]
     pub keystore_uri: String,
-    /// The directory in which all gadgets will store their data
+    /// The directory in which all blueprints will store their data
     #[arg(long, short = 'd', default_value = "./data")]
     pub data_dir: PathBuf,
+    /// The cache directory for blueprint manager downloads
+    #[arg(long, short = 'd', default_value_os_t = default_cache_dir())]
+    pub cache_dir: PathBuf,
     /// The verbosity level, can be used multiple times to increase verbosity
     #[arg(long, short = 'v', action = clap::ArgAction::Count)]
     pub verbose: u8,
@@ -43,6 +47,11 @@ pub struct BlueprintManagerConfig {
     pub instance_id: Option<String>,
     #[arg(long, short = 't')]
     pub test_mode: bool,
+    /// Whether to allow invalid GitHub attestations (binary integrity checks)
+    ///
+    /// This will also allow for running the manager without the GitHub CLI installed.
+    #[arg(long)]
+    pub allow_unchecked_attestations: bool,
     /// The preferred way to run a blueprint.
     ///
     /// This is not a guarantee that the blueprint will use this method, as there may not be a source
@@ -52,6 +61,35 @@ pub struct BlueprintManagerConfig {
     /// The location of the Podman-Docker socket
     #[arg(long, short, default_value_t = DEFAULT_DOCKER_HOST.clone())]
     pub podman_host: Url,
+    /// Authentication proxy options
+    #[command(flatten)]
+    pub auth_proxy_opts: AuthProxyOpts,
+}
+
+fn default_cache_dir() -> PathBuf {
+    match dirs::cache_dir() {
+        Some(dir) => dir.join("blueprint-manager"),
+        None => PathBuf::from("./blueprint-manager-cache"),
+    }
+}
+
+impl Default for BlueprintManagerConfig {
+    fn default() -> Self {
+        Self {
+            blueprint_config: None,
+            keystore_uri: "./keystore".into(),
+            data_dir: PathBuf::from("./data"),
+            cache_dir: default_cache_dir(),
+            verbose: 0,
+            pretty: false,
+            instance_id: None,
+            test_mode: false,
+            allow_unchecked_attestations: false,
+            preferred_source: SourceType::default(),
+            podman_host: DEFAULT_DOCKER_HOST.clone(),
+            auth_proxy_opts: AuthProxyOpts::default(),
+        }
+    }
 }
 
 #[derive(clap::ValueEnum, Debug, Copy, Clone, Default, PartialEq, Eq)]
@@ -175,5 +213,25 @@ impl SourceCandidates {
     async fn determine_wasm(&mut self) -> Result<bool> {
         // TODO: Verify WASM runtime installations
         Ok(true)
+    }
+}
+
+/// The options for the auth proxy
+#[derive(Debug, Parser, Clone)]
+pub struct AuthProxyOpts {
+    /// The host on which the auth proxy will listen
+    #[arg(long, default_value = "0.0.0.0")]
+    pub auth_proxy_host: IpAddr,
+    /// The port on which the auth proxy will listen
+    #[arg(long, default_value_t = 8276)]
+    pub auth_proxy_port: u16,
+}
+
+impl Default for AuthProxyOpts {
+    fn default() -> Self {
+        Self {
+            auth_proxy_host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            auth_proxy_port: 8276, // T9 Mapping of TBPM (Tangle Blueprint Manager)
+        }
     }
 }
