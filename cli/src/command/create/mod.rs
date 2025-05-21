@@ -21,14 +21,14 @@ pub mod types;
 /// * `blueprint_type` - Optional blueprint type (Tangle or Eigenlayer)
 /// * `define` - Template variable definitions (key=value pairs)
 /// * `template_values_file` - Optional path to a file containing template values
-/// * `interactive` - Whether to run in interactive mode, prompting for all variables
+/// * `skip_prompts` - Whether to skip all interactive prompts, using defaults for unspecified values
 pub fn new_blueprint(
     name: &str,
     source: Option<Source>,
     blueprint_type: Option<BlueprintType>,
     mut define: Vec<String>,
     template_values_file: &Option<String>,
-    interactive: bool,
+    skip_prompts: bool,
 ) -> Result<(), Error> {
     println!("Generating blueprint with name: {}", name);
 
@@ -57,10 +57,8 @@ pub fn new_blueprint(
         }
     });
 
-    if interactive {
-        println!("Running in interactive mode - will prompt for all template variables");
-    } else {
-        println!("Using default values for unspecified template variables");
+    if skip_prompts {
+        println!("Skipping prompts and using default values for unspecified template variables");
 
         // Create a map of existing variable definitions
         let mut defined_vars = std::collections::HashMap::new();
@@ -91,6 +89,8 @@ pub fn new_blueprint(
                 println!("  Using default value for {key}: {value}");
             }
         }
+    } else {
+        println!("Running in interactive mode - will prompt for template variables as needed");
     }
 
     if !define.is_empty() {

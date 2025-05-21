@@ -151,18 +151,23 @@ pub enum BlueprintCommands {
 
         /// Define a value for template variables (can be used multiple times)
         /// Example: --define gh-username=myusername
-        /// By default, sensible defaults will be used for unspecified variables
-        #[arg(long, short = 'd', number_of_values = 1)]
+        /// Example with spaces: --define "project-description=My Blueprint description"
+        #[arg(
+            long,
+            short = 'd',
+            number_of_values = 1,
+            conflicts_with = "template_values_file"
+        )]
         define: Vec<String>,
 
         /// Path to a file containing template values
         /// File should contain key=value pairs, one per line
-        #[arg(long, value_name = "FILE")]
+        #[arg(long, value_name = "FILE", conflicts_with = "define")]
         template_values_file: Option<String>,
 
-        /// Run in interactive mode, prompting for all template variables
-        #[arg(long, short = 'i')]
-        interactive: bool,
+        /// Skip all interactive prompts, using defaults for any variables not provided with `--define` or `--template-values-file`
+        #[arg(long)]
+        skip_prompts: bool,
     },
 
     /// Deploy a blueprint to the Tangle Network or Eigenlayer.
@@ -437,7 +442,7 @@ async fn main() -> color_eyre::Result<()> {
                 blueprint_type,
                 define,
                 template_values_file,
-                interactive,
+                skip_prompts,
             } => {
                 new_blueprint(
                     &name,
@@ -445,7 +450,7 @@ async fn main() -> color_eyre::Result<()> {
                     blueprint_type,
                     define,
                     &template_values_file,
-                    interactive,
+                    skip_prompts,
                 )?;
             }
             BlueprintCommands::Deploy { target } => match target {
