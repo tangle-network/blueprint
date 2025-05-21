@@ -218,6 +218,7 @@ http-body-util = { version = "0.1.3", default-features = false }
 dashmap = { version = "6.1.0", default-features = false }
 cloud-hypervisor-client = { version = "0.3.0", default-features = false }
 axum = { version = "0.8", default-features = false }
+openssl-sys = "0.9.108"
 
 # System & OS
 parking_lot = { version = "0.12.3", default-features = false }
