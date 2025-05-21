@@ -288,7 +288,6 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
     let http_rpc_url = settings.http_rpc_url.clone();
     let ws_rpc_url = settings.ws_rpc_url.clone();
     let keystore_uri = settings.keystore_uri.clone();
-    let bridge_socket_path = settings.bridge_socket_path.clone();
 
     #[cfg(feature = "networking")]
     let bootnodes = settings.bootnodes.clone().unwrap_or_default();
@@ -454,7 +453,6 @@ impl ContextConfig {
     pub fn create_config(
         http_rpc_url: Url,
         ws_rpc_url: Url,
-        bridge_socket_path: PathBuf,
         keystore_uri: String,
         keystore_password: Option<String>,
         chain: SupportedChains,
@@ -527,7 +525,6 @@ impl ContextConfig {
                 pretty: true,
                 keystore_password,
                 protocol: Some(protocol),
-                bridge_socket_path,
                 ws_rpc_url,
                 #[cfg(feature = "tangle")]
                 blueprint_id,
@@ -571,7 +568,6 @@ impl ContextConfig {
     pub fn create_config_with_defaults(
         http_rpc_url: Url,
         ws_rpc_url: Url,
-        bridge_socket_path: PathBuf,
         keystore_uri: String,
         keystore_password: Option<String>,
         chain: SupportedChains,
@@ -581,7 +577,6 @@ impl ContextConfig {
         ContextConfig::create_config(
             http_rpc_url,
             ws_rpc_url,
-            bridge_socket_path,
             keystore_uri,
             keystore_password,
             chain,
@@ -596,7 +591,6 @@ impl ContextConfig {
     pub fn create_eigenlayer_config(
         http_rpc_url: Url,
         ws_rpc_url: Url,
-        bridge_socket_path: PathBuf,
         keystore_uri: String,
         keystore_password: Option<String>,
         chain: SupportedChains,
@@ -605,7 +599,6 @@ impl ContextConfig {
         Self::create_config_with_defaults(
             http_rpc_url,
             ws_rpc_url,
-            bridge_socket_path,
             keystore_uri,
             keystore_password,
             chain,
@@ -620,7 +613,6 @@ impl ContextConfig {
     pub fn create_tangle_config(
         http_rpc_url: Url,
         ws_rpc_url: Url,
-        bridge_socket_path: PathBuf,
         keystore_uri: String,
         keystore_password: Option<String>,
         chain: SupportedChains,
@@ -632,7 +624,6 @@ impl ContextConfig {
         Self::create_config_with_defaults(
             http_rpc_url,
             ws_rpc_url,
-            bridge_socket_path,
             keystore_uri,
             keystore_password,
             chain,
@@ -681,8 +672,6 @@ pub struct BlueprintSettings {
     /// The protocol to use
     #[arg(long, value_enum, env)]
     pub protocol: Option<Protocol>,
-    #[arg(env)]
-    pub bridge_socket_path: PathBuf,
 
     // ========
     // NETWORKING
@@ -846,7 +835,6 @@ impl Default for BlueprintSettings {
             pretty: false,
             keystore_password: None,
             protocol: None,
-            bridge_socket_path: PathBuf::from("path/to/be/determined"),
 
             // Networking
             #[cfg(feature = "networking")]
