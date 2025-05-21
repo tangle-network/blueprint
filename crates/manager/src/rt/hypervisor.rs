@@ -1,6 +1,6 @@
 use crate::error::{Error, Result};
 use cloud_hypervisor_client::apis::DefaultApi;
-use cloud_hypervisor_client::models::{DiskConfig, PayloadConfig, VmConfig, VsockConfig};
+use cloud_hypervisor_client::models::{ConsoleConfig, DiskConfig, PayloadConfig, VmConfig, VsockConfig};
 use cloud_hypervisor_client::{SocketBasedApiClient, socket_based_api_client};
 use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
 use hyper::StatusCode;
@@ -9,6 +9,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use cloud_hypervisor_client::models::console_config::Mode;
 use tokio::process::{Child, Command};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
@@ -17,6 +18,7 @@ pub struct CHVmConfig;
 
 pub(super) struct HypervisorInstance {
     sock_path: PathBuf,
+    guest_logs_path: PathBuf,
     binary_image_path: PathBuf,
     handle: Child,
     vm_conf: Option<CHVmConfig>,
@@ -29,18 +31,26 @@ impl HypervisorInstance {
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
     ) -> Result<HypervisorInstance> {
+        let guest_logs_path = cache_dir.as_ref().join(format!("{}-guest.log", service_name));
+        let stdout_log_path = cache_dir.as_ref().join(format!("{}.log.stdout", service_name));
+        let stderr_log_path = cache_dir.as_ref().join(format!("{}.log.stderr", service_name));
         let binary_image_path = cache_dir
             .as_ref()
             .join(&format!("{}-bin.img", service_name));
         let sock_path = runtime_dir.as_ref().join("ch-api.sock");
 
+        let stdout = OpenOptions::new().create(true).read(true).append(true).open(&stdout_log_path)?;
+        let stderr = OpenOptions::new().create(true).read(true).append(true).open(&stderr_log_path)?;
         let handle = Command::new("cloud-hypervisor")
             .arg("--api-socket")
             .arg(&sock_path)
+            .stdout(stdout)
+            .stderr(stderr)
             .spawn()?;
 
         Ok(HypervisorInstance {
             sock_path,
+            guest_logs_path,
             binary_image_path,
             handle,
             vm_conf: Some(conf),
@@ -71,7 +81,7 @@ impl HypervisorInstance {
             .open(&self.binary_image_path)?;
         img.set_len(img_len)?;
 
-        fatfs::format_volume(&mut img, FormatVolumeOptions::new())?;
+        fatfs::format_volume(&mut img, FormatVolumeOptions::new().volume_label(*b"SERVICEDISK"))?;
 
         let fs = FileSystem::new(&mut img, FsOptions::new())?;
         let root = fs.root_dir();
@@ -130,17 +140,17 @@ impl HypervisorInstance {
                 e
             })?;
 
+        let (serial, console, cmdline_console_target) = self.logging_configs();
+
         let vm_conf = VmConfig {
             cpus: None,
             memory: None,
             payload: PayloadConfig {
-                firmware: None,
                 // TODO
-                kernel: Some(String::from("/home/alex/Downloads/hypervisor-fw")),
-                cmdline: None,
-                initramfs: None,
-                igvm: None,
-                host_data: None,
+                kernel: Some(String::from("/home/alex/Downloads/kernel-extracted/vmlinuz")),
+                initramfs: Some(String::from("/home/alex/Downloads/kernel-extracted/initrd.img")),
+                cmdline: Some(format!("root=/dev/vda2 rw console={cmdline_console_target} systemd.log_level=debug systemd.log_target=kmsg")),
+                ..Default::default()
             },
             rate_limit_groups: None,
             disks: Some(vec![
@@ -163,8 +173,8 @@ impl HypervisorInstance {
             balloon: None,
             fs: None,
             pmem: None,
-            serial: None,
-            console: None,
+            serial: Some(serial),
+            console: Some(console),
             debug_console: None,
             devices: None,
             vdpa: None,
@@ -194,6 +204,29 @@ impl HypervisorInstance {
         Ok(())
     }
 
+    // Disable serial port logging in release builds, too much noise for production
+    //#[cfg(not(debug_assertions))]
+    // fn logging_configs(&self) -> (ConsoleConfig, ConsoleConfig, &'static str) {
+    //     let serial = ConsoleConfig { mode: Mode::Off, ..Default::default() };
+    //     let virtio_console = ConsoleConfig {
+    //         mode: Mode::File,
+    //         file: Some(self.guest_logs_path.to_string_lossy().into()),
+    //         ..Default::default()
+    //     };
+    //     (serial, virtio_console, "hvc0")
+    // }
+
+    //#[cfg(debug_assertions)]
+    fn logging_configs(&self) -> (ConsoleConfig, ConsoleConfig, &'static str) {
+        let serial = ConsoleConfig {
+            mode: Mode::File,
+            file: Some(self.guest_logs_path.to_string_lossy().into()),
+            ..Default::default()
+        };
+        let virtio_console = ConsoleConfig { mode: Mode::Off, ..Default::default() };
+        (serial, virtio_console, "ttyS0")
+    }
+
     pub async fn start(&mut self) -> Result<()> {
         let client = self
             .client()
@@ -218,7 +251,7 @@ impl HypervisorInstance {
     }
 
     pub async fn shutdown(mut self) -> Result<()> {
-        const VM_SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(10);
+        const VM_SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(30);
 
         let client = self
             .client()

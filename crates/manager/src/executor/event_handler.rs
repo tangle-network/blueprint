@@ -97,58 +97,11 @@ impl VerifiedBlueprint {
                 )
                 .await?;
 
-                service.start().await?;
-                // TODO: verify service running
-                // Now that the file is loaded, spawn the process
-                //                 let mut handle = source
-                //                     .spawn(
-                //                         source_candidates,
-                //                         blueprint_config,
-                //                         &sub_service_str,
-                //                         arguments,
-                //                         env_vars,
-                //                     )
-                //                     .await?;
-                //
-                //                 if handle.wait_for_status_change().await != Some(Status::Running) {
-                //                     error!("Process did not start successfully");
-                //                     continue;
-                //                 }
-                //
-                //                 if blueprint.registration_mode {
-                //                     // We must wait for the process to exit successfully
-                //                     let Some(status) = handle.wait_for_status_change().await else {
-                //                         error!("Process status channel closed unexpectedly, aborting...");
-                //                         if !handle.abort() {
-                //                             error!(
-                //                                 "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
-                //                             );
-                //                         }
-                //                         continue;
-                //                     };
-                //
-                //                     match status {
-                //                         Status::Finished => {
-                //                             info!(
-                //                                 "***Protocol (registration mode) {sub_service_str} executed successfully***"
-                //                             );
-                //                         }
-                //                         Status::Error => {
-                //                             error!(
-                //                                 "Protocol (registration mode) {sub_service_str} failed to execute: {status:?}"
-                //                             );
-                //                         }
-                //                         Status::Running => {
-                //                             error!("Process did not terminate successfully, aborting...");
-                //                             if !handle.abort() {
-                //                                 error!(
-                //                                     "Failed to send abort signal to service: bid={blueprint_id}//sid={service_id}"
-                //                                 );
-                //                             }
-                //                         }
-                //                     }
-                //                     continue;
-                //                 }
+                if let Err(e) = service.start().await {
+                    error!("Service did not start successfully, aborting: {e}");
+                    service.shutdown().await?;
+                    continue;
+                }
 
                 active_blueprints
                     .entry(blueprint_id)

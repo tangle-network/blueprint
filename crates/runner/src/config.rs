@@ -9,10 +9,12 @@ use blueprint_keystore::{Keystore, KeystoreConfig};
 use clap::Parser;
 use core::fmt::{Debug, Display};
 use core::str::FromStr;
+use std::sync::{Arc, Mutex};
 #[cfg(feature = "networking")]
 pub use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
 use url::Url;
+use blueprint_manager_bridge::Bridge;
 
 pub trait ProtocolSettingsT: Sized + 'static {
     /// Load the protocol-specific settings from the given [`BlueprintSettings`].
@@ -224,8 +226,7 @@ pub struct BlueprintEnvironment {
     pub protocol_settings: ProtocolSettings,
     /// Whether the blueprint is in test mode
     pub test_mode: bool,
-    /// Path to the manager bridge for this service
-    pub bridge_socket_path: PathBuf,
+    bridge: Arc<Mutex<Option<Arc<Bridge>>>>,
 
     #[cfg(feature = "networking")]
     pub bootnodes: Vec<Multiaddr>,
@@ -309,7 +310,7 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         keystore_uri,
         data_dir: std::env::var("DATA_DIR").ok().map(PathBuf::from),
         protocol_settings,
-        bridge_socket_path,
+        bridge: Arc::new(Mutex::new(None)),
 
         #[cfg(feature = "networking")]
         bootnodes,
@@ -322,6 +323,19 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         #[cfg(feature = "networking")]
         target_peer_count,
     })
+}
+
+impl BlueprintEnvironment {
+    pub async fn bridge(&self) -> Result<Arc<Bridge>, blueprint_manager_bridge::Error> {
+        let mut guard = self.bridge.lock().unwrap();
+        if let Some(bridge) = &*guard {
+            return Ok(bridge.clone());
+        }
+
+        let bridge = Arc::new(Bridge::connect().await?);
+        *guard = Some(bridge.clone());
+        Ok(bridge)
+    }
 }
 
 #[cfg(feature = "networking")]
