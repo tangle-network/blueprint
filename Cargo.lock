@@ -3555,6 +3555,7 @@ dependencies = [
  "blueprint-keystore",
  "chrono",
  "futures",
+ "hyper 1.6.0",
  "opentelemetry 0.29.1",
  "opentelemetry-prometheus",
  "opentelemetry-semantic-conventions",

@@ -1,10 +1,7 @@
-use rand::{Rng, thread_rng};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
-use tokio::sync::oneshot::{self, Receiver};
-use tokio::time;
-use tracing::{error, info};
+use tracing::info;
 
 use crate::error::Result;
 
@@ -98,7 +95,10 @@ where
     async fn send_heartbeat(&self) -> Result<()> {
         let status = HeartbeatStatus {
             block_number: 0,
-            timestamp: chrono::Utc::now().timestamp() as u64,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
             service_id: self.config.service_id,
             blueprint_id: self.config.blueprint_id,
             status_code: 0,

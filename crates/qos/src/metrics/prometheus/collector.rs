@@ -1,12 +1,9 @@
-use prometheus::{
-    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec,
-    IntGauge, IntGaugeVec, Registry,
-};
+use prometheus::{Gauge, HistogramVec, IntCounter, IntCounterVec, IntGauge, Registry};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info};
+use tracing::debug;
 
-use crate::metrics::types::{BlueprintMetrics, BlueprintStatus, MetricsConfig, SystemMetrics};
+use crate::metrics::types::{BlueprintStatus, MetricsConfig, SystemMetrics};
 
 /// Prometheus metrics collector
 pub struct PrometheusCollector {

@@ -67,7 +67,7 @@ pub fn init_loki_logging(config: LokiConfig) -> Result<()> {
 
     // Add labels
     for (key, value) in config.labels {
-        builder = match builder.label(key, value) {
+        builder = match builder.label(key.clone(), value.clone()) {
             Ok(b) => b,
             Err(e) => {
                 error!("Failed to add label to Loki layer: {}", e);
@@ -122,8 +122,8 @@ pub fn init_loki_with_opentelemetry(loki_config: LokiConfig, service_name: &str)
     let mut builder = tracing_loki::builder();
 
     // Add labels
-    for (key, value) in loki_config.labels {
-        builder = match builder.label(key, value) {
+    for (key, value) in &loki_config.labels {
+        builder = match builder.label(key.clone(), value.clone()) {
             Ok(b) => b,
             Err(e) => {
                 error!("Failed to add label to Loki layer: {}", e);
@@ -147,22 +147,13 @@ pub fn init_loki_with_opentelemetry(loki_config: LokiConfig, service_name: &str)
     // Spawn the background task
     tokio::spawn(task);
 
-    // Create an OpenTelemetry tracer
-    use opentelemetry::trace::TracerProvider as _; 
-    use opentelemetry_sdk::trace::Config;
-    use opentelemetry_sdk::Resource;
-    use opentelemetry_sdk::export::trace::SimpleSpanExporter;
-    let service_name_owned = service_name.to_owned();
-    let tracer = opentelemetry_sdk::trace::TracerProvider::builder()
-        .with_simple_exporter(SimpleSpanExporter::new())
-        .build()
-        .tracer(service_name_owned);
+    init_otel_tracer(&loki_config, service_name)?;
 
-    // Create a subscriber with the Loki layer and OpenTelemetry
+    let opentelemetry_layer = tracing_opentelemetry::layer();
     let subscriber = Registry::default()
         .with(EnvFilter::from_default_env())
-        .with(tracing_opentelemetry::layer().with_tracer(tracer))
-        .with(loki_layer);
+        .with(loki_layer)
+        .with(opentelemetry_layer);
 
     // Set the subscriber as the global default
     match tracing::subscriber::set_global_default(subscriber) {
@@ -181,46 +172,29 @@ pub fn init_loki_with_opentelemetry(loki_config: LokiConfig, service_name: &str)
 }
 
 /// Initialize OpenTelemetry tracer
-pub fn init_otel_tracer(loki_config: &LokiConfig, service_name: &str) -> Result<opentelemetry_sdk::trace::Tracer> {
+pub fn init_otel_tracer(loki_config: &LokiConfig, service_name: &str) -> Result<()> {
     use opentelemetry::KeyValue;
-    use opentelemetry::trace::TracerProvider; 
-    use opentelemetry_sdk::export::trace::stdout;
-    use opentelemetry_sdk::trace as sdktrace;
-    use opentelemetry_sdk::Resource;
-    use opentelemetry_semantic_conventions::resource as semconv_resource;
 
     let service_name_owned = service_name.to_string();
 
-    // 1. Create stdout exporter
-    let stdout_exporter = stdout::new_pipeline().build_exporter();
-
-    // 2. Create SDK trace config
-    let mut sdk_config = sdktrace::Config::default();
-
-    // Apply settings from loki_config.otel_config if present
-    if let Some(otel_cfg) = &loki_config.otel_config {
-        if let Some(max_attr) = otel_cfg.max_attributes_per_span {
-            sdk_config = sdk_config.with_max_attributes_per_span(max_attr);
-        }
-        // Map other fields from OtelConfig to sdk_config if they are added in the future
-    }
-
-    // Create and add resource information
-    let resource = Resource::new(vec![
-        KeyValue::new(semconv_resource::SERVICE_NAME.as_str(), service_name_owned.clone()),
-    ]);
-    sdk_config = sdk_config.with_resource(resource);
-
-    // 3. Build TracerProvider
-    let provider = opentelemetry_sdk::trace::TracerProvider::builder()
-        .with_config(sdk_config)
-        .with_simple_exporter(stdout_exporter) 
+    let resource = opentelemetry_sdk::Resource::builder()
+        .with_attributes(vec![
+            KeyValue::new("service.name", service_name_owned.clone()),
+            KeyValue::new("service.version", env!("CARGO_PKG_VERSION").to_string()),
+        ])
         .build();
 
-    // 4. Get Tracer
-    let tracer = provider.tracer(service_name_owned);
+    // Apply settings from loki_config.otel_config if present
+    if let Some(_otel_cfg) = &loki_config.otel_config {}
 
-    Ok(tracer)
+    let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+        .with_resource(resource)
+        .build();
+
+    // Set as global provider
+    opentelemetry::global::set_tracer_provider(provider);
+
+    Ok(())
 }
 
 #[cfg(test)]

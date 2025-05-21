@@ -22,7 +22,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "time", "signal", "macros"] }
 tonic = { workspace = true, features = ["transport", "codegen", "prost"] }
 prost = { workspace = true, features = ["prost-derive"] }
-sysinfo = { workspace = true }
+sysinfo = { workspace = true, features = ["system"] }
 rand = { workspace = true }
 chrono = { workspace = true }
 tracing = { workspace = true }
@@ -31,8 +31,9 @@ opentelemetry = { workspace = true, features = ["metrics"] }
 opentelemetry-prometheus = { workspace = true }
 opentelemetry-semantic-conventions = { workspace = true }
 opentelemetry_sdk = { workspace = true, features = ["metrics", "rt-tokio", "trace"] }
-axum = { workspace = true, features = ["tokio"] }
-futures = { workspace = true }
+axum = { workspace = true, features = ["tokio", "http1", "http2"] }
+hyper = { workspace = true, features = ["http1", "server"] }
+futures = { workspace = true, features = ["executor"] }
 tracing-loki = { workspace = true, features = ["compat-0-2-1"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 tracing-opentelemetry = { workspace = true }

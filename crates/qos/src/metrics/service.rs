@@ -1,6 +1,6 @@
 use std::sync::Arc;
-use tokio::sync::oneshot::{self, Receiver};
-use tracing::{error, info};
+// Removed unused oneshot import
+use tracing::info;
 
 use crate::error::Result;
 use crate::metrics::opentelemetry::OpenTelemetryConfig;
