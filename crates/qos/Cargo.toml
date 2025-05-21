@@ -27,12 +27,13 @@ rand = { workspace = true }
 chrono = { workspace = true }
 tracing = { workspace = true }
 prometheus = { workspace = true, features = ["process"] }
-opentelemetry = { workspace = true, features = ["metrics", "rt-tokio"] }
+opentelemetry = { workspace = true, features = ["metrics"] }
 opentelemetry-prometheus = { workspace = true }
-opentelemetry_sdk = { workspace = true, features = ["metrics", "rt-tokio"] }
+opentelemetry-semantic-conventions = { workspace = true }
+opentelemetry_sdk = { workspace = true, features = ["metrics", "rt-tokio", "trace"] }
 axum = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
-tracing-loki = { workspace = true }
+tracing-loki = { workspace = true, features = ["compat-0-2-1"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 tracing-opentelemetry = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

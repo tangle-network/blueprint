@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::time::Duration;
 use tracing::{error, info};
 use tracing_loki::url::Url;
 use tracing_subscriber::EnvFilter;
@@ -27,6 +26,9 @@ pub struct LokiConfig {
 
     /// Timeout for sending logs
     pub timeout_secs: u64,
+
+    /// OpenTelemetry configuration
+    pub otel_config: Option<OtelConfig>,
 }
 
 impl Default for LokiConfig {
@@ -42,8 +44,16 @@ impl Default for LokiConfig {
             labels,
             batch_size: 100,
             timeout_secs: 5,
+            otel_config: None,
         }
     }
+}
+
+/// OpenTelemetry configuration
+#[derive(Clone, Debug)]
+pub struct OtelConfig {
+    /// Maximum attributes per span
+    pub max_attributes_per_span: Option<u32>,
 }
 
 /// Initialize Loki logging
@@ -138,10 +148,13 @@ pub fn init_loki_with_opentelemetry(loki_config: LokiConfig, service_name: &str)
     tokio::spawn(task);
 
     // Create an OpenTelemetry tracer
-    use opentelemetry::trace::TracerProvider;
+    use opentelemetry::trace::TracerProvider as _; 
+    use opentelemetry_sdk::trace::Config;
+    use opentelemetry_sdk::Resource;
+    use opentelemetry_sdk::export::trace::SimpleSpanExporter;
     let service_name_owned = service_name.to_owned();
     let tracer = opentelemetry_sdk::trace::TracerProvider::builder()
-        .with_simple_exporter(opentelemetry_stdout::SpanExporter::default())
+        .with_simple_exporter(SimpleSpanExporter::new())
         .build()
         .tracer(service_name_owned);
 
@@ -165,6 +178,49 @@ pub fn init_loki_with_opentelemetry(loki_config: LokiConfig, service_name: &str)
             )))
         }
     }
+}
+
+/// Initialize OpenTelemetry tracer
+pub fn init_otel_tracer(loki_config: &LokiConfig, service_name: &str) -> Result<opentelemetry_sdk::trace::Tracer> {
+    use opentelemetry::KeyValue;
+    use opentelemetry::trace::TracerProvider; 
+    use opentelemetry_sdk::export::trace::stdout;
+    use opentelemetry_sdk::trace as sdktrace;
+    use opentelemetry_sdk::Resource;
+    use opentelemetry_semantic_conventions::resource as semconv_resource;
+
+    let service_name_owned = service_name.to_string();
+
+    // 1. Create stdout exporter
+    let stdout_exporter = stdout::new_pipeline().build_exporter();
+
+    // 2. Create SDK trace config
+    let mut sdk_config = sdktrace::Config::default();
+
+    // Apply settings from loki_config.otel_config if present
+    if let Some(otel_cfg) = &loki_config.otel_config {
+        if let Some(max_attr) = otel_cfg.max_attributes_per_span {
+            sdk_config = sdk_config.with_max_attributes_per_span(max_attr);
+        }
+        // Map other fields from OtelConfig to sdk_config if they are added in the future
+    }
+
+    // Create and add resource information
+    let resource = Resource::new(vec![
+        KeyValue::new(semconv_resource::SERVICE_NAME.as_str(), service_name_owned.clone()),
+    ]);
+    sdk_config = sdk_config.with_resource(resource);
+
+    // 3. Build TracerProvider
+    let provider = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_config(sdk_config)
+        .with_simple_exporter(stdout_exporter) 
+        .build();
+
+    // 4. Get Tracer
+    let tracer = provider.tracer(service_name_owned);
+
+    Ok(tracer)
 }
 
 #[cfg(test)]

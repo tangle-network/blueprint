@@ -5,10 +5,6 @@ pub mod metrics;
 pub mod service;
 pub mod unified_service;
 
-// pub mod proto {
-//     tonic::include_proto!("qos");
-// }
-
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/qos.rs"));
 }

@@ -1,5 +1,5 @@
 pub mod grafana;
 pub mod loki;
 
-pub use grafana::{Dashboard, GrafanaClient, GrafanaConfig, Panel};
-pub use loki::{LokiConfig, init_loki_logging, init_loki_with_opentelemetry};
+pub use self::grafana::{GrafanaClient, GrafanaConfig};
+pub use self::loki::{init_loki_logging, LokiConfig, OtelConfig, init_otel_tracer};
