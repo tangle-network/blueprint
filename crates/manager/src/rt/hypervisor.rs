@@ -156,7 +156,7 @@ impl HypervisorInstance {
             disks: Some(vec![
                 DiskConfig {
                     // TODO
-                    path: Some(String::from("/home/alex/Downloads/debian-base.qcow2")),
+                    path: Some(String::from("/home/alex/Downloads/ubuntu-base.qcow2")),
                     readonly: Some(false),
                     direct: Some(true),
                     ..DiskConfig::default()
