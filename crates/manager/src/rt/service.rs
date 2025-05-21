@@ -1,7 +1,10 @@
 use super::bridge::{Bridge, BridgeHandle};
 use super::hypervisor::{CHVmConfig, HypervisorInstance};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use std::path::Path;
+use std::time::Duration;
+use tokio::sync::oneshot;
+use tokio::time;
 use tracing::error;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -11,15 +14,11 @@ pub enum Status {
     Error,
 }
 
-enum BridgeState {
-    Inactive(Bridge),
-    Started(BridgeHandle),
-}
-
 pub struct Service {
     manager_id: u32,
     hypervisor: HypervisorInstance,
-    bridge: Option<BridgeState>,
+    bridge: BridgeHandle,
+    alive_rx: Option<oneshot::Receiver<()>>,
 }
 
 impl Service {
@@ -34,6 +33,12 @@ impl Service {
         arguments: Vec<String>,
     ) -> Result<Service> {
         let bridge = Bridge::new(runtime_dir.as_ref().to_path_buf(), service_name.to_string());
+        let bridge_base_socket = bridge.base_socket_path();
+
+        let (bridge_handle, alive_rx) = bridge.spawn().map_err(|e| {
+            error!("Failed to spawn manager <-> service bridge: {e}");
+            e
+        })?;
 
         let mut hypervisor = HypervisorInstance::new(
             vm_conf,
@@ -45,7 +50,7 @@ impl Service {
         hypervisor
             .prepare(
                 id,
-                bridge.socket_path(),
+                bridge_base_socket,
                 binary_path.as_ref(),
                 env_vars,
                 arguments,
@@ -56,7 +61,8 @@ impl Service {
         Ok(Self {
             manager_id: id,
             hypervisor,
-            bridge: Some(BridgeState::Inactive(bridge)),
+            bridge: bridge_handle,
+            alive_rx: Some(alive_rx)
         })
     }
 
@@ -66,7 +72,7 @@ impl Service {
     }
 
     pub async fn start(&mut self) -> Result<()> {
-        let Some(BridgeState::Inactive(bridge)) = self.bridge.take() else {
+        let Some(alive_rx) = self.alive_rx.take() else {
             error!("Service already started!");
             return Ok(());
         };
@@ -76,26 +82,21 @@ impl Service {
             e
         })?;
 
-        let bridge_handle = bridge.spawn(self.manager_id).await.map_err(|e| {
-            error!("Failed to spawn manager <-> service bridge: {e}");
-            e
-        })?;
-        self.bridge = Some(BridgeState::Started(bridge_handle));
+        if time::timeout(Duration::from_secs(30), alive_rx)
+            .await.is_err() {
+            error!("Service never connected to bridge (network error?)");
+            return Err(Error::Other("Bridge connection timeout".into()));
+        }
 
         Ok(())
     }
 
     pub async fn shutdown(mut self) -> Result<()> {
-        let Some(BridgeState::Started(bridge)) = self.bridge.take() else {
-            error!("Service not running!");
-            return Ok(());
-        };
-
         self.hypervisor.shutdown().await.map_err(|e| {
             error!("Failed to shut down hypervisor: {e}");
             e
         })?;
-        bridge.shutdown();
+        self.bridge.shutdown();
 
         Ok(())
     }

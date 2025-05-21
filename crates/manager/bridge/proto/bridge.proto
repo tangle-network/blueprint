@@ -1,6 +1,8 @@
 syntax = "proto3";
 package blueprint_manager_bridge;
 
+import "google/protobuf/empty.proto";
+
 message PortRequest {
   uint32 preferred_port = 1;
 }
@@ -11,6 +13,7 @@ message PortResponse {
 }
 
 service BlueprintManagerBridge {
+  rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);
   rpc RequestPort(PortRequest) returns (PortResponse);
 }
 

@@ -20,6 +20,7 @@ prost = { workspace = true, features = ["derive"] }
 tower = { workspace = true, features = ["util"] }
 tokio-stream.workspace = true
 thiserror.workspace = true
+tokio-vsock.workspace = true
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
