@@ -1,10 +1,7 @@
-//! Common utilities for server management
-
 use futures::StreamExt;
-use shiplift::{ContainerOptions, Docker, ExecContainerOptions, PullOptions};
+use shiplift::{ContainerOptions, Docker, PullOptions};
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::time::sleep;
 use tokio_retry::{strategy::ExponentialBackoff, Retry};
 use tracing::{debug, error, info};
 
@@ -37,7 +34,7 @@ impl DockerManager {
     /// Returns an error if the image pull fails
     pub async fn ensure_image(&self, image: &str) -> Result<()> {
         let images = self.docker.images();
-        let all_images = images.list(&Default::default()).await.map_err(|e| {
+        let all_images = images.list(&shiplift::ImageListOptions::default()).await.map_err(|e| {
             Error::Other(format!("Failed to list Docker images: {}", e))
         })?;
 
@@ -86,7 +83,7 @@ impl DockerManager {
 
         // Check if container already exists
         let containers = self.docker.containers();
-        let all_containers = containers.list(&Default::default()).await.map_err(|e| {
+        let all_containers = containers.list(&shiplift::ContainerListOptions::default()).await.map_err(|e| {
             Error::Other(format!("Failed to list Docker containers: {}", e))
         })?;
 
@@ -180,8 +177,6 @@ impl DockerManager {
             .await
             .map_err(|e| Error::Other(format!("Failed to inspect container {}: {}", container_id, e)))?;
 
-        // Check if the container is running by inspecting the state
-        // The State struct has a running boolean field
         let running = details.state.running;
         Ok(running)
     }
@@ -195,22 +190,18 @@ impl DockerManager {
         container_id: &str,
         timeout_secs: u64,
     ) -> Result<()> {
-        // Create a retry strategy with exponential backoff
         let retry_strategy = ExponentialBackoff::from_millis(100)
             .factor(2)
             .max_delay(Duration::from_secs(1))
-            // Use take() to limit the number of retries
-            .take(timeout_secs as usize);
+            .take(usize::try_from(timeout_secs).unwrap_or(30));
 
         Retry::spawn(retry_strategy, || async {
             let container = self.docker.containers().get(container_id);
             let details = container.inspect().await.map_err(|e| {
                 error!("Failed to inspect container {}: {}", container_id, e);
-                ()
+                // Map the error to unit type
             })?;
 
-            // Extract health status from container state
-            // In shiplift, we need to check the status field
             let health = Some(details.state.status.clone());
 
             match health {
@@ -223,8 +214,6 @@ impl DockerManager {
                     Err(())
                 }
                 None => {
-                    // If no health check is defined, just check if it's running
-                    // Check if the container is running
                     let running = details.state.running;
                     if running {
                         info!("Container {} is running (no health check defined)", container_id);
@@ -237,7 +226,7 @@ impl DockerManager {
             }
         })
         .await
-        .map_err(|_| {
+        .map_err(|()| {
             Error::Other(format!(
                 "Container {} did not become healthy within {} seconds",
                 container_id, timeout_secs

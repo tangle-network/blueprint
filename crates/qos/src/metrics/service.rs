@@ -1,5 +1,4 @@
 use std::sync::Arc;
-// Removed unused oneshot import
 use tracing::info;
 
 use crate::error::Result;
@@ -100,7 +99,6 @@ mod tests {
         assert!(service.is_ok());
 
         let service = service.unwrap();
-        // Check that the provider exists by verifying it's a valid Arc
         assert!(std::sync::Arc::strong_count(&service.provider()) >= 1);
     }
 
@@ -127,7 +125,6 @@ mod tests {
         assert!(service.is_ok());
 
         let service = service.unwrap();
-        // Check that the provider exists by verifying it's a valid Arc
         assert!(std::sync::Arc::strong_count(&service.provider()) >= 1);
     }
 
@@ -150,7 +147,6 @@ mod tests {
 
         let service = MetricsService::new(config.clone()).unwrap();
 
-        // This should not panic
         service.record_job_execution(1, 0.5);
     }
 
@@ -173,7 +169,6 @@ mod tests {
 
         let service = MetricsService::new(config.clone()).unwrap();
 
-        // This should not panic
         service.record_job_error(1, "test_error");
     }
 }

@@ -71,7 +71,7 @@ where
         }
 
         // Initialize Grafana client if configured
-        let grafana_client = config
+        let _grafana_client = config
             .grafana
             .as_ref()
             .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())));
@@ -108,7 +108,7 @@ where
         };
         
         // Update Grafana client if we are managing servers
-        let grafana_client = if let Some(server) = &grafana_server {
+        let _grafana_client = if let Some(server) = &grafana_server {
             Some(Arc::new(GrafanaClient::new(server.client_config())))
         } else {
             // Otherwise use the provided config
@@ -494,24 +494,28 @@ where
 
     /// Enable dashboard creation with the specified Loki datasource UID
     /// Set the Loki datasource UID
+    #[must_use]
     pub fn with_loki_datasource(mut self, datasource_uid: &str) -> Self {
         self.loki_datasource = Some(datasource_uid.to_string());
         self
     }
 
     /// Set the Grafana server configuration
+    #[must_use]
     pub fn with_grafana_server_config(mut self, config: GrafanaServerConfig) -> Self {
         self.config.grafana_server = Some(config);
         self
     }
 
     /// Set the Loki server configuration
+    #[must_use]
     pub fn with_loki_server_config(mut self, config: LokiServerConfig) -> Self {
         self.config.loki_server = Some(config);
         self
     }
 
     /// Enable or disable server management
+    #[must_use]
     pub fn manage_servers(mut self, manage: bool) -> Self {
         self.config.manage_servers = manage;
         self

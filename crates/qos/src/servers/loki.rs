@@ -1,5 +1,3 @@
-//! Loki server management
-
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -66,7 +64,7 @@ impl LokiServer {
             password: None,
             batch_size: 1024,
             labels: HashMap::new(),
-            timeout_secs: 30, // Default timeout
+            timeout_secs: 30,
             otel_config: None,
         }
     }
@@ -77,18 +75,14 @@ impl ServerManager for LokiServer {
     async fn start(&self) -> Result<()> {
         info!("Starting Loki server on port {}", self.config.port);
         
-        // Set up environment variables
         let env_vars = HashMap::new();
         
-        // Set up port mappings
         let mut ports = HashMap::new();
         ports.insert("3100/tcp".to_string(), self.config.port.to_string());
         
-        // Set up volume mappings
         let mut volumes = HashMap::new();
         volumes.insert(self.config.data_dir.clone(), "/loki".to_string());
         
-        // Start the container
         let container_id = self.docker.run_container(
             "grafana/loki:latest",
             &self.config.container_name,
@@ -97,13 +91,11 @@ impl ServerManager for LokiServer {
             volumes,
         ).await?;
         
-        // Store the container ID
         {
             let mut id = self.container_id.lock().unwrap();
             *id = Some(container_id.clone());
-        } // Release the lock before the await
+        }
         
-        // Wait for the container to be ready
         self.wait_until_ready(30).await?;
         
         info!("Loki server started successfully");
@@ -125,7 +117,6 @@ impl ServerManager for LokiServer {
         info!("Stopping Loki server");
         self.docker.stop_container(&container_id).await?;
         
-        // Clear the container ID
         let mut id = self.container_id.lock().unwrap();
         *id = None;
         
@@ -160,19 +151,15 @@ impl ServerManager for LokiServer {
             }
         };
         
-        // First wait for the container to be healthy
         self.docker.wait_for_container_health(&container_id, timeout_secs).await?;
         
-        // Then check if the API is responsive
         let client = reqwest::Client::new();
         let url = format!("{}/ready", self.url());
         
-        // Create a retry strategy with exponential backoff
         let retry_strategy = ExponentialBackoff::from_millis(100)
             .factor(2)
             .max_delay(Duration::from_secs(1))
-            // Use take() to limit the number of retries
-            .take(timeout_secs as usize);
+            .take(usize::try_from(timeout_secs).unwrap_or(30));
         
         Retry::spawn(retry_strategy, || async {
             match client.get(&url).timeout(Duration::from_secs(1)).send().await {
@@ -191,7 +178,7 @@ impl ServerManager for LokiServer {
             }
         })
         .await
-        .map_err(|_| {
+        .map_err(|()| {
             Error::Other(format!(
                 "Loki API did not become responsive within {} seconds",
                 timeout_secs

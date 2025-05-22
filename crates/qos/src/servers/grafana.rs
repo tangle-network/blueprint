@@ -1,9 +1,6 @@
-//! Grafana server management
-
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::time::sleep;
 use tokio_retry::{strategy::ExponentialBackoff, Retry};
 use tracing::{error, info};
 
@@ -79,7 +76,7 @@ impl GrafanaServer {
     pub fn client_config(&self) -> GrafanaConfig {
         GrafanaConfig {
             url: self.url(),
-            api_key: String::new(), // No API key needed for anonymous access
+            api_key: String::new(),
             org_id: None,
             folder: None,
         }
@@ -104,15 +101,12 @@ impl ServerManager for GrafanaServer {
         
         env_vars.insert("GF_FEATURE_TOGGLES_ENABLE".to_string(), "publicDashboards".to_string());
         
-        // Set up port mappings
         let mut ports = HashMap::new();
         ports.insert("3000/tcp".to_string(), self.config.port.to_string());
         
-        // Set up volume mappings
         let mut volumes = HashMap::new();
         volumes.insert(self.config.data_dir.clone(), "/var/lib/grafana".to_string());
         
-        // Start the container
         let container_id = self.docker.run_container(
             "grafana/grafana:latest",
             &self.config.container_name,
@@ -121,13 +115,11 @@ impl ServerManager for GrafanaServer {
             volumes,
         ).await?;
         
-        // Store the container ID
         {
             let mut id = self.container_id.lock().unwrap();
             *id = Some(container_id.clone());
-        } // Release the lock before the await
+        }
         
-        // Wait for the container to be ready
         self.wait_until_ready(30).await?;
         
         info!("Grafana server started successfully");
@@ -149,7 +141,6 @@ impl ServerManager for GrafanaServer {
         info!("Stopping Grafana server");
         self.docker.stop_container(&container_id).await?;
         
-        // Clear the container ID
         let mut id = self.container_id.lock().unwrap();
         *id = None;
         
@@ -184,19 +175,15 @@ impl ServerManager for GrafanaServer {
             }
         };
         
-        // First wait for the container to be healthy
         self.docker.wait_for_container_health(&container_id, timeout_secs).await?;
         
-        // Then check if the API is responsive
         let client = reqwest::Client::new();
         let url = format!("{}/api/health", self.url());
         
-        // Create a retry strategy with exponential backoff
         let retry_strategy = ExponentialBackoff::from_millis(100)
             .factor(2)
             .max_delay(Duration::from_secs(1))
-            // Use take() to limit the number of retries
-            .take(timeout_secs as usize);
+            .take(usize::try_from(timeout_secs).unwrap_or(30));
         
         Retry::spawn(retry_strategy, || async {
             match client.get(&url).timeout(Duration::from_secs(1)).send().await {
@@ -215,7 +202,7 @@ impl ServerManager for GrafanaServer {
             }
         })
         .await
-        .map_err(|_| {
+        .map_err(|()| {
             Error::Other(format!(
                 "Grafana API did not become responsive within {} seconds",
                 timeout_secs

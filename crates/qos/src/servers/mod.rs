@@ -1,15 +1,8 @@
-//! Server management module for QoS
-//!
-//! This module provides functionality to start and manage Grafana and Loki servers
-//! for metrics visualization and log aggregation.
-
 pub mod grafana;
 pub mod loki;
 pub mod common;
 
 use crate::error::Result;
-use std::sync::Arc;
-use tokio::sync::oneshot;
 
 /// Common trait for server management
 #[async_trait::async_trait]
