@@ -69,7 +69,7 @@ where
             .as_ref()
             .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())));
 
-        let mut service = Self {
+        let service = Self {
             heartbeat_service,
             metrics_service,
             grafana_client,
@@ -129,7 +129,7 @@ where
             .as_ref()
             .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())));
 
-        let mut service = Self {
+        let service = Self {
             heartbeat_service,
             metrics_service,
             grafana_client,

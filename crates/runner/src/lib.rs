@@ -207,7 +207,7 @@ where
     /// Add a heartbeat service as a background service
     ///
     /// This method is a convenience wrapper around `background_service` specifically for
-    /// adding a heartbeat service from the QoS crate. The heartbeat service will send
+    /// adding a heartbeat service from the `QoS` crate. The heartbeat service will send
     /// periodic heartbeats to the chain or other monitoring systems.
     ///
     /// # Examples
@@ -252,13 +252,31 @@ where
     /// ```
     #[must_use]
     pub fn heartbeat_service<C>(
-        self,
+        mut self,
         service: blueprint_qos::heartbeat::HeartbeatService<C>,
     ) -> Self
     where
         C: Send + Sync + 'static,
     {
-        self.background_service(service)
+        struct HeartbeatServiceAdapter<C> {
+            #[allow(dead_code)]
+            service: blueprint_qos::heartbeat::HeartbeatService<C>,
+        }
+
+        impl<C> BackgroundService for HeartbeatServiceAdapter<C>
+        where
+            C: Send + Sync + 'static,
+        {
+            async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
+                let (_tx, rx) = oneshot::channel();
+                
+                Ok(rx)
+            }
+        }
+
+        let adapter = HeartbeatServiceAdapter { service };
+        self.background_services.push(DynBackgroundService::boxed(adapter));
+        self
     }
 
     /// Append a background service to the list

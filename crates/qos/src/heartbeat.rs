@@ -59,10 +59,7 @@ pub trait HeartbeatConsumer: Send + Sync + 'static {
 }
 
 /// Service for sending heartbeats to the chain
-pub struct HeartbeatService<C>
-where
-    C: HeartbeatConsumer,
-{
+pub struct HeartbeatService<C> {
     config: HeartbeatConfig,
 
     consumer: Arc<C>,
@@ -75,10 +72,7 @@ where
     task_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
-impl<C> HeartbeatService<C>
-where
-    C: HeartbeatConsumer,
-{
+impl<C> HeartbeatService<C> {
     /// Create a new heartbeat service
     pub fn new(config: HeartbeatConfig, consumer: Arc<C>) -> Self {
         Self {
@@ -106,7 +100,10 @@ where
     ///
     /// # Errors
     /// Returns an error if the heartbeat cannot be sent to the consumer
-    async fn send_heartbeat(&self) -> Result<()> {
+    async fn send_heartbeat(&self) -> Result<()>
+    where
+        C: HeartbeatConsumer,
+    {
         let status = HeartbeatStatus {
             block_number: 0,
             timestamp: SystemTime::now()
@@ -137,7 +134,10 @@ where
     ///
     /// # Errors
     /// Returns an error if the service is already running
-    pub async fn start_heartbeat(&self) -> Result<()> {
+    pub async fn start_heartbeat(&self) -> Result<()>
+    where
+        C: HeartbeatConsumer,
+    {
         let mut running = self.running.lock().await;
         if *running {
             return Err(crate::error::Error::Other(
@@ -157,17 +157,28 @@ where
                 if let Err(e) = service.send_heartbeat().await {
                     warn!("Failed to send heartbeat: {}", e);
                 }
-                let jitter_factor = if jitter_percent > 0 {
-                    let jitter_range = (jitter_percent as f64) / 100.0;
+                let sleep_duration = if jitter_percent > 0 {
+                    let interval_ms = interval_secs * 1000;
+                    let max_jitter_ms = (interval_ms * u64::from(jitter_percent)) / 100;
+                    
                     let mut rng = rand::thread_rng();
-                    1.0 + rng.gen_range(-jitter_range..jitter_range)
+                    let jitter_ms = if max_jitter_ms > 0 {
+                        #[allow(clippy::cast_possible_wrap)]
+                        let max_jitter_ms_i64 = max_jitter_ms as i64;
+                        rng.gen_range(-max_jitter_ms_i64..max_jitter_ms_i64)
+                    } else {
+                        0
+                    };
+                    
+                    #[allow(clippy::cast_possible_wrap)]
+                    let final_ms = interval_ms as i64 + jitter_ms;
+                    let final_ms = final_ms.max(100);
+                    
+                    #[allow(clippy::cast_sign_loss)]
+                    Duration::from_millis(final_ms as u64)
                 } else {
-                    1.0
+                    Duration::from_secs(interval_secs)
                 };
-
-                let sleep_duration = Duration::from_secs(
-                    (interval_secs as f64 * jitter_factor) as u64,
-                );
 
                 tokio::time::sleep(sleep_duration).await;
 
@@ -186,7 +197,10 @@ where
     ///
     /// # Errors
     /// Returns an error if the service is not running
-    pub async fn stop_heartbeat(&self) -> Result<()> {
+    pub async fn stop_heartbeat(&self) -> Result<()>
+    where
+        C: HeartbeatConsumer,
+    {
         let mut running = self.running.lock().await;
         if !*running {
             return Err(crate::error::Error::Other(
@@ -206,10 +220,7 @@ where
     }
 }
 
-impl<C> Clone for HeartbeatService<C>
-where
-    C: HeartbeatConsumer,
-{
+impl<C> Clone for HeartbeatService<C> {
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
@@ -221,10 +232,7 @@ where
     }
 }
 
-impl<C> Drop for HeartbeatService<C>
-where
-    C: HeartbeatConsumer,
-{
+impl<C> Drop for HeartbeatService<C> {
     fn drop(&mut self) {
         if let Ok(mut handle) = self.task_handle.try_lock() {
             if let Some(h) = handle.take() {
