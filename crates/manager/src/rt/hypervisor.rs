@@ -1,6 +1,9 @@
 use crate::error::{Error, Result};
 use cloud_hypervisor_client::apis::DefaultApi;
-use cloud_hypervisor_client::models::{ConsoleConfig, DiskConfig, PayloadConfig, VmConfig, VsockConfig};
+use cloud_hypervisor_client::models::console_config::Mode;
+use cloud_hypervisor_client::models::{
+    ConsoleConfig, DiskConfig, PayloadConfig, VmConfig, VsockConfig,
+};
 use cloud_hypervisor_client::{SocketBasedApiClient, socket_based_api_client};
 use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
 use hyper::StatusCode;
@@ -9,7 +12,6 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use cloud_hypervisor_client::models::console_config::Mode;
 use tokio::process::{Child, Command};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
@@ -31,16 +33,30 @@ impl HypervisorInstance {
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
     ) -> Result<HypervisorInstance> {
-        let guest_logs_path = cache_dir.as_ref().join(format!("{}-guest.log", service_name));
-        let stdout_log_path = cache_dir.as_ref().join(format!("{}.log.stdout", service_name));
-        let stderr_log_path = cache_dir.as_ref().join(format!("{}.log.stderr", service_name));
+        let guest_logs_path = cache_dir
+            .as_ref()
+            .join(format!("{}-guest.log", service_name));
+        let stdout_log_path = cache_dir
+            .as_ref()
+            .join(format!("{}.log.stdout", service_name));
+        let stderr_log_path = cache_dir
+            .as_ref()
+            .join(format!("{}.log.stderr", service_name));
         let binary_image_path = cache_dir
             .as_ref()
             .join(&format!("{}-bin.img", service_name));
         let sock_path = runtime_dir.as_ref().join("ch-api.sock");
 
-        let stdout = OpenOptions::new().create(true).read(true).append(true).open(&stdout_log_path)?;
-        let stderr = OpenOptions::new().create(true).read(true).append(true).open(&stderr_log_path)?;
+        let stdout = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .append(true)
+            .open(&stdout_log_path)?;
+        let stderr = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .append(true)
+            .open(&stderr_log_path)?;
         let handle = Command::new("cloud-hypervisor")
             .arg("--api-socket")
             .arg(&sock_path)
@@ -81,7 +97,10 @@ impl HypervisorInstance {
             .open(&self.binary_image_path)?;
         img.set_len(img_len)?;
 
-        fatfs::format_volume(&mut img, FormatVolumeOptions::new().volume_label(*b"SERVICEDISK"))?;
+        fatfs::format_volume(
+            &mut img,
+            FormatVolumeOptions::new().volume_label(*b"SERVICEDISK"),
+        )?;
 
         let fs = FileSystem::new(&mut img, FsOptions::new())?;
         let root = fs.root_dir();
@@ -147,9 +166,15 @@ impl HypervisorInstance {
             memory: None,
             payload: PayloadConfig {
                 // TODO
-                kernel: Some(String::from("/home/alex/Downloads/kernel-extracted/vmlinuz")),
-                initramfs: Some(String::from("/home/alex/Downloads/kernel-extracted/initrd.img")),
-                cmdline: Some(format!("root=/dev/vda2 rw console={cmdline_console_target} systemd.log_level=debug systemd.log_target=kmsg")),
+                kernel: Some(String::from(
+                    "/home/alex/Downloads/kernel-extracted/vmlinuz",
+                )),
+                initramfs: Some(String::from(
+                    "/home/alex/Downloads/kernel-extracted/initrd.img",
+                )),
+                cmdline: Some(format!(
+                    "root=/dev/vda2 rw console={cmdline_console_target} systemd.log_level=debug systemd.log_target=kmsg"
+                )),
                 ..Default::default()
             },
             rate_limit_groups: None,
@@ -223,7 +248,10 @@ impl HypervisorInstance {
             file: Some(self.guest_logs_path.to_string_lossy().into()),
             ..Default::default()
         };
-        let virtio_console = ConsoleConfig { mode: Mode::Off, ..Default::default() };
+        let virtio_console = ConsoleConfig {
+            mode: Mode::Off,
+            ..Default::default()
+        };
         (serial, virtio_console, "ttyS0")
     }
 

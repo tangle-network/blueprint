@@ -90,6 +90,7 @@ impl VerifiedBlueprint {
                     CHVmConfig,
                     &cache_dir,
                     &manager_config.runtime_dir,
+                    &manager_config.data_dir,
                     &sub_service_str,
                     &binary_path,
                     env_vars,

@@ -3403,6 +3403,7 @@ dependencies = [
 name = "blueprint-manager-bridge"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "blueprint-auth",
  "prost 0.12.6",
  "thiserror 2.0.12",
  "tokio",
