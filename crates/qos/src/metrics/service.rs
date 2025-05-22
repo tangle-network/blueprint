@@ -36,7 +36,7 @@ impl MetricsService {
     }
 
     /// Get the metrics provider
-    pub fn provider(&self) -> Arc<EnhancedMetricsProvider> {
+    #[must_use] pub fn provider(&self) -> Arc<EnhancedMetricsProvider> {
         self.provider.clone()
     }
 
@@ -51,7 +51,7 @@ impl MetricsService {
     }
 }
 
-/// Run the QoS metrics server
+/// Run the `QoS` metrics server
 pub async fn run_metrics_server(config: MetricsConfig) -> Result<Arc<EnhancedMetricsProvider>> {
     let otel_config = OpenTelemetryConfig::default();
     let provider = Arc::new(EnhancedMetricsProvider::new(config, otel_config)?);
@@ -68,13 +68,13 @@ pub async fn run_metrics_server(config: MetricsConfig) -> Result<Arc<EnhancedMet
 mod tests {
     use super::*;
 
-    /// Tests that a new MetricsService can be created with a valid configuration.
+    /// Tests that a new `MetricsService` can be created with a valid configuration.
     ///
     /// ```
     /// MetricsConfig -> MetricsService
     /// ```
     ///
-    /// Expected outcome: MetricsService is created with the provided config
+    /// Expected outcome: `MetricsService` is created with the provided config
     #[test]
     fn test_metrics_service_creation() {
         let config = MetricsConfig {
@@ -93,13 +93,13 @@ mod tests {
         assert!(std::sync::Arc::strong_count(&service.provider()) >= 1);
     }
 
-    /// Tests that a new MetricsService can be created with custom OpenTelemetry configuration.
+    /// Tests that a new `MetricsService` can be created with custom OpenTelemetry configuration.
     ///
     /// ```
     /// MetricsConfig + OpenTelemetryConfig -> MetricsService
     /// ```
     ///
-    /// Expected outcome: MetricsService is created with the provided configs
+    /// Expected outcome: `MetricsService` is created with the provided configs
     #[test]
     fn test_metrics_service_with_otel_config() {
         let config = MetricsConfig {
@@ -120,7 +120,7 @@ mod tests {
         assert!(std::sync::Arc::strong_count(&service.provider()) >= 1);
     }
 
-    /// Tests that the MetricsService can record job executions.
+    /// Tests that the `MetricsService` can record job executions.
     ///
     /// ```
     /// MetricsService.record_job_execution() -> Job execution recorded
@@ -143,7 +143,7 @@ mod tests {
         service.record_job_execution(1, 0.5);
     }
 
-    /// Tests that the MetricsService can record job errors.
+    /// Tests that the `MetricsService` can record job errors.
     ///
     /// ```
     /// MetricsService.record_job_error() -> Job error recorded

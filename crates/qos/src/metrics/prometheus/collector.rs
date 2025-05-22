@@ -117,13 +117,13 @@ impl PrometheusCollector {
     }
 
     /// Get the Prometheus registry
-    pub fn registry(&self) -> &Registry {
+    #[must_use] pub fn registry(&self) -> &Registry {
         &self.registry
     }
 
     /// Update system metrics
     pub fn update_system_metrics(&self, metrics: &SystemMetrics) {
-        self.cpu_usage.set(metrics.cpu_usage as f64);
+        self.cpu_usage.set(f64::from(metrics.cpu_usage));
         self.memory_usage.set(metrics.memory_usage as i64);
         self.total_memory.set(metrics.total_memory as i64);
         self.disk_usage.set(metrics.disk_usage as i64);
@@ -143,7 +143,7 @@ impl PrometheusCollector {
         if let Some(last_heartbeat) = status.last_heartbeat {
             self.last_heartbeat.set(last_heartbeat as i64);
         }
-        self.status_code.set(status.status_code as i64);
+        self.status_code.set(i64::from(status.status_code));
 
         debug!("Updated blueprint status in Prometheus");
     }

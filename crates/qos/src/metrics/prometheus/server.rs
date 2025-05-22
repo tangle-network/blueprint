@@ -28,7 +28,7 @@ pub struct PrometheusServer {
 
 impl PrometheusServer {
     /// Create a new Prometheus metrics server
-    pub fn new(registry: Registry, bind_address: String) -> Self {
+    #[must_use] pub fn new(registry: Registry, bind_address: String) -> Self {
         Self {
             registry: Arc::new(registry),
             bind_address,

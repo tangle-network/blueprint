@@ -98,7 +98,7 @@ pub fn init_loki_logging(config: LokiConfig) -> Result<()> {
 
     // Set the subscriber as the global default
     match tracing::subscriber::set_global_default(subscriber) {
-        Ok(_) => {
+        Ok(()) => {
             info!("Initialized Loki logging");
             Ok(())
         }
@@ -157,7 +157,7 @@ pub fn init_loki_with_opentelemetry(loki_config: LokiConfig, service_name: &str)
 
     // Set the subscriber as the global default
     match tracing::subscriber::set_global_default(subscriber) {
-        Ok(_) => {
+        Ok(()) => {
             info!("Initialized Loki logging with OpenTelemetry");
             Ok(())
         }
@@ -201,7 +201,7 @@ pub fn init_otel_tracer(loki_config: &LokiConfig, service_name: &str) -> Result<
 mod tests {
     use super::*;
 
-    /// Tests that the LokiConfig default implementation returns a valid configuration.
+    /// Tests that the `LokiConfig` default implementation returns a valid configuration.
     ///
     /// ```
     /// LokiConfig::default() -> Valid config

@@ -12,7 +12,7 @@ use crate::proto::{
     SystemMetrics as ProtoSystemMetrics,
 };
 
-/// QoS metrics service implementation
+/// `QoS` metrics service implementation
 #[derive(Debug)]
 pub struct QosMetricsService<T> {
     provider: Arc<T>,
@@ -22,7 +22,7 @@ impl<T> QosMetricsService<T>
 where
     T: MetricsProvider,
 {
-    /// Create a new QoS metrics service
+    /// Create a new `QoS` metrics service
     pub fn new(provider: Arc<T>) -> Self {
         Self { provider }
     }
@@ -182,7 +182,7 @@ where
     }
 }
 
-/// Run the QoS metrics server
+/// Run the `QoS` metrics server
 pub async fn run_qos_server<T>(bind_address: String, provider: Arc<T>) -> Result<()>
 where
     T: MetricsProvider,
@@ -200,7 +200,7 @@ where
         .add_service(server)
         .serve(addr)
         .await
-        .map_err(|e| Error::Grpc(e))?;
+        .map_err(Error::Grpc)?;
 
     Ok(())
 }

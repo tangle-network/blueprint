@@ -215,12 +215,12 @@ impl EnhancedMetricsProvider {
     }
 
     /// Get the OpenTelemetry exporter
-    pub fn opentelemetry_exporter(&self) -> Arc<OpenTelemetryExporter> {
+    #[must_use] pub fn opentelemetry_exporter(&self) -> Arc<OpenTelemetryExporter> {
         self.opentelemetry_exporter.clone()
     }
 
     /// Get the Prometheus collector
-    pub fn prometheus_collector(&self) -> Arc<PrometheusCollector> {
+    #[must_use] pub fn prometheus_collector(&self) -> Arc<PrometheusCollector> {
         self.prometheus_collector.clone()
     }
 }

@@ -67,12 +67,12 @@ impl OpenTelemetryExporter {
     }
 
     /// Get the meter
-    pub fn meter(&self) -> &opentelemetry::metrics::Meter {
+    #[must_use] pub fn meter(&self) -> &opentelemetry::metrics::Meter {
         &self.meter
     }
 
     /// Get the meter provider
-    pub fn meter_provider(&self) -> Arc<SdkMeterProvider> {
+    #[must_use] pub fn meter_provider(&self) -> Arc<SdkMeterProvider> {
         self.meter_provider.clone()
     }
 

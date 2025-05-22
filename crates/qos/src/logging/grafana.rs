@@ -25,7 +25,7 @@ impl Default for GrafanaConfig {
     fn default() -> Self {
         Self {
             url: "http://localhost:3000".to_string(),
-            api_key: "".to_string(),
+            api_key: String::new(),
             org_id: None,
             folder: None,
         }
@@ -298,7 +298,7 @@ struct DashboardCreateResponse {
 
 impl GrafanaClient {
     /// Create a new Grafana client
-    pub fn new(config: GrafanaConfig) -> Self {
+    #[must_use] pub fn new(config: GrafanaConfig) -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()
@@ -635,7 +635,7 @@ impl GrafanaClient {
 mod tests {
     use super::*;
 
-    /// Tests that the GrafanaConfig default implementation returns a valid configuration.
+    /// Tests that the `GrafanaConfig` default implementation returns a valid configuration.
     ///
     /// ```
     /// GrafanaConfig::default() -> Valid config
@@ -651,13 +651,13 @@ mod tests {
         assert_eq!(config.folder, None);
     }
 
-    /// Tests that a new GrafanaClient can be created with a valid configuration.
+    /// Tests that a new `GrafanaClient` can be created with a valid configuration.
     ///
     /// ```
     /// GrafanaConfig -> GrafanaClient
     /// ```
     ///
-    /// Expected outcome: GrafanaClient is created with the provided config
+    /// Expected outcome: `GrafanaClient` is created with the provided config
     #[test]
     fn test_grafana_client_creation() {
         let config = GrafanaConfig {

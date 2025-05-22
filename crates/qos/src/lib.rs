@@ -12,8 +12,9 @@ pub mod proto {
 pub use logging::{GrafanaClient, GrafanaConfig, LokiConfig};
 pub use unified_service::{QoSService, QoSServiceBuilder};
 
-/// Configuration for the QoS system
+/// Configuration for the `QoS` system
 #[derive(Clone, Debug)]
+#[derive(Default)]
 pub struct QoSConfig {
     /// Heartbeat configuration
     pub heartbeat: Option<heartbeat::HeartbeatConfig>,
@@ -28,19 +29,9 @@ pub struct QoSConfig {
     pub grafana: Option<logging::GrafanaConfig>,
 }
 
-impl Default for QoSConfig {
-    fn default() -> Self {
-        Self {
-            heartbeat: None,
-            metrics: None,
-            loki: None,
-            grafana: None,
-        }
-    }
-}
 
-/// Create a new QoS configuration with default values
-pub fn default_qos_config() -> QoSConfig {
+/// Create a new `QoS` configuration with default values
+#[must_use] pub fn default_qos_config() -> QoSConfig {
     QoSConfig {
         heartbeat: Some(heartbeat::HeartbeatConfig::default()),
         metrics: Some(metrics::MetricsConfig::default()),

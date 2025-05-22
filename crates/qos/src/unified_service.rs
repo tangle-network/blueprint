@@ -10,7 +10,7 @@ use crate::metrics::provider::EnhancedMetricsProvider;
 use crate::metrics::service::MetricsService;
 use crate::metrics::types::MetricsConfig;
 
-/// Unified QoS service that combines heartbeat, metrics, logging, and dashboard functionality
+/// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality
 pub struct QoSService<C> {
     /// Heartbeat service
     heartbeat_service: Option<HeartbeatService<C>>,
@@ -32,7 +32,7 @@ impl<C> QoSService<C>
 where
     C: HeartbeatConsumer + Send + Sync + 'static,
 {
-    /// Create a new QoS service with heartbeat, metrics, and optional Loki/Grafana integration
+    /// Create a new `QoS` service with heartbeat, metrics, and optional Loki/Grafana integration
     pub fn new(config: QoSConfig, heartbeat_consumer: Arc<C>) -> Result<Self> {
         // Initialize heartbeat service if configured
         let heartbeat_service = config
@@ -57,11 +57,7 @@ where
         }
 
         // Initialize Grafana client if configured
-        let grafana_client = if let Some(grafana_config) = &config.grafana {
-            Some(Arc::new(GrafanaClient::new(grafana_config.clone())))
-        } else {
-            None
-        };
+        let grafana_client = config.grafana.as_ref().map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())));
 
         Ok(Self {
             heartbeat_service,
@@ -72,7 +68,7 @@ where
         })
     }
 
-    /// Create a new QoS service with custom OpenTelemetry configuration
+    /// Create a new `QoS` service with custom OpenTelemetry configuration
     pub fn with_otel_config(
         config: QoSConfig,
         heartbeat_consumer: Arc<C>,
@@ -104,11 +100,7 @@ where
         }
 
         // Initialize Grafana client if configured
-        let grafana_client = if let Some(grafana_config) = &config.grafana {
-            Some(Arc::new(GrafanaClient::new(grafana_config.clone())))
-        } else {
-            None
-        };
+        let grafana_client = config.grafana.as_ref().map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())));
 
         Ok(Self {
             heartbeat_service,
@@ -163,15 +155,15 @@ where
     }
 
     /// Get the dashboard URL if available
-    pub fn dashboard_url(&self) -> Option<&str> {
+    #[must_use] pub fn dashboard_url(&self) -> Option<&str> {
         self.dashboard_url.as_deref()
     }
 
     /// Get the metrics provider if available
-    pub fn metrics_provider(&self) -> Option<Arc<EnhancedMetricsProvider>> {
+    #[must_use] pub fn metrics_provider(&self) -> Option<Arc<EnhancedMetricsProvider>> {
         self.metrics_service
             .as_ref()
-            .map(|service| service.provider())
+            .map(super::metrics::service::MetricsService::provider)
     }
 
     /// Record job execution if metrics service is available
@@ -189,7 +181,7 @@ where
     }
 }
 
-/// Builder for QoS service
+/// Builder for `QoS` service
 pub struct QoSServiceBuilder<C> {
     config: QoSConfig,
     heartbeat_consumer: Option<Arc<C>>,
@@ -203,8 +195,8 @@ impl<C> QoSServiceBuilder<C>
 where
     C: HeartbeatConsumer + Send + Sync + 'static,
 {
-    /// Create a new QoS service builder
-    pub fn new() -> Self {
+    /// Create a new `QoS` service builder
+    #[must_use] pub fn new() -> Self {
         Self {
             config: QoSConfig::default(),
             heartbeat_consumer: None,
@@ -215,32 +207,32 @@ where
         }
     }
 
-    /// Set the QoS configuration
-    pub fn with_config(mut self, config: QoSConfig) -> Self {
+    /// Set the `QoS` configuration
+    #[must_use] pub fn with_config(mut self, config: QoSConfig) -> Self {
         self.config = config;
         self
     }
 
     /// Set the heartbeat configuration
-    pub fn with_heartbeat_config(mut self, config: HeartbeatConfig) -> Self {
+    #[must_use] pub fn with_heartbeat_config(mut self, config: HeartbeatConfig) -> Self {
         self.config.heartbeat = Some(config);
         self
     }
 
     /// Set the metrics configuration
-    pub fn with_metrics_config(mut self, config: MetricsConfig) -> Self {
+    #[must_use] pub fn with_metrics_config(mut self, config: MetricsConfig) -> Self {
         self.config.metrics = Some(config);
         self
     }
 
     /// Set the Loki configuration
-    pub fn with_loki_config(mut self, config: LokiConfig) -> Self {
+    #[must_use] pub fn with_loki_config(mut self, config: LokiConfig) -> Self {
         self.config.loki = Some(config);
         self
     }
 
     /// Set the Grafana configuration
-    pub fn with_grafana_config(mut self, config: GrafanaConfig) -> Self {
+    #[must_use] pub fn with_grafana_config(mut self, config: GrafanaConfig) -> Self {
         self.config.grafana = Some(config);
         self
     }
@@ -252,25 +244,25 @@ where
     }
 
     /// Set the OpenTelemetry configuration
-    pub fn with_otel_config(mut self, config: OpenTelemetryConfig) -> Self {
+    #[must_use] pub fn with_otel_config(mut self, config: OpenTelemetryConfig) -> Self {
         self.otel_config = Some(config);
         self
     }
 
     /// Enable dashboard creation with the specified Prometheus datasource UID
-    pub fn with_prometheus_datasource(mut self, datasource_uid: &str) -> Self {
+    #[must_use] pub fn with_prometheus_datasource(mut self, datasource_uid: &str) -> Self {
         self.prometheus_datasource = Some(datasource_uid.to_string());
         self.create_dashboard = true;
         self
     }
 
     /// Enable dashboard creation with the specified Loki datasource UID
-    pub fn with_loki_datasource(mut self, datasource_uid: &str) -> Self {
+    #[must_use] pub fn with_loki_datasource(mut self, datasource_uid: &str) -> Self {
         self.loki_datasource = Some(datasource_uid.to_string());
         self
     }
 
-    /// Build the QoS service
+    /// Build the `QoS` service
     pub async fn build(self) -> Result<QoSService<C>> {
         let heartbeat_consumer = self.heartbeat_consumer.ok_or_else(|| {
             crate::error::Error::Other("Heartbeat consumer is required".to_string())
