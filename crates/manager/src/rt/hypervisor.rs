@@ -109,12 +109,8 @@ impl HypervisorInstance {
             launcher_script.push_str(&format!("export {key}=\"{val}\"\n"));
         }
 
-        launcher_script.push_str("exec /srv/service\n");
-
-        for arg in arguments {
-            launcher_script.push(' ');
-            launcher_script.push_str(&arg);
-        }
+        let args = arguments.join(" ");
+        launcher_script = format!("{launcher_script}exec /srv/service {args}");
 
         launcher_script
     }
