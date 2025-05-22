@@ -25,7 +25,7 @@ blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-networking = { workspace = true, features = ["std"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-manager-bridge.workspace = true
-blueprint-auth = { workspace = true, features = ["std"] }
+#blueprint-auth = { workspace = true, features = ["std"] }
 
 axum = { workspace = true, default-features = false, features = ["json"] }
 docktopus = { workspace = true, features = ["deploy"] }
