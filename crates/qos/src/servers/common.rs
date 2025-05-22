@@ -2,7 +2,7 @@ use futures::StreamExt;
 use shiplift::{ContainerOptions, Docker, PullOptions};
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio_retry::{strategy::ExponentialBackoff, Retry};
+use tokio_retry::{Retry, strategy::ExponentialBackoff};
 use tracing::{debug, error, info};
 
 use crate::error::{Error, Result};
@@ -34,9 +34,10 @@ impl DockerManager {
     /// Returns an error if the image pull fails
     pub async fn ensure_image(&self, image: &str) -> Result<()> {
         let images = self.docker.images();
-        let all_images = images.list(&shiplift::ImageListOptions::default()).await.map_err(|e| {
-            Error::Other(format!("Failed to list Docker images: {}", e))
-        })?;
+        let all_images = images
+            .list(&shiplift::ImageListOptions::default())
+            .await
+            .map_err(|e| Error::Other(format!("Failed to list Docker images: {}", e)))?;
 
         // Check if image already exists
         for img in all_images {
@@ -57,7 +58,10 @@ impl DockerManager {
             match pull_result {
                 Ok(output) => debug!("Pull progress: {:?}", output),
                 Err(e) => {
-                    return Err(Error::Other(format!("Failed to pull image {}: {}", image, e)));
+                    return Err(Error::Other(format!(
+                        "Failed to pull image {}: {}",
+                        image, e
+                    )));
                 }
             }
         }
@@ -83,9 +87,10 @@ impl DockerManager {
 
         // Check if container already exists
         let containers = self.docker.containers();
-        let all_containers = containers.list(&shiplift::ContainerListOptions::default()).await.map_err(|e| {
-            Error::Other(format!("Failed to list Docker containers: {}", e))
-        })?;
+        let all_containers = containers
+            .list(&shiplift::ContainerListOptions::default())
+            .await
+            .map_err(|e| Error::Other(format!("Failed to list Docker containers: {}", e)))?;
 
         for container in all_containers {
             if container.names.iter().any(|n| n == &format!("/{}", name)) {
@@ -113,7 +118,11 @@ impl DockerManager {
         for (container_port, host_port) in ports {
             // Use the expose method with the correct parameters
             // expose(srcport, protocol, hostport)
-            options.expose(container_port.parse::<u32>().unwrap_or(3000), "tcp", host_port.parse::<u32>().unwrap_or(3000));
+            options.expose(
+                container_port.parse::<u32>().unwrap_or(3000),
+                "tcp",
+                host_port.parse::<u32>().unwrap_or(3000),
+            );
         }
 
         // Add volume mappings
@@ -137,7 +146,10 @@ impl DockerManager {
             .await
             .map_err(|e| Error::Other(format!("Failed to start container {}: {}", name, e)))?;
 
-        info!("Successfully started container: {} (ID: {})", name, container_id);
+        info!(
+            "Successfully started container: {} (ID: {})",
+            name, container_id
+        );
         Ok(container_id)
     }
 
@@ -147,22 +159,26 @@ impl DockerManager {
     /// Returns an error if the container stop or removal fails
     pub async fn stop_container(&self, container_id: &str) -> Result<()> {
         let container = self.docker.containers().get(container_id);
-        
+
         // Stop the container
         info!("Stopping container: {}", container_id);
-        container
-            .stop(None)
-            .await
-            .map_err(|e| Error::Other(format!("Failed to stop container {}: {}", container_id, e)))?;
+        container.stop(None).await.map_err(|e| {
+            Error::Other(format!("Failed to stop container {}: {}", container_id, e))
+        })?;
 
         // Remove the container
         info!("Removing container: {}", container_id);
-        container
-            .delete()
-            .await
-            .map_err(|e| Error::Other(format!("Failed to remove container {}: {}", container_id, e)))?;
+        container.delete().await.map_err(|e| {
+            Error::Other(format!(
+                "Failed to remove container {}: {}",
+                container_id, e
+            ))
+        })?;
 
-        info!("Successfully stopped and removed container: {}", container_id);
+        info!(
+            "Successfully stopped and removed container: {}",
+            container_id
+        );
         Ok(())
     }
 
@@ -172,10 +188,12 @@ impl DockerManager {
     /// Returns an error if the container inspection fails
     pub async fn is_container_running(&self, container_id: &str) -> Result<bool> {
         let container = self.docker.containers().get(container_id);
-        let details = container
-            .inspect()
-            .await
-            .map_err(|e| Error::Other(format!("Failed to inspect container {}: {}", container_id, e)))?;
+        let details = container.inspect().await.map_err(|e| {
+            Error::Other(format!(
+                "Failed to inspect container {}: {}",
+                container_id, e
+            ))
+        })?;
 
         let running = details.state.running;
         Ok(running)
@@ -216,7 +234,10 @@ impl DockerManager {
                 None => {
                     let running = details.state.running;
                     if running {
-                        info!("Container {} is running (no health check defined)", container_id);
+                        info!(
+                            "Container {} is running (no health check defined)",
+                            container_id
+                        );
                         Ok(())
                     } else {
                         debug!("Container {} is not running", container_id);

@@ -39,13 +39,13 @@ pub struct QoSConfig {
 
     /// Grafana configuration
     pub grafana: Option<logging::GrafanaConfig>,
-    
+
     /// Grafana server configuration (if None, no server will be started)
     pub grafana_server: Option<servers::grafana::GrafanaServerConfig>,
-    
+
     /// Loki server configuration (if None, no server will be started)
     pub loki_server: Option<servers::loki::LokiServerConfig>,
-    
+
     /// Whether to manage servers automatically
     pub manage_servers: bool,
 }

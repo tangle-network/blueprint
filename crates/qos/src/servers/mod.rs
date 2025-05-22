@@ -1,6 +1,6 @@
+pub mod common;
 pub mod grafana;
 pub mod loki;
-pub mod common;
 
 use crate::error::Result;
 

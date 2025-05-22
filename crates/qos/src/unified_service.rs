@@ -9,7 +9,11 @@ use crate::metrics::opentelemetry::OpenTelemetryConfig;
 use crate::metrics::provider::EnhancedMetricsProvider;
 use crate::metrics::service::MetricsService;
 use crate::metrics::types::MetricsConfig;
-use crate::servers::{ServerManager, grafana::{GrafanaServer, GrafanaServerConfig}, loki::{LokiServer, LokiServerConfig}};
+use crate::servers::{
+    ServerManager,
+    grafana::{GrafanaServer, GrafanaServerConfig},
+    loki::{LokiServer, LokiServerConfig},
+};
 
 /// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality
 pub struct QoSService<C>
@@ -31,10 +35,10 @@ where
 
     /// Dashboard URL
     dashboard_url: Option<String>,
-    
+
     /// Grafana server manager
     grafana_server: Option<Arc<GrafanaServer>>,
-    
+
     /// Loki server manager
     loki_server: Option<Arc<LokiServer>>,
 }
@@ -79,10 +83,16 @@ where
         // Initialize server managers if configured
         let (grafana_server, loki_server) = if config.manage_servers {
             let (grafana_server, loki_server) = (
-                config.grafana_server.as_ref().map(|cfg| Arc::new(GrafanaServer::new(cfg.clone()))),
-                config.loki_server.as_ref().map(|cfg| Arc::new(LokiServer::new(cfg.clone()))),
+                config
+                    .grafana_server
+                    .as_ref()
+                    .map(|cfg| Arc::new(GrafanaServer::new(cfg.clone()))),
+                config
+                    .loki_server
+                    .as_ref()
+                    .map(|cfg| Arc::new(LokiServer::new(cfg.clone()))),
             );
-            
+
             // Start the servers if configured
             if let Some(server) = &grafana_server {
                 info!("Starting Grafana server...");
@@ -92,7 +102,7 @@ where
                     info!("Grafana server started successfully");
                 }
             }
-            
+
             if let Some(server) = &loki_server {
                 info!("Starting Loki server...");
                 if let Err(e) = server.start().await {
@@ -101,12 +111,12 @@ where
                     info!("Loki server started successfully");
                 }
             }
-            
+
             (grafana_server, loki_server)
         } else {
             (None, None)
         };
-        
+
         // Update Grafana client if we are managing servers
         let _grafana_client = if let Some(server) = &grafana_server {
             Some(Arc::new(GrafanaClient::new(server.client_config())))
@@ -117,16 +127,19 @@ where
                 .as_ref()
                 .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())))
         };
-        
+
         // Update Loki config if we are managing servers
         if let Some(server) = &loki_server {
             if let Some(loki_config) = &config.loki {
                 let mut updated_config = server.client_config();
                 // Preserve any custom labels from the original config
                 updated_config.labels = loki_config.labels.clone();
-                
+
                 if let Err(e) = init_loki_logging(updated_config) {
-                    error!("Failed to initialize Loki logging with managed server: {}", e);
+                    error!(
+                        "Failed to initialize Loki logging with managed server: {}",
+                        e
+                    );
                 } else {
                     info!("Initialized Loki logging with managed server");
                 }
@@ -136,10 +149,16 @@ where
         // Initialize server managers if configured
         let (grafana_server, loki_server) = if config.manage_servers {
             let (grafana_server, loki_server) = (
-                config.grafana_server.as_ref().map(|cfg| Arc::new(GrafanaServer::new(cfg.clone()))),
-                config.loki_server.as_ref().map(|cfg| Arc::new(LokiServer::new(cfg.clone()))),
+                config
+                    .grafana_server
+                    .as_ref()
+                    .map(|cfg| Arc::new(GrafanaServer::new(cfg.clone()))),
+                config
+                    .loki_server
+                    .as_ref()
+                    .map(|cfg| Arc::new(LokiServer::new(cfg.clone()))),
             );
-            
+
             // Start the servers if configured
             if let Some(server) = &grafana_server {
                 info!("Starting Grafana server...");
@@ -149,7 +168,7 @@ where
                     info!("Grafana server started successfully");
                 }
             }
-            
+
             if let Some(server) = &loki_server {
                 info!("Starting Loki server...");
                 if let Err(e) = server.start().await {
@@ -158,12 +177,12 @@ where
                     info!("Loki server started successfully");
                 }
             }
-            
+
             (grafana_server, loki_server)
         } else {
             (None, None)
         };
-        
+
         // Update Grafana client if we are managing servers
         let grafana_client = if let Some(server) = &grafana_server {
             Some(Arc::new(GrafanaClient::new(server.client_config())))
@@ -174,16 +193,19 @@ where
                 .as_ref()
                 .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())))
         };
-        
+
         // Update Loki config if we are managing servers
         if let Some(server) = &loki_server {
             if let Some(loki_config) = &config.loki {
                 let mut updated_config = server.client_config();
                 // Preserve any custom labels from the original config
                 updated_config.labels = loki_config.labels.clone();
-                
+
                 if let Err(e) = init_loki_logging(updated_config) {
-                    error!("Failed to initialize Loki logging with managed server: {}", e);
+                    error!(
+                        "Failed to initialize Loki logging with managed server: {}",
+                        e
+                    );
                 } else {
                     info!("Initialized Loki logging with managed server");
                 }
@@ -209,14 +231,14 @@ where
             }
         }
 
-    // Start the metrics service if configured
-    if let Some(metrics_service) = &service.metrics_service {
-        if let Err(e) = metrics_service.provider().start_collection().await {
-            error!("Failed to start metrics service: {}", e);
-        } else {
-            info!("Started metrics service");
+        // Start the metrics service if configured
+        if let Some(metrics_service) = &service.metrics_service {
+            if let Err(e) = metrics_service.provider().start_collection().await {
+                error!("Failed to start metrics service: {}", e);
+            } else {
+                info!("Started metrics service");
+            }
         }
-    }
 
         Ok(service)
     }
@@ -271,14 +293,14 @@ where
             loki_server: None,
         };
 
-    // Start the metrics service if configured
-    if let Some(metrics_service) = &service.metrics_service {
-        if let Err(e) = metrics_service.provider().start_collection().await {
-            error!("Failed to start metrics service: {}", e);
-        } else {
-            info!("Started metrics service");
+        // Start the metrics service if configured
+        if let Some(metrics_service) = &service.metrics_service {
+            if let Err(e) = metrics_service.provider().start_collection().await {
+                error!("Failed to start metrics service: {}", e);
+            } else {
+                info!("Started metrics service");
+            }
         }
-    }
 
         // Start the heartbeat service if configured
         if let Some(heartbeat_service) = &service.heartbeat_service {
@@ -365,13 +387,13 @@ where
             metrics_service.record_job_error(job_id, error_type);
         }
     }
-    
+
     /// Get the Grafana server URL if available
     #[must_use]
     pub fn grafana_server_url(&self) -> Option<String> {
         self.grafana_server.as_ref().map(|server| server.url())
     }
-    
+
     /// Get the Loki server URL if available
     #[must_use]
     pub fn loki_server_url(&self) -> Option<String> {
@@ -395,7 +417,7 @@ where
                 info!("Grafana server stopped successfully");
             }
         }
-        
+
         if let Some(server) = &self.loki_server {
             info!("Stopping Loki server...");
             let runtime = tokio::runtime::Runtime::new().unwrap();
