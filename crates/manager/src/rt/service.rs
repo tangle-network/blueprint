@@ -27,7 +27,7 @@ impl Service {
         vm_conf: CHVmConfig,
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
-        data_dir: impl AsRef<Path>, // Added data_dir parameter
+        data_dir: impl AsRef<Path>,
         service_name: &str,
         binary_path: impl AsRef<Path>,
         env_vars: Vec<(String, String)>,

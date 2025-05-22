@@ -56,7 +56,7 @@ service BlueprintManagerBridge {
   rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);
   rpc RequestPort(PortRequest) returns (PortResponse);
 
-  //\ - Auth Proxy methods -
+  // - Auth Proxy methods -
 
   // This is called by the blueprint to register a service to the proxy.
   rpc RegisterBlueprintServiceProxy(RegisterBlueprintServiceProxyRequest)
