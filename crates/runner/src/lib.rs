@@ -269,13 +269,14 @@ where
         {
             async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
                 let (_tx, rx) = oneshot::channel();
-                
+
                 Ok(rx)
             }
         }
 
         let adapter = HeartbeatServiceAdapter { service };
-        self.background_services.push(DynBackgroundService::boxed(adapter));
+        self.background_services
+            .push(DynBackgroundService::boxed(adapter));
         self
     }
 

@@ -1,9 +1,9 @@
+use blueprint_core::{info, warn};
+use rand::Rng;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use blueprint_core::{info, warn};
-use rand::Rng;
 
 use crate::error::Result;
 
@@ -160,7 +160,7 @@ impl<C> HeartbeatService<C> {
                 let sleep_duration = if jitter_percent > 0 {
                     let interval_ms = interval_secs * 1000;
                     let max_jitter_ms = (interval_ms * u64::from(jitter_percent)) / 100;
-                    
+
                     let mut rng = rand::thread_rng();
                     let jitter_ms = if max_jitter_ms > 0 {
                         #[allow(clippy::cast_possible_wrap)]
@@ -169,11 +169,11 @@ impl<C> HeartbeatService<C> {
                     } else {
                         0
                     };
-                    
+
                     #[allow(clippy::cast_possible_wrap)]
                     let final_ms = interval_ms as i64 + jitter_ms;
                     let final_ms = final_ms.max(100);
-                    
+
                     #[allow(clippy::cast_sign_loss)]
                     Duration::from_millis(final_ms as u64)
                 } else {
