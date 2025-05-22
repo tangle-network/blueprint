@@ -162,8 +162,6 @@ impl BlueprintManagerBridge for BridgeService {
                 key_bytes: owner.key_bytes,
             })
             .collect();
-
-        // Create ServiceModel
         let service = ServiceModel {
             api_key_prefix,
             owners: service_owners,

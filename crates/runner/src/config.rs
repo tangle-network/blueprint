@@ -328,9 +328,6 @@ impl BlueprintEnvironment {
     ///
     /// # Errors
     /// - `blueprint_manager_bridge::Error` if the connection to the bridge fails.
-    ///
-    /// # Panics
-    /// - If the lock on the bridge is poisoned.
     pub async fn bridge(&self) -> Result<Arc<Bridge>, blueprint_manager_bridge::Error> {
         let mut guard = self.bridge.lock().unwrap();
         if let Some(bridge) = &*guard {
