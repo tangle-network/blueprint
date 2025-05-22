@@ -69,8 +69,10 @@ pub fn new_blueprint(
         }
 
         // Define default values for common template variables
-        // These are specific to Tangle's Blueprint Templates
         let defaults = [
+            ("gh-username", ""),
+            ("gh-repo", ""),
+            ("gh-organization", ""),
             ("project-description", ""),
             ("project-homepage", ""),
             ("flakes", "false"),
