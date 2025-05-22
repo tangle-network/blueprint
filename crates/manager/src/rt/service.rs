@@ -29,12 +29,30 @@ impl Service {
         keystore: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
+        data_dir: impl AsRef<Path>, // Added data_dir parameter
         service_name: &str,
         binary_path: impl AsRef<Path>,
         env_vars: Vec<(String, String)>,
         arguments: Vec<String>,
     ) -> Result<Service> {
-        let bridge = Bridge::new(runtime_dir.as_ref().to_path_buf(), service_name.to_string());
+        let db_path = data_dir
+            .as_ref()
+            .join("private")
+            .join("auth-proxy")
+            .join("db");
+        tokio::fs::create_dir_all(&db_path).await.map_err(|e| {
+            error!(
+                "Failed to create database directory at {}: {e}",
+                db_path.display()
+            );
+            Error::Other(format!("Failed to create database directory: {e}"))
+        })?;
+
+        let bridge = Bridge::new(
+            runtime_dir.as_ref().to_path_buf(),
+            service_name.to_string(),
+            db_path,
+        );
         let bridge_base_socket = bridge.base_socket_path();
 
         let (bridge_handle, alive_rx) = bridge.spawn().map_err(|e| {
