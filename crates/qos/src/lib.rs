@@ -2,6 +2,7 @@ pub mod error;
 pub mod heartbeat;
 pub mod logging;
 pub mod metrics;
+pub mod servers;
 pub mod service;
 pub mod unified_service;
 
@@ -21,6 +22,7 @@ pub mod proto {
 }
 
 pub use logging::{GrafanaClient, GrafanaConfig, LokiConfig};
+pub use servers::{grafana::GrafanaServerConfig, loki::LokiServerConfig};
 pub use unified_service::{QoSService, QoSServiceBuilder};
 
 /// Configuration for the `QoS` system
@@ -37,6 +39,15 @@ pub struct QoSConfig {
 
     /// Grafana configuration
     pub grafana: Option<logging::GrafanaConfig>,
+    
+    /// Grafana server configuration (if None, no server will be started)
+    pub grafana_server: Option<servers::grafana::GrafanaServerConfig>,
+    
+    /// Loki server configuration (if None, no server will be started)
+    pub loki_server: Option<servers::loki::LokiServerConfig>,
+    
+    /// Whether to manage servers automatically
+    pub manage_servers: bool,
 }
 
 /// Create a new `QoS` configuration with default values
@@ -47,5 +58,8 @@ pub fn default_qos_config() -> QoSConfig {
         metrics: Some(metrics::MetricsConfig::default()),
         loki: Some(logging::LokiConfig::default()),
         grafana: Some(logging::GrafanaConfig::default()),
+        grafana_server: Some(servers::grafana::GrafanaServerConfig::default()),
+        loki_server: Some(servers::loki::LokiServerConfig::default()),
+        manage_servers: true,
     }
 }

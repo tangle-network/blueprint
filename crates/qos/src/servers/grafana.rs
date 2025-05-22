@@ -1,0 +1,225 @@
+//! Grafana server management
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::time::sleep;
+use tokio_retry::{strategy::ExponentialBackoff, Retry};
+use tracing::{error, info};
+
+use crate::error::{Error, Result};
+use crate::logging::GrafanaConfig;
+use crate::servers::common::DockerManager;
+use crate::servers::ServerManager;
+
+/// Grafana server configuration
+#[derive(Clone, Debug)]
+pub struct GrafanaServerConfig {
+    /// Port to expose Grafana on
+    pub port: u16,
+    
+    /// Admin username
+    pub admin_user: String,
+    
+    /// Admin password
+    pub admin_password: String,
+    
+    /// Whether to allow anonymous access
+    pub allow_anonymous: bool,
+    
+    /// Anonymous user role
+    pub anonymous_role: String,
+    
+    /// Data directory
+    pub data_dir: String,
+    
+    /// Container name
+    pub container_name: String,
+}
+
+impl Default for GrafanaServerConfig {
+    fn default() -> Self {
+        Self {
+            port: 3000,
+            admin_user: "admin".to_string(),
+            admin_password: "admin".to_string(),
+            allow_anonymous: true,
+            anonymous_role: "Admin".to_string(),
+            data_dir: "/var/lib/grafana".to_string(),
+            container_name: "blueprint-grafana".to_string(),
+        }
+    }
+}
+
+/// Grafana server manager
+pub struct GrafanaServer {
+    /// Docker manager
+    docker: DockerManager,
+    
+    /// Server configuration
+    config: GrafanaServerConfig,
+    
+    /// Container ID
+    container_id: Arc<Mutex<Option<String>>>,
+}
+
+impl GrafanaServer {
+    /// Create a new Grafana server manager
+    #[must_use]
+    pub fn new(config: GrafanaServerConfig) -> Self {
+        Self {
+            docker: DockerManager::new(),
+            config,
+            container_id: Arc::new(Mutex::new(None)),
+        }
+    }
+    
+    /// Get the Grafana client configuration
+    #[must_use]
+    pub fn client_config(&self) -> GrafanaConfig {
+        GrafanaConfig {
+            url: self.url(),
+            api_key: String::new(), // No API key needed for anonymous access
+            org_id: None,
+            folder: None,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl ServerManager for GrafanaServer {
+    async fn start(&self) -> Result<()> {
+        info!("Starting Grafana server on port {}", self.config.port);
+        
+        // Set up environment variables
+        let mut env_vars = HashMap::new();
+        env_vars.insert("GF_SECURITY_ADMIN_USER".to_string(), self.config.admin_user.clone());
+        env_vars.insert("GF_SECURITY_ADMIN_PASSWORD".to_string(), self.config.admin_password.clone());
+        
+        if self.config.allow_anonymous {
+            env_vars.insert("GF_AUTH_ANONYMOUS_ENABLED".to_string(), "true".to_string());
+            env_vars.insert("GF_AUTH_ANONYMOUS_ORG_ROLE".to_string(), self.config.anonymous_role.clone());
+            env_vars.insert("GF_AUTH_DISABLE_LOGIN_FORM".to_string(), "true".to_string());
+        }
+        
+        env_vars.insert("GF_FEATURE_TOGGLES_ENABLE".to_string(), "publicDashboards".to_string());
+        
+        // Set up port mappings
+        let mut ports = HashMap::new();
+        ports.insert("3000/tcp".to_string(), self.config.port.to_string());
+        
+        // Set up volume mappings
+        let mut volumes = HashMap::new();
+        volumes.insert(self.config.data_dir.clone(), "/var/lib/grafana".to_string());
+        
+        // Start the container
+        let container_id = self.docker.run_container(
+            "grafana/grafana:latest",
+            &self.config.container_name,
+            env_vars,
+            ports,
+            volumes,
+        ).await?;
+        
+        // Store the container ID
+        {
+            let mut id = self.container_id.lock().unwrap();
+            *id = Some(container_id.clone());
+        } // Release the lock before the await
+        
+        // Wait for the container to be ready
+        self.wait_until_ready(30).await?;
+        
+        info!("Grafana server started successfully");
+        Ok(())
+    }
+    
+    async fn stop(&self) -> Result<()> {
+        let container_id = {
+            let id = self.container_id.lock().unwrap();
+            match id.as_ref() {
+                Some(id) => id.clone(),
+                None => {
+                    info!("Grafana server is not running");
+                    return Ok(());
+                }
+            }
+        };
+        
+        info!("Stopping Grafana server");
+        self.docker.stop_container(&container_id).await?;
+        
+        // Clear the container ID
+        let mut id = self.container_id.lock().unwrap();
+        *id = None;
+        
+        info!("Grafana server stopped successfully");
+        Ok(())
+    }
+    
+    fn url(&self) -> String {
+        format!("http://localhost:{}", self.config.port)
+    }
+    
+    async fn is_running(&self) -> Result<bool> {
+        let container_id = {
+            let id = self.container_id.lock().unwrap();
+            match id.as_ref() {
+                Some(id) => id.clone(),
+                None => return Ok(false),
+            }
+        };
+        
+        self.docker.is_container_running(&container_id).await
+    }
+    
+    async fn wait_until_ready(&self, timeout_secs: u64) -> Result<()> {
+        let container_id = {
+            let id = self.container_id.lock().unwrap();
+            match id.as_ref() {
+                Some(id) => id.clone(),
+                None => {
+                    return Err(Error::Other("Grafana server is not running".to_string()));
+                }
+            }
+        };
+        
+        // First wait for the container to be healthy
+        self.docker.wait_for_container_health(&container_id, timeout_secs).await?;
+        
+        // Then check if the API is responsive
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/health", self.url());
+        
+        // Create a retry strategy with exponential backoff
+        let retry_strategy = ExponentialBackoff::from_millis(100)
+            .factor(2)
+            .max_delay(Duration::from_secs(1))
+            // Use take() to limit the number of retries
+            .take(timeout_secs as usize);
+        
+        Retry::spawn(retry_strategy, || async {
+            match client.get(&url).timeout(Duration::from_secs(1)).send().await {
+                Ok(response) if response.status().is_success() => {
+                    info!("Grafana API is responsive");
+                    Ok(())
+                }
+                Ok(response) => {
+                    error!("Grafana API returned non-success status: {}", response.status());
+                    Err(())
+                }
+                Err(e) => {
+                    error!("Failed to connect to Grafana API: {}", e);
+                    Err(())
+                }
+            }
+        })
+        .await
+        .map_err(|_| {
+            Error::Other(format!(
+                "Grafana API did not become responsive within {} seconds",
+                timeout_secs
+            ))
+        })
+    }
+}

@@ -126,8 +126,6 @@ mod tests {
         // Allow more time for heartbeats to be sent and metrics to be collected
         println!("Waiting for heartbeats to be sent (this may take a few seconds)...");
 
-        // TODO: Finish heartbeat portion
-
         println!("Waiting for metrics service to initialize...");
         sleep(Duration::from_secs(2)).await;
 
@@ -157,7 +155,7 @@ mod tests {
         }
 
         // Allow time for the metrics to be collected
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(5)).await;
 
         Ok(())
     }

@@ -9,6 +9,7 @@ use crate::metrics::opentelemetry::OpenTelemetryConfig;
 use crate::metrics::provider::EnhancedMetricsProvider;
 use crate::metrics::service::MetricsService;
 use crate::metrics::types::MetricsConfig;
+use crate::servers::{ServerManager, grafana::{GrafanaServer, GrafanaServerConfig}, loki::{LokiServer, LokiServerConfig}};
 
 /// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality
 pub struct QoSService<C>
@@ -30,6 +31,12 @@ where
 
     /// Dashboard URL
     dashboard_url: Option<String>,
+    
+    /// Grafana server manager
+    grafana_server: Option<Arc<GrafanaServer>>,
+    
+    /// Loki server manager
+    loki_server: Option<Arc<LokiServer>>,
 }
 
 impl<C> QoSService<C>
@@ -69,12 +76,128 @@ where
             .as_ref()
             .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())));
 
+        // Initialize server managers if configured
+        let (grafana_server, loki_server) = if config.manage_servers {
+            let (grafana_server, loki_server) = (
+                config.grafana_server.as_ref().map(|cfg| Arc::new(GrafanaServer::new(cfg.clone()))),
+                config.loki_server.as_ref().map(|cfg| Arc::new(LokiServer::new(cfg.clone()))),
+            );
+            
+            // Start the servers if configured
+            if let Some(server) = &grafana_server {
+                info!("Starting Grafana server...");
+                if let Err(e) = server.start().await {
+                    error!("Failed to start Grafana server: {}", e);
+                } else {
+                    info!("Grafana server started successfully");
+                }
+            }
+            
+            if let Some(server) = &loki_server {
+                info!("Starting Loki server...");
+                if let Err(e) = server.start().await {
+                    error!("Failed to start Loki server: {}", e);
+                } else {
+                    info!("Loki server started successfully");
+                }
+            }
+            
+            (grafana_server, loki_server)
+        } else {
+            (None, None)
+        };
+        
+        // Update Grafana client if we are managing servers
+        let grafana_client = if let Some(server) = &grafana_server {
+            Some(Arc::new(GrafanaClient::new(server.client_config())))
+        } else {
+            // Otherwise use the provided config
+            config
+                .grafana
+                .as_ref()
+                .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())))
+        };
+        
+        // Update Loki config if we are managing servers
+        if let Some(server) = &loki_server {
+            if let Some(loki_config) = &config.loki {
+                let mut updated_config = server.client_config();
+                // Preserve any custom labels from the original config
+                updated_config.labels = loki_config.labels.clone();
+                
+                if let Err(e) = init_loki_logging(updated_config) {
+                    error!("Failed to initialize Loki logging with managed server: {}", e);
+                } else {
+                    info!("Initialized Loki logging with managed server");
+                }
+            }
+        }
+
+        // Initialize server managers if configured
+        let (grafana_server, loki_server) = if config.manage_servers {
+            let (grafana_server, loki_server) = (
+                config.grafana_server.as_ref().map(|cfg| Arc::new(GrafanaServer::new(cfg.clone()))),
+                config.loki_server.as_ref().map(|cfg| Arc::new(LokiServer::new(cfg.clone()))),
+            );
+            
+            // Start the servers if configured
+            if let Some(server) = &grafana_server {
+                info!("Starting Grafana server...");
+                if let Err(e) = server.start().await {
+                    error!("Failed to start Grafana server: {}", e);
+                } else {
+                    info!("Grafana server started successfully");
+                }
+            }
+            
+            if let Some(server) = &loki_server {
+                info!("Starting Loki server...");
+                if let Err(e) = server.start().await {
+                    error!("Failed to start Loki server: {}", e);
+                } else {
+                    info!("Loki server started successfully");
+                }
+            }
+            
+            (grafana_server, loki_server)
+        } else {
+            (None, None)
+        };
+        
+        // Update Grafana client if we are managing servers
+        let grafana_client = if let Some(server) = &grafana_server {
+            Some(Arc::new(GrafanaClient::new(server.client_config())))
+        } else {
+            // Otherwise use the provided config
+            config
+                .grafana
+                .as_ref()
+                .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())))
+        };
+        
+        // Update Loki config if we are managing servers
+        if let Some(server) = &loki_server {
+            if let Some(loki_config) = &config.loki {
+                let mut updated_config = server.client_config();
+                // Preserve any custom labels from the original config
+                updated_config.labels = loki_config.labels.clone();
+                
+                if let Err(e) = init_loki_logging(updated_config) {
+                    error!("Failed to initialize Loki logging with managed server: {}", e);
+                } else {
+                    info!("Initialized Loki logging with managed server");
+                }
+            }
+        }
+
         let service = Self {
             heartbeat_service,
             metrics_service,
             grafana_client,
             config,
             dashboard_url: None,
+            grafana_server: None,
+            loki_server: None,
         };
 
         // Start the heartbeat service if configured
@@ -85,6 +208,15 @@ where
                 info!("Started heartbeat service");
             }
         }
+
+    // Start the metrics service if configured
+    if let Some(metrics_service) = &service.metrics_service {
+        if let Err(e) = metrics_service.provider().start_collection().await {
+            error!("Failed to start metrics service: {}", e);
+        } else {
+            info!("Started metrics service");
+        }
+    }
 
         Ok(service)
     }
@@ -135,7 +267,18 @@ where
             grafana_client,
             config,
             dashboard_url: None,
+            grafana_server: None,
+            loki_server: None,
         };
+
+    // Start the metrics service if configured
+    if let Some(metrics_service) = &service.metrics_service {
+        if let Err(e) = metrics_service.provider().start_collection().await {
+            error!("Failed to start metrics service: {}", e);
+        } else {
+            info!("Started metrics service");
+        }
+    }
 
         // Start the heartbeat service if configured
         if let Some(heartbeat_service) = &service.heartbeat_service {
@@ -220,6 +363,47 @@ where
     pub fn record_job_error(&self, job_id: u64, error_type: &str) {
         if let Some(metrics_service) = &self.metrics_service {
             metrics_service.record_job_error(job_id, error_type);
+        }
+    }
+    
+    /// Get the Grafana server URL if available
+    #[must_use]
+    pub fn grafana_server_url(&self) -> Option<String> {
+        self.grafana_server.as_ref().map(|server| server.url())
+    }
+    
+    /// Get the Loki server URL if available
+    #[must_use]
+    pub fn loki_server_url(&self) -> Option<String> {
+        self.loki_server.as_ref().map(|server| server.url())
+    }
+}
+
+impl<C> Drop for QoSService<C>
+where
+    C: HeartbeatConsumer + Send + Sync + 'static,
+{
+    fn drop(&mut self) {
+        // Stop the servers when the service is dropped
+        // We can't use async functions in drop, so we just log errors
+        if let Some(server) = &self.grafana_server {
+            info!("Stopping Grafana server...");
+            let runtime = tokio::runtime::Runtime::new().unwrap();
+            if let Err(e) = runtime.block_on(server.stop()) {
+                error!("Failed to stop Grafana server: {}", e);
+            } else {
+                info!("Grafana server stopped successfully");
+            }
+        }
+        
+        if let Some(server) = &self.loki_server {
+            info!("Stopping Loki server...");
+            let runtime = tokio::runtime::Runtime::new().unwrap();
+            if let Err(e) = runtime.block_on(server.stop()) {
+                error!("Failed to stop Loki server: {}", e);
+            } else {
+                info!("Loki server stopped successfully");
+            }
         }
     }
 }
@@ -309,9 +493,27 @@ where
     }
 
     /// Enable dashboard creation with the specified Loki datasource UID
-    #[must_use]
+    /// Set the Loki datasource UID
     pub fn with_loki_datasource(mut self, datasource_uid: &str) -> Self {
         self.loki_datasource = Some(datasource_uid.to_string());
+        self
+    }
+
+    /// Set the Grafana server configuration
+    pub fn with_grafana_server_config(mut self, config: GrafanaServerConfig) -> Self {
+        self.config.grafana_server = Some(config);
+        self
+    }
+
+    /// Set the Loki server configuration
+    pub fn with_loki_server_config(mut self, config: LokiServerConfig) -> Self {
+        self.config.loki_server = Some(config);
+        self
+    }
+
+    /// Enable or disable server management
+    pub fn manage_servers(mut self, manage: bool) -> Self {
+        self.config.manage_servers = manage;
         self
     }
 
