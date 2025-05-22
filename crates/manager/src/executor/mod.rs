@@ -1,12 +1,12 @@
 use crate::blueprint::ActiveBlueprints;
-use crate::config::BlueprintManagerConfig;
+use crate::config::{AuthProxyOpts, BlueprintManagerConfig, SourceCandidates};
 use crate::error::Error;
 use crate::error::Result;
 use crate::sdk::entry::SendFuture;
 use blueprint_clients::tangle::EventsClient;
 use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
-use blueprint_core::{info, warn};
+use blueprint_core::{error, info, warn};
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
@@ -17,6 +17,7 @@ use color_eyre::eyre::OptionExt;
 use sp_core::{ecdsa, sr25519};
 use std::collections::HashMap;
 use std::future::Future;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tangle_subxt::subxt::tx::Signer;
@@ -193,6 +194,17 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         std::fs::create_dir_all(data_dir)?;
     }
 
+    let source_candidates = SourceCandidates::load(
+        blueprint_manager_config.preferred_source,
+        blueprint_manager_config.podman_host.clone(),
+    )
+    .await?;
+
+    // Create the auth proxy task
+    let auth_proxy_task = run_auth_proxy(
+        data_dir.clone(),
+        blueprint_manager_config.auth_proxy_opts.clone(),
+    );
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
         let sr_key_pub = keystore.first_local::<SpSr25519>()?;
@@ -284,6 +296,9 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         tokio::select! {
             res0 = manager_task => {
                 Err(Report::msg(format!("Blueprint Manager Closed Unexpectedly: {res0:?}")))
+            },
+            res1 = auth_proxy_task => {
+                Err(Report::msg(format!("Auth Proxy Closed Unexpectedly: {res1:?}")))
             },
 
             () = shutdown_task => {
@@ -396,4 +411,43 @@ async fn handle_init(
     .await?;
 
     Ok(operator_subscribed_blueprints)
+}
+
+/// Runs the authentication proxy server.
+///
+/// This function sets up and runs an authenticated proxy server that listens on the configured host and port.
+/// It creates necessary directories for the proxy's database and then starts the server.
+///
+/// # Arguments
+///
+/// * `data_dir` - The path to the data directory where the proxy's database will be stored.
+/// * `auth_proxy_opts` - Configuration options for the authentication proxy, including host and port.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - It fails to create the necessary directories for the database.
+/// - It fails to bind to the specified host and port.
+/// - The Axum server encounters an error during operation.
+async fn run_auth_proxy(data_dir: PathBuf, auth_proxy_opts: AuthProxyOpts) -> Result<()> {
+    let db_path = data_dir.join("private").join("auth-proxy").join("db");
+    tokio::fs::create_dir_all(&db_path).await?;
+
+    let proxy = blueprint_auth::proxy::AuthenticatedProxy::new(&db_path)?;
+    let router = proxy.router();
+    let listener = tokio::net::TcpListener::bind((
+        auth_proxy_opts.auth_proxy_host,
+        auth_proxy_opts.auth_proxy_port,
+    ))
+    .await?;
+    info!(
+        "Auth proxy listening on {}:{}",
+        auth_proxy_opts.auth_proxy_host, auth_proxy_opts.auth_proxy_port
+    );
+    let result = axum::serve(listener, router).await;
+    if let Err(err) = result {
+        error!("Auth proxy error: {err}");
+    }
+
+    Ok(())
 }

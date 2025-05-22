@@ -106,6 +106,7 @@ async fn test_run_blueprint() -> Result<()> {
         vec![alice_account.clone()],
         0,
         deployment_env.keystore_uri.clone(),
+        None,
     )
     .await?;
 
