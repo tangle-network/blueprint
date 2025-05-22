@@ -42,7 +42,10 @@ pub struct EnhancedMetricsProvider {
 }
 
 impl EnhancedMetricsProvider {
-    /// Create a new enhanced metrics provider
+    /// Create a new enhanced metrics provider with OpenTelemetry support
+    ///
+    /// # Errors
+    /// Returns an error if the Prometheus collector or OpenTelemetry exporter initialization fails
     pub fn new(metrics_config: MetricsConfig, otel_config: OpenTelemetryConfig) -> Result<Self> {
         // Create a Prometheus registry
         let registry = Registry::new();
@@ -56,15 +59,17 @@ impl EnhancedMetricsProvider {
 
         // Create an OpenTelemetry exporter
         let opentelemetry_exporter = Arc::new(OpenTelemetryExporter::new(
-            registry.clone(),
+            &registry,
             otel_config,
             &metrics_config,
         )?);
 
         // Initialize blueprint status
-        let mut blueprint_status = BlueprintStatus::default();
-        blueprint_status.service_id = metrics_config.service_id;
-        blueprint_status.blueprint_id = metrics_config.blueprint_id;
+        let blueprint_status = BlueprintStatus {
+            service_id: metrics_config.service_id,
+            blueprint_id: metrics_config.blueprint_id,
+            ..BlueprintStatus::default()
+        };
 
         let provider = Self {
             system_metrics: Arc::new(RwLock::new(Vec::new())),
@@ -81,14 +86,17 @@ impl EnhancedMetricsProvider {
         Ok(provider)
     }
 
-    /// Start the metrics collection
+    /// Start the metrics collection process
+    ///
+    /// # Errors
+    /// Returns an error if the Prometheus server fails to start
     pub async fn start_collection(&self) -> Result<()> {
         // Start the Prometheus server
         let bind_address = self.config.bind_address.clone();
         let registry = self.prometheus_collector.registry().clone();
 
         let mut server = PrometheusServer::new(registry, bind_address);
-        server.start()?;
+        server.start().await?;
 
         let mut prometheus_server = self.prometheus_server.write().await;
         *prometheus_server = Some(server);

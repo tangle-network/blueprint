@@ -29,6 +29,7 @@ pub struct PrometheusCollector {
     status_code: IntGauge,
 
     // Configuration
+    #[allow(dead_code)]
     config: MetricsConfig,
 
     // Custom metrics storage
@@ -37,6 +38,9 @@ pub struct PrometheusCollector {
 
 impl PrometheusCollector {
     /// Create a new Prometheus metrics collector
+    ///
+    /// # Errors
+    /// Returns an error if any of the Prometheus metrics cannot be registered
     pub fn new(config: MetricsConfig) -> Result<Self, prometheus::Error> {
         let registry = Registry::new();
 
@@ -125,13 +129,17 @@ impl PrometheusCollector {
     /// Update system metrics
     pub fn update_system_metrics(&self, metrics: &SystemMetrics) {
         self.cpu_usage.set(f64::from(metrics.cpu_usage));
-        self.memory_usage.set(metrics.memory_usage as i64);
-        self.total_memory.set(metrics.total_memory as i64);
-        self.disk_usage.set(metrics.disk_usage as i64);
-        self.total_disk.set(metrics.total_disk as i64);
+        // Safely convert u64 to i64, capping at i64::MAX if needed
+        self.memory_usage
+            .set(metrics.memory_usage.try_into().unwrap_or(i64::MAX));
+        self.total_memory
+            .set(metrics.total_memory.try_into().unwrap_or(i64::MAX));
+        self.disk_usage
+            .set(metrics.disk_usage.try_into().unwrap_or(i64::MAX));
+        self.total_disk
+            .set(metrics.total_disk.try_into().unwrap_or(i64::MAX));
 
         // For counters, we need to increment by the difference
-        // This is a simplification - in a real system, you'd track the previous values
         self.network_rx_bytes.inc_by(metrics.network_rx_bytes);
         self.network_tx_bytes.inc_by(metrics.network_tx_bytes);
 
@@ -140,9 +148,11 @@ impl PrometheusCollector {
 
     /// Update blueprint status
     pub fn update_blueprint_status(&self, status: &BlueprintStatus) {
-        self.uptime.set(status.uptime as i64);
+        self.uptime
+            .set(status.uptime.try_into().unwrap_or(i64::MAX));
         if let Some(last_heartbeat) = status.last_heartbeat {
-            self.last_heartbeat.set(last_heartbeat as i64);
+            self.last_heartbeat
+                .set(last_heartbeat.try_into().unwrap_or(i64::MAX));
         }
         self.status_code.set(i64::from(status.status_code));
 

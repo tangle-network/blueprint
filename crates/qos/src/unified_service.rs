@@ -13,6 +13,7 @@ use crate::metrics::types::MetricsConfig;
 /// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality
 pub struct QoSService<C> {
     /// Heartbeat service
+    #[allow(dead_code)]
     heartbeat_service: Option<HeartbeatService<C>>,
 
     /// Metrics service
@@ -33,6 +34,9 @@ where
     C: HeartbeatConsumer + Send + Sync + 'static,
 {
     /// Create a new `QoS` service with heartbeat, metrics, and optional Loki/Grafana integration
+    ///
+    /// # Errors
+    /// Returns an error if the metrics service initialization fails
     pub fn new(config: QoSConfig, heartbeat_consumer: Arc<C>) -> Result<Self> {
         // Initialize heartbeat service if configured
         let heartbeat_service = config
@@ -72,6 +76,9 @@ where
     }
 
     /// Create a new `QoS` service with custom OpenTelemetry configuration
+    ///
+    /// # Errors
+    /// Returns an error if the metrics service initialization fails
     pub fn with_otel_config(
         config: QoSConfig,
         heartbeat_consumer: Arc<C>,
@@ -118,6 +125,9 @@ where
     }
 
     /// Create a Grafana dashboard for the service
+    ///
+    /// # Errors
+    /// Returns an error if the dashboard creation fails due to Grafana API issues
     pub async fn create_dashboard(
         &mut self,
         prometheus_datasource: &str,
@@ -252,6 +262,7 @@ where
     }
 
     /// Set the heartbeat consumer
+    #[must_use]
     pub fn with_heartbeat_consumer(mut self, consumer: Arc<C>) -> Self {
         self.heartbeat_consumer = Some(consumer);
         self
@@ -280,6 +291,9 @@ where
     }
 
     /// Build the `QoS` service
+    ///
+    /// # Errors
+    /// Returns an error if the heartbeat consumer is not provided or if the service initialization fails
     pub async fn build(self) -> Result<QoSService<C>> {
         let heartbeat_consumer = self.heartbeat_consumer.ok_or_else(|| {
             crate::error::Error::Other("Heartbeat consumer is required".to_string())

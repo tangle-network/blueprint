@@ -5,7 +5,6 @@ use blueprint_qos::{
     logging::{GrafanaConfig, LokiConfig},
     metrics::MetricsConfig,
 };
-use std::future::Future;
 use std::sync::Arc;
 
 // Mock HeartbeatConsumer for testing purposes
@@ -13,11 +12,8 @@ use std::sync::Arc;
 struct MockHeartbeatConsumer;
 
 impl HeartbeatConsumer for MockHeartbeatConsumer {
-    fn send_heartbeat(
-        &self,
-        _status: &HeartbeatStatus,
-    ) -> impl Future<Output = Result<(), QosError>> + Send {
-        async { Ok(()) }
+    async fn send_heartbeat(&self, _status: &HeartbeatStatus) -> Result<(), QosError> {
+        Ok(())
     }
 }
 

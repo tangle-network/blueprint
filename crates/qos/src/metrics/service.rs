@@ -13,11 +13,15 @@ pub struct MetricsService {
     provider: Arc<EnhancedMetricsProvider>,
 
     /// Configuration
+    #[allow(dead_code)]
     config: MetricsConfig,
 }
 
 impl MetricsService {
     /// Create a new metrics service
+    ///
+    /// # Errors
+    /// Returns an error if the metrics provider initialization fails
     pub fn new(config: MetricsConfig) -> Result<Self> {
         let otel_config = OpenTelemetryConfig::default();
         let provider = Arc::new(EnhancedMetricsProvider::new(config.clone(), otel_config)?);
@@ -26,6 +30,9 @@ impl MetricsService {
     }
 
     /// Create a new metrics service with custom OpenTelemetry configuration
+    ///
+    /// # Errors
+    /// Returns an error if the metrics provider initialization fails
     pub fn with_otel_config(
         config: MetricsConfig,
         otel_config: OpenTelemetryConfig,
@@ -52,7 +59,10 @@ impl MetricsService {
     }
 }
 
-/// Run the `QoS` metrics server
+/// Run a metrics server with the given configuration
+///
+/// # Errors
+/// Returns an error if the metrics provider initialization or server startup fails
 pub async fn run_metrics_server(config: MetricsConfig) -> Result<Arc<EnhancedMetricsProvider>> {
     let otel_config = OpenTelemetryConfig::default();
     let provider = Arc::new(EnhancedMetricsProvider::new(config, otel_config)?);

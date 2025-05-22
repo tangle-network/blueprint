@@ -56,7 +56,10 @@ pub struct OtelConfig {
     pub max_attributes_per_span: Option<u32>,
 }
 
-/// Initialize Loki logging
+/// Initialize Loki logging with the given configuration
+///
+/// # Errors
+/// Returns an error if the Loki layer initialization fails
 pub fn init_loki_logging(config: LokiConfig) -> Result<()> {
     // Parse the Loki URL
     let url = Url::parse(&config.url)
@@ -113,7 +116,10 @@ pub fn init_loki_logging(config: LokiConfig) -> Result<()> {
 }
 
 /// Initialize Loki logging with OpenTelemetry integration
-pub fn init_loki_with_opentelemetry(loki_config: LokiConfig, service_name: &str) -> Result<()> {
+///
+/// # Errors
+/// Returns an error if the Loki layer or OpenTelemetry initialization fails
+pub fn init_loki_with_opentelemetry(loki_config: &LokiConfig, service_name: &str) -> Result<()> {
     // Parse the Loki URL
     let url = Url::parse(&loki_config.url)
         .map_err(|e| Error::Other(format!("Failed to parse Loki URL: {}", e)))?;
@@ -147,7 +153,7 @@ pub fn init_loki_with_opentelemetry(loki_config: LokiConfig, service_name: &str)
     // Spawn the background task
     tokio::spawn(task);
 
-    init_otel_tracer(&loki_config, service_name)?;
+    init_otel_tracer(loki_config, service_name)?;
 
     let opentelemetry_layer = tracing_opentelemetry::layer();
     let subscriber = Registry::default()
@@ -171,7 +177,10 @@ pub fn init_loki_with_opentelemetry(loki_config: LokiConfig, service_name: &str)
     }
 }
 
-/// Initialize OpenTelemetry tracer
+/// Initialize OpenTelemetry tracer with Loki integration
+///
+/// # Errors
+/// Returns an error if the OpenTelemetry tracer initialization fails
 pub fn init_otel_tracer(loki_config: &LokiConfig, service_name: &str) -> Result<()> {
     use opentelemetry::KeyValue;
 

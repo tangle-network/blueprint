@@ -5,6 +5,17 @@ pub mod metrics;
 pub mod service;
 pub mod unified_service;
 
+// Allow clippy lints in generated code
+#[allow(
+    clippy::all,
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::missing_errors_doc,
+    clippy::wildcard_imports,
+    clippy::doc_markdown,
+    clippy::used_underscore_items,
+    clippy::default_trait_access
+)]
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/qos.rs"));
 }

@@ -34,13 +34,17 @@ pub struct OpenTelemetryExporter {
     /// Meter
     meter: opentelemetry::metrics::Meter,
     /// Configuration
+    #[allow(dead_code)]
     config: OpenTelemetryConfig,
 }
 
 impl OpenTelemetryExporter {
     /// Create a new OpenTelemetry exporter
+    ///
+    /// # Errors
+    /// Returns an error if the OpenTelemetry meter provider or tracer provider initialization fails
     pub fn new(
-        registry: Registry,
+        registry: &Registry,
         otel_config: OpenTelemetryConfig,
         _metrics_config: &MetricsConfig,
     ) -> Result<Self> {

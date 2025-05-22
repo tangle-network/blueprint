@@ -30,7 +30,10 @@ impl DefaultMetricsProvider {
         }
     }
 
-    /// Start collecting metrics
+    /// Start the metrics collection process
+    ///
+    /// # Errors
+    /// Returns an error if the Prometheus server fails to start
     pub fn start_collection(&self) -> crate::error::Result<()> {
         let system_metrics = self.system_metrics.clone();
         let blueprint_metrics = self.blueprint_metrics.clone();

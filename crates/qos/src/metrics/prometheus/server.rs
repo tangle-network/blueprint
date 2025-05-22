@@ -38,7 +38,14 @@ impl PrometheusServer {
     }
 
     /// Start the Prometheus metrics server
-    pub fn start(&mut self) -> Result<()> {
+    ///
+    /// # Errors
+    /// Returns an error if the bind address cannot be parsed or the server fails to start
+    ///
+    /// # Panics
+    /// Panics if the TCP listener cannot be bound to the address or if the server encounters an error
+    #[allow(clippy::unused_async)]
+    pub async fn start(&mut self) -> Result<()> {
         let addr: SocketAddr = self
             .bind_address
             .parse()
@@ -89,6 +96,8 @@ impl Drop for PrometheusServer {
 }
 
 /// Handler for /metrics endpoint
+///
+/// Returns the current metrics in Prometheus text format
 async fn metrics_handler(State(state): State<ServerState>) -> Response {
     let encoder = TextEncoder::new();
     let metric_families = state.registry.gather();
@@ -107,6 +116,8 @@ async fn metrics_handler(State(state): State<ServerState>) -> Response {
 }
 
 /// Handler for /health endpoint
+///
+/// Returns a simple OK response to indicate the server is running
 async fn health_handler() -> Response {
     (StatusCode::OK, "OK").into_response()
 }

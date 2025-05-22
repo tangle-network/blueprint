@@ -182,7 +182,10 @@ where
     }
 }
 
-/// Run the `QoS` metrics server
+/// Run a `QoS` server with the given metrics provider
+///
+/// # Errors
+/// Returns an error if the server fails to start or encounters an error during operation
 pub async fn run_qos_server<T>(bind_address: String, provider: Arc<T>) -> Result<()>
 where
     T: MetricsProvider,

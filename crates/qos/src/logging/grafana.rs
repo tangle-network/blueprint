@@ -279,6 +279,7 @@ struct DashboardCreateRequest {
 
 /// Dashboard creation response from Grafana API
 #[derive(Deserialize, Debug)]
+#[allow(dead_code)]
 struct DashboardCreateResponse {
     /// Dashboard ID
     id: u64,
@@ -308,7 +309,10 @@ impl GrafanaClient {
         Self { client, config }
     }
 
-    /// Create or update a dashboard
+    /// Create or update a Grafana dashboard
+    ///
+    /// # Errors
+    /// Returns an error if the Grafana API request fails or returns an error response
     pub async fn create_dashboard(
         &self,
         dashboard: Dashboard,
@@ -356,7 +360,10 @@ impl GrafanaClient {
         Ok(dashboard_response.url)
     }
 
-    /// Create a folder
+    /// Create a folder in Grafana
+    ///
+    /// # Errors
+    /// Returns an error if the Grafana API request fails or returns an error response
     pub async fn create_folder(&self, title: &str, uid: Option<&str>) -> Result<u64> {
         let url = format!("{}/api/folders", self.config.url);
 
@@ -402,7 +409,10 @@ impl GrafanaClient {
         Ok(folder_id)
     }
 
-    /// Create a default Blueprint dashboard
+    /// Create a blueprint dashboard in Grafana
+    ///
+    /// # Errors
+    /// Returns an error if the dashboard creation fails or if the Grafana API returns an error
     pub async fn create_blueprint_dashboard(
         &self,
         service_id: u64,
@@ -669,6 +679,5 @@ mod tests {
         };
 
         let _client = GrafanaClient::new(config.clone());
-        // Just test that the client can be created without panicking
     }
 }

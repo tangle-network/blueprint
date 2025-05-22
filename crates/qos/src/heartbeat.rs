@@ -82,16 +82,22 @@ where
     }
 
     /// Get the last heartbeat status
+    #[must_use]
     pub async fn last_heartbeat(&self) -> Option<HeartbeatStatus> {
         self.last_heartbeat.lock().await.clone()
     }
 
     /// Check if the service is running
+    #[must_use]
     pub async fn is_running(&self) -> bool {
         *self.running.lock().await
     }
 
     /// Send a heartbeat to the chain
+    ///
+    /// # Errors
+    /// Returns an error if the heartbeat cannot be sent to the consumer
+    #[allow(dead_code)]
     async fn send_heartbeat(&self) -> Result<()> {
         let status = HeartbeatStatus {
             block_number: 0,
