@@ -3355,7 +3355,6 @@ version = "0.3.0-alpha.13"
 dependencies = [
  "auto_impl",
  "axum 0.8.4",
- "blueprint-auth",
  "blueprint-clients",
  "blueprint-core",
  "blueprint-crypto",
