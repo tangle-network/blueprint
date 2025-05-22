@@ -1,7 +1,9 @@
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
-use tracing::info;
+use tokio::task::JoinHandle;
+use blueprint_core::{info, warn};
+use rand::Rng;
 
 use crate::error::Result;
 
@@ -57,7 +59,10 @@ pub trait HeartbeatConsumer: Send + Sync + 'static {
 }
 
 /// Service for sending heartbeats to the chain
-pub struct HeartbeatService<C> {
+pub struct HeartbeatService<C>
+where
+    C: HeartbeatConsumer,
+{
     config: HeartbeatConfig,
 
     consumer: Arc<C>,
@@ -65,6 +70,9 @@ pub struct HeartbeatService<C> {
     last_heartbeat: Arc<Mutex<Option<HeartbeatStatus>>>,
 
     running: Arc<Mutex<bool>>,
+
+    /// Handle to the background task that sends heartbeats
+    task_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl<C> HeartbeatService<C>
@@ -78,6 +86,7 @@ where
             consumer,
             last_heartbeat: Arc::new(Mutex::new(None)),
             running: Arc::new(Mutex::new(false)),
+            task_handle: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -97,7 +106,6 @@ where
     ///
     /// # Errors
     /// Returns an error if the heartbeat cannot be sent to the consumer
-    #[allow(dead_code)]
     async fn send_heartbeat(&self) -> Result<()> {
         let status = HeartbeatStatus {
             block_number: 0,
@@ -124,6 +132,78 @@ where
 
         Ok(())
     }
+
+    /// Start sending heartbeats at the configured interval
+    ///
+    /// # Errors
+    /// Returns an error if the service is already running
+    pub async fn start_heartbeat(&self) -> Result<()> {
+        let mut running = self.running.lock().await;
+        if *running {
+            return Err(crate::error::Error::Other(
+                "Heartbeat service is already running".to_string(),
+            ));
+        }
+
+        *running = true;
+        drop(running);
+
+        let service = self.clone();
+        let interval_secs = self.config.interval_secs;
+        let jitter_percent = self.config.jitter_percent;
+
+        let handle = tokio::spawn(async move {
+            loop {
+                if let Err(e) = service.send_heartbeat().await {
+                    warn!("Failed to send heartbeat: {}", e);
+                }
+                let jitter_factor = if jitter_percent > 0 {
+                    let jitter_range = (jitter_percent as f64) / 100.0;
+                    let mut rng = rand::thread_rng();
+                    1.0 + rng.gen_range(-jitter_range..jitter_range)
+                } else {
+                    1.0
+                };
+
+                let sleep_duration = Duration::from_secs(
+                    (interval_secs as f64 * jitter_factor) as u64,
+                );
+
+                tokio::time::sleep(sleep_duration).await;
+
+                if !*service.running.lock().await {
+                    break;
+                }
+            }
+        });
+
+        *self.task_handle.lock().await = Some(handle);
+
+        Ok(())
+    }
+
+    /// Stop sending heartbeats
+    ///
+    /// # Errors
+    /// Returns an error if the service is not running
+    pub async fn stop_heartbeat(&self) -> Result<()> {
+        let mut running = self.running.lock().await;
+        if !*running {
+            return Err(crate::error::Error::Other(
+                "Heartbeat service is not running".to_string(),
+            ));
+        }
+
+        *running = false;
+        drop(running);
+
+        let mut handle = self.task_handle.lock().await;
+        if let Some(h) = handle.take() {
+            h.abort();
+        }
+
+        Ok(())
+    }
 }
 
 impl<C> Clone for HeartbeatService<C>
@@ -136,6 +216,20 @@ where
             consumer: self.consumer.clone(),
             last_heartbeat: self.last_heartbeat.clone(),
             running: self.running.clone(),
+            task_handle: self.task_handle.clone(),
+        }
+    }
+}
+
+impl<C> Drop for HeartbeatService<C>
+where
+    C: HeartbeatConsumer,
+{
+    fn drop(&mut self) {
+        if let Ok(mut handle) = self.task_handle.try_lock() {
+            if let Some(h) = handle.take() {
+                h.abort();
+            }
         }
     }
 }

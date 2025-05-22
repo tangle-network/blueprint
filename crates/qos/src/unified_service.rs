@@ -11,7 +11,10 @@ use crate::metrics::service::MetricsService;
 use crate::metrics::types::MetricsConfig;
 
 /// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality
-pub struct QoSService<C> {
+pub struct QoSService<C>
+where
+    C: HeartbeatConsumer + Send + Sync + 'static,
+{
     /// Heartbeat service
     #[allow(dead_code)]
     heartbeat_service: Option<HeartbeatService<C>>,
@@ -37,7 +40,7 @@ where
     ///
     /// # Errors
     /// Returns an error if the metrics service initialization fails
-    pub fn new(config: QoSConfig, heartbeat_consumer: Arc<C>) -> Result<Self> {
+    pub async fn new(config: QoSConfig, heartbeat_consumer: Arc<C>) -> Result<Self> {
         // Initialize heartbeat service if configured
         let heartbeat_service = config
             .heartbeat
@@ -66,20 +69,31 @@ where
             .as_ref()
             .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())));
 
-        Ok(Self {
+        let mut service = Self {
             heartbeat_service,
             metrics_service,
             grafana_client,
             config,
             dashboard_url: None,
-        })
+        };
+
+        // Start the heartbeat service if configured
+        if let Some(heartbeat_service) = &service.heartbeat_service {
+            if let Err(e) = heartbeat_service.start_heartbeat().await {
+                error!("Failed to start heartbeat service: {}", e);
+            } else {
+                info!("Started heartbeat service");
+            }
+        }
+
+        Ok(service)
     }
 
     /// Create a new `QoS` service with custom OpenTelemetry configuration
     ///
     /// # Errors
     /// Returns an error if the metrics service initialization fails
-    pub fn with_otel_config(
+    pub async fn with_otel_config(
         config: QoSConfig,
         heartbeat_consumer: Arc<C>,
         otel_config: OpenTelemetryConfig,
@@ -115,13 +129,24 @@ where
             .as_ref()
             .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())));
 
-        Ok(Self {
+        let mut service = Self {
             heartbeat_service,
             metrics_service,
             grafana_client,
             config,
             dashboard_url: None,
-        })
+        };
+
+        // Start the heartbeat service if configured
+        if let Some(heartbeat_service) = &service.heartbeat_service {
+            if let Err(e) = heartbeat_service.start_heartbeat().await {
+                error!("Failed to start heartbeat service: {}", e);
+            } else {
+                info!("Started heartbeat service");
+            }
+        }
+
+        Ok(service)
     }
 
     /// Create a Grafana dashboard for the service
@@ -301,9 +326,9 @@ where
 
         // Create the QoS service
         let mut service = if let Some(otel_config) = self.otel_config {
-            QoSService::with_otel_config(self.config, heartbeat_consumer, otel_config)?
+            QoSService::with_otel_config(self.config, heartbeat_consumer, otel_config).await?
         } else {
-            QoSService::new(self.config, heartbeat_consumer)?
+            QoSService::new(self.config, heartbeat_consumer).await?
         };
 
         // Create a dashboard if requested
