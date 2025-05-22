@@ -117,7 +117,8 @@ impl PrometheusCollector {
     }
 
     /// Get the Prometheus registry
-    #[must_use] pub fn registry(&self) -> &Registry {
+    #[must_use]
+    pub fn registry(&self) -> &Registry {
         &self.registry
     }
 

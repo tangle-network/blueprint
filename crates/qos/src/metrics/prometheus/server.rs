@@ -28,7 +28,8 @@ pub struct PrometheusServer {
 
 impl PrometheusServer {
     /// Create a new Prometheus metrics server
-    #[must_use] pub fn new(registry: Registry, bind_address: String) -> Self {
+    #[must_use]
+    pub fn new(registry: Registry, bind_address: String) -> Self {
         Self {
             registry: Arc::new(registry),
             bind_address,
@@ -37,7 +38,7 @@ impl PrometheusServer {
     }
 
     /// Start the Prometheus metrics server
-    pub async fn start(&mut self) -> Result<()> {
+    pub fn start(&mut self) -> Result<()> {
         let addr: SocketAddr = self
             .bind_address
             .parse()

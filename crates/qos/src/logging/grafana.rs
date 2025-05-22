@@ -298,7 +298,8 @@ struct DashboardCreateResponse {
 
 impl GrafanaClient {
     /// Create a new Grafana client
-    #[must_use] pub fn new(config: GrafanaConfig) -> Self {
+    #[must_use]
+    pub fn new(config: GrafanaConfig) -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()

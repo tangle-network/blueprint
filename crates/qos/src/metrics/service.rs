@@ -36,7 +36,8 @@ impl MetricsService {
     }
 
     /// Get the metrics provider
-    #[must_use] pub fn provider(&self) -> Arc<EnhancedMetricsProvider> {
+    #[must_use]
+    pub fn provider(&self) -> Arc<EnhancedMetricsProvider> {
         self.provider.clone()
     }
 

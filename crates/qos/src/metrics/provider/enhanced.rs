@@ -88,7 +88,7 @@ impl EnhancedMetricsProvider {
         let registry = self.prometheus_collector.registry().clone();
 
         let mut server = PrometheusServer::new(registry, bind_address);
-        server.start().await?;
+        server.start()?;
 
         let mut prometheus_server = self.prometheus_server.write().await;
         *prometheus_server = Some(server);
@@ -215,12 +215,14 @@ impl EnhancedMetricsProvider {
     }
 
     /// Get the OpenTelemetry exporter
-    #[must_use] pub fn opentelemetry_exporter(&self) -> Arc<OpenTelemetryExporter> {
+    #[must_use]
+    pub fn opentelemetry_exporter(&self) -> Arc<OpenTelemetryExporter> {
         self.opentelemetry_exporter.clone()
     }
 
     /// Get the Prometheus collector
-    #[must_use] pub fn prometheus_collector(&self) -> Arc<PrometheusCollector> {
+    #[must_use]
+    pub fn prometheus_collector(&self) -> Arc<PrometheusCollector> {
         self.prometheus_collector.clone()
     }
 }

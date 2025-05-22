@@ -18,7 +18,8 @@ pub struct DefaultMetricsProvider {
 
 impl DefaultMetricsProvider {
     /// Create a new default metrics provider
-    #[must_use] pub fn new(config: MetricsConfig) -> Self {
+    #[must_use]
+    pub fn new(config: MetricsConfig) -> Self {
         Self {
             system_metrics: Arc::new(RwLock::new(Vec::new())),
             blueprint_metrics: Arc::new(RwLock::new(Vec::new())),
