@@ -1,4 +1,5 @@
 use crate::error::{Error, Result};
+use blueprint_auth::proxy::DEFAULT_AUTH_PROXY_PORT;
 use clap::Parser;
 use docktopus::bollard::system::Version;
 use docktopus::bollard::{API_DEFAULT_VERSION, Docker};
@@ -234,7 +235,7 @@ pub struct AuthProxyOpts {
     #[arg(long, default_value = "0.0.0.0")]
     pub auth_proxy_host: IpAddr,
     /// The port on which the auth proxy will listen
-    #[arg(long, default_value_t = 8276)]
+    #[arg(long, default_value_t = DEFAULT_AUTH_PROXY_PORT)]
     pub auth_proxy_port: u16,
 }
 
@@ -242,7 +243,7 @@ impl Default for AuthProxyOpts {
     fn default() -> Self {
         Self {
             auth_proxy_host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            auth_proxy_port: 8276, // T9 Mapping of TBPM (Tangle Blueprint Manager)
+            auth_proxy_port: DEFAULT_AUTH_PROXY_PORT,
         }
     }
 }
