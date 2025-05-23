@@ -399,6 +399,26 @@ where
     pub fn loki_server_url(&self) -> Option<String> {
         self.loki_server.as_ref().map(|server| server.url())
     }
+
+    /// Debug method to check if servers are initialized
+    pub fn debug_server_status(&self) {
+        info!(
+            "Debug server status - grafana_server present: {}",
+            self.grafana_server.is_some()
+        );
+        info!(
+            "Debug server status - loki_server present: {}",
+            self.loki_server.is_some()
+        );
+
+        if let Some(server) = &self.grafana_server {
+            info!("Grafana server URL: {}", server.url());
+        }
+
+        if let Some(server) = &self.loki_server {
+            info!("Loki server URL: {}", server.url());
+        }
+    }
 }
 
 impl<C> Drop for QoSService<C>
@@ -515,6 +535,74 @@ where
     }
 
     /// Enable dashboard creation with the specified Loki datasource UID
+    /// Set the Loki datasource UID
+    #[must_use]
+    pub fn with_loki_datasource(mut self, datasource_uid: &str) -> Self {
+        self.loki_datasource = Some(datasource_uid.to_string());
+        self
+    }
+
+    /// Set the Grafana server configuration
+    #[must_use]
+    pub fn with_grafana_server_config(mut self, config: GrafanaServerConfig) -> Self {
+        self.config.grafana_server = Some(config);
+        self
+    }
+
+    /// Set the Loki server configuration
+    #[must_use]
+    pub fn with_loki_server_config(mut self, config: LokiServerConfig) -> Self {
+        self.config.loki_server = Some(config);
+        self
+    }
+
+    /// Enable or disable server management
+    #[must_use]
+    pub fn manage_servers(mut self, manage: bool) -> Self {
+        self.config.manage_servers = manage;
+        self
+    }
+
+    /// Build the `QoS` service
+    ///
+    /// # Errors
+    /// Returns an error if the heartbeat consumer is not provided or if the service initialization fails
+    pub async fn build(self) -> Result<QoSService<C>> {
+        let heartbeat_consumer = self.heartbeat_consumer.ok_or_else(|| {
+            crate::error::Error::Other("Heartbeat consumer is required".to_string())
+        })?;
+
+        // Create the QoS service
+        let mut service = if let Some(otel_config) = self.otel_config {
+            QoSService::with_otel_config(self.config, heartbeat_consumer, otel_config).await?
+        } else {
+            QoSService::new(self.config, heartbeat_consumer).await?
+        };
+
+        // Create a dashboard if requested
+        if self.create_dashboard && service.grafana_client.is_some() {
+            let prometheus_ds = self
+                .prometheus_datasource
+                .unwrap_or_else(|| "prometheus".to_string());
+            let loki_ds = self.loki_datasource.unwrap_or_else(|| "loki".to_string());
+
+            if let Err(e) = service.create_dashboard(&prometheus_ds, &loki_ds).await {
+                error!("Failed to create dashboard: {}", e);
+            }
+        }
+
+        Ok(service)
+    }
+}
+
+impl<C> Default for QoSServiceBuilder<C>
+where
+    C: HeartbeatConsumer + Send + Sync + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
     /// Set the Loki datasource UID
     #[must_use]
     pub fn with_loki_datasource(mut self, datasource_uid: &str) -> Self {

@@ -3569,6 +3569,7 @@ dependencies = [
  "serde_json",
  "shiplift",
  "sysinfo",
+ "tempfile",
  "thiserror 2.0.12",
  "tokio",
  "tokio-retry",

@@ -45,6 +45,9 @@ uuid = { workspace = true, features = ["v4"] }
 shiplift = "0.7"
 tokio-retry = "0.3"
 
+[dev-dependencies]
+tempfile = "3.8"
+
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
 

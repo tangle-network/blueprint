@@ -4,10 +4,14 @@ mod tests {
         QoSServiceBuilder, default_qos_config,
         error::Error as QosError,
         heartbeat::{HeartbeatConsumer, HeartbeatStatus},
+        servers::grafana::GrafanaServerConfig,
+        servers::loki::LokiServerConfig,
     };
     use prometheus::core::Number;
+    use reqwest::Client;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
+    use tempfile::TempDir;
     use tokio::time::sleep;
 
     /// Mock `HeartbeatConsumer` for testing.
@@ -156,6 +160,143 @@ mod tests {
 
         // Allow time for the metrics to be collected
         sleep(Duration::from_secs(5)).await;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_grafana_loki_server_management() -> Result<(), QosError> {
+        // Create a mock heartbeat consumer
+        let heartbeat_consumer = Arc::new(MockHeartbeatConsumer::new());
+
+        // Create temporary directories for Grafana and Loki data
+        let grafana_temp_dir =
+            TempDir::new().expect("Failed to create temporary directory for Grafana");
+        let loki_temp_dir = TempDir::new().expect("Failed to create temporary directory for Loki");
+
+        // Create a custom QoS configuration
+        let mut qos_config = default_qos_config();
+
+        // Configure server ports (using different ports than the first test)
+        let grafana_port = BASE_PORT + 100;
+        let loki_port = BASE_PORT + 200;
+
+        // Configure Grafana server
+        let grafana_server_config = GrafanaServerConfig {
+            port: grafana_port,
+            admin_user: "admin".to_string(),
+            admin_password: "admin".to_string(),
+            allow_anonymous: true,
+            anonymous_role: "Viewer".to_string(),
+            data_dir: grafana_temp_dir.path().to_string_lossy().to_string(),
+            container_name: "test-grafana-server".to_string(),
+        };
+
+        // Configure Loki server
+        let loki_server_config = LokiServerConfig {
+            port: loki_port,
+            data_dir: loki_temp_dir.path().to_string_lossy().to_string(),
+            container_name: "test-loki-server".to_string(),
+        };
+
+        // Enable server management
+        qos_config.manage_servers = true;
+        qos_config.grafana_server = Some(grafana_server_config);
+        qos_config.loki_server = Some(loki_server_config);
+
+        // Print the configuration to debug
+        println!("Grafana server config: {:?}", qos_config.grafana_server);
+        println!("Loki server config: {:?}", qos_config.loki_server);
+        println!("manage_servers flag: {}", qos_config.manage_servers);
+
+        // Build the QoS service
+        println!("Building QoS service with server management enabled...");
+        let qos_service_result = QoSServiceBuilder::new()
+            .with_config(qos_config.clone())
+            .with_heartbeat_consumer(heartbeat_consumer.clone())
+            .manage_servers(true)
+            .build()
+            .await;
+
+        assert!(
+            qos_service_result.is_ok(),
+            "QoS service build failed: {:?}",
+            qos_service_result.err()
+        );
+
+        let mut qos_service = qos_service_result.unwrap();
+
+        // Check if server URLs are available through public methods
+        println!(
+            "DEBUG: Grafana server URL available: {}",
+            qos_service.grafana_server_url().is_some()
+        );
+        println!(
+            "DEBUG: Loki server URL available: {}",
+            qos_service.loki_server_url().is_some()
+        );
+
+        // Debug server status
+        println!("Debugging server status...");
+        qos_service.debug_server_status();
+
+        // Verify that the Grafana server URL is available
+        let grafana_url = qos_service.grafana_server_url();
+        assert!(
+            grafana_url.is_some(),
+            "Grafana server URL should be available"
+        );
+        println!("Grafana server URL: {}", grafana_url.as_ref().unwrap());
+
+        // Verify that the Loki server URL is available
+        let loki_url = qos_service.loki_server_url();
+        assert!(loki_url.is_some(), "Loki server URL should be available");
+        println!("Loki server URL: {}", loki_url.as_ref().unwrap());
+
+        // Wait for servers to be fully initialized
+        println!("Waiting for servers to be fully initialized...");
+        sleep(Duration::from_secs(5)).await;
+
+        // Verify that the Grafana server is accessible
+        let client = Client::new();
+        let grafana_health_url = format!("{}/api/health", grafana_url.as_ref().unwrap());
+        let grafana_response = client.get(&grafana_health_url).send().await;
+        assert!(
+            grafana_response.is_ok(),
+            "Failed to connect to Grafana server"
+        );
+        let grafana_status = grafana_response.unwrap().status();
+        assert!(
+            grafana_status.is_success(),
+            "Grafana server health check failed with status: {}",
+            grafana_status
+        );
+        println!("Grafana server health check passed");
+
+        // Verify that the Loki server is accessible
+        let loki_ready_url = format!("{}/ready", loki_url.as_ref().unwrap());
+        let loki_response = client.get(&loki_ready_url).send().await;
+        assert!(loki_response.is_ok(), "Failed to connect to Loki server");
+        let loki_status = loki_response.unwrap().status();
+        assert!(
+            loki_status.is_success(),
+            "Loki server ready check failed with status: {}",
+            loki_status
+        );
+        println!("Loki server ready check passed");
+
+        // Create a Grafana dashboard
+        let dashboard_result = qos_service.create_dashboard("prometheus", "loki").await;
+        assert!(
+            dashboard_result.is_ok(),
+            "Dashboard creation failed: {:?}",
+            dashboard_result.err()
+        );
+        println!("Dashboard creation result: {:?}", dashboard_result);
+
+        // The QoS service will be dropped at the end of the test, which should stop the servers
+        // We'll add a small delay to ensure proper cleanup
+        println!("Test completed, cleaning up servers...");
 
         Ok(())
     }
