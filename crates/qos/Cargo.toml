@@ -26,7 +26,6 @@ prost = { workspace = true, features = ["prost-derive"] }
 sysinfo = { workspace = true, features = ["system"] }
 rand = { workspace = true }
 chrono = { workspace = true }
-tracing = { workspace = true }
 prometheus = { workspace = true, features = ["process"] }
 opentelemetry = { workspace = true, features = ["metrics"] }
 opentelemetry-prometheus = { workspace = true }
@@ -44,9 +43,11 @@ reqwest = { workspace = true, features = ["json"] }
 uuid = { workspace = true, features = ["v4"] }
 shiplift = "0.7"
 tokio-retry = "0.3"
+base64.workspace = true
 
 [dev-dependencies]
-tempfile = "3.8"
+tempfile = { workspace = true }
+blueprint-testing-utils = { workspace = true }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }

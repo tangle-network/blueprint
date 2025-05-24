@@ -9,7 +9,7 @@ use prometheus::{Registry, TextEncoder};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::oneshot;
-use tracing::{error, info};
+use blueprint_core::{error, info};
 
 use crate::error::{Error, Result};
 

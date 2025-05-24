@@ -2,7 +2,7 @@ use opentelemetry::metrics::MeterProvider;
 use opentelemetry_sdk::metrics::SdkMeterProvider;
 use prometheus::Registry;
 use std::sync::Arc;
-use tracing::info;
+use blueprint_core::info;
 
 use crate::error::{Error, Result};
 use crate::metrics::types::MetricsConfig;

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tracing::info;
+use blueprint_core::info;
 
 use crate::error::Result;
 use crate::metrics::opentelemetry::OpenTelemetryConfig;

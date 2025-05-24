@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tracing::info;
+use blueprint_core::{info, error};
 
 use crate::metrics::types::{
     BlueprintMetrics, BlueprintStatus, MetricsConfig, MetricsProvider, SystemMetrics,
@@ -52,7 +52,7 @@ impl DefaultMetricsProvider {
                     let mut metrics = match system_metrics.write() {
                         Ok(lock) => lock,
                         Err(e) => {
-                            tracing::error!("Failed to acquire system_metrics write lock: {}", e);
+                            error!("Failed to acquire system_metrics write lock: {}", e);
                             continue;
                         }
                     };
@@ -66,7 +66,7 @@ impl DefaultMetricsProvider {
                     let custom = match custom_metrics.read() {
                         Ok(lock) => lock,
                         Err(e) => {
-                            tracing::error!("Failed to acquire custom_metrics read lock: {}", e);
+                            error!("Failed to acquire custom_metrics read lock: {}", e);
                             continue;
                         }
                     };
@@ -76,7 +76,7 @@ impl DefaultMetricsProvider {
                     let mut metrics = match blueprint_metrics.write() {
                         Ok(lock) => lock,
                         Err(e) => {
-                            tracing::error!(
+                            error!(
                                 "Failed to acquire blueprint_metrics write lock: {}",
                                 e
                             );
@@ -92,7 +92,7 @@ impl DefaultMetricsProvider {
                     let mut status = match blueprint_status.write() {
                         Ok(lock) => lock,
                         Err(e) => {
-                            tracing::error!("Failed to acquire blueprint_status write lock: {}", e);
+                            error!("Failed to acquire blueprint_status write lock: {}", e);
                             continue;
                         }
                     };
@@ -141,7 +141,7 @@ impl MetricsProvider for DefaultMetricsProvider {
         match self.system_metrics.read() {
             Ok(guard) => guard.last().cloned().unwrap_or_default(),
             Err(e) => {
-                tracing::error!("Failed to acquire system_metrics read lock: {}", e);
+                error!("Failed to acquire system_metrics read lock: {}", e);
                 SystemMetrics::default()
             }
         }
@@ -150,7 +150,7 @@ impl MetricsProvider for DefaultMetricsProvider {
         match self.blueprint_metrics.read() {
             Ok(guard) => guard.last().cloned().unwrap_or_default(),
             Err(e) => {
-                tracing::error!("Failed to acquire blueprint_metrics read lock: {}", e);
+                error!("Failed to acquire blueprint_metrics read lock: {}", e);
                 BlueprintMetrics::default()
             }
         }
@@ -159,7 +159,7 @@ impl MetricsProvider for DefaultMetricsProvider {
         match self.blueprint_status.read() {
             Ok(guard) => guard.clone(),
             Err(e) => {
-                tracing::error!("Failed to acquire blueprint_status read lock: {}", e);
+                error!("Failed to acquire blueprint_status read lock: {}", e);
                 BlueprintStatus::default()
             }
         }
@@ -168,7 +168,7 @@ impl MetricsProvider for DefaultMetricsProvider {
         match self.system_metrics.read() {
             Ok(guard) => guard.clone(),
             Err(e) => {
-                tracing::error!("Failed to acquire system_metrics read lock: {}", e);
+                error!("Failed to acquire system_metrics read lock: {}", e);
                 Vec::new()
             }
         }
@@ -177,7 +177,7 @@ impl MetricsProvider for DefaultMetricsProvider {
         match self.blueprint_metrics.read() {
             Ok(guard) => guard.clone(),
             Err(e) => {
-                tracing::error!("Failed to acquire blueprint_metrics read lock: {}", e);
+                error!("Failed to acquire blueprint_metrics read lock: {}", e);
                 Vec::new()
             }
         }
@@ -186,7 +186,7 @@ impl MetricsProvider for DefaultMetricsProvider {
         if let Ok(mut custom) = self.custom_metrics.write() {
             custom.insert(key, value);
         } else {
-            tracing::error!("Failed to acquire custom_metrics write lock");
+            error!("Failed to acquire custom_metrics write lock");
         }
     }
     fn set_blueprint_status(&self, status_code: u32, status_message: Option<String>) {
@@ -194,14 +194,14 @@ impl MetricsProvider for DefaultMetricsProvider {
             status.status_code = status_code;
             status.status_message = status_message;
         } else {
-            tracing::error!("Failed to acquire blueprint_status write lock");
+            error!("Failed to acquire blueprint_status write lock");
         }
     }
     fn update_last_heartbeat(&self, timestamp: u64) {
         if let Ok(mut status) = self.blueprint_status.write() {
             status.last_heartbeat = Some(timestamp);
         } else {
-            tracing::error!("Failed to acquire blueprint_status write lock");
+            error!("Failed to acquire blueprint_status write lock");
         }
     }
 }

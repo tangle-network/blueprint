@@ -22,7 +22,7 @@ pub mod proto {
 }
 
 pub use logging::{GrafanaClient, GrafanaConfig, LokiConfig};
-pub use servers::{grafana::GrafanaServerConfig, loki::LokiServerConfig};
+pub use servers::{grafana::GrafanaServerConfig, loki::LokiServerConfig, prometheus::PrometheusServerConfig};
 pub use unified_service::{QoSService, QoSServiceBuilder};
 
 /// Configuration for the `QoS` system
@@ -46,6 +46,9 @@ pub struct QoSConfig {
     /// Loki server configuration (if None, no server will be started)
     pub loki_server: Option<servers::loki::LokiServerConfig>,
 
+    /// Prometheus server configuration (if None, no server will be started)
+    pub prometheus_server: Option<servers::prometheus::PrometheusServerConfig>,
+
     /// Whether to manage servers automatically
     pub manage_servers: bool,
 }
@@ -60,6 +63,7 @@ pub fn default_qos_config() -> QoSConfig {
         grafana: Some(logging::GrafanaConfig::default()),
         grafana_server: Some(servers::grafana::GrafanaServerConfig::default()),
         loki_server: Some(servers::loki::LokiServerConfig::default()),
+        prometheus_server: Some(servers::prometheus::PrometheusServerConfig::default()),
         manage_servers: true,
     }
 }

@@ -11,6 +11,7 @@ extern crate alloc;
 
 pub mod config;
 pub mod error;
+pub mod metrics_server;
 
 #[cfg(feature = "eigenlayer")]
 pub mod eigenlayer;
@@ -277,6 +278,53 @@ where
         let adapter = HeartbeatServiceAdapter { service };
         self.background_services
             .push(DynBackgroundService::boxed(adapter));
+        self
+    }
+
+    /// Add a metrics server as a background service
+    ///
+    /// This method is a convenience wrapper around `background_service` specifically for
+    /// adding a metrics server from the `QoS` crate. The metrics server will serve
+    /// Prometheus metrics on the configured endpoint.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blueprint_runner::config::BlueprintEnvironment;
+    /// use blueprint_router::Router;
+    /// use blueprint_qos::servers::prometheus::PrometheusServerConfig;
+    /// use blueprint_qos::QoSServiceBuilder;
+    /// use std::sync::Arc;
+    ///
+    /// #[derive(Clone)]
+    /// struct MyContext;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), blueprint_runner::error::RunnerError> {
+    ///     let env = BlueprintEnvironment::load()?;
+    ///     let context = Arc::new(MyContext);
+    ///     let router = Router::new().with_context(context.clone());
+    ///
+    ///     let qos_service = QoSServiceBuilder::new()
+    ///         .with_prometheus_server_config(PrometheusServerConfig::default())
+    ///         .manage_servers(true)
+    ///         .build()
+    ///         .await?;
+    ///
+    ///     if let Some(prometheus_server) = qos_service.prometheus_server {
+    ///         blueprint_runner::BlueprintRunner::builder((), env)
+    ///             .router(router)
+    ///             .metrics_server(prometheus_server)
+    ///             .run()
+    ///             .await?;
+    ///     }
+    ///     # Ok(())
+    ///     # }
+    /// ```
+    pub fn metrics_server(mut self, server: Arc<blueprint_qos::servers::prometheus::PrometheusServer>) -> Self {
+        // Create a background service adapter for the metrics server
+        let adapter = self::metrics_server::MetricsServerAdapter::new(server);
+        self.background_services.push(DynBackgroundService::boxed(adapter));
         self
     }
 

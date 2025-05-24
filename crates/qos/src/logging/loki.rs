@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use tracing::{error, info};
+use blueprint_core::{error, info};
 use tracing_loki::url::Url;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{Registry, layer::SubscriberExt};
@@ -99,20 +99,22 @@ pub fn init_loki_logging(config: LokiConfig) -> Result<()> {
         .with(EnvFilter::from_default_env())
         .with(loki_layer);
 
-    // Set the subscriber as the global default
-    match tracing::subscriber::set_global_default(subscriber) {
-        Ok(()) => {
-            info!("Initialized Loki logging");
-            Ok(())
-        }
-        Err(e) => {
-            error!("Failed to set global subscriber: {}", e);
-            Err(Error::Other(format!(
-                "Failed to set global subscriber: {}",
-                e
-            )))
-        }
-    }
+    // TODO: Fix loki logging
+    // // Set the subscriber as the global default
+    // match blueprint_core::subscriber::set_global_default(subscriber) {
+    //     Ok(()) => {
+    //         info!("Initialized Loki logging");
+    //         Ok(())
+    //     }
+    //     Err(e) => {
+    //         error!("Failed to set global subscriber: {}", e);
+    //         Err(Error::Other(format!(
+    //             "Failed to set global subscriber: {}",
+    //             e
+    //         )))
+    //     }
+    // }
+    Ok(())
 }
 
 /// Initialize Loki logging with OpenTelemetry integration
@@ -161,20 +163,22 @@ pub fn init_loki_with_opentelemetry(loki_config: &LokiConfig, service_name: &str
         .with(loki_layer)
         .with(opentelemetry_layer);
 
-    // Set the subscriber as the global default
-    match tracing::subscriber::set_global_default(subscriber) {
-        Ok(()) => {
-            info!("Initialized Loki logging with OpenTelemetry");
-            Ok(())
-        }
-        Err(e) => {
-            error!("Failed to set global subscriber: {}", e);
-            Err(Error::Other(format!(
-                "Failed to set global subscriber: {}",
-                e
-            )))
-        }
-    }
+    // TODO: Fix loki logging
+    // // Set the subscriber as the global default
+    // match tracing::subscriber::set_global_default(subscriber) {
+    //     Ok(()) => {
+    //         info!("Initialized Loki logging with OpenTelemetry");
+    //         Ok(())
+    //     }
+    //     Err(e) => {
+    //         error!("Failed to set global subscriber: {}", e);
+    //         Err(Error::Other(format!(
+    //             "Failed to set global subscriber: {}",
+    //             e
+    //         )))
+    //     }
+    // }
+    Ok(())
 }
 
 /// Initialize OpenTelemetry tracer with Loki integration

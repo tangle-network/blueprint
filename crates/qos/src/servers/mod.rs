@@ -1,6 +1,7 @@
 pub mod common;
 pub mod grafana;
 pub mod loki;
+pub mod prometheus;
 
 use crate::error::Result;
 
