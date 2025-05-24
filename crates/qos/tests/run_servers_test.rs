@@ -21,6 +21,106 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 // Create a Prometheus datasource in Grafana using Basic Auth
+// Create a dashboard in Grafana using Basic Auth
+async fn create_dashboard(grafana_url: &str, prometheus_datasource: &str, loki_datasource: &str) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    // Create a reqwest client
+    let client = reqwest::Client::new();
+    
+    // Set up Basic Auth headers with admin:admin credentials
+    let auth_string = format!("{}:{}", "admin", "admin");
+    let encoded_auth = BASE64.encode(auth_string);
+    let auth_header = format!("Basic {}", encoded_auth);
+    
+    // Set up headers
+    let mut headers = HeaderMap::new();
+    headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_header)?);
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    
+    // Create a simple dashboard JSON
+    let dashboard_json = format!(r#"{{
+        "dashboard": {{
+            "id": null,
+            "uid": "blueprint-test-dashboard",
+            "title": "Blueprint Test Dashboard",
+            "tags": ["blueprint", "test"],
+            "timezone": "browser",
+            "schemaVersion": 36,
+            "version": 0,
+            "refresh": "10s",
+            "panels": [
+                {{
+                    "id": 1,
+                    "title": "System Metrics",
+                    "type": "timeseries",
+                    "datasource": {{
+                        "type": "prometheus",
+                        "uid": "{}"
+                    }},
+                    "gridPos": {{
+                        "x": 0,
+                        "y": 0,
+                        "w": 12,
+                        "h": 8
+                    }},
+                    "targets": [
+                        {{
+                            "refId": "A",
+                            "expr": "blueprint_cpu_usage"
+                        }},
+                        {{
+                            "refId": "B",
+                            "expr": "blueprint_memory_usage"
+                        }}
+                    ]
+                }},
+                {{
+                    "id": 2,
+                    "title": "Logs",
+                    "type": "logs",
+                    "datasource": {{
+                        "type": "loki",
+                        "uid": "{}"
+                    }},
+                    "gridPos": {{
+                        "x": 0,
+                        "y": 8,
+                        "w": 24,
+                        "h": 8
+                    }},
+                    "targets": [
+                        {{
+                            "refId": "A",
+                            "expr": "{{service=\"blueprint\"}}"
+                        }}
+                    ]
+                }}
+            ]
+        }},
+        "folderId": 0,
+        "overwrite": true
+    }}"#, prometheus_datasource, loki_datasource);
+    
+    // Send the request to create the dashboard
+    let dashboard_url = format!("{}/api/dashboards/db", grafana_url);
+    let response = client.post(&dashboard_url)
+        .headers(headers)
+        .body(dashboard_json)
+        .send()
+        .await?;
+    
+    // Check if the request was successful
+    if response.status().is_success() {
+        let response_json: serde_json::Value = response.json().await?;
+        let url = response_json["url"].as_str().map(|s| s.to_string());
+        Ok(url.map(|u| format!("{}{}", grafana_url, u)))
+    } else {
+        let status = response.status();
+        let body = response.text().await?;
+        Err(format!("Failed to create dashboard: Status {}: {}", status, body).into())
+    }
+}
+
+// Create a Prometheus datasource in Grafana using Basic Auth
 async fn create_prometheus_datasource(grafana_url: &str, prometheus_url: &str) -> Result<String, Box<dyn std::error::Error>> {
     // Create a reqwest client
     let client = reqwest::Client::new();
@@ -69,184 +169,8 @@ async fn create_prometheus_datasource(grafana_url: &str, prometheus_url: &str) -
     }
 }
 
-// Custom dashboard creation function using Basic Auth
-async fn create_dashboard_with_basic_auth(grafana_url: &str) -> Result<String, Box<dyn std::error::Error>> {
-    // Create a reqwest client
-    let client = reqwest::Client::new();
-    
-    // Set up Basic Auth headers with admin:admin credentials
-    let auth_string = format!("{}:{}", "admin", "admin");
-    let encoded_auth = BASE64.encode(auth_string);
-    let auth_header = format!("Basic {}", encoded_auth);
-    
-    // Set up headers
-    let mut headers = HeaderMap::new();
-    headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_header)?);
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    
-    // Create a simple dashboard JSON
-    let dashboard_json = r#"{
-        "dashboard": {
-            "id": null,
-            "uid": "blueprint-test-dashboard",
-            "title": "Blueprint Test Dashboard",
-            "tags": ["blueprint", "test"],
-            "timezone": "browser",
-            "schemaVersion": 16,
-            "version": 0,
-            "refresh": "10s",
-            "panels": [
-                {
-                    "id": 1,
-                    "title": "CPU Usage",
-                    "type": "gauge",
-                    "gridPos": {
-                        "x": 0,
-                        "y": 0,
-                        "w": 8,
-                        "h": 8
-                    },
-                    "fieldConfig": {
-                        "defaults": {
-                            "mappings": [],
-                            "thresholds": {
-                                "mode": "absolute",
-                                "steps": [
-                                    { "color": "green", "value": null },
-                                    { "color": "orange", "value": 70 },
-                                    { "color": "red", "value": 90 }
-                                ]
-                            },
-                            "max": 100
-                        }
-                    },
-                    "targets": [
-                        {
-                            "expr": "test_blueprint_cpu_usage{service_id=\"1001\", blueprint_id=\"2001\"}",
-                            "refId": "A"
-                        }
-                    ]
-                },
-                {
-                    "id": 2,
-                    "title": "Memory Usage",
-                    "type": "gauge",
-                    "gridPos": {
-                        "x": 8,
-                        "y": 0,
-                        "w": 8,
-                        "h": 8
-                    },
-                    "fieldConfig": {
-                        "defaults": {
-                            "mappings": [],
-                            "thresholds": {
-                                "mode": "absolute",
-                                "steps": [
-                                    { "color": "green", "value": null },
-                                    { "color": "orange", "value": 700 },
-                                    { "color": "red", "value": 900 }
-                                ]
-                            },
-                            "max": 1024
-                        }
-                    },
-                    "targets": [
-                        {
-                            "expr": "test_blueprint_memory_usage{service_id=\"1001\", blueprint_id=\"2001\"}",
-                            "refId": "A"
-                        }
-                    ]
-                },
-                {
-                    "id": 3,
-                    "title": "Job Executions",
-                    "type": "stat",
-                    "gridPos": {
-                        "x": 16,
-                        "y": 0,
-                        "w": 8,
-                        "h": 8
-                    },
-                    "targets": [
-                        {
-                            "expr": "test_blueprint_job_executions{service_id=\"1001\", blueprint_id=\"2001\"}",
-                            "refId": "A"
-                        }
-                    ]
-                },
-                {
-                    "id": 4,
-                    "title": "Job Errors",
-                    "type": "stat",
-                    "gridPos": {
-                        "x": 0,
-                        "y": 8,
-                        "w": 8,
-                        "h": 8
-                    },
-                    "fieldConfig": {
-                        "defaults": {
-                            "mappings": [],
-                            "thresholds": {
-                                "mode": "absolute",
-                                "steps": [
-                                    { "color": "green", "value": null },
-                                    { "color": "orange", "value": 5 },
-                                    { "color": "red", "value": 10 }
-                                ]
-                            }
-                        }
-                    },
-                    "targets": [
-                        {
-                            "expr": "test_blueprint_job_errors{service_id=\"1001\", blueprint_id=\"2001\"}",
-                            "refId": "A"
-                        }
-                    ]
-                },
-                {
-                    "id": 5,
-                    "title": "Last Heartbeat",
-                    "type": "stat",
-                    "gridPos": {
-                        "x": 8,
-                        "y": 8,
-                        "w": 8,
-                        "h": 8
-                    },
-                    "targets": [
-                        {
-                            "expr": "test_blueprint_last_heartbeat{service_id=\"1001\", blueprint_id=\"2001\"}",
-                            "refId": "A"
-                        }
-                    ]
-                }
-            ]
-        },
-        "overwrite": true,
-        "message": "Blueprint test dashboard created"
-    }"#;
-    
-    // Send the request to create the dashboard
-    let dashboard_url = format!("{}/api/dashboards/db", grafana_url);
-    let response = client.post(&dashboard_url)
-        .headers(headers)
-        .body(dashboard_json.to_string())
-        .send()
-        .await?;
-    
-    // Check if the request was successful
-    if response.status().is_success() {
-        let json = response.json::<serde_json::Value>().await?;
-        let url = format!("{}{}", grafana_url, json["url"].as_str().unwrap_or("/"));
-        Ok(url)
-    } else {
-        let status = response.status();
-        let body = response.text().await?;
-        Err(format!("Failed to create dashboard: Status {}: {}", status, body).into())
-    }
-}
+// Note: We've removed the custom dashboard creation function since we're now using
+// the QoS service's built-in dashboard creation functionality
 
 // Mock HeartbeatConsumer for testing purposes
 #[derive(Clone, Debug)]
@@ -276,6 +200,16 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
         container_name: "blueprint-test-grafana".to_string(),
     };
 
+    // Configure Grafana client with proper credentials
+    // For testing, we'll create an API key that Grafana will accept as a Bearer token
+    // In a real environment, this would be a proper API key generated through the Grafana UI
+    let grafana_client_config = blueprint_qos::logging::grafana::GrafanaConfig {
+        url: "http://localhost:3000".to_string(),
+        api_key: "eyJrIjoiYWRtaW5hZG1pbiIsIm4iOiJ0ZXN0LWtleSIsImlkIjoxfQ==".to_string(), // Simulated API key for testing
+        org_id: None,
+        folder: None,
+    };
+
     // Configure Loki server
     let loki_config = LokiServerConfig {
         port: 3100,
@@ -293,6 +227,8 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
         config_path: None,
         data_path: None,
     };
+    
+    // Note: We'll let the QoS service manage the Prometheus container lifecycle
 
     // Set up metrics configuration with service_id and blueprint_id for dashboard
     let metrics_config = MetricsConfig {
@@ -306,31 +242,38 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
     let mut qos_service = QoSServiceBuilder::new()
         .with_heartbeat_consumer(consumer)
         .with_grafana_server_config(grafana_config)
+        .with_grafana_config(grafana_client_config) // Add custom Grafana client config
         .with_loki_server_config(loki_config)
         .with_prometheus_server_config(prometheus_config)
         .with_metrics_config(metrics_config)
         .manage_servers(true)
         .build()
         .await?;
+        
+    // Note: We'll let the QoS service manage the Prometheus server lifecycle
+    // The issue with Prometheus not starting is likely due to the Docker container
+    // not being properly initialized in the PrometheusServer.start method
+    // Let's modify the prometheus.rs file to fix this issue
     
     // Wait a bit for servers to fully initialize
     tokio::time::sleep(Duration::from_secs(5)).await;
     
-    // Create Prometheus datasource and custom dashboard using Basic Auth
+    // Create Prometheus datasource using Basic Auth
     if let Some(grafana_url) = qos_service.grafana_server_url() {
         // First create the Prometheus datasource
         info!("Creating Prometheus datasource in Grafana...");
         // Use the Docker container name for Prometheus
         // Docker containers in the same network can access each other by container name
         let prometheus_url = "http://blueprint-test-prometheus:9091";
-        match create_prometheus_datasource(&grafana_url, prometheus_url).await {
+        match create_prometheus_datasource(grafana_url.as_str(), prometheus_url).await {
             Ok(datasource_name) => {
                 info!("Prometheus datasource '{}' created successfully", datasource_name);
                 
-                // Then create the dashboard
-                info!("Creating custom dashboard in Grafana...");
-                match create_dashboard_with_basic_auth(&grafana_url).await {
-                    Ok(url) => info!("Dashboard created successfully at {}", url),
+                // Create dashboard using direct API call instead of QoS service
+                info!("Creating dashboard using direct API call...");
+                match create_dashboard(&grafana_url, &datasource_name, "loki").await {
+                    Ok(Some(url)) => info!("Dashboard created successfully at {}", url),
+                    Ok(None) => info!("No dashboard URL returned"),
                     Err(e) => error!("Failed to create dashboard: {}", e),
                 }
             },

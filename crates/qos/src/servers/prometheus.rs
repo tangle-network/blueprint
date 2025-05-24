@@ -150,27 +150,42 @@ impl PrometheusServer {
 impl ServerManager for PrometheusServer {
     async fn start(&self) -> Result<()> {
         if self.config.use_docker {
+            // Check if container is already initialized
+            let container_id_opt = {
+                let id = self.container_id.lock().unwrap();
+                id.clone()
+            };
+            
+            match container_id_opt {
+                Some(container_id) => {
+                    // Container already created, just check if it's running
+                    let is_running = self.docker_manager.is_container_running(&container_id).await?;
+                    if !is_running {
+                        // If not running, we need to create it again
+                        // First try to create the container
+                        self.create_docker_container().await?;
+                    }
+                },
+                None => {
+                    // Container not initialized, create it
+                    self.create_docker_container().await?;
+                }
+            }
+            
+            // Get the container ID again after potentially creating it
             let container_id = {
                 let id = self.container_id.lock().unwrap();
                 match id.as_ref() {
                     Some(id) => id.clone(),
                     None => {
                         return Err(crate::error::Error::Other(
-                            "Docker container not initialized".to_string(),
+                            "Docker container still not initialized after creation attempt".to_string(),
                         ));
                     }
                 }
             };
             
-            // Container already created, just check if it's running
-            let is_running = self.docker_manager.is_container_running(&container_id).await?;
-            if !is_running {
-                // If not running, we need to create it again
-                return Err(crate::error::Error::Other(
-                    "Docker container not running and cannot be restarted automatically".to_string(),
-                ));
-            }
-            info!("Prometheus server is already running in Docker container: {}", self.config.docker_container_name);
+            info!("Prometheus server is running in Docker container: {}", self.config.docker_container_name);
         } else {
             // For embedded server, we need to initialize it if it doesn't exist
             if self.embedded_server.lock().unwrap().is_none() {
