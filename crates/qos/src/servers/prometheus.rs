@@ -175,23 +175,51 @@ impl ServerManager for PrometheusServer {
             // For embedded server, we need to initialize it if it doesn't exist
             if self.embedded_server.lock().unwrap().is_none() {
                 // Initialize the embedded server
-                self.create_embedded_server().await?
+                self.create_embedded_server().await?;
             }
             
             info!("Prometheus embedded server initialized on {}:{}", self.config.host, self.config.port);
             
-            // We need to create a temporary server just for starting
-            // This is not ideal but avoids the borrowing issues
-            let registry = prometheus::Registry::new();
-            let bind_address = format!("{}:{}", self.config.host, self.config.port);
-            let mut temp_server = PrometheusMetricsServer::new(registry, bind_address);
+            // Check if the embedded server exists
+            let server_exists = {
+                let guard = self.embedded_server.lock().unwrap();
+                guard.is_some()
+            };
             
-            // Start the temporary server
-            if let Err(e) = temp_server.start().await {
-                return Err(e);
+            if !server_exists {
+                return Err(crate::error::Error::Other(
+                    "Embedded server not initialized properly".to_string(),
+                ));
             }
             
-            info!("Started embedded Prometheus server on {}:{}", self.config.host, self.config.port);
+            // Start the server without holding the mutex guard across the await
+            {
+                // Get a clone of the server to avoid holding the mutex across an await point
+                let mut server = {
+                    let server_guard = self.embedded_server.lock().unwrap();
+                    if let Some(server) = &*server_guard {
+                        // Clone the server's fields to create a new instance
+                        let bind_address = format!("{}:{}", self.config.host, self.config.port);
+                        let registry = self.registry.lock().unwrap().clone().unwrap_or_else(prometheus::Registry::new);
+                        PrometheusMetricsServer::new(registry, bind_address)
+                    } else {
+                        return Err(crate::error::Error::Other(
+                            "Embedded server not initialized properly".to_string(),
+                        ));
+                    }
+                };
+                
+                // Start the server
+                if let Err(e) = server.start().await {
+                    return Err(e);
+                }
+                
+                // Store the started server back in the mutex
+                let mut server_guard = self.embedded_server.lock().unwrap();
+                *server_guard = Some(server);
+                
+                info!("Started embedded Prometheus server on {}:{}", self.config.host, self.config.port);
+            }
         }
         
         Ok(())

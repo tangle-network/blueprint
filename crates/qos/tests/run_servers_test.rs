@@ -3,6 +3,7 @@ use blueprint_qos::{
     servers::{
         grafana::GrafanaServerConfig,
         loki::LokiServerConfig,
+        prometheus::PrometheusServerConfig,
     },
     heartbeat::{HeartbeatConsumer, HeartbeatStatus},
     error::Error as QosError,
@@ -282,12 +283,11 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
         container_name: "blueprint-test-loki".to_string(),
     };
 
-    // Configure Prometheus server
-    // Note: We need to use the full path since it's not directly exported from servers
-    let prometheus_config = blueprint_qos::servers::prometheus::PrometheusServerConfig {
-        port: 9090,
+    // Configure Prometheus server (using Docker for full API support)
+    let prometheus_config = PrometheusServerConfig {
+        port: 9091, // Use a different port to avoid conflicts
         host: "0.0.0.0".to_string(),
-        use_docker: false, // Use embedded server instead of Docker to avoid container initialization issues
+        use_docker: true, // Use Docker for full Prometheus API support
         docker_image: "prom/prometheus:latest".to_string(),
         docker_container_name: "blueprint-test-prometheus".to_string(),
         config_path: None,
@@ -320,7 +320,9 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(grafana_url) = qos_service.grafana_server_url() {
         // First create the Prometheus datasource
         info!("Creating Prometheus datasource in Grafana...");
-        let prometheus_url = "http://localhost:9090";
+        // Use the Docker container name for Prometheus
+        // Docker containers in the same network can access each other by container name
+        let prometheus_url = "http://blueprint-test-prometheus:9091";
         match create_prometheus_datasource(&grafana_url, prometheus_url).await {
             Ok(datasource_name) => {
                 info!("Prometheus datasource '{}' created successfully", datasource_name);
@@ -352,8 +354,9 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
         info!("Loki server not initialized");
     }
 
-    if let Some(url) = qos_service.prometheus_server_url() {
-        info!("Prometheus: {}", url);
+    // For Docker-based Prometheus, use the container name
+    if let Some(_) = qos_service.prometheus_server_url() {
+        info!("Prometheus: http://blueprint-test-prometheus:9091");
     } else {
         info!("Prometheus server not initialized");
     }
