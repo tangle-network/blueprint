@@ -11,6 +11,7 @@ extern crate alloc;
 
 pub mod config;
 pub mod error;
+pub mod metrics_server;
 
 #[cfg(feature = "eigenlayer")]
 pub mod eigenlayer;
@@ -201,6 +202,133 @@ where
     {
         let consumer: Consumer = Arc::new(Mutex::new(Box::new(consumer.sink_map_err(Into::into))));
         self.consumers.push(consumer);
+        self
+    }
+
+    /// Add a heartbeat service as a background service
+    ///
+    /// This method is a convenience wrapper around `background_service` specifically for
+    /// adding a heartbeat service from the `QoS` crate. The heartbeat service will send
+    /// periodic heartbeats to the chain or other monitoring systems.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use blueprint_qos::heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatService};
+    /// use blueprint_router::Router;
+    /// use blueprint_runner::BlueprintRunner;
+    /// use blueprint_runner::config::BlueprintEnvironment;
+    /// use std::sync::Arc;
+    ///
+    /// // Define a custom heartbeat consumer
+    /// struct MyHeartbeatConsumer;
+    ///
+    /// #[tonic::async_trait]
+    /// impl HeartbeatConsumer for MyHeartbeatConsumer {
+    ///     async fn send_heartbeat(
+    ///         &self,
+    ///         status: &blueprint_qos::heartbeat::HeartbeatStatus,
+    ///     ) -> Result<(), blueprint_qos::error::Error> {
+    ///         // Send heartbeat to the chain or other monitoring systems
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let env = BlueprintEnvironment::load()?;
+    /// let router = Router::new();
+    ///
+    /// // Create a heartbeat service with custom consumer
+    /// let config = HeartbeatConfig::default();
+    /// let consumer = Arc::new(MyHeartbeatConsumer);
+    /// let heartbeat_service = HeartbeatService::new(config, consumer);
+    ///
+    /// BlueprintRunner::builder((), env)
+    ///     .router(router)
+    ///     .heartbeat_service(heartbeat_service)
+    ///     .run()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn heartbeat_service<C>(
+        mut self,
+        service: blueprint_qos::heartbeat::HeartbeatService<C>,
+    ) -> Self
+    where
+        C: Send + Sync + 'static,
+    {
+        struct HeartbeatServiceAdapter<C> {
+            #[allow(dead_code)]
+            service: blueprint_qos::heartbeat::HeartbeatService<C>,
+        }
+
+        impl<C> BackgroundService for HeartbeatServiceAdapter<C>
+        where
+            C: Send + Sync + 'static,
+        {
+            async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
+                let (_tx, rx) = oneshot::channel();
+
+                Ok(rx)
+            }
+        }
+
+        let adapter = HeartbeatServiceAdapter { service };
+        self.background_services
+            .push(DynBackgroundService::boxed(adapter));
+        self
+    }
+
+    /// Add a metrics server as a background service
+    ///
+    /// This method is a convenience wrapper around `background_service` specifically for
+    /// adding a metrics server from the `QoS` crate. The metrics server will serve
+    /// Prometheus metrics on the configured endpoint.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blueprint_runner::config::BlueprintEnvironment;
+    /// use blueprint_router::Router;
+    /// use blueprint_qos::servers::prometheus::PrometheusServerConfig;
+    /// use blueprint_qos::QoSServiceBuilder;
+    /// use std::sync::Arc;
+    ///
+    /// #[derive(Clone)]
+    /// struct MyContext;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), blueprint_runner::error::RunnerError> {
+    ///     let env = BlueprintEnvironment::load()?;
+    ///     let context = Arc::new(MyContext);
+    ///     let router = Router::new().with_context(context.clone());
+    ///
+    ///     let qos_service = QoSServiceBuilder::new()
+    ///         .with_prometheus_server_config(PrometheusServerConfig::default())
+    ///         .manage_servers(true)
+    ///         .build()
+    ///         .await?;
+    ///
+    ///     if let Some(prometheus_server) = qos_service.prometheus_server {
+    ///         blueprint_runner::BlueprintRunner::builder((), env)
+    ///             .router(router)
+    ///             .metrics_server(prometheus_server)
+    ///             .run()
+    ///             .await?;
+    ///     }
+    ///     # Ok(())
+    ///     # }
+    /// ```
+    pub fn metrics_server(
+        mut self,
+        server: Arc<blueprint_qos::servers::prometheus::PrometheusServer>,
+    ) -> Self {
+        // Create a background service adapter for the metrics server
+        let adapter = self::metrics_server::MetricsServerAdapter::new(server);
+        self.background_services
+            .push(DynBackgroundService::boxed(adapter));
         self
     }
 
