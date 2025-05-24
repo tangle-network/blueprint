@@ -1,8 +1,8 @@
+use blueprint_core::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio_retry::{Retry, strategy::ExponentialBackoff};
-use blueprint_core::{debug, error, info, warn};
 
 use crate::error::{Error, Result};
 use crate::logging::GrafanaConfig;
@@ -195,7 +195,11 @@ impl ServerManager for GrafanaServer {
         };
 
         // Wait for the container to be running (not necessarily healthy)
-        match self.docker.wait_for_container_health(&container_id, timeout_secs).await {
+        match self
+            .docker
+            .wait_for_container_health(&container_id, timeout_secs)
+            .await
+        {
             Ok(_) => {
                 info!("Grafana container is running");
             }
@@ -230,7 +234,10 @@ impl ServerManager for GrafanaServer {
                     Ok(())
                 }
                 Ok(response) => {
-                    warn!("Grafana API returned status: {}, will retry", response.status());
+                    warn!(
+                        "Grafana API returned status: {}, will retry",
+                        response.status()
+                    );
                     Err(())
                 }
                 Err(e) => {

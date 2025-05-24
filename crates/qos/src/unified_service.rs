@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use blueprint_core::{error, info};
+use std::sync::Arc;
 
 use crate::QoSConfig;
 use crate::error::Result;
@@ -42,7 +42,7 @@ where
 
     /// Loki server manager
     loki_server: Option<Arc<LokiServer>>,
-    
+
     /// Prometheus server manager
     prometheus_server: Option<Arc<PrometheusServer>>,
 }
@@ -119,7 +119,7 @@ where
                     info!("Loki server started successfully");
                 }
             }
-            
+
             if let Some(server) = &prometheus_server {
                 info!("Starting Prometheus server...");
                 if let Err(e) = server.start().await {
@@ -174,7 +174,10 @@ where
 
         // Initialize metrics service if configured
         let metrics_service = if let Some(metrics_config) = config.metrics.clone() {
-            Some(MetricsService::with_otel_config(metrics_config, otel_config)?)
+            Some(MetricsService::with_otel_config(
+                metrics_config,
+                otel_config,
+            )?)
         } else {
             None
         };
@@ -223,7 +226,7 @@ where
                     info!("Loki server started successfully");
                 }
             }
-            
+
             if let Some(server) = &prometheus_server {
                 info!("Starting Prometheus server...");
                 if let Err(e) = server.start().await {
@@ -274,9 +277,14 @@ where
             // Use the service_id and blueprint_id from the metrics config if available
             let service_id = self.config.metrics.as_ref().map_or(0, |m| m.service_id);
             let blueprint_id = self.config.metrics.as_ref().map_or(0, |m| m.blueprint_id);
-            
+
             let dashboard_url = client
-                .create_blueprint_dashboard(service_id, blueprint_id, prometheus_datasource, loki_datasource)
+                .create_blueprint_dashboard(
+                    service_id,
+                    blueprint_id,
+                    prometheus_datasource,
+                    loki_datasource,
+                )
                 .await?;
             self.dashboard_url = Some(dashboard_url.clone());
             Ok(Some(dashboard_url))
@@ -292,7 +300,9 @@ where
 
     /// Get the metrics provider if available
     pub fn metrics_provider(&self) -> Option<Arc<EnhancedMetricsProvider>> {
-        self.metrics_service.as_ref().map(|service| service.provider())
+        self.metrics_service
+            .as_ref()
+            .map(|service| service.provider())
     }
 
     /// Record job execution if metrics service is available
@@ -338,7 +348,7 @@ where
         info!("Grafana server: {}", self.grafana_server.is_some());
         info!("Loki server: {}", self.loki_server.is_some());
         info!("Prometheus server: {}", self.prometheus_server.is_some());
-        
+
         if let Some(server) = &self.grafana_server {
             info!("Grafana URL: {}", server.url());
         }
@@ -369,7 +379,7 @@ where
             info!("Stopping Loki server...");
             let _ = futures::executor::block_on(server.stop());
         }
-        
+
         if let Some(server) = &self.prometheus_server {
             info!("Stopping Prometheus server...");
             let _ = futures::executor::block_on(server.stop());
@@ -484,7 +494,7 @@ where
         self.config.loki_server = Some(config);
         self
     }
-    
+
     /// Set the Prometheus server configuration
     #[must_use]
     pub fn with_prometheus_server_config(mut self, config: PrometheusServerConfig) -> Self {

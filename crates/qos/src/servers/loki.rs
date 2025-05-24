@@ -1,8 +1,8 @@
+use blueprint_core::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio_retry::{Retry, strategy::ExponentialBackoff};
-use blueprint_core::{debug, error, info, warn};
 
 use crate::error::{Error, Result};
 use crate::logging::LokiConfig;
@@ -159,7 +159,11 @@ impl ServerManager for LokiServer {
         };
 
         // Wait for the container to be running (not necessarily healthy)
-        match self.docker.wait_for_container_health(&container_id, timeout_secs).await {
+        match self
+            .docker
+            .wait_for_container_health(&container_id, timeout_secs)
+            .await
+        {
             Ok(_) => {
                 info!("Loki container is running");
             }
@@ -174,7 +178,7 @@ impl ServerManager for LokiServer {
         // Increase timeout for API check to be more lenient
         let api_timeout_secs = timeout_secs.max(60); // At least 60 seconds
         let client = reqwest::Client::new();
-        
+
         // Try multiple Loki API endpoints that might indicate readiness
         let urls = [
             format!("{}/ready", self.url()),
@@ -189,7 +193,7 @@ impl ServerManager for LokiServer {
 
         // Try to connect to any of the API endpoints, but don't fail if we can't
         let mut success = false;
-        
+
         for url in &urls {
             debug!("Trying Loki API endpoint: {}", url);
             match Retry::spawn(retry_strategy.clone(), || async {
@@ -204,7 +208,11 @@ impl ServerManager for LokiServer {
                         Ok(())
                     }
                     Ok(response) => {
-                        debug!("Loki API endpoint {} returned status: {}, will retry", url, response.status());
+                        debug!(
+                            "Loki API endpoint {} returned status: {}, will retry",
+                            url,
+                            response.status()
+                        );
                         Err(())
                     }
                     Err(e) => {

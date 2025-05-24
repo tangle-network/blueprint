@@ -1,6 +1,6 @@
+use blueprint_core::{error, info};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use blueprint_core::{info, error};
 
 use crate::metrics::types::{
     BlueprintMetrics, BlueprintStatus, MetricsConfig, MetricsProvider, SystemMetrics,
@@ -76,10 +76,7 @@ impl DefaultMetricsProvider {
                     let mut metrics = match blueprint_metrics.write() {
                         Ok(lock) => lock,
                         Err(e) => {
-                            error!(
-                                "Failed to acquire blueprint_metrics write lock: {}",
-                                e
-                            );
+                            error!("Failed to acquire blueprint_metrics write lock: {}", e);
                             continue;
                         }
                     };

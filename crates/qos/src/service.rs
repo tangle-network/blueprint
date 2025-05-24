@@ -1,6 +1,6 @@
+use blueprint_core::info;
 use std::sync::Arc;
 use tonic::{Request, Response, Status, transport::Server};
-use blueprint_core::info;
 
 use crate::error::{Error, Result};
 use crate::metrics::MetricsProvider;

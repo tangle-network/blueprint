@@ -1,7 +1,7 @@
+use blueprint_core::{error, info};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use blueprint_core::{error, info};
 
 use crate::error::{Error, Result};
 

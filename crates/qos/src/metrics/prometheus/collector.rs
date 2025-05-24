@@ -1,7 +1,7 @@
+use blueprint_core::debug;
 use prometheus::{Gauge, HistogramVec, IntCounter, IntCounterVec, IntGauge, Registry};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use blueprint_core::debug;
 
 use crate::metrics::types::{BlueprintStatus, MetricsConfig, SystemMetrics};
 

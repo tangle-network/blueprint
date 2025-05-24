@@ -1,8 +1,8 @@
+use blueprint_core::{debug, info};
 use prometheus::Registry;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use blueprint_core::{debug, info};
 
 use crate::error::Result;
 use crate::metrics::opentelemetry::{OpenTelemetryConfig, OpenTelemetryExporter};

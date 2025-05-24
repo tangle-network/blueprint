@@ -5,11 +5,11 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
+use blueprint_core::{error, info};
 use prometheus::{Registry, TextEncoder};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::oneshot;
-use blueprint_core::{error, info};
 
 use crate::error::{Error, Result};
 

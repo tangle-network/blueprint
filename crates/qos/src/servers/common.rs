@@ -1,9 +1,9 @@
+use blueprint_core::{debug, error, info, warn};
 use futures::StreamExt;
 use shiplift::{ContainerOptions, Docker, PullOptions};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio_retry::{Retry, strategy::ExponentialBackoff};
-use blueprint_core::{debug, error, info, warn};
 
 use crate::error::{Error, Result};
 
@@ -38,10 +38,10 @@ impl DockerManager {
         info!("Attempting to pull image: {}", image);
         let images = self.docker.images();
         let options = PullOptions::builder().image(image).build();
-        
+
         // Try to pull the image but don't fail if it already exists
         let mut stream = images.pull(&options);
-        
+
         while let Some(pull_result) = stream.next().await {
             match pull_result {
                 Ok(output) => debug!("Pull progress: {:?}", output),
@@ -51,14 +51,14 @@ impl DockerManager {
                         info!("Image {} already exists", image);
                         return Ok(());
                     }
-                    
+
                     // For other errors, log but continue - we'll try to use the image anyway
                     error!("Error pulling image {}: {}", image, e);
                     // Don't return error here, try to continue with container creation
                 }
             }
         }
-        
+
         info!("Image pull operation completed for: {}", image);
         Ok(())
     }
@@ -77,12 +77,18 @@ impl DockerManager {
     ) -> Result<String> {
         // Try to ensure image exists, but continue even if there are issues
         if let Err(e) = self.ensure_image(image).await {
-            warn!("Issue ensuring image exists, but will try to continue: {}", e);
+            warn!(
+                "Issue ensuring image exists, but will try to continue: {}",
+                e
+            );
         }
 
         // Try to clean up any existing container with the same name
         let containers = self.docker.containers();
-        match containers.list(&shiplift::ContainerListOptions::default()).await {
+        match containers
+            .list(&shiplift::ContainerListOptions::default())
+            .await
+        {
             Ok(all_containers) => {
                 for container in all_containers {
                     if container.names.iter().any(|n| n == &format!("/{}", name)) {
@@ -90,17 +96,26 @@ impl DockerManager {
                         let container = containers.get(container.id);
                         // Try to stop and remove, but don't fail if we can't
                         if let Err(e) = container.stop(None).await {
-                            warn!("Failed to stop container {}: {}, will try to continue", name, e);
+                            warn!(
+                                "Failed to stop container {}: {}, will try to continue",
+                                name, e
+                            );
                         }
                         if let Err(e) = container.delete().await {
-                            warn!("Failed to delete container {}: {}, will try to continue", name, e);
+                            warn!(
+                                "Failed to delete container {}: {}, will try to continue",
+                                name, e
+                            );
                         }
                     }
                 }
-            },
+            }
             Err(e) => {
                 // If we can't list containers, log and continue
-                warn!("Failed to list Docker containers: {}, will try to continue", e);
+                warn!(
+                    "Failed to list Docker containers: {}, will try to continue",
+                    e
+                );
             }
         }
 
@@ -120,7 +135,7 @@ impl DockerManager {
                 Some(port_str) => port_str.parse::<u32>().unwrap_or(3000),
                 None => 3000,
             };
-            
+
             // Use the expose method with the correct parameters
             // expose(srcport, protocol, hostport)
             options.expose(
@@ -148,36 +163,41 @@ impl DockerManager {
             Ok(container) => container.id,
             Err(e) => {
                 // If container creation fails, try a simpler approach without volumes
-                error!("Failed to create container with volumes: {}, trying without volumes", e);
-                
+                error!(
+                    "Failed to create container with volumes: {}, trying without volumes",
+                    e
+                );
+
                 // Create new options without volumes
                 let mut simple_options = ContainerOptions::builder(image);
                 simple_options.name(name);
-                
+
                 // Add environment variables
                 for (key, value) in &env_vars {
                     simple_options.env(&[format!("{}={}", key, value)]);
                 }
-                
+
                 // Add port mappings
                 for (container_port, host_port) in &ports {
                     let container_port_num = match container_port.split('/').next() {
                         Some(port_str) => port_str.parse::<u32>().unwrap_or(3000),
                         None => 3000,
                     };
-                    
+
                     simple_options.expose(
                         container_port_num,
                         "tcp",
                         host_port.parse::<u32>().unwrap_or(3000),
                     );
                 }
-                
+
                 // Try to create the container with simplified options
                 containers
                     .create(&simple_options.build())
                     .await
-                    .map_err(|e| Error::Other(format!("Failed to create container {}: {}", name, e)))?
+                    .map_err(|e| {
+                        Error::Other(format!("Failed to create container {}: {}", name, e))
+                    })?
                     .id
             }
         };
@@ -185,12 +205,18 @@ impl DockerManager {
         let container = containers.get(&container_id);
         match container.start().await {
             Ok(_) => {
-                info!("Successfully started container: {} (ID: {})", name, container_id);
+                info!(
+                    "Successfully started container: {} (ID: {})",
+                    name, container_id
+                );
                 Ok(container_id)
-            },
+            }
             Err(e) => {
                 error!("Failed to start container {}: {}", name, e);
-                Err(Error::Other(format!("Failed to start container {}: {}", name, e)))
+                Err(Error::Other(format!(
+                    "Failed to start container {}: {}",
+                    name, e
+                )))
             }
         }
     }
@@ -265,7 +291,7 @@ impl DockerManager {
             let health = Some(details.state.status.clone());
 
             let running = details.state.running;
-        
+
             if running {
                 // If the container is running, consider it good enough
                 match health {
@@ -275,11 +301,17 @@ impl DockerManager {
                     }
                     Some(status) => {
                         // Accept any status as long as the container is running
-                        info!("Container {} is running with status: {}", container_id, status);
+                        info!(
+                            "Container {} is running with status: {}",
+                            container_id, status
+                        );
                         Ok(())
                     }
                     None => {
-                        info!("Container {} is running (no health status available)", container_id);
+                        info!(
+                            "Container {} is running (no health status available)",
+                            container_id
+                        );
                         Ok(())
                     }
                 }

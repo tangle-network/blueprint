@@ -321,10 +321,14 @@ where
     ///     # Ok(())
     ///     # }
     /// ```
-    pub fn metrics_server(mut self, server: Arc<blueprint_qos::servers::prometheus::PrometheusServer>) -> Self {
+    pub fn metrics_server(
+        mut self,
+        server: Arc<blueprint_qos::servers::prometheus::PrometheusServer>,
+    ) -> Self {
         // Create a background service adapter for the metrics server
         let adapter = self::metrics_server::MetricsServerAdapter::new(server);
-        self.background_services.push(DynBackgroundService::boxed(adapter));
+        self.background_services
+            .push(DynBackgroundService::boxed(adapter));
         self
     }
 

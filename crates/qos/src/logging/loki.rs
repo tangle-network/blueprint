@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use blueprint_core::{error, info};
+use std::collections::HashMap;
 use tracing_loki::url::Url;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{Registry, layer::SubscriberExt};
