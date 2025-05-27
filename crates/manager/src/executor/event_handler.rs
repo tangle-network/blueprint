@@ -88,6 +88,8 @@ impl VerifiedBlueprint {
                 let mut service = Service::new(
                     active_blueprints.len() as u32 + 3,
                     CHVmConfig,
+                    &blueprint_config.data_dir,
+                    &blueprint_config.keystore_uri,
                     &cache_dir,
                     &manager_config.runtime_dir,
                     &sub_service_str,

@@ -3366,6 +3366,7 @@ dependencies = [
  "hyperlocal",
  "itertools 0.14.0",
  "libp2p",
+ "nix 0.30.1",
  "parking_lot 0.12.3",
  "reqwest 0.12.19",
  "serde",
