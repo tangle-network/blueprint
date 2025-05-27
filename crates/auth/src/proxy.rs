@@ -21,7 +21,6 @@ use crate::types::{ServiceId, VerifyChallengeResponse};
 type HTTPClient = hyper_util::client::legacy::Client<HttpConnector, Body>;
 
 /// The default port for the authenticated proxy server
-///
 // T9 Mapping of TBPM (Tangle Blueprint Manager)
 pub const DEFAULT_AUTH_PROXY_PORT: u16 = 8276;
 
