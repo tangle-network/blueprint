@@ -1,0 +1,61 @@
+[package]
+name = "blueprint-qos"
+version = "0.1.0-alpha.1"
+description = "Quality of Service (QoS) module for Blueprint SDK"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+blueprint-core = { workspace = true, features = ["tracing"] }
+blueprint-crypto = { workspace = true }
+blueprint-keystore = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
+
+thiserror = { workspace = true }
+async-trait = "0.1"
+tokio = { workspace = true, features = ["rt", "sync", "time", "signal", "macros"] }
+tonic = { workspace = true, features = ["transport", "codegen", "prost"] }
+prost = { workspace = true, features = ["prost-derive"] }
+sysinfo = { workspace = true, features = ["system"] }
+rand = { workspace = true }
+chrono = { workspace = true }
+prometheus = { workspace = true, features = ["process"] }
+opentelemetry = { workspace = true, features = ["metrics"] }
+opentelemetry-prometheus = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+opentelemetry_sdk = { workspace = true, features = ["metrics", "rt-tokio", "trace"] }
+axum = { workspace = true, features = ["tokio", "http1", "http2"] }
+hyper = { workspace = true, features = ["http1", "server"] }
+futures = { workspace = true, features = ["executor"] }
+tracing-loki = { workspace = true, features = ["compat-0-2-1"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+tracing-opentelemetry = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+uuid = { workspace = true, features = ["v4"] }
+shiplift = "0.7"
+tokio-retry = "0.3"
+base64.workspace = true
+
+[dev-dependencies]
+tempfile = { workspace = true }
+blueprint-testing-utils = { workspace = true }
+
+[build-dependencies]
+tonic-build = { workspace = true, features = ["prost"] }
+
+[features]
+default = ["std"]
+std = [
+    "blueprint-core/std",
+    "blueprint-crypto/std",
+    "blueprint-keystore/std",
+]
