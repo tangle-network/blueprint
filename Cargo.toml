@@ -186,6 +186,7 @@ cid = { version = "0.11.1", default-features = false }
 serde = { version = "1.0.208", default-features = false }
 serde_bytes = { version = "0.11.15", default-features = false }
 serde_json = { version = "1.0", default-features = false }
+serde_yaml = { version = "0.9.33", default-features = false }
 serde_test = { version = "1.0.177", default-features = false }
 dynosaur = { version = "0.2.0", default-features = false }
 bytes = { version = "1.10.1", default-features = false }

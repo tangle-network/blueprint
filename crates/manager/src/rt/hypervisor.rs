@@ -41,6 +41,7 @@ pub(super) struct HypervisorInstance {
     sock_path: PathBuf,
     guest_logs_path: PathBuf,
     binary_image_path: PathBuf,
+    cloud_init_image_path: PathBuf,
     virtio: Virtio,
     handles: Handles,
     vm_conf: Option<CHVmConfig>,
@@ -67,6 +68,9 @@ impl HypervisorInstance {
         let binary_image_path = cache_dir
             .as_ref()
             .join(&format!("{}-bin.img", service_name));
+        let cloud_init_image_path = cache_dir
+            .as_ref()
+            .join(&format!("{}-cloud-init.img", service_name));
         let sock_path = runtime_dir.as_ref().join("ch-api.sock");
 
         let stdout = OpenOptions::new()
@@ -124,6 +128,7 @@ impl HypervisorInstance {
             sock_path,
             guest_logs_path,
             binary_image_path,
+            cloud_init_image_path,
             virtio: Virtio {
                 data_dir_socket: data_dir_virtio_socket,
                 data_dir: data_dir.as_ref().to_path_buf(),
@@ -139,7 +144,7 @@ impl HypervisorInstance {
         })
     }
 
-    async fn create_binary_image(
+    fn create_binary_image(
         &self,
         data_dir: impl AsRef<Path>,
         keystore: impl AsRef<Path>,
@@ -147,78 +152,78 @@ impl HypervisorInstance {
         env_vars: Vec<(String, String)>,
         arguments: Vec<String>,
     ) -> Result<()> {
-        // Leave 64 KiB for FAT overhead
-        const IMG_OVERHEAD: u64 = 64 * 1024;
-        // Make at *least* 1 MiB images
-        const MIN_IMG_SIZE: u64 = 1 * 1024 * 1024;
+        const LAUNCHER_SCRIPT_TEMPLATE: &str = r#"#!/bin/sh
+        set -e
 
-        let binary_meta = fs::metadata(&binary_path)?;
+        mkdir -p {{DATA_DIR}}
+        mount -t virtiofs {{DATA_DIR_VIRTIO}} {{DATA_DIR}}
 
-        let file_data_len = binary_meta.len() + IMG_OVERHEAD;
-        let img_len = file_data_len.next_power_of_two().max(MIN_IMG_SIZE);
+        mkdir -p {{KEYSTORE_DIR}}
+        mount -t virtiofs {{KEYSTORE_VIRTIO}} {{KEYSTORE_DIR}}
 
-        let mut img = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .read(true)
-            .write(true)
-            .open(&self.binary_image_path)?;
-        img.set_len(img_len)?;
+        {{ENV_VARS}}
 
-        fatfs::format_volume(
-            &mut img,
-            FormatVolumeOptions::new().volume_label(*b"SERVICEDISK"),
-        )?;
+        exec /srv/service {{SERVICE_ARGS}}
+        "#;
 
-        let fs = FileSystem::new(&mut img, FsOptions::new())?;
-        let root = fs.root_dir();
+        let mut env_vars_str = String::new();
+        for (key, val) in env_vars {
+            env_vars_str.push_str(&format!("export {key}=\"{val}\"\n"));
+        }
 
-        std::io::copy(
-            &mut File::open(&binary_path)?,
-            &mut root.create_file("service")?,
-        )?;
+        let args = arguments.join(" ");
 
-        let launcher_script_content =
-            Self::build_launcher_script(data_dir, keystore, env_vars, arguments);
+        let launcher_script = LAUNCHER_SCRIPT_TEMPLATE
+            .replace("{{DATA_DIR}}", &*data_dir.as_ref().to_string_lossy())
+            .replace("{{DATA_DIR_VIRTIO}}", DATA_DIR_VIRTIO)
+            .replace("{{KEYSTORE_DIR}}", &*keystore.as_ref().to_string_lossy())
+            .replace("{{KEYSTORE_VIRTIO}}", KEYSTORE_VIRTIO)
+            .replace("{{ENV_VARS}}", &env_vars_str)
+            .replace("{{SERVICE_ARGS}}", &args);
 
-        let mut l = root.create_file("launch")?;
-        l.write_all(launcher_script_content.as_bytes())?;
+        let binary_meta = fs::metadata(binary_path.as_ref())?;
+
+        new_fat_fs(FatFsConfig {
+            starting_length: binary_meta.len() as usize,
+            volume_label: *b"SERVICEDISK",
+            files: vec![
+                CopiedFile {
+                    target_name: String::from("service"),
+                    source: FileSource::Fs(binary_path.as_ref().to_path_buf()),
+                },
+                CopiedFile {
+                    target_name: String::from("launch"),
+                    source: FileSource::Raw(launcher_script.into_bytes()),
+                },
+            ],
+            image_path: Default::default(),
+        })?;
 
         Ok(())
     }
 
-    fn build_launcher_script(
-        data_dir: impl AsRef<Path>,
-        keystore: impl AsRef<Path>,
-        env_vars: Vec<(String, String)>,
-        arguments: Vec<String>,
-    ) -> String {
-        const LAUNCHER_SCRIPT_HEADER: &str = r"#!/bin/sh
-        set -e
-        ";
+    fn create_cloud_init_image(&self, manager_service_id: u32) -> Result<()> {
+        const CLOUD_INIT_USER_DATA: &str = include_str!("hypervisor/assets/user-data");
+        const CLOUD_INIT_META_DATA: &str = include_str!("hypervisor/assets/meta-data");
 
-        let mut launcher_script = LAUNCHER_SCRIPT_HEADER.to_string();
+        let meta = CLOUD_INIT_META_DATA
+            .replace("{{BLUEPRINT_INSTANCE_ID}}", &manager_service_id.to_string());
 
-        launcher_script.push_str(&format!("mkdir -p {}\n", data_dir.as_ref().display()));
-        launcher_script.push_str(&format!(
-            "mount -t virtiofs {DATA_DIR_VIRTIO} {}\n",
-            data_dir.as_ref().display()
-        ));
-
-        launcher_script.push_str(&format!("mkdir -p {}\n", keystore.as_ref().display()));
-        launcher_script.push_str(&format!(
-            "mount -t virtiofs {KEYSTORE_VIRTIO} {}\n",
-            keystore.as_ref().display()
-        ));
-
-        for (key, val) in env_vars {
-            launcher_script.push_str(&format!("export {key}=\"{val}\"\n"));
-        }
-
-        let args = arguments.join(" ");
-        launcher_script = format!("{launcher_script}exec /srv/service {args}");
-
-        launcher_script
+        new_fat_fs(FatFsConfig {
+            starting_length: CLOUD_INIT_USER_DATA.len() + CLOUD_INIT_META_DATA.len(),
+            volume_label: *b"CIDATA     ",
+            files: vec![
+                CopiedFile {
+                    target_name: String::from("user-data"),
+                    source: FileSource::Raw(CLOUD_INIT_USER_DATA.as_bytes().to_vec()),
+                },
+                CopiedFile {
+                    target_name: String::from("meta-data"),
+                    source: FileSource::Raw(meta.into_bytes()),
+                },
+            ],
+            image_path: self.cloud_init_image_path.clone(),
+        })
     }
 
     pub async fn prepare(
@@ -241,16 +246,20 @@ impl HypervisorInstance {
             env_vars,
             arguments,
         )
-        .await
         .map_err(|e| {
-            error!("Error creating binary image: {}", e);
+            error!("Error creating binary image: {e}");
             e
         })?;
+
+        self.create_cloud_init_image(manager_service_id)
+            .map_err(|e| {
+                error!("Error creating cloud-init image: {e}");
+                e
+            })?;
 
         let (serial, console, cmdline_console_target) = self.logging_configs();
 
         let vm_conf = VmConfig {
-            cpus: None,
             memory: Some(MemoryConfig {
                 size: 1073741824,
                 shared: Some(true),
@@ -269,7 +278,6 @@ impl HypervisorInstance {
                 )),
                 ..Default::default()
             },
-            rate_limit_groups: None,
             disks: Some(vec![
                 DiskConfig {
                     // TODO
@@ -279,9 +287,8 @@ impl HypervisorInstance {
                     ..DiskConfig::default()
                 },
                 DiskConfig {
-                    // TODO
-                    path: Some(String::from("/home/alex/Downloads/cloud-init.img")),
-                    readonly: Some(false),
+                    path: Some(self.cloud_init_image_path.to_string_lossy().to_string()),
+                    readonly: Some(true),
                     direct: Some(true),
                     ..DiskConfig::default()
                 },
@@ -292,9 +299,6 @@ impl HypervisorInstance {
                     ..DiskConfig::default()
                 },
             ]),
-            net: None,
-            rng: None,
-            balloon: None,
             fs: Some(vec![
                 FsConfig {
                     tag: String::from(DATA_DIR_VIRTIO),
@@ -307,27 +311,14 @@ impl HypervisorInstance {
                     ..Default::default()
                 },
             ]),
-            pmem: None,
             serial: Some(serial),
             console: Some(console),
-            debug_console: None,
-            devices: None,
-            vdpa: None,
             vsock: Some(VsockConfig {
                 cid: manager_service_id as i64,
                 socket: bridge_socket_path.as_ref().to_string_lossy().into(),
                 ..Default::default()
             }),
-            sgx_epc: None,
-            numa: None,
-            iommu: None,
-            watchdog: None,
-            pvpanic: None,
-            pci_segments: None,
-            platform: None,
-            tpm: None,
-            landlock_enable: None,
-            landlock_rules: None,
+            ..Default::default()
         };
 
         let client = self.client().await?;
@@ -451,4 +442,64 @@ impl HypervisorInstance {
 
         Ok(())
     }
+}
+
+struct CopiedFile {
+    target_name: String,
+    source: FileSource,
+}
+
+enum FileSource {
+    Fs(PathBuf),
+    Raw(Vec<u8>),
+}
+
+struct FatFsConfig {
+    starting_length: usize,
+    volume_label: [u8; 11],
+    files: Vec<CopiedFile>,
+    image_path: PathBuf,
+}
+
+fn new_fat_fs(config: FatFsConfig) -> Result<()> {
+    // Leave 64 KiB for FAT overhead
+    const IMG_OVERHEAD: u64 = 64 * 1024;
+    // Make at *least* 1 MiB images
+    const MIN_IMG_SIZE: u64 = 1 * 1024 * 1024;
+
+    let file_data_len = (config.starting_length as u64) + IMG_OVERHEAD;
+    let img_len = file_data_len.next_power_of_two().max(MIN_IMG_SIZE);
+
+    let mut img = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .read(true)
+        .write(true)
+        .open(config.image_path)?;
+    img.set_len(img_len)?;
+
+    fatfs::format_volume(
+        &mut img,
+        FormatVolumeOptions::new().volume_label(config.volume_label),
+    )?;
+
+    let fs = FileSystem::new(&mut img, FsOptions::new())?;
+    let root = fs.root_dir();
+
+    for file in config.files {
+        match file.source {
+            FileSource::Fs(path_on_host) => {
+                std::io::copy(
+                    &mut File::open(path_on_host)?,
+                    &mut root.create_file(&file.target_name)?,
+                )?;
+            }
+            FileSource::Raw(raw_file_content) => {
+                let mut f = root.create_file(&file.target_name)?;
+                f.write_all(&raw_file_content)?;
+            }
+        }
+    }
+
+    Ok(())
 }
