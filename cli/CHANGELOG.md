@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.16](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.15...cargo-tangle-v0.4.0-alpha.16) - 2025-05-27
+
+### Added
+
+- *(cargo-tangle)* blueprint create without interaction (#996)
+- add support for request params (#984)
+
+### Fixed
+
+- *(cargo-tangle)* missing template defaults (#999)
+
 ## [0.4.0-alpha.15](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.14...cargo-tangle-v0.4.0-alpha.15) - 2025-05-14
 
 ### Other

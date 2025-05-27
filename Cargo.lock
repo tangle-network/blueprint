@@ -2752,7 +2752,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-auth"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "axum 0.8.4",
  "base64 0.22.1",
@@ -3326,7 +3326,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-macros"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "blueprint-sdk",
  "proc-macro2",
@@ -3341,7 +3341,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager"
-version = "0.3.0-alpha.13"
+version = "0.3.0-alpha.14"
 dependencies = [
  "auto_impl",
  "axum 0.8.4",
@@ -3484,7 +3484,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-pricing-engine"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3602,7 +3602,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-sdk"
-version = "0.1.0-alpha.12"
+version = "0.1.0-alpha.13"
 dependencies = [
  "alloy",
  "alloy-json-abi",
@@ -3694,7 +3694,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-tangle-testing-utils"
-version = "0.1.0-alpha.12"
+version = "0.1.0-alpha.13"
 dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer-local",
@@ -3721,7 +3721,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-testing-utils"
-version = "0.1.0-alpha.12"
+version = "0.1.0-alpha.13"
 dependencies = [
  "blueprint-anvil-testing-utils",
  "blueprint-core-testing-utils",
@@ -4250,7 +4250,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-tangle"
-version = "0.4.0-alpha.15"
+version = "0.4.0-alpha.16"
 dependencies = [
  "alloy-contract",
  "alloy-dyn-abi",
