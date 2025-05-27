@@ -32,6 +32,7 @@ docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace", "issue-url"] }
 serde = { workspace = true }
+serde_yaml.workspace = true
 tangle-subxt = { workspace = true }
 toml = { workspace = true }
 hex = { workspace = true }
