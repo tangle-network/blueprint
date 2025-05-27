@@ -1,4 +1,5 @@
 use axum::http::uri;
+use base64::Engine;
 use prost::Message;
 
 use crate::{
@@ -84,7 +85,7 @@ impl ApiTokenModel {
         let mut output = [0u8; 32];
         hasher.finalize(&mut output);
 
-        let token_hash = base64::Engine::encode(&CUSTOM_ENGINE, output);
+        let token_hash = CUSTOM_ENGINE.encode(output);
 
         self.token == token_hash
     }
