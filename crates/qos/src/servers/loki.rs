@@ -1,4 +1,4 @@
-use blueprint_core::{debug, error, info, warn};
+use blueprint_core::{debug, info, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -164,7 +164,7 @@ impl ServerManager for LokiServer {
             .wait_for_container_health(&container_id, timeout_secs)
             .await
         {
-            Ok(_) => {
+            Ok(()) => {
                 info!("Loki container is running");
             }
             Err(e) => {
@@ -223,12 +223,12 @@ impl ServerManager for LokiServer {
             })
             .await
             {
-                Ok(_) => {
+                Ok(()) => {
                     info!("Successfully connected to Loki API endpoint: {}", url);
                     success = true;
                     break;
                 }
-                Err(_) => {
+                Err(()) => {
                     debug!("Could not connect to Loki API endpoint: {}", url);
                     // Continue trying other endpoints
                 }

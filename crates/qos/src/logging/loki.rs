@@ -1,4 +1,4 @@
-use blueprint_core::{error, info};
+use blueprint_core::error;
 use std::collections::HashMap;
 use tracing_loki::url::Url;
 use tracing_subscriber::EnvFilter;
@@ -95,7 +95,7 @@ pub fn init_loki_logging(config: LokiConfig) -> Result<()> {
     tokio::spawn(task);
 
     // Create a subscriber with the Loki layer
-    let subscriber = Registry::default()
+    let _subscriber = Registry::default()
         .with(EnvFilter::from_default_env())
         .with(loki_layer);
 
@@ -158,7 +158,7 @@ pub fn init_loki_with_opentelemetry(loki_config: &LokiConfig, service_name: &str
     init_otel_tracer(loki_config, service_name)?;
 
     let opentelemetry_layer = tracing_opentelemetry::layer();
-    let subscriber = Registry::default()
+    let _subscriber = Registry::default()
         .with(EnvFilter::from_default_env())
         .with(loki_layer)
         .with(opentelemetry_layer);

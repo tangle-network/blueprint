@@ -145,16 +145,16 @@ impl DockerManager {
             );
         }
 
-        // Add volume mappings only if they're not empty
-        if !volumes.is_empty() {
+        // Add volume mappings if available
+        if volumes.is_empty() {
+            info!("No volume mappings provided");
+        } else {
             info!("Adding volume mappings: {:?}", volumes);
             for (container_path, host_path) in &volumes {
                 // Format as "host_path:container_path" for volume mapping
                 let volume_mapping = format!("{}:{}", host_path, container_path);
                 options.volumes(vec![&volume_mapping]);
             }
-        } else {
-            info!("No volume mappings provided");
         }
 
         // Create and start the container
@@ -204,7 +204,7 @@ impl DockerManager {
 
         let container = containers.get(&container_id);
         match container.start().await {
-            Ok(_) => {
+            Ok(()) => {
                 info!(
                     "Successfully started container: {} (ID: {})",
                     name, container_id

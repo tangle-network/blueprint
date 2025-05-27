@@ -294,15 +294,17 @@ where
     }
 
     /// Get the dashboard URL if available
+    #[must_use]
     pub fn dashboard_url(&self) -> Option<&str> {
         self.dashboard_url.as_deref()
     }
 
     /// Get the metrics provider if available
+    #[must_use]
     pub fn metrics_provider(&self) -> Option<Arc<EnhancedMetricsProvider>> {
         self.metrics_service
             .as_ref()
-            .map(|service| service.provider())
+            .map(super::metrics::service::MetricsService::provider)
     }
 
     /// Record job execution if metrics service is available
@@ -320,21 +322,25 @@ where
     }
 
     /// Get the Grafana server URL if available
+    #[must_use]
     pub fn grafana_server_url(&self) -> Option<String> {
         self.grafana_server.as_ref().map(|server| server.url())
     }
 
     /// Get the Loki server URL if available
+    #[must_use]
     pub fn loki_server_url(&self) -> Option<String> {
         self.loki_server.as_ref().map(|server| server.url())
     }
 
     /// Get the Prometheus server URL if available
+    #[must_use]
     pub fn prometheus_server_url(&self) -> Option<String> {
         self.prometheus_server.as_ref().map(|server| server.url())
     }
 
     /// Get the Prometheus registry if available
+    #[must_use]
     pub fn prometheus_registry(&self) -> Option<Arc<prometheus::Registry>> {
         self.metrics_provider().map(|provider| {
             let collector = provider.prometheus_collector();
@@ -405,6 +411,7 @@ where
     C: HeartbeatConsumer + Send + Sync + 'static,
 {
     /// Create a new `QoS` service builder
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: QoSConfig::default(),

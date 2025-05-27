@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use blueprint_core::{error, info};
 use blueprint_qos::{
     QoSServiceBuilder,
@@ -29,9 +28,9 @@ async fn test_all_servers() -> Result<(), Box<dyn std::error::Error>> {
 
     // Configure Prometheus server to use Docker mode for full API support
     let prometheus_config = PrometheusServerConfig {
-        port: 9091, // Use a different port to avoid conflicts
+        port: 9091,
         host: "0.0.0.0".to_string(),
-        use_docker: true, // Use Docker for full Prometheus API support
+        use_docker: true,
         docker_image: "prom/prometheus:latest".to_string(),
         docker_container_name: "blueprint-test-prometheus".to_string(),
         config_path: None,
@@ -45,28 +44,28 @@ async fn test_all_servers() -> Result<(), Box<dyn std::error::Error>> {
         admin_password: "admin".to_string(),
         allow_anonymous: true,
         anonymous_role: "Admin".to_string(),
-        data_dir: "/var/lib/grafana".to_string(), // This won't be used as we won't mount volumes
+        data_dir: "/var/lib/grafana".to_string(),
         container_name: "blueprint-test-grafana".to_string(),
     };
 
     // Configure Loki server without volume mounts
     let loki_config = LokiServerConfig {
         port: 3100,
-        data_dir: "/var/lib/loki".to_string(), // This won't be used as we won't mount volumes
+        data_dir: "/var/lib/loki".to_string(),
         container_name: "blueprint-test-loki".to_string(),
     };
 
     // Configure metrics
     let metrics_config = MetricsConfig::default();
 
-    // Create a mock heartbeat consumer (required by QoSService)
     struct MockHeartbeatConsumer;
 
-    #[async_trait::async_trait]
     impl HeartbeatConsumer for MockHeartbeatConsumer {
-        async fn send_heartbeat(&self, _status: &HeartbeatStatus) -> QoSResult<()> {
-            // Do nothing in the test
-            Ok(())
+        fn send_heartbeat(
+            &self,
+            _status: &HeartbeatStatus,
+        ) -> impl std::future::Future<Output = QoSResult<()>> {
+            async move { Ok(()) }
         }
     }
 

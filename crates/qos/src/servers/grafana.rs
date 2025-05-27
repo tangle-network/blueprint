@@ -1,4 +1,4 @@
-use blueprint_core::{debug, error, info, warn};
+use blueprint_core::{debug, info, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -200,7 +200,7 @@ impl ServerManager for GrafanaServer {
             .wait_for_container_health(&container_id, timeout_secs)
             .await
         {
-            Ok(_) => {
+            Ok(()) => {
                 info!("Grafana container is running");
             }
             Err(e) => {
@@ -248,11 +248,11 @@ impl ServerManager for GrafanaServer {
         })
         .await
         {
-            Ok(_) => {
+            Ok(()) => {
                 info!("Successfully connected to Grafana API");
                 Ok(())
             }
-            Err(_) => {
+            Err(()) => {
                 // Don't fail the startup if API isn't responsive yet
                 warn!("Grafana API not responsive yet, but continuing anyway");
                 info!("You may need to wait a bit longer before accessing Grafana in your browser");

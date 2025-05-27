@@ -1,4 +1,4 @@
-use blueprint_core::{error, info};
+use blueprint_core::info;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -80,7 +80,7 @@ impl PrometheusServer {
     }
 
     /// Create a new embedded Prometheus server
-    async fn create_embedded_server(&self) -> Result<()> {
+    fn create_embedded_server(&self) -> Result<()> {
         let registry = prometheus::Registry::new();
         let bind_address = format!("{}:{}", self.config.host, self.config.port);
 
@@ -105,6 +105,9 @@ impl PrometheusServer {
     ///
     /// # Errors
     /// Returns an error if the container creation fails
+    ///
+    /// # Panics
+    /// Panics if mutex locks cannot be acquired
     pub async fn create_docker_container(&self) -> Result<()> {
         // Create environment variables
         let env_vars = HashMap::new();
@@ -213,15 +216,10 @@ impl ServerManager for PrometheusServer {
                 // Get a clone of the server to avoid holding the mutex across an await point
                 let mut server = {
                     let server_guard = self.embedded_server.lock().unwrap();
-                    if let Some(server) = &*server_guard {
+                    if let Some(_server) = &*server_guard {
                         // Clone the server's fields to create a new instance
                         let bind_address = format!("{}:{}", self.config.host, self.config.port);
-                        let registry = self
-                            .registry
-                            .lock()
-                            .unwrap()
-                            .clone()
-                            .unwrap_or_else(prometheus::Registry::new);
+                        let registry = self.registry.lock().unwrap().clone().unwrap_or_default();
                         PrometheusMetricsServer::new(registry, bind_address)
                     } else {
                         return Err(crate::error::Error::Other(
@@ -231,9 +229,7 @@ impl ServerManager for PrometheusServer {
                 };
 
                 // Start the server
-                if let Err(e) = server.start().await {
-                    return Err(e);
-                }
+                server.start().await?;
 
                 // Store the started server back in the mutex
                 let mut server_guard = self.embedded_server.lock().unwrap();
@@ -309,12 +305,12 @@ impl ServerManager for PrometheusServer {
                 .docker_manager
                 .is_container_running(&container_id)
                 .await;
-        } else {
-            // For embedded server, we don't have a good way to check if it's running
-            // So we just return true if it's initialized
-            let server = self.embedded_server.lock().unwrap();
-            return Ok(server.is_some());
         }
+
+        // For embedded server, we don't have a good way to check if it's running
+        // So we just return true if it's initialized
+        let server = self.embedded_server.lock().unwrap();
+        Ok(server.is_some())
     }
 
     async fn wait_until_ready(&self, timeout_secs: u64) -> Result<()> {
