@@ -79,7 +79,7 @@ impl HypervisorInstance {
             .read(true)
             .append(true)
             .open(&stderr_log_path)?;
-        let handle = Command::new("cloud-hypervisor")
+        let hypervisor_handle = Command::new("cloud-hypervisor")
             .arg("--api-socket")
             .arg(&sock_path)
             .stdout(stdout)
@@ -228,7 +228,6 @@ impl HypervisorInstance {
         binary_path: impl AsRef<Path>,
         env_vars: Vec<(String, String)>,
         arguments: Vec<String>,
-        service_name: &str,
     ) -> Result<()> {
         let Some(_conf) = self.vm_conf.take() else {
             error!("Service already created!");
