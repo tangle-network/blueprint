@@ -3,17 +3,71 @@ package blueprint_manager_bridge;
 
 import "google/protobuf/empty.proto";
 
-message PortRequest {
-  uint32 preferred_port = 1;
-}
+message PortRequest { uint32 preferred_port = 1; }
 
 message PortResponse {
   // The host‑side port the manager actually reserved.
   uint32 port = 1;
 }
 
+message ServiceOwner {
+  enum KeyType {
+    UNKNOWN = 0;
+    ECDSA = 1;
+    SR25519 = 2;
+  }
+  // The type of the public key.
+  KeyType key_type = 1;
+  // The public key of the service owner.
+  bytes key_bytes = 2;
+}
+
+message RegisterBlueprintServiceProxyRequest {
+  // The unique ID of the service.
+  uint64 service_id = 1;
+  // The prefix of the API key used to authenticate the service.
+  string api_key_prefix = 2;
+  // The URL of the upstream service.
+  string upstream_url = 3;
+  // Service owners that are allowed to use this service.
+  repeated ServiceOwner owners = 4;
+}
+
+message UnregisterBlueprintServiceProxyRequest {
+  // The unique ID of the service.
+  uint64 service_id = 1;
+}
+
+message AddOwnerToServiceRequest {
+  // The unique ID of the service.
+  uint64 service_id = 1;
+  // The public key of the service owner to add.
+  ServiceOwner owner_to_add = 2;
+}
+
+message RemoveOwnerFromServiceRequest {
+  // The unique ID of the service.
+  uint64 service_id = 1;
+  // The public key of the service owner to remove.
+  ServiceOwner owner_to_remove = 2;
+}
+
 service BlueprintManagerBridge {
   rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);
   rpc RequestPort(PortRequest) returns (PortResponse);
-}
 
+  // - Auth Proxy methods -
+
+  // This is called by the blueprint to register a service to the proxy.
+  rpc RegisterBlueprintServiceProxy(RegisterBlueprintServiceProxyRequest)
+      returns (google.protobuf.Empty);
+  // This is called by the blueprint to unregister a service from the proxy.
+  rpc UnregisterBlueprintServiceProxy(UnregisterBlueprintServiceProxyRequest)
+      returns (google.protobuf.Empty);
+  // This is called by the blueprint to add an owner to a service.
+  rpc AddOwnerToService(AddOwnerToServiceRequest)
+      returns (google.protobuf.Empty);
+  // This is called by the blueprint to remove an owner from a service.
+  rpc RemoveOwnerFromService(RemoveOwnerFromServiceRequest)
+      returns (google.protobuf.Empty);
+}

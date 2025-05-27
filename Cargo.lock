@@ -3390,6 +3390,7 @@ dependencies = [
 name = "blueprint-manager-bridge"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "blueprint-auth",
  "prost 0.12.6",
  "thiserror 2.0.12",
  "tokio",
@@ -3715,6 +3716,7 @@ version = "0.1.0-alpha.12"
 dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer-local",
+ "blueprint-auth",
  "blueprint-chain-setup",
  "blueprint-client-tangle",
  "blueprint-contexts",

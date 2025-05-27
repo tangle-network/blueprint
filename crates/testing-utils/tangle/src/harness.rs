@@ -1,6 +1,7 @@
 use crate::Error;
 use crate::multi_node::{find_open_tcp_bind_port, MultiNodeTestEnv};
 use crate::{InputValue, OutputValue, keys::inject_tangle_key};
+use blueprint_auth::proxy::DEFAULT_AUTH_PROXY_PORT;
 use blueprint_chain_setup::tangle::testnet::SubstrateNode;
 use blueprint_chain_setup::tangle::transactions;
 use blueprint_chain_setup::tangle::transactions::setup_operators_with_service;
@@ -17,12 +18,14 @@ use blueprint_runner::error::RunnerError;
 use blueprint_runner::tangle::error::TangleError;
 use blueprint_std::io;
 use blueprint_std::path::{Path, PathBuf};
+use futures::FutureExt;
 use tangle_subxt::subxt::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::PricingQuote;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{AssetSecurityCommitment, AssetSecurityRequirement};
 use blueprint_tangle_extra::serde::new_bounded_string;
 use std::marker::PhantomData;
+use std::net::Ipv4Addr;
 use std::sync::Arc;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::request::RequestArgs;
@@ -71,6 +74,7 @@ pub struct TangleTestHarness<Ctx = ()> {
     config: TangleTestConfig,
     temp_dir: tempfile::TempDir,
     _node: SubstrateNode,
+    _auth_proxy: JoinHandle<()>,
     _phantom: PhantomData<Ctx>,
 }
 
@@ -178,6 +182,10 @@ where
             .map_err(|e| Error::Setup(e.to_string()))?;
 
         let client = alice_env.tangle_client().await?;
+        let auth_proxy = tokio::spawn(run_auth_proxy(
+            test_dir.path().to_path_buf(),
+            DEFAULT_AUTH_PROXY_PORT,
+        ));
         let harness = TangleTestHarness {
             http_endpoint,
             ws_endpoint,
@@ -188,6 +196,7 @@ where
             temp_dir: test_dir,
             config,
             _node: node,
+            _auth_proxy,
             _phantom: PhantomData,
         };
 
@@ -610,6 +619,42 @@ where
             assert_eq!(result, expected);
         }
     }
+}
+
+/// Runs the authentication proxy server.
+///
+/// This function sets up and runs an authenticated proxy server that listens on the configured host and port.
+/// It creates necessary directories for the proxy's database and then starts the server.
+///
+/// # Arguments
+///
+/// * `data_dir` - The path to the data directory where the proxy's database will be stored.
+/// * `auth_proxy_port` - The port on which the proxy server will listen.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - It fails to create the necessary directories for the database.
+/// - It fails to bind to the specified host and port.
+/// - The Axum server encounters an error during operation.
+async fn run_auth_proxy(data_dir: PathBuf, auth_proxy_port: u16) -> Result<(), Error> {
+    let db_path = data_dir.join("private").join("auth-proxy").join("db");
+    tokio::fs::create_dir_all(&db_path).await?;
+
+    let proxy = blueprint_auth::proxy::AuthenticatedProxy::new(&db_path)?;
+    let router = proxy.router();
+    let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, auth_proxy_port)).await?;
+    info!(
+        "Auth proxy listening on {}:{}",
+        Ipv4Addr::LOCALHOST,
+        auth_proxy_port
+    );
+    let result = axum::serve(listener, router).await;
+    if let Err(err) = result {
+        error!("Auth proxy error: {err}");
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
