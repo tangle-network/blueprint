@@ -230,6 +230,7 @@ xz = "0.1.0"
 walkdir = "2.5.0"
 fatfs = "0.3.6"
 tokio-vsock = "0.7.1"
+nix = "0.30.1"
 
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }

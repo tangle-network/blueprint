@@ -1,64 +1,148 @@
 use crate::error::{Error, Result};
 use cloud_hypervisor_client::apis::DefaultApi;
-use cloud_hypervisor_client::models::{ConsoleConfig, DiskConfig, PayloadConfig, VmConfig, VsockConfig};
+use cloud_hypervisor_client::models::console_config::Mode;
+use cloud_hypervisor_client::models::{
+    ConsoleConfig, DiskConfig, FsConfig, MemoryConfig, PayloadConfig, VmConfig, VsockConfig,
+};
 use cloud_hypervisor_client::{SocketBasedApiClient, socket_based_api_client};
 use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
 use hyper::StatusCode;
+use nix::sys::signal;
+use nix::sys::signal::Signal;
+use nix::unistd::Pid;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use cloud_hypervisor_client::models::console_config::Mode;
 use tokio::process::{Child, Command};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
+const DATA_DIR_VIRTIO: &str = "blueprint-data";
+const KEYSTORE_VIRTIO: &str = "blueprint-keystore";
+
 pub struct CHVmConfig;
+
+struct Handles {
+    hypervisor: Child,
+    data_dir_virtio: Child,
+    keystore_virtio: Child,
+}
+
+struct Virtio {
+    data_dir_socket: PathBuf,
+    data_dir: PathBuf,
+    keystore_socket: PathBuf,
+    keystore: PathBuf,
+}
 
 pub(super) struct HypervisorInstance {
     sock_path: PathBuf,
     guest_logs_path: PathBuf,
     binary_image_path: PathBuf,
-    handle: Child,
+    virtio: Virtio,
+    handles: Handles,
     vm_conf: Option<CHVmConfig>,
 }
 
 impl HypervisorInstance {
     pub fn new(
         conf: CHVmConfig,
+        data_dir: impl AsRef<Path>,
+        keystore: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
     ) -> Result<HypervisorInstance> {
-        let guest_logs_path = cache_dir.as_ref().join(format!("{}-guest.log", service_name));
-        let stdout_log_path = cache_dir.as_ref().join(format!("{}.log.stdout", service_name));
-        let stderr_log_path = cache_dir.as_ref().join(format!("{}.log.stderr", service_name));
+        let guest_logs_path = cache_dir
+            .as_ref()
+            .join(format!("{}-guest.log", service_name));
+        let stdout_log_path = cache_dir
+            .as_ref()
+            .join(format!("{}.log.stdout", service_name));
+        let stderr_log_path = cache_dir
+            .as_ref()
+            .join(format!("{}.log.stderr", service_name));
         let binary_image_path = cache_dir
             .as_ref()
             .join(&format!("{}-bin.img", service_name));
         let sock_path = runtime_dir.as_ref().join("ch-api.sock");
 
-        let stdout = OpenOptions::new().create(true).read(true).append(true).open(&stdout_log_path)?;
-        let stderr = OpenOptions::new().create(true).read(true).append(true).open(&stderr_log_path)?;
-        let handle = Command::new("cloud-hypervisor")
+        let stdout = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .append(true)
+            .open(&stdout_log_path)?;
+        let stderr = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .append(true)
+            .open(&stderr_log_path)?;
+        let hypervisor_handle = Command::new("cloud-hypervisor")
             .arg("--api-socket")
             .arg(&sock_path)
             .stdout(stdout)
             .stderr(stderr)
             .spawn()?;
 
+        let data_dir_virtio_socket = runtime_dir.as_ref().join("data-dir.sock");
+        let data_dir_virtio = Command::new("unshare")
+            .args([
+                "-r",
+                "--map-auto",
+                "--",
+                "/usr/lib/virtiofsd",
+                "--sandbox",
+                "chroot",
+            ])
+            .arg(format!(
+                "--socket-path={}",
+                data_dir_virtio_socket.display()
+            ))
+            .arg(format!("--shared-dir={}", data_dir.as_ref().display()))
+            .spawn()?;
+
+        let keystore_virtio_socket = runtime_dir.as_ref().join("keystore.sock");
+        let keystore_virtio = Command::new("unshare")
+            .args([
+                "-r",
+                "--map-auto",
+                "--",
+                "/usr/lib/virtiofsd",
+                "--sandbox",
+                "chroot",
+            ])
+            .arg(format!(
+                "--socket-path={}",
+                keystore_virtio_socket.display()
+            ))
+            .arg(format!("--shared-dir={}", keystore.as_ref().display()))
+            .spawn()?;
+
         Ok(HypervisorInstance {
             sock_path,
             guest_logs_path,
             binary_image_path,
-            handle,
+            virtio: Virtio {
+                data_dir_socket: data_dir_virtio_socket,
+                data_dir: data_dir.as_ref().to_path_buf(),
+                keystore_socket: keystore_virtio_socket,
+                keystore: keystore.as_ref().to_path_buf(),
+            },
+            handles: Handles {
+                hypervisor: hypervisor_handle,
+                data_dir_virtio,
+                keystore_virtio,
+            },
             vm_conf: Some(conf),
         })
     }
 
     async fn create_binary_image(
         &self,
+        data_dir: impl AsRef<Path>,
+        keystore: impl AsRef<Path>,
         binary_path: impl AsRef<Path>,
         env_vars: Vec<(String, String)>,
         arguments: Vec<String>,
@@ -81,7 +165,10 @@ impl HypervisorInstance {
             .open(&self.binary_image_path)?;
         img.set_len(img_len)?;
 
-        fatfs::format_volume(&mut img, FormatVolumeOptions::new().volume_label(*b"SERVICEDISK"))?;
+        fatfs::format_volume(
+            &mut img,
+            FormatVolumeOptions::new().volume_label(*b"SERVICEDISK"),
+        )?;
 
         let fs = FileSystem::new(&mut img, FsOptions::new())?;
         let root = fs.root_dir();
@@ -91,7 +178,8 @@ impl HypervisorInstance {
             &mut root.create_file("service")?,
         )?;
 
-        let launcher_script_content = Self::build_launcher_script(env_vars, arguments);
+        let launcher_script_content =
+            Self::build_launcher_script(data_dir, keystore, env_vars, arguments);
 
         let mut l = root.create_file("launch")?;
         l.write_all(launcher_script_content.as_bytes())?;
@@ -99,12 +187,30 @@ impl HypervisorInstance {
         Ok(())
     }
 
-    fn build_launcher_script(env_vars: Vec<(String, String)>, arguments: Vec<String>) -> String {
+    fn build_launcher_script(
+        data_dir: impl AsRef<Path>,
+        keystore: impl AsRef<Path>,
+        env_vars: Vec<(String, String)>,
+        arguments: Vec<String>,
+    ) -> String {
         const LAUNCHER_SCRIPT_HEADER: &str = r"#!/bin/sh
         set -e
         ";
 
         let mut launcher_script = LAUNCHER_SCRIPT_HEADER.to_string();
+
+        launcher_script.push_str(&format!("mkdir -p {}\n", data_dir.as_ref().display()));
+        launcher_script.push_str(&format!(
+            "mount -t virtiofs {DATA_DIR_VIRTIO} {}\n",
+            data_dir.as_ref().display()
+        ));
+
+        launcher_script.push_str(&format!("mkdir -p {}\n", keystore.as_ref().display()));
+        launcher_script.push_str(&format!(
+            "mount -t virtiofs {KEYSTORE_VIRTIO} {}\n",
+            keystore.as_ref().display()
+        ));
+
         for (key, val) in env_vars {
             launcher_script.push_str(&format!("export {key}=\"{val}\"\n"));
         }
@@ -129,30 +235,53 @@ impl HypervisorInstance {
             return Ok(());
         };
 
-        self.create_binary_image(binary_path, env_vars, arguments)
-            .await
-            .map_err(|e| {
-                error!("Error creating binary image: {}", e);
-                e
-            })?;
+        self.create_binary_image(
+            &self.virtio.data_dir,
+            &self.virtio.keystore,
+            binary_path,
+            env_vars,
+            arguments,
+        )
+        .await
+        .map_err(|e| {
+            error!("Error creating binary image: {}", e);
+            e
+        })?;
 
         let (serial, console, cmdline_console_target) = self.logging_configs();
 
         let vm_conf = VmConfig {
             cpus: None,
-            memory: None,
+            memory: Some(MemoryConfig {
+                size: 1073741824,
+                shared: Some(true),
+                ..Default::default()
+            }),
             payload: PayloadConfig {
                 // TODO
-                kernel: Some(String::from("/home/alex/Downloads/kernel-extracted/vmlinuz")),
-                initramfs: Some(String::from("/home/alex/Downloads/kernel-extracted/initrd.img")),
-                cmdline: Some(format!("root=/dev/vda2 rw console={cmdline_console_target} systemd.log_level=debug systemd.log_target=kmsg")),
+                kernel: Some(String::from(
+                    "/home/alex/Downloads/kernel-extracted/vmlinuz",
+                )),
+                initramfs: Some(String::from(
+                    "/home/alex/Downloads/kernel-extracted/initrd.img",
+                )),
+                cmdline: Some(format!(
+                    "root=/dev/vda1 rw console={cmdline_console_target} systemd.log_level=debug systemd.log_target=kmsg"
+                )),
                 ..Default::default()
             },
             rate_limit_groups: None,
             disks: Some(vec![
                 DiskConfig {
                     // TODO
-                    path: Some(String::from("/home/alex/Downloads/ubuntu-base.qcow2")),
+                    path: Some(String::from("/home/alex/Downloads/ubuntu-base.raw")),
+                    readonly: Some(false),
+                    direct: Some(true),
+                    ..DiskConfig::default()
+                },
+                DiskConfig {
+                    // TODO
+                    path: Some(String::from("/home/alex/Downloads/cloud-init.img")),
                     readonly: Some(false),
                     direct: Some(true),
                     ..DiskConfig::default()
@@ -167,7 +296,18 @@ impl HypervisorInstance {
             net: None,
             rng: None,
             balloon: None,
-            fs: None,
+            fs: Some(vec![
+                FsConfig {
+                    tag: String::from(DATA_DIR_VIRTIO),
+                    socket: self.virtio.data_dir_socket.to_string_lossy().to_string(),
+                    ..Default::default()
+                },
+                FsConfig {
+                    tag: String::from(KEYSTORE_VIRTIO),
+                    socket: self.virtio.keystore_socket.to_string_lossy().to_string(),
+                    ..Default::default()
+                },
+            ]),
             pmem: None,
             serial: Some(serial),
             console: Some(console),
@@ -219,7 +359,10 @@ impl HypervisorInstance {
             file: Some(self.guest_logs_path.to_string_lossy().into()),
             ..Default::default()
         };
-        let virtio_console = ConsoleConfig { mode: Mode::Off, ..Default::default() };
+        let virtio_console = ConsoleConfig {
+            mode: Mode::Off,
+            ..Default::default()
+        };
         (serial, virtio_console, "ttyS0")
     }
 
@@ -288,12 +431,24 @@ impl HypervisorInstance {
 
         if let Err(e) = client.shutdown_vmm().await {
             error!("Unable to gracefully shutdown VM manager, killing process: {e:?}");
-            self.handle.kill().await?;
+            self.handles.hypervisor.kill().await?;
             return Ok(());
         }
 
         // VM manager shutting down, process will exit with it
-        self.handle.wait().await?;
+        self.handles.hypervisor.wait().await?;
+
+        if let Some(id) = self.handles.data_dir_virtio.id() {
+            let pid = Pid::from_raw(id as i32);
+            let _ = signal::kill(pid, Signal::SIGINT).ok();
+            self.handles.data_dir_virtio.wait().await?;
+        }
+
+        if let Some(id) = self.handles.keystore_virtio.id() {
+            let pid = Pid::from_raw(id as i32);
+            let _ = signal::kill(pid, Signal::SIGINT).ok();
+            self.handles.keystore_virtio.wait().await?;
+        }
 
         Ok(())
     }
