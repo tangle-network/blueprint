@@ -104,7 +104,7 @@ blueprint-context-derive = { version = "0.1.0-alpha.6", path = "./crates/macros/
 # Stores
 blueprint-stores = { version = "0.1.0-alpha.4", path = "./crates/stores", default-features = false }
 blueprint-store-local-database = { version = "0.1.0-alpha.4", path = "./crates/stores/local-database", default-features = false }
-rocksdb = { version = "0.23.0", default-features = false }
+rocksdb = { version = "0.21.0", default-features = false }
 
 # SDK
 blueprint-keystore = { version = "0.1.0-alpha.9", path = "./crates/keystore", default-features = false }

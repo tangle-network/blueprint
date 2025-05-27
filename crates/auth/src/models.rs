@@ -49,7 +49,7 @@ pub struct ServiceModel {
 }
 
 /// A service owner model stored in the database.
-#[derive(prost::Message, Clone)]
+#[derive(prost::Message, Clone, PartialEq, Eq)]
 pub struct ServiceOwnerModel {
     /// The Public key type.
     ///

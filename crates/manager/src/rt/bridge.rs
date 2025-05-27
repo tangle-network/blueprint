@@ -1,7 +1,7 @@
 use blueprint_auth::{
     db::{RocksDb, RocksDbConfig},
     models::{ServiceModel, ServiceOwnerModel},
-    types::{KeyType, ServiceId},
+    types::ServiceId,
 };
 use blueprint_manager_bridge::blueprint_manager_bridge_server::{
     BlueprintManagerBridge, BlueprintManagerBridgeServer,
@@ -241,15 +241,12 @@ impl BlueprintManagerBridge for BridgeService {
             service.owners.push(new_owner);
             // Save updated service
             service.save(service_id, db).map_err(|e| {
-                error!(
-                    "Failed to save updated service {} to database: {e}",
-                    service_id_val
-                );
+                error!("Failed to save updated service {service_id} to database: {e}",);
                 tonic::Status::internal(format!("Database error: {e}"))
             })?;
-            info!("Added owner to service ID: {}", service_id_val);
+            info!("Added owner to service ID: {service_id}");
         } else {
-            info!("Owner already exists for service ID: {}", service_id_val);
+            info!("Owner already exists for service ID: {service_id}");
         }
 
         Ok(Response::new(()))

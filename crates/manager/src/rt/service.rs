@@ -15,7 +15,6 @@ pub enum Status {
 }
 
 pub struct Service {
-    manager_id: u32,
     hypervisor: HypervisorInstance,
     bridge: BridgeHandle,
     alive_rx: Option<oneshot::Receiver<()>>,
@@ -29,7 +28,6 @@ impl Service {
         keystore: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
-        data_dir: impl AsRef<Path>,
         service_name: &str,
         binary_path: impl AsRef<Path>,
         env_vars: Vec<(String, String)>,
@@ -76,12 +74,10 @@ impl Service {
                 binary_path.as_ref(),
                 env_vars,
                 arguments,
-                service_name,
             )
             .await?;
 
         Ok(Self {
-            manager_id: id,
             hypervisor,
             bridge: bridge_handle,
             alive_rx: Some(alive_rx),
@@ -115,7 +111,7 @@ impl Service {
         Ok(())
     }
 
-    pub async fn shutdown(mut self) -> Result<()> {
+    pub async fn shutdown(self) -> Result<()> {
         self.hypervisor.shutdown().await.map_err(|e| {
             error!("Failed to shut down hypervisor: {e}");
             e
