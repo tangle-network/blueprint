@@ -581,7 +581,6 @@ async fn main() -> color_eyre::Result<()> {
                     }
                 }
                 config.keystore_uri = keystore_path.to_string_lossy().to_string();
-                config.data_dir = data_dir.or_else(|| Some(PathBuf::from("./data")));
                 config.bootnodes = bootnodes
                     .unwrap_or_default()
                     .iter()
@@ -607,7 +606,7 @@ async fn main() -> color_eyre::Result<()> {
                                     .map_err(|e| color_eyre::Report::msg(format!("Blueprint ID is required in the protocol settings: {e:?}")))?,
                             ),
                             keystore_path: Some(config.keystore_uri.clone()),
-                            data_dir: config.data_dir.clone(),
+                            data_dir,
                             allow_unchecked_attestations,
                             podman_host: Some(podman_host)
                         };

@@ -3050,6 +3050,7 @@ dependencies = [
 name = "blueprint-core-testing-utils"
 version = "0.1.0-alpha.12"
 dependencies = [
+ "blueprint-auth",
  "blueprint-clients",
  "blueprint-core",
  "blueprint-keystore",
@@ -3738,6 +3739,7 @@ version = "0.1.0-alpha.12"
 dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer-local",
+ "axum 0.8.4",
  "blueprint-auth",
  "blueprint-chain-setup",
  "blueprint-client-tangle",

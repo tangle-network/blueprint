@@ -30,6 +30,7 @@ alloy-primitives = { workspace = true }
 sp-core = { workspace = true }
 tangle-subxt = { workspace = true }
 
+axum = { workspace = true, features = ["tokio", "http2"] }
 futures = { workspace = true }
 tracing = { workspace = true }
 tempfile = { workspace = true }

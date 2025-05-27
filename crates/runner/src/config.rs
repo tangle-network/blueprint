@@ -13,7 +13,8 @@ use core::str::FromStr;
 #[cfg(feature = "networking")]
 pub use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use url::Url;
 
 pub trait ProtocolSettingsT: Sized + 'static {
@@ -329,7 +330,7 @@ impl BlueprintEnvironment {
     /// # Errors
     /// - `blueprint_manager_bridge::Error` if the connection to the bridge fails.
     pub async fn bridge(&self) -> Result<Arc<Bridge>, blueprint_manager_bridge::Error> {
-        let mut guard = self.bridge.lock().unwrap();
+        let mut guard = self.bridge.lock().await;
         if let Some(bridge) = &*guard {
             return Ok(bridge.clone());
         }

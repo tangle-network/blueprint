@@ -66,14 +66,11 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         .display()
         .to_string();
 
-    blueprint_config.data_dir = opts.data_dir;
+    blueprint_config.data_dir = opts.data_dir.unwrap_or_else(|| PathBuf::from("./data"));
 
     let blueprint_manager_config = BlueprintManagerConfig {
         keystore_uri: blueprint_config.keystore_uri.clone(),
-        data_dir: blueprint_config
-            .data_dir
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("./data")),
+        data_dir: blueprint_config.data_dir.clone(),
         verbose: 2,
         pretty: true,
         instance_id: Some(format!("Blueprint-{}", blueprint_id)),

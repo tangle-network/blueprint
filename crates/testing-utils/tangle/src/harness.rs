@@ -18,7 +18,6 @@ use blueprint_runner::error::RunnerError;
 use blueprint_runner::tangle::error::TangleError;
 use blueprint_std::io;
 use blueprint_std::path::{Path, PathBuf};
-use futures::FutureExt;
 use tangle_subxt::subxt::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::pricing::PricingQuote;
@@ -37,7 +36,7 @@ use tangle_subxt::tangle_testnet_runtime::api::services::{
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tracing::info;
+use tracing::{error, info};
 use url::Url;
 use blueprint_pricing_engine_lib::{init_benchmark_cache, init_operator_signer, load_pricing_from_toml, OperatorConfig, DEFAULT_CONFIG};
 use blueprint_pricing_engine_lib::service::rpc::server::run_rpc_server;
@@ -74,7 +73,7 @@ pub struct TangleTestHarness<Ctx = ()> {
     config: TangleTestConfig,
     temp_dir: tempfile::TempDir,
     _node: SubstrateNode,
-    _auth_proxy: JoinHandle<()>,
+    _auth_proxy: JoinHandle<Result<(), Error>>,
     _phantom: PhantomData<Ctx>,
 }
 
@@ -93,10 +92,14 @@ pub async fn generate_env_from_node_id(
     ws_endpoint: Url,
     test_dir: &Path,
 ) -> Result<BlueprintEnvironment, RunnerError> {
-    let keystore_path = test_dir.join(identity.to_ascii_lowercase());
+    let node_dir = test_dir.join(identity.to_ascii_lowercase());
+    let keystore_path = node_dir.join("keystore");
     tokio::fs::create_dir_all(&keystore_path).await?;
     inject_tangle_key(&keystore_path, &format!("//{identity}"))
         .map_err(|err| RunnerError::Tangle(TangleError::Keystore(err)))?;
+
+    let data_dir = node_dir.join("data");
+    tokio::fs::create_dir_all(&data_dir).await?;
 
     // Create context config
     let context_config = ContextConfig::create_tangle_config(
@@ -104,6 +107,7 @@ pub async fn generate_env_from_node_id(
         ws_endpoint,
         keystore_path.display().to_string(),
         None,
+        data_dir,
         SupportedChains::LocalTestnet,
         0,
         Some(0),
@@ -196,7 +200,7 @@ where
             temp_dir: test_dir,
             config,
             _node: node,
-            _auth_proxy,
+            _auth_proxy: auth_proxy,
             _phantom: PhantomData,
         };
 
