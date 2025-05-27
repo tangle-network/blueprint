@@ -79,7 +79,7 @@ impl HypervisorInstance {
             .read(true)
             .append(true)
             .open(&stderr_log_path)?;
-        let hypervisor_handle = Command::new("cloud-hypervisor")
+        let handle = Command::new("cloud-hypervisor")
             .arg("--api-socket")
             .arg(&sock_path)
             .stdout(stdout)

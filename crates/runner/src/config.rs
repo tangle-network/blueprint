@@ -6,15 +6,15 @@ use crate::error::ConfigError;
 use alloc::string::{String, ToString};
 #[cfg(feature = "std")]
 use blueprint_keystore::{Keystore, KeystoreConfig};
+use blueprint_manager_bridge::Bridge;
 use clap::Parser;
 use core::fmt::{Debug, Display};
 use core::str::FromStr;
-use std::sync::{Arc, Mutex};
 #[cfg(feature = "networking")]
 pub use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
 use url::Url;
-use blueprint_manager_bridge::Bridge;
 
 pub trait ProtocolSettingsT: Sized + 'static {
     /// Load the protocol-specific settings from the given [`BlueprintSettings`].
@@ -324,6 +324,10 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
 }
 
 impl BlueprintEnvironment {
+    /// Returns the bridge to the blueprint manager.
+    ///
+    /// # Errors
+    /// - `blueprint_manager_bridge::Error` if the connection to the bridge fails.
     pub async fn bridge(&self) -> Result<Arc<Bridge>, blueprint_manager_bridge::Error> {
         let mut guard = self.bridge.lock().unwrap();
         if let Some(bridge) = &*guard {
