@@ -25,6 +25,8 @@ impl Service {
     pub async fn new(
         id: u32,
         vm_conf: CHVmConfig,
+        data_dir: impl AsRef<Path>,
+        keystore: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
@@ -42,6 +44,8 @@ impl Service {
 
         let mut hypervisor = HypervisorInstance::new(
             vm_conf,
+            data_dir,
+            keystore,
             cache_dir.as_ref(),
             runtime_dir.as_ref(),
             service_name,
@@ -62,7 +66,7 @@ impl Service {
             manager_id: id,
             hypervisor,
             bridge: bridge_handle,
-            alive_rx: Some(alive_rx)
+            alive_rx: Some(alive_rx),
         })
     }
 
@@ -83,7 +87,9 @@ impl Service {
         })?;
 
         if time::timeout(Duration::from_secs(30), alive_rx)
-            .await.is_err() {
+            .await
+            .is_err()
+        {
             error!("Service never connected to bridge (network error?)");
             return Err(Error::Other("Bridge connection timeout".into()));
         }

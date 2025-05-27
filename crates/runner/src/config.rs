@@ -219,9 +219,7 @@ pub struct BlueprintEnvironment {
     /// The keystore URI for the blueprint
     pub keystore_uri: String,
     /// Data directory exclusively for this blueprint
-    ///
-    /// This will be `None` if the blueprint manager was not provided a base directory.
-    pub data_dir: Option<PathBuf>,
+    pub data_dir: PathBuf,
     /// Protocol-specific settings
     pub protocol_settings: ProtocolSettings,
     /// Whether the blueprint is in test mode
@@ -284,6 +282,7 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         ..
     } = config;
 
+    let data_dir = settings.data_dir.clone();
     let test_mode = settings.test_mode;
     let http_rpc_url = settings.http_rpc_url.clone();
     let ws_rpc_url = settings.ws_rpc_url.clone();
@@ -307,7 +306,7 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         http_rpc_endpoint: http_rpc_url.to_string(),
         ws_rpc_endpoint: ws_rpc_url.to_string(),
         keystore_uri,
-        data_dir: std::env::var("DATA_DIR").ok().map(PathBuf::from),
+        data_dir,
         protocol_settings,
         bridge: Arc::new(Mutex::new(None)),
 
@@ -455,6 +454,7 @@ impl ContextConfig {
         ws_rpc_url: Url,
         keystore_uri: String,
         keystore_password: Option<String>,
+        data_dir: PathBuf,
         chain: SupportedChains,
         protocol: Protocol,
         protocol_settings: ProtocolSettings,
@@ -520,6 +520,7 @@ impl ContextConfig {
                 #[cfg(feature = "networking")]
                 target_peer_count: None,
                 keystore_uri,
+                data_dir,
                 chain,
                 verbose: 3,
                 pretty: true,
@@ -570,6 +571,7 @@ impl ContextConfig {
         ws_rpc_url: Url,
         keystore_uri: String,
         keystore_password: Option<String>,
+        data_dir: PathBuf,
         chain: SupportedChains,
         protocol: Protocol,
         protocol_settings: ProtocolSettings,
@@ -579,6 +581,7 @@ impl ContextConfig {
             ws_rpc_url,
             keystore_uri,
             keystore_password,
+            data_dir,
             chain,
             protocol,
             protocol_settings,
@@ -593,6 +596,7 @@ impl ContextConfig {
         ws_rpc_url: Url,
         keystore_uri: String,
         keystore_password: Option<String>,
+        data_dir: PathBuf,
         chain: SupportedChains,
         eigenlayer_contract_addresses: crate::eigenlayer::config::EigenlayerProtocolSettings,
     ) -> Self {
@@ -601,6 +605,7 @@ impl ContextConfig {
             ws_rpc_url,
             keystore_uri,
             keystore_password,
+            data_dir,
             chain,
             Protocol::Eigenlayer,
             ProtocolSettings::Eigenlayer(eigenlayer_contract_addresses),
@@ -615,6 +620,7 @@ impl ContextConfig {
         ws_rpc_url: Url,
         keystore_uri: String,
         keystore_password: Option<String>,
+        data_dir: PathBuf,
         chain: SupportedChains,
         blueprint_id: u64,
         service_id: Option<u64>,
@@ -626,6 +632,7 @@ impl ContextConfig {
             ws_rpc_url,
             keystore_uri,
             keystore_password,
+            data_dir,
             chain,
             Protocol::Tangle,
             ProtocolSettings::Tangle(TangleProtocolSettings {
@@ -660,6 +667,8 @@ pub struct BlueprintSettings {
     pub ws_rpc_url: Url,
     #[arg(long, short = 'd', env, default_value_t = String::from("./keystore"))]
     pub keystore_uri: String,
+    #[arg(long, short, env)]
+    pub data_dir: PathBuf,
     #[arg(long, value_enum, env, default_value_t)]
     pub chain: SupportedChains,
     #[arg(long, short = 'v', global = true, action = clap::ArgAction::Count)]
@@ -830,6 +839,7 @@ impl Default for BlueprintSettings {
             http_rpc_url: default_http_rpc_url(),
             ws_rpc_url: default_ws_rpc_url(),
             keystore_uri: String::new(),
+            data_dir: PathBuf::new(),
             chain: SupportedChains::default(),
             verbose: 0,
             pretty: false,

@@ -1,12 +1,12 @@
+use blueprint_manager_bridge::VSOCK_PORT;
 use blueprint_manager_bridge::blueprint_manager_bridge_server::{
     BlueprintManagerBridge, BlueprintManagerBridgeServer,
 };
 use blueprint_manager_bridge::{Error, PortRequest, PortResponse};
-use blueprint_manager_bridge::VSOCK_PORT;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::UnixListener;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{Mutex, oneshot};
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::{Request, Response, transport::Server};
@@ -61,7 +61,10 @@ impl Bridge {
             e
         })?;
 
-        info!("Connected to bridge for service `{}`, listening on VSOCK port {VSOCK_PORT}", self.service_name);
+        info!(
+            "Connected to bridge for service `{}`, listening on VSOCK port {VSOCK_PORT}",
+            self.service_name
+        );
 
         let (tx, rx) = oneshot::channel();
 
@@ -83,7 +86,9 @@ struct BridgeService {
 
 impl BridgeService {
     fn new(tx: oneshot::Sender<()>) -> Self {
-        Self { ready_tx: Arc::new(Mutex::new(Some(tx))) }
+        Self {
+            ready_tx: Arc::new(Mutex::new(Some(tx))),
+        }
     }
 
     async fn signal_ready(&self) {
@@ -95,10 +100,7 @@ impl BridgeService {
 
 #[tonic::async_trait]
 impl BlueprintManagerBridge for BridgeService {
-    async fn ping(
-        &self,
-        _req: Request<()>,
-    ) -> Result<Response<()>, tonic::Status> {
+    async fn ping(&self, _req: Request<()>) -> Result<Response<()>, tonic::Status> {
         self.signal_ready().await;
         Ok(Response::new(()))
     }
