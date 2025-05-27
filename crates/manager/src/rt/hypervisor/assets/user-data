@@ -1,0 +1,37 @@
+#cloud-config
+mounts:
+  - [LABEL=SERVICEDISK, /srv, vfat, "ro,defaults,nofail", "0", "0"]
+
+write_files:
+  - path: /etc/systemd/system/launch.service
+    content: |
+      [Unit]
+      Description=Service Launcher
+      After=srv.mount
+
+      [Service]
+      Type=exec
+      ExecStart=/srv/launch
+      Restart=no
+      KillSignal=SIGINT
+
+      [Install]
+      WantedBy=multi-user.target
+
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - software-properties-common
+
+runcmd:
+  # Install Docker using the official script
+  - curl -fsSL https://get.docker.com -o get-docker.sh
+  - sh get-docker.sh
+  - usermod -aG docker ubuntu
+  - systemctl enable docker
+  - systemctl start docker
+
+  # Enable and start the launch service after the disk is mounted
+  - systemctl daemon-reload
+  - systemctl enable --now launch.service
