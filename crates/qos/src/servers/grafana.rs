@@ -83,7 +83,6 @@ impl GrafanaServer {
     }
 }
 
-#[async_trait::async_trait]
 impl ServerManager for GrafanaServer {
     async fn start(&self) -> Result<()> {
         info!("Starting Grafana server on port {}", self.config.port);

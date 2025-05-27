@@ -3,7 +3,6 @@ use crate::error::RunnerError as Error;
 use blueprint_qos::servers::ServerManager;
 use blueprint_qos::servers::prometheus::PrometheusServer;
 use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 use tracing::{error, info};

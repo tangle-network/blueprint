@@ -61,17 +61,14 @@ async fn test_all_servers() -> Result<(), Box<dyn std::error::Error>> {
     struct MockHeartbeatConsumer;
 
     impl HeartbeatConsumer for MockHeartbeatConsumer {
-        fn send_heartbeat(
-            &self,
-            _status: &HeartbeatStatus,
-        ) -> impl std::future::Future<Output = QoSResult<()>> {
-            async move { Ok(()) }
+        async fn send_heartbeat(&self, _status: &HeartbeatStatus) -> QoSResult<()> {
+            Ok(())
         }
     }
 
     // Create the QoS service with all servers enabled
     let consumer = Arc::new(MockHeartbeatConsumer);
-    let qos_service = QoSServiceBuilder::new()
+    let mut qos_service = QoSServiceBuilder::new()
         .with_heartbeat_consumer(consumer)
         .with_grafana_server_config(grafana_config)
         .with_loki_server_config(loki_config)
@@ -115,11 +112,11 @@ async fn test_all_servers() -> Result<(), Box<dyn std::error::Error>> {
             .const_label("service_id", service_id.to_string())
             .const_label("blueprint_id", blueprint_id.to_string());
 
-        let gauge = IntGauge::with_opts(opts).map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+        let gauge = IntGauge::with_opts(opts).map_err(Box::<dyn std::error::Error>::from)?;
 
         registry
             .register(Box::new(gauge.clone()))
-            .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+            .map_err(Box::<dyn std::error::Error>::from)?;
 
         Ok(gauge)
     };
@@ -153,10 +150,7 @@ async fn test_all_servers() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a dashboard using the QoS service's built-in functionality
     info!("Creating dashboard using QoS service...");
-    match qos_service
-        .create_dashboard("Test Blueprint Dashboard")
-        .await
-    {
+    match qos_service.create_dashboard("prometheus", "loki").await {
         Ok(_) => info!("Dashboard created successfully using QoS service"),
         Err(e) => error!("Failed to create dashboard: {}", e),
     }
@@ -169,7 +163,8 @@ async fn test_all_servers() -> Result<(), Box<dyn std::error::Error>> {
 
         loop {
             // Update metrics with simulated values
-            let elapsed_secs = start_time.elapsed().as_secs() as i64;
+            let seconds = start_time.elapsed().as_secs();
+            let elapsed_secs = i64::try_from(seconds).unwrap_or(i64::MAX);
 
             // Simulate CPU usage (0-100%)
             let cpu_value = elapsed_secs % 100;

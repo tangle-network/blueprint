@@ -70,7 +70,6 @@ impl LokiServer {
     }
 }
 
-#[async_trait::async_trait]
 impl ServerManager for LokiServer {
     async fn start(&self) -> Result<()> {
         info!("Starting Loki server on port {}", self.config.port);

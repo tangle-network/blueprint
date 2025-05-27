@@ -321,6 +321,7 @@ where
     ///     # Ok(())
     ///     # }
     /// ```
+    #[must_use]
     pub fn metrics_server(
         mut self,
         server: Arc<blueprint_qos::servers::prometheus::PrometheusServer>,

@@ -80,7 +80,7 @@ impl PrometheusServer {
     }
 
     /// Create a new embedded Prometheus server
-    fn create_embedded_server(&self) -> Result<()> {
+    fn create_embedded_server(&self) {
         let registry = prometheus::Registry::new();
         let bind_address = format!("{}:{}", self.config.host, self.config.port);
 
@@ -97,8 +97,6 @@ impl PrometheusServer {
             let mut reg = self.registry.lock().unwrap();
             *reg = Some(registry);
         }
-
-        Ok(())
     }
 
     /// Create a new Docker container for the Prometheus server
@@ -155,7 +153,6 @@ impl PrometheusServer {
     }
 }
 
-#[async_trait::async_trait]
 impl ServerManager for PrometheusServer {
     async fn start(&self) -> Result<()> {
         if self.config.use_docker {
@@ -191,7 +188,7 @@ impl ServerManager for PrometheusServer {
             // For embedded server, we need to initialize it if it doesn't exist
             if self.embedded_server.lock().unwrap().is_none() {
                 // Initialize the embedded server
-                self.create_embedded_server().await?;
+                self.create_embedded_server();
             }
 
             info!(

@@ -10,7 +10,6 @@ use blueprint_qos::{
     },
 };
 use blueprint_testing_utils::setup_log;
-use prometheus::core::Collector;
 use prometheus::{IntGauge, Opts, Registry};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use std::sync::Arc;
@@ -311,7 +310,7 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create the QoS service with all servers enabled
     let consumer = Arc::new(MockHeartbeatConsumer);
-    let mut qos_service = QoSServiceBuilder::new()
+    let qos_service = QoSServiceBuilder::new()
         .with_heartbeat_consumer(consumer)
         .with_grafana_server_config(grafana_config)
         .with_loki_server_config(loki_config)
@@ -366,7 +365,7 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // For Docker-based Prometheus, use the container name
-    if let Some(_) = qos_service.prometheus_server_url() {
+    if qos_service.prometheus_server_url().is_some() {
         info!("Prometheus: http://blueprint-test-prometheus:9091");
     } else {
         info!("Prometheus server not initialized");
@@ -458,7 +457,8 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
 
         loop {
             // Update metrics with simulated values
-            let elapsed_secs = start_time.elapsed().as_secs() as i64;
+            let seconds = start_time.elapsed().as_secs();
+            let elapsed_secs = i64::try_from(seconds).unwrap_or(i64::MAX);
 
             // Simulate CPU usage (0-100%)
             let cpu_value = elapsed_secs % 100;

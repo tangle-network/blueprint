@@ -6,7 +6,6 @@ pub mod prometheus;
 use crate::error::Result;
 
 /// Common trait for server management
-#[async_trait::async_trait]
 pub trait ServerManager: Send + Sync {
     /// Start the server
     ///
