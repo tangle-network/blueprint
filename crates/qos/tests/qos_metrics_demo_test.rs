@@ -16,8 +16,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 use tokio::time::Duration;
+use tokio::signal;
 
-// Create a Prometheus datasource in Grafana using Basic Auth
+/// Create a Prometheus datasource in Grafana using Basic Auth
 async fn create_prometheus_datasource(
     grafana_url: &str,
     prometheus_url: &str,
@@ -73,7 +74,7 @@ async fn create_prometheus_datasource(
     }
 }
 
-// Custom dashboard creation function using Basic Auth
+/// Create a simple dashboard in Grafana with CPU and Memory metrics
 async fn create_dashboard_with_basic_auth(
     grafana_url: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
@@ -118,17 +119,28 @@ async fn create_dashboard_with_basic_auth(
                             "thresholds": {
                                 "mode": "absolute",
                                 "steps": [
-                                    { "color": "green", "value": null },
-                                    { "color": "orange", "value": 70 },
-                                    { "color": "red", "value": 90 }
+                                    {
+                                        "color": "green",
+                                        "value": null
+                                    },
+                                    {
+                                        "color": "orange",
+                                        "value": 70
+                                    },
+                                    {
+                                        "color": "red",
+                                        "value": 85
+                                    }
                                 ]
                             },
-                            "max": 100
+                            "min": 0,
+                            "max": 100,
+                            "unit": "percent"
                         }
                     },
                     "targets": [
                         {
-                            "expr": "test_blueprint_cpu_usage{service_id=\"1001\", blueprint_id=\"2001\"}",
+                            "expr": "test_blueprint_cpu_usage",
                             "refId": "A"
                         }
                     ]
@@ -149,17 +161,28 @@ async fn create_dashboard_with_basic_auth(
                             "thresholds": {
                                 "mode": "absolute",
                                 "steps": [
-                                    { "color": "green", "value": null },
-                                    { "color": "orange", "value": 700 },
-                                    { "color": "red", "value": 900 }
+                                    {
+                                        "color": "green",
+                                        "value": null
+                                    },
+                                    {
+                                        "color": "orange",
+                                        "value": 768
+                                    },
+                                    {
+                                        "color": "red",
+                                        "value": 896
+                                    }
                                 ]
                             },
-                            "max": 1024
+                            "min": 0,
+                            "max": 1024,
+                            "unit": "MB"
                         }
                     },
                     "targets": [
                         {
-                            "expr": "test_blueprint_memory_usage{service_id=\"1001\", blueprint_id=\"2001\"}",
+                            "expr": "test_blueprint_memory_usage",
                             "refId": "A"
                         }
                     ]
@@ -172,11 +195,11 @@ async fn create_dashboard_with_basic_auth(
                         "x": 16,
                         "y": 0,
                         "w": 8,
-                        "h": 8
+                        "h": 4
                     },
                     "targets": [
                         {
-                            "expr": "test_blueprint_job_executions{service_id=\"1001\", blueprint_id=\"2001\"}",
+                            "expr": "test_blueprint_job_executions",
                             "refId": "A"
                         }
                     ]
@@ -186,52 +209,46 @@ async fn create_dashboard_with_basic_auth(
                     "title": "Job Errors",
                     "type": "stat",
                     "gridPos": {
-                        "x": 0,
-                        "y": 8,
+                        "x": 16,
+                        "y": 4,
                         "w": 8,
-                        "h": 8
+                        "h": 4
                     },
                     "fieldConfig": {
                         "defaults": {
-                            "mappings": [],
+                            "color": {
+                                "mode": "thresholds"
+                            },
                             "thresholds": {
                                 "mode": "absolute",
                                 "steps": [
-                                    { "color": "green", "value": null },
-                                    { "color": "orange", "value": 5 },
-                                    { "color": "red", "value": 10 }
+                                    {
+                                        "color": "green",
+                                        "value": null
+                                    },
+                                    {
+                                        "color": "orange",
+                                        "value": 1
+                                    },
+                                    {
+                                        "color": "red",
+                                        "value": 5
+                                    }
                                 ]
                             }
                         }
                     },
                     "targets": [
                         {
-                            "expr": "test_blueprint_job_errors{service_id=\"1001\", blueprint_id=\"2001\"}",
-                            "refId": "A"
-                        }
-                    ]
-                },
-                {
-                    "id": 5,
-                    "title": "Last Heartbeat",
-                    "type": "stat",
-                    "gridPos": {
-                        "x": 8,
-                        "y": 8,
-                        "w": 8,
-                        "h": 8
-                    },
-                    "targets": [
-                        {
-                            "expr": "test_blueprint_last_heartbeat{service_id=\"1001\", blueprint_id=\"2001\"}",
+                            "expr": "test_blueprint_job_errors",
                             "refId": "A"
                         }
                     ]
                 }
             ]
         },
-        "overwrite": true,
-        "message": "Blueprint test dashboard created"
+        "folderId": 0,
+        "overwrite": true
     }"#;
 
     // Send the request to create the dashboard
@@ -239,15 +256,15 @@ async fn create_dashboard_with_basic_auth(
     let response = client
         .post(&dashboard_url)
         .headers(headers)
-        .body(dashboard_json.to_string())
+        .body(dashboard_json)
         .send()
         .await?;
 
     // Check if the request was successful
     if response.status().is_success() {
-        let json = response.json::<serde_json::Value>().await?;
-        let url = format!("{}{}", grafana_url, json["url"].as_str().unwrap_or("/"));
-        Ok(url)
+        let json: serde_json::Value = response.json().await?;
+        let url = json["url"].as_str().unwrap_or("");
+        Ok(format!("{}{}", grafana_url, url))
     } else {
         let status = response.status();
         let body = response.text().await?;
@@ -255,7 +272,7 @@ async fn create_dashboard_with_basic_auth(
     }
 }
 
-// Mock HeartbeatConsumer for testing purposes
+/// Mock HeartbeatConsumer for testing purposes
 #[derive(Clone, Debug)]
 struct MockHeartbeatConsumer;
 
@@ -265,12 +282,36 @@ impl HeartbeatConsumer for MockHeartbeatConsumer {
     }
 }
 
+/// This test demonstrates running all three servers (Grafana, Loki, and Prometheus)
+/// and showcases the metrics collection, visualization, and monitoring capabilities.
+/// 
+/// It runs a complete QoS metrics setup with:
+/// - Prometheus server for metrics collection
+/// - Grafana server for visualization
+/// - Loki server for logs
+/// - Simulated metrics data generation
+/// - Dashboard creation and setup
+/// 
+/// This test is designed to be run manually to demo the QoS features.
+/// It will wait for a Ctrl+C signal to terminate.
 #[tokio::test]
-#[ignore]
-async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
+#[ignore] // Ignore by default since this is a demo that runs until manually stopped
+async fn test_qos_metrics_demo() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging
     setup_log();
 
-    info!("Starting QoS servers test...");
+    info!("Starting QoS metrics demonstration...");
+
+    // Configure Prometheus server to use Docker mode for full API support
+    let prometheus_config = PrometheusServerConfig {
+        port: 9091,
+        host: "0.0.0.0".to_string(),
+        use_docker: true,
+        docker_image: "prom/prometheus:latest".to_string(),
+        docker_container_name: "blueprint-test-prometheus".to_string(),
+        config_path: None,
+        data_path: None,
+    };
 
     // Configure Grafana server
     let grafana_config = GrafanaServerConfig {
@@ -290,23 +331,8 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
         container_name: "blueprint-test-loki".to_string(),
     };
 
-    // Configure Prometheus server (using Docker for full API support)
-    let prometheus_config = PrometheusServerConfig {
-        port: 9091, // Use a different port to avoid conflicts
-        host: "0.0.0.0".to_string(),
-        use_docker: true, // Use Docker for full Prometheus API support
-        docker_image: "prom/prometheus:latest".to_string(),
-        docker_container_name: "blueprint-test-prometheus".to_string(),
-        config_path: None,
-        data_path: None,
-    };
-
-    // Set up metrics configuration with service_id and blueprint_id for dashboard
-    let metrics_config = MetricsConfig {
-        service_id: 1001,
-        blueprint_id: 2001,
-        ..Default::default()
-    };
+    // Configure metrics
+    let metrics_config = MetricsConfig::default();
 
     // Create the QoS service with all servers enabled
     let consumer = Arc::new(MockHeartbeatConsumer);
@@ -321,34 +347,8 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // Wait a bit for servers to fully initialize
+    info!("Waiting for servers to initialize (5 seconds)...");
     tokio::time::sleep(Duration::from_secs(5)).await;
-
-    // Create Prometheus datasource and custom dashboard using Basic Auth
-    if let Some(grafana_url) = qos_service.grafana_server_url() {
-        // First create the Prometheus datasource
-        info!("Creating Prometheus datasource in Grafana...");
-        // Use the Docker container name for Prometheus
-        // Docker containers in the same network can access each other by container name
-        let prometheus_url = "http://blueprint-test-prometheus:9091";
-        match create_prometheus_datasource(&grafana_url, prometheus_url).await {
-            Ok(datasource_name) => {
-                info!(
-                    "Prometheus datasource '{}' created successfully",
-                    datasource_name
-                );
-
-                // Then create the dashboard
-                info!("Creating custom dashboard in Grafana...");
-                match create_dashboard_with_basic_auth(&grafana_url).await {
-                    Ok(url) => info!("Dashboard created successfully at {}", url),
-                    Err(e) => error!("Failed to create dashboard: {}", e),
-                }
-            }
-            Err(e) => error!("Failed to create Prometheus datasource: {}", e),
-        }
-    } else {
-        info!("No dashboard created (Grafana server not available)");
-    }
 
     // Print server URLs for easy access
     info!("Server URLs:");
@@ -357,11 +357,15 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         info!("Grafana server not initialized");
     }
-
     if let Some(url) = qos_service.loki_server_url() {
         info!("Loki: {}", url);
     } else {
         info!("Loki server not initialized");
+    }
+    if let Some(url) = qos_service.prometheus_server_url() {
+        info!("Prometheus: {}", url);
+    } else {
+        info!("Prometheus server not initialized");
     }
 
     // For Docker-based Prometheus, use the container name
@@ -374,15 +378,15 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
     // Debug server status
     qos_service.debug_server_status();
 
-    // Set up Prometheus metrics for simulation
-    info!("Setting up simulated metrics...");
+    // Set up service and blueprint IDs for metrics
+    let service_id = 1001;
+    let blueprint_id = 2001;
+
+    // Create a Prometheus registry and register test metrics
     let registry = Registry::new();
 
     // Helper function to create and register a gauge with labels
     let create_gauge = |name: &str, help: &str| -> Result<IntGauge, Box<dyn std::error::Error>> {
-        let service_id = 1001;
-        let blueprint_id = 2001;
-
         let opts = Opts::new(name, help)
             .const_label("service_id", service_id.to_string())
             .const_label("blueprint_id", blueprint_id.to_string());
@@ -393,61 +397,42 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
         Ok(gauge)
     };
 
-    // Create all the gauges
-    let cpu_usage = match create_gauge(
+    // Create all the gauges for simulation
+    info!("Setting up simulated metrics...");
+    let cpu_usage = create_gauge(
         "test_blueprint_cpu_usage",
         "Simulated CPU usage for test blueprint",
-    ) {
-        Ok(gauge) => gauge,
-        Err(e) => {
-            error!("Failed to create CPU usage gauge: {}", e);
-            return Err(e);
-        }
-    };
+    )?;
 
-    let memory_usage = match create_gauge(
+    let memory_usage = create_gauge(
         "test_blueprint_memory_usage",
         "Simulated memory usage for test blueprint",
-    ) {
-        Ok(gauge) => gauge,
-        Err(e) => {
-            error!("Failed to create memory usage gauge: {}", e);
-            return Err(e);
-        }
-    };
+    )?;
 
-    let job_executions = match create_gauge(
+    let job_executions = create_gauge(
         "test_blueprint_job_executions",
         "Simulated job executions for test blueprint",
-    ) {
-        Ok(gauge) => gauge,
-        Err(e) => {
-            error!("Failed to create job executions gauge: {}", e);
-            return Err(e);
-        }
-    };
+    )?;
 
-    let job_errors = match create_gauge(
+    let job_errors = create_gauge(
         "test_blueprint_job_errors",
         "Simulated job errors for test blueprint",
-    ) {
-        Ok(gauge) => gauge,
-        Err(e) => {
-            error!("Failed to create job errors gauge: {}", e);
-            return Err(e);
-        }
-    };
+    )?;
 
-    let heartbeat = match create_gauge(
+    let heartbeat = create_gauge(
         "test_blueprint_last_heartbeat",
         "Simulated last heartbeat timestamp for test blueprint",
-    ) {
-        Ok(gauge) => gauge,
-        Err(e) => {
-            error!("Failed to create heartbeat gauge: {}", e);
-            return Err(e);
+    )?;
+
+    // Create dashboard using either the built-in method or our custom function
+    info!("Creating dashboard...");
+    if let Some(grafana_url) = qos_service.grafana_server_url() {
+        let dashboard_result = create_dashboard_with_basic_auth(&grafana_url).await;
+        match dashboard_result {
+            Ok(url) => info!("Dashboard created successfully. View at: {}", url),
+            Err(e) => error!("Failed to create dashboard manually: {}", e),
         }
-    };
+    }
 
     // Start a background task to update metrics
     let start_time = Instant::now();
@@ -488,17 +473,24 @@ async fn test_run_all_servers() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Simulated metrics are now being generated");
 
-    // Provide instructions for viewing the dashboard
+    // Print information about viewing the dashboard
     if let Some(url) = qos_service.grafana_server_url() {
         info!("You can view the dashboard at {}/dashboards", url);
     }
 
-    // Sleep indefinitely to keep the servers running
-    info!("All servers started. Sleeping indefinitely...");
-    info!("Press Ctrl+C to stop the test.");
+    info!("QoS metrics demonstration is now running.");
+    info!("Press Ctrl+C to stop the demonstration.");
 
-    // Sleep for a very long time (effectively indefinitely)
-    tokio::time::sleep(Duration::from_secs(3600 * 24)).await; // 24 hours
+    // Wait for Ctrl+C signal
+    match signal::ctrl_c().await {
+        Ok(()) => {
+            info!("Received Ctrl+C, shutting down...");
+        }
+        Err(e) => {
+            error!("Failed to listen for Ctrl+C: {}", e);
+        }
+    }
 
+    info!("Demonstration completed, servers will be stopped.");
     Ok(())
 }
