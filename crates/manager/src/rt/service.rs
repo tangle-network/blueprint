@@ -1,5 +1,6 @@
 use super::bridge::{Bridge, BridgeHandle};
-use super::hypervisor::{CHVmConfig, HypervisorInstance};
+use super::hypervisor::HypervisorInstance;
+use super::hypervisor::net::NetworkManager;
 use crate::error::{Error, Result};
 use std::path::Path;
 use std::time::Duration;
@@ -21,9 +22,10 @@ pub struct Service {
 }
 
 impl Service {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         id: u32,
-        vm_conf: CHVmConfig,
+        network_manager: NetworkManager,
         data_dir: impl AsRef<Path>,
         keystore: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
@@ -59,7 +61,6 @@ impl Service {
         })?;
 
         let mut hypervisor = HypervisorInstance::new(
-            vm_conf,
             data_dir,
             keystore,
             cache_dir.as_ref(),
@@ -70,6 +71,7 @@ impl Service {
         hypervisor
             .prepare(
                 id,
+                network_manager,
                 bridge_base_socket,
                 binary_path.as_ref(),
                 env_vars,

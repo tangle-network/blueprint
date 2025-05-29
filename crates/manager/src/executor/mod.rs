@@ -2,6 +2,7 @@ use crate::blueprint::ActiveBlueprints;
 use crate::config::{AuthProxyOpts, BlueprintManagerConfig};
 use crate::error::Error;
 use crate::error::Result;
+use crate::rt::hypervisor::net::NetworkManager;
 use crate::sdk::entry::SendFuture;
 use blueprint_clients::tangle::EventsClient;
 use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
@@ -17,11 +18,13 @@ use color_eyre::eyre::OptionExt;
 use sp_core::{ecdsa, sr25519};
 use std::collections::HashMap;
 use std::future::Future;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::subxt::utils::AccountId32;
 use tokio::task::JoinHandle;
+use tracing::error;
 
 pub(crate) mod event_handler;
 
@@ -218,6 +221,13 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
     let keystore_uri = env.keystore_uri.clone();
 
+    let network_candidates = blueprint_manager_config
+        .default_address_pool
+        .hosts()
+        .filter(|ip| ip.octets()[3] != 0 && ip.octets()[3] != 255)
+        .collect();
+    let network_manager = NetworkManager::new(network_candidates).await?;
+
     let manager_task = async move {
         let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
         let services_client = tangle_client.services_client();
@@ -233,6 +243,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
             &mut active_blueprints,
             &env,
             &blueprint_manager_config,
+            network_manager.clone(),
         )
         .await?;
 
@@ -255,6 +266,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
                 &event,
                 &operator_subscribed_blueprints,
                 &env,
+                network_manager.clone(),
                 &blueprint_manager_config,
                 &mut active_blueprints,
                 result,
@@ -362,6 +374,7 @@ async fn handle_init(
     active_blueprints: &mut ActiveBlueprints,
     blueprint_env: &BlueprintEnvironment,
     blueprint_manager_config: &BlueprintManagerConfig,
+    network_manager: NetworkManager,
 ) -> Result<Vec<RpcServicesWithBlueprint>> {
     info!("Beginning initialization of Blueprint Manager");
 
@@ -373,16 +386,14 @@ async fn handle_init(
         .query_operator_blueprints(init_event.hash, sub_account_id.clone())
         .await;
 
-    let operator_subscribed_blueprints = match maybe_operator_subscribed_blueprints {
-        Ok(blueprints) => blueprints,
-        Err(err) => {
+    let operator_subscribed_blueprints =
+        maybe_operator_subscribed_blueprints.unwrap_or_else(|err| {
             warn!(
                 "Failed to query operator blueprints: {}, did you register as an operator?",
                 err
             );
-            blueprint_std::vec::Vec::new()
-        }
-    };
+            Vec::new()
+        });
 
     info!(
         "Received {} initial blueprints this operator is registered to",
@@ -397,6 +408,7 @@ async fn handle_init(
         &init_event,
         &operator_subscribed_blueprints,
         blueprint_env,
+        network_manager,
         blueprint_manager_config,
         active_blueprints,
         poll_result,

@@ -1,3 +1,4 @@
+use std::fs;
 use crate::config::BlueprintManagerConfig;
 use crate::error::{Error, Result};
 use crate::blueprint::native::FilteredBlueprint;
@@ -17,8 +18,8 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use tangle_subxt::tangle_testnet_runtime::api::services::events::{
     JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
 };
+use crate::rt::hypervisor::net::NetworkManager;
 use crate::rt::service::{Service, Status};
-use crate::rt::hypervisor::CHVmConfig;
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
 
@@ -28,8 +29,10 @@ pub struct VerifiedBlueprint {
 }
 
 impl VerifiedBlueprint {
+    #[allow(clippy::cast_possible_truncation)]
     pub async fn start_services_if_needed(
         &mut self,
+        network_manager: NetworkManager,
         blueprint_config: &BlueprintEnvironment,
         manager_config: &BlueprintManagerConfig,
         active_blueprints: &mut ActiveBlueprints,
@@ -85,13 +88,18 @@ impl VerifiedBlueprint {
                     arguments.join(" ")
                 );
 
+                let id = active_blueprints.len() as u32;
+
+                let runtime_dir = manager_config.runtime_dir.join(id.to_string());
+                fs::create_dir_all(&runtime_dir)?;
+
                 let mut service = Service::new(
-                    active_blueprints.len() as u32 + 3,
-                    CHVmConfig,
+                    id,
+                    network_manager.clone(),
                     &blueprint_config.data_dir,
                     &blueprint_config.keystore_uri,
                     &cache_dir,
-                    &manager_config.runtime_dir,
+                    runtime_dir,
                     &sub_service_str,
                     &binary_path,
                     env_vars,
@@ -240,6 +248,7 @@ pub(crate) async fn handle_tangle_event(
     event: &TangleEvent,
     blueprints: &[RpcServicesWithBlueprint],
     blueprint_config: &BlueprintEnvironment,
+    network_manager: NetworkManager,
     manager_config: &BlueprintManagerConfig,
     active_blueprints: &mut ActiveBlueprints,
     poll_result: EventPollResult,
@@ -307,7 +316,12 @@ pub(crate) async fn handle_tangle_event(
     // Step 3: Check to see if we need to start any new services
     for blueprint in &mut verified_blueprints {
         blueprint
-            .start_services_if_needed(blueprint_config, manager_config, active_blueprints)
+            .start_services_if_needed(
+                network_manager.clone(),
+                blueprint_config,
+                manager_config,
+                active_blueprints,
+            )
             .await?;
     }
 

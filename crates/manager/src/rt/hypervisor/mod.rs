@@ -1,8 +1,12 @@
+pub mod net;
+use net::NetworkManager;
+
 use crate::error::{Error, Result};
 use cloud_hypervisor_client::apis::DefaultApi;
 use cloud_hypervisor_client::models::console_config::Mode;
 use cloud_hypervisor_client::models::{
-    ConsoleConfig, DiskConfig, FsConfig, MemoryConfig, PayloadConfig, VmConfig, VsockConfig,
+    ConsoleConfig, DiskConfig, FsConfig, MemoryConfig, NetConfig, PayloadConfig, VmConfig,
+    VsockConfig,
 };
 use cloud_hypervisor_client::{SocketBasedApiClient, socket_based_api_client};
 use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
@@ -10,9 +14,10 @@ use hyper::StatusCode;
 use nix::sys::signal;
 use nix::sys::signal::Signal;
 use nix::unistd::Pid;
+use std::fmt::Write as _;
 use std::fs;
 use std::fs::{File, OpenOptions};
-use std::io::Write;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::process::{Child, Command};
@@ -21,8 +26,6 @@ use tracing::{error, info, warn};
 
 const DATA_DIR_VIRTIO: &str = "blueprint-data";
 const KEYSTORE_VIRTIO: &str = "blueprint-keystore";
-
-pub struct CHVmConfig;
 
 struct Handles {
     hypervisor: Child,
@@ -44,12 +47,11 @@ pub(super) struct HypervisorInstance {
     cloud_init_image_path: PathBuf,
     virtio: Virtio,
     handles: Handles,
-    vm_conf: Option<CHVmConfig>,
+    lease: Option<net::Lease>,
 }
 
 impl HypervisorInstance {
     pub fn new(
-        conf: CHVmConfig,
         data_dir: impl AsRef<Path>,
         keystore: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
@@ -65,12 +67,10 @@ impl HypervisorInstance {
         let stderr_log_path = cache_dir
             .as_ref()
             .join(format!("{}.log.stderr", service_name));
-        let binary_image_path = cache_dir
-            .as_ref()
-            .join(&format!("{}-bin.img", service_name));
+        let binary_image_path = cache_dir.as_ref().join(format!("{}-bin.img", service_name));
         let cloud_init_image_path = cache_dir
             .as_ref()
-            .join(&format!("{}-cloud-init.img", service_name));
+            .join(format!("{}-cloud-init.img", service_name));
         let sock_path = runtime_dir.as_ref().join("ch-api.sock");
 
         let stdout = OpenOptions::new()
@@ -140,19 +140,20 @@ impl HypervisorInstance {
                 data_dir_virtio,
                 keystore_virtio,
             },
-            vm_conf: Some(conf),
+            lease: None,
         })
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn create_binary_image(
         &self,
         data_dir: impl AsRef<Path>,
         keystore: impl AsRef<Path>,
         binary_path: impl AsRef<Path>,
         env_vars: Vec<(String, String)>,
-        arguments: Vec<String>,
+        arguments: &[String],
     ) -> Result<()> {
-        const LAUNCHER_SCRIPT_TEMPLATE: &str = r#"#!/bin/sh
+        const LAUNCHER_SCRIPT_TEMPLATE: &str = r"#!/bin/sh
         set -e
 
         mkdir -p {{DATA_DIR}}
@@ -164,19 +165,19 @@ impl HypervisorInstance {
         {{ENV_VARS}}
 
         exec /srv/service {{SERVICE_ARGS}}
-        "#;
+        ";
 
         let mut env_vars_str = String::new();
         for (key, val) in env_vars {
-            env_vars_str.push_str(&format!("export {key}=\"{val}\"\n"));
+            writeln!(&mut env_vars_str, "export {key}=\"{val}\"").unwrap();
         }
 
         let args = arguments.join(" ");
 
         let launcher_script = LAUNCHER_SCRIPT_TEMPLATE
-            .replace("{{DATA_DIR}}", &*data_dir.as_ref().to_string_lossy())
+            .replace("{{DATA_DIR}}", &data_dir.as_ref().to_string_lossy())
             .replace("{{DATA_DIR_VIRTIO}}", DATA_DIR_VIRTIO)
-            .replace("{{KEYSTORE_DIR}}", &*keystore.as_ref().to_string_lossy())
+            .replace("{{KEYSTORE_DIR}}", &keystore.as_ref().to_string_lossy())
             .replace("{{KEYSTORE_VIRTIO}}", KEYSTORE_VIRTIO)
             .replace("{{ENV_VARS}}", &env_vars_str)
             .replace("{{SERVICE_ARGS}}", &args);
@@ -196,15 +197,15 @@ impl HypervisorInstance {
                     source: FileSource::Raw(launcher_script.into_bytes()),
                 },
             ],
-            image_path: Default::default(),
+            image_path: self.binary_image_path.clone(),
         })?;
 
         Ok(())
     }
 
     fn create_cloud_init_image(&self, manager_service_id: u32) -> Result<()> {
-        const CLOUD_INIT_USER_DATA: &str = include_str!("hypervisor/assets/user-data");
-        const CLOUD_INIT_META_DATA: &str = include_str!("hypervisor/assets/meta-data");
+        const CLOUD_INIT_USER_DATA: &str = include_str!("assets/user-data");
+        const CLOUD_INIT_META_DATA: &str = include_str!("assets/meta-data");
 
         let meta = CLOUD_INIT_META_DATA
             .replace("{{BLUEPRINT_INSTANCE_ID}}", &manager_service_id.to_string());
@@ -229,22 +230,18 @@ impl HypervisorInstance {
     pub async fn prepare(
         &mut self,
         manager_service_id: u32,
+        network_manager: NetworkManager,
         bridge_socket_path: impl AsRef<Path>,
         binary_path: impl AsRef<Path>,
         env_vars: Vec<(String, String)>,
         arguments: Vec<String>,
     ) -> Result<()> {
-        let Some(_conf) = self.vm_conf.take() else {
-            error!("Service already created!");
-            return Ok(());
-        };
-
         self.create_binary_image(
             &self.virtio.data_dir,
             &self.virtio.keystore,
             binary_path,
             env_vars,
-            arguments,
+            &arguments,
         )
         .map_err(|e| {
             error!("Error creating binary image: {e}");
@@ -259,9 +256,20 @@ impl HypervisorInstance {
 
         let (serial, console, cmdline_console_target) = self.logging_configs();
 
+        let (lease, tap_interface) = network_manager
+            .new_tap_interface(manager_service_id)
+            .await
+            .map_err(|e| {
+                error!("Error creating TAP interface: {e}");
+                e
+            })?;
+
+        let tap_interface_addr = lease.addr();
+        self.lease = Some(lease);
+
         let vm_conf = VmConfig {
             memory: Some(MemoryConfig {
-                size: 1073741824,
+                size: 4096,
                 shared: Some(true),
                 ..Default::default()
             }),
@@ -314,10 +322,16 @@ impl HypervisorInstance {
             serial: Some(serial),
             console: Some(console),
             vsock: Some(VsockConfig {
-                cid: manager_service_id as i64,
+                // + 3 since 0 = hypervisor, 1 = loopback, 2 = host
+                cid: i64::from(manager_service_id) + 3,
                 socket: bridge_socket_path.as_ref().to_string_lossy().into(),
                 ..Default::default()
             }),
+            net: Some(vec![NetConfig {
+                tap: Some(tap_interface),
+                ip: Some(tap_interface_addr.to_string()),
+                ..Default::default()
+            }]),
             ..Default::default()
         };
 
@@ -379,6 +393,7 @@ impl HypervisorInstance {
         Ok(client)
     }
 
+    #[allow(clippy::cast_possible_wrap)]
     pub async fn shutdown(mut self) -> Result<()> {
         const VM_SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(30);
 
@@ -465,7 +480,7 @@ fn new_fat_fs(config: FatFsConfig) -> Result<()> {
     // Leave 64 KiB for FAT overhead
     const IMG_OVERHEAD: u64 = 64 * 1024;
     // Make at *least* 1 MiB images
-    const MIN_IMG_SIZE: u64 = 1 * 1024 * 1024;
+    const MIN_IMG_SIZE: u64 = 1024 * 1024;
 
     let file_data_len = (config.starting_length as u64) + IMG_OVERHEAD;
     let img_len = file_data_len.next_power_of_two().max(MIN_IMG_SIZE);

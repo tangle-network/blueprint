@@ -14,8 +14,6 @@ remappings_location = "txt"
 remappings_version = false
 
 [dependencies]
-# TODO: Replace with 0.5.0 release once published
-# tnt-core = "0.5.0"
-tnt-core = { version = "0.5.0", git = "https://github.com/tangle-network/tnt-core.git" }
+tnt-core = "0.4.0"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
