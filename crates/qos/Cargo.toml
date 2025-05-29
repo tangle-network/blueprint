@@ -46,7 +46,14 @@ base64.workspace = true
 
 [dev-dependencies]
 tempfile = { workspace = true }
-blueprint-testing-utils = { workspace = true }
+blueprint-testing-utils = { workspace = true, features = ["tangle"] }
+blueprint-runner = { path = "../runner", features = ["std", "tangle"] }
+blueprint-chain-setup = { path = "../chain-setup" }
+blueprint-contexts = { path = "../contexts" }
+blueprint-sdk = { path = "../sdk" }
+blueprint-tangle-extra = { path = "../tangle-extra" }
+blueprint-router = { path = "../router" }
+tangle-subxt = { workspace = true, features = ["std"] }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }

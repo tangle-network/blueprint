@@ -58,7 +58,7 @@ mod tests {
     const BASE_PORT: u16 = 9000;
 
     /// Tests the core QoS service functionality including metrics, heartbeats, and configuration.
-    /// 
+    ///
     /// This test verifies:
     /// - QoS service initialization with custom configuration
     /// - Heartbeat mechanism functionality
@@ -148,13 +148,13 @@ mod tests {
     }
 
     /// Tests the Grafana and Loki server management functionality.
-    /// 
+    ///
     /// This test verifies:
     /// - Server initialization and startup
     /// - Server URL accessibility
     /// - Health check endpoints
     /// - Dashboard creation
-    /// 
+    ///
     /// Note: This test requires Docker to be running on the host machine.
     #[tokio::test]
     async fn test_grafana_loki_server_management() -> Result<(), QosError> {
@@ -174,7 +174,11 @@ mod tests {
             admin_password: "admin".to_string(),
             allow_anonymous: true,
             anonymous_role: "Admin".to_string(),
-            data_dir: temp_dir.path().join("grafana").to_string_lossy().to_string(),
+            data_dir: temp_dir
+                .path()
+                .join("grafana")
+                .to_string_lossy()
+                .to_string(),
             container_name: "test-grafana-server".to_string(),
         };
 

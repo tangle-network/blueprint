@@ -348,6 +348,11 @@ where
         })
     }
 
+    /// Get the heartbeat service if available
+    pub fn heartbeat_service(&self) -> Option<&HeartbeatService<C>> {
+        self.heartbeat_service.as_ref()
+    }
+
     /// Debug method to check if servers are initialized
     pub fn debug_server_status(&self) {
         info!("Server status:");

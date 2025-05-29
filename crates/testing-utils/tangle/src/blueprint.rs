@@ -138,14 +138,15 @@ debug = false
         r#"use blueprint_sdk::Job;
 use blueprint_sdk::Router;
 use blueprint_sdk::contexts::tangle::TangleClientContext;
-use blueprint_sdk::crypto::sp_core::SpSr25519;
-use blueprint_sdk::crypto::tangle_pair_signer::TanglePairSigner;
-use blueprint_sdk::keystore::backends::Backend;
-use blueprint_sdk::runner::BackgroundService;
-use blueprint_sdk::runner::BlueprintRunner;
-use blueprint_sdk::runner::config::BlueprintEnvironment;
-use blueprint_sdk::runner::error::RunnerError;
-use blueprint_sdk::runner::tangle::config::TangleConfig;
+use blueprint_core::crypto::keypair::sp_runtime::traits::Verify;
+use blueprint_core::crypto::sp::sp_core::ed25519::Signature;
+use blueprint_core::extract::Context;
+use blueprint_runner::config::BlueprintEnvironment;
+use blueprint_runner::error::RunnerError;
+use blueprint_runner::ext::BackgroundService;
+use blueprint_runner::BlueprintRunner;
+use blueprint_sdk::prelude::*;
+use blueprint_sdk::tangle::config::TangleConfig;
 use blueprint_sdk::tangle::consumer::TangleConsumer;
 use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
 use blueprint_sdk::tangle::filters::MatchesServiceId;
@@ -154,8 +155,16 @@ use blueprint_sdk::tangle::producer::TangleProducer;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Receiver;
 use tower::filter::FilterLayer;
-use tracing::error;
+use tracing::{error, info};
 use tracing::level_filters::LevelFilter;
+
+// QoS imports
+use blueprint_qos::default_qos_config;
+use blueprint_qos::error::Error as QosError;
+use blueprint_qos::heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatStatus};
+use blueprint_qos::servers::prometheus::PrometheusServerConfig;
+use blueprint_qos::unified_service::QoSServiceBuilder;
+use std::sync::Arc;
 
 // The job ID
 pub const XSQUARE_JOB_ID: u32 = 0;
@@ -166,6 +175,39 @@ pub async fn square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
 
     // The result is then converted into a `JobResult` to be sent back to the caller.
     TangleResult(result)
+}
+
+/// Mock heartbeat consumer for testing
+#[derive(Clone, Debug)]
+pub struct MockHeartbeatConsumer {
+    heartbeat_count: Arc<tokio::sync::Mutex<usize>>,
+    last_status: Arc<tokio::sync::Mutex<Option<HeartbeatStatus>>>,
+}
+
+impl MockHeartbeatConsumer {
+    pub fn new() -> Self {
+        Self {
+            heartbeat_count: Arc::new(tokio::sync::Mutex::new(0)),
+            last_status: Arc::new(tokio::sync::Mutex::new(None)),
+        }
+    }
+    
+    pub async fn heartbeat_count(&self) -> usize {
+        *self.heartbeat_count.lock().await
+    }
+}
+
+impl HeartbeatConsumer for MockHeartbeatConsumer {
+    async fn send_heartbeat(&self, status: &HeartbeatStatus) -> std::result::Result<(), QosError> {
+        let mut count = self.heartbeat_count.lock().await;
+        *count += 1;
+        
+        let mut last = self.last_status.lock().await;
+        *last = Some(status.clone());
+        
+        info!("Heartbeat sent via consumer, count: {}, status: {:?}", *count, status);
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -195,9 +237,60 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     let tangle_consumer = TangleConsumer::new(tangle_client.rpc_client.clone(), st25519_signer);
 
     let tangle_config = TangleConfig::default();
-
     let service_id = env.protocol_settings.tangle()?.service_id.unwrap();
-    let result = BlueprintRunner::builder(tangle_config, env)
+    
+    // Initialize QoS services
+    // Configure the heartbeat service
+    let mut qos_config = default_qos_config();
+    qos_config.heartbeat = Some(HeartbeatConfig {
+        interval_secs: 5, // Send heartbeats every 5 seconds
+        jitter_percent: 5,
+        service_id,
+        blueprint_id: 1, // Use a default blueprint ID for testing
+        max_missed_heartbeats: 3,
+    });
+    
+    // Configure Prometheus metrics server
+    qos_config.prometheus_server = Some(PrometheusServerConfig::default());
+    qos_config.manage_servers = true;
+    
+    // Create the heartbeat consumer
+    let heartbeat_consumer = Arc::new(MockHeartbeatConsumer::new());
+    
+    // Build the QoS service
+    let qos_service = match QoSServiceBuilder::new()
+        .with_config(qos_config)
+        .with_heartbeat_consumer(heartbeat_consumer.clone())
+        .build()
+        .await
+    {
+        Ok(service) => service,
+        Err(e) => {
+            error!("Failed to initialize QoS service: {}", e);
+            return Err(blueprint_sdk::Error::GenericError(format!("QoS initialization failed: {}", e)));
+        }
+    };
+    
+    // Get the heartbeat service if available
+    let heartbeat_service = match qos_service.heartbeat_service() {
+        Some(service) => {
+            info!("Heartbeat service initialized successfully");
+            service.clone()
+        },
+        None => {
+            error!("Failed to initialize heartbeat service");
+            return Err(blueprint_sdk::Error::GenericError("Heartbeat service initialization failed".to_string()));
+        }
+    };
+    
+    // Start the heartbeat service
+    if let Err(e) = heartbeat_service.start_heartbeat().await {
+        error!("Failed to start heartbeat service: {}", e);
+        return Err(blueprint_sdk::Error::GenericError(format!("Failed to start heartbeat service: {}", e)));
+    }
+    
+    // Create builder and add router and background service
+    let mut builder = BlueprintRunner::builder(tangle_config, env)
         .router(
             // A router
             //
@@ -210,7 +303,25 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
                 // Add the `FilterLayer` to filter out job calls that don't match the service ID
                 .layer(FilterLayer::new(MatchesServiceId(service_id))),
         )
-        .background_service(FooBackgroundService)
+        .background_service(FooBackgroundService);
+        
+    // Add the heartbeat service to the BlueprintRunner
+    builder = builder.heartbeat_service(heartbeat_service);
+    
+    // Check if prometheus metrics server is available and add it if so
+    if qos_service.prometheus_server_url().is_some() {
+        // We need to use the PrometheusServer directly from the QoS crate
+        // The metrics_server method expects an Arc<PrometheusServer>
+        info!("Prometheus metrics server initialized");
+        
+        // Create a new PrometheusServer with the same config
+        let prometheus_config = PrometheusServerConfig::default();
+        let prometheus_server = Arc::new(blueprint_qos::servers::prometheus::PrometheusServer::new(prometheus_config));
+        builder = builder.metrics_server(prometheus_server);
+    }
+    
+    // Complete the builder chain
+    let result = builder
         // Add potentially many producers
         //
         // A producer is simply a `Stream` that outputs `JobCall`s, which are passed down to the intended

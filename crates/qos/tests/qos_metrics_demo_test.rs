@@ -15,8 +15,8 @@ use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
-use tokio::time::Duration;
 use tokio::signal;
+use tokio::time::Duration;
 
 /// Create a Prometheus datasource in Grafana using Basic Auth
 async fn create_prometheus_datasource(
@@ -284,14 +284,14 @@ impl HeartbeatConsumer for MockHeartbeatConsumer {
 
 /// This test demonstrates running all three servers (Grafana, Loki, and Prometheus)
 /// and showcases the metrics collection, visualization, and monitoring capabilities.
-/// 
+///
 /// It runs a complete QoS metrics setup with:
 /// - Prometheus server for metrics collection
 /// - Grafana server for visualization
 /// - Loki server for logs
 /// - Simulated metrics data generation
 /// - Dashboard creation and setup
-/// 
+///
 /// This test is designed to be run manually to demo the QoS features.
 /// It will wait for a Ctrl+C signal to terminate.
 #[tokio::test]
