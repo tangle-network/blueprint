@@ -1,10 +1,6 @@
-// use blueprint_core::info;
-use blueprint_core::info;
-use blueprint_core::extract::Context;
 use blueprint_qos::error::Error as QosError;
 use blueprint_qos::heartbeat::{HeartbeatConsumer, HeartbeatStatus};
 use blueprint_qos::proto::qos_metrics_client::QosMetricsClient;
-use blueprint_qos::QoSConfig;
 use blueprint_tangle_extra::extract::{TangleArg, TangleResult};
 use blueprint_testing_utils::Error;
 use std::sync::{Arc, Mutex};
@@ -21,20 +17,20 @@ pub async fn square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
     TangleResult(result)
 }
 
-#[derive(Clone)]
-pub struct TestContext {
-    pub heartbeat_consumer: Arc<MockHeartbeatConsumer>,
-    pub qos_config: QoSConfig,
-}
+// #[derive(Clone)]
+// pub struct TestContext {
+//     pub heartbeat_consumer: Arc<MockHeartbeatConsumer>,
+//     pub qos_config: QoSConfig,
+// }
 
-impl TestContext {
-    pub fn new(heartbeat_consumer: Arc<MockHeartbeatConsumer>, qos_config: QoSConfig) -> Self {
-        Self {
-            heartbeat_consumer,
-            qos_config,
-        }
-    }
-}
+// impl TestContext {
+//     pub fn new(heartbeat_consumer: Arc<MockHeartbeatConsumer>, qos_config: QoSConfig) -> Self {
+//         Self {
+//             heartbeat_consumer,
+//             qos_config,
+//         }
+//     }
+// }
 
 /// Mock implementation of the HeartbeatConsumer for testing
 #[derive(Clone, Default)]
@@ -78,7 +74,9 @@ impl HeartbeatConsumer for MockHeartbeatConsumer {
 pub async fn connect_to_qos_metrics(addr: &str) -> Result<QosMetricsClient<Channel>, Error> {
     let endpoint = tonic::transport::Endpoint::new(format!("http://{}", addr))
         .map_err(|e| Error::Setup(format!("Failed to create endpoint: {}", e)))?;
-    let channel = endpoint.connect().await
+    let channel = endpoint
+        .connect()
+        .await
         .map_err(|e| Error::Setup(format!("Failed to connect to endpoint: {}", e)))?;
     Ok(QosMetricsClient::new(channel))
 }
