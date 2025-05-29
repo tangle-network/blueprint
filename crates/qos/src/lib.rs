@@ -4,6 +4,7 @@ pub mod logging;
 pub mod metrics;
 pub mod servers;
 pub mod service;
+pub mod service_builder;
 pub mod unified_service;
 
 // Allow clippy lints in generated code
@@ -25,7 +26,8 @@ pub use logging::{GrafanaClient, GrafanaConfig, LokiConfig};
 pub use servers::{
     grafana::GrafanaServerConfig, loki::LokiServerConfig, prometheus::PrometheusServerConfig,
 };
-pub use unified_service::{QoSService, QoSServiceBuilder};
+pub use service_builder::QoSServiceBuilder;
+pub use unified_service::QoSService;
 
 /// Configuration for the `QoS` system
 #[derive(Clone, Debug, Default)]

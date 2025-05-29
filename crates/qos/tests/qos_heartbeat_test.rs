@@ -3,7 +3,7 @@ use blueprint_qos::{
     default_qos_config,
     error::Error as QosError,
     heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatStatus},
-    unified_service::QoSServiceBuilder,
+    QoSServiceBuilder,
 };
 use blueprint_testing_utils::setup_log;
 use std::sync::Arc;
@@ -45,8 +45,9 @@ impl HeartbeatConsumer for MockHeartbeatConsumer {
     }
 }
 
-const SERVICE_ID: u64 = 1; // Dummy service ID
-const BLUEPRINT_ID: u64 = 1; // Dummy blueprint ID
+// Test configuration constants
+const SERVICE_ID: u64 = 1;
+const BLUEPRINT_ID: u64 = 1;
 const HEARTBEAT_TIMEOUT_SECS: u64 = 15;
 
 #[tokio::test]
@@ -54,18 +55,21 @@ async fn test_qos_heartbeat_functionality() -> Result<(), QosError> {
     setup_log();
     info!("Starting QoS heartbeat functionality test");
 
+    // Create a mock heartbeat consumer for testing
     let heartbeat_consumer = Arc::new(MockHeartbeatConsumer::new());
 
+    // Configure QoS with rapid heartbeats for testing
     let mut config = default_qos_config();
     config.heartbeat = Some(HeartbeatConfig {
-        interval_secs: 1, // Fast heartbeats for testing
+        interval_secs: 1,
         jitter_percent: 5,
         service_id: SERVICE_ID,
         blueprint_id: BLUEPRINT_ID,
         max_missed_heartbeats: 3,
     });
 
-    let qos_service = QoSServiceBuilder::new()
+    // Build and initialize the QoS service
+    let qos_service = QoSServiceBuilder::<MockHeartbeatConsumer>::new()
         .with_config(config)
         .with_heartbeat_consumer(heartbeat_consumer.clone())
         .build()
@@ -74,14 +78,16 @@ async fn test_qos_heartbeat_functionality() -> Result<(), QosError> {
     info!("QoS service initialized with heartbeat functionality");
     let qos_service = Arc::new(qos_service);
 
+    // Start the heartbeat service
     if let Some(heartbeat_service) = &qos_service.heartbeat_service() {
-        info!("Starting heartbeat service...");
+        info!("Starting heartbeat service");
         heartbeat_service.start_heartbeat().await?
     } else {
         panic!("Heartbeat service not found in QoS service");
     }
 
-    info!("Waiting for heartbeats to be sent...");
+    // Wait and verify that heartbeats are being sent
+    info!("Waiting for heartbeats to be sent");
     let mut heartbeats_received = false;
 
     for attempt in 1..=HEARTBEAT_TIMEOUT_SECS {
@@ -89,10 +95,7 @@ async fn test_qos_heartbeat_functionality() -> Result<(), QosError> {
 
         let heartbeat_count = heartbeat_consumer.heartbeat_count().await;
         if heartbeat_count > 0 {
-            info!(
-                "Success: Received {} heartbeat(s) after {} seconds",
-                heartbeat_count, attempt
-            );
+            info!("Received {} heartbeat(s) after {} seconds", heartbeat_count, attempt);
             heartbeats_received = true;
             break;
         }
@@ -100,10 +103,7 @@ async fn test_qos_heartbeat_functionality() -> Result<(), QosError> {
         info!("Waiting for heartbeats... ({} seconds elapsed)", attempt);
     }
 
-    assert!(
-        heartbeats_received,
-        "No heartbeats were received - heartbeat service failed to function"
-    );
+    assert!(heartbeats_received, "No heartbeats were received - heartbeat service failed to function");
 
     info!("QoS heartbeat functionality test completed successfully");
     Ok(())

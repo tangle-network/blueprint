@@ -167,8 +167,6 @@ use blueprint_qos::servers::prometheus::PrometheusServerConfig;
 use blueprint_qos::unified_service::QoSServiceBuilder;
 use std::sync::Arc;
 use std::fs;
-// For heartbeat marker files
-extern crate dirs;
 
 // The job ID
 pub const XSQUARE_JOB_ID: u32 = 0;
@@ -186,35 +184,18 @@ pub async fn square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
 pub struct MockHeartbeatConsumer {
     heartbeat_count: Arc<tokio::sync::Mutex<usize>>,
     last_status: Arc<tokio::sync::Mutex<Option<HeartbeatStatus>>>,
-    // Path to the heartbeat marker file
-    heartbeat_marker_path: Arc<std::path::PathBuf>,
 }
 
 impl MockHeartbeatConsumer {
     pub fn new() -> Self {
-        // Create a deterministic path in the system temp directory
-        let marker_path = std::env::temp_dir().join("blueprint-qos-heartbeat-marker.txt");
-        
-        // Set environment variable with the path for tests to read
-        std::env::set_var("BLUEPRINT_QOS_HEARTBEAT_MARKER", marker_path.to_string_lossy().to_string());
-        
-        // Delete any existing marker file to start fresh
-        let _ = std::fs::remove_file(&marker_path);
-        
         Self {
             heartbeat_count: Arc::new(tokio::sync::Mutex::new(0)),
             last_status: Arc::new(tokio::sync::Mutex::new(None)),
-            heartbeat_marker_path: Arc::new(marker_path),
         }
     }
     
     pub async fn heartbeat_count(&self) -> usize {
         *self.heartbeat_count.lock().await
-    }
-    
-    /// Get the path to the heartbeat marker file
-    pub fn get_marker_path(&self) -> std::path::PathBuf {
-        (*self.heartbeat_marker_path).clone()
     }
 }
 
@@ -226,74 +207,12 @@ impl HeartbeatConsumer for MockHeartbeatConsumer {
         let mut last = self.last_status.lock().await;
         *last = Some(status.clone());
         
-        // IMPORTANT: Log with special marker strings that the test can search for in the log output
-        info!("HEARTBEAT_MARKER: Heartbeat #{} sent via consumer at timestamp {}", *count, status.timestamp);
-        info!("HEARTBEAT_DATA: service_id={}, blueprint_id={}", status.service_id, status.blueprint_id);
+        // Log basic heartbeat information
+        info!("Heartbeat #{} sent for service {} blueprint {}", 
+            *count, status.service_id, status.blueprint_id);
         
-        // Try multiple locations for the marker file to increase chances of success
-        // First try writing to /tmp
-        let tmp_marker_path = "/tmp/blueprint-heartbeat-marker.txt";
-        
-        // Create a simple content string that's easy to parse
-        let content = format!("Heartbeat #{} sent at {} for service {} blueprint {}", 
-            *count, 
-            status.timestamp,
-            status.service_id,
-            status.blueprint_id
-        );
-        
-        // Write to multiple possible locations to increase chances of detection
-        let mut success = false;
-        
-        // Try /tmp location
-        match fs::write(tmp_marker_path, &content) {
-            Ok(_) => {
-                info!("HEARTBEAT_FILE: Successfully wrote heartbeat marker to {}", tmp_marker_path);
-                success = true;
-            },
-            Err(e) => {
-                warn!("Failed to write to /tmp marker file: {}", e);
-            }
-        }
-        
-        // Also try current directory as fallback
-        if !success {
-            match std::env::current_dir() {
-                Ok(current_dir) => {
-                    let current_dir_marker = current_dir.join("heartbeat-marker.txt");
-                    match fs::write(&current_dir_marker, &content) {
-                        Ok(_) => {
-                            info!("HEARTBEAT_FILE: Successfully wrote heartbeat marker to {:?}", current_dir_marker);
-                            success = true;
-                        },
-                        Err(e) => {
-                            warn!("Failed to write to current dir marker file: {}", e);
-                        }
-                    }
-                },
-                Err(e) => {
-                    warn!("Failed to get current directory: {}", e);
-                }
-            }
-        }
-        
-        // As a last resort, try user's home directory
-        if !success {
-            if let Some(home_dir) = dirs::home_dir() {
-                let home_marker = home_dir.join("blueprint-heartbeat-marker.txt");
-                match fs::write(&home_marker, &content) {
-                    Ok(_) => {
-                        info!("HEARTBEAT_FILE: Successfully wrote heartbeat marker to {:?}", home_marker);
-                    },
-                    Err(e) => {
-                        error!("Failed to write to home dir marker file: {}", e);
-                    }
-                }
-            }
-        }
-        
-        // Note: After this custom implementation, an on-chain heartbeat should also be sent
-        // by the HeartbeatService based on the chain's expectations
+        // Note: The on-chain heartbeat will be sent by the HeartbeatService
+        // based on the chain's expectations
         
         Ok(())
     }

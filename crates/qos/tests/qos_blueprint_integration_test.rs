@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use blueprint_core::{info, warn};
     use blueprint_qos::{
         QoSServiceBuilder, default_qos_config,
         error::Error as QosError,
@@ -7,6 +8,7 @@ mod tests {
         servers::grafana::GrafanaServerConfig,
         servers::loki::LokiServerConfig,
     };
+    use blueprint_testing_utils::setup_log;
     use prometheus::core::Number;
     use reqwest::Client;
     use std::sync::{Arc, Mutex};
@@ -50,7 +52,7 @@ mod tests {
             let mut last = self.last_status.lock().unwrap();
             *last = Some(status.clone());
 
-            println!("Heartbeat sent, count: {}, status: {:?}", *count, status);
+            info!("Heartbeat sent, count: {}, status: {:?}", *count, status);
             Ok(())
         }
     }
@@ -65,6 +67,9 @@ mod tests {
     /// - Metrics provider initialization and access
     #[tokio::test]
     async fn test_qos_service_functionality() -> Result<(), QosError> {
+        setup_log();
+        info!("Starting QoS service functionality test");
+
         // Create a mock heartbeat consumer
         let heartbeat_consumer = Arc::new(MockHeartbeatConsumer::new());
 
@@ -72,17 +77,14 @@ mod tests {
         let mut qos_config = default_qos_config();
 
         // Update the configuration with test values
-        println!("Setting up heartbeat configuration");
+        info!("Setting up heartbeat configuration");
         if let Some(heartbeat_config) = &mut qos_config.heartbeat {
             heartbeat_config.service_id = 1;
             heartbeat_config.blueprint_id = 2;
             heartbeat_config.interval_secs = 1;
-            println!(
-                "Heartbeat interval set to {} seconds",
-                heartbeat_config.interval_secs
-            );
+            info!("Heartbeat interval set to {} seconds", heartbeat_config.interval_secs);
         } else {
-            println!("WARNING: No heartbeat configuration found in default config");
+            warn!("No heartbeat configuration found in default config");
             // Create heartbeat config if it doesn't exist
             qos_config.heartbeat = Some(blueprint_qos::heartbeat::HeartbeatConfig {
                 service_id: 1,
@@ -91,7 +93,7 @@ mod tests {
                 jitter_percent: 10,
                 max_missed_heartbeats: 3,
             });
-            println!("Created new heartbeat configuration with 1 second interval");
+            info!("Created new heartbeat configuration with 1 second interval");
         }
 
         if let Some(metrics_config) = &mut qos_config.metrics {
@@ -101,7 +103,7 @@ mod tests {
         }
 
         // Build the QoS service
-        println!("Building QoS service with heartbeat consumer...");
+        info!("Building QoS service with heartbeat consumer");
         let qos_service_result = QoSServiceBuilder::new()
             .with_config(qos_config.clone())
             .with_heartbeat_consumer(heartbeat_consumer.clone())
@@ -109,9 +111,9 @@ mod tests {
             .await;
 
         if let Err(ref e) = qos_service_result {
-            println!("QoS service build failed: {:?}", e);
+            warn!("QoS service build failed: {:?}", e);
         } else {
-            println!("QoS service built successfully");
+            info!("QoS service built successfully");
         }
 
         assert!(
@@ -130,19 +132,19 @@ mod tests {
         );
 
         // Wait for some heartbeats to be sent
-        println!("Waiting for heartbeats to be sent...");
+        info!("Waiting for heartbeats to be sent...");
         sleep(Duration::from_secs(5)).await;
 
         // Verify that heartbeats were sent
         let heartbeat_count = heartbeat_consumer.heartbeat_count();
-        println!("Heartbeat count: {}", heartbeat_count);
+        info!("Heartbeat count: {}", heartbeat_count);
         assert!(
             heartbeat_count > 0,
             "At least one heartbeat should have been sent"
         );
 
         // The QoS service will be dropped at the end of the test
-        println!("Test completed");
+        info!("Test completed");
 
         Ok(())
     }
@@ -158,8 +160,13 @@ mod tests {
     /// Note: This test requires Docker to be running on the host machine.
     #[tokio::test]
     async fn test_grafana_loki_server_management() -> Result<(), QosError> {
+        setup_log();
+        info!("Starting Grafana and Loki server management test");
+
         // Create a temporary directory for server data
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let temp_dir = TempDir::new().map_err(|e| QosError::Other(format!("Failed to create temp dir: {}", e)))?;
+        let temp_dir_path = temp_dir.path().to_string_lossy().to_string();
+        info!("Using temporary directory for Docker volumes: {}", temp_dir_path);
 
         // Create a mock heartbeat consumer
         let heartbeat_consumer = Arc::new(MockHeartbeatConsumer::new());
@@ -167,19 +174,13 @@ mod tests {
         // Create a custom QoS configuration
         let mut qos_config = default_qos_config();
 
-        // Create Grafana server configuration
+        // Configure Grafana server
+        let grafana_port = BASE_PORT + 1;
         let grafana_server_config = GrafanaServerConfig {
-            port: BASE_PORT + 1,
-            admin_user: "admin".to_string(),
-            admin_password: "admin".to_string(),
-            allow_anonymous: true,
-            anonymous_role: "Admin".to_string(),
-            data_dir: temp_dir
-                .path()
-                .join("grafana")
-                .to_string_lossy()
-                .to_string(),
-            container_name: "test-grafana-server".to_string(),
+            port: grafana_port,
+            container_name: "test-grafana".to_string(),
+            data_dir: format!("{}/grafana", temp_dir_path),
+            ..Default::default() // Use default values for other fields
         };
 
         // Create Loki server configuration
@@ -194,13 +195,13 @@ mod tests {
         qos_config.grafana_server = Some(grafana_server_config);
         qos_config.loki_server = Some(loki_server_config);
 
-        // Print the configuration to debug
-        println!("Grafana server config: {:?}", qos_config.grafana_server);
-        println!("Loki server config: {:?}", qos_config.loki_server);
-        println!("manage_servers flag: {}", qos_config.manage_servers);
+        // Log the configuration
+        info!("Grafana server config: {:?}", qos_config.grafana_server);
+        info!("Loki server config: {:?}", qos_config.loki_server);
+        info!("manage_servers flag: {}", qos_config.manage_servers);
 
         // Build the QoS service
-        println!("Building QoS service with server management enabled...");
+        info!("Building QoS service with server management enabled");
         let qos_service_result = QoSServiceBuilder::new()
             .with_config(qos_config.clone())
             .with_heartbeat_consumer(heartbeat_consumer.clone())
@@ -217,76 +218,55 @@ mod tests {
         let mut qos_service = qos_service_result.unwrap();
 
         // Check if server URLs are available through public methods
-        println!(
-            "DEBUG: Grafana server URL available: {}",
-            qos_service.grafana_server_url().is_some()
-        );
-        println!(
-            "DEBUG: Loki server URL available: {}",
-            qos_service.loki_server_url().is_some()
-        );
+        info!("Grafana server URL available: {}", qos_service.grafana_server_url().is_some());
+        info!("Loki server URL available: {}", qos_service.loki_server_url().is_some());
 
-        // Debug server status
-        println!("Debugging server status...");
+        // Log server status
         qos_service.debug_server_status();
 
         // Verify that the Grafana server URL is available
         let grafana_url = qos_service.grafana_server_url();
-        assert!(
-            grafana_url.is_some(),
-            "Grafana server URL should be available"
-        );
-        println!("Grafana server URL: {}", grafana_url.as_ref().unwrap());
+        assert!(grafana_url.is_some(), "Grafana server URL should be available");
+        info!("Grafana server URL: {}", grafana_url.as_ref().unwrap());
 
         // Verify that the Loki server URL is available
         let loki_url = qos_service.loki_server_url();
         assert!(loki_url.is_some(), "Loki server URL should be available");
-        println!("Loki server URL: {}", loki_url.as_ref().unwrap());
+        info!("Loki server URL: {}", loki_url.as_ref().unwrap());
 
-        // Wait for servers to be fully initialized (reduced from 5s to 3s for quicker tests)
-        println!("Waiting for servers to be fully initialized...");
+        // Wait for servers to be fully initialized
+        info!("Waiting for servers to be fully initialized");
         sleep(Duration::from_secs(3)).await;
 
         // Verify that the Grafana server is accessible
         let client = Client::new();
         let grafana_health_url = format!("{}/api/health", grafana_url.as_ref().unwrap());
         let grafana_response = client.get(&grafana_health_url).send().await;
-        assert!(
-            grafana_response.is_ok(),
-            "Failed to connect to Grafana server"
-        );
+        assert!(grafana_response.is_ok(), "Failed to connect to Grafana server");
+        
         let grafana_status = grafana_response.unwrap().status();
-        assert!(
-            grafana_status.is_success(),
-            "Grafana server health check failed with status: {}",
-            grafana_status
-        );
-        println!("Grafana server health check passed");
+        assert!(grafana_status.is_success(), 
+                "Grafana server health check failed with status: {}", grafana_status);
+        info!("Grafana server health check passed");
 
         // Verify that the Loki server is accessible
         let loki_ready_url = format!("{}/ready", loki_url.as_ref().unwrap());
         let loki_response = client.get(&loki_ready_url).send().await;
         assert!(loki_response.is_ok(), "Failed to connect to Loki server");
+        
         let loki_status = loki_response.unwrap().status();
-        assert!(
-            loki_status.is_success(),
-            "Loki server ready check failed with status: {}",
-            loki_status
-        );
-        println!("Loki server ready check passed");
+        assert!(loki_status.is_success(),
+                "Loki server ready check failed with status: {}", loki_status);
+        info!("Loki server ready check passed");
 
         // Create a Grafana dashboard
         let dashboard_result = qos_service.create_dashboard("prometheus", "loki").await;
-        assert!(
-            dashboard_result.is_ok(),
-            "Dashboard creation failed: {:?}",
-            dashboard_result.err()
-        );
-        println!("Dashboard creation result: {:?}", dashboard_result);
+        assert!(dashboard_result.is_ok(), 
+                "Dashboard creation failed: {:?}", dashboard_result.err());
+        info!("Dashboard creation successful: {:?}", dashboard_result);
 
-        // The QoS service will be dropped at the end of the test, which should stop the servers
-        // We'll add a small delay to ensure proper cleanup
-        println!("Test completed, cleaning up servers...");
+        // QoS service will be dropped at the end of the test, stopping the servers
+        info!("Test completed successfully, cleaning up servers");
 
         Ok(())
     }
