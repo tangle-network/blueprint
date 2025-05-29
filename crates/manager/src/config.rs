@@ -8,6 +8,7 @@ use hyper::body::Bytes;
 use hyper::header::HeaderValue;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
+use ipnet::Ipv4Net;
 use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
@@ -17,6 +18,9 @@ use url::Url;
 
 pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =
     LazyLock::new(|| Url::parse("unix:///var/run/docker.sock").unwrap());
+
+pub static DEFAULT_ADDRESS_POOL: LazyLock<Ipv4Net> =
+    LazyLock::new(|| "172.30.0.0/16".parse().unwrap());
 
 #[derive(Debug, Parser)]
 #[command(
@@ -65,6 +69,10 @@ pub struct BlueprintManagerConfig {
     /// The location of the Podman-Docker socket
     #[arg(long, short, default_value_t = DEFAULT_DOCKER_HOST.clone())]
     pub podman_host: Url,
+    /// The default address pool for VM TAP interfaces
+    #[arg(long, default_value_t = *DEFAULT_ADDRESS_POOL)]
+    pub default_address_pool: Ipv4Net,
+
     /// Authentication proxy options
     #[command(flatten)]
     pub auth_proxy_opts: AuthProxyOpts,
@@ -99,6 +107,7 @@ impl Default for BlueprintManagerConfig {
             allow_unchecked_attestations: false,
             preferred_source: SourceType::default(),
             podman_host: DEFAULT_DOCKER_HOST.clone(),
+            default_address_pool: *DEFAULT_ADDRESS_POOL,
             auth_proxy_opts: AuthProxyOpts::default(),
         }
     }
