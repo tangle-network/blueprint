@@ -8,9 +8,7 @@ use crate::logging::{GrafanaConfig, LokiConfig};
 use crate::metrics::opentelemetry::OpenTelemetryConfig;
 use crate::metrics::types::MetricsConfig;
 use crate::servers::{
-    grafana::GrafanaServerConfig,
-    loki::LokiServerConfig,
-    prometheus::PrometheusServerConfig,
+    grafana::GrafanaServerConfig, loki::LokiServerConfig, prometheus::PrometheusServerConfig,
 };
 use crate::unified_service::QoSService;
 

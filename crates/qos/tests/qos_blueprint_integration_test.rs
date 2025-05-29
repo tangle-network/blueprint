@@ -9,7 +9,7 @@ mod tests {
         servers::loki::LokiServerConfig,
     };
     use blueprint_testing_utils::setup_log;
-    
+
     use reqwest::Client;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
@@ -82,7 +82,10 @@ mod tests {
             heartbeat_config.service_id = 1;
             heartbeat_config.blueprint_id = 2;
             heartbeat_config.interval_secs = 1;
-            info!("Heartbeat interval set to {} seconds", heartbeat_config.interval_secs);
+            info!(
+                "Heartbeat interval set to {} seconds",
+                heartbeat_config.interval_secs
+            );
         } else {
             warn!("No heartbeat configuration found in default config");
             // Create heartbeat config if it doesn't exist
@@ -164,9 +167,13 @@ mod tests {
         info!("Starting Grafana and Loki server management test");
 
         // Create a temporary directory for server data
-        let temp_dir = TempDir::new().map_err(|e| QosError::Other(format!("Failed to create temp dir: {}", e)))?;
+        let temp_dir = TempDir::new()
+            .map_err(|e| QosError::Other(format!("Failed to create temp dir: {}", e)))?;
         let temp_dir_path = temp_dir.path().to_string_lossy().to_string();
-        info!("Using temporary directory for Docker volumes: {}", temp_dir_path);
+        info!(
+            "Using temporary directory for Docker volumes: {}",
+            temp_dir_path
+        );
 
         // Create a mock heartbeat consumer
         let heartbeat_consumer = Arc::new(MockHeartbeatConsumer::new());
@@ -218,15 +225,24 @@ mod tests {
         let mut qos_service = qos_service_result.unwrap();
 
         // Check if server URLs are available through public methods
-        info!("Grafana server URL available: {}", qos_service.grafana_server_url().is_some());
-        info!("Loki server URL available: {}", qos_service.loki_server_url().is_some());
+        info!(
+            "Grafana server URL available: {}",
+            qos_service.grafana_server_url().is_some()
+        );
+        info!(
+            "Loki server URL available: {}",
+            qos_service.loki_server_url().is_some()
+        );
 
         // Log server status
         qos_service.debug_server_status();
 
         // Verify that the Grafana server URL is available
         let grafana_url = qos_service.grafana_server_url();
-        assert!(grafana_url.is_some(), "Grafana server URL should be available");
+        assert!(
+            grafana_url.is_some(),
+            "Grafana server URL should be available"
+        );
         info!("Grafana server URL: {}", grafana_url.as_ref().unwrap());
 
         // Verify that the Loki server URL is available
@@ -242,27 +258,39 @@ mod tests {
         let client = Client::new();
         let grafana_health_url = format!("{}/api/health", grafana_url.as_ref().unwrap());
         let grafana_response = client.get(&grafana_health_url).send().await;
-        assert!(grafana_response.is_ok(), "Failed to connect to Grafana server");
-        
+        assert!(
+            grafana_response.is_ok(),
+            "Failed to connect to Grafana server"
+        );
+
         let grafana_status = grafana_response.unwrap().status();
-        assert!(grafana_status.is_success(), 
-                "Grafana server health check failed with status: {}", grafana_status);
+        assert!(
+            grafana_status.is_success(),
+            "Grafana server health check failed with status: {}",
+            grafana_status
+        );
         info!("Grafana server health check passed");
 
         // Verify that the Loki server is accessible
         let loki_ready_url = format!("{}/ready", loki_url.as_ref().unwrap());
         let loki_response = client.get(&loki_ready_url).send().await;
         assert!(loki_response.is_ok(), "Failed to connect to Loki server");
-        
+
         let loki_status = loki_response.unwrap().status();
-        assert!(loki_status.is_success(),
-                "Loki server ready check failed with status: {}", loki_status);
+        assert!(
+            loki_status.is_success(),
+            "Loki server ready check failed with status: {}",
+            loki_status
+        );
         info!("Loki server ready check passed");
 
         // Create a Grafana dashboard
         let dashboard_result = qos_service.create_dashboard("prometheus", "loki").await;
-        assert!(dashboard_result.is_ok(), 
-                "Dashboard creation failed: {:?}", dashboard_result.err());
+        assert!(
+            dashboard_result.is_ok(),
+            "Dashboard creation failed: {:?}",
+            dashboard_result.err()
+        );
         info!("Dashboard creation successful: {:?}", dashboard_result);
 
         // QoS service will be dropped at the end of the test, stopping the servers

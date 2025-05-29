@@ -9,10 +9,7 @@ use crate::metrics::opentelemetry::OpenTelemetryConfig;
 use crate::metrics::provider::EnhancedMetricsProvider;
 use crate::metrics::service::MetricsService;
 use crate::servers::{
-    ServerManager,
-    grafana::GrafanaServer,
-    loki::LokiServer,
-    prometheus::PrometheusServer,
+    ServerManager, grafana::GrafanaServer, loki::LokiServer, prometheus::PrometheusServer,
 };
 
 /// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality
@@ -331,7 +328,7 @@ where
     pub fn loki_server_url(&self) -> Option<String> {
         self.loki_server.as_ref().map(|server| server.url())
     }
-    
+
     /// Get the Grafana client if available
     pub fn grafana_client(&self) -> Option<&Arc<GrafanaClient>> {
         self.grafana_client.as_ref()

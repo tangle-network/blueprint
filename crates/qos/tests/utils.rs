@@ -17,7 +17,6 @@ pub async fn square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
     TangleResult(result)
 }
 
-
 /// Mock implementation of the HeartbeatConsumer for testing
 #[derive(Clone, Default)]
 pub struct MockHeartbeatConsumer {

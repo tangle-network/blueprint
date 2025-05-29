@@ -1,9 +1,8 @@
 use blueprint_core::info;
 use blueprint_qos::{
-    default_qos_config,
+    QoSServiceBuilder, default_qos_config,
     error::Error as QosError,
     heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatStatus},
-    QoSServiceBuilder,
 };
 use blueprint_testing_utils::setup_log;
 use std::sync::Arc;
@@ -95,7 +94,10 @@ async fn test_qos_heartbeat_functionality() -> Result<(), QosError> {
 
         let heartbeat_count = heartbeat_consumer.heartbeat_count().await;
         if heartbeat_count > 0 {
-            info!("Received {} heartbeat(s) after {} seconds", heartbeat_count, attempt);
+            info!(
+                "Received {} heartbeat(s) after {} seconds",
+                heartbeat_count, attempt
+            );
             heartbeats_received = true;
             break;
         }
@@ -103,7 +105,10 @@ async fn test_qos_heartbeat_functionality() -> Result<(), QosError> {
         info!("Waiting for heartbeats... ({} seconds elapsed)", attempt);
     }
 
-    assert!(heartbeats_received, "No heartbeats were received - heartbeat service failed to function");
+    assert!(
+        heartbeats_received,
+        "No heartbeats were received - heartbeat service failed to function"
+    );
 
     info!("QoS heartbeat functionality test completed successfully");
     Ok(())

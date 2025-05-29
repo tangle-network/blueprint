@@ -1,7 +1,10 @@
 use std::{fs, process::Command, time::Duration};
 
 use blueprint_core::{Job, error, info, warn};
-use blueprint_qos::proto::{GetBlueprintMetricsRequest, GetResourceUsageRequest, GetStatusRequest, qos_metrics_client::QosMetricsClient};
+use blueprint_qos::proto::{
+    GetBlueprintMetricsRequest, GetResourceUsageRequest, GetStatusRequest,
+    qos_metrics_client::QosMetricsClient,
+};
 use blueprint_tangle_extra::layers::TangleLayer;
 use blueprint_testing_utils::{
     Error, setup_log,
@@ -41,17 +44,17 @@ fn cleanup_docker_containers() -> Result<(), Error> {
 }
 
 /// Integration test for QoS functionality with the Tangle Blueprint
-/// 
+///
 /// This test verifies that the QoS heartbeat mechanism works correctly
 /// by checking for heartbeat records on-chain in the Tangle storage.
-/// 
+///
 /// Test workflow:
 /// 1. Set up a test environment with a blueprint and Tangle nodes
 /// 2. Start the BlueprintRunner which initializes QoS and heartbeat services
 /// 3. Submit and execute a test job to ensure the service is operational
 /// 4. Verify heartbeats are properly recorded on-chain
 /// 5. Optionally verify metrics API if ENABLE_QOS_METRICS_TEST env var is set
-/// 
+///
 /// Expected outcome:
 /// - Job execution succeeds
 /// - Heartbeats are found on-chain in the Tangle storage
@@ -124,7 +127,7 @@ async fn test_qos_integration() -> Result<(), Error> {
     info!("Configuring QoS metrics server");
     let metrics_port = QOS_PORT;
     let metrics_addr = format!("127.0.0.1:{}", metrics_port);
-    
+
     // Start the runner with the node handle
     // The BlueprintRunner will internally start the QoS service and heartbeat service
     info!("Starting BlueprintRunner with node handle");
@@ -136,31 +139,34 @@ async fn test_qos_integration() -> Result<(), Error> {
     info!(
         "BlueprintRunner started successfully - QoS service and heartbeat service should be running internally"
     );
-    
+
     // Instead of trying to access the QoS service, we'll directly start a metrics server
     // We'll use tokio::spawn to start the server in the background
-    info!("Starting separate metrics server for testing on {}", metrics_addr);
-    
+    info!(
+        "Starting separate metrics server for testing on {}",
+        metrics_addr
+    );
+
     // Clone metrics_addr to avoid the borrow of moved value error
     let metrics_addr_clone = metrics_addr.clone();
-    
+
     let _metrics_server_handle = tokio::spawn(async move {
         // Import the QoS metrics service from the proto module
-        use blueprint_qos::proto::qos_metrics_server::QosMetricsServer;
-        use blueprint_qos::service::QosMetricsService;
+        use blueprint_qos::metrics::opentelemetry::OpenTelemetryConfig;
         use blueprint_qos::metrics::provider::EnhancedMetricsProvider;
         use blueprint_qos::metrics::types::MetricsConfig;
-        use blueprint_qos::metrics::opentelemetry::OpenTelemetryConfig;
+        use blueprint_qos::proto::qos_metrics_server::QosMetricsServer;
+        use blueprint_qos::service::QosMetricsService;
         use std::sync::Arc;
-        
+
         // Create metrics and OpenTelemetry configs with default values
         let metrics_config = MetricsConfig {
             collection_interval_secs: 1,
             ..Default::default()
         };
-        
+
         let otel_config = OpenTelemetryConfig::default();
-        
+
         // Create a new metrics provider with required configs
         let metrics_provider = match EnhancedMetricsProvider::new(metrics_config, otel_config) {
             Ok(provider) => provider,
@@ -169,10 +175,10 @@ async fn test_qos_integration() -> Result<(), Error> {
                 return;
             }
         };
-        
+
         // Create the service with the provider wrapped in an Arc
         let service = QosMetricsService::new(Arc::new(metrics_provider));
-        
+
         // Start the gRPC server
         info!("Starting metrics gRPC server at {}", metrics_addr_clone);
         match tonic::transport::Server::builder()
@@ -181,7 +187,7 @@ async fn test_qos_integration() -> Result<(), Error> {
             .await
         {
             Ok(_) => info!("Metrics server terminated normally"),
-            Err(e) => error!("Metrics server error: {}", e)
+            Err(e) => error!("Metrics server error: {}", e),
         }
     });
 
@@ -222,17 +228,17 @@ async fn test_qos_integration() -> Result<(), Error> {
     // Now check for heartbeats on-chain in Tangle storage
     info!("Checking on-chain storage for heartbeat records");
     let mut found_heartbeat_on_chain = false;
-    
+
     // Get the client from the harness
     let client = harness.client().clone();
-    
+
     // Use a simpler approach - check the latest block for heartbeat events
     info!("Checking latest block for heartbeat-related events");
-    
+
     // Query the latest finalized block
     if let Ok(latest_block) = client.rpc_client.blocks().at_latest().await {
         info!("Latest finalized block: {}", latest_block.number());
-        
+
         // Check the latest block events
         if let Ok(events) = latest_block.events().await {
             // First approach: Look for heartbeat events in the event data
@@ -245,7 +251,7 @@ async fn test_qos_integration() -> Result<(), Error> {
                     break;
                 }
             }
-            
+
             // If no direct heartbeat events found, look for any service-related events
             // which might indicate the service pallet is active
             if !found_heartbeat_on_chain {
@@ -263,11 +269,11 @@ async fn test_qos_integration() -> Result<(), Error> {
         } else {
             warn!("Could not retrieve events from the latest block");
         }
-        
+
         // If no heartbeat or service events found, log a warning
         if !found_heartbeat_on_chain {
             warn!("No heartbeat events found on-chain in the latest block");
-            
+
             // We'll still continue the test, as the heartbeat might appear in later blocks
             // This makes the test more robust against timing issues
             info!("Continuing test execution despite missing heartbeat events");
@@ -275,7 +281,7 @@ async fn test_qos_integration() -> Result<(), Error> {
     } else {
         error!("Failed to get latest block from the chain");
     }
-    
+
     // Final verification result
     if found_heartbeat_on_chain {
         info!("Heartbeat verification successful: Found heartbeats on-chain");
@@ -291,17 +297,17 @@ async fn test_qos_integration() -> Result<(), Error> {
     info!("Waiting for metrics service to fully initialize...");
     sleep(Duration::from_secs(3)).await;
     goto_metrics_check(None, service_id, blueprint_id, metrics_addr.clone()).await;
-    
+
     info!("QoS Blueprint integration test completed successfully");
     Ok(())
-}  // End of test_qos_integration function
+} // End of test_qos_integration function
 
 // Helper function to handle metrics verification
 async fn goto_metrics_check(
     mut client_result: Option<QosMetricsClient<Channel>>,
-    service_id: u64, 
+    service_id: u64,
     blueprint_id: u64,
-    metrics_addr: String
+    metrics_addr: String,
 ) {
     // Test the QoS gRPC API - this is a critical part of the integration test
     info!("Testing QoS metrics gRPC API");
@@ -310,15 +316,15 @@ async fn goto_metrics_check(
     let qos_addr = metrics_addr; // Use the provided metrics_addr
     let max_retries = 10; // Increased retry attempts
     let base_wait_ms = 500; // Start with 500ms wait
-    
+
     // Before attempting connections, run a quick diagnostic to check if anything is listening on the port
     info!("Running pre-connection diagnostics");
-    
+
     // Extract the port from the metrics_addr (expected format: 127.0.0.1:PORT)
     // Create a longer-lived value to avoid temporary value dropped while borrowed error
     let port_string = QOS_PORT.to_string();
     let port = qos_addr.split(':').nth(1).unwrap_or(port_string.as_str());
-    
+
     match Command::new("nc").args(["-z", "127.0.0.1", port]).output() {
         Ok(output) => {
             if output.status.success() {
@@ -326,16 +332,16 @@ async fn goto_metrics_check(
             } else {
                 warn!("Port {} does not appear to be open yet", port);
             }
-        },
-        Err(e) => warn!("Could not check port status: {}", e)
+        }
+        Err(e) => warn!("Could not check port status: {}", e),
     }
-    
+
     for attempt in 1..=max_retries {
         info!("Connection attempt {} of {}", attempt, max_retries);
-        
+
         // Calculate wait time with exponential backoff
         let wait_time = base_wait_ms * 2u64.pow(attempt as u32 - 1);
-        
+
         match utils::connect_to_qos_metrics(&qos_addr).await {
             Ok(client) => {
                 client_result = Some(client);
@@ -343,7 +349,10 @@ async fn goto_metrics_check(
                 break;
             }
             Err(e) => {
-                warn!("Failed to connect to QoS metrics service (attempt {}): {}", attempt, e);
+                warn!(
+                    "Failed to connect to QoS metrics service (attempt {}): {}",
+                    attempt, e
+                );
                 if attempt < max_retries {
                     info!("Waiting for {}ms before next attempt", wait_time);
                     sleep(Duration::from_millis(wait_time)).await;
@@ -355,14 +364,26 @@ async fn goto_metrics_check(
     // If we successfully connected, try to get the service status
     if let Some(mut client) = client_result {
         // Get service status metrics
-        match client.get_status(GetStatusRequest { service_id, blueprint_id }).await {
+        match client
+            .get_status(GetStatusRequest {
+                service_id,
+                blueprint_id,
+            })
+            .await
+        {
             Ok(response) => {
                 let response = response.into_inner();
                 info!("QoS metrics service returned status:");
                 info!("  Status code: {}", response.status_code);
-                info!("  Status message: {}", response.status_message.unwrap_or_default());
+                info!(
+                    "  Status message: {}",
+                    response.status_message.unwrap_or_default()
+                );
                 info!("  Uptime: {} seconds", response.uptime);
-                info!("  Last heartbeat: {}", response.last_heartbeat.unwrap_or_default());
+                info!(
+                    "  Last heartbeat: {}",
+                    response.last_heartbeat.unwrap_or_default()
+                );
             }
             Err(e) => {
                 warn!("Error querying QoS metrics service: {:?}", e);
@@ -370,10 +391,13 @@ async fn goto_metrics_check(
         }
 
         // Get resource usage metrics
-        match client.get_resource_usage(GetResourceUsageRequest {
-            service_id,
-            blueprint_id,
-        }).await {
+        match client
+            .get_resource_usage(GetResourceUsageRequest {
+                service_id,
+                blueprint_id,
+            })
+            .await
+        {
             Ok(response) => {
                 let response = response.into_inner();
                 info!("QoS metrics service returned resource usage:");
@@ -387,7 +411,13 @@ async fn goto_metrics_check(
         }
 
         // Get blueprint-specific metrics
-        match client.get_blueprint_metrics(GetBlueprintMetricsRequest { service_id, blueprint_id }).await {
+        match client
+            .get_blueprint_metrics(GetBlueprintMetricsRequest {
+                service_id,
+                blueprint_id,
+            })
+            .await
+        {
             Ok(response) => {
                 let response = response.into_inner();
                 if response.custom_metrics.is_empty() {
@@ -407,6 +437,6 @@ async fn goto_metrics_check(
         warn!("Could not connect to QoS metrics service after multiple attempts");
         info!("Test is still considered successful as job execution worked correctly");
     }
-    
+
     info!("QoS metrics API check completed");
 }

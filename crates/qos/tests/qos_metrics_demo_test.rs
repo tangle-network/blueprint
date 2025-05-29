@@ -32,21 +32,24 @@ impl MockHeartbeatConsumer {
 }
 
 impl HeartbeatConsumer for MockHeartbeatConsumer {
-    async fn send_heartbeat(&self, status: &HeartbeatStatus) -> Result<(), blueprint_qos::error::Error> {
+    async fn send_heartbeat(
+        &self,
+        status: &HeartbeatStatus,
+    ) -> Result<(), blueprint_qos::error::Error> {
         self.heartbeats.lock().unwrap().push(status.clone());
         Ok(())
     }
 }
 
 /// Demonstrates the complete QoS metrics system with Grafana, Loki, and Prometheus.
-/// 
+///
 /// Features:
 /// - Metrics collection via Prometheus
 /// - Dashboard visualization in Grafana
 /// - Log collection in Loki
 /// - Simulated metrics generation
 /// - Automatic dashboard setup
-/// 
+///
 /// Note: This test runs until manually terminated with Ctrl+C.
 #[tokio::test]
 #[ignore] // Ignore by default since this is a demo test that runs until manually stopped - run with: cargo test test_qos_metrics_demo -- --ignored
@@ -63,8 +66,10 @@ async fn test_qos_metrics_demo() -> Result<(), Box<dyn std::error::Error>> {
     let prometheus_port = 9091;
     let loki_port = 3100;
 
-    info!("Server configuration: Grafana({}), Prometheus({}), Loki({})", 
-          grafana_port, prometheus_port, loki_port);
+    info!(
+        "Server configuration: Grafana({}), Prometheus({}), Loki({})",
+        grafana_port, prometheus_port, loki_port
+    );
 
     // Server configurations
     let grafana_config = GrafanaServerConfig {
@@ -169,27 +174,27 @@ async fn test_qos_metrics_demo() -> Result<(), Box<dyn std::error::Error>> {
     info!("Setting up simulated metrics");
     let cpu_usage = create_gauge(
         "test_blueprint_cpu_usage",
-        "Simulated CPU usage for test blueprint"
+        "Simulated CPU usage for test blueprint",
     )?;
 
     let memory_usage = create_gauge(
         "test_blueprint_memory_usage",
-        "Simulated memory usage for test blueprint"
+        "Simulated memory usage for test blueprint",
     )?;
 
     let job_executions = create_gauge(
         "test_blueprint_job_executions",
-        "Simulated job executions for test blueprint"
+        "Simulated job executions for test blueprint",
     )?;
 
     let job_errors = create_gauge(
         "test_blueprint_job_errors",
-        "Simulated job errors for test blueprint"
+        "Simulated job errors for test blueprint",
     )?;
 
     let heartbeat = create_gauge(
         "test_blueprint_last_heartbeat",
-        "Simulated last heartbeat timestamp for test blueprint"
+        "Simulated last heartbeat timestamp for test blueprint",
     )?;
 
     // Create and set up Grafana dashboard
@@ -217,19 +222,19 @@ async fn test_qos_metrics_demo() -> Result<(), Box<dyn std::error::Error>> {
             let elapsed_secs = i64::try_from(seconds).unwrap_or(i64::MAX);
 
             // Update metrics with simulated values
-            cpu_usage.set(elapsed_secs % 100);                    // CPU: 0-99%
-            memory_usage.set(elapsed_secs % 1024);                // Memory: 0-1023MB
-            job_executions.set(execution_count);                  // Executions: increasing counter
-            
+            cpu_usage.set(elapsed_secs % 100); // CPU: 0-99%
+            memory_usage.set(elapsed_secs % 1024); // Memory: 0-1023MB
+            job_executions.set(execution_count); // Executions: increasing counter
+
             // Increment execution counter
             execution_count += 1;
-            
+
             // Add error every 10 seconds
             if elapsed_secs % 10 == 0 {
                 error_count += 1;
                 job_errors.set(error_count);
             }
-            
+
             // Update heartbeat timestamp
             heartbeat.set(elapsed_secs);
 
