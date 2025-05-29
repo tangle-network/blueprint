@@ -3,17 +3,16 @@ use std::sync::Arc;
 
 use crate::QoSConfig;
 use crate::error::Result;
-use crate::heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatService};
-use crate::logging::{GrafanaClient, GrafanaConfig, LokiConfig, init_loki_logging};
+use crate::heartbeat::{HeartbeatConsumer, HeartbeatService};
+use crate::logging::{GrafanaClient, init_loki_logging};
 use crate::metrics::opentelemetry::OpenTelemetryConfig;
 use crate::metrics::provider::EnhancedMetricsProvider;
 use crate::metrics::service::MetricsService;
-use crate::metrics::types::MetricsConfig;
 use crate::servers::{
     ServerManager,
-    grafana::{GrafanaServer, GrafanaServerConfig},
-    loki::{LokiServer, LokiServerConfig},
-    prometheus::{PrometheusServer, PrometheusServerConfig},
+    grafana::GrafanaServer,
+    loki::LokiServer,
+    prometheus::PrometheusServer,
 };
 
 /// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality

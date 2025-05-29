@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use tracing::{info, error, warn};
 
 /// Creates a temporary directory with the incredible-squaring blueprint
 ///
@@ -221,6 +220,12 @@ impl HeartbeatConsumer for MockHeartbeatConsumer {
 #[derive(Clone)]
 pub struct FooBackgroundService;
 
+impl FooBackgroundService {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
 impl BackgroundService for FooBackgroundService {
     async fn start(&self) -> Result<Receiver<Result<(), RunnerError>>, RunnerError> {
         let (tx, rx) = oneshot::channel();
@@ -262,6 +267,19 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     qos_config.prometheus_server = Some(PrometheusServerConfig::default());
     qos_config.manage_servers = true;
     
+    // Configure the metrics gRPC server with production-like settings
+    // Following Windsurf Guidelines for minimal, sufficient configuration
+    qos_config.metrics_grpc_port = Some(8085); // Must match QOS_PORT in the test
+    qos_config.metrics_grpc_address = Some("127.0.0.1".to_string());
+    
+    // Explicitly enable all metrics subsystems for test reliability
+    qos_config.metrics_enabled = true;
+    qos_config.enable_metrics_server = true;
+    qos_config.start_metrics_server = true; // Critical: Actually start the server
+    
+    // Set a short interval to ensure metrics are collected quickly during tests
+    qos_config.metrics_collection_interval_secs = Some(1);
+    
     // Create the heartbeat consumer
     let heartbeat_consumer = Arc::new(MockHeartbeatConsumer::new());
     
@@ -300,21 +318,21 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     // Create builder and add router and background service
     let mut builder = BlueprintRunner::builder(tangle_config, env)
         .router(
-            // A router
-            //
-            // Each "route" is a job ID and the job function. We can also support arbitrary `Service`s from `tower`,
-            // which may make it easier for people to port over existing services to a blueprint.
             Router::new()
-                // The route defined here has a `TangleLayer`, which adds metadata to the
-                // produced `JobResult`s, making it visible to a `TangleConsumer`.
+                // Add the square job with the TangleLayer
                 .route(XSQUARE_JOB_ID, square.layer(TangleLayer))
-                // Add the `FilterLayer` to filter out job calls that don't match the service ID
-                .layer(FilterLayer::new(MatchesServiceId(service_id))),
+                // Add the FilterLayer to filter out job calls that don't match the service ID
+                .layer(FilterLayer::new(MatchesServiceId(service_id)))
         )
-        .background_service(FooBackgroundService);
+        .background_service(FooBackgroundService::new());
         
     // Add the heartbeat service to the BlueprintRunner
     builder = builder.heartbeat_service(heartbeat_service);
+    
+    // Add QoS service to builder
+    // This ensures the metrics gRPC server is properly registered and started
+    info!("Registering QoS service with metrics gRPC server enabled");
+    builder = builder.qos_service(qos_service);
     
     // Check if prometheus metrics server is available and add it if so
     if qos_service.prometheus_server_url().is_some() {

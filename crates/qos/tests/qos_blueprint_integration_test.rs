@@ -9,7 +9,7 @@ mod tests {
         servers::loki::LokiServerConfig,
     };
     use blueprint_testing_utils::setup_log;
-    use prometheus::core::Number;
+    
     use reqwest::Client;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
@@ -122,7 +122,7 @@ mod tests {
             qos_service_result.err()
         );
 
-        let mut qos_service = qos_service_result.unwrap();
+        let qos_service = qos_service_result.unwrap();
 
         // Verify that the metrics provider is available
         let metrics_provider = qos_service.metrics_provider();

@@ -194,7 +194,7 @@ async fn test_qos_metrics_demo() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create and set up Grafana dashboard
     info!("Creating monitoring dashboard");
-    if let Some(grafana_url) = qos_service.grafana_server_url() {
+    if let Some(_grafana_url) = qos_service.grafana_server_url() {
         // Just use the built-in dashboard creation method instead
         match qos_service.create_dashboard("prometheus", "loki").await {
             Ok(Some(url)) => info!("Dashboard created successfully: {}", url),
