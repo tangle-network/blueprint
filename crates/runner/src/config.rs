@@ -620,6 +620,7 @@ impl ContextConfig {
     /// Creates a new context config with defaults for Tangle
     #[cfg(feature = "tangle")]
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn create_tangle_config(
         http_rpc_url: Url,
         ws_rpc_url: Url,

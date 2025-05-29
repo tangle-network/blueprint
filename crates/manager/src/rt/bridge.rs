@@ -128,6 +128,7 @@ impl BlueprintManagerBridge for BridgeService {
         Ok(Response::new(()))
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     async fn request_port(
         &self,
         req: Request<PortRequest>,
@@ -237,7 +238,9 @@ impl BlueprintManagerBridge for BridgeService {
         };
 
         // Add owner if not already present
-        if !service.owners.contains(&new_owner) {
+        if service.owners.contains(&new_owner) {
+            info!("Owner already exists for service ID: {service_id}");
+        } else {
             service.owners.push(new_owner);
             // Save updated service
             service.save(service_id, db).map_err(|e| {
@@ -245,8 +248,6 @@ impl BlueprintManagerBridge for BridgeService {
                 tonic::Status::internal(format!("Database error: {e}"))
             })?;
             info!("Added owner to service ID: {service_id}");
-        } else {
-            info!("Owner already exists for service ID: {service_id}");
         }
 
         Ok(Response::new(()))

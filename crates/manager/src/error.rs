@@ -27,6 +27,8 @@ pub enum Error {
     Bridge(#[from] blueprint_manager_bridge::error::Error),
     #[error("Hypervisor error: {0}")]
     Hypervisor(String),
+    #[error("Networking error: {0}")]
+    Net(#[from] rtnetlink::Error),
 
     #[error("Failed to get initial block hash")]
     InitialBlock,
@@ -48,6 +50,6 @@ pub enum Error {
     Request(#[from] reqwest::Error),
     #[error(transparent)]
     TangleClient(#[from] blueprint_clients::tangle::error::Error),
-    // #[error(transparent)]
-    // Auth(#[from] blueprint_auth::Error),
+    #[error(transparent)]
+    Auth(#[from] blueprint_auth::Error),
 }

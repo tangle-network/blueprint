@@ -27,12 +27,11 @@ blueprint-std = { workspace = true, features = ["std"] }
 blueprint-manager-bridge.workspace = true
 blueprint-auth = { workspace = true, features = ["std"] }
 
-axum = { workspace = true, default-features = false, features = ["json"] }
+axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
 docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace", "issue-url"] }
 serde = { workspace = true }
-serde_yaml.workspace = true
 tangle-subxt = { workspace = true }
 toml = { workspace = true }
 hex = { workspace = true }
@@ -63,7 +62,11 @@ tonic.workspace = true
 tokio-stream = { workspace = true, features = ["net"] }
 cloud-hypervisor-client = { workspace = true }
 fatfs.workspace = true
-nix = { workspace = true, features = ["process", "signal"] }
+nix = { workspace = true, features = ["process", "signal", "ioctl"] }
+
+# Networking
+rtnetlink.workspace = true
+ipnet.workspace = true
 
 [package.metadata.dist]
 dist = false
