@@ -80,7 +80,7 @@ async fn test_qos_heartbeat_functionality() -> Result<(), QosError> {
     // Start the heartbeat service
     if let Some(heartbeat_service) = &qos_service.heartbeat_service() {
         info!("Starting heartbeat service");
-        heartbeat_service.start_heartbeat().await?
+        heartbeat_service.start_heartbeat().await?;
     } else {
         panic!("Heartbeat service not found in QoS service");
     }

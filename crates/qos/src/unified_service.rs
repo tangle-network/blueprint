@@ -330,6 +330,7 @@ where
     }
 
     /// Get the Grafana client if available
+    #[must_use]
     pub fn grafana_client(&self) -> Option<&Arc<GrafanaClient>> {
         self.grafana_client.as_ref()
     }
@@ -350,6 +351,7 @@ where
     }
 
     /// Get the heartbeat service if available
+    #[must_use]
     pub fn heartbeat_service(&self) -> Option<&HeartbeatService<C>> {
         self.heartbeat_service.as_ref()
     }
