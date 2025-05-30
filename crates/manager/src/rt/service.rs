@@ -2,6 +2,7 @@ use super::bridge::{Bridge, BridgeHandle};
 use super::hypervisor::HypervisorInstance;
 use super::hypervisor::net::NetworkManager;
 use crate::error::{Error, Result};
+use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use std::path::Path;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -15,6 +16,7 @@ pub enum Status {
     Error,
 }
 
+/// A service instance
 pub struct Service {
     hypervisor: HypervisorInstance,
     bridge: BridgeHandle,
@@ -30,10 +32,11 @@ impl Service {
         keystore: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
+        pty_slave_path: Option<&Path>,
         service_name: &str,
         binary_path: impl AsRef<Path>,
-        env_vars: Vec<(String, String)>,
-        arguments: Vec<String>,
+        env_vars: BlueprintEnvVars,
+        arguments: BlueprintArgs,
     ) -> Result<Service> {
         let db_path = data_dir
             .as_ref()
@@ -73,6 +76,7 @@ impl Service {
                 id,
                 network_manager,
                 bridge_base_socket,
+                pty_slave_path,
                 binary_path.as_ref(),
                 env_vars,
                 arguments,
@@ -91,10 +95,16 @@ impl Service {
         Ok(Status::Running)
     }
 
-    pub async fn start(&mut self) -> Result<()> {
+    /// Starts the service and returns a health check future
+    ///
+    /// If the service is already started, it will return `None`.
+    ///
+    /// The future **should** be polled to completion to determine whether the VM can be connected to
+    /// via the bridge.
+    pub async fn start(&mut self) -> Result<Option<impl Future<Output = Result<()>> + use<>>> {
         let Some(alive_rx) = self.alive_rx.take() else {
             error!("Service already started!");
-            return Ok(());
+            return Ok(None);
         };
 
         self.hypervisor.start().await.map_err(|e| {
@@ -102,17 +112,20 @@ impl Service {
             e
         })?;
 
-        if time::timeout(Duration::from_secs(30), alive_rx)
-            .await
-            .is_err()
-        {
-            error!("Service never connected to bridge (network error?)");
-            return Err(Error::Other("Bridge connection timeout".into()));
-        }
+        Ok(Some(async move {
+            if time::timeout(Duration::from_secs(30), alive_rx)
+                .await
+                .is_err()
+            {
+                error!("Service never connected to bridge (network error?)");
+                return Err(Error::Other("Bridge connection timeout".into()));
+            }
 
-        Ok(())
+            Ok(())
+        }))
     }
 
+    /// Gracefully shutdown the service (VM+bridge)
     pub async fn shutdown(self) -> Result<()> {
         self.hypervisor.shutdown().await.map_err(|e| {
             error!("Failed to shut down hypervisor: {e}");

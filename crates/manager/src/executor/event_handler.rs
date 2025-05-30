@@ -5,7 +5,7 @@ use crate::blueprint::native::FilteredBlueprint;
 use crate::blueprint::ActiveBlueprints;
 use crate::sdk::utils::bounded_string_to_string;
 use crate::sources::github::GithubBinaryFetcher;
-use crate::sources::{process_arguments_and_env, BlueprintSourceHandler, DynBlueprintSource};
+use crate::sources::{BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler, DynBlueprintSource};
 use crate::sources::testing::TestSourceFetcher;
 use blueprint_clients::tangle::client::{TangleConfig, TangleEvent};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
@@ -74,7 +74,8 @@ impl VerifiedBlueprint {
             for service_id in &blueprint.services {
                 let sub_service_str = format!("{service_str}-{service_id}");
 
-                let (arguments, env_vars) = process_arguments_and_env(
+                let args = BlueprintArgs::new(manager_config);
+                let env = BlueprintEnvVars::new(
                     blueprint_config,
                     manager_config,
                     blueprint_id,
@@ -83,10 +84,7 @@ impl VerifiedBlueprint {
                     &sub_service_str,
                 );
 
-                info!(
-                    "Starting protocol: {sub_service_str} with args: {}",
-                    arguments.join(" ")
-                );
+                info!("Starting protocol: {sub_service_str}",);
 
                 let id = active_blueprints.len() as u32;
 
@@ -100,23 +98,31 @@ impl VerifiedBlueprint {
                     &blueprint_config.keystore_uri,
                     &cache_dir,
                     runtime_dir,
+                    None,
                     &sub_service_str,
                     &binary_path,
-                    env_vars,
-                    arguments,
+                    env,
+                    args,
                 )
                 .await?;
 
-                if let Err(e) = service.start().await {
-                    error!("Service did not start successfully, aborting: {e}");
-                    service.shutdown().await?;
-                    continue;
-                }
+                let service_start_res = service.start().await;
+                match service_start_res {
+                    Ok(Some(is_alive)) => {
+                        is_alive.await?;
 
-                active_blueprints
-                    .entry(blueprint_id)
-                    .or_default()
-                    .insert(*service_id, service);
+                        active_blueprints
+                            .entry(blueprint_id)
+                            .or_default()
+                            .insert(*service_id, service);
+                    }
+                    Ok(None) => continue,
+                    Err(e) => {
+                        error!("Service did not start successfully, aborting: {e}");
+                        service.shutdown().await?;
+                        continue;
+                    }
+                }
             }
 
             break;

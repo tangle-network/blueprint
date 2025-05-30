@@ -32,7 +32,9 @@ pub trait ProtocolSettingsT: Sized + 'static {
     /// For example, [`TangleProtocolSettings`] will return `"tangle"`.
     ///
     /// [`TangleProtocolSettings`]: crate::tangle::config::TangleProtocolSettings
-    fn protocol(&self) -> &'static str;
+    fn protocol_name(&self) -> &'static str;
+
+    fn protocol(&self) -> Protocol;
 }
 
 /// The protocol on which a blueprint will be executed.
@@ -146,15 +148,27 @@ impl ProtocolSettingsT for ProtocolSettings {
         Ok(protocol_settings)
     }
 
-    fn protocol(&self) -> &'static str {
+    fn protocol_name(&self) -> &'static str {
         match self {
             #[cfg(feature = "tangle")]
-            ProtocolSettings::Tangle(val) => val.protocol(),
+            ProtocolSettings::Tangle(val) => val.protocol_name(),
             #[cfg(feature = "eigenlayer")]
-            ProtocolSettings::Eigenlayer(val) => val.protocol(),
+            ProtocolSettings::Eigenlayer(val) => val.protocol_name(),
             #[cfg(feature = "symbiotic")]
             ProtocolSettings::Symbiotic => "symbiotic",
             _ => unreachable!("should be exhaustive"),
+        }
+    }
+
+    fn protocol(&self) -> Protocol {
+        match self {
+            ProtocolSettings::None => unreachable!(),
+            #[cfg(feature = "tangle")]
+            ProtocolSettings::Tangle(_) => Protocol::Tangle,
+            #[cfg(feature = "eigenlayer")]
+            ProtocolSettings::Eigenlayer(_) => Protocol::Eigenlayer,
+            #[cfg(feature = "symbiotic")]
+            ProtocolSettings::Symbiotic => Protocol::Symbiotic,
         }
     }
 }
@@ -211,7 +225,7 @@ impl ProtocolSettings {
 
 /// Description of the environment in which the blueprint is running
 #[non_exhaustive]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BlueprintEnvironment {
     /// HTTP RPC endpoint for host restaking network (Tangle / Ethereum (Eigenlayer or Symbiotic)).
     pub http_rpc_endpoint: String,
@@ -225,6 +239,7 @@ pub struct BlueprintEnvironment {
     pub protocol_settings: ProtocolSettings,
     /// Whether the blueprint is in test mode
     pub test_mode: bool,
+    #[serde(skip)]
     bridge: Arc<Mutex<Option<Arc<Bridge>>>>,
 
     #[cfg(feature = "networking")]
