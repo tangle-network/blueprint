@@ -1,16 +1,16 @@
-use std::process::Command;
-use std::time::{Duration, Instant};
 use std::fs;
+use std::process::Command;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use blueprint_core::{Job, info, warn};
 use blueprint_qos::{
-    default_qos_config, QoSServiceBuilder, servers,
-    metrics::{service, EnhancedMetricsProvider},
+    QoSServiceBuilder, default_qos_config,
     metrics::opentelemetry::OpenTelemetryConfig,
     metrics::types::MetricsConfig,
+    metrics::{EnhancedMetricsProvider, service},
+    servers,
 };
-use prometheus::Registry;
 use blueprint_tangle_extra::layers::TangleLayer;
 use blueprint_testing_utils::{
     Error, setup_log,
@@ -20,6 +20,7 @@ use blueprint_testing_utils::{
         harness::SetupServicesOpts,
     },
 };
+use prometheus::Registry;
 use prometheus::{IntGauge, Opts};
 use tokio::time::sleep;
 
@@ -63,7 +64,7 @@ fn cleanup_docker_containers(_harness: &TangleTestHarness<()>) -> Result<(), Err
         .args(["ps", "-a"])
         .output()
         .map_err(|e| Error::Setup(format!("Failed to run docker ps command: {}", e)))?;
-    
+
     if list_output.status.success() {
         let container_list = String::from_utf8_lossy(&list_output.stdout);
         info!("Docker containers: {}", container_list);
@@ -71,18 +72,18 @@ fn cleanup_docker_containers(_harness: &TangleTestHarness<()>) -> Result<(), Err
 
     // Docker container names used in this test
     let containers = [
-        "blueprint-test-loki", 
-        "blueprint-test-grafana", 
-        "blueprint-test-prometheus", 
-        "blueprint-loki",  // also try default names
+        "blueprint-test-loki",
+        "blueprint-test-grafana",
+        "blueprint-test-prometheus",
+        "blueprint-loki", // also try default names
         "blueprint-grafana",
         "blueprint-prometheus",
-        "loki", 
-        "grafana", 
-        "prometheus", 
-        "qos-test"
+        "loki",
+        "grafana",
+        "prometheus",
+        "qos-test",
     ];
-    
+
     for container_name in &containers {
         info!("Cleaning up container: {}", container_name);
         let output = Command::new("docker")
@@ -94,7 +95,7 @@ fn cleanup_docker_containers(_harness: &TangleTestHarness<()>) -> Result<(), Err
             info!("Container {} might not exist, continuing", container_name);
         }
     }
-    
+
     Ok(())
 }
 
@@ -112,7 +113,10 @@ fn cleanup_docker_containers(_harness: &TangleTestHarness<()>) -> Result<(), Err
 #[ignore] // Ignore by default since this is a long-running demo test - run with: cargo test test_qos_metrics_demo -- --ignored
 async fn test_qos_metrics_demo() -> Result<(), Error> {
     setup_log();
-    info!("Starting QoS metrics demonstration with {} job runs", TOTAL_JOBS_TO_RUN);
+    info!(
+        "Starting QoS metrics demonstration with {} job runs",
+        TOTAL_JOBS_TO_RUN
+    );
 
     // Create a test blueprint with QoS integration
     info!("Creating test blueprint with QoS integration");
@@ -124,10 +128,10 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
 
     // Clean up existing containers
     cleanup_docker_containers(&harness)?;
-    
+
     // Create a QoS configuration with integrated server management
     let mut qos_config = default_qos_config();
-    
+
     // Configure server containers for metrics visualization
     let grafana_server_config = servers::grafana::GrafanaServerConfig {
         port: GRAFANA_PORT,
@@ -137,26 +141,29 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         allow_anonymous: true,
         ..Default::default()
     };
-    
+
     let prometheus_server_config = servers::prometheus::PrometheusServerConfig {
         port: PROMETHEUS_PORT,
         docker_container_name: "blueprint-test-prometheus".to_string(),
         ..Default::default()
     };
-    
+
     let loki_server_config = servers::loki::LokiServerConfig {
         port: LOKI_PORT,
         container_name: "blueprint-test-loki".to_string(),
         ..Default::default()
     };
-    
+
     // Enable server management and set configurations
     qos_config.manage_servers = true;
     qos_config.grafana_server = Some(grafana_server_config);
     qos_config.prometheus_server = Some(prometheus_server_config);
     qos_config.loki_server = Some(loki_server_config);
-    
-    info!("QoS metrics visualization configured with Grafana on port {}", GRAFANA_PORT);
+
+    info!(
+        "QoS metrics visualization configured with Grafana on port {}",
+        GRAFANA_PORT
+    );
 
     // Set up test service with operators
     info!("Setting up test service with {} operators", OPERATOR_COUNT);
@@ -216,8 +223,10 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         .await
         .map_err(|e| Error::Setup(format!("Failed to start runner: {}", e)))?;
 
-    info!("BlueprintRunner started successfully - QoS service and heartbeat service should be running internally");
-    
+    info!(
+        "BlueprintRunner started successfully - QoS service and heartbeat service should be running internally"
+    );
+
     // Start a metrics server to expose metrics for viewing
     info!("Starting metrics server on {}", metrics_addr);
     let metrics_addr_clone = metrics_addr.clone();
@@ -225,9 +234,8 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     // Copy the service_id and blueprint_id for use in the async block
     let metrics_service_id = service_id;
     let metrics_blueprint_id = blueprint_id;
-    
-    let _metrics_server_handle = tokio::spawn(async move {
 
+    let _metrics_server_handle = tokio::spawn(async move {
         let metrics_config = MetricsConfig {
             service_id: metrics_service_id,
             blueprint_id: metrics_blueprint_id,
@@ -236,7 +244,9 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         };
 
         // Create metrics provider - just for verification
-        if let Err(e) = EnhancedMetricsProvider::new(metrics_config.clone(), OpenTelemetryConfig::default()) {
+        if let Err(e) =
+            EnhancedMetricsProvider::new(metrics_config.clone(), OpenTelemetryConfig::default())
+        {
             panic!("Failed to create metrics provider: {}", e);
         }
 
@@ -249,7 +259,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
 
     // Create a heartbeat consumer for QoS service
     let heartbeat_consumer = Arc::new(MockHeartbeatConsumer::new());
-    
+
     // Build the QoS service with server management
     info!("Starting QoS service with server management");
     let qos_service_result = QoSServiceBuilder::new()
@@ -258,13 +268,13 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         .manage_servers(true)
         .build()
         .await;
-        
+
     match qos_service_result {
         Ok(mut qos_service) => {
             // Wait for servers to initialize
             info!("Waiting for metrics servers to initialize...");
             sleep(Duration::from_secs(5)).await;
-            
+
             // Create the dashboard
             info!("Creating Grafana dashboard for blueprint metrics");
             match qos_service.create_dashboard("prometheus", "loki").await {
@@ -276,7 +286,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
                     warn!("Failed to create dashboard: {}", e);
                 }
             }
-            
+
             // Get Grafana URL - this is the only URL we show to the user
             if let Some(url) = qos_service.grafana_server_url() {
                 // Only display the Grafana URL as requested
@@ -284,16 +294,22 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
                 info!("Login credentials: admin/admin (if required)");
             } else {
                 // Fallback to direct URL if server URL isn't available
-                info!("Grafana dashboard available at: http://127.0.0.1:{}", GRAFANA_PORT);
+                info!(
+                    "Grafana dashboard available at: http://127.0.0.1:{}",
+                    GRAFANA_PORT
+                );
                 info!("Login credentials: admin/admin (if required)");
             }
         }
         Err(e) => {
             warn!("Failed to start QoS service with server management: {}", e);
             warn!("Falling back to using direct Grafana URL");
-            
+
             // Provide direct access URL in case of failure
-            info!("Grafana dashboard available at: http://127.0.0.1:{}", GRAFANA_PORT);
+            info!(
+                "Grafana dashboard available at: http://127.0.0.1:{}",
+                GRAFANA_PORT
+            );
             info!("Login credentials: admin/admin (if required)");
         }
     }
@@ -314,7 +330,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
                     warn!("Failed to register gauge {}: {}", name, e);
                 }
                 gauge
-            },
+            }
             Err(e) => {
                 panic!("Failed to create gauge {}: {}", name, e);
             }
@@ -328,65 +344,89 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         "Job executions for test blueprint",
     );
 
-    let job_success = create_gauge(
-        "test_blueprint_job_success",
-        "Successful job executions",
-    );
+    let job_success = create_gauge("test_blueprint_job_success", "Successful job executions");
 
     let job_latency = create_gauge(
         "test_blueprint_job_latency_ms",
         "Job execution latency in milliseconds",
     );
-    
+
     // Starting the continuous job execution loop
-    info!("Starting continuous job execution loop ({} jobs)", TOTAL_JOBS_TO_RUN);
-    info!("Access Grafana dashboard at: http://127.0.0.1:{}", GRAFANA_PORT);
-    
+    info!(
+        "Starting continuous job execution loop ({} jobs)",
+        TOTAL_JOBS_TO_RUN
+    );
+    info!(
+        "Access Grafana dashboard at: http://127.0.0.1:{}",
+        GRAFANA_PORT
+    );
+
     // Run jobs in a loop to generate continuous metrics
     let mut jobs_completed = 0;
     let start_time = Instant::now();
-    
+
     while jobs_completed < TOTAL_JOBS_TO_RUN {
         let job_start = Instant::now();
-        
+
         // Submit a job to square a number using the actual service_id from setup
-        info!("Submitting job #{} to square {}", jobs_completed + 1, INPUT_VALUE);
-        let call = harness.submit_job(service_id, utils::XSQUARE_JOB_ID, vec![InputValue::Uint64(INPUT_VALUE)])
+        info!(
+            "Submitting job #{} to square {}",
+            jobs_completed + 1,
+            INPUT_VALUE
+        );
+        let call = harness
+            .submit_job(
+                service_id,
+                utils::XSQUARE_JOB_ID,
+                vec![InputValue::Uint64(INPUT_VALUE)],
+            )
             .await
             .map_err(|e| Error::Setup(format!("Failed to submit job: {}", e)))?;
-            
+
         // Wait for job execution completion
-        let result = harness.wait_for_job_execution(service_id, call)
+        let result = harness
+            .wait_for_job_execution(service_id, call)
             .await
             .map_err(|e| Error::Setup(format!("Failed to wait for job execution: {}", e)))?;
-            
+
         // Verify job result
-        harness.verify_job(&result, vec![OutputValue::Uint64(INPUT_VALUE * INPUT_VALUE)]);
-        
+        harness.verify_job(
+            &result,
+            vec![OutputValue::Uint64(INPUT_VALUE * INPUT_VALUE)],
+        );
+
         // Record metrics
         jobs_completed += 1;
         job_executions.set(jobs_completed as i64);
         job_success.set(jobs_completed as i64);
         let latency = job_start.elapsed().as_millis() as i64;
         job_latency.set(latency);
-        
-        info!("Job #{} completed: {} squared = {} (took {} ms)", 
-              jobs_completed, INPUT_VALUE, INPUT_VALUE * INPUT_VALUE, latency);
-        
+
+        info!(
+            "Job #{} completed: {} squared = {} (took {} ms)",
+            jobs_completed,
+            INPUT_VALUE,
+            INPUT_VALUE * INPUT_VALUE,
+            latency
+        );
+
         // Wait between job submissions
         sleep(Duration::from_millis(JOB_INTERVAL_MS)).await;
     }
-    
+
     // Show final statistics
     let total_time = start_time.elapsed();
     info!("QoS metrics demonstration completed");
     info!("Jobs completed: {}", jobs_completed);
     info!("Total time: {:.2} seconds", total_time.as_secs_f64());
-    info!("Average job time: {:.2} ms", total_time.as_millis() as f64 / jobs_completed as f64);
-    
+    info!(
+        "Average job time: {:.2} ms",
+        total_time.as_millis() as f64 / jobs_completed as f64
+    );
+
     // Keep server running for a few seconds to allow viewing metrics
     info!("Servers will remain running for 10 more seconds for metrics viewing");
     sleep(Duration::from_secs(10)).await;
-    
+
     Ok(())
 }
