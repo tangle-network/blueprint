@@ -1,6 +1,6 @@
 use std::{fs, process::Command, time::Duration};
 
-use blueprint_core::{Job, error, info, warn};
+use blueprint_core::{Job, info, warn};
 use blueprint_qos::proto::{
     GetBlueprintMetricsRequest, GetResourceUsageRequest, GetStatusRequest,
     qos_metrics_client::QosMetricsClient,
@@ -132,8 +132,7 @@ async fn test_qos_integration() -> Result<(), Error> {
             match EnhancedMetricsProvider::new(metrics_config, OpenTelemetryConfig::default()) {
                 Ok(provider) => provider,
                 Err(e) => {
-                    error!("Failed to create metrics provider: {}", e);
-                    return;
+                    panic!("Failed to create metrics provider: {}", e);
                 }
             };
 
@@ -144,7 +143,7 @@ async fn test_qos_integration() -> Result<(), Error> {
             .serve(metrics_addr_clone.parse().unwrap())
             .await
         {
-            error!("Metrics server error: {}", e);
+            panic!("Metrics server error: {}", e);
         }
     });
 
@@ -187,40 +186,20 @@ async fn test_qos_integration() -> Result<(), Error> {
             for event in events.iter() {
                 let event_str = format!("{:?}", event);
                 if event_str.contains("heartbeat") || event_str.contains("Heartbeat") {
-                    info!("Found heartbeat event in block: {:?}", event_str);
+                    info!("Found heartbeat event in block");
                     found_heartbeat_on_chain = true;
                     break;
                 }
             }
-
-            if !found_heartbeat_on_chain {
-                for event in events.iter() {
-                    let event_str = format!("{:?}", event);
-                    if event_str.contains("Service") || event_str.contains("service") {
-                        info!("Found service-related event: {:?}", event_str);
-                        warn!("No direct heartbeat events found, but service events are present");
-                        found_heartbeat_on_chain = true;
-                        break;
-                    }
-                }
-            }
         } else {
-            warn!("Could not retrieve events from the latest block");
+            panic!("Could not retrieve events from the latest block");
         }
 
         if !found_heartbeat_on_chain {
-            warn!("No heartbeat events found on-chain in the latest block");
-
-            info!("Continuing test execution despite missing heartbeat events");
+            panic!("No heartbeat events found on-chain in the latest block");
         }
     } else {
-        error!("Failed to get latest block from the chain");
-    }
-
-    if found_heartbeat_on_chain {
-        info!("Heartbeat verification successful: Found heartbeats on-chain");
-    } else {
-        warn!("Heartbeat verification inconclusive: No heartbeats found in the latest block");
+        panic!("Failed to get latest block from the chain");
     }
 
     sleep(Duration::from_secs(3)).await;
@@ -310,6 +289,6 @@ async fn verify_qos_metrics(service_id: u64, blueprint_id: u64, metrics_addr: St
         }
         info!("QoS metrics API check completed");
     } else {
-        warn!("Could not connect to metrics service");
+        panic!("Could not connect to metrics service");
     }
 }
