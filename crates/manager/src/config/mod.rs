@@ -1,6 +1,8 @@
+mod debug;
+
 use crate::error::{Error, Result};
 use blueprint_auth::proxy::DEFAULT_AUTH_PROXY_PORT;
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 use docktopus::bollard::system::Version;
 use docktopus::bollard::{API_DEFAULT_VERSION, Docker};
 use http_body_util::Full;
@@ -11,9 +13,9 @@ use hyper_util::rt::TokioExecutor;
 use ipnet::Ipv4Net;
 use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-use tracing::error;
+use tracing::{error, info};
 use url::Url;
 
 pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =
@@ -27,21 +29,36 @@ pub static DEFAULT_ADDRESS_POOL: LazyLock<Ipv4Net> =
     name = "Blueprint Manager",
     about = "A program executor that connects to the Tangle network and runs blueprints dynamically on the fly"
 )]
+pub struct BlueprintManagerCli {
+    #[command(flatten)]
+    pub config: BlueprintManagerConfig,
+
+    #[command(subcommand)]
+    pub command: Option<BlueprintManagerCommand>,
+}
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum BlueprintManagerCommand {
+    #[command(subcommand)]
+    Debug(debug::DebugCommand),
+}
+
+#[derive(Debug, Args)]
 pub struct BlueprintManagerConfig {
     /// The path to the blueprint configuration file
-    #[arg(short = 's', long)]
+    #[arg(short = 'c', long)]
     pub blueprint_config: Option<PathBuf>,
     /// The path to the keystore
-    #[arg(short = 'k', long)]
+    #[arg(short = 'k', long, default_value = "./keystore")]
     pub keystore_uri: String,
     /// The directory in which all blueprints will store their data
     #[arg(long, short = 'd', default_value = "./data")]
     pub data_dir: PathBuf,
     /// The cache directory for blueprint manager downloads
-    #[arg(long, short = 'd', default_value_os_t = default_cache_dir())]
+    #[arg(long, short = 'z', default_value_os_t = default_cache_dir())]
     pub cache_dir: PathBuf,
     /// The runtime directory for manager-to-blueprint sockets
-    #[arg(long, short = 'd', default_value_os_t = default_runtime_dir())]
+    #[arg(long, short, default_value_os_t = default_runtime_dir())]
     pub runtime_dir: PathBuf,
     /// The verbosity level, can be used multiple times to increase verbosity
     #[arg(long, short = 'v', action = clap::ArgAction::Count)]
@@ -64,10 +81,10 @@ pub struct BlueprintManagerConfig {
     ///
     /// This is not a guarantee that the blueprint will use this method, as there may not be a source
     /// available of this type.
-    #[arg(long, short, default_value_t)]
+    #[arg(long, short = 's', default_value_t)]
     pub preferred_source: SourceType,
     /// The location of the Podman-Docker socket
-    #[arg(long, short, default_value_t = DEFAULT_DOCKER_HOST.clone())]
+    #[arg(long, default_value_t = DEFAULT_DOCKER_HOST.clone())]
     pub podman_host: Url,
     /// The default address pool for VM TAP interfaces
     #[arg(long, default_value_t = *DEFAULT_ADDRESS_POOL)]
@@ -76,6 +93,45 @@ pub struct BlueprintManagerConfig {
     /// Authentication proxy options
     #[command(flatten)]
     pub auth_proxy_opts: AuthProxyOpts,
+}
+
+impl BlueprintManagerConfig {
+    pub fn verify_directories_exist(&self) -> Result<()> {
+        if !self.cache_dir.exists() {
+            info!(
+                "Cache directory does not exist, creating it at `{}`",
+                self.cache_dir.display()
+            );
+            std::fs::create_dir_all(&self.cache_dir)?;
+        }
+
+        if !self.runtime_dir.exists() {
+            info!(
+                "Runtime directory does not exist, creating it at `{}`",
+                self.runtime_dir.display()
+            );
+            std::fs::create_dir_all(&self.runtime_dir)?;
+        }
+
+        if !self.data_dir.exists() {
+            info!(
+                "Data directory does not exist, creating it at `{}`",
+                self.data_dir.display()
+            );
+            std::fs::create_dir_all(&self.data_dir)?;
+        }
+
+        let keystore = Path::new(&self.keystore_uri);
+        if !keystore.exists() {
+            info!(
+                "Keystore directory does not exist, creating it at `{}`",
+                keystore.display()
+            );
+            std::fs::create_dir_all(keystore)?;
+        }
+
+        Ok(())
+    }
 }
 
 fn default_cache_dir() -> PathBuf {

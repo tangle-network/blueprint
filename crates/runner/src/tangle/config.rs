@@ -1,5 +1,5 @@
 use crate::BlueprintConfig;
-use crate::config::{BlueprintEnvironment, BlueprintSettings, ProtocolSettingsT};
+use crate::config::{BlueprintEnvironment, BlueprintSettings, Protocol, ProtocolSettingsT};
 use crate::error::{ConfigError, RunnerError};
 use crate::tangle::error::TangleError;
 use blueprint_keystore::backends::Backend;
@@ -40,8 +40,12 @@ impl ProtocolSettingsT for TangleProtocolSettings {
         })
     }
 
-    fn protocol(&self) -> &'static str {
+    fn protocol_name(&self) -> &'static str {
         "tangle"
+    }
+
+    fn protocol(&self) -> Protocol {
+        Protocol::Tangle
     }
 }
 

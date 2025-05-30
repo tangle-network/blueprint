@@ -1,6 +1,6 @@
 use crate::blueprint::native::FilteredBlueprint;
 use crate::config::BlueprintManagerConfig;
-use blueprint_runner::config::{BlueprintEnvironment, SupportedChains};
+use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use std::path::{Path, PathBuf};
 
 pub mod github;
@@ -20,80 +20,120 @@ pub trait BlueprintSourceHandler: Send + Sync {
 unsafe impl Send for DynBlueprintSource<'_> {}
 unsafe impl Sync for DynBlueprintSource<'_> {}
 
-#[must_use]
-pub fn process_arguments_and_env(
-    env: &BlueprintEnvironment,
-    manager_config: &BlueprintManagerConfig,
-    blueprint_id: u64,
-    service_id: u64,
-    blueprint: &FilteredBlueprint,
-    sub_service_str: &str,
-) -> (Vec<String>, Vec<(String, String)>) {
-    let mut arguments = vec![];
-    arguments.push("run".to_string());
+pub struct BlueprintArgs {
+    pub test_mode: bool,
+    pub pretty: bool,
+    pub verbose: u8,
+}
 
-    if manager_config.test_mode {
-        arguments.push("--test-mode".to_string());
-    }
-
-    if manager_config.pretty {
-        arguments.push("--pretty".to_string());
-    }
-
-    if manager_config.test_mode {
-        blueprint_core::warn!("Test mode is enabled");
-    }
-
-    // TODO: Add support for keystore password
-    // if let Some(keystore_password) = &env.keystore_password {
-    //     arguments.push(format!("--keystore-password={}", keystore_password));
-    // }
-
-    // Uses occurrences of clap short -v
-    if manager_config.verbose > 0 {
-        arguments.push(format!("-{}", "v".repeat(manager_config.verbose as usize)));
-    }
-
-    let chain = match env.http_rpc_endpoint.as_str() {
-        url if url.contains("127.0.0.1") || url.contains("localhost") => {
-            SupportedChains::LocalTestnet
+impl BlueprintArgs {
+    #[must_use]
+    pub fn new(manager_config: &BlueprintManagerConfig) -> Self {
+        if manager_config.test_mode {
+            blueprint_core::warn!("Test mode is enabled");
         }
-        _ => SupportedChains::Testnet,
-    };
 
-    let bootnodes = env
-        .bootnodes
-        .iter()
-        .fold(String::new(), |acc, bootnode| format!("{acc} {bootnode}"));
+        // TODO: Add support for keystore password
+        // if let Some(keystore_password) = &env.keystore_password {
+        //     arguments.push(format!("--keystore-password={}", keystore_password));
+        // }
 
-    // Add required env vars for all child processes/blueprints
-    let mut env_vars = vec![
-        (
-            "HTTP_RPC_URL".to_string(),
-            env.http_rpc_endpoint.to_string(),
-        ),
-        ("WS_RPC_URL".to_string(), env.ws_rpc_endpoint.to_string()),
-        ("KEYSTORE_URI".to_string(), env.keystore_uri.clone()),
-        ("BLUEPRINT_ID".to_string(), format!("{}", blueprint_id)),
-        ("SERVICE_ID".to_string(), format!("{}", service_id)),
-        ("PROTOCOL".to_string(), blueprint.protocol.to_string()),
-        ("CHAIN".to_string(), chain.to_string()),
-        ("BOOTNODES".to_string(), bootnodes),
-    ];
-
-    let base_data_dir = &manager_config.data_dir;
-    let data_dir = base_data_dir.join(format!("blueprint-{blueprint_id}-{sub_service_str}"));
-    env_vars.push((
-        "DATA_DIR".to_string(),
-        data_dir.to_string_lossy().into_owned(),
-    ));
-
-    // Ensure our child process inherits the current processes' environment vars
-    env_vars.extend(std::env::vars());
-
-    if blueprint.registration_mode {
-        env_vars.push(("REGISTRATION_MODE_ON".to_string(), "true".to_string()));
+        Self {
+            test_mode: manager_config.test_mode,
+            pretty: manager_config.pretty,
+            verbose: manager_config.verbose,
+        }
     }
 
-    (arguments, env_vars)
+    #[must_use]
+    pub fn encode(&self) -> Vec<String> {
+        let mut arguments = vec![];
+        arguments.push("run".to_string());
+
+        if self.test_mode {
+            arguments.push("--test-mode".to_string());
+        }
+
+        if self.pretty {
+            arguments.push("--pretty".to_string());
+        }
+
+        // Uses occurrences of clap short -v
+        if self.verbose > 0 {
+            arguments.push(format!("-{}", "v".repeat(self.verbose as usize)));
+        }
+
+        arguments
+    }
+}
+
+pub struct BlueprintEnvVars {
+    pub http_rpc_endpoint: String,
+    pub ws_rpc_endpoint: String,
+    pub keystore_uri: String,
+    pub data_dir: PathBuf,
+    pub blueprint_id: u64,
+    pub service_id: u64,
+    pub protocol: Protocol,
+    pub bootnodes: String,
+    pub registration_mode: bool,
+}
+
+impl BlueprintEnvVars {
+    #[must_use]
+    pub fn new(
+        env: &BlueprintEnvironment,
+        manager_config: &BlueprintManagerConfig,
+        blueprint_id: u64,
+        service_id: u64,
+        blueprint: &FilteredBlueprint,
+        sub_service_str: &str,
+    ) -> BlueprintEnvVars {
+        let base_data_dir = &manager_config.data_dir;
+        let data_dir = base_data_dir.join(format!("blueprint-{blueprint_id}-{sub_service_str}"));
+
+        let bootnodes = env
+            .bootnodes
+            .iter()
+            .fold(String::new(), |acc, bootnode| format!("{acc} {bootnode}"));
+
+        BlueprintEnvVars {
+            http_rpc_endpoint: env.http_rpc_endpoint.to_string(),
+            ws_rpc_endpoint: env.ws_rpc_endpoint.to_string(),
+            keystore_uri: env.keystore_uri.to_string(),
+            data_dir,
+            blueprint_id,
+            service_id,
+            protocol: blueprint.protocol,
+            bootnodes,
+            registration_mode: blueprint.registration_mode,
+        }
+    }
+
+    #[must_use]
+    pub fn encode(&self) -> Vec<(String, String)> {
+        let chain = match self.http_rpc_endpoint.as_str() {
+            url if url.contains("127.0.0.1") || url.contains("localhost") => {
+                SupportedChains::LocalTestnet
+            }
+            _ => SupportedChains::Testnet,
+        };
+
+        // Add required env vars for all child processes/blueprints
+        let env_vars = vec![
+            (
+                "HTTP_RPC_URL".to_string(),
+                self.http_rpc_endpoint.to_string(),
+            ),
+            ("WS_RPC_URL".to_string(), self.ws_rpc_endpoint.clone()),
+            ("KEYSTORE_URI".to_string(), self.keystore_uri.clone()),
+            ("BLUEPRINT_ID".to_string(), self.blueprint_id.to_string()),
+            ("SERVICE_ID".to_string(), self.service_id.to_string()),
+            ("PROTOCOL".to_string(), self.protocol.to_string()),
+            ("CHAIN".to_string(), chain.to_string()),
+            ("BOOTNODES".to_string(), self.bootnodes.clone()),
+        ];
+
+        env_vars
+    }
 }

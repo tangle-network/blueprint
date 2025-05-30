@@ -1,49 +1,126 @@
-mod manager;
-pub use manager::{Lease, NetworkManager};
+use crate::error::Result;
+use futures::channel::mpsc::UnboundedReceiver;
+use futures::stream::TryStreamExt;
+use rtnetlink::packet_core::{NetlinkMessage, NetlinkPayload};
+use rtnetlink::packet_route::{
+    RouteNetlinkMessage,
+    address::{AddressAttribute, AddressMessage},
+};
+use rtnetlink::sys::SocketAddr;
+use rtnetlink::{Handle, new_connection};
+use std::collections::HashSet;
+use std::net::Ipv4Addr;
+use std::sync::{Arc, Weak};
+use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 
-use nix::ioctl_write_ptr;
-use nix::libc::{self, IFNAMSIZ, c_char, c_short};
-use std::os::fd::AsRawFd;
-use std::{fs, io};
+pub struct Lease {
+    addr: Ipv4Addr,
+    pool: Weak<RwLock<Inner>>,
+}
 
-const TUN_PATH: &str = "/dev/net/tun";
-const INTERFACE_PREFIX: &str = "tap-tngl-";
-const IFF_TAP: c_short = 0x0002;
-const IFF_NO_PI: c_short = 0x1000;
+impl Lease {
+    pub fn addr(&self) -> Ipv4Addr {
+        self.addr
+    }
+}
 
-ioctl_write_ptr!(tun_set_iff, b'T', 202, libc::ifreq);
+impl Drop for Lease {
+    fn drop(&mut self) {
+        if let Some(pool) = self.pool.upgrade() {
+            tokio::task::block_in_place(move || {
+                let mut guard = pool.blocking_write();
+                guard.unavailable.remove(&self.addr);
+            });
+        }
+    }
+}
 
-/// Creates a TAP interface named `tap-tngl-{vm_id}` for use with a VM.
-///
-/// This returns the generated interface name.
-///
-/// # Errors
-///
-/// Returns an error if opening `/dev/net/tun` or setting the interface fails.
-#[allow(clippy::cast_possible_wrap)]
-pub fn create_tap_interface(vm_id: u32) -> io::Result<String> {
-    let name = format!("{INTERFACE_PREFIX}{vm_id}");
-    assert!(name.len() < IFNAMSIZ);
+struct Inner {
+    _conn_task_handle: JoinHandle<()>,
+    _conn_handle: Handle,
+    candidates: Vec<Ipv4Addr>,
+    unavailable: HashSet<Ipv4Addr>,
+}
 
-    let mut ifr_name: [c_char; IFNAMSIZ] = [0; IFNAMSIZ];
-    for (i, b) in name.bytes().enumerate() {
-        ifr_name[i] = b as _;
+#[derive(Clone)]
+pub struct NetworkManager {
+    inner: Arc<RwLock<Inner>>,
+}
+
+impl NetworkManager {
+    pub async fn new(candidates: Vec<Ipv4Addr>) -> Result<Self> {
+        let (conn, handle, msgs) = new_connection()?;
+        let conn_task_handle = tokio::spawn(conn);
+
+        let unavailable = Self::initial_snapshot(handle.clone()).await?;
+        let inner = Arc::new(RwLock::new(Inner {
+            _conn_task_handle: conn_task_handle,
+            _conn_handle: handle,
+            candidates,
+            unavailable,
+        }));
+        spawn_watcher(Arc::downgrade(&inner), msgs);
+        Ok(Self { inner })
     }
 
-    let file = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(TUN_PATH)?;
+    /// Lease the first free address
+    pub async fn allocate(&self) -> Option<Lease> {
+        let mut guard = self.inner.write().await;
 
-    let mut req = libc::ifreq {
-        ifr_name,
-        ifr_ifru: unsafe { std::mem::zeroed() },
-    };
-    req.ifr_ifru.ifru_flags = IFF_TAP | IFF_NO_PI;
-
-    unsafe {
-        tun_set_iff(file.as_raw_fd(), &req)?;
+        for &addr in &guard.candidates {
+            if !guard.unavailable.contains(&addr) {
+                guard.unavailable.insert(addr);
+                return Some(Lease {
+                    addr,
+                    pool: Arc::downgrade(&self.inner),
+                });
+            }
+        }
+        None
     }
 
-    Ok(name)
+    async fn initial_snapshot(handle: Handle) -> Result<HashSet<Ipv4Addr>> {
+        let mut set = HashSet::new();
+        let mut addrs = handle.address().get().execute();
+        while let Some(msg) = addrs.try_next().await? {
+            if let Some(addr) = addr_from_msg(&msg) {
+                set.insert(addr);
+            }
+        }
+        Ok(set)
+    }
+}
+
+fn addr_from_msg(msg: &AddressMessage) -> Option<Ipv4Addr> {
+    msg.attributes.iter().find_map(|attr| match attr {
+        AddressAttribute::Address(std::net::IpAddr::V4(a)) => Some(*a),
+        _ => None,
+    })
+}
+
+fn spawn_watcher(
+    pool: Weak<RwLock<Inner>>,
+    mut msgs: UnboundedReceiver<(NetlinkMessage<RouteNetlinkMessage>, SocketAddr)>,
+) {
+    tokio::spawn(async move {
+        while let Ok(Some((msg, _))) = msgs.try_next() {
+            let Some(inner) = pool.upgrade() else { break };
+            let mut guard = inner.write().await;
+
+            match msg.payload {
+                NetlinkPayload::InnerMessage(RouteNetlinkMessage::NewAddress(ref a)) => {
+                    if let Some(addr) = addr_from_msg(a) {
+                        guard.unavailable.insert(addr);
+                    }
+                }
+                NetlinkPayload::InnerMessage(RouteNetlinkMessage::DelAddress(ref a)) => {
+                    if let Some(addr) = addr_from_msg(a) {
+                        guard.unavailable.remove(&addr);
+                    }
+                }
+                _ => {}
+            }
+        }
+    });
 }
