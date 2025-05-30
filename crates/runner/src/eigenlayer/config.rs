@@ -1,4 +1,4 @@
-use crate::config::{BlueprintSettings, ProtocolSettingsT};
+use crate::config::{BlueprintSettings, Protocol, ProtocolSettingsT};
 use crate::error::ConfigError;
 use alloy_primitives::{Address, address};
 use serde::{Deserialize, Serialize};
@@ -72,8 +72,12 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
         })
     }
 
-    fn protocol(&self) -> &'static str {
+    fn protocol_name(&self) -> &'static str {
         "eigenlayer"
+    }
+
+    fn protocol(&self) -> Protocol {
+        Protocol::Eigenlayer
     }
 }
 

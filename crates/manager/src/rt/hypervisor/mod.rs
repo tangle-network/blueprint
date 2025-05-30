@@ -2,6 +2,7 @@ pub mod net;
 use net::NetworkManager;
 
 use crate::error::{Error, Result};
+use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use cloud_hypervisor_client::apis::DefaultApi;
 use cloud_hypervisor_client::models::console_config::Mode;
 use cloud_hypervisor_client::models::{
@@ -15,11 +16,11 @@ use nix::sys::signal;
 use nix::sys::signal::Signal;
 use nix::unistd::Pid;
 use std::fmt::Write as _;
-use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use std::{fs, io};
 use tokio::process::{Child, Command};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
@@ -40,7 +41,7 @@ struct Virtio {
     keystore: PathBuf,
 }
 
-pub(super) struct HypervisorInstance {
+pub struct HypervisorInstance {
     sock_path: PathBuf,
     guest_logs_path: PathBuf,
     binary_image_path: PathBuf,
@@ -58,6 +59,8 @@ impl HypervisorInstance {
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
     ) -> Result<HypervisorInstance> {
+        info!("Initializing hypervisor for service `{service_name}`...");
+
         let guest_logs_path = cache_dir
             .as_ref()
             .join(format!("{}-guest.log", service_name));
@@ -87,7 +90,7 @@ impl HypervisorInstance {
             .arg("--api-socket")
             .arg(&sock_path)
             .stdout(stdout)
-            .stderr(stderr)
+            .stderr(stderr.try_clone()?)
             .spawn()?;
 
         let data_dir_virtio_socket = runtime_dir.as_ref().join("data-dir.sock");
@@ -150,8 +153,8 @@ impl HypervisorInstance {
         data_dir: impl AsRef<Path>,
         keystore: impl AsRef<Path>,
         binary_path: impl AsRef<Path>,
-        env_vars: Vec<(String, String)>,
-        arguments: &[String],
+        env_vars: BlueprintEnvVars,
+        arguments: BlueprintArgs,
     ) -> Result<()> {
         const LAUNCHER_SCRIPT_TEMPLATE: &str = r"#!/bin/sh
         set -e
@@ -168,11 +171,11 @@ impl HypervisorInstance {
         ";
 
         let mut env_vars_str = String::new();
-        for (key, val) in env_vars {
+        for (key, val) in env_vars.encode() {
             writeln!(&mut env_vars_str, "export {key}=\"{val}\"").unwrap();
         }
 
-        let args = arguments.join(" ");
+        let args = arguments.encode().join(" ");
 
         let launcher_script = LAUNCHER_SCRIPT_TEMPLATE
             .replace("{{DATA_DIR}}", &data_dir.as_ref().to_string_lossy())
@@ -232,16 +235,17 @@ impl HypervisorInstance {
         manager_service_id: u32,
         network_manager: NetworkManager,
         bridge_socket_path: impl AsRef<Path>,
+        pty_slave_path: Option<&Path>,
         binary_path: impl AsRef<Path>,
-        env_vars: Vec<(String, String)>,
-        arguments: Vec<String>,
+        env_vars: BlueprintEnvVars,
+        arguments: BlueprintArgs,
     ) -> Result<()> {
         self.create_binary_image(
             &self.virtio.data_dir,
             &self.virtio.keystore,
             binary_path,
             env_vars,
-            &arguments,
+            arguments,
         )
         .map_err(|e| {
             error!("Error creating binary image: {e}");
@@ -254,22 +258,29 @@ impl HypervisorInstance {
                 e
             })?;
 
-        let (serial, console, cmdline_console_target) = self.logging_configs();
+        let (serial, console, cmdline_console_target) = self.logging_configs(pty_slave_path);
 
-        let (lease, tap_interface) = network_manager
-            .new_tap_interface(manager_service_id)
-            .await
-            .map_err(|e| {
-                error!("Error creating TAP interface: {e}");
-                e
-            })?;
+        // let (lease, tap_interface) = network_manager
+        //     .new_tap_interface(manager_service_id)
+        //     .await
+        //     .map_err(|e| {
+        //         error!("Error creating TAP interface: {e}");
+        //         e
+        //     })?;
+        //
+        // let tap_interface_addr = lease.addr();
+        // self.lease = Some(lease);
+        // io::Error::new(io::ErrorKind::QuotaExceeded, "IP pool exhausted").into()
+        let Some(lease) = network_manager.allocate().await else {
+            return Err(io::Error::new(io::ErrorKind::QuotaExceeded, "IP pool exhausted").into());
+        };
 
         let tap_interface_addr = lease.addr();
         self.lease = Some(lease);
 
         let vm_conf = VmConfig {
             memory: Some(MemoryConfig {
-                size: 4096,
+                size: 4294967296,
                 shared: Some(true),
                 ..Default::default()
             }),
@@ -311,11 +322,13 @@ impl HypervisorInstance {
                 FsConfig {
                     tag: String::from(DATA_DIR_VIRTIO),
                     socket: self.virtio.data_dir_socket.to_string_lossy().to_string(),
+                    queue_size: 1024,
                     ..Default::default()
                 },
                 FsConfig {
                     tag: String::from(KEYSTORE_VIRTIO),
                     socket: self.virtio.keystore_socket.to_string_lossy().to_string(),
+                    queue_size: 1024,
                     ..Default::default()
                 },
             ]),
@@ -328,7 +341,7 @@ impl HypervisorInstance {
                 ..Default::default()
             }),
             net: Some(vec![NetConfig {
-                tap: Some(tap_interface),
+                tap: Some(format!("tap-tngl-{manager_service_id}")),
                 ip: Some(tap_interface_addr.to_string()),
                 ..Default::default()
             }]),
@@ -357,10 +370,18 @@ impl HypervisorInstance {
     // }
 
     //#[cfg(debug_assertions)]
-    fn logging_configs(&self) -> (ConsoleConfig, ConsoleConfig, &'static str) {
+    fn logging_configs(
+        &self,
+        pty_slave_path: Option<&Path>,
+    ) -> (ConsoleConfig, ConsoleConfig, &'static str) {
+        let file = match pty_slave_path {
+            Some(pty) => pty.to_string_lossy().to_string(),
+            None => self.guest_logs_path.to_string_lossy().into(),
+        };
+
         let serial = ConsoleConfig {
             mode: Mode::File,
-            file: Some(self.guest_logs_path.to_string_lossy().into()),
+            file: Some(file),
             ..Default::default()
         };
         let virtio_console = ConsoleConfig {
@@ -371,6 +392,8 @@ impl HypervisorInstance {
     }
 
     pub async fn start(&mut self) -> Result<()> {
+        info!("Booting VM...");
+
         let client = self
             .client()
             .await

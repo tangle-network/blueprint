@@ -171,34 +171,11 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let _span = span.enter();
     info!("Starting blueprint manager ... waiting for start signal ...");
 
-    if !blueprint_manager_config.cache_dir.exists() {
-        info!(
-            "Cache directory does not exist, creating it at `{}`",
-            blueprint_manager_config.cache_dir.display()
-        );
-        std::fs::create_dir_all(&blueprint_manager_config.cache_dir)?;
-    }
-
-    if !blueprint_manager_config.runtime_dir.exists() {
-        info!(
-            "Runtime directory does not exist, creating it at `{}`",
-            blueprint_manager_config.runtime_dir.display()
-        );
-        std::fs::create_dir_all(&blueprint_manager_config.runtime_dir)?;
-    }
-
-    let data_dir = &blueprint_manager_config.data_dir;
-    if !data_dir.exists() {
-        info!(
-            "Data directory does not exist, creating it at `{}`",
-            data_dir.display()
-        );
-        std::fs::create_dir_all(data_dir)?;
-    }
+    blueprint_manager_config.verify_directories_exist()?;
 
     // Create the auth proxy task
     let auth_proxy_task = run_auth_proxy(
-        data_dir.clone(),
+        blueprint_manager_config.data_dir.clone(),
         blueprint_manager_config.auth_proxy_opts.clone(),
     );
 
