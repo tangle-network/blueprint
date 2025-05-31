@@ -162,43 +162,14 @@ impl DockerManager {
         let container_id = match containers.create(&options.build()).await {
             Ok(container) => container.id,
             Err(e) => {
-                // If container creation fails, try a simpler approach without volumes
                 error!(
-                    "Failed to create container with volumes: {}, trying without volumes",
+                    "[DOCKER ERROR] Failed to create container with volumes: {}",
                     e
                 );
-
-                // Create new options without volumes
-                let mut simple_options = ContainerOptions::builder(image);
-                simple_options.name(name);
-
-                // Add environment variables
-                for (key, value) in &env_vars {
-                    simple_options.env(&[format!("{}={}", key, value)]);
-                }
-
-                // Add port mappings
-                for (container_port, host_port) in &ports {
-                    let container_port_num = match container_port.split('/').next() {
-                        Some(port_str) => port_str.parse::<u32>().unwrap_or(3000),
-                        None => 3000,
-                    };
-
-                    simple_options.expose(
-                        container_port_num,
-                        "tcp",
-                        host_port.parse::<u32>().unwrap_or(3000),
-                    );
-                }
-
-                // Try to create the container with simplified options
-                containers
-                    .create(&simple_options.build())
-                    .await
-                    .map_err(|e| {
-                        Error::Other(format!("Failed to create container {}: {}", name, e))
-                    })?
-                    .id
+                panic!(
+                    "[DOCKER PANIC] Could not create container '{}': {}.\n\nPossible causes: Docker is not running, permissions issue, or Docker daemon is not accessible to this user. Please run 'docker info' and ensure you can create containers manually.",
+                    name, e
+                );
             }
         };
 
@@ -212,6 +183,11 @@ impl DockerManager {
                 Ok(container_id)
             }
             Err(e) => {
+                error!("[DOCKER ERROR] Failed to start container: {}", e);
+                panic!(
+                    "[DOCKER PANIC] Could not start container '{}': {}.\n\nPossible causes: Docker is not running, permissions issue, or Docker daemon is not accessible to this user. Please run 'docker info' and ensure you can create containers manually.",
+                    name, e
+                );
                 error!("Failed to start container {}: {}", name, e);
                 Err(Error::Other(format!(
                     "Failed to start container {}: {}",

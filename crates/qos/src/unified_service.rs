@@ -380,9 +380,6 @@ where
     C: HeartbeatConsumer + Send + Sync + 'static,
 {
     fn drop(&mut self) {
-        // No need to explicitly stop the heartbeat service or metrics service
-        // as they don't implement the stop method
-
         // Stop the server managers
         if let Some(server) = &self.grafana_server {
             info!("Stopping Grafana server...");

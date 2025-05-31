@@ -205,10 +205,12 @@ where
         self
     }
 
-    /// Add a heartbeat service as a background service
+    /// Add a custom heartbeat service as a background service
     ///
     /// This method is a convenience wrapper around `background_service` specifically for
-    /// adding a heartbeat service from the `QoS` crate. The heartbeat service will send
+    /// adding a custom heartbeat service from the `QoS` crate. The core heartbeat logic from the
+    /// unified QoS service is always running if `.qos_service(...)` is called. This method should only
+    /// be used to add additional, blueprint-specific health checks.
     /// periodic heartbeats to the chain or other monitoring systems.
     ///
     /// # Examples
@@ -328,6 +330,63 @@ where
     ) -> Self {
         // Create a background service adapter for the metrics server
         let adapter = self::metrics_server::MetricsServerAdapter::new(server);
+        self.background_services
+            .push(DynBackgroundService::boxed(adapter));
+        self
+    }
+
+    /// Integrate the unified QoS service (heartbeat, metrics, logging, dashboards) as an always-on background service.
+    ///
+    /// This method instantiates and manages a `QoSService` internally, automatically starting its heartbeat and metrics
+    /// background tasks if configured. Custom heartbeat and metrics logic can still be added via `.heartbeat_service` and
+    /// `.metrics_server`, but the core QoS logic is always running if this is called.
+    pub fn qos_service<C>(
+        mut self,
+        config: blueprint_qos::QoSConfig,
+        heartbeat_consumer: std::sync::Arc<C>,
+    ) -> Self
+    where
+        C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
+    {
+        struct QoSServiceAdapter<
+            C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
+        > {
+            qos_service: std::sync::Arc<
+                tokio::sync::Mutex<Option<blueprint_qos::unified_service::QoSService<C>>>,
+            >,
+        }
+        impl<C> BackgroundService for QoSServiceAdapter<C>
+        where
+            C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
+        {
+            async fn start(
+                &self,
+            ) -> Result<
+                tokio::sync::oneshot::Receiver<Result<(), crate::error::RunnerError>>,
+                crate::error::RunnerError,
+            > {
+                use blueprint_qos::unified_service::QoSService;
+                let mut lock = self.qos_service.lock().await;
+                if let Some(qos) = lock.as_mut() {
+                    // Start heartbeat if present
+                    if let Some(hb) = qos.heartbeat_service() {
+                        let _ = hb.start_heartbeat().await;
+                    }
+                    // Metrics server (Prometheus) is started by QoSService::new if configured
+                }
+                let (_tx, rx) = tokio::sync::oneshot::channel();
+                Ok(rx)
+            }
+        }
+        let qos_service = std::sync::Arc::new(tokio::sync::Mutex::new(Some(
+            tokio::runtime::Handle::current()
+                .block_on(blueprint_qos::unified_service::QoSService::new(
+                    config,
+                    heartbeat_consumer,
+                ))
+                .expect("Failed to initialize QoSService"),
+        )));
+        let adapter = QoSServiceAdapter { qos_service };
         self.background_services
             .push(DynBackgroundService::boxed(adapter));
         self

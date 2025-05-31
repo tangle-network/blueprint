@@ -3,9 +3,12 @@ use blueprint_router::Router;
 use blueprint_runner::BlueprintConfig;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::error::RunnerError as Error;
+use blueprint_runner::metrics_server::MetricsServerAdapter;
 use blueprint_runner::{BackgroundService, BlueprintRunner, BlueprintRunnerBuilder};
 use std::future;
 use std::future::Pending;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub struct TestRunner<Ctx> {
     router: Option<Router<Ctx>>,
@@ -59,6 +62,48 @@ where
                 .take()
                 .expect("router should always exist")
                 .background_service(service),
+        );
+        self
+    }
+
+    /// Integrate the unified QoS service (heartbeat, metrics, logging, dashboards) as an always-on background service.
+    pub async fn qos_service<C>(
+        &mut self,
+        qos_service: Arc<Mutex<Option<blueprint_qos::unified_service::QoSService<C>>>>,
+        // config: blueprint_qos::QoSConfig,
+        // heartbeat_consumer: std::sync::Arc<C>,
+    ) -> &mut Self
+    where
+        C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
+    {
+        struct QoSServiceAdapter<
+            C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
+        > {
+            qos_service: Arc<Mutex<Option<blueprint_qos::unified_service::QoSService<C>>>>,
+        }
+        impl<C> BackgroundService for QoSServiceAdapter<C>
+        where
+            C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
+        {
+            async fn start(
+                &self,
+            ) -> Result<tokio::sync::oneshot::Receiver<Result<(), Error>>, Error> {
+                let mut lock = self.qos_service.lock().await;
+                if let Some(qos) = lock.as_mut() {
+                    if let Some(hb) = qos.heartbeat_service() {
+                        let _ = hb.start_heartbeat().await;
+                    }
+                }
+                let (_tx, rx) = tokio::sync::oneshot::channel();
+                Ok(rx)
+            }
+        }
+        let adapter = QoSServiceAdapter { qos_service };
+        self.builder = Some(
+            self.builder
+                .take()
+                .expect("failed to add QoS service")
+                .background_service(adapter),
         );
         self
     }

@@ -4,14 +4,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use blueprint_core::{Job, info, warn};
-use blueprint_qos::{
-    QoSServiceBuilder, default_qos_config,
-    metrics::opentelemetry::OpenTelemetryConfig,
-    metrics::types::MetricsConfig,
-    metrics::{EnhancedMetricsProvider, service},
-    servers,
-};
+use blueprint_qos::heartbeat::HeartbeatConfig;
+use blueprint_qos::{PrometheusServerConfig, QoSService, default_qos_config};
 use blueprint_tangle_extra::layers::TangleLayer;
+use blueprint_testing_utils::tangle::runner::MockHeartbeatConsumer;
 use blueprint_testing_utils::{
     Error, setup_log,
     tangle::multi_node::NodeSlot,
@@ -25,26 +21,6 @@ use prometheus::{IntGauge, Opts};
 use tokio::time::sleep;
 
 mod utils;
-
-/// Mock implementation of HeartbeatConsumer for testing
-#[derive(Debug, Clone)]
-struct MockHeartbeatConsumer {}
-
-impl MockHeartbeatConsumer {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-// Implement the HeartbeatConsumer trait
-impl blueprint_qos::heartbeat::HeartbeatConsumer for MockHeartbeatConsumer {
-    fn send_heartbeat(
-        &self,
-        _status: &blueprint_qos::heartbeat::HeartbeatStatus,
-    ) -> impl std::future::Future<Output = Result<(), blueprint_qos::error::Error>> + Send {
-        async { Ok(()) }
-    }
-}
 
 // Port constants for the metrics servers
 const METRICS_PORT: u16 = 8085;
@@ -75,7 +51,7 @@ fn cleanup_docker_containers(_harness: &TangleTestHarness<()>) -> Result<(), Err
         "blueprint-test-loki",
         "blueprint-test-grafana",
         "blueprint-test-prometheus",
-        "blueprint-loki", // also try default names
+        "blueprint-loki",
         "blueprint-grafana",
         "blueprint-prometheus",
         "loki",
@@ -85,7 +61,6 @@ fn cleanup_docker_containers(_harness: &TangleTestHarness<()>) -> Result<(), Err
     ];
 
     for container_name in &containers {
-        info!("Cleaning up container: {}", container_name);
         let output = Command::new("docker")
             .args(["rm", "-f", container_name])
             .output()
@@ -100,15 +75,6 @@ fn cleanup_docker_containers(_harness: &TangleTestHarness<()>) -> Result<(), Err
 }
 
 /// Demonstrates the complete QoS metrics system with Grafana, Loki, and Prometheus.
-///
-/// Features:
-/// - Metrics collection via Prometheus
-/// - Dashboard visualization in Grafana
-/// - Log collection in Loki
-/// - Continuous job execution to generate metrics
-/// - Automatic dashboard setup
-///
-/// This test runs until TOTAL_JOBS_TO_RUN have been completed.
 #[tokio::test]
 #[ignore] // Ignore by default since this is a long-running demo test - run with: cargo test test_qos_metrics_demo -- --ignored
 async fn test_qos_metrics_demo() -> Result<(), Error> {
@@ -123,60 +89,18 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     let (temp_dir, blueprint_dir) = create_test_blueprint();
 
     let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await?;
-
     std::env::set_current_dir(&blueprint_dir).unwrap();
-
-    // Clean up existing containers
     cleanup_docker_containers(&harness)?;
 
-    // Create a QoS configuration with integrated server management
-    let mut qos_config = default_qos_config();
-
-    // Configure server containers for metrics visualization
-    let grafana_server_config = servers::grafana::GrafanaServerConfig {
-        port: GRAFANA_PORT,
-        container_name: "blueprint-test-grafana".to_string(),
-        admin_user: "admin".to_string(),
-        admin_password: "admin".to_string(),
-        allow_anonymous: true,
-        ..Default::default()
-    };
-
-    let prometheus_server_config = servers::prometheus::PrometheusServerConfig {
-        port: PROMETHEUS_PORT,
-        docker_container_name: "blueprint-test-prometheus".to_string(),
-        ..Default::default()
-    };
-
-    let loki_server_config = servers::loki::LokiServerConfig {
-        port: LOKI_PORT,
-        container_name: "blueprint-test-loki".to_string(),
-        ..Default::default()
-    };
-
-    // Enable server management and set configurations
-    qos_config.manage_servers = true;
-    qos_config.grafana_server = Some(grafana_server_config);
-    qos_config.prometheus_server = Some(prometheus_server_config);
-    qos_config.loki_server = Some(loki_server_config);
-
-    info!(
-        "QoS metrics visualization configured with Grafana on port {}",
-        GRAFANA_PORT
-    );
-
-    // Set up test service with operators
     info!("Setting up test service with {} operators", OPERATOR_COUNT);
     let setup_services_opts = SetupServicesOpts {
         exit_after_registration: false,
-        skip_service_request: false,
-        registration_args: vec![Vec::default(); OPERATOR_COUNT].try_into().unwrap(),
-        request_args: Vec::default(),
+        ..Default::default()
     };
-
     let (mut test_env, service_id, blueprint_id) = harness
         .setup_services_with_options::<OPERATOR_COUNT>(setup_services_opts)
         .await?;
+    info!("Test environment initialized, submitting jobs to generate metrics...");
 
     // Verify that the blueprint includes QoS imports
     let main_rs_content = fs::read_to_string(blueprint_dir.join("src/main.rs"))
@@ -209,12 +133,40 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         }
     };
 
-    // Add square job to node handle
     info!("Adding square job to node handle");
     node_handle.add_job(utils::square.layer(TangleLayer)).await;
 
-    // Set up metrics server on dedicated port
-    let metrics_addr = format!("127.0.0.1:{}", METRICS_PORT);
+    let mut qos_config = default_qos_config();
+
+    qos_config.heartbeat = Some(HeartbeatConfig {
+        interval_secs: 5,
+        jitter_percent: 5,
+        service_id,
+        blueprint_id: 1,
+        max_missed_heartbeats: 3,
+    });
+    qos_config.prometheus_server = Some(PrometheusServerConfig {
+        host: "0.0.0.0".to_string(),
+        port: 9091,
+        use_docker: false,
+        ..Default::default()
+    });
+    qos_config.manage_servers = true;
+    qos_config.loki = Some(blueprint_qos::logging::loki::LokiConfig {
+        url: "http://localhost:3100".to_string(),
+        username: Some("test-tenant".to_string()),
+        ..Default::default()
+    });
+    qos_config.grafana = Some(blueprint_qos::logging::grafana::GrafanaConfig {
+        url: "http://localhost:3000".to_string(),
+        api_key: "test-api-key".to_string(),
+        folder: Some("TestDashboards".to_string()),
+        ..Default::default()
+    });
+    let qos_service = QoSService::new(qos_config.clone(), Arc::new(MockHeartbeatConsumer::new()))
+        .await
+        .unwrap();
+    node_handle.set_qos_service(qos_service).await;
 
     // Start the BlueprintRunner
     info!("Starting BlueprintRunner with node handle");
@@ -227,96 +179,11 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         "BlueprintRunner started successfully - QoS service and heartbeat service should be running internally"
     );
 
-    // Start a metrics server to expose metrics for viewing
-    info!("Starting metrics server on {}", metrics_addr);
-    let metrics_addr_clone = metrics_addr.clone();
-
-    // Copy the service_id and blueprint_id for use in the async block
-    let metrics_service_id = service_id;
-    let metrics_blueprint_id = blueprint_id;
-
-    let _metrics_server_handle = tokio::spawn(async move {
-        let metrics_config = MetricsConfig {
-            service_id: metrics_service_id,
-            blueprint_id: metrics_blueprint_id,
-            bind_address: metrics_addr_clone.clone(),
-            ..Default::default()
-        };
-
-        // Create metrics provider - just for verification
-        if let Err(e) =
-            EnhancedMetricsProvider::new(metrics_config.clone(), OpenTelemetryConfig::default())
-        {
-            panic!("Failed to create metrics provider: {}", e);
-        }
-
-        info!("Metrics server running at http://{}", metrics_addr_clone);
-        // Start metrics server with the config
-        if let Err(e) = service::run_metrics_server(metrics_config).await {
-            panic!("Metrics server error: {}", e);
-        }
-    });
-
-    // Create a heartbeat consumer for QoS service
-    let heartbeat_consumer = Arc::new(MockHeartbeatConsumer::new());
-
-    // Build the QoS service with server management
-    info!("Starting QoS service with server management");
-    let qos_service_result = QoSServiceBuilder::new()
-        .with_config(qos_config.clone())
-        .with_heartbeat_consumer(heartbeat_consumer)
-        .manage_servers(true)
-        .build()
-        .await;
-
-    match qos_service_result {
-        Ok(mut qos_service) => {
-            // Wait for servers to initialize
-            info!("Waiting for metrics servers to initialize...");
-            sleep(Duration::from_secs(5)).await;
-
-            // Create the dashboard
-            info!("Creating Grafana dashboard for blueprint metrics");
-            match qos_service.create_dashboard("prometheus", "loki").await {
-                Ok(dashboard_url) => {
-                    info!("Dashboard created successfully");
-                    info!("Dashboard URL: {:?}", dashboard_url);
-                }
-                Err(e) => {
-                    warn!("Failed to create dashboard: {}", e);
-                }
-            }
-
-            // Get Grafana URL - this is the only URL we show to the user
-            if let Some(url) = qos_service.grafana_server_url() {
-                // Only display the Grafana URL as requested
-                info!("Grafana dashboard available at: {}", url);
-                info!("Login credentials: admin/admin (if required)");
-            } else {
-                // Fallback to direct URL if server URL isn't available
-                info!(
-                    "Grafana dashboard available at: http://127.0.0.1:{}",
-                    GRAFANA_PORT
-                );
-                info!("Login credentials: admin/admin (if required)");
-            }
-        }
-        Err(e) => {
-            warn!("Failed to start QoS service with server management: {}", e);
-            warn!("Falling back to using direct Grafana URL");
-
-            // Provide direct access URL in case of failure
-            info!(
-                "Grafana dashboard available at: http://127.0.0.1:{}",
-                GRAFANA_PORT
-            );
-            info!("Login credentials: admin/admin (if required)");
-        }
-    }
+    info!("Grafana dashboard available at: http://127.0.0.1:3000");
+    info!("Login credentials: admin/admin (if required)");
 
     // Setup registry for job metrics
     let registry = Registry::new();
-    // Use the actual service_id and blueprint_id from the test setup
 
     // Helper function to create and register a gauge with labels using the actual service_id and blueprint_id
     let create_gauge = |name: &str, help: &str| {
