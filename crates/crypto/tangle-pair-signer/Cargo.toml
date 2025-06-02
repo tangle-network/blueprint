@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-crypto-tangle-pair-signer"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 description = "Pair signer for Tangle"
 authors.workspace = true
 edition.workspace = true
