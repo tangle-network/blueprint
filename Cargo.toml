@@ -140,7 +140,7 @@ sp-keystore = { version = "0.40.0", default-features = false }
 sc-keystore = { version = "33.0.0", default-features = false }
 sp-application-crypto = { version = "38.0.0", default-features = false }
 scale-info = { version = "2.11", default-features = false }
-parity-scale-codec = { version = "3.6", default-features = false }
+parity-scale-codec = { version = "3.7", default-features = false }
 
 # Async & Runtime
 crossbeam = { version = "0.8", default-features = false }
