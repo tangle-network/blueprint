@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.13](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.12...blueprint-sdk-v0.1.0-alpha.13) - 2025-06-02
+
+### Other
+
+- updated the following local packages: blueprint-macros, blueprint-testing-utils
+
 ## [0.1.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.11...blueprint-sdk-v0.1.0-alpha.12) - 2025-05-14
 
 ### Other
