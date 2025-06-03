@@ -96,6 +96,11 @@ pub struct BlueprintManagerConfig {
 }
 
 impl BlueprintManagerConfig {
+    /// Check if all configured directories exist, and if not, create them
+    ///
+    /// # Errors
+    ///
+    /// This will error if it fails to create any of the directories.
     pub fn verify_directories_exist(&self) -> Result<()> {
         if !self.cache_dir.exists() {
             info!(

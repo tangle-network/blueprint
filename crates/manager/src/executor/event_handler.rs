@@ -19,6 +19,7 @@ use tangle_subxt::tangle_testnet_runtime::api::services::events::{
     JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
 };
 use crate::rt::hypervisor::net::NetworkManager;
+use crate::rt::hypervisor::ServiceVmConfig;
 use crate::rt::service::{Service, Status};
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
@@ -92,13 +93,16 @@ impl VerifiedBlueprint {
                 fs::create_dir_all(&runtime_dir)?;
 
                 let mut service = Service::new(
-                    id,
+                    // TODO: !!! Actually configure the VM with resource limits
+                    ServiceVmConfig {
+                        id,
+                        ..Default::default()
+                    },
                     network_manager.clone(),
                     &blueprint_config.data_dir,
                     &blueprint_config.keystore_uri,
                     &cache_dir,
                     runtime_dir,
-                    None,
                     &sub_service_str,
                     &binary_path,
                     env,
@@ -116,11 +120,10 @@ impl VerifiedBlueprint {
                             .or_default()
                             .insert(*service_id, service);
                     }
-                    Ok(None) => continue,
+                    Ok(None) => {}
                     Err(e) => {
                         error!("Service did not start successfully, aborting: {e}");
                         service.shutdown().await?;
-                        continue;
                     }
                 }
             }

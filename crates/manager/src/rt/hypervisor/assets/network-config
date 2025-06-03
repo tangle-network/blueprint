@@ -1,0 +1,10 @@
+network:
+  version: 2
+  ethernets:
+    ens5:
+      dhcp4: false
+      addresses:
+        - {{GUEST_IP_ADDRESS}}/24
+      gateway4: {{TAP_IP_ADDRESS}}
+      nameservers:
+        addresses: [1.1.1.1, 8.8.8.8]
