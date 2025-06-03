@@ -1,16 +1,16 @@
 use crate::config::BlueprintManagerConfig;
+use crate::rt::hypervisor::ServiceVmConfig;
 use crate::rt::hypervisor::net::NetworkManager;
 use crate::rt::service::Service;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_runner::config::Protocol;
 use clap::Subcommand;
-use nix::fcntl::OFlag;
-use nix::pty::{grantpt, posix_openpt, ptsname_r, unlockpt};
-use std::fs;
-use std::os::fd::OwnedFd;
-use std::path::{Path, PathBuf};
-use tokio::fs::File;
-use tracing::error;
+use nix::sys::termios;
+use nix::sys::termios::{InputFlags, LocalFlags, SetArg};
+use std::io::{self, Read, Write};
+use std::path::PathBuf;
+use std::{fs, thread};
+use tracing::{error, info, warn};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum DebugCommand {
@@ -23,6 +23,8 @@ pub enum DebugCommand {
         binary: PathBuf,
         #[arg(long, default_value_t = Protocol::Tangle)]
         protocol: Protocol,
+        #[arg(long, default_value_t = true)]
+        verify_network_connection: bool,
     },
 }
 
@@ -53,48 +55,39 @@ impl DebugCommand {
                 service_name,
                 binary,
                 protocol,
+                verify_network_connection,
             } => {
                 config.verify_directories_exist()?;
-
-                let master = posix_openpt(OFlag::O_RDWR | OFlag::O_NOCTTY)?;
-                grantpt(&master)?;
-                unlockpt(&master)?;
-
-                let slave_path = ptsname_r(&master)?;
-
-                let owned: OwnedFd = master.into();
-                let mut master_file = File::from_std(fs::File::from(owned));
-                let mut master_file_clone = master_file.try_clone().await?;
-
-                let pump_out = tokio::task::spawn(async move {
-                    tokio::io::copy(&mut master_file, &mut tokio::io::stdout()).await
-                });
-
-                let pump_in = tokio::task::spawn(async move {
-                    tokio::io::copy(&mut tokio::io::stdin(), &mut master_file_clone).await
-                });
+                blueprint_tangle_testing_utils::keys::inject_tangle_key(
+                    &config.keystore_uri,
+                    "//Alice",
+                )
+                .map_err(|e| crate::error::Error::Other(e.to_string()))?;
 
                 let args = BlueprintArgs::new(&config);
                 let env = BlueprintEnvVars {
-                    http_rpc_endpoint: "".to_string(),
-                    ws_rpc_endpoint: "".to_string(),
+                    http_rpc_endpoint: String::new(),
+                    ws_rpc_endpoint: String::new(),
                     keystore_uri: config.keystore_uri.clone(),
                     data_dir: config.data_dir.clone(),
                     blueprint_id: 0,
                     service_id: 0,
                     protocol,
-                    bootnodes: "".to_string(),
+                    bootnodes: String::new(),
                     registration_mode: false,
                 };
 
                 let mut service = Service::new(
-                    id,
+                    ServiceVmConfig {
+                        id,
+                        pty: true,
+                        ..Default::default()
+                    },
                     network_manager,
                     config.data_dir,
                     config.keystore_uri,
                     config.cache_dir,
                     &config.runtime_dir,
-                    Some(Path::new(&slave_path)),
                     &service_name,
                     binary,
                     env,
@@ -103,18 +96,60 @@ impl DebugCommand {
                 .await?;
                 let mut is_alive = Box::pin(service.start().await?.unwrap());
 
-                loop {
-                    tokio::select! {
-                        _ = tokio::signal::ctrl_c() => {
-                            break;
+                let pty = service.hypervisor().pty().await?.unwrap();
+                info!("VM serial output to: {}", pty.display());
+
+                let pty = fs::OpenOptions::new().read(true).write(true).open(pty)?;
+
+                set_raw_mode(&pty)?;
+
+                let mut pty_reader = pty.try_clone()?;
+                let mut pty_writer = pty;
+
+                let stdin_to_pty = thread::spawn(move || {
+                    let mut stdin = std::io::stdin();
+                    let mut buffer = [0u8; 1024];
+                    loop {
+                        match stdin.read(&mut buffer) {
+                            Ok(0) | Err(_) => break,
+                            Ok(n) => {
+                                if pty_writer.write_all(&buffer[..n]).is_err() {
+                                    break;
+                                }
+                            }
                         }
-                        // _ = &mut is_alive => {
-                        //     warn!("Networking will **NOT** work for this VM");
-                        // }
+                    }
+                });
+
+                let pty_to_stdout = thread::spawn(move || {
+                    let mut stdout = std::io::stdout();
+                    let mut buffer = [0u8; 1024];
+                    loop {
+                        match pty_reader.read(&mut buffer) {
+                            Ok(0) | Err(_) => break,
+                            Ok(n) => {
+                                if stdout.write_all(&buffer[..n]).is_err() {
+                                    break;
+                                }
+                                stdout.flush().ok();
+                            }
+                        }
+                    }
+                });
+
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = &mut is_alive => {
+                        warn!("Networking will **NOT** work for this VM");
+                        if verify_network_connection {
+                            service.shutdown().await?;
+                            return Err(crate::error::Error::Other(String::from("Bridge failed to connect")));
+                        }
                     }
                 }
 
-                pump_out.abort();
+                stdin_to_pty.join().unwrap();
+                pty_to_stdout.join().unwrap();
 
                 service.shutdown().await?;
             }
@@ -122,4 +157,15 @@ impl DebugCommand {
 
         Ok(())
     }
+}
+
+fn set_raw_mode(fd: &fs::File) -> io::Result<()> {
+    let mut termios = termios::tcgetattr(fd)?;
+
+    termios.input_flags &= !(InputFlags::ICRNL | InputFlags::IXON);
+    termios.local_flags &= !(LocalFlags::ICANON | LocalFlags::ECHO | LocalFlags::ISIG);
+
+    termios::tcsetattr(fd, SetArg::TCSANOW, &termios)?;
+
+    Ok(())
 }

@@ -1,6 +1,6 @@
 use super::bridge::{Bridge, BridgeHandle};
-use super::hypervisor::HypervisorInstance;
 use super::hypervisor::net::NetworkManager;
+use super::hypervisor::{HypervisorInstance, ServiceVmConfig};
 use crate::error::{Error, Result};
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use std::path::Path;
@@ -26,13 +26,12 @@ pub struct Service {
 impl Service {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
-        id: u32,
+        vm_config: ServiceVmConfig,
         network_manager: NetworkManager,
         data_dir: impl AsRef<Path>,
         keystore: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
-        pty_slave_path: Option<&Path>,
         service_name: &str,
         binary_path: impl AsRef<Path>,
         env_vars: BlueprintEnvVars,
@@ -64,7 +63,7 @@ impl Service {
         })?;
 
         let mut hypervisor = HypervisorInstance::new(
-            data_dir,
+            vm_config,
             keystore,
             cache_dir.as_ref(),
             runtime_dir.as_ref(),
@@ -73,10 +72,10 @@ impl Service {
 
         hypervisor
             .prepare(
-                id,
                 network_manager,
+                data_dir,
+                cache_dir,
                 bridge_base_socket,
-                pty_slave_path,
                 binary_path.as_ref(),
                 env_vars,
                 arguments,
@@ -113,7 +112,7 @@ impl Service {
         })?;
 
         Ok(Some(async move {
-            if time::timeout(Duration::from_secs(30), alive_rx)
+            if time::timeout(Duration::from_secs(240), alive_rx)
                 .await
                 .is_err()
             {
@@ -134,5 +133,9 @@ impl Service {
         self.bridge.shutdown();
 
         Ok(())
+    }
+
+    pub fn hypervisor(&self) -> &HypervisorInstance {
+        &self.hypervisor
     }
 }
