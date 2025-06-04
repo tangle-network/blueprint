@@ -149,7 +149,7 @@ sp-keystore = { version = "0.40.0", default-features = false }
 sc-keystore = { version = "33.0.0", default-features = false }
 sp-application-crypto = { version = "38.0.0", default-features = false }
 scale-info = { version = "2.11", default-features = false }
-parity-scale-codec = { version = "3.6", default-features = false }
+parity-scale-codec = { version = "3.7", default-features = false }
 
 # Async & Runtime
 crossbeam = { version = "0.8", default-features = false }
@@ -166,7 +166,7 @@ async-stream = { version = "0.3.6", default-features = false }
 
 # CLI & Configuration
 cargo-generate = { version = "0.23", default-features = false }
-clap = { version = "4.5.38" }
+clap = { version = "4.5.39" }
 clap-cargo = { version = "0.14", default-features = false }
 toml = { version = "0.8.19", default-features = false }
 dialoguer = { version = "0.11.0", default-features = false }
@@ -219,7 +219,7 @@ url = { version = "2.5.2", default-features = false }
 serde_with = { version = "3.12.0", default-features = false }
 hyper = { version = "1.6.0", default-features = false }
 hyperlocal = { version = "0.9.1", default-features = false }
-hyper-util = { version = "0.1.11", default-features = false }
+hyper-util = { version = "0.1.13", default-features = false }
 http-body-util = { version = "0.1.3", default-features = false }
 dashmap = { version = "6.1.0", default-features = false }
 axum = { version = "0.8", default-features = false }
@@ -247,7 +247,7 @@ trybuild = { version = "1.0", default-features = false }
 dirs = { version = "6.0.0", default-features = false }
 indicatif = { version = "0.17.8", default-features = false }
 document-features = "0.2.11"
-rustversion = "1.0.20"
+rustversion = "1.0.21"
 cargo-dist-schema = "0.28.0"
 
 # Time & Date
@@ -256,7 +256,7 @@ chrono = { version = "0.4", default-features = false }
 
 # System & OS
 sysinfo = { version = "0.34.2", default-features = false }
-num_cpus = { version = "1.16", default-features = false }
+num_cpus = { version = "1.17", default-features = false }
 libc = { version = "0.2.147", default-features = false }
 
 # gRPC & Protocol Buffers
