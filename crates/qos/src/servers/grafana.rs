@@ -79,6 +79,8 @@ impl GrafanaServer {
             api_key: String::new(),
             org_id: None,
             folder: None,
+            admin_user: Some(self.config.admin_user.clone()),
+            admin_password: Some(self.config.admin_password.clone()),
         }
     }
 }

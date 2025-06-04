@@ -11,8 +11,14 @@ pub struct GrafanaConfig {
     /// Grafana server URL
     pub url: String,
 
-    /// API key for authentication
+    /// API key for authentication (preferred)
     pub api_key: String,
+
+    /// Admin username for basic authentication (fallback)
+    pub admin_user: Option<String>,
+
+    /// Admin password for basic authentication (fallback)
+    pub admin_password: Option<String>,
 
     /// Default organization ID
     pub org_id: Option<u64>,
@@ -26,6 +32,8 @@ impl Default for GrafanaConfig {
         Self {
             url: "http://localhost:3000".to_string(),
             api_key: String::new(),
+            admin_user: None,
+            admin_password: None,
             org_id: None,
             folder: None,
         }
@@ -284,9 +292,6 @@ struct DashboardCreateResponse {
     /// Dashboard ID
     id: u64,
 
-    /// Dashboard UID
-    uid: String,
-
     /// Dashboard URL
     url: String,
 
@@ -295,6 +300,76 @@ struct DashboardCreateResponse {
 
     /// Dashboard version
     version: u64,
+}
+
+// Helper for parsing Grafana API error responses
+#[derive(Deserialize, Debug)]
+struct GrafanaApiError {
+    message: String,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDataSourceRequest {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub ds_type: String,
+    pub url: String,
+    pub access: String, // "proxy" or "direct"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_default: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_data: Option<serde_json::Value>,
+    // secure_json_data can be added if needed for auth later
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDataSourceResponse {
+    pub id: u64,
+    // pub uid: String, // Removed: UID is nested in datasource_config
+    pub name: String,
+    pub message: String,
+    #[serde(rename = "datasource")]
+    // Ensure this matches the previous working version if it was datasource_config
+    pub datasource: DataSourceDetails, // Renamed from datasource_config for consistency if needed, or keep as datasource_config if that was correct
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DataSourceDetails {
+    pub id: u64,
+    pub uid: String,
+    pub org_id: u64,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub ds_type: String,
+    pub type_logo_url: String,
+    pub access: String,
+    pub url: String,
+    pub is_default: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_data: Option<serde_json::Value>,
+    pub version: u64,
+    pub read_only: bool,
+}
+
+// Specific jsonData structs
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PrometheusJsonData {
+    pub http_method: String, // e.g., "POST"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<u64>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct LokiJsonData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_lines: Option<u32>,
 }
 
 impl GrafanaClient {
@@ -329,10 +404,20 @@ impl GrafanaClient {
             overwrite: true,
         };
 
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
+        let mut request_builder = self.client.post(&url);
+
+        if !self.config.api_key.is_empty() {
+            request_builder = request_builder.header(
+                "Authorization",
+                format!("Bearer {}", self.config.api_key.trim()),
+            );
+        } else if let (Some(user), Some(pass)) =
+            (&self.config.admin_user, &self.config.admin_password)
+        {
+            request_builder = request_builder.basic_auth(user, Some(pass.as_str()));
+        }
+
+        let response = request_builder
             .header("Content-Type", "application/json")
             .json(&request)
             .send()
@@ -374,10 +459,20 @@ impl GrafanaClient {
             request.insert("uid", uid.to_string());
         }
 
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
+        let mut request_builder = self.client.post(&url);
+
+        if !self.config.api_key.is_empty() {
+            request_builder = request_builder.header(
+                "Authorization",
+                format!("Bearer {}", self.config.api_key.trim()),
+            );
+        } else if let (Some(user), Some(pass)) =
+            (&self.config.admin_user, &self.config.admin_password)
+        {
+            request_builder = request_builder.basic_auth(user, Some(pass.as_str()));
+        }
+
+        let response = request_builder
             .header("Content-Type", "application/json")
             .json(&request)
             .send()
@@ -640,6 +735,163 @@ impl GrafanaClient {
         self.create_dashboard(dashboard, folder_id, "Created by Blueprint QoS")
             .await
     }
+
+    /// Updates the URL for an existing Prometheus datasource in Grafana
+    ///
+    /// # Errors
+    /// Returns an error if the datasource update fails or the datasource doesn't exist
+    pub async fn update_datasource_url(
+        &self,
+        datasource_uid: &str,
+        new_url: &str,
+    ) -> Result<Option<String>> {
+        info!(
+            "Updating Grafana datasource {} URL to {}",
+            datasource_uid, new_url
+        );
+
+        // First, get the datasource by UID to preserve all other settings
+        let url = format!("{}/api/datasources/uid/{}", self.config.url, datasource_uid);
+        let mut request_builder = self.client.get(&url);
+
+        if !self.config.api_key.is_empty() {
+            request_builder = request_builder.bearer_auth(self.config.api_key.trim());
+        } else if let (Some(user), Some(pass)) =
+            (&self.config.admin_user, &self.config.admin_password)
+        {
+            request_builder = request_builder.basic_auth(user, Some(pass.as_str()));
+        }
+
+        let response = request_builder
+            .send()
+            .await
+            .map_err(|e| Error::GrafanaApi(format!("Failed to get datasource: {}", e)))?;
+
+        if !response.status().is_success() {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::GrafanaApi(format!(
+                "Failed to get datasource {}: {}",
+                datasource_uid, error_text
+            )));
+        }
+
+        // Parse the existing datasource
+        let mut datasource: serde_json::Value = response.json().await.map_err(|e| {
+            Error::GrafanaApi(format!("Failed to parse datasource response: {}", e))
+        })?;
+
+        // Update the URL
+        datasource["url"] = serde_json::Value::String(new_url.to_string());
+
+        // Convert to a proper request for update
+        let payload = CreateDataSourceRequest {
+            name: datasource["name"]
+                .as_str()
+                .unwrap_or("Prometheus")
+                .to_string(),
+            ds_type: datasource["type"]
+                .as_str()
+                .unwrap_or("prometheus")
+                .to_string(),
+            url: new_url.to_string(),
+            access: datasource["access"].as_str().unwrap_or("proxy").to_string(),
+            uid: Some(datasource_uid.to_string()),
+            is_default: datasource["isDefault"].as_bool(),
+            json_data: datasource["jsonData"]
+                .as_object()
+                .map(|o| serde_json::Value::Object(o.clone())),
+        };
+
+        // Update the datasource
+        match self.create_or_update_datasource(payload).await {
+            Ok(response) => {
+                info!(
+                    "Successfully updated datasource {} URL to {}",
+                    datasource_uid, new_url
+                );
+                Ok(Some(format!(
+                    "Datasource {} URL updated to {}",
+                    response.name, new_url
+                )))
+            }
+            Err(e) => {
+                error!("Failed to update datasource URL: {}", e);
+                Err(e)
+            }
+        }
+    }
+
+    pub async fn create_or_update_datasource(
+        &self,
+        payload: CreateDataSourceRequest,
+    ) -> Result<CreateDataSourceResponse> {
+        let url = format!("{}/api/datasources", self.config.url);
+        info!(
+            "Attempting to create/update Grafana datasource: {} (UID: {:?}) at URL: {}",
+            payload.name, payload.uid, payload.url
+        );
+
+        let mut request_builder = self.client.post(&url);
+        if !self.config.api_key.is_empty() {
+            request_builder = request_builder.bearer_auth(self.config.api_key.trim());
+        } else if let (Some(user), Some(pass)) =
+            (&self.config.admin_user, &self.config.admin_password)
+        {
+            request_builder = request_builder.basic_auth(user, Some(pass.as_str()));
+        }
+
+        let response = request_builder.json(&payload).send().await.map_err(|e| {
+            Error::GrafanaApi(format!("Failed to send create datasource request: {}", e))
+        })?;
+
+        if response.status().is_success() {
+            let response_text = response.text().await.map_err(|e| {
+                Error::GrafanaApi(format!(
+                    "Failed to read success response body as text: {}",
+                    e
+                ))
+            })?;
+            info!(
+                "Grafana datasource creation/update successful. Raw response body: {}",
+                response_text
+            );
+
+            let response_body: CreateDataSourceResponse = serde_json::from_str(&response_text)
+                .map_err(|e| {
+                    Error::GrafanaApi(format!(
+                        "Failed to parse create datasource response from text ({}): {}",
+                        response_text, e
+                    ))
+                })?;
+            info!(
+                "Successfully created/updated Grafana datasource: {} (ID: {}, UID: {})",
+                response_body.name, response_body.id, response_body.datasource.uid
+            );
+            Ok(response_body)
+        } else {
+            let status = response.status();
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            error!(
+                "Failed to create/update Grafana datasource. Status: {}. Body: {}",
+                status, error_body
+            );
+            // Attempt to parse Grafana's specific error message format
+            let grafana_error_message = serde_json::from_str::<GrafanaApiError>(&error_body)
+                .map(|e| e.message)
+                .unwrap_or_else(|_| error_body.clone());
+
+            Err(Error::GrafanaApi(format!(
+                "Grafana API error ({}) creating/updating datasource '{}': {}",
+                status, payload.name, grafana_error_message
+            )))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -674,6 +926,8 @@ mod tests {
         let config = GrafanaConfig {
             url: "http://localhost:3000".to_string(),
             api_key: "test_key".to_string(),
+            admin_user: Some("admin".to_string()),
+            admin_password: Some("password".to_string()),
             org_id: Some(1),
             folder: None,
         };

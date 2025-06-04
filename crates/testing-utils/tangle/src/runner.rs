@@ -8,7 +8,7 @@ use blueprint_keystore::backends::Backend;
 use blueprint_keystore::crypto::sp_core::SpSr25519;
 use blueprint_qos::heartbeat::HeartbeatConsumer;
 use blueprint_qos::heartbeat::HeartbeatStatus;
-use blueprint_qos::{QoSConfig, QoSService, heartbeat};
+use blueprint_qos::{QoSConfig, QoSService};
 use blueprint_runner::BackgroundService;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::Multiaddr;

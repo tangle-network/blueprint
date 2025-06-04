@@ -188,11 +188,6 @@ impl DockerManager {
                     "[DOCKER PANIC] Could not start container '{}': {}.\n\nPossible causes: Docker is not running, permissions issue, or Docker daemon is not accessible to this user. Please run 'docker info' and ensure you can create containers manually.",
                     name, e
                 );
-                error!("Failed to start container {}: {}", name, e);
-                Err(Error::Other(format!(
-                    "Failed to start container {}: {}",
-                    name, e
-                )))
             }
         }
     }

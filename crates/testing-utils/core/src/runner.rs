@@ -3,12 +3,35 @@ use blueprint_router::Router;
 use blueprint_runner::BlueprintConfig;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::error::RunnerError as Error;
-use blueprint_runner::metrics_server::MetricsServerAdapter;
+// use blueprint_runner::metrics_server::MetricsServerAdapter; // Removed unused import
 use blueprint_runner::{BackgroundService, BlueprintRunner, BlueprintRunnerBuilder};
-use std::future;
+use std::future; // Retained for `Pending` type and potential `future::pending` elsewhere
 use std::future::Pending;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, oneshot};
+
+// A background service that never completes on its own.
+// Its purpose is to keep the BlueprintRunner's main loop alive in test environments
+// where there might not be any active producers, but background services (like QoS)
+// need to continue running for the duration of the test.
+struct KeepAliveService;
+
+impl BackgroundService for KeepAliveService {
+    async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
+        blueprint_core::error!("!!! KEEPALIVESERVICE STARTING NOW (Forget Strategy) !!!");
+        let (tx, rx) = oneshot::channel();
+
+        // Forget the sender. This means the sender is not dropped,
+        // and since no message is sent on it, the receiver (rx)
+        // will pend indefinitely.
+        std::mem::forget(tx);
+
+        blueprint_core::info!(
+            "KeepAliveService: tx sender forgotten, returning receiver that should pend indefinitely."
+        );
+        Ok(rx)
+    }
+}
 
 pub struct TestRunner<Ctx> {
     router: Option<Router<Ctx>>,
@@ -26,8 +49,10 @@ where
     where
         C: BlueprintConfig + 'static,
     {
-        let builder =
-            BlueprintRunner::builder(config, env).with_shutdown_handler(future::pending());
+        let builder = BlueprintRunner::builder(config, env)
+            .with_shutdown_handler(future::pending())
+            .background_service(KeepAliveService); // Add KeepAliveService
+        blueprint_core::error!("!!! TestRunner::new - KeepAliveService ADDED to builder !!!");
         TestRunner {
             router: Some(Router::<Ctx>::new()),
             job_index: 0,
@@ -81,6 +106,7 @@ where
         > {
             qos_service: Arc<Mutex<Option<blueprint_qos::unified_service::QoSService<C>>>>,
         }
+
         impl<C> BackgroundService for QoSServiceAdapter<C>
         where
             C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
@@ -88,17 +114,87 @@ where
             async fn start(
                 &self,
             ) -> Result<tokio::sync::oneshot::Receiver<Result<(), Error>>, Error> {
-                let mut lock = self.qos_service.lock().await;
-                if let Some(qos) = lock.as_mut() {
-                    if let Some(hb) = qos.heartbeat_service() {
-                        let _ = hb.start_heartbeat().await;
+                let (runner_tx, runner_rx) = tokio::sync::oneshot::channel::<Result<(), Error>>();
+
+                let mut service_guard = self.qos_service.lock().await;
+                if let Some(service_instance) = service_guard.as_mut() {
+                    // Create the channel for QoSService
+                    let (qos_tx, qos_rx) =
+                        tokio::sync::oneshot::channel::<blueprint_qos::error::Result<()>>();
+
+                    // Start heartbeat if applicable
+                    if let Some(hb) = service_instance.heartbeat_service() {
+                        if let Err(e) = hb.start_heartbeat().await {
+                            blueprint_core::error!(
+                                "QoSServiceAdapter: Failed to start heartbeat: {:?}",
+                                e
+                            );
+                            // This error is logged but doesn't prevent the adapter from starting.
+                            // Depending on requirements, this could be made a fatal error for start.
+                        }
+                    }
+                    service_instance.set_completion_sender(qos_tx);
+                    blueprint_core::info!("QoSServiceAdapter: start: qos_tx passed to QoSService.");
+
+                    tokio::spawn(async move {
+                        match qos_rx.await {
+                            Ok(qos_result) => {
+                                // Convert blueprint_qos::error::Error to RunnerError (aliased as Error here)
+                                let runner_result = qos_result.map_err(|qos_err| {
+                                    Error::BackgroundService(format!(
+                                        "QoS Service error: {}",
+                                        qos_err
+                                    ))
+                                });
+                                if runner_tx.send(runner_result).is_err() {
+                                    blueprint_core::error!(
+                                        "QoSServiceAdapter bridge: runner_rx was dropped before completion signal could be sent."
+                                    );
+                                }
+                            }
+                            Err(_recv_error) => {
+                                // qos_tx was dropped without sending a value
+                                blueprint_core::error!(
+                                    "QoSServiceAdapter bridge: qos_rx received an error. This means qos_tx was dropped, possibly due to QoSService panic or not calling set_completion_sender properly."
+                                );
+                                if runner_tx
+                                    .send(Err(Error::BackgroundService(
+                                        "QoS service did not signal completion (sender dropped)."
+                                            .to_string(),
+                                    )))
+                                    .is_err()
+                                {
+                                    blueprint_core::error!(
+                                        "QoSServiceAdapter bridge: runner_rx was also dropped after qos_tx drop."
+                                    );
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    blueprint_core::error!(
+                        "QoSServiceAdapter: start: QoSService instance was None. Cannot initialize."
+                    );
+                    // Immediately send an error on runner_tx as the service isn't there.
+                    if runner_tx
+                        .send(Err(Error::BackgroundService(
+                            "QoSService instance not available at start".to_string(),
+                        )))
+                        .is_err()
+                    {
+                        blueprint_core::error!(
+                            "QoSServiceAdapter: start: runner_rx was dropped while reporting service_instance None."
+                        );
                     }
                 }
-                let (_tx, rx) = tokio::sync::oneshot::channel();
-                Ok(rx)
+                // Drop the guard to release the Mutex lock before returning the receiver
+                drop(service_guard);
+                Ok(runner_rx)
             }
         }
+
         let adapter = QoSServiceAdapter { qos_service };
+
         self.builder = Some(
             self.builder
                 .take()

@@ -13,6 +13,9 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+bollard = { version = "0.18.0", features = ["ssl"] } # Added for Docker interaction
+async-trait = "0.1" # Added for ScrapingPrometheusServer
+tempfile = "3.5"    # Added for ScrapingPrometheusServer
 blueprint-core = { workspace = true, features = ["tracing"] }
 blueprint-crypto = { workspace = true }
 blueprint-keystore = { workspace = true }

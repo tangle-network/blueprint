@@ -65,15 +65,29 @@ impl PrometheusServer {
 
         info!("Starting Prometheus metrics server on {}", addr);
 
+        let listener = match tokio::net::TcpListener::bind(addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                error!(
+                    "Failed to bind Prometheus metrics server to {}: {}",
+                    addr, e
+                );
+                return Err(Error::Other(format!(
+                    "Failed to bind Prometheus server to {}: {}",
+                    addr, e
+                )));
+            }
+        };
+
         tokio::spawn(async move {
-            let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
             axum::serve(listener, app)
                 .with_graceful_shutdown(async {
                     rx.await.ok();
                 })
                 .await
                 .unwrap_or_else(|e| {
-                    error!("Prometheus metrics server error: {}", e);
+                    // This unwrap is for the server's execution, not bind
+                    error!("Prometheus metrics server execution error: {}", e);
                 });
         });
 

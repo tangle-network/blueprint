@@ -365,7 +365,6 @@ where
                 tokio::sync::oneshot::Receiver<Result<(), crate::error::RunnerError>>,
                 crate::error::RunnerError,
             > {
-                use blueprint_qos::unified_service::QoSService;
                 let mut lock = self.qos_service.lock().await;
                 if let Some(qos) = lock.as_mut() {
                     // Start heartbeat if present
@@ -692,16 +691,15 @@ where
         let mut router = router.as_service();
 
         let has_background_services = !background_services.is_empty();
-        let mut background_receivers = Vec::with_capacity(background_services.len());
-        for service in background_services {
-            let receiver = service.start().await?;
-            background_receivers.push(receiver);
-        }
-
-        let mut background_futures = Vec::with_capacity(background_receivers.len());
+        let mut background_futures = Vec::with_capacity(background_services.len());
 
         // Startup background services
-        for receiver in background_receivers {
+        // Iterate by reference (&service_box) over `background_services` (the Vec of Boxes)
+        // This ensures that the `Box<dyn BackgroundService>` instances themselves remain owned by
+        // the `background_services` vector and are not dropped after `start()` is called.
+        for service_box in &background_services {
+            // service_box is &Box<dyn BackgroundService>
+            let receiver = service_box.start().await?;
             background_futures.push(Box::pin(async move {
                 receiver
                     .await
@@ -710,6 +708,8 @@ where
             })
                 as Pin<Box<dyn Future<Output = Result<(), Error>> + Send>>);
         }
+        // The `background_services` Vec (containing the Boxed service instances) is still alive here
+        // and will be dropped only when `FinalizedBlueprintRunner::run` exits.
 
         let (mut shutdown_tx, shutdown_rx) = oneshot::channel();
         tokio::spawn(async move {

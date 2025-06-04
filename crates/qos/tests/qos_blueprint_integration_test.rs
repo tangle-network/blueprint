@@ -285,7 +285,9 @@ mod tests {
         info!("Loki server ready check passed");
 
         // Create a Grafana dashboard
-        let dashboard_result = qos_service.create_dashboard("prometheus", "loki").await;
+        let dashboard_result = qos_service
+            .create_dashboard(1, 1, "prometheus", "loki")
+            .await;
         assert!(
             dashboard_result.is_ok(),
             "Dashboard creation failed: {:?}",
