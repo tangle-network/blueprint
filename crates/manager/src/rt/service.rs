@@ -64,7 +64,6 @@ impl Service {
 
         let mut hypervisor = HypervisorInstance::new(
             vm_config,
-            keystore,
             cache_dir.as_ref(),
             runtime_dir.as_ref(),
             service_name,
@@ -73,6 +72,7 @@ impl Service {
         hypervisor
             .prepare(
                 network_manager,
+                keystore,
                 data_dir,
                 cache_dir,
                 bridge_base_socket,

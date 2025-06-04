@@ -25,6 +25,7 @@ use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::subxt::utils::AccountId32;
 use tokio::task::JoinHandle;
 use tracing::error;
+use crate::rt;
 
 pub(crate) mod event_handler;
 
@@ -172,6 +173,9 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     info!("Starting blueprint manager ... waiting for start signal ...");
 
     blueprint_manager_config.verify_directories_exist()?;
+
+    info!("Checking for VM images");
+    rt::hypervisor::images::download_image_if_needed(&blueprint_manager_config.cache_dir).await?;
 
     // Create the auth proxy task
     let auth_proxy_task = run_auth_proxy(

@@ -23,7 +23,7 @@ const FILES: &[(&str, &str)] = &[
 // Give each VM a 20GB rootfs
 const ALLOCATED_IMAGE_SIZE: u64 = 1024 * 1024 * 1024 * 20;
 
-async fn download_image_if_needed(cache_dir: impl AsRef<Path>) -> Result<()> {
+pub async fn download_image_if_needed(cache_dir: impl AsRef<Path>) -> Result<()> {
     let cache = cache_dir.as_ref();
 
     for (dest_file_name, url) in FILES.iter().copied() {

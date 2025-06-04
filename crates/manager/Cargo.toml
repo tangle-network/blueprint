@@ -69,6 +69,7 @@ xz.workspace = true
 # Debug CLI
 tempfile.workspace = true
 blueprint-tangle-testing-utils.workspace = true
+blueprint-chain-setup = { workspace = true, features = ["tangle"] }
 
 [package.metadata.dist]
 dist = false

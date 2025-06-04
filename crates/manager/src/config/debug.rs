@@ -11,6 +11,7 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::{fs, thread};
 use tracing::{error, info, warn};
+use url::Url;
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum DebugCommand {
@@ -64,10 +65,31 @@ impl DebugCommand {
                 )
                 .map_err(|e| crate::error::Error::Other(e.to_string()))?;
 
+                info!("Spawning Tangle node");
+                let node = match blueprint_chain_setup::tangle::run(
+                    blueprint_chain_setup::tangle::NodeConfig::new(false),
+                )
+                .await
+                {
+                    Ok(node) => node,
+                    Err(e) => {
+                        error!("Failed to setup local Tangle node: {e}");
+                        return Err(crate::error::Error::Other(e.to_string()));
+                    }
+                };
+
+                let http = format!("http://127.0.0.1:{}", node.ws_port());
+                let ws = format!("ws://127.0.0.1:{}", node.ws_port());
+
+                info!("Tangle node running on {http} / {ws}");
+
+                let http_rpc_endpoint = Url::parse(&http).unwrap();
+                let ws_rpc_endpoint = Url::parse(&ws).unwrap();
+
                 let args = BlueprintArgs::new(&config);
                 let env = BlueprintEnvVars {
-                    http_rpc_endpoint: String::new(),
-                    ws_rpc_endpoint: String::new(),
+                    http_rpc_endpoint,
+                    ws_rpc_endpoint,
                     keystore_uri: config.keystore_uri.clone(),
                     data_dir: config.data_dir.clone(),
                     blueprint_id: 0,

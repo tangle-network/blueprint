@@ -225,12 +225,12 @@ impl ProtocolSettings {
 
 /// Description of the environment in which the blueprint is running
 #[non_exhaustive]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintEnvironment {
     /// HTTP RPC endpoint for host restaking network (Tangle / Ethereum (Eigenlayer or Symbiotic)).
-    pub http_rpc_endpoint: String,
+    pub http_rpc_endpoint: Url,
     /// WS RPC endpoint for host restaking network (Tangle / Ethereum (Eigenlayer or Symbiotic)).
-    pub ws_rpc_endpoint: String,
+    pub ws_rpc_endpoint: Url,
     /// The keystore URI for the blueprint
     pub keystore_uri: String,
     /// Data directory exclusively for this blueprint
@@ -255,6 +255,31 @@ pub struct BlueprintEnvironment {
     /// The target number of peers to connect to
     #[cfg(feature = "networking")]
     pub target_peer_count: u32,
+}
+
+impl Default for BlueprintEnvironment {
+    fn default() -> Self {
+        Self {
+            http_rpc_endpoint: default_http_rpc_url(),
+            ws_rpc_endpoint: default_ws_rpc_url(),
+            keystore_uri: String::default(),
+            data_dir: PathBuf::default(),
+            protocol_settings: ProtocolSettings::default(),
+            test_mode: false,
+            bridge: Arc::new(Mutex::new(None)),
+
+            #[cfg(feature = "networking")]
+            bootnodes: Vec::new(),
+            #[cfg(feature = "networking")]
+            network_bind_port: 0,
+            #[cfg(feature = "networking")]
+            enable_mdns: false,
+            #[cfg(feature = "networking")]
+            enable_kademlia: false,
+            #[cfg(feature = "networking")]
+            target_peer_count: 0,
+        }
+    }
 }
 
 impl BlueprintEnvironment {
@@ -319,8 +344,8 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
 
     Ok(BlueprintEnvironment {
         test_mode,
-        http_rpc_endpoint: http_rpc_url.to_string(),
-        ws_rpc_endpoint: ws_rpc_url.to_string(),
+        http_rpc_endpoint: http_rpc_url,
+        ws_rpc_endpoint: ws_rpc_url,
         keystore_uri,
         data_dir,
         protocol_settings,
@@ -686,7 +711,7 @@ pub struct BlueprintSettings {
     #[arg(long, env, default_value_t = default_ws_rpc_url())]
     #[serde(default = "default_ws_rpc_url")]
     pub ws_rpc_url: Url,
-    #[arg(long, short = 'd', env, default_value_t = String::from("./keystore"))]
+    #[arg(long, short = 'k', env, default_value_t = String::from("./keystore"))]
     pub keystore_uri: String,
     #[arg(long, short, env)]
     pub data_dir: PathBuf,
