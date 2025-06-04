@@ -2,6 +2,7 @@ use crate::blueprint::native::FilteredBlueprint;
 use crate::config::BlueprintManagerConfig;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use std::path::{Path, PathBuf};
+use url::Url;
 
 pub mod github;
 pub mod testing;
@@ -68,8 +69,8 @@ impl BlueprintArgs {
 }
 
 pub struct BlueprintEnvVars {
-    pub http_rpc_endpoint: String,
-    pub ws_rpc_endpoint: String,
+    pub http_rpc_endpoint: Url,
+    pub ws_rpc_endpoint: Url,
     pub keystore_uri: String,
     pub data_dir: PathBuf,
     pub blueprint_id: u64,
@@ -98,8 +99,8 @@ impl BlueprintEnvVars {
             .fold(String::new(), |acc, bootnode| format!("{acc} {bootnode}"));
 
         BlueprintEnvVars {
-            http_rpc_endpoint: env.http_rpc_endpoint.to_string(),
-            ws_rpc_endpoint: env.ws_rpc_endpoint.to_string(),
+            http_rpc_endpoint: env.http_rpc_endpoint.clone(),
+            ws_rpc_endpoint: env.ws_rpc_endpoint.clone(),
             keystore_uri: env.keystore_uri.to_string(),
             data_dir,
             blueprint_id,
@@ -112,7 +113,19 @@ impl BlueprintEnvVars {
 
     #[must_use]
     pub fn encode(&self) -> Vec<(String, String)> {
-        let chain = match self.http_rpc_endpoint.as_str() {
+        let BlueprintEnvVars {
+            http_rpc_endpoint,
+            ws_rpc_endpoint,
+            keystore_uri,
+            data_dir,
+            blueprint_id,
+            service_id,
+            protocol,
+            bootnodes,
+            registration_mode,
+        } = self;
+
+        let chain = match http_rpc_endpoint.as_str() {
             url if url.contains("127.0.0.1") || url.contains("localhost") => {
                 SupportedChains::LocalTestnet
             }
@@ -120,19 +133,24 @@ impl BlueprintEnvVars {
         };
 
         // Add required env vars for all child processes/blueprints
-        let env_vars = vec![
-            (
-                "HTTP_RPC_URL".to_string(),
-                self.http_rpc_endpoint.to_string(),
-            ),
-            ("WS_RPC_URL".to_string(), self.ws_rpc_endpoint.clone()),
-            ("KEYSTORE_URI".to_string(), self.keystore_uri.clone()),
-            ("BLUEPRINT_ID".to_string(), self.blueprint_id.to_string()),
-            ("SERVICE_ID".to_string(), self.service_id.to_string()),
-            ("PROTOCOL".to_string(), self.protocol.to_string()),
+        let mut env_vars = vec![
+            ("HTTP_RPC_URL".to_string(), http_rpc_endpoint.to_string()),
+            ("WS_RPC_URL".to_string(), ws_rpc_endpoint.to_string()),
+            ("KEYSTORE_URI".to_string(), keystore_uri.clone()),
+            ("DATA_DIR".to_string(), data_dir.display().to_string()),
+            ("BLUEPRINT_ID".to_string(), blueprint_id.to_string()),
+            ("SERVICE_ID".to_string(), service_id.to_string()),
+            ("PROTOCOL".to_string(), protocol.to_string()),
             ("CHAIN".to_string(), chain.to_string()),
-            ("BOOTNODES".to_string(), self.bootnodes.clone()),
+            ("BOOTNODES".to_string(), bootnodes.clone()),
         ];
+
+        if *registration_mode {
+            env_vars.push((
+                "REGISTRATION_MODE_ON".to_string(),
+                registration_mode.to_string(),
+            ));
+        }
 
         env_vars
     }

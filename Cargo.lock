@@ -3377,6 +3377,7 @@ dependencies = [
  "auto_impl",
  "axum 0.8.4",
  "blueprint-auth",
+ "blueprint-chain-setup",
  "blueprint-clients",
  "blueprint-core",
  "blueprint-crypto",

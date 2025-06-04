@@ -1,24 +1,21 @@
-mod images;
+pub mod images;
 pub mod net;
 
 use net::NetworkManager;
 
 use crate::error::{Error, Result};
 use crate::rt::hypervisor::images::CloudImage;
+use crate::rt::hypervisor::net::Lease;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use cloud_hypervisor_client::apis::DefaultApi;
 use cloud_hypervisor_client::models::console_config::Mode;
 use cloud_hypervisor_client::models::{
-    ConsoleConfig, DiskConfig, FsConfig, MemoryConfig, NetConfig, PayloadConfig, VmConfig,
-    VsockConfig,
+    ConsoleConfig, DiskConfig, MemoryConfig, NetConfig, PayloadConfig, VmConfig, VsockConfig,
 };
 use cloud_hypervisor_client::{SocketBasedApiClient, socket_based_api_client};
-use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
+use fatfs::{Dir, FileSystem, FormatVolumeOptions, FsOptions};
 use hyper::StatusCode;
 use ipnet::Ipv4Net;
-use nix::sys::signal;
-use nix::sys::signal::Signal;
-use nix::unistd::Pid;
 use std::fmt::Write as _;
 use std::fs::{File, OpenOptions};
 use std::io::Write as _;
@@ -29,11 +26,9 @@ use std::{fs, io};
 use tokio::process::{Child, Command};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
+use url::{Host, Url};
 
 const VM_DATA_DIR: &str = "/mnt/data";
-const VM_KEYSTORE_DIR: &str = const_format::concatcp!(VM_DATA_DIR, "/keystore");
-
-const KEYSTORE_VIRTIO: &str = "blueprint-keystore";
 
 pub struct ServiceVmConfig {
     pub id: u32,
@@ -57,31 +52,19 @@ impl Default for ServiceVmConfig {
     }
 }
 
-struct Handles {
-    hypervisor: Child,
-    keystore_virtio: Child,
-}
-
-struct Virtio {
-    keystore_socket: PathBuf,
-    keystore: PathBuf,
-}
-
 pub struct HypervisorInstance {
     config: ServiceVmConfig,
     sock_path: PathBuf,
     guest_logs_path: PathBuf,
     binary_image_path: PathBuf,
     cloud_init_image_path: PathBuf,
-    virtio: Virtio,
-    handles: Handles,
+    hypervisor: Child,
     lease: Option<net::Lease>,
 }
 
 impl HypervisorInstance {
     pub fn new(
         config: ServiceVmConfig,
-        keystore: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
@@ -120,37 +103,13 @@ impl HypervisorInstance {
             .stderr(stderr.try_clone()?)
             .spawn()?;
 
-        let keystore_virtio_socket = runtime_dir.as_ref().join("keystore.sock");
-        let keystore_virtio = Command::new("unshare")
-            .args([
-                "-r",
-                "--map-auto",
-                "--",
-                "/usr/lib/virtiofsd",
-                "--sandbox",
-                "chroot",
-            ])
-            .arg(format!(
-                "--socket-path={}",
-                keystore_virtio_socket.display()
-            ))
-            .arg(format!("--shared-dir={}", keystore.as_ref().display()))
-            .spawn()?;
-
         Ok(HypervisorInstance {
             config,
             sock_path,
             guest_logs_path,
             binary_image_path,
             cloud_init_image_path,
-            virtio: Virtio {
-                keystore_socket: keystore_virtio_socket,
-                keystore: keystore.as_ref().to_path_buf(),
-            },
-            handles: Handles {
-                hypervisor: hypervisor_handle,
-                keystore_virtio,
-            },
+            hypervisor: hypervisor_handle,
             lease: None,
         })
     }
@@ -158,15 +117,13 @@ impl HypervisorInstance {
     #[allow(clippy::cast_possible_truncation)]
     fn create_binary_image(
         &self,
+        keystore: impl AsRef<Path>,
         binary_path: impl AsRef<Path>,
         env_vars: &BlueprintEnvVars,
         arguments: &BlueprintArgs,
     ) -> Result<()> {
         const LAUNCHER_SCRIPT_TEMPLATE: &str = r"#!/bin/sh
         set -e
-
-        mkdir -p {{KEYSTORE_DIR}}
-        mount -t virtiofs {{KEYSTORE_VIRTIO}} {{KEYSTORE_DIR}}
 
         {{ENV_VARS}}
 
@@ -181,26 +138,62 @@ impl HypervisorInstance {
         let args = arguments.encode().join(" ");
 
         let launcher_script = LAUNCHER_SCRIPT_TEMPLATE
-            .replace("{{KEYSTORE_DIR}}", VM_KEYSTORE_DIR)
-            .replace("{{KEYSTORE_VIRTIO}}", KEYSTORE_VIRTIO)
             .replace("{{ENV_VARS}}", &env_vars_str)
             .replace("{{SERVICE_ARGS}}", &args);
 
+        let mut entries = vec![
+            CopiedEntry::File(CopiedFile {
+                target_name: String::from("service"),
+                source: FileSource::Fs(binary_path.as_ref().to_path_buf()),
+            }),
+            CopiedEntry::File(CopiedFile {
+                target_name: String::from("launch"),
+                source: FileSource::Raw(launcher_script.into_bytes()),
+            }),
+        ];
+
         let binary_meta = fs::metadata(binary_path.as_ref())?;
+        let mut keystore_size = 0;
+
+        let mut keystore_dir = Directory {
+            name: String::from("keystore"),
+            children: Vec::new(),
+        };
+
+        let mut current_dir = None;
+        for entry in walkdir::WalkDir::new(keystore) {
+            let entry = entry?;
+            if entry.file_type().is_dir() {
+                if let Some(dir) = current_dir.take() {
+                    keystore_dir.children.push(CopiedEntry::Dir(dir));
+                }
+
+                current_dir = Some(Directory {
+                    name: entry.file_name().to_string_lossy().into(),
+                    children: Vec::new(),
+                });
+                continue;
+            }
+
+            let Some(current_dir) = current_dir.as_mut() else {
+                // The keystore doesn't store any files in the root, so just ignore anything extra
+                continue;
+            };
+
+            keystore_size += entry.metadata()?.len();
+
+            current_dir.children.push(CopiedEntry::File(CopiedFile {
+                target_name: entry.file_name().to_string_lossy().into_owned(),
+                source: FileSource::Fs(entry.path().to_path_buf()),
+            }))
+        }
+
+        entries.push(CopiedEntry::Dir(keystore_dir));
 
         new_fat_fs(FatFsConfig {
-            starting_length: binary_meta.len() as usize,
+            starting_length: binary_meta.len() as usize + keystore_size as usize,
             volume_label: *b"SERVICEDISK",
-            files: vec![
-                CopiedFile {
-                    target_name: String::from("service"),
-                    source: FileSource::Fs(binary_path.as_ref().to_path_buf()),
-                },
-                CopiedFile {
-                    target_name: String::from("launch"),
-                    source: FileSource::Raw(launcher_script.into_bytes()),
-                },
-            ],
+            entries,
             image_path: self.binary_image_path.clone(),
         })?;
 
@@ -234,19 +227,19 @@ impl HypervisorInstance {
         new_fat_fs(FatFsConfig {
             starting_length: CLOUD_INIT_USER_DATA.len() + meta.len() + net.len(),
             volume_label: *b"CIDATA     ",
-            files: vec![
-                CopiedFile {
+            entries: vec![
+                CopiedEntry::File(CopiedFile {
                     target_name: String::from("user-data"),
                     source: FileSource::Raw(CLOUD_INIT_USER_DATA.as_bytes().to_vec()),
-                },
-                CopiedFile {
+                }),
+                CopiedEntry::File(CopiedFile {
                     target_name: String::from("meta-data"),
                     source: FileSource::Raw(meta.into_bytes()),
-                },
-                CopiedFile {
+                }),
+                CopiedEntry::File(CopiedFile {
                     target_name: String::from("network-config"),
                     source: FileSource::Raw(net.into_bytes()),
-                },
+                }),
             ],
             image_path: self.cloud_init_image_path.clone(),
         })
@@ -275,6 +268,7 @@ impl HypervisorInstance {
     pub async fn prepare(
         &mut self,
         network_manager: NetworkManager,
+        keystore: impl AsRef<Path>,
         data_dir: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
         bridge_socket_path: impl AsRef<Path>,
@@ -282,22 +276,36 @@ impl HypervisorInstance {
         mut env_vars: BlueprintEnvVars,
         arguments: BlueprintArgs,
     ) -> Result<()> {
+        /// TODO: actually resolve the hosts to see if they're loopback
+        // For local testnets, we need to translate IPs to the host
+        fn translate_local_ip(url: &mut Url, lease: &Lease) {
+            match url.host() {
+                Some(Host::Ipv4(ip)) if ip.is_loopback() => {
+                    let _ = url.set_ip_host(lease.addr().into()).ok();
+                }
+                _ => {}
+            }
+        }
+
         let image = CloudImage::fetch(data_dir.as_ref(), cache_dir).await?;
 
         let data_disk_path = self.create_data_disk(data_dir).await?;
 
         env_vars.data_dir = PathBuf::from(VM_DATA_DIR);
-        env_vars.keystore_uri = VM_KEYSTORE_DIR.to_string();
-
-        self.create_binary_image(binary_path, &env_vars, &arguments)
-            .map_err(|e| {
-                error!("Error creating binary image: {e}");
-                e
-            })?;
+        env_vars.keystore_uri = String::from("/srv/keystore");
 
         let Some(lease) = network_manager.allocate().await else {
             return Err(io::Error::new(io::ErrorKind::QuotaExceeded, "IP pool exhausted").into());
         };
+
+        translate_local_ip(&mut env_vars.http_rpc_endpoint, &lease);
+        translate_local_ip(&mut env_vars.ws_rpc_endpoint, &lease);
+
+        self.create_binary_image(keystore, binary_path, &env_vars, &arguments)
+            .map_err(|e| {
+                error!("Error creating binary image: {e}");
+                e
+            })?;
 
         self.create_cloud_init_image(self.config.id, lease.addr())
             .map_err(|e| {
@@ -351,12 +359,6 @@ impl HypervisorInstance {
                     ..DiskConfig::default()
                 },
             ]),
-            fs: Some(vec![FsConfig {
-                tag: String::from(KEYSTORE_VIRTIO),
-                socket: self.virtio.keystore_socket.to_string_lossy().to_string(),
-                queue_size: 1024,
-                ..Default::default()
-            }]),
             serial: Some(serial),
             console: Some(console),
             vsock: Some(VsockConfig {
@@ -483,18 +485,12 @@ impl HypervisorInstance {
 
         if let Err(e) = client.shutdown_vmm().await {
             error!("Unable to gracefully shutdown VM manager, killing process: {e:?}");
-            self.handles.hypervisor.kill().await?;
+            self.hypervisor.kill().await?;
             return Ok(());
         }
 
         // VM manager shutting down, process will exit with it
-        self.handles.hypervisor.wait().await?;
-
-        if let Some(id) = self.handles.keystore_virtio.id() {
-            let pid = Pid::from_raw(id as i32);
-            let _ = signal::kill(pid, Signal::SIGINT).ok();
-            self.handles.keystore_virtio.wait().await?;
-        }
+        self.hypervisor.wait().await?;
 
         Ok(())
     }
@@ -507,6 +503,16 @@ impl HypervisorInstance {
             .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
         Ok(info.config.serial.and_then(|c| c.file.map(PathBuf::from)))
     }
+}
+
+enum CopiedEntry {
+    Dir(Directory),
+    File(CopiedFile),
+}
+
+struct Directory {
+    name: String,
+    children: Vec<CopiedEntry>,
 }
 
 struct CopiedFile {
@@ -522,11 +528,36 @@ enum FileSource {
 struct FatFsConfig {
     starting_length: usize,
     volume_label: [u8; 11],
-    files: Vec<CopiedFile>,
+    entries: Vec<CopiedEntry>,
     image_path: PathBuf,
 }
 
 fn new_fat_fs(config: FatFsConfig) -> Result<()> {
+    fn write_entry(root: &Dir<'_, &mut File>, entry: CopiedEntry) -> Result<()> {
+        match entry {
+            CopiedEntry::Dir(dir) => {
+                let root = root.create_dir(&dir.name)?;
+                for child in dir.children {
+                    write_entry(&root, child)?;
+                }
+            }
+            CopiedEntry::File(file) => match file.source {
+                FileSource::Fs(path_on_host) => {
+                    std::io::copy(
+                        &mut File::open(path_on_host)?,
+                        &mut root.create_file(&file.target_name)?,
+                    )?;
+                }
+                FileSource::Raw(raw_file_content) => {
+                    let mut f = root.create_file(&file.target_name)?;
+                    f.write_all(&raw_file_content)?;
+                }
+            },
+        }
+
+        Ok(())
+    }
+
     // Leave 64 KiB for FAT overhead
     const IMG_OVERHEAD: u64 = 64 * 1024;
     // Make at *least* 1 MiB images
@@ -551,19 +582,8 @@ fn new_fat_fs(config: FatFsConfig) -> Result<()> {
     let fs = FileSystem::new(&mut img, FsOptions::new())?;
     let root = fs.root_dir();
 
-    for file in config.files {
-        match file.source {
-            FileSource::Fs(path_on_host) => {
-                std::io::copy(
-                    &mut File::open(path_on_host)?,
-                    &mut root.create_file(&file.target_name)?,
-                )?;
-            }
-            FileSource::Raw(raw_file_content) => {
-                let mut f = root.create_file(&file.target_name)?;
-                f.write_all(&raw_file_content)?;
-            }
-        }
+    for entry in config.entries {
+        write_entry(&root, entry)?;
     }
 
     Ok(())
