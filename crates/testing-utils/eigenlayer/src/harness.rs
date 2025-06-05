@@ -67,7 +67,7 @@ where
             http_endpoint,
             ws_endpoint,
             eigenlayer_contract_addresses,
-        } = setup_eigenlayer_test_environment(&testnet.http_endpoint, &testnet.ws_endpoint).await;
+        } = setup_eigenlayer_test_environment(testnet.http_endpoint, testnet.ws_endpoint).await;
 
         // Setup temporary testing keystore
         let keystore_path = test_dir.path().join("keystore");

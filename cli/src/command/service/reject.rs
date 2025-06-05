@@ -28,12 +28,12 @@ use dialoguer::console::style;
 /// * Failed to create keystore
 /// * Failed to get keys from keystore
 pub async fn reject_request(
-    ws_rpc_url: String,
+    ws_rpc_url: impl AsRef<str>,
     keystore_uri: String,
     // keystore_password: Option<String>, // TODO: Add keystore password support
     request_id: u64,
 ) -> Result<()> {
-    let client = OnlineClient::from_url(ws_rpc_url.clone()).await?;
+    let client = OnlineClient::from_url(ws_rpc_url.as_ref()).await?;
 
     let config = KeystoreConfig::new().fs_root(keystore_uri.clone());
     let keystore = Keystore::new(config).expect("Failed to create keystore");

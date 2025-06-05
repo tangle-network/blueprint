@@ -8,6 +8,7 @@ use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use eigensdk::utils::slashing::middleware::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
 use eigensdk::utils::slashing::middleware::registrycoordinator::IStakeRegistryTypes::StrategyParams;
 use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordinator;
+use url::Url;
 
 // ================= Core Eigenlayer Deployment Addresses =================
 /// The default Allocation Manager address on our testnet
@@ -60,11 +61,17 @@ pub struct EigenlayerTestEnvironment {
 /// - Sets all the necessary environment variables for the necessary EigenLayer Contract Addresses.
 /// - Returns a [`EigenlayerTestEnvironment`] struct containing the test environment state.
 #[allow(clippy::missing_panics_doc)]
-pub async fn setup_eigenlayer_test_environment(
-    http_endpoint: &str,
-    ws_endpoint: &str,
-) -> EigenlayerTestEnvironment {
-    let provider = get_provider_http(http_endpoint);
+pub async fn setup_eigenlayer_test_environment<T: TryInto<Url>, U: TryInto<Url>>(
+    http_endpoint: T,
+    ws_endpoint: U,
+) -> EigenlayerTestEnvironment
+where
+    <T as TryInto<Url>>::Error: std::fmt::Debug,
+    <U as TryInto<Url>>::Error: std::fmt::Debug,
+{
+    let http_endpoint = http_endpoint.try_into().unwrap();
+    let ws_endpoint = ws_endpoint.try_into().unwrap();
+    let provider = get_provider_http(http_endpoint.clone());
 
     let accounts = provider.get_accounts().await.unwrap();
 

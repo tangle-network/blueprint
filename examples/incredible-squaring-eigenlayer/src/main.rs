@@ -33,7 +33,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
         .parse()
         .expect("failed to generate wallet ");
     let wallet = EthereumWallet::from(signer);
-    let provider = get_wallet_provider_http(&env.http_rpc_endpoint, wallet.clone());
+    let provider = get_wallet_provider_http(env.http_rpc_endpoint.clone(), wallet.clone());
 
     let server_address = format!("{}:{}", "127.0.0.1", 8081);
     let eigen_client_context = EigenSquareContext {

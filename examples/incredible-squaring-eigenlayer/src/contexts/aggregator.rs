@@ -16,6 +16,7 @@ use blueprint_sdk::{debug, error, info};
 use eigensdk::types::avs::TaskIndex;
 use jsonrpc_core::{IoHandler, Params, Value};
 use jsonrpc_http_server::{AccessControlAllowOrigin, DomainsValidation, ServerBuilder};
+use reqwest::Url;
 use std::{collections::VecDeque, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, Notify, oneshot};
 use tokio::task::JoinHandle;
@@ -24,7 +25,7 @@ use tokio::task::JoinHandle;
 pub struct AggregatorContext {
     pub port_address: String,
     pub task_manager_address: Address,
-    pub http_rpc_url: String,
+    pub http_rpc_url: Url,
     pub wallet: EthereumWallet,
     pub response_cache: Arc<Mutex<VecDeque<SignedTaskResponse>>>,
     #[config]

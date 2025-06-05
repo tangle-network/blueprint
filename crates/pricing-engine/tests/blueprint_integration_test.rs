@@ -246,10 +246,7 @@ resources = [
         };
         node_handles.push(node_handle.clone());
         let operator_env = node_handle.test_env.read().await.env.clone();
-        let database_path = operator_env
-            .data_dir
-            .clone()
-            .unwrap_or(PathBuf::from(format!("./data/test_benchmark_cache_{}", i)));
+        let database_path = operator_env.data_dir.clone();
 
         let mut config = utils::create_test_config();
         config.rpc_port = port;

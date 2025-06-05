@@ -41,7 +41,7 @@ use blueprint_keystore::backends::Backend;
 /// * Failed to get keys from keystore
 #[allow(clippy::too_many_arguments)]
 pub async fn request_service(
-    ws_rpc_url: String,
+    ws_rpc_url: impl AsRef<str>,
     blueprint_id: u64,
     min_exposure_percent: u8,
     max_exposure_percent: u8,
@@ -51,7 +51,7 @@ pub async fn request_service(
     params_file: Option<String>,
     // keystore_password: Option<String>, // TODO: Add keystore password support
 ) -> Result<()> {
-    let client = OnlineClient::from_url(ws_rpc_url.clone()).await?;
+    let client = OnlineClient::from_url(ws_rpc_url.as_ref()).await?;
 
     let config = KeystoreConfig::new().fs_root(keystore_uri.clone());
     let keystore = Keystore::new(config).expect("Failed to create keystore");

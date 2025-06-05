@@ -34,13 +34,13 @@ use tracing::debug;
 /// * Failed to create keystore
 /// * Failed to get keys from keystore
 pub async fn register(
-    ws_rpc_url: String,
+    ws_rpc_url: impl AsRef<str>,
     blueprint_id: u64,
     keystore_uri: String,
     rpc_address: impl AsRef<str>,
     // keystore_password: Option<String>, // TODO: Add keystore password support
 ) -> Result<()> {
-    let client = OnlineClient::from_url(ws_rpc_url.clone()).await?;
+    let client = OnlineClient::from_url(ws_rpc_url.as_ref()).await?;
 
     let config = KeystoreConfig::new().fs_root(keystore_uri.clone());
     let keystore = Keystore::new(config).expect("Failed to create keystore");
