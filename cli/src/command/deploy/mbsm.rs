@@ -116,6 +116,12 @@ pub async fn deploy_mbsm(http_rpc_url: Url, force: bool) -> color_eyre::Result<(
     Ok(())
 }
 
+/// Check if the MBSM is deployed, and if not, deploy it
+///
+/// # Errors
+///
+/// * Unable to check for existing MBSM revision
+/// * Unable to deploy new MBSM revision
 pub async fn deploy_mbsm_if_needed<T: Signer<TangleConfig>>(
     ws_endpoint: Url,
     client: &TangleClient,

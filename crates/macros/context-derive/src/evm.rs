@@ -38,7 +38,7 @@ pub fn generate_context_impl(
         impl #impl_generics ::blueprint_sdk::contexts::instrumented_evm_client::EvmInstrumentedClientContext for #name #ty_generics #where_clause {
             async fn evm_client(&self) -> ::blueprint_sdk::contexts::instrumented_evm_client::InstrumentedClient {
                 ::blueprint_sdk::contexts::instrumented_evm_client::InstrumentedClient::new(
-                    &#field_access.http_rpc_endpoint,
+                    #field_access.http_rpc_endpoint.clone(),
                 ).await.expect("Failed to create EVM client")
             }
         }

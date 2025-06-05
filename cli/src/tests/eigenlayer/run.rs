@@ -255,8 +255,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
 
     // Run the binary using the run command
     let config = ContextConfig::create_config(
-        testnet.http_endpoint.parse()?,
-        testnet.ws_endpoint.parse()?,
+        testnet.http_endpoint,
+        testnet.ws_endpoint,
         keystore_path.to_string_lossy().to_string(),
         None,
         data_dir_path,

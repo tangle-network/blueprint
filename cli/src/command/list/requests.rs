@@ -3,7 +3,6 @@ use dialoguer::console::style;
 use blueprint_clients::tangle::client::OnlineClient;
 use tangle_subxt::subxt::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::ServiceRequest;
-use url::Url;
 
 /// Lists all service requests from the Tangle Network.
 ///
@@ -26,9 +25,9 @@ use url::Url;
 ///
 /// Panics if the key bytes cannot be converted to a request ID.
 pub async fn list_requests(
-    ws_rpc_url: Url,
+    ws_rpc_url: impl AsRef<str>,
 ) -> Result<Vec<(u64, ServiceRequest<AccountId32, u64, u128>)>> {
-    let client = OnlineClient::from_url(ws_rpc_url).await?;
+    let client = OnlineClient::from_url(ws_rpc_url.as_ref()).await?;
 
     let service_requests_addr = tangle_subxt::tangle_testnet_runtime::api::storage()
         .services()

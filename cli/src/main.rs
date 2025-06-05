@@ -864,7 +864,7 @@ async fn main() -> color_eyre::Result<()> {
                     .manifest_path
                     .unwrap_or_else(|| PathBuf::from("Cargo.toml"));
 
-                debug::spawn::execute(
+                Box::pin(debug::spawn::execute(
                     http_rpc_url,
                     ws_rpc_url,
                     manifest_path,
@@ -874,8 +874,8 @@ async fn main() -> color_eyre::Result<()> {
                     binary,
                     protocol,
                     verify_network_connection,
-                )
-                .await?
+                ))
+                .await?;
             }
         },
     }

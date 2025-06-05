@@ -35,6 +35,7 @@ use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
 use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::{Router, error, info, warn};
 use futures::StreamExt;
+use reqwest::Url;
 use tokio::sync::oneshot;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -59,7 +60,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     let harness = EigenlayerTestHarness::setup(temp_dir).await.unwrap();
 
     let env = harness.env().clone();
-    let http_endpoint = harness.http_endpoint.to_string();
+    let http_endpoint = harness.http_endpoint.clone();
 
     let private_key = PRIVATE_KEY.to_string();
 
@@ -92,7 +93,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     };
 
     let core_contracts = deploy_core_contracts(
-        &http_endpoint,
+        http_endpoint.as_str(),
         &private_key,
         harness.owner_account(),
         core_config,
@@ -117,7 +118,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     std::fs::write("core_contracts.json", core_contracts_json).unwrap();
 
     let avs_contracts = deploy_avs_contracts(
-        &env.http_rpc_endpoint,
+        env.http_rpc_endpoint.as_str(),
         &private_key,
         harness.owner_account(),
         1,
@@ -159,9 +160,9 @@ async fn run_eigenlayer_incredible_squaring_test(
         "Aggregator private key: {}",
         AGGREGATOR_PRIVATE_KEY.as_str()
     );
-    let signer_wallet = get_provider_from_signer(&private_key, &http_endpoint);
+    let signer_wallet = get_provider_from_signer(&private_key, http_endpoint.clone());
     let wallet = EthereumWallet::from(signer);
-    let provider = get_wallet_provider_http(&http_endpoint, wallet.clone());
+    let provider = get_wallet_provider_http(http_endpoint.clone(), wallet.clone());
 
     match setup_avs_permissions(
         &core_contracts,
@@ -360,7 +361,7 @@ pub struct SquaringAvsContracts {
 }
 
 pub fn setup_task_spawner(
-    http_endpoint: String,
+    http_endpoint: Url,
     registry_coordinator_address: Address,
     task_generator_address: Address,
     accounts: Vec<Address>,
@@ -368,7 +369,7 @@ pub fn setup_task_spawner(
 ) -> impl std::future::Future<Output = ()> {
     setup_log();
     info!("Setting up task spawner...");
-    let provider = get_provider_http(&http_endpoint);
+    let provider = get_provider_http(http_endpoint.clone());
     let task_manager = SquaringTask::new(task_manager_address, provider.clone());
     let registry_coordinator =
         RegistryCoordinator::new(registry_coordinator_address, provider.clone());

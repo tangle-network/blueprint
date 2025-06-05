@@ -22,6 +22,21 @@ use std::{fs, thread};
 use tracing::{error, info, warn};
 use url::Url;
 
+/// Spawns a Tangle testnet and virtual machine for the given blueprint
+///
+/// # Errors
+///
+/// * Unable to spawn/connect to the Tangle node
+///
+/// See also:
+///
+/// * [`deploy_mbsm_if_needed()`]
+/// * [`NetworkManager::new()`]
+/// * [`run_auth_proxy()`]
+/// * [`register()`]
+/// * [`Service::new()`]
+/// * [`Service::start()`]
+#[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
 pub async fn execute(
     http_rpc_url: Option<Url>,
     ws_rpc_url: Option<Url>,
@@ -58,14 +73,14 @@ pub async fn execute(
     )?;
 
     let (_node, http, ws) = setup_tangle_node(tmp.path(), http_rpc_url, ws_rpc_url).await?;
-    deploy_tangle(
+    Box::pin(deploy_tangle(
         http.to_string(),
         ws.to_string(),
         package,
         false,
         Some(PathBuf::from(&manager_config.keystore_uri)),
         manifest_path,
-    )
+    ))
     .await?;
     register(ws.to_string(), 0, manager_config.keystore_uri.clone(), "").await?;
 
