@@ -555,10 +555,14 @@ where
 
         let mut pending_jobs = FuturesUnordered::new();
 
-        error!("[FATAL] Unable to establish bridge connection, aborting runner");
-
-        let bridge = env.bridge().await?;
-        bridge.ping().await?;
+        let bridge = env.bridge().await.map_err(|e| {
+            error!("[FATAL] Unable to establish bridge connection, aborting runner: {e}");
+            e
+        })?;
+        bridge.ping().await.map_err(|e| {
+            error!("[FATAL] Unable to establish bridge connection, aborting runner: {e}");
+            e
+        })?;
 
         loop {
             tokio::select! {

@@ -1,6 +1,6 @@
 use blueprint_manager::config::DEFAULT_DOCKER_HOST;
 use std::path::PathBuf;
-use cargo_tangle::command::{create, deploy};
+use cargo_tangle::command::{create, deploy, debug};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, ProtocolSettings, SupportedChains};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use blueprint_runner::error::ConfigError;
@@ -68,6 +68,13 @@ enum Commands {
     Key {
         #[command(subcommand)]
         command: KeyCommands,
+    },
+
+    /// Service debugging
+    #[command(visible_alias = "d")]
+    Debug {
+        #[command(subcommand)]
+        command: DebugCommands,
     },
 }
 
@@ -186,7 +193,7 @@ pub enum BlueprintCommands {
 
         /// The HTTP RPC endpoint URL (required)
         #[arg(short = 'u', long, default_value = "http://127.0.0.1:9944")]
-        rpc_url: String,
+        rpc_url: Url,
 
         /// The keystore path (defaults to ./keystore)
         #[arg(short = 'k', long)]
@@ -230,7 +237,7 @@ pub enum BlueprintCommands {
     ListRequests {
         /// WebSocket RPC URL to use
         #[arg(long, env = "WS_RPC_URL", default_value = "ws://127.0.0.1:9944")]
-        ws_rpc_url: String,
+        ws_rpc_url: Url,
     },
 
     /// List Blueprints on target Tangle network
@@ -355,7 +362,7 @@ pub enum BlueprintCommands {
     DeployMBSM {
         /// The HTTP RPC URL to use
         #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:9944", env)]
-        http_rpc_url: String,
+        http_rpc_url: Url,
 
         /// Force deployment even if the contract is already deployed
         #[arg(short, long, value_name = "VALUE", default_value_t = false)]
@@ -415,6 +422,32 @@ pub enum DeployTarget {
         /// The keystore path (defaults to ./keystore)
         #[arg(short = 'k', long)]
         keystore_path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum DebugCommands {
+    Spawn {
+        /// HTTP RPC URL to use
+        #[arg(long, value_name = "URL", env)]
+        http_rpc_url: Option<Url>,
+        /// WS RPC URL to use
+        #[arg(long, value_name = "URL", env)]
+        ws_rpc_url: Option<Url>,
+        /// The package to deploy (if the workspace has multiple packages).
+        #[arg(short = 'p', long, value_name = "PACKAGE", env = "CARGO_PACKAGE")]
+        package: Option<String>,
+
+        #[arg(default_value_t = 0)]
+        id: u32,
+        #[arg(default_value = "service")]
+        service_name: String,
+        #[arg(long, required = true)]
+        binary: PathBuf,
+        #[arg(long, default_value_t = Protocol::Tangle)]
+        protocol: Protocol,
+        #[arg(long, default_value_t = true)]
+        verify_network_connection: bool,
     },
 }
 
@@ -534,7 +567,9 @@ async fn main() -> color_eyre::Result<()> {
                     "local" => SupportedChains::LocalTestnet,
                     "testnet" => SupportedChains::Testnet,
                     "mainnet" => {
-                        if rpc_url.contains("127.0.0.1") || rpc_url.contains("localhost") {
+                        if rpc_url.as_str().contains("127.0.0.1")
+                            || rpc_url.as_str().contains("localhost")
+                        {
                             SupportedChains::LocalMainnet
                         } else {
                             SupportedChains::Mainnet
@@ -549,13 +584,19 @@ async fn main() -> color_eyre::Result<()> {
                 };
 
                 let mut config = BlueprintEnvironment::default();
-                let ws_url = if let Some(stripped) = rpc_url.strip_prefix("http://") {
-                    format!("ws://{}", stripped)
-                } else if let Some(stripped) = rpc_url.strip_prefix("https://") {
-                    format!("wss://{}", stripped)
-                } else {
-                    panic!("Invalid RPC URL format");
-                };
+
+                let mut ws_url = rpc_url.clone();
+                match rpc_url.scheme() {
+                    "http" => ws_url.set_scheme("ws").unwrap(),
+                    "https" => ws_url.set_scheme("wss").unwrap(),
+                    _ => {
+                        return Err(color_eyre::Report::msg(format!(
+                            "Invalid scheme: {}",
+                            rpc_url.scheme()
+                        )));
+                    }
+                }
+
                 config.http_rpc_endpoint = rpc_url.clone();
                 config.ws_rpc_endpoint = ws_url;
                 let keystore_path = keystore_path.unwrap_or_else(|| PathBuf::from("./keystore"));
@@ -775,6 +816,66 @@ async fn main() -> color_eyre::Result<()> {
                 eprintln!(
                     "\nWARNING: Store this mnemonic phrase securely. It can be used to recover your keys."
                 );
+            }
+        },
+        Commands::Debug { command } => match command {
+            DebugCommands::Spawn {
+                mut http_rpc_url,
+                mut ws_rpc_url,
+                package,
+                id,
+                service_name,
+                binary,
+                protocol,
+                verify_network_connection,
+            } => {
+                match (&mut http_rpc_url, &mut ws_rpc_url) {
+                    (Some(http), None) => match http.scheme() {
+                        "http" => {
+                            let mut ws = http.clone();
+                            ws.set_scheme("ws").unwrap();
+                            ws_rpc_url = Some(ws);
+                        }
+                        "https" => {
+                            let mut ws = http.clone();
+                            ws.set_scheme("wss").unwrap();
+                            ws_rpc_url = Some(ws);
+                        }
+                        _ => panic!("Unknown URL scheme"),
+                    },
+                    (None, Some(ws)) => match ws.scheme() {
+                        "ws" => {
+                            let mut http = ws.clone();
+                            http.set_scheme("http").unwrap();
+                            http_rpc_url = Some(http);
+                        }
+                        "wss" => {
+                            let mut http = ws.clone();
+                            http.set_scheme("https").unwrap();
+                            http_rpc_url = Some(http);
+                        }
+                        _ => panic!("Unknown URL scheme"),
+                    },
+                    (Some(_), Some(_)) | (None, None) => {}
+                }
+
+                let manifest_path = cli
+                    .manifest
+                    .manifest_path
+                    .unwrap_or_else(|| PathBuf::from("Cargo.toml"));
+
+                debug::spawn::execute(
+                    http_rpc_url,
+                    ws_rpc_url,
+                    manifest_path,
+                    package,
+                    id,
+                    service_name,
+                    binary,
+                    protocol,
+                    verify_network_connection,
+                )
+                .await?
             }
         },
     }

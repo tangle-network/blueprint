@@ -250,7 +250,6 @@ indicatif = { version = "0.17.8", default-features = false }
 document-features = "0.2.11"
 rustversion = "1.0.21"
 cargo-dist-schema = "0.28.0"
-const_format = "0.2.34"
 
 # Time & Date
 time = { version = "0.3.41", default-features = false }

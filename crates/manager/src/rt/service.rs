@@ -3,6 +3,7 @@ use super::hypervisor::net::NetworkManager;
 use super::hypervisor::{HypervisorInstance, ServiceVmConfig};
 use crate::error::{Error, Result};
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
+use blueprint_auth::db::RocksDb;
 use std::path::Path;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -28,6 +29,7 @@ impl Service {
     pub async fn new(
         vm_config: ServiceVmConfig,
         network_manager: NetworkManager,
+        db: RocksDb,
         data_dir: impl AsRef<Path>,
         keystore: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
@@ -37,23 +39,10 @@ impl Service {
         env_vars: BlueprintEnvVars,
         arguments: BlueprintArgs,
     ) -> Result<Service> {
-        let db_path = data_dir
-            .as_ref()
-            .join("private")
-            .join("auth-proxy")
-            .join("db");
-        tokio::fs::create_dir_all(&db_path).await.map_err(|e| {
-            error!(
-                "Failed to create database directory at {}: {e}",
-                db_path.display()
-            );
-            Error::Other(format!("Failed to create database directory: {e}"))
-        })?;
-
         let bridge = Bridge::new(
             runtime_dir.as_ref().to_path_buf(),
             service_name.to_string(),
-            db_path,
+            db,
         );
         let bridge_base_socket = bridge.base_socket_path();
 
@@ -112,7 +101,7 @@ impl Service {
         })?;
 
         Ok(Some(async move {
-            if time::timeout(Duration::from_secs(240), alive_rx)
+            if time::timeout(Duration::from_secs(480), alive_rx)
                 .await
                 .is_err()
             {

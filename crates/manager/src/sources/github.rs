@@ -220,12 +220,10 @@ impl DownloadUrls {
             String::from_utf8(binary.name.0.0.clone()).expect("Should be a valid binary name");
         let os_name = format!("{:?}", binary.os).to_lowercase();
         let arch_name = format!("{:?}", binary.arch).to_lowercase();
-        // let binary_archive_url = format!(
-        //     "https://github.com/{owner}/{repo}/releases/download/{tag}/{binary_name}-{os_name}-{arch_name}.tar.xz"
-        // );
 
-        let binary_archive_url = String::from(
-            "https://github.com/tangle-network/hyperlane-validator-blueprint/releases/download/0.1.0/hyperlane-validator-blueprint-bin-x86_64-unknown-linux-gnu.tar.xz",
+        // TODO: This is NOT the correct format for cargo-dist. Need the target triple onchain
+        let binary_archive_url = format!(
+            "https://github.com/{owner}/{repo}/releases/download/{tag}/{binary_name}-{os_name}-{arch_name}.tar.xz"
         );
 
         let dist_manifest =

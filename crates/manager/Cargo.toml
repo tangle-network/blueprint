@@ -55,7 +55,6 @@ tokio-stream = { workspace = true, features = ["net"] }
 cloud-hypervisor-client = { workspace = true }
 fatfs.workspace = true
 nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"] }
-const_format.workspace = true
 
 # Networking
 rtnetlink.workspace = true
@@ -65,11 +64,6 @@ ipnet.workspace = true
 cargo-dist-schema.workspace = true
 tar.workspace = true
 xz.workspace = true
-
-# Debug CLI
-tempfile.workspace = true
-blueprint-tangle-testing-utils.workspace = true
-blueprint-chain-setup = { workspace = true, features = ["tangle"] }
 
 [package.metadata.dist]
 dist = false

@@ -10,6 +10,7 @@ use color_eyre::Result;
 use dialoguer::console::style;
 use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::tangle_testnet_runtime::api;
+use tracing::debug;
 
 /// Registers a blueprint.
 ///
@@ -132,13 +133,13 @@ pub async fn register(
     println!("{}", style("Verifying registration...").cyan());
     let latest_block = client.blocks().at_latest().await?;
     let latest_block_hash = latest_block.hash();
-    info!("Latest block: {:?}", latest_block.number());
+    debug!("Latest block: {:?}", latest_block.number());
 
     // Create a TangleServicesClient to query operator blueprints
     let services_client =
         blueprint_clients::tangle::services::TangleServicesClient::new(client.clone());
 
-    info!("Querying blueprints for account: {:?}", account_id);
+    debug!("Querying blueprints for account: {:?}", account_id);
 
     // Query operator blueprints at the latest block
     let block_hash = latest_block_hash.0;
