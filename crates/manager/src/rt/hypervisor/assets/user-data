@@ -15,12 +15,6 @@ mounts:
   - [LABEL=SERVICEDISK, /srv, vfat, "ro,defaults,nofail", "0", "0"]
   - [LABEL=DATADISK, /mnt/data, "auto", "defaults,nofail,discard", "0", "2"]
 
-# TODO(cleanup): REMOVE THIS
-chpasswd:
-  list: |
-    root:root
-  expire: False
-
 write_files:
   - path: /etc/systemd/system/launch.service
     content: |
