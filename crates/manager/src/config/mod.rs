@@ -1,8 +1,6 @@
-mod debug;
-
 use crate::error::{Error, Result};
 use blueprint_auth::proxy::DEFAULT_AUTH_PROXY_PORT;
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser};
 use docktopus::bollard::system::Version;
 use docktopus::bollard::{API_DEFAULT_VERSION, Docker};
 use http_body_util::Full;
@@ -32,15 +30,6 @@ pub static DEFAULT_ADDRESS_POOL: LazyLock<Ipv4Net> =
 pub struct BlueprintManagerCli {
     #[command(flatten)]
     pub config: BlueprintManagerConfig,
-
-    #[command(subcommand)]
-    pub command: Option<BlueprintManagerCommand>,
-}
-
-#[derive(Subcommand, Clone, Debug)]
-pub enum BlueprintManagerCommand {
-    #[command(subcommand)]
-    Debug(debug::DebugCommand),
 }
 
 #[derive(Debug, Args)]

@@ -18,6 +18,7 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use tangle_subxt::tangle_testnet_runtime::api::services::events::{
     JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
 };
+use blueprint_auth::db::RocksDb;
 use crate::rt::hypervisor::net::NetworkManager;
 use crate::rt::hypervisor::ServiceVmConfig;
 use crate::rt::service::{Service, Status};
@@ -34,6 +35,7 @@ impl VerifiedBlueprint {
     pub async fn start_services_if_needed(
         &mut self,
         network_manager: NetworkManager,
+        db: RocksDb,
         blueprint_config: &BlueprintEnvironment,
         manager_config: &BlueprintManagerConfig,
         active_blueprints: &mut ActiveBlueprints,
@@ -99,6 +101,7 @@ impl VerifiedBlueprint {
                         ..Default::default()
                     },
                     network_manager.clone(),
+                    db.clone(),
                     &blueprint_config.data_dir,
                     &blueprint_config.keystore_uri,
                     &cache_dir,
@@ -258,6 +261,7 @@ pub(crate) async fn handle_tangle_event(
     blueprints: &[RpcServicesWithBlueprint],
     blueprint_config: &BlueprintEnvironment,
     network_manager: NetworkManager,
+    db: RocksDb,
     manager_config: &BlueprintManagerConfig,
     active_blueprints: &mut ActiveBlueprints,
     poll_result: EventPollResult,
@@ -327,6 +331,7 @@ pub(crate) async fn handle_tangle_event(
         blueprint
             .start_services_if_needed(
                 network_manager.clone(),
+                db.clone(),
                 blueprint_config,
                 manager_config,
                 active_blueprints,

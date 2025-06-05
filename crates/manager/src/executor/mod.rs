@@ -2,8 +2,10 @@ use crate::blueprint::ActiveBlueprints;
 use crate::config::{AuthProxyOpts, BlueprintManagerConfig};
 use crate::error::Error;
 use crate::error::Result;
+use crate::rt;
 use crate::rt::hypervisor::net::NetworkManager;
 use crate::sdk::entry::SendFuture;
+use blueprint_auth::db::RocksDb;
 use blueprint_clients::tangle::EventsClient;
 use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
@@ -25,7 +27,6 @@ use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::subxt::utils::AccountId32;
 use tokio::task::JoinHandle;
 use tracing::error;
-use crate::rt;
 
 pub(crate) mod event_handler;
 
@@ -178,10 +179,11 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     rt::hypervisor::images::download_image_if_needed(&blueprint_manager_config.cache_dir).await?;
 
     // Create the auth proxy task
-    let auth_proxy_task = run_auth_proxy(
+    let (db, auth_proxy_task) = run_auth_proxy(
         blueprint_manager_config.data_dir.clone(),
         blueprint_manager_config.auth_proxy_opts.clone(),
-    );
+    )
+    .await?;
 
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
@@ -225,6 +227,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
             &env,
             &blueprint_manager_config,
             network_manager.clone(),
+            db.clone(),
         )
         .await?;
 
@@ -248,6 +251,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
                 &operator_subscribed_blueprints,
                 &env,
                 network_manager.clone(),
+                db.clone(),
                 &blueprint_manager_config,
                 &mut active_blueprints,
                 result,
@@ -356,6 +360,7 @@ async fn handle_init(
     blueprint_env: &BlueprintEnvironment,
     blueprint_manager_config: &BlueprintManagerConfig,
     network_manager: NetworkManager,
+    db: RocksDb,
 ) -> Result<Vec<RpcServicesWithBlueprint>> {
     info!("Beginning initialization of Blueprint Manager");
 
@@ -390,6 +395,7 @@ async fn handle_init(
         &operator_subscribed_blueprints,
         blueprint_env,
         network_manager,
+        db.clone(),
         blueprint_manager_config,
         active_blueprints,
         poll_result,
@@ -416,25 +422,33 @@ async fn handle_init(
 /// - It fails to create the necessary directories for the database.
 /// - It fails to bind to the specified host and port.
 /// - The Axum server encounters an error during operation.
-async fn run_auth_proxy(data_dir: PathBuf, auth_proxy_opts: AuthProxyOpts) -> Result<()> {
+pub async fn run_auth_proxy(
+    data_dir: PathBuf,
+    auth_proxy_opts: AuthProxyOpts,
+) -> Result<(RocksDb, impl Future<Output = Result<()>>)> {
     let db_path = data_dir.join("private").join("auth-proxy").join("db");
     tokio::fs::create_dir_all(&db_path).await?;
 
     let proxy = blueprint_auth::proxy::AuthenticatedProxy::new(&db_path)?;
-    let router = proxy.router();
-    let listener = tokio::net::TcpListener::bind((
-        auth_proxy_opts.auth_proxy_host,
-        auth_proxy_opts.auth_proxy_port,
-    ))
-    .await?;
-    info!(
-        "Auth proxy listening on {}:{}",
-        auth_proxy_opts.auth_proxy_host, auth_proxy_opts.auth_proxy_port
-    );
-    let result = axum::serve(listener, router).await;
-    if let Err(err) = result {
-        error!("Auth proxy error: {err}");
-    }
+    let db = proxy.db();
 
-    Ok(())
+    let router = proxy.router();
+
+    Ok((db, async move {
+        let listener = tokio::net::TcpListener::bind((
+            auth_proxy_opts.auth_proxy_host,
+            auth_proxy_opts.auth_proxy_port,
+        ))
+        .await?;
+        info!(
+            "Auth proxy listening on {}:{}",
+            auth_proxy_opts.auth_proxy_host, auth_proxy_opts.auth_proxy_port
+        );
+        let result = axum::serve(listener, router).await;
+        if let Err(err) = result {
+            error!("Auth proxy error: {err}");
+        }
+
+        Ok(())
+    }))
 }

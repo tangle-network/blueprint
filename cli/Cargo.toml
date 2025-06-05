@@ -40,7 +40,7 @@ clap = { workspace = true, features = ["derive", "wrap_help"] }
 clap-cargo = { workspace = true, features = ["clap"] }
 cargo-generate = { workspace = true, features = ["vendored-libgit2"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "ansi"] }
-color-eyre = { workspace = true }
+color-eyre = { workspace = true, features = ["color-spantrace", "track-caller"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["alloc", "preserve_order"] }
 tokio = { workspace = true, features = ["full"] }
@@ -68,6 +68,7 @@ alloy-contract = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-transport = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
+nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"] }
 
 [dev-dependencies]
 blueprint-keystore = { workspace = true, features = ["bn254"] }

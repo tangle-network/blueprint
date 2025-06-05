@@ -1,5 +1,7 @@
+use alloy_network::{AnyNetwork, ReceiptResponse};
 use alloy_provider::network::TransactionBuilder;
 use alloy_provider::{Provider, WsConnect};
+use alloy_rpc_types::serde_helpers::WithOtherFields;
 use alloy_rpc_types_eth::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_chain_setup_common::signer::{load_evm_signer_from_env, load_signer_from_env};
@@ -171,13 +173,14 @@ pub async fn deploy_to_tangle(
     };
 
     let my_account_id = signer.account_id();
-    update_progress(85, "Connecting");
+    update_progress(
+        85,
+        &format!("Connected to Tangle Network at: {}", ws_rpc_url),
+    );
     let client = subxt::OnlineClient::from_url(ws_rpc_url.clone()).await?;
-    tracing::info!("Connected to Tangle Network at: {}", ws_rpc_url);
 
     update_progress(90, "Creating blueprint transaction");
     let create_blueprint_tx = TangleApi::tx().services().create_blueprint(blueprint);
-    tracing::info!("Created blueprint...");
 
     update_progress(93, "Signing and submitting transaction");
     let progress = client
@@ -431,6 +434,7 @@ async fn deploy_contracts_to_tangle(
     assert!(rpc_url.starts_with("ws:"));
 
     let provider = alloy_provider::ProviderBuilder::new()
+        .network::<AnyNetwork>()
         .wallet(wallet)
         .on_ws(WsConnect::new(rpc_url))
         .await?;
@@ -447,7 +451,11 @@ async fn deploy_contracts_to_tangle(
 
         let tx = TransactionRequest::default().with_deploy_code(bytecode);
         // Deploy the contract.
-        let receipt = provider.send_transaction(tx).await?.get_receipt().await?;
+        let receipt = provider
+            .send_transaction(WithOtherFields::new(tx))
+            .await?
+            .get_receipt()
+            .await?;
         // Check the receipt status.
         if receipt.status() {
             let contract_address =

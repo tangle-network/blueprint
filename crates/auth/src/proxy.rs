@@ -15,6 +15,7 @@ use axum::{
 use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor, rt::TokioTimer};
 
 use crate::api_tokens::{ApiToken, ApiTokenGenerator};
+use crate::db::RocksDb;
 use crate::models::{ApiTokenModel, ServiceModel};
 use crate::types::{ServiceId, VerifyChallengeResponse};
 
@@ -57,6 +58,10 @@ impl AuthenticatedProxy {
             .nest("/v1", Self::internal_api_router_v1())
             .fallback(any(reverse_proxy))
             .with_state(state)
+    }
+
+    pub fn db(&self) -> RocksDb {
+        self.db.clone()
     }
 
     /// Internal API router for version 1

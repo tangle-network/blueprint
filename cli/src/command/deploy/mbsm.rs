@@ -1,10 +1,13 @@
+use alloy_signer_local::PrivateKeySigner;
 use blueprint_chain_setup::tangle::transactions;
+use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
 use blueprint_contexts::tangle::TangleClientContext;
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_testing_utils::tangle::harness::{ENDOWED_TEST_NAMES, generate_env_from_node_id};
 use dialoguer::console::style;
+use tangle_subxt::subxt::tx::Signer;
 use tempfile::TempDir;
 use url::Url;
 
@@ -17,9 +20,8 @@ use url::Url;
 /// # Errors
 ///
 /// Returns an error if the deployment fails
-pub async fn deploy_mbsm(http_rpc_url: String, force: bool) -> Result<(), color_eyre::Report> {
+pub async fn deploy_mbsm(http_rpc_url: Url, force: bool) -> color_eyre::Result<()> {
     let temp_dir = TempDir::new()?;
-    let http_rpc_url = Url::parse(&http_rpc_url)?;
     let mut ws_endpoint = http_rpc_url.clone();
     ws_endpoint.set_scheme("ws").map_err(|()| {
         color_eyre::Report::msg(format!(
@@ -111,5 +113,53 @@ pub async fn deploy_mbsm(http_rpc_url: String, force: bool) -> Result<(), color_
     .map_err(|e| color_eyre::Report::msg(format!("Failed to deploy MBSM: {}", e)))?;
 
     println!("{}", style("MBSM deployed successfully").green());
+    Ok(())
+}
+
+pub async fn deploy_mbsm_if_needed<T: Signer<TangleConfig>>(
+    ws_endpoint: Url,
+    client: &TangleClient,
+    account: &T,
+    evm_signer: PrivateKeySigner,
+) -> color_eyre::Result<()> {
+    // Check if MBSM is already deployed
+    let latest_revision = transactions::get_latest_mbsm_revision(client)
+        .await
+        .map_err(|e| {
+            color_eyre::Report::msg(format!("Failed to get latest MBSM revision: {}", e))
+        })?;
+
+    if let Some((rev, addr)) = latest_revision {
+        println!(
+            "{}",
+            style(format!(
+                "MBSM is already deployed at revision #{} at address {}",
+                rev, addr
+            ))
+            .green()
+        );
+
+        return Ok(());
+    }
+
+    println!(
+        "{}",
+        style("MBSM is not deployed, deploying now with Alice's account...").cyan()
+    );
+
+    let bytecode = tnt_core_bytecode::bytecode::MASTER_BLUEPRINT_SERVICE_MANAGER;
+    transactions::deploy_new_mbsm_revision(
+        ws_endpoint.as_str(),
+        client,
+        account,
+        evm_signer,
+        bytecode,
+        alloy_primitives::address!("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"),
+    )
+    .await
+    .map_err(|e| color_eyre::Report::msg(format!("Failed to deploy MBSM: {}", e)))?;
+
+    println!("{}", style("MBSM deployed successfully").green());
+
     Ok(())
 }

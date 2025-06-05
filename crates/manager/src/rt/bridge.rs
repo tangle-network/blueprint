@@ -1,5 +1,5 @@
 use blueprint_auth::{
-    db::{RocksDb, RocksDbConfig},
+    db::RocksDb,
     models::{ServiceModel, ServiceOwnerModel},
     types::ServiceId,
 };
@@ -38,15 +38,15 @@ impl BridgeHandle {
 pub struct Bridge {
     runtime_dir: PathBuf,
     service_name: String,
-    db_path: PathBuf,
+    db: RocksDb,
 }
 
 impl Bridge {
-    pub fn new(runtime_dir: PathBuf, service_name: String, db_path: PathBuf) -> Self {
+    pub fn new(runtime_dir: PathBuf, service_name: String, db: RocksDb) -> Self {
         Self {
             runtime_dir,
             service_name,
-            db_path,
+            db,
         }
     }
 
@@ -80,17 +80,10 @@ impl Bridge {
 
         let (tx, rx) = oneshot::channel();
 
-        // Open the database
-        let config = RocksDbConfig::default();
-        let db = RocksDb::open(&self.db_path, &config).map_err(|e| {
-            error!("Failed to open database at {}: {e}", self.db_path.display());
-            std::io::Error::new(std::io::ErrorKind::Other, format!("Database error: {e}"))
-        })?;
-
         let handle = tokio::task::spawn(async move {
             Server::builder()
                 .add_service(BlueprintManagerBridgeServer::new(BridgeService::new(
-                    tx, db,
+                    tx, self.db,
                 )))
                 .serve_with_incoming(UnixListenerStream::new(listener))
                 .await
