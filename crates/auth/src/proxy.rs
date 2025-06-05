@@ -15,10 +15,15 @@ use axum::{
 use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor, rt::TokioTimer};
 
 use crate::api_tokens::{ApiToken, ApiTokenGenerator};
+use crate::db::RocksDb;
 use crate::models::{ApiTokenModel, ServiceModel};
 use crate::types::{ServiceId, VerifyChallengeResponse};
 
 type HTTPClient = hyper_util::client::legacy::Client<HttpConnector, Body>;
+
+/// The default port for the authenticated proxy server
+// T9 Mapping of TBPM (Tangle Blueprint Manager)
+pub const DEFAULT_AUTH_PROXY_PORT: u16 = 8276;
 
 pub struct AuthenticatedProxy {
     client: HTTPClient,
@@ -53,6 +58,10 @@ impl AuthenticatedProxy {
             .nest("/v1", Self::internal_api_router_v1())
             .fallback(any(reverse_proxy))
             .with_state(state)
+    }
+
+    pub fn db(&self) -> RocksDb {
+        self.db.clone()
     }
 
     /// Internal API router for version 1

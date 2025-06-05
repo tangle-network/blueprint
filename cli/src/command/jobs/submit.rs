@@ -1,3 +1,6 @@
+use crate::command::jobs::check::check_job;
+use crate::command::jobs::helpers::{load_job_args_from_file, prompt_for_job_params};
+use crate::decode_bounded_string;
 use blueprint_clients::tangle::client::OnlineClient;
 use blueprint_core::info;
 use blueprint_crypto::sp_core::SpSr25519;
@@ -9,10 +12,6 @@ use dialoguer::console::style;
 use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::tangle_testnet_runtime::api;
 use tangle_subxt::tangle_testnet_runtime::api::services::events::JobCalled;
-
-use crate::command::jobs::check::check_job;
-use crate::command::jobs::helpers::{load_job_args_from_file, prompt_for_job_params};
-use crate::decode_bounded_string;
 
 /// Submits a job to a service.
 ///
@@ -46,7 +45,7 @@ use crate::decode_bounded_string;
 /// * Failed to get keys from keystore
 /// * Job was not called successfully
 pub async fn submit_job(
-    ws_rpc_url: String,
+    ws_rpc_url: impl AsRef<str>,
     service_id: Option<u64>,
     blueprint_id: u64,
     keystore_uri: String,
@@ -55,12 +54,12 @@ pub async fn submit_job(
     params_file: Option<String>,
     watcher: bool,
 ) -> Result<JobCalled> {
-    let client = OnlineClient::from_url(ws_rpc_url.clone()).await?;
+    let client = OnlineClient::from_url(ws_rpc_url.as_ref()).await?;
 
     let config = KeystoreConfig::new().fs_root(keystore_uri.clone());
     let keystore = Keystore::new(config).expect("Failed to create keystore");
-    let public = keystore.first_local::<SpSr25519>().unwrap();
-    let pair = keystore.get_secret::<SpSr25519>(&public).unwrap();
+    let public = keystore.first_local::<SpSr25519>()?;
+    let pair = keystore.get_secret::<SpSr25519>(&public)?;
     let signer = TanglePairSigner::new(pair.0);
 
     let service_id = service_id.unwrap();

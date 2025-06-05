@@ -13,6 +13,7 @@ use testcontainers::{
     runners::AsyncRunner,
 };
 use tokio::io::AsyncBufReadExt;
+use url::Url;
 
 pub type Container = ContainerAsync<GenericImage>;
 
@@ -21,8 +22,8 @@ pub const ANVIL_TAG: &str = "nightly-5b7e4cb3c882b28f3c32ba580de27ce7381f415a";
 
 pub struct AnvilTestnet {
     pub container: Container,
-    pub http_endpoint: String,
-    pub ws_endpoint: String,
+    pub http_endpoint: Url,
+    pub ws_endpoint: Url,
     pub temp_dir: TempDir,
 }
 
@@ -103,9 +104,9 @@ pub async fn start_anvil_container(state_json: Option<&str>, include_logs: bool)
         .map_to_host_port_ipv4(8545)
         .unwrap();
 
-    let http_endpoint = format!("http://localhost:{}", port);
+    let http_endpoint = format!("http://localhost:{port}").parse().unwrap();
     println!("Anvil HTTP endpoint: {}", http_endpoint);
-    let ws_endpoint = format!("ws://localhost:{}", port);
+    let ws_endpoint = format!("ws://localhost:{port}").parse().unwrap();
     println!("Anvil WS endpoint: {}", ws_endpoint);
 
     AnvilTestnet {

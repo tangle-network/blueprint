@@ -1,0 +1,27 @@
+[package]
+name = "blueprint-manager-bridge"
+version = "0.1.0-alpha.1"
+description = ""                  # TODO
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tokio = { workspace = true, features = ["net"] }
+uuid.workspace = true
+tonic = { workspace = true, features = ["codegen", "transport", "prost"] }
+prost = { workspace = true, features = ["derive"] }
+tower = { workspace = true, features = ["util"] }
+tokio-stream.workspace = true
+thiserror.workspace = true
+tokio-vsock.workspace = true
+blueprint-auth.workspace = true
+
+[build-dependencies]
+tonic-build = { workspace = true, features = ["prost"] }

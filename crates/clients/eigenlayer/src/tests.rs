@@ -110,7 +110,7 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
 
     println!("Setting AVS permissions and Metadata...");
     println!("Private key: {}", private_key);
-    let signer_wallet = get_provider_from_signer(private_key, &http_endpoint);
+    let signer_wallet = get_provider_from_signer(private_key, &*http_endpoint);
 
     match setup_avs_permissions(
         &core_contracts,

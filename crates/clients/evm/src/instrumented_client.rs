@@ -124,8 +124,10 @@ impl InstrumentedClient {
     /// # Errors
     ///
     /// Returns an error if the URL is invalid or if there is an error getting the version.
-    pub async fn new(url: &str) -> Result<Self, InstrumentedClientError> {
-        let url = Url::parse(url).map_err(|_| InstrumentedClientError::InvalidUrl)?;
+    pub async fn new<T: TryInto<Url>>(url: T) -> Result<Self, InstrumentedClientError> {
+        let url = url
+            .try_into()
+            .map_err(|_| InstrumentedClientError::InvalidUrl)?;
         let http_client = ProviderBuilder::new()
             .disable_recommended_fillers()
             .on_http(url);
@@ -155,8 +157,10 @@ impl InstrumentedClient {
     /// # Errors
     ///
     /// Returns an error if the URL is invalid or if there is an error getting the version.
-    pub async fn new_ws(url: &str) -> Result<Self, InstrumentedClientError> {
-        let url = Url::parse(url).map_err(|_| InstrumentedClientError::InvalidUrl)?;
+    pub async fn new_ws<T: TryInto<Url>>(url: T) -> Result<Self, InstrumentedClientError> {
+        let url = url
+            .try_into()
+            .map_err(|_| InstrumentedClientError::InvalidUrl)?;
         let ws_connect = WsConnect::new(url);
 
         let ws_client = ProviderBuilder::new()
@@ -846,11 +850,11 @@ mod tests {
     async fn test_suggest_gas_tip_cap() {
         let testnet = start_default_anvil_testnet(false).await;
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let fee_per_gas = instrumented_client.suggest_gas_tip_cap().await.unwrap();
-        let expected_fee_per_gas = get_provider_http(&testnet.http_endpoint)
+        let expected_fee_per_gas = get_provider_http(testnet.http_endpoint.clone())
             .get_max_priority_fee_per_gas()
             .await
             .unwrap();
@@ -860,9 +864,9 @@ mod tests {
     #[tokio::test]
     async fn test_gas_price() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let gas_price = instrumented_client.suggest_gas_price().await.unwrap();
@@ -873,9 +877,9 @@ mod tests {
     #[tokio::test]
     async fn test_sync_status() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let sync_status = instrumented_client.sync_progress().await.unwrap();
@@ -886,9 +890,9 @@ mod tests {
     #[tokio::test]
     async fn test_chain_id() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
 
@@ -901,9 +905,9 @@ mod tests {
     #[tokio::test]
     async fn test_balance_at() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let address = provider.get_accounts().await.unwrap()[0];
@@ -921,7 +925,7 @@ mod tests {
     async fn test_subscribe_new_head() {
         let testnet = start_default_anvil_testnet(false).await;
 
-        let instrumented_client = InstrumentedClient::new_ws(&testnet.ws_endpoint)
+        let instrumented_client = InstrumentedClient::new_ws(testnet.ws_endpoint)
             .await
             .unwrap();
         let subscription: TransportResult<Subscription<SubscriptionResult>> =
@@ -932,9 +936,9 @@ mod tests {
     #[tokio::test]
     async fn test_subscribe_filter_logs() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new_ws(&testnet.ws_endpoint)
+        let instrumented_client = InstrumentedClient::new_ws(testnet.ws_endpoint)
             .await
             .unwrap();
         let address = provider.clone().get_accounts().await.unwrap()[0];
@@ -949,9 +953,9 @@ mod tests {
     #[tokio::test]
     async fn test_block_by_hash() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
 
@@ -973,9 +977,9 @@ mod tests {
     #[tokio::test]
     async fn test_block_by_number() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let block_number = 1;
@@ -996,9 +1000,9 @@ mod tests {
     #[tokio::test]
     async fn test_transaction_count() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
 
@@ -1027,7 +1031,7 @@ mod tests {
     #[ignore]
     async fn test_transaction_methods() {
         let testnet = start_default_anvil_testnet(false).await;
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
 
@@ -1059,7 +1063,7 @@ mod tests {
         let tx_by_hash = instrumented_client.transaction_by_hash(tx_hash).await;
         assert!(tx_by_hash.is_ok());
 
-        wait_transaction(&testnet.http_endpoint, tx_hash)
+        wait_transaction(testnet.http_endpoint.clone(), tx_hash)
             .await
             .unwrap();
 
@@ -1081,9 +1085,9 @@ mod tests {
     #[tokio::test]
     async fn test_estimate_gas() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let accounts = provider.get_accounts().await.unwrap();
@@ -1115,9 +1119,9 @@ mod tests {
     #[tokio::test]
     async fn test_call_contract_and_pending_call_contract() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
 
@@ -1160,9 +1164,9 @@ mod tests {
     #[tokio::test]
     async fn test_filter_logs() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let address = provider.clone().get_accounts().await.unwrap()[0];
@@ -1177,9 +1181,9 @@ mod tests {
     #[tokio::test]
     async fn test_storage_at() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
 
@@ -1201,9 +1205,9 @@ mod tests {
     #[tokio::test]
     async fn test_block_number() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
 
@@ -1229,9 +1233,9 @@ mod tests {
     #[tokio::test]
     async fn test_code_at() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let address = provider.get_accounts().await.unwrap()[0];
@@ -1248,9 +1252,9 @@ mod tests {
     #[tokio::test]
     async fn test_fee_history() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
 
@@ -1286,9 +1290,9 @@ mod tests {
     #[tokio::test]
     async fn test_header_by_hash() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let hash = provider
@@ -1312,9 +1316,9 @@ mod tests {
     #[tokio::test]
     async fn test_header_by_number() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let block_number = BlockNumberOrTag::Earliest;
@@ -1337,9 +1341,9 @@ mod tests {
     #[tokio::test]
     async fn test_nonce_at() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let address = provider.get_accounts().await.unwrap()[0];
@@ -1356,9 +1360,9 @@ mod tests {
     #[tokio::test]
     async fn test_pending_balance_at() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let address = provider.get_accounts().await.unwrap()[0];
@@ -1376,9 +1380,9 @@ mod tests {
     #[tokio::test]
     async fn test_pending_code_at() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let address = provider.get_accounts().await.unwrap()[0];
@@ -1393,9 +1397,9 @@ mod tests {
     #[tokio::test]
     async fn test_pending_nonce_at() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let address = provider.get_accounts().await.unwrap()[0];
@@ -1410,9 +1414,9 @@ mod tests {
     #[tokio::test]
     async fn test_pending_storage_at() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
         let address = provider.get_accounts().await.unwrap()[0];
@@ -1432,9 +1436,9 @@ mod tests {
     #[tokio::test]
     async fn test_pending_transaction_count() {
         let testnet = start_default_anvil_testnet(false).await;
-        let provider = get_provider_http(&testnet.http_endpoint);
+        let provider = get_provider_http(testnet.http_endpoint.clone());
 
-        let instrumented_client = InstrumentedClient::new(&testnet.http_endpoint)
+        let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
 

@@ -1,3 +1,4 @@
+use crate::wait_for_in_block_success;
 use blueprint_chain_setup::tangle::transactions::get_security_commitment;
 use blueprint_clients::tangle::client::OnlineClient;
 use blueprint_crypto::sp_core::SpSr25519;
@@ -7,8 +8,6 @@ use blueprint_keystore::{Keystore, KeystoreConfig};
 use color_eyre::Result;
 use dialoguer::console::style;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::Asset;
-
-use crate::wait_for_in_block_success;
 
 /// Accepts a service request.
 ///
@@ -34,7 +33,7 @@ use crate::wait_for_in_block_success;
 /// * Failed to create keystore
 /// * Failed to get keys from keystore
 pub async fn accept_request(
-    ws_rpc_url: String,
+    ws_rpc_url: impl AsRef<str>,
     _min_exposure_percent: u8,
     _max_exposure_percent: u8,
     restaking_percent: u8,
@@ -42,7 +41,7 @@ pub async fn accept_request(
     // keystore_password: Option<String>, // TODO: Add keystore password support
     request_id: u64,
 ) -> Result<()> {
-    let client = OnlineClient::from_url(ws_rpc_url.clone()).await?;
+    let client = OnlineClient::from_url(ws_rpc_url.as_ref()).await?;
 
     let config = KeystoreConfig::new().fs_root(keystore_uri.clone());
     let keystore = Keystore::new(config).expect("Failed to create keystore");

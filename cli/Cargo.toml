@@ -13,23 +13,6 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
-clap = { workspace = true, features = ["derive", "wrap_help"] }
-clap-cargo = { workspace = true, features = ["clap"] }
-cargo-generate = { workspace = true, features = ["vendored-libgit2"] }
-tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "ansi"] }
-color-eyre = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true, features = ["alloc", "preserve_order"] }
-tokio = { workspace = true, features = ["full"] }
-hex = { workspace = true }
-tracing = { workspace = true, features = ["log"] }
-thiserror = { workspace = true }
-bip39 = { workspace = true, features = ["rand_core", "rand"] }
-dotenv = { workspace = true }
-url = { workspace = true }
-toml = { workspace = true }
-indicatif = { workspace = true }
 blueprint-core = { workspace = true, features = ["tracing"] }
 blueprint-runner = { workspace = true, features = ["networking", "tangle", "eigenlayer"] }
 blueprint-std = { workspace = true, features = ["std"] }
@@ -37,9 +20,6 @@ blueprint-tangle-extra = { workspace = true, features = ["std"] }
 blueprint-chain-setup = { workspace = true, features = ["tangle", "anvil", "std"] }
 blueprint-testing-utils = { workspace = true, features = ["tangle", "anvil", "eigenlayer"] }
 blueprint-contexts = { workspace = true }
-tnt-core-bytecode = { workspace = true }
-blueprint-manager = { workspace = true }
-dialoguer = { workspace = true, default-features = true }
 blueprint-clients = { workspace = true, features = ["tangle", "eigenlayer", "evm", "std"] }
 blueprint-crypto = { workspace = true, features = [
     "k256",
@@ -53,6 +33,27 @@ blueprint-crypto = { workspace = true, features = [
 ] }
 blueprint-crypto-core = { workspace = true, features = ["clap"] }
 blueprint-keystore = { workspace = true, features = ["tangle-full", "eigenlayer-full", "evm", "std"] }
+blueprint-manager = { workspace = true }
+
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive", "wrap_help"] }
+clap-cargo = { workspace = true, features = ["clap"] }
+cargo-generate = { workspace = true, features = ["vendored-libgit2"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "ansi"] }
+color-eyre = { workspace = true, features = ["color-spantrace", "track-caller"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["alloc", "preserve_order"] }
+tokio = { workspace = true, features = ["full"] }
+hex = { workspace = true }
+tracing = { workspace = true, features = ["log"] }
+thiserror = { workspace = true }
+bip39 = { workspace = true, features = ["rand_core", "rand"] }
+dotenv = { workspace = true }
+url = { workspace = true }
+toml = { workspace = true }
+indicatif = { workspace = true }
+tnt-core-bytecode = { workspace = true }
+dialoguer = { workspace = true, default-features = true }
 tangle-subxt = { workspace = true }
 sp-core = { workspace = true }
 eigensdk = { workspace = true }
@@ -67,6 +68,7 @@ alloy-contract = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-transport = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
+nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"] }
 
 [dev-dependencies]
 blueprint-keystore = { workspace = true, features = ["bn254"] }

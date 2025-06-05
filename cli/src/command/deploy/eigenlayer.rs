@@ -20,11 +20,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use tokio::signal;
+use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EigenlayerDeployOpts {
     /// The RPC URL to connect to
-    pub(crate) rpc_url: String,
+    pub(crate) rpc_url: Url,
     /// Path to the contracts, defaults to `"./contracts"`
     pub(crate) contracts_path: String,
     /// Optional constructor arguments for contracts, keyed by contract name
@@ -43,16 +44,21 @@ impl EigenlayerDeployOpts {
     /// When used in a local testnet environment with no specified keystore, this will panic if it
     /// cannot create a temporary directory to use for the keystore.
     #[must_use]
-    pub fn new(
-        rpc_url: String,
+    pub fn new<T: TryInto<Url>>(
+        rpc_url: T,
         contracts_path: Option<String>,
         ordered_deployment: bool,
         chain: SupportedChains,
         keystore_path: Option<impl AsRef<Path>>,
-    ) -> Self {
+    ) -> Self
+    where
+        <T as TryInto<Url>>::Error: std::fmt::Debug,
+    {
+        let rpc_url = rpc_url.try_into().unwrap();
+
         let keystore_path = if keystore_path.is_none()
             && chain == SupportedChains::LocalTestnet
-            && (rpc_url.contains("127.0.0.1") || rpc_url.contains("localhost"))
+            && (rpc_url.as_str().contains("127.0.0.1") || rpc_url.as_str().contains("localhost"))
         {
             // For local testnet with no specified keystore, use a temporary directory
             let temp_dir = tempfile::tempdir()
@@ -85,7 +91,8 @@ impl EigenlayerDeployOpts {
         config = config.fs_root(&self.keystore_path);
         let keystore = Keystore::new(config)?;
 
-        if (self.rpc_url.contains("127.0.0.1") || self.rpc_url.contains("localhost"))
+        if (self.rpc_url.as_str().contains("127.0.0.1")
+            || self.rpc_url.as_str().contains("localhost"))
             && self.chain == SupportedChains::LocalTestnet
         {
             Ok("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80".to_string())
@@ -772,14 +779,14 @@ pub async fn deploy_eigenlayer(
         deploy_to_eigenlayer(&opts)?;
 
         // Keep the process running and show helpful instructions
-        display_devnet_info(&testnet.http_endpoint);
+        display_devnet_info(testnet.http_endpoint.as_str());
 
         // Wait for Ctrl+C to shut down
         signal::ctrl_c().await?;
         println!("{}", style("\nShutting down devnet...").yellow());
     } else {
         let opts = EigenlayerDeployOpts::new(
-            rpc_url.as_ref().map(ToString::to_string).ok_or_else(|| {
+            rpc_url.as_deref().ok_or_else(|| {
                 color_eyre::Report::msg(
                     "The --rpc-url flag is required when deploying to a non-local network",
                 )

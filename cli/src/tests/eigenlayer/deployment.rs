@@ -160,7 +160,7 @@ evm_version = 'shanghai'",
     let abi = alloy_json_abi::JsonAbi::from_json_str(&abi)?;
 
     // Create a provider
-    let provider = get_provider_http(&testnet.http_endpoint);
+    let provider = get_provider_http(testnet.http_endpoint.clone());
 
     // Create a contract instance
     let test_contract =
@@ -216,7 +216,7 @@ evm_version = 'shanghai'",
     let abi = alloy_json_abi::JsonAbi::from_json_str(&abi)?;
 
     // Create a provider
-    let provider = get_provider_http(&testnet.http_endpoint);
+    let provider = get_provider_http(testnet.http_endpoint);
 
     // Create a contract instance
     let simple_storage_contract =

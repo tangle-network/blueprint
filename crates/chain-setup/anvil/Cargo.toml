@@ -24,6 +24,7 @@ testcontainers = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tempfile = { workspace = true}
+url.workspace = true
 
 
 [features]

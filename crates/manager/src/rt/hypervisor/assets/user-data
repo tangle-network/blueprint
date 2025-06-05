@@ -1,0 +1,57 @@
+#cloud-config
+disk_setup:
+  /dev/vdc:
+    # TODO: Change to gpt once https://github.com/canonical/cloud-init/issues/5797 is resolved
+    table_type: mbr
+    layout: true
+
+fs_setup:
+  - device: /dev/vdc1
+    filesystem: ext4
+    overwrite: false
+    label: DATADISK
+
+mounts:
+  - [LABEL=SERVICEDISK, /srv, vfat, "ro,defaults,nofail", "0", "0"]
+  - [LABEL=DATADISK, /mnt/data, "auto", "defaults,nofail,discard", "0", "2"]
+
+write_files:
+  - path: /etc/systemd/system/launch.service
+    content: |
+      [Unit]
+      Description=Service Launcher
+      After=srv.mount mnt-data.mount docker.service
+
+      [Service]
+      Type=simple
+      ExecStart=/srv/launch
+      Restart=no
+      KillSignal=SIGINT
+
+      [Install]
+      WantedBy=multi-user.target
+  - path: /etc/docker/daemon.json
+    owner: root:root
+    permissions: '0644'
+    content: |
+      { "data-root": "/mnt/data/docker" }
+
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - software-properties-common
+
+runcmd:
+  # Enable virtiofs
+  - sudo modprobe virtiofs
+
+  # Install Docker using the official script
+  - curl -fsSL https://get.docker.com -o get-docker.sh
+  - sh get-docker.sh
+  - usermod -aG docker ubuntu
+  - systemctl enable --now docker
+
+  # Enable and start the launch service after the disk is mounted
+  - systemctl daemon-reload
+  - systemctl enable --now launch.service
