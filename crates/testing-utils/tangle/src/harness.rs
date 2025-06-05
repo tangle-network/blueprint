@@ -1,3 +1,4 @@
+use crate::runner::MockHeartbeatConsumer;
 use crate::Error;
 use crate::multi_node::{find_open_tcp_bind_port, MultiNodeTestEnv};
 use crate::{InputValue, OutputValue, keys::inject_tangle_key};
@@ -141,7 +142,7 @@ where
     pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
         // Start Local Tangle Node
         let node = blueprint_chain_setup::tangle::run(
-            blueprint_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
+            blueprint_chain_setup::tangle::NodeConfig::new(true).with_log_target("evm", "trace"),
         )
         .await
         .map_err(|e| Error::Setup(e.to_string()))?;
@@ -410,7 +411,7 @@ where
             registration_args,
             request_args,
         }: SetupServicesOpts<N>,
-    ) -> Result<(MultiNodeTestEnv<Ctx>, u64, u64), Error> {
+    ) -> Result<(MultiNodeTestEnv<Ctx, MockHeartbeatConsumer>, u64, u64), Error> {
         const { assert!(N > 0, "Must have at least 1 initial node") };
 
         // Deploy blueprint
@@ -474,7 +475,7 @@ where
     pub async fn setup_services<const N: usize>(
         &self,
         exit_after_registration: bool,
-    ) -> Result<(MultiNodeTestEnv<Ctx>, u64, u64), Error> {
+    ) -> Result<(MultiNodeTestEnv<Ctx, MockHeartbeatConsumer>, u64, u64), Error> {
         const { assert!(N > 0, "Must have at least 1 initial node") };
 
         self.setup_services_with_options::<N>(SetupServicesOpts {

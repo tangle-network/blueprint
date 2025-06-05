@@ -18,6 +18,7 @@ blueprint-router.workspace = true
 blueprint-std.workspace = true
 blueprint-keystore = { workspace = true }
 blueprint-crypto = { workspace = true }
+blueprint-qos = { workspace = true }
 futures-core.workspace = true
 futures-util.workspace = true
 tower.workspace = true
@@ -56,6 +57,7 @@ eigensdk = { workspace = true, features = [
     "client-avsregistry",
     "crypto-bls",
 ], optional = true }
+async-trait = "0.1.88"
 
 [dev-dependencies]
 blueprint-sdk = { path = "../sdk", features = ["std", "tangle"] }

@@ -16,11 +16,13 @@ workspace = true
 blueprint-core = { workspace = true }
 blueprint-runner = { workspace = true }
 blueprint-router = { workspace = true }
+blueprint-qos = { workspace = true }
 
 blueprint-clients = { workspace = true, features = ["std"] }
 blueprint-keystore = { workspace = true, features = ["std"] }
 cargo_toml = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 url = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
