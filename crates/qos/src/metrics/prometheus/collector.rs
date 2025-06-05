@@ -7,7 +7,7 @@ use crate::metrics::types::{BlueprintStatus, MetricsConfig, SystemMetrics};
 
 /// Prometheus metrics collector
 pub struct PrometheusCollector {
-    registry: Registry,
+    registry: Arc<Registry>,
 
     // System metrics
     cpu_usage: Gauge,
@@ -41,12 +41,12 @@ impl PrometheusCollector {
     ///
     /// # Errors
     /// Returns an error if any of the Prometheus metrics cannot be registered
-    pub fn new(config: MetricsConfig) -> Result<Self, prometheus::Error> {
-        let registry = Registry::new();
+    pub fn new(config: MetricsConfig, registry: Arc<Registry>) -> Result<Self, prometheus::Error> {
+        // The passed-in 'registry: Arc<Registry>' will be used.
 
-        // Register process metrics
-        let process_collector = prometheus::process_collector::ProcessCollector::for_self();
-        registry.register(Box::new(process_collector))?;
+        // Register process metrics (if enabled in the future)
+        // let process_collector = prometheus::process_collector::ProcessCollector::for_self();
+        // registry.register(Box::new(process_collector))?;
 
         // System metrics
         let cpu_usage = Gauge::new("blueprint_cpu_usage", "CPU usage percentage")?;
@@ -85,7 +85,7 @@ impl PrometheusCollector {
         )?;
         let status_code = IntGauge::new("blueprint_status_code", "Status code")?;
 
-        // Register metrics with registry
+        // Register metrics with the provided registry
         registry.register(Box::new(cpu_usage.clone()))?;
         registry.register(Box::new(memory_usage.clone()))?;
         registry.register(Box::new(total_memory.clone()))?;
@@ -101,7 +101,7 @@ impl PrometheusCollector {
         registry.register(Box::new(status_code.clone()))?;
 
         Ok(Self {
-            registry,
+            registry, // Store the passed-in Arc<Registry>
             cpu_usage,
             memory_usage,
             total_memory,
@@ -122,8 +122,8 @@ impl PrometheusCollector {
 
     /// Get the Prometheus registry
     #[must_use]
-    pub fn registry(&self) -> &Registry {
-        &self.registry
+    pub fn registry(&self) -> Arc<Registry> {
+        self.registry.clone()
     }
 
     /// Update system metrics

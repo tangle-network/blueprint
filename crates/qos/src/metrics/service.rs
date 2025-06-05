@@ -7,6 +7,7 @@ use crate::metrics::provider::EnhancedMetricsProvider;
 use crate::metrics::types::MetricsConfig;
 
 /// Metrics service for collecting and exposing metrics
+#[derive(Clone)]
 pub struct MetricsService {
     /// Metrics provider
     provider: Arc<EnhancedMetricsProvider>,
@@ -47,9 +48,22 @@ impl MetricsService {
         self.provider.clone()
     }
 
+    /// Get a clone of the OpenTelemetry job executions counter from the provider.
+    #[must_use]
+    pub fn get_otel_job_executions_counter(&self) -> opentelemetry::metrics::Counter<u64> {
+        self.provider.get_otel_job_executions_counter()
+    }
+
     /// Record job execution
-    pub fn record_job_execution(&self, job_id: u64, execution_time: f64) {
-        self.provider.record_job_execution(job_id, execution_time);
+    pub fn record_job_execution(
+        &self,
+        job_id: u64,
+        execution_time: f64,
+        service_id: u64,
+        blueprint_id: u64,
+    ) {
+        self.provider
+            .record_job_execution(job_id, execution_time, service_id, blueprint_id);
     }
 
     /// Record job error
@@ -147,7 +161,7 @@ mod tests {
 
         let service = MetricsService::new(config.clone()).unwrap();
 
-        service.record_job_execution(1, 0.5);
+        service.record_job_execution(1, 0.5, 42, 24);
     }
 
     /// Tests that the `MetricsService` can record job errors.

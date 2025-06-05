@@ -10,11 +10,7 @@ use crate::metrics::opentelemetry::OpenTelemetryConfig;
 use crate::metrics::provider::EnhancedMetricsProvider;
 use crate::metrics::service::MetricsService;
 use crate::servers::{
-    ServerManager,
-    grafana::GrafanaServer,
-    loki::LokiServer,
-    prometheus::PrometheusServer,
-    scraping_prometheus::ScrapingPrometheusServer, // Added
+    ServerManager, grafana::GrafanaServer, loki::LokiServer, prometheus::PrometheusServer,
 };
 
 /// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality
@@ -43,9 +39,6 @@ where
 
     /// Prometheus server manager
     prometheus_server: Option<Arc<PrometheusServer>>,
-
-    /// Scraping Prometheus server manager
-    scraping_prometheus_server: Option<Arc<ScrapingPrometheusServer>>,
 
     /// Oneshot sender to signal completion when this service is dropped.
     completion_tx: Option<tokio::sync::oneshot::Sender<Result<()>>>,
@@ -83,98 +76,77 @@ where
         }
 
         // (around line 88)
-        let (grafana_server, loki_server, prometheus_server, scraping_prometheus_server_opt) =
-            if config.manage_servers {
-                // Define instances with new names
-                let grafana_server_instance = config
-                    .grafana_server
+        let (grafana_server, loki_server, prometheus_server) = if config.manage_servers {
+            // Define instances with new names
+            let grafana_server_instance = config
+                .grafana_server
+                .as_ref()
+                .map(|cfg| Arc::new(GrafanaServer::new(cfg.clone())));
+            let loki_server_instance = config
+                .loki_server
+                .as_ref()
+                .map(|cfg| Arc::new(LokiServer::new(cfg.clone())));
+            let metrics_service_instance = metrics_service.clone();
+            let prometheus_registry_for_server: Option<Arc<prometheus::Registry>> =
+                metrics_service_instance
                     .as_ref()
-                    .map(|cfg| Arc::new(GrafanaServer::new(cfg.clone())));
-                let loki_server_instance = config
-                    .loki_server
-                    .as_ref()
-                    .map(|cfg| Arc::new(LokiServer::new(cfg.clone())));
-                let prometheus_server_instance = config
-                    .prometheus_server
-                    .as_ref()
-                    .map(|cfg| Arc::new(PrometheusServer::new(cfg.clone())));
-                let scraping_prometheus_server_instance = config // This was the block you added
-                        .scraping_prometheus_server
-                        .as_ref()
-                        .map(|cfg| {
-                            match ScrapingPrometheusServer::new(cfg.clone()) {
-                                Ok(server) => Arc::<ScrapingPrometheusServer>::new(server),
-                                Err(e) => {
-                                    error!("Failed to create ScrapingPrometheusServer in new(): {}. It will not be started.", e);
-                                    panic!("Critical: Failed to create ScrapingPrometheusServer in new(): {}", e);
-                                }
-                            }
-                        });
+                    .map(|ms| ms.provider().prometheus_collector().registry().clone());
 
-                // Start the servers using the *_instance variables (around line 118 onwards)
-                if let Some(server) = &grafana_server_instance {
-                    // Use grafana_server_instance
-                    info!("Starting Grafana server...");
-                    if let Err(e) = server.start().await {
-                        error!("Failed to start Grafana server: {}", e); // Non-critical, just log
-                    } else {
-                        info!("Grafana server started successfully: {}", server.url());
-                    }
+            let prometheus_server_instance = config.prometheus_server.as_ref().map(|server_cfg| {
+                let registry_to_pass = if !server_cfg.use_docker {
+                    prometheus_registry_for_server.clone()
+                } else {
+                    None
+                };
+                Arc::new(PrometheusServer::new(server_cfg.clone(), registry_to_pass))
+            });
+            // Start the servers using the *_instance variables (around line 118 onwards)
+            if let Some(server) = &grafana_server_instance {
+                // Use grafana_server_instance
+                info!("Starting Grafana server...");
+                if let Err(e) = server.start().await {
+                    error!("Failed to start Grafana server: {}", e); // Non-critical, just log
+                } else {
+                    info!("Grafana server started successfully: {}", server.url());
                 }
+            }
 
-                if let Some(server) = &loki_server_instance {
-                    // Use loki_server_instance
-                    info!("Starting Loki server...");
-                    if let Err(e) = server.start().await {
-                        error!("Failed to start Loki server: {}", e); // Non-critical, just log
-                    } else {
-                        info!("Loki server started successfully: {}", server.url());
-                    }
+            if let Some(server) = &loki_server_instance {
+                // Use loki_server_instance
+                info!("Starting Loki server...");
+                if let Err(e) = server.start().await {
+                    error!("Failed to start Loki server: {}", e); // Non-critical, just log
+                } else {
+                    info!("Loki server started successfully: {}", server.url());
                 }
+            }
 
-                if let Some(server) = &prometheus_server_instance {
-                    // Use prometheus_server_instance
-                    info!("Starting Prometheus server (exposer)...");
-                    if let Err(e) = server.start().await {
-                        error!(
-                            "Failed to start critical Prometheus server (exposer): {}",
-                            e
-                        );
-                        return Err(e); // This is critical
-                    } else {
-                        info!(
-                            "Prometheus server (exposer) started successfully: {}",
-                            server.url()
-                        );
-                    }
+            if let Some(server) = &prometheus_server_instance {
+                // Use prometheus_server_instance
+                info!("Starting Prometheus server (exposer)...");
+                if let Err(e) = server.start().await {
+                    error!(
+                        "Failed to start critical Prometheus server (exposer): {}",
+                        e
+                    );
+                    return Err(e); // This is critical
+                } else {
+                    info!(
+                        "Prometheus server (exposer) started successfully: {}",
+                        server.url()
+                    );
                 }
+            }
 
-                if let Some(server) = &scraping_prometheus_server_instance {
-                    // Use scraping_prometheus_server_instance
-                    info!("Starting scraping Prometheus server (new)... ");
-                    if let Err(e) = server.start().await {
-                        error!(
-                            "Failed to start scraping Prometheus server (new): {}. Metrics might not be scraped.",
-                            e
-                        );
-                    } else {
-                        info!(
-                            "Scraping Prometheus server (new) started successfully: {}",
-                            server.url()
-                        );
-                    }
-                }
-
-                // Return the instances (around line 145)
-                (
-                    grafana_server_instance,
-                    loki_server_instance,
-                    prometheus_server_instance,
-                    scraping_prometheus_server_instance,
-                )
-            } else {
-                (None, None, None, None)
-            };
+            // Return the instances (around line 145)
+            (
+                grafana_server_instance,
+                loki_server_instance,
+                prometheus_server_instance,
+            )
+        } else {
+            (None, None, None)
+        };
         // Now, the variables from line 88 (grafana_server, loki_server, etc.) are correctly populated
         // and can be used for the struct initialization later.
 
@@ -196,7 +168,6 @@ where
             grafana_server,
             loki_server,
             prometheus_server,
-            scraping_prometheus_server: scraping_prometheus_server_opt,
             completion_tx: None,
         })
     }
@@ -236,70 +207,65 @@ where
         }
 
         // Initialize server managers if configured
-        let (grafana_server, loki_server, prometheus_server, scraping_prometheus_server) =
-            if config.manage_servers {
-                let (grafana_server, loki_server, prometheus_server, scraping_prometheus_server) = (
-                    config
-                        .grafana_server
-                        .as_ref()
-                        .map(|cfg| Arc::new(GrafanaServer::new(cfg.clone()))),
-                    config
-                        .loki_server
-                        .as_ref()
-                        .map(|cfg| Arc::new(LokiServer::new(cfg.clone()))),
-                    config
-                        .prometheus_server
-                        .as_ref()
-                        .map(|cfg| Arc::new(PrometheusServer::new(cfg.clone()))),
-                    config.scraping_prometheus_server.as_ref().and_then(|cfg| {
-                        match ScrapingPrometheusServer::new(cfg.clone()) {
-                            Ok(server) => Some(Arc::new(server)),
-                            Err(e) => {
-                                error!("Failed to create scraping Prometheus server: {}", e);
-                                None
-                            }
-                        }
-                    }),
-                );
+        let (grafana_server, loki_server, prometheus_server) = if config.manage_servers {
+            let metrics_service_instance_otel = metrics_service.clone();
+            let prometheus_registry_for_server_otel: Option<Arc<prometheus::Registry>> =
+                metrics_service_instance_otel
+                    .as_ref()
+                    .map(|ms| ms.provider().prometheus_collector().registry().clone());
 
-                // Start the servers if configured
-                if let Some(server) = &grafana_server {
-                    info!("Starting Grafana server...");
-                    if let Err(e) = server.start().await {
-                        error!("Failed to start Grafana server: {}", e);
+            let (grafana_server, loki_server, prometheus_server) = (
+                config
+                    .grafana_server
+                    .as_ref()
+                    .map(|cfg| Arc::new(GrafanaServer::new(cfg.clone()))),
+                config
+                    .loki_server
+                    .as_ref()
+                    .map(|cfg| Arc::new(LokiServer::new(cfg.clone()))),
+                config.prometheus_server.as_ref().map(|server_cfg| {
+                    let registry_to_pass = if !server_cfg.use_docker {
+                        prometheus_registry_for_server_otel.clone()
                     } else {
-                        info!("Grafana server started successfully");
-                    }
-                }
+                        None
+                    };
+                    Arc::new(PrometheusServer::new(server_cfg.clone(), registry_to_pass))
+                }),
+            );
 
-                if let Some(server) = &loki_server {
-                    info!("Starting Loki server...");
-                    if let Err(e) = server.start().await {
-                        error!("Failed to start Loki server: {}", e);
-                    } else {
-                        info!("Loki server started successfully");
-                    }
+            // Start the servers if configured
+            if let Some(server) = &grafana_server {
+                info!("Starting Grafana server...");
+                if let Err(e) = server.start().await {
+                    error!("Failed to start Grafana server: {}", e);
+                } else {
+                    info!("Grafana server started successfully");
                 }
+            }
 
-                if let Some(server) = &prometheus_server {
-                    info!("Starting Prometheus server...");
-                    if let Err(e) = server.start().await {
-                        error!("Failed to start critical Prometheus server: {}", e);
-                        return Err(e);
-                    } else {
-                        info!("Prometheus server started successfully");
-                    }
+            if let Some(server) = &loki_server {
+                info!("Starting Loki server...");
+                if let Err(e) = server.start().await {
+                    error!("Failed to start Loki server: {}", e);
+                } else {
+                    info!("Loki server started successfully");
                 }
+            }
 
-                (
-                    grafana_server,
-                    loki_server,
-                    prometheus_server,
-                    scraping_prometheus_server,
-                )
-            } else {
-                (None, None, None, None)
-            };
+            if let Some(server) = &prometheus_server {
+                info!("Starting Prometheus server...");
+                if let Err(e) = server.start().await {
+                    error!("Failed to start critical Prometheus server: {}", e);
+                    return Err(e);
+                } else {
+                    info!("Prometheus server started successfully");
+                }
+            }
+
+            (grafana_server, loki_server, prometheus_server)
+        } else {
+            (None, None, None)
+        };
 
         // Update Grafana client if we are managing servers
         let grafana_client = if let Some(server) = &grafana_server {
@@ -320,7 +286,6 @@ where
             grafana_server,
             loki_server,
             prometheus_server,
-            scraping_prometheus_server,
             completion_tx: None,
         })
     }
@@ -363,8 +328,9 @@ where
             });
 
             let prometheus_json_data = PrometheusJsonData {
-                http_method: "POST".to_string(),
+                http_method: "GET".to_string(),
                 timeout: Some(30),
+                disable_metrics_lookup: false, // Explicitly enable metrics lookup
             };
             let prometheus_request_payload = CreateDataSourceRequest {
                 name: prometheus_ds_name.to_string(),
@@ -473,10 +439,24 @@ where
             .map(super::metrics::service::MetricsService::provider)
     }
 
+    /// Get a clone of the OpenTelemetry job executions counter, if the metrics service is available.
+    #[must_use]
+    pub fn get_otel_job_executions_counter(&self) -> Option<opentelemetry::metrics::Counter<u64>> {
+        self.metrics_service
+            .as_ref()
+            .map(|ms| ms.get_otel_job_executions_counter())
+    }
+
     /// Record job execution if metrics service is available
-    pub fn record_job_execution(&self, job_id: u64, execution_time: f64) {
+    pub fn record_job_execution(
+        &self,
+        job_id: u64,
+        execution_time: f64,
+        service_id: u64,
+        blueprint_id: u64,
+    ) {
         if let Some(service) = &self.metrics_service {
-            service.record_job_execution(job_id, execution_time);
+            service.record_job_execution(job_id, execution_time, service_id, blueprint_id);
         }
     }
 
@@ -511,20 +491,12 @@ where
         self.prometheus_server.as_ref().map(|server| server.url())
     }
 
-    /// Get the Scraping Prometheus server URL if available
-    #[must_use]
-    pub fn scraping_prometheus_server_url(&self) -> Option<String> {
-        self.scraping_prometheus_server
-            .as_ref()
-            .map(|server| server.url())
-    }
-
     /// Get the Prometheus registry if available
     #[must_use]
     pub fn prometheus_registry(&self) -> Option<Arc<prometheus::Registry>> {
         self.metrics_provider().map(|provider| {
             let collector = provider.prometheus_collector();
-            Arc::new(collector.registry().clone())
+            collector.registry().clone()
         })
     }
 
@@ -543,11 +515,6 @@ where
             "Prometheus server (exposer): {}",
             self.prometheus_server.is_some()
         );
-        info!(
-            "Scraping Prometheus server: {}",
-            self.scraping_prometheus_server.is_some()
-        ); // Added to debug_server_status
-
         if let Some(server) = &self.grafana_server {
             info!("Grafana URL: {}", server.url());
         }
@@ -556,10 +523,6 @@ where
         }
         if let Some(server) = &self.prometheus_server {
             info!("Prometheus (exposer) URL: {}", server.url());
-        }
-        if let Some(server) = &self.scraping_prometheus_server {
-            // Added to debug_server_status
-            info!("Scraping Prometheus URL: {}", server.url());
         }
     }
 
@@ -581,32 +544,25 @@ where
     C: HeartbeatConsumer + Send + Sync + 'static,
 {
     fn drop(&mut self) {
-        use std::backtrace::Backtrace;
-        let bt = Backtrace::force_capture();
-        info!(
-            "[QoSService::Drop] Dropping QoSService<C>. Backtrace:\n{:?}",
-            bt
-        );
+        // use std::backtrace::Backtrace;
+
         // Stop the server managers
         if let Some(server) = &self.grafana_server {
-            info!("Stopping Grafana server...");
+            info!("[Drop] About to stop Grafana server...");
             let _ = futures::executor::block_on(server.stop());
+            info!("[Drop] Grafana server stop returned.");
         }
 
         if let Some(server) = &self.loki_server {
-            info!("Stopping Loki server...");
+            info!("[Drop] About to stop Loki server...");
             let _ = futures::executor::block_on(server.stop());
+            info!("[Drop] Loki server stop returned.");
         }
 
         if let Some(server) = &self.prometheus_server {
-            info!("Stopping Prometheus server (exposer)...");
+            info!("[Drop] About to stop Prometheus server (exposer)...");
             let _ = futures::executor::block_on(server.stop());
-        }
-
-        if let Some(server) = &self.scraping_prometheus_server {
-            // Added to drop
-            info!("Stopping scraping Prometheus server...");
-            let _ = futures::executor::block_on(server.stop());
+            info!("[Drop] Prometheus server (exposer) stop returned.");
         }
 
         // Signal completion if a sender was provided

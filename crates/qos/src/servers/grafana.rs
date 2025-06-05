@@ -9,6 +9,8 @@ use crate::logging::GrafanaConfig;
 use crate::servers::ServerManager;
 use crate::servers::common::DockerManager;
 
+const GRAFANA_IMAGE_NAME_FULL: &str = "grafana/grafana:10.4.3";
+
 /// Grafana server configuration
 #[derive(Clone, Debug)]
 pub struct GrafanaServerConfig {
@@ -99,6 +101,7 @@ impl ServerManager for GrafanaServer {
             "GF_SECURITY_ADMIN_PASSWORD".to_string(),
             self.config.admin_password.clone(),
         );
+        env_vars.insert("GF_LOG_LEVEL".to_string(), "debug".to_string()); // Enable debug logging
 
         if self.config.allow_anonymous {
             env_vars.insert("GF_AUTH_ANONYMOUS_ENABLED".to_string(), "true".to_string());
@@ -127,11 +130,12 @@ impl ServerManager for GrafanaServer {
         let container_id = self
             .docker
             .run_container(
-                "grafana/grafana:latest",
+                GRAFANA_IMAGE_NAME_FULL,
                 &self.config.container_name,
                 env_vars,
                 ports,
                 volumes,
+                Some(vec!["host.docker.internal:host-gateway".to_string()]),
             )
             .await?;
 

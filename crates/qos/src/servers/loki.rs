@@ -94,6 +94,7 @@ impl ServerManager for LokiServer {
                 env_vars,
                 ports,
                 volumes,
+                None, // extra_hosts
             )
             .await?;
 

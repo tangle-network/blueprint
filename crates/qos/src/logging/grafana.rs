@@ -1,9 +1,39 @@
-use blueprint_core::{error, info};
+use blueprint_core::{debug, error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
+
+// Health check response structures
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DatasourceHealthDetails {
+    #[serde(flatten)]
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DatasourceHealthResponse {
+    pub message: String,
+    pub status: String, // "OK", "ERROR", etc.
+    pub details: Option<DatasourceHealthDetails>,
+}
+
+// For parsing generic Grafana JSON error responses
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GrafanaApiErrorBody {
+    pub message: String,
+    #[serde(alias = "statusCode")]
+    pub status_code: Option<u16>,
+    #[serde(alias = "messageId")]
+    pub error_code: Option<String>,
+    pub trace_id: Option<String>,
+    #[serde(flatten)]
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
+}
 
 /// Configuration for Grafana
 #[derive(Clone, Debug)]
@@ -363,6 +393,7 @@ pub struct PrometheusJsonData {
     pub http_method: String, // e.g., "POST"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u64>,
+    pub disable_metrics_lookup: bool, // Added to control metrics lookup
 }
 
 #[derive(Serialize, Debug)]
@@ -403,6 +434,13 @@ impl GrafanaClient {
             message: message.to_string(),
             overwrite: true,
         };
+
+        let dashboard_payload_json = serde_json::to_string_pretty(&request)
+            .unwrap_or_else(|e| format!("Failed to serialize dashboard request payload: {}", e));
+        info!(
+            "Grafana create_dashboard payload:\n{}",
+            dashboard_payload_json
+        );
 
         let mut request_builder = self.client.post(&url);
 
@@ -547,7 +585,7 @@ impl GrafanaClient {
                 Target {
                     ref_id: "A".to_string(),
                     expr: format!(
-                        "blueprint_cpu_usage{{service_id=\"{}\",blueprint_id=\"{}\"}}",
+                        "blueprint_cpu_usage{{service_id=\\\"{}\\\",blueprint_id=\\\"{}\\\"}}",
                         service_id, blueprint_id
                     ),
                     datasource: None,
@@ -555,7 +593,7 @@ impl GrafanaClient {
                 Target {
                     ref_id: "B".to_string(),
                     expr: format!(
-                        "blueprint_memory_usage{{service_id=\"{}\",blueprint_id=\"{}\"}}",
+                        "blueprint_memory_usage{{service_id=\\\"{}\\\",blueprint_id=\\\"{}\\\"}}",
                         service_id, blueprint_id
                     ),
                     datasource: None,
@@ -583,16 +621,13 @@ impl GrafanaClient {
             targets: vec![
                 Target {
                     ref_id: "A".to_string(),
-                    expr: format!(
-                        "blueprint_job_executions{{service_id=\"{}\",blueprint_id=\"{}\"}}",
-                        service_id, blueprint_id
-                    ),
+                    expr: "up{job=\"prometheus\"}".to_string(),
                     datasource: None,
                 },
                 Target {
                     ref_id: "B".to_string(),
                     expr: format!(
-                        "blueprint_job_errors{{service_id=\"{}\",blueprint_id=\"{}\"}}",
+                        "blueprint_job_errors{{service_id=\\\"{}\\\",blueprint_id=\\\"{}\\\"}}",
                         service_id, blueprint_id
                     ),
                     datasource: None,
@@ -647,7 +682,7 @@ impl GrafanaClient {
             targets: vec![Target {
                 ref_id: "A".to_string(),
                 expr: format!(
-                    "blueprint_last_heartbeat{{service_id=\"{}\",blueprint_id=\"{}\"}}",
+                    "blueprint_last_heartbeat{{service_id=\\\"{}\\\",blueprint_id=\\\"{}\\\"}}",
                     service_id, blueprint_id
                 ),
                 datasource: None,
@@ -674,7 +709,7 @@ impl GrafanaClient {
             targets: vec![Target {
                 ref_id: "A".to_string(),
                 expr: format!(
-                    "blueprint_status_code{{service_id=\"{}\",blueprint_id=\"{}\"}}",
+                    "blueprint_status_code{{service_id=\\\"{}\\\",blueprint_id=\\\"{}\\\"}}",
                     service_id, blueprint_id
                 ),
                 datasource: None,
@@ -701,7 +736,7 @@ impl GrafanaClient {
             targets: vec![Target {
                 ref_id: "A".to_string(),
                 expr: format!(
-                    "blueprint_uptime{{service_id=\"{}\",blueprint_id=\"{}\"}}",
+                    "blueprint_uptime{{service_id=\\\"{}\\\",blueprint_id=\\\"{}\\\"}}",
                     service_id, blueprint_id
                 ),
                 datasource: None,
@@ -800,9 +835,7 @@ impl GrafanaClient {
             access: datasource["access"].as_str().unwrap_or("proxy").to_string(),
             uid: Some(datasource_uid.to_string()),
             is_default: datasource["isDefault"].as_bool(),
-            json_data: datasource["jsonData"]
-                .as_object()
-                .map(|o| serde_json::Value::Object(o.clone())),
+            json_data: None,
         };
 
         // Update the datasource
@@ -820,6 +853,81 @@ impl GrafanaClient {
             Err(e) => {
                 error!("Failed to update datasource URL: {}", e);
                 Err(e)
+            }
+        }
+    }
+
+    pub async fn check_datasource_health(&self, uid: &str) -> Result<DatasourceHealthResponse> {
+        let path = format!("api/datasources/uid/{}/health", uid);
+        let url = format!("{}/{}", self.config.url.trim_end_matches('/'), path);
+
+        debug!(target: "blueprint_qos::logging::grafana", "Performing health check for datasource UID {} at URL: {}", uid, url);
+
+        let mut request_builder = self.client.get(&url); // Use self.client
+
+        if !self.config.api_key.is_empty() {
+            // Check if api_key string is non-empty
+            request_builder = request_builder.bearer_auth(self.config.api_key.trim());
+            debug!(target: "blueprint_qos::logging::grafana", "Health check for datasource UID {}: Using API Key auth", uid);
+        } else if let (Some(username), Some(password)) =
+            (&self.config.admin_user, &self.config.admin_password)
+        {
+            // Fallback to basic auth if API key is empty string AND basic auth creds are present
+            request_builder = request_builder.basic_auth(username, Some(password));
+            debug!(target: "blueprint_qos::logging::grafana", "Health check for datasource UID {}: Using Basic auth (API key was empty) for user {}", uid, username);
+        } else {
+            warn!(target: "blueprint_qos::logging::grafana", "Health check for datasource UID {}: No authentication configured (API key empty, no basic auth). This is unlikely to succeed.", uid);
+        }
+
+        let response = match request_builder.send().await {
+            Ok(res) => res,
+            Err(e) => {
+                error!(target: "blueprint_qos::logging::grafana", "Health check request for datasource UID {} to {} failed: {}", uid, url, e);
+                return Err(Error::GrafanaApi(format!(
+                    "HTTP request to {} failed: {}",
+                    url, e
+                )));
+            }
+        };
+
+        let response_status = response.status();
+        let response_text = match response.text().await {
+            Ok(text) => text,
+            Err(e) => {
+                error!(target: "blueprint_qos::logging::grafana", "Failed to read response body for UID {} (status {}): {}", uid, response_status, e);
+                return Err(Error::GrafanaApi(format!(
+                    "Failed to read response body for UID {} (status {}): {}",
+                    uid, response_status, e
+                )));
+            }
+        };
+
+        if response_status.is_success() {
+            match serde_json::from_str::<DatasourceHealthResponse>(&response_text) {
+                Ok(health_response) => {
+                    debug!(target: "blueprint_qos::logging::grafana", "Health check for datasource UID {} successful: Status {}, Message: {}. Body: {}", uid, health_response.status, health_response.message, response_text);
+                    Ok(health_response)
+                }
+                Err(e) => {
+                    error!(target: "blueprint_qos::logging::grafana", "Failed to parse successful health check response for UID {} from body '{}': {}", uid, response_text, e);
+                    Err(Error::Json(format!(
+                        "Failed to parse health check response for UID {} from body '{}': {}",
+                        uid, response_text, e
+                    )))
+                }
+            }
+        } else {
+            error!(target: "blueprint_qos::logging::grafana", "Health check for datasource UID {} failed with status {}. Body: {}", uid, response_status, response_text);
+
+            match serde_json::from_str::<GrafanaApiErrorBody>(&response_text) {
+                Ok(api_err) => Err(Error::GrafanaApi(format!(
+                    "Grafana API error ({}) during health check: {}. UID: {}. Full Body: {}",
+                    response_status, api_err.message, uid, response_text
+                ))),
+                Err(_) => Err(Error::GrafanaApi(format!(
+                    "Grafana API request failed with status {} for UID {} during health check. Full Body: {}",
+                    response_status, uid, response_text
+                ))),
             }
         }
     }

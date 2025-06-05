@@ -1,4 +1,4 @@
-use blueprint_core::info;
+use blueprint_core::{error, info};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -39,7 +39,7 @@ impl Default for PrometheusServerConfig {
         Self {
             port: 9090,
             host: "0.0.0.0".to_string(),
-            use_docker: true,
+            use_docker: false,
             docker_image: "prom/prometheus:latest".to_string(),
             docker_container_name: "blueprint-prometheus".to_string(),
             config_path: None,
@@ -62,40 +62,23 @@ pub struct PrometheusServer {
     /// The embedded Prometheus server (if not using Docker)
     embedded_server: Arc<Mutex<Option<PrometheusMetricsServer>>>,
 
-    /// The registry for the embedded Prometheus server
-    registry: Arc<Mutex<Option<prometheus::Registry>>>,
+    /// The metrics registry provided by EnhancedMetricsProvider (if not using Docker)
+    metrics_registry: Option<Arc<prometheus::Registry>>,
 }
 
 impl PrometheusServer {
     /// Create a new Prometheus server manager
     #[must_use]
-    pub fn new(config: PrometheusServerConfig) -> Self {
+    pub fn new(
+        config: PrometheusServerConfig,
+        metrics_registry: Option<Arc<prometheus::Registry>>,
+    ) -> Self {
         Self {
             config,
             docker_manager: DockerManager::new(),
             container_id: Arc::new(Mutex::new(None)),
             embedded_server: Arc::new(Mutex::new(None)),
-            registry: Arc::new(Mutex::new(None)),
-        }
-    }
-
-    /// Create a new embedded Prometheus server
-    fn create_embedded_server(&self) {
-        let registry = prometheus::Registry::new();
-        let bind_address = format!("{}:{}", self.config.host, self.config.port);
-
-        let server = PrometheusMetricsServer::new(registry.clone(), bind_address);
-
-        // Update the embedded server
-        {
-            let mut embedded_server = self.embedded_server.lock().unwrap();
-            *embedded_server = Some(server);
-        }
-
-        // Update the registry
-        {
-            let mut reg = self.registry.lock().unwrap();
-            *reg = Some(registry);
+            metrics_registry,
         }
     }
 
@@ -136,6 +119,7 @@ impl PrometheusServer {
                 env_vars,
                 ports,
                 volumes,
+                None, // extra_hosts
             )
             .await?;
 
@@ -145,11 +129,9 @@ impl PrometheusServer {
         Ok(())
     }
 
-    /// Get the registry for the embedded Prometheus server
-    #[must_use]
+    /// Get the metrics registry used by the embedded Prometheus server
     pub fn registry(&self) -> Option<Arc<prometheus::Registry>> {
-        let registry_guard = self.registry.lock().ok()?;
-        registry_guard.as_ref().map(|r| Arc::new(r.clone()))
+        self.metrics_registry.clone()
     }
 }
 
@@ -185,58 +167,85 @@ impl ServerManager for PrometheusServer {
                 self.config.docker_container_name
             );
         } else {
-            // For embedded server, we need to initialize it if it doesn't exist
-            if self.embedded_server.lock().unwrap().is_none() {
-                // Initialize the embedded server
-                self.create_embedded_server();
-            }
-
-            info!(
-                "Prometheus embedded server initialized on {}:{}",
-                self.config.host, self.config.port
-            );
-
-            // Check if the embedded server exists
-            let server_exists = {
+            // Logic for non-Docker (embedded) server
+            // Check if already started
+            {
                 let guard = self.embedded_server.lock().unwrap();
-                guard.is_some()
-            };
+                if guard.is_some() {
+                    info!(
+                        "Embedded Prometheus server on {}:{} already initialized.",
+                        self.config.host, self.config.port
+                    );
+                    return Ok(());
+                }
+            } // Guard dropped here
 
-            if !server_exists {
+            // Prepare for start if not started
+            let registry_arc_clone;
+            let bind_address_for_new_server;
+
+            if let Some(registry) = &self.metrics_registry {
+                registry_arc_clone = registry.clone();
+                bind_address_for_new_server = format!("{}:{}", self.config.host, self.config.port);
+                info!(
+                    "Attempting to start embedded Prometheus server on {} using provided registry",
+                    bind_address_for_new_server
+                );
+            } else {
                 return Err(crate::error::Error::Other(
-                    "Embedded server not initialized properly".to_string(),
+                    "Metrics registry not provided for embedded Prometheus server".to_string(),
                 ));
             }
 
-            // Start the server without holding the mutex guard across the await
-            {
-                // Get a clone of the server to avoid holding the mutex across an await point
-                let mut server = {
-                    let server_guard = self.embedded_server.lock().unwrap();
-                    if let Some(_server) = &*server_guard {
-                        // Clone the server's fields to create a new instance
-                        let bind_address = format!("{}:{}", self.config.host, self.config.port);
-                        let registry = self.registry.lock().unwrap().clone().unwrap_or_default();
-                        PrometheusMetricsServer::new(registry, bind_address)
-                    } else {
-                        return Err(crate::error::Error::Other(
-                            "Embedded server not initialized properly".to_string(),
-                        ));
-                    }
-                };
-
-                // Start the server
-                server.start().await?;
-
-                // Store the started server back in the mutex
-                let mut server_guard = self.embedded_server.lock().unwrap();
-                *server_guard = Some(server);
-
-                info!(
-                    "Started embedded Prometheus server on {}:{}",
-                    self.config.host, self.config.port
-                );
+            // Pre-bind check to ensure the port is not already in use
+            match std::net::TcpListener::bind(&bind_address_for_new_server) {
+                Ok(listener) => {
+                    // Port is free, drop the listener immediately so Axum can bind
+                    drop(listener);
+                    info!(
+                        "Port {} is free, proceeding to start embedded Prometheus server.",
+                        bind_address_for_new_server
+                    );
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+                    error!(
+                        "Failed to bind embedded Prometheus server to {}: Address already in use.",
+                        bind_address_for_new_server
+                    );
+                    return Err(crate::error::Error::Other(format!(
+                        "Address {} already in use for embedded Prometheus server",
+                        bind_address_for_new_server
+                    )));
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to perform pre-bind check for embedded Prometheus server on {}: {}",
+                        bind_address_for_new_server, e
+                    );
+                    return Err(crate::error::Error::Other(format!(
+                        "Failed pre-bind check for {}: {}",
+                        bind_address_for_new_server, e
+                    )));
+                }
             }
+
+            let mut server_instance = PrometheusMetricsServer::new(
+                registry_arc_clone,
+                bind_address_for_new_server.clone(),
+            );
+
+            server_instance.start().await?; // Async operation, no locks held from self.embedded_server
+
+            // Store the started server
+            {
+                let mut guard = self.embedded_server.lock().unwrap();
+                *guard = Some(server_instance);
+            } // Guard dropped here
+
+            info!(
+                "Successfully started embedded Prometheus server on {}",
+                bind_address_for_new_server
+            );
         }
 
         Ok(())

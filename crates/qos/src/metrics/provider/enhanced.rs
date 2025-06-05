@@ -10,6 +10,7 @@ use crate::metrics::prometheus::{PrometheusCollector, PrometheusServer};
 use crate::metrics::types::{
     BlueprintMetrics, BlueprintStatus, MetricsConfig, MetricsProvider, SystemMetrics,
 };
+use opentelemetry::KeyValue;
 
 /// Enhanced metrics provider that integrates Prometheus and OpenTelemetry
 pub struct EnhancedMetricsProvider {
@@ -34,6 +35,12 @@ pub struct EnhancedMetricsProvider {
     /// Prometheus server
     prometheus_server: Arc<RwLock<Option<PrometheusServer>>>,
 
+    /// Shared Prometheus registry for all metrics
+    shared_registry: Arc<Registry>,
+
+    /// OpenTelemetry counter for job executions
+    otel_job_executions_counter: opentelemetry::metrics::Counter<u64>,
+
     /// Configuration
     config: MetricsConfig,
 
@@ -47,22 +54,38 @@ impl EnhancedMetricsProvider {
     /// # Errors
     /// Returns an error if the Prometheus collector or OpenTelemetry exporter initialization fails
     pub fn new(metrics_config: MetricsConfig, otel_config: OpenTelemetryConfig) -> Result<Self> {
-        // Create a Prometheus registry
-        let registry = Registry::new();
-
-        // Create a Prometheus collector
+        // Create a single shared Prometheus registry
+        let shared_registry = Arc::new(Registry::new());
+        // Create a Prometheus collector, passing the shared registry
         let prometheus_collector = Arc::new(
-            PrometheusCollector::new(metrics_config.clone()).map_err(|e| {
-                crate::error::Error::Other(format!("Failed to create Prometheus collector: {}", e))
-            })?,
+            PrometheusCollector::new(metrics_config.clone(), shared_registry.clone()).map_err(
+                |e| {
+                    crate::error::Error::Other(format!(
+                        "Failed to create Prometheus collector: {}",
+                        e
+                    ))
+                },
+            )?,
         );
 
-        // Create an OpenTelemetry exporter
+        // Create an OpenTelemetry exporter, passing the shared registry
         let opentelemetry_exporter = Arc::new(OpenTelemetryExporter::new(
-            &registry,
+            &shared_registry, // Pass as reference, assuming OTelExporter::new takes &Registry
             otel_config,
             &metrics_config,
         )?);
+        info!(
+            "Created OpenTelemetryExporter in EnhancedMetricsProvider: {:?}",
+            opentelemetry_exporter
+        );
+
+        // Create an OpenTelemetry counter for job executions
+        let otel_job_executions_counter = opentelemetry_exporter
+            .meter()
+            .u64_counter("blueprint_job_executions")
+            .with_description("Total number of job executions recorded via OTel")
+            .build();
+        info!("Created otel_job_executions_counter in EnhancedMetricsProvider");
 
         // Initialize blueprint status
         let blueprint_status = BlueprintStatus {
@@ -79,6 +102,8 @@ impl EnhancedMetricsProvider {
             prometheus_collector,
             opentelemetry_exporter,
             prometheus_server: Arc::new(RwLock::new(None)),
+            shared_registry,             // Store the shared registry
+            otel_job_executions_counter, // Store the OTel counter
             config: metrics_config,
             start_time: Instant::now(),
         };
@@ -93,9 +118,10 @@ impl EnhancedMetricsProvider {
     pub async fn start_collection(&self) -> Result<()> {
         // Start the Prometheus server
         let bind_address = self.config.bind_address.clone();
-        let registry = self.prometheus_collector.registry().clone();
+        // Use the shared registry stored in self
+        let registry_for_server = self.shared_registry.clone();
 
-        let mut server = PrometheusServer::new(registry, bind_address);
+        let mut server = PrometheusServer::new(registry_for_server, bind_address);
         server.start().await?;
 
         let mut prometheus_server = self.prometheus_server.write().await;
@@ -203,7 +229,26 @@ impl EnhancedMetricsProvider {
     }
 
     /// Record job execution
-    pub fn record_job_execution(&self, job_id: u64, execution_time: f64) {
+    pub fn record_job_execution(
+        &self,
+        job_id: u64,
+        execution_time: f64,
+        service_id: u64,
+        blueprint_id: u64,
+    ) {
+        info!(
+            "Recording job execution (job_id: {}). Incrementing otel_job_executions_counter.",
+            job_id
+        );
+        // Increment OTel counter
+        self.otel_job_executions_counter.add(
+            1,
+            &[
+                KeyValue::new("service_id", service_id.to_string()),
+                KeyValue::new("blueprint_id", blueprint_id.to_string()),
+            ],
+        );
+
         self.prometheus_collector.record_job_execution(
             job_id,
             self.config.service_id,
@@ -232,6 +277,12 @@ impl EnhancedMetricsProvider {
     #[must_use]
     pub fn prometheus_collector(&self) -> Arc<PrometheusCollector> {
         self.prometheus_collector.clone()
+    }
+
+    /// Get a clone of the OpenTelemetry job executions counter
+    #[must_use]
+    pub fn get_otel_job_executions_counter(&self) -> opentelemetry::metrics::Counter<u64> {
+        self.otel_job_executions_counter.clone()
     }
 }
 

@@ -3,7 +3,6 @@ pub mod heartbeat;
 pub mod logging;
 pub mod metrics;
 pub mod servers;
-use servers::scraping_prometheus::ScrapingPrometheusServerConfig;
 pub mod service;
 pub mod service_builder;
 pub mod unified_service;
@@ -54,9 +53,6 @@ pub struct QoSConfig {
     /// Prometheus server configuration (if None, no server will be started)
     pub prometheus_server: Option<servers::prometheus::PrometheusServerConfig>,
 
-    /// Scraping Prometheus server configuration (if None, no scraping Prometheus server will be started)
-    pub scraping_prometheus_server: Option<ScrapingPrometheusServerConfig>,
-
     /// Whether to manage servers automatically
     pub manage_servers: bool,
 
@@ -78,7 +74,6 @@ pub fn default_qos_config() -> QoSConfig {
         grafana_server: Some(servers::grafana::GrafanaServerConfig::default()),
         loki_server: Some(servers::loki::LokiServerConfig::default()),
         prometheus_server: None,
-        scraping_prometheus_server: None,
         manage_servers: true,
         service_id: None,
         blueprint_id: None,

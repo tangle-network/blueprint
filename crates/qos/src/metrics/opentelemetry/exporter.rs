@@ -1,6 +1,12 @@
 use blueprint_core::info;
-use opentelemetry::metrics::MeterProvider;
+use opentelemetry::global::set_meter_provider;
+use opentelemetry::metrics::MeterProvider as _; // Import the trait
+// Note: GlobalMeterProviderGuard does not seem to exist for the current opentelemetry version.
+use opentelemetry::KeyValue;
 use opentelemetry_sdk::metrics::SdkMeterProvider;
+use opentelemetry_semantic_conventions::resource::{
+    SERVICE_INSTANCE_ID, SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION,
+};
 use prometheus::Registry;
 use std::sync::Arc;
 
@@ -28,8 +34,10 @@ impl Default for OpenTelemetryConfig {
 }
 
 /// OpenTelemetry exporter
+#[derive(Debug)]
 pub struct OpenTelemetryExporter {
-    /// Meter provider
+    /// The OpenTelemetry SdkMeterProvider wrapped in an Arc for sharing.
+    /// This provider is configured with the Prometheus exporter and a resource.
     meter_provider: Arc<SdkMeterProvider>,
     /// Meter
     meter: opentelemetry::metrics::Meter,
@@ -48,23 +56,46 @@ impl OpenTelemetryExporter {
         otel_config: OpenTelemetryConfig,
         _metrics_config: &MetricsConfig,
     ) -> Result<Self> {
-        // Create a Prometheus exporter pipeline
-        let _exporter = opentelemetry_prometheus::exporter()
+        // 1. Create the PrometheusExporter (MetricReader) first.
+        let prometheus_exporter = opentelemetry_prometheus::exporter()
             .with_registry(registry.clone())
-            .build()
+            .build() // Build the exporter itself
             .map_err(|e| Error::Other(format!("Failed to create OpenTelemetry exporter: {}", e)))?;
 
-        let meter_provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder().build();
+        // 2. Create a Resource for the SdkMeterProvider using the builder pattern.
+        let resource_attributes = vec![
+            KeyValue::new(SERVICE_NAME, otel_config.service_name.clone()),
+            KeyValue::new(SERVICE_VERSION, otel_config.service_version.clone()),
+            KeyValue::new(SERVICE_INSTANCE_ID, otel_config.service_instance_id.clone()),
+            KeyValue::new(SERVICE_NAMESPACE, otel_config.service_namespace.clone()),
+        ];
+        let resource = opentelemetry_sdk::resource::Resource::builder()
+            .with_attributes(resource_attributes)
+            .build();
 
-        let meter_provider = Arc::new(meter_provider);
+        // 3. Create the SdkMeterProvider, registering the exporter and resource with it.
+        let meter_provider = SdkMeterProvider::builder()
+            .with_reader(prometheus_exporter) // Pass the exporter directly
+            .with_resource(resource) // Add the resource
+            .build();
+        info!("Built SdkMeterProvider in OpenTelemetryExporter");
 
-        // Create a meter
-        let meter = meter_provider.meter("blueprint_metrics");
+        // Set this meter provider as the global meter provider.
+        // The SdkMeterProvider itself (which is cloned and set) will keep the provider alive.
+        // Storing a guard seems unnecessary with current opentelemetry API (v0.22.x - v0.30.x).
+        set_meter_provider(meter_provider.clone());
+        info!("Set global meter provider.");
+
+        // 4. Wrap SdkMeterProvider in Arc for storage and sharing.
+        let meter_provider_arc = Arc::new(meter_provider);
+
+        // 5. Create a meter from this provider.
+        let meter = meter_provider_arc.meter("blueprint_metrics");
+        info!("Created meter from SdkMeterProvider in OpenTelemetryExporter");
         info!("Created OpenTelemetry exporter");
 
         Ok(Self {
-            // exporter,
-            meter_provider,
+            meter_provider: meter_provider_arc,
             meter,
             config: otel_config,
         })

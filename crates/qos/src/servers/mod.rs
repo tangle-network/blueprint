@@ -2,7 +2,6 @@ pub mod common;
 pub mod grafana;
 pub mod loki;
 pub mod prometheus;
-pub mod scraping_prometheus;
 
 use crate::error::Result;
 

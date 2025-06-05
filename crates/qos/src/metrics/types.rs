@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::SystemTime;
 
 /// Configuration for the metrics service
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct MetricsConfig {
     pub bind_address: String,
     pub collection_interval_secs: u64,
@@ -14,7 +14,7 @@ pub struct MetricsConfig {
 impl Default for MetricsConfig {
     fn default() -> Self {
         Self {
-            bind_address: "127.0.0.1:50051".to_string(),
+            bind_address: "0.0.0.0:9090".to_string(),
             collection_interval_secs: 60,
             max_history: 100,
             service_id: 0,

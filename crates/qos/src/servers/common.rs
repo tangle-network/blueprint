@@ -74,6 +74,7 @@ impl DockerManager {
         env_vars: HashMap<String, String>,
         ports: HashMap<String, String>,
         volumes: HashMap<String, String>,
+        extra_hosts: Option<Vec<String>>,
     ) -> Result<String> {
         // Try to ensure image exists, but continue even if there are issues
         if let Err(e) = self.ensure_image(image).await {
@@ -123,6 +124,12 @@ impl DockerManager {
         let mut options = ContainerOptions::builder(image);
         options.name(name);
 
+        // Add extra hosts if provided
+        if let Some(hosts) = extra_hosts {
+            let host_strs: Vec<&str> = hosts.iter().map(AsRef::as_ref).collect();
+            options.extra_hosts(host_strs);
+        }
+
         // Add environment variables
         for (key, value) in &env_vars {
             options.env(&[format!("{}={}", key, value)]);
@@ -158,6 +165,10 @@ impl DockerManager {
         }
 
         // Create and start the container
+        info!(
+            "Environment variables for container {}: {:?}",
+            name, &env_vars
+        );
         info!("Creating and starting container: {}", name);
         let container_id = match containers.create(&options.build()).await {
             Ok(container) => container.id,
@@ -201,9 +212,12 @@ impl DockerManager {
 
         // Stop the container
         info!("Stopping container: {}", container_id);
-        container.stop(None).await.map_err(|e| {
-            Error::Other(format!("Failed to stop container {}: {}", container_id, e))
-        })?;
+        container
+            .stop(Some(Duration::from_secs(5)))
+            .await
+            .map_err(|e| {
+                Error::Other(format!("Failed to stop container {}: {}", container_id, e))
+            })?;
 
         // Remove the container
         info!("Removing container: {}", container_id);
