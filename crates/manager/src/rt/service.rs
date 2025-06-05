@@ -25,6 +25,18 @@ pub struct Service {
 }
 
 impl Service {
+    /// Create a new `Service` instance
+    ///
+    /// This will:
+    /// * Spawn a [`Bridge`]
+    /// * Configure and create a VM to be started with [`Self::start()`].
+    ///
+    /// # Errors
+    ///
+    /// See:
+    /// * [`Bridge::spawn()`]
+    /// * [`HypervisorInstance::new()`]
+    /// * [`HypervisorInstance::prepare()`]
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         vm_config: ServiceVmConfig,
@@ -78,6 +90,13 @@ impl Service {
         })
     }
 
+    /// Check the status of the running service
+    ///
+    /// If this returns an error, the service may be dead.
+    ///
+    /// # Errors
+    ///
+    /// * See [`HypervisorInstance::client()`]
     pub fn status(&self) -> Result<Status> {
         // TODO: A way to actually check the status
         Ok(Status::Running)
@@ -89,6 +108,10 @@ impl Service {
     ///
     /// The future **should** be polled to completion to determine whether the VM can be connected to
     /// via the bridge.
+    ///
+    /// # Errors
+    ///
+    /// * See [`HypervisorInstance::start()`]
     pub async fn start(&mut self) -> Result<Option<impl Future<Output = Result<()>> + use<>>> {
         let Some(alive_rx) = self.alive_rx.take() else {
             error!("Service already started!");
@@ -114,6 +137,13 @@ impl Service {
     }
 
     /// Gracefully shutdown the service (VM+bridge)
+    ///
+    /// # Errors
+    ///
+    /// See:
+    ///
+    /// * [`HypervisorInstance::shutdown()`]
+    /// * [`BridgeHandle::shutdown()`]
     pub async fn shutdown(self) -> Result<()> {
         self.hypervisor.shutdown().await.map_err(|e| {
             error!("Failed to shut down hypervisor: {e}");
@@ -124,6 +154,7 @@ impl Service {
         Ok(())
     }
 
+    #[must_use]
     pub fn hypervisor(&self) -> &HypervisorInstance {
         &self.hypervisor
     }

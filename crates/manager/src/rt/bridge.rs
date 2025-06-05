@@ -42,6 +42,7 @@ pub struct Bridge {
 }
 
 impl Bridge {
+    #[must_use]
     pub fn new(runtime_dir: PathBuf, service_name: String, db: RocksDb) -> Self {
         Self {
             runtime_dir,
@@ -50,11 +51,13 @@ impl Bridge {
         }
     }
 
+    #[must_use]
     pub fn base_socket_path(&self) -> PathBuf {
         let sock_name = format!("{}.sock", self.service_name);
         self.runtime_dir.join(sock_name)
     }
 
+    #[must_use]
     fn guest_socket_path(&self) -> PathBuf {
         let sock_name = format!("{}.sock_{VSOCK_PORT}", self.service_name);
         self.runtime_dir.join(sock_name)
@@ -62,6 +65,13 @@ impl Bridge {
 }
 
 impl Bridge {
+    /// Spawn the bridge instance
+    ///
+    /// # Errors
+    ///
+    /// * Unable to bind to the socket, possibly an issue with the [`HypervisorInstance`] startup.
+    ///
+    /// [HypervisorInstance]: crate::rt::hypervisor::HypervisorInstance
     pub fn spawn(self) -> Result<(BridgeHandle, oneshot::Receiver<()>), Error> {
         let sock_path = self.guest_socket_path();
         let _ = std::fs::remove_file(&sock_path);
@@ -311,6 +321,8 @@ impl BlueprintManagerBridge for BridgeService {
     }
 }
 
+// TODO: Actually allocate a port to the VM
+#[expect(clippy::unused_async, reason = "This isn't actually setup yet")]
 async fn allocate_host_port(hint: u16) -> Result<u16, tonic::Status> {
     let listener = std::net::TcpListener::bind(format!("0.0.0.0:{hint}"))
         .map_err(|e| tonic::Status::unavailable(e.to_string()))?;

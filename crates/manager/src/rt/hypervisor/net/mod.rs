@@ -20,6 +20,7 @@ pub struct Lease {
 }
 
 impl Lease {
+    #[must_use]
     pub fn addr(&self) -> Ipv4Addr {
         self.addr
     }
@@ -49,6 +50,14 @@ pub struct NetworkManager {
 }
 
 impl NetworkManager {
+    /// Create a new `NetworkManager`
+    ///
+    /// This will take a snapshot of all currently occupied addresses.
+    ///
+    /// # Errors
+    ///
+    /// * Unable to start a `NetLink` connection
+    /// * Unable to check used addresses
     pub async fn new(candidates: Vec<Ipv4Addr>) -> Result<Self> {
         let (conn, handle, msgs) = new_connection()?;
         let conn_task_handle = tokio::spawn(conn);

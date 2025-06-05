@@ -63,6 +63,13 @@ pub struct HypervisorInstance {
 }
 
 impl HypervisorInstance {
+    /// Create a new `HypervisorInstance`
+    ///
+    /// # Errors
+    ///
+    /// * Unable to create log files in `cache_dir`
+    /// * Unable to start a `cloud-hypervisor` instance
+    ///     * In this case, the issue may be logged in `<cache_dir>/<service_name>.log.stderr`
     pub fn new(
         config: ServiceVmConfig,
         cache_dir: impl AsRef<Path>,
@@ -185,7 +192,7 @@ impl HypervisorInstance {
             current_dir.children.push(CopiedEntry::File(CopiedFile {
                 target_name: entry.file_name().to_string_lossy().into_owned(),
                 source: FileSource::Fs(entry.path().to_path_buf()),
-            }))
+            }));
         }
 
         entries.push(CopiedEntry::Dir(keystore_dir));
@@ -264,6 +271,18 @@ impl HypervisorInstance {
         Ok(image_path)
     }
 
+    /// Configure the VM for boot
+    ///
+    /// # Errors
+    ///
+    /// * Unable to create the service or cloud-init FAT fs disks
+    /// * Unable to create the QCOW data disk (possible storage exhaustion)
+    /// * Unable to allocate an IPv4 address (possible pool exhaustion), see [`NetworkManager`]
+    /// * Unable to create the VM, possibly a bad configuration
+    ///
+    /// See also:
+    /// * [`Self::client()`]
+    /// * [`CloudImage::fetch()`]
     #[allow(clippy::too_many_arguments)]
     pub async fn prepare(
         &mut self,
@@ -417,6 +436,12 @@ impl HypervisorInstance {
         (serial, virtio_console, "ttyS0")
     }
 
+    /// Boot the virtual machine
+    ///
+    /// # Errors
+    ///
+    /// * This will error if the VM cannot be booted for any reason
+    /// * See [`Self::client()`]
     pub async fn start(&mut self) -> Result<()> {
         info!("Booting VM...");
 
@@ -432,6 +457,11 @@ impl HypervisorInstance {
         Ok(())
     }
 
+    /// Connect to the configured VMM socket
+    ///
+    /// # Errors
+    ///
+    /// * This will error if it is unable to ping the VMM
     pub async fn client(&self) -> Result<SocketBasedApiClient> {
         let client = socket_based_api_client(&self.sock_path);
 
@@ -442,6 +472,14 @@ impl HypervisorInstance {
         Ok(client)
     }
 
+    /// Shutdown the VM
+    ///
+    /// If the VM fails to shut down within the grace period, it, along with the VMM, will be killed.
+    ///
+    /// # Errors
+    ///
+    /// * This will error if it unable to send a shutdown signal to the VM
+    /// * See [`Self::client()`]
     #[allow(clippy::cast_possible_wrap)]
     pub async fn shutdown(mut self) -> Result<()> {
         const VM_SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(30);
@@ -495,6 +533,12 @@ impl HypervisorInstance {
         Ok(())
     }
 
+    /// Get the pty path, if the VM is configured to output to one
+    ///
+    /// # Errors
+    ///
+    /// * Unable to fetch VM info
+    /// * See [`Self::client()`]
     pub async fn pty(&self) -> Result<Option<PathBuf>> {
         let client = self.client().await?;
         let info = client

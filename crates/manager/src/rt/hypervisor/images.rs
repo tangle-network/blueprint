@@ -21,8 +21,16 @@ const FILES: &[(&str, &str)] = &[
 ];
 
 // Give each VM a 20GB rootfs
-const ALLOCATED_IMAGE_SIZE: u64 = 1024 * 1024 * 1024 * 20;
+pub const ALLOCATED_IMAGE_SIZE: u64 = 1024 * 1024 * 1024 * 20;
 
+/// Download the Ubuntu cloud image if it is missing
+///
+/// This will place the Ubuntu disk, vmlinuz, and initrd in `cache_dir`.
+///
+/// # Errors
+///
+/// * Unable to download the image (network error)
+/// * Unable to write the image to disk
 pub async fn download_image_if_needed(cache_dir: impl AsRef<Path>) -> Result<()> {
     let cache = cache_dir.as_ref();
 
@@ -51,6 +59,15 @@ pub struct CloudImage {
 }
 
 impl CloudImage {
+    /// Fetch and allocate an Ubuntu cloud disk image
+    ///
+    /// This will place an image of size [`ALLOCATED_IMAGE_SIZE`] into `data_dir`.
+    ///
+    /// # Errors
+    ///
+    /// * Unable to convert the Ubuntu image to a raw format
+    /// * Unable to resize the Ubuntu image
+    /// * See [`download_image_if_needed()`]
     pub async fn fetch(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Path>) -> Result<Self> {
         let cache = cache_dir.as_ref();
         download_image_if_needed(cache).await?;
