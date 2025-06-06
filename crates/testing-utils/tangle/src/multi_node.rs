@@ -659,7 +659,7 @@ where
         self.test_env.write().await.set_qos_config(config);
     }
 
-    pub async fn set_qos_service(&self, service: QoSService<C>) {
+    pub async fn set_qos_service(&self, service: Arc<QoSService<C>>) {
         self.test_env.write().await.set_qos_service(service);
     }
 

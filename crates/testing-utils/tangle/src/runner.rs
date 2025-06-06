@@ -30,7 +30,7 @@ where
     pub env: BlueprintEnvironment,
     pub runner_handle: Mutex<Option<JoinHandle<Result<(), Error>>>>,
     pub qos_config: Option<QoSConfig>,
-    pub qos_service: Option<Arc<Mutex<Option<QoSService<C>>>>>,
+    pub qos_service: Option<Arc<QoSService<C>>>,
 }
 
 impl<Ctx, C> TangleTestEnv<Ctx, C>
@@ -51,8 +51,8 @@ where
         self.qos_config = Some(config);
     }
     /// Set the QoS service for this test environment
-    pub fn set_qos_service(&mut self, service: QoSService<C>) {
-        self.qos_service = Some(Arc::new(Mutex::new(Some(service))));
+    pub fn set_qos_service(&mut self, service: Arc<QoSService<C>>) {
+        self.qos_service = Some(service);
     }
 
     // TODO(serial): This needs to return errors. Too many chances to panic here. Not helpful.
@@ -145,8 +145,8 @@ where
     async fn run_runner(&mut self, context: Self::Context) -> Result<(), Error> {
         // Spawn the runner in a background task
         let mut runner = self.runner.take().expect("Runner already running");
-        if let Some(qos_service) = self.qos_service.take() {
-            runner.qos_service(qos_service).await;
+        if let Some(qos_service_arc) = &self.qos_service {
+            runner.qos_service(qos_service_arc.clone());
         }
 
         let handle = tokio::spawn(async move { runner.run(context).await });

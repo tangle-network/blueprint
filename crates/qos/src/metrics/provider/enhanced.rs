@@ -68,21 +68,31 @@ impl EnhancedMetricsProvider {
             )?,
         );
 
-        // Create an OpenTelemetry exporter, passing the shared registry
-        let opentelemetry_exporter = Arc::new(OpenTelemetryExporter::new(
-            &shared_registry, // Pass as reference, assuming OTelExporter::new takes &Registry
-            otel_config,
-            &metrics_config,
-        )?);
+        // Create an OpenTelemetry exporter. It now manages its own internal registry for OTel metrics.
+        let otel_exporter_instance = OpenTelemetryExporter::new(otel_config)?;
+
+        // Get the collector adapter from the OpenTelemetryExporter.
+        // This adapter will allow the main shared_registry to collect metrics from OTel's internal registry.
+        let otel_collector_adapter = otel_exporter_instance.get_collector_adapter();
+
+        // Register the OTel collector adapter with the main shared_registry.
+        shared_registry.register(Box::new(otel_collector_adapter))
+            .map_err(|e| crate::error::Error::Other(format!(
+                "Failed to register OTel Prometheus collector adapter with shared registry: {}", e
+            )))?;
+        info!("Registered OTel collector adapter with shared Prometheus registry.");
+
+        // Store the OpenTelemetryExporter instance (wrapped in Arc) in the provider.
+        let opentelemetry_exporter = Arc::new(otel_exporter_instance);
         info!(
-            "Created OpenTelemetryExporter in EnhancedMetricsProvider: {:?}",
+            "Created and configured OpenTelemetryExporter in EnhancedMetricsProvider: {:?}",
             opentelemetry_exporter
         );
 
         // Create an OpenTelemetry counter for job executions
         let otel_job_executions_counter = opentelemetry_exporter
             .meter()
-            .u64_counter("blueprint_job_executions")
+            .u64_counter("otel_blueprint_job_executions")
             .with_description("Total number of job executions recorded via OTel")
             .build();
         info!("Created otel_job_executions_counter in EnhancedMetricsProvider");

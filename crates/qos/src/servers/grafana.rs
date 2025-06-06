@@ -6,6 +6,7 @@ use tokio_retry::{Retry, strategy::ExponentialBackoff};
 
 use crate::error::{Error, Result};
 use crate::logging::GrafanaConfig;
+use crate::logging::loki::LokiConfig;
 use crate::servers::ServerManager;
 use crate::servers::common::DockerManager;
 
@@ -34,6 +35,9 @@ pub struct GrafanaServerConfig {
 
     /// Container name
     pub container_name: String,
+
+    /// Optional Loki configuration to be used by the Grafana client.
+    pub loki_config: Option<LokiConfig>,
 }
 
 impl Default for GrafanaServerConfig {
@@ -46,6 +50,7 @@ impl Default for GrafanaServerConfig {
             anonymous_role: "Admin".to_string(),
             data_dir: "/var/lib/grafana".to_string(),
             container_name: "blueprint-grafana".to_string(),
+            loki_config: None,
         }
     }
 }
@@ -83,6 +88,7 @@ impl GrafanaServer {
             folder: None,
             admin_user: Some(self.config.admin_user.clone()),
             admin_password: Some(self.config.admin_password.clone()),
+            loki_config: self.config.loki_config.clone(),
         }
     }
 }

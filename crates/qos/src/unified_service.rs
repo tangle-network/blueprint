@@ -12,6 +12,7 @@ use crate::metrics::service::MetricsService;
 use crate::servers::{
     ServerManager, grafana::GrafanaServer, loki::LokiServer, prometheus::PrometheusServer,
 };
+use tokio::sync::RwLock;
 
 /// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality
 pub struct QoSService<C>
@@ -20,10 +21,10 @@ where
 {
     /// Heartbeat service
     #[allow(dead_code)]
-    heartbeat_service: Option<HeartbeatService<C>>,
+    heartbeat_service: Option<Arc<HeartbeatService<C>>>, // Changed to Arc
 
     /// Metrics service
-    metrics_service: Option<MetricsService>,
+    metrics_service: Option<Arc<MetricsService>>, // Changed to Arc
 
     /// Grafana client
     grafana_client: Option<Arc<GrafanaClient>>,
@@ -41,7 +42,7 @@ where
     prometheus_server: Option<Arc<PrometheusServer>>,
 
     /// Oneshot sender to signal completion when this service is dropped.
-    completion_tx: Option<tokio::sync::oneshot::Sender<Result<()>>>,
+    completion_tx: RwLock<Option<tokio::sync::oneshot::Sender<Result<()>>>>,
 }
 
 impl<C> QoSService<C>
@@ -54,14 +55,13 @@ where
     /// Returns an error if the metrics service initialization fails
     pub async fn new(config: QoSConfig, heartbeat_consumer: Arc<C>) -> Result<Self> {
         // Initialize heartbeat service if configured
-        let heartbeat_service = config
-            .heartbeat
-            .clone()
-            .map(|config| HeartbeatService::new(config, heartbeat_consumer));
+        let _heartbeat_service = config.heartbeat.clone().map(|hc_config| {
+            Arc::new(HeartbeatService::new(hc_config, heartbeat_consumer.clone()))
+        });
 
         // Initialize metrics service if configured
         let metrics_service = if let Some(metrics_config) = config.metrics.clone() {
-            Some(MetricsService::new(metrics_config)?)
+            Some(Arc::new(MetricsService::new(metrics_config)?))
         } else {
             None
         };
@@ -152,13 +152,28 @@ where
 
         // Update Grafana client if we are managing servers
         let grafana_client = if let Some(server) = &grafana_server {
-            Some(Arc::new(GrafanaClient::new(server.client_config())))
+            let mut client_grafana_config = server.client_config();
+            client_grafana_config.loki_config = config.loki.clone(); // Populate LokiConfig
+            Some(Arc::new(GrafanaClient::new(client_grafana_config)))
         } else {
-            config
-                .grafana
-                .as_ref()
-                .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())))
+            config.grafana.as_ref().map(|user_grafana_config| {
+                let mut client_grafana_config = user_grafana_config.clone();
+                client_grafana_config.loki_config = config.loki.clone(); // Populate LokiConfig
+                Arc::new(GrafanaClient::new(client_grafana_config))
+            })
         };
+
+        // Initialize MetricsService
+        let metrics_service = if let Some(ref mc) = config.metrics {
+            Some(Arc::new(MetricsService::new(mc.clone())?))
+        } else {
+            None
+        };
+
+        // Initialize HeartbeatService
+        let heartbeat_service = config.heartbeat.clone().map(|hc_config| {
+            Arc::new(HeartbeatService::new(hc_config, heartbeat_consumer.clone()))
+        });
 
         Ok(Self {
             heartbeat_service,
@@ -168,7 +183,7 @@ where
             grafana_server,
             loki_server,
             prometheus_server,
-            completion_tx: None,
+            completion_tx: RwLock::new(None),
         })
     }
 
@@ -182,20 +197,15 @@ where
         otel_config: OpenTelemetryConfig,
     ) -> Result<Self> {
         // Initialize heartbeat service if configured
-        let heartbeat_service = config
-            .heartbeat
-            .clone()
-            .map(|config| HeartbeatService::new(config, heartbeat_consumer));
+        let _heartbeat_service = config.heartbeat.clone().map(|hc_config| {
+            Arc::new(HeartbeatService::new(hc_config, heartbeat_consumer.clone()))
+        });
 
         // Initialize metrics service if configured
-        let metrics_service = if let Some(metrics_config) = config.metrics.clone() {
-            Some(MetricsService::with_otel_config(
-                metrics_config,
-                otel_config,
-            )?)
-        } else {
-            None
-        };
+        let metrics_service = Some(Arc::new(MetricsService::with_otel_config(
+            config.metrics.clone().unwrap_or_default(),
+            otel_config,
+        )?));
 
         // Initialize Loki logging if configured
         if let Some(loki_config) = &config.loki {
@@ -261,32 +271,43 @@ where
                     info!("Prometheus server started successfully");
                 }
             }
-
+            // Return the tuple of server instances
             (grafana_server, loki_server, prometheus_server)
         } else {
             (None, None, None)
+        }; // Closes the server management if/else block
+
+        // Initialize Grafana client
+        let grafana_client = if let Some(server) = &grafana_server {
+            let mut client_grafana_config = server.client_config();
+            client_grafana_config.loki_config = config.loki.clone();
+            Some(Arc::new(GrafanaClient::new(client_grafana_config)))
+        } else {
+            config.grafana.as_ref().map(|user_grafana_config| {
+                let mut client_grafana_config = user_grafana_config.clone();
+                client_grafana_config.loki_config = config.loki.clone();
+                Arc::new(GrafanaClient::new(client_grafana_config))
+            })
         };
 
-        // Update Grafana client if we are managing servers
-        let grafana_client = if let Some(server) = &grafana_server {
-            Some(Arc::new(GrafanaClient::new(server.client_config())))
-        } else {
-            // Otherwise use the provided config
-            config
-                .grafana
-                .as_ref()
-                .map(|grafana_config| Arc::new(GrafanaClient::new(grafana_config.clone())))
-        };
+        // METRICS SERVICE IS ALREADY INITIALIZED at the top of this function using the explicit otel_config.
+        // The local 'metrics_service' variable (which is an Option<Arc<MetricsService>>) correctly holds this instance.
+        // DO NOT RE-INITIALIZE OR OVERWRITE 'metrics_service' here.
+
+        // Initialize HeartbeatService
+        let heartbeat_service = config.heartbeat.clone().map(|hc_config| {
+            Arc::new(HeartbeatService::new(hc_config, heartbeat_consumer.clone()))
+        });
 
         Ok(Self {
             heartbeat_service,
             metrics_service,
             grafana_client,
             dashboard_url: None,
-            grafana_server,
+            grafana_server, // These are Option<Arc<ServerType>> from the manage_servers block
             loki_server,
             prometheus_server,
-            completion_tx: None,
+            completion_tx: RwLock::new(None),
         })
     }
 
@@ -366,8 +387,10 @@ where
 
             if !loki_datasource_uid.is_empty() {
                 let loki_ds_name = "Blueprint Loki";
-                let loki_url = self.loki_server_url().unwrap_or_else(|| {
-                    blueprint_core::warn!("Loki server URL not available for Grafana data source creation, defaulting to http://localhost:3100");
+                let loki_url = self.loki_server_url().or_else(|| {
+                    client.config().loki_config.as_ref().map(|lc| lc.url.clone())
+                }).unwrap_or_else(|| {
+                    blueprint_core::warn!("Loki server URL not available from managed server or Grafana config, defaulting to http://localhost:3100 for Grafana data source creation");
                     "http://localhost:3100".to_string()
                 });
 
@@ -436,7 +459,7 @@ where
     pub fn metrics_provider(&self) -> Option<Arc<EnhancedMetricsProvider>> {
         self.metrics_service
             .as_ref()
-            .map(super::metrics::service::MetricsService::provider)
+            .map(|arc_service| arc_service.provider())
     }
 
     /// Get a clone of the OpenTelemetry job executions counter, if the metrics service is available.
@@ -503,7 +526,7 @@ where
     /// Get the heartbeat service if available
     #[must_use]
     pub fn heartbeat_service(&self) -> Option<&HeartbeatService<C>> {
-        self.heartbeat_service.as_ref()
+        self.heartbeat_service.as_ref().map(Arc::as_ref)
     }
 
     /// Debug method to check if servers are initialized
@@ -529,13 +552,14 @@ where
     /// Sets the oneshot sender that will be used to signal completion when this QoSService is dropped.
     /// This is typically called by an adapter (e.g., QoSServiceAdapter) when integrating QoSService
     /// into a runner framework that expects a completion signal.
-    pub fn set_completion_sender(&mut self, tx: tokio::sync::oneshot::Sender<Result<()>>) {
-        if self.completion_tx.is_some() {
+    pub async fn set_completion_sender(&self, tx: tokio::sync::oneshot::Sender<Result<()>>) {
+        let mut guard = self.completion_tx.write().await;
+        if guard.is_some() {
             blueprint_core::warn!(
                 "[QoSService::set_completion_sender] Completion sender was already set. Overwriting."
             );
         }
-        self.completion_tx = Some(tx);
+        *guard = Some(tx);
     }
 } // Closing brace for impl<C> QoSService<C>
 
@@ -566,7 +590,9 @@ where
         }
 
         // Signal completion if a sender was provided
-        if let Some(tx) = self.completion_tx.take() {
+        let mut sender_option_guard = self.completion_tx.blocking_write();
+
+        if let Some(tx) = sender_option_guard.take() {
             if tx.send(Ok(())).is_err() {
                 info!(
                     "[QoSService::Drop] Completion signal receiver was already dropped while sending Ok."

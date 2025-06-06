@@ -35,7 +35,7 @@ mod utils;
 const GRAFANA_PORT: u16 = 3000;
 const OPERATOR_COUNT: usize = 1; // Number of operators for the test
 const INPUT_VALUE: u64 = 5; // Value to square in our test job
-const TOTAL_JOBS_TO_RUN: u64 = 3; // Aim for ~70 seconds of active job processing
+const TOTAL_JOBS_TO_RUN: u64 = 10; // Aim for ~70 seconds of active job processing
 const JOB_INTERVAL_MS: u64 = 2000; // Time between job submissions in milliseconds (2 seconds)
 const PROMETHEUS_BLUEPRINT_UID: &str = "prometheus_blueprint_default";
 const LOKI_BLUEPRINT_UID: &str = "loki_blueprint_default";
@@ -607,6 +607,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         admin_user: Some("admin".to_string()),
         admin_password: Some("admin".to_string()),
         folder: None, // Default to no specific folder
+        loki_config: None,
     });
 
     // Configure metrics exposer to use 0.0.0.0 for accessibility from Docker containers
@@ -714,6 +715,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         admin_user: Some("admin".to_string()),
         admin_password: Some("admin".to_string()),
         folder: None,
+        loki_config: None, // Added missing field
     };
     qos_config.grafana = Some(blueprint_qos::logging::grafana::GrafanaConfig {
         url: "http://localhost:3000".to_string(),
@@ -726,7 +728,26 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         .unwrap();
 
     info!("Creating QoS service...");
-    qos_service.debug_server_status();
+    // --- BEGIN NEW CODE ---
+    info!("Wrapping QoSService in Arc and setting it on test environment node handles...");
+    let qos_service_arc = Arc::new(qos_service);
+
+    let nodes = test_env.nodes.read().await;
+    for (i, node_slot) in nodes.iter().enumerate() {
+        match node_slot {
+            NodeSlot::Occupied(node_handle) => {
+                info!("Setting QoS service for node handle {}...", i);
+                node_handle.set_qos_service(qos_service_arc.clone()).await;
+            }
+            NodeSlot::Empty => {
+                warn!("Node slot {} is empty, skipping QoS service setup.", i);
+            }
+        }
+    }
+    info!("QoS service set on all active node handles.");
+    // --- END NEW CODE ---
+
+    qos_service_arc.debug_server_status();
 
     // info!(
     //     "Waiting 15 seconds to ensure services are fully started and Prometheus has collected initial metrics data..."
@@ -738,10 +759,14 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
 
     // The native Prometheus server runs on the host at 127.0.0.1:9091 (configured earlier).
     // Grafana (in Docker) will access this via host.docker.internal.
-    let prometheus_datasource_url = "http://host.docker.internal:9091".to_string();
+    let prometheus_datasource_url = format!("http://{}:9091", "host.docker.internal");
 
     // When using a custom network, try container name first, then fallback to container IP or localhost
 
+    info!(
+        "Attempting to configure Grafana Prometheus datasource to scrape: {}",
+        prometheus_datasource_url
+    );
     info!(
         "Using Prometheus datasource URL for Grafana: {}",
         prometheus_datasource_url
@@ -771,7 +796,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         };
 
         // Create the datasource directly using the GrafanaClient to ensure it exists
-        if let Some(grafana_client) = qos_service.grafana_client() {
+        if let Some(grafana_client) = qos_service_arc.grafana_client() {
             info!(
                 "Creating or updating Prometheus datasource with URL: {}",
                 prometheus_url
@@ -926,7 +951,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     info!("QoSService has started a Grafana instance");
 
     // Get the Grafana server URL (this verifies Grafana is running)
-    if let Some(url) = qos_service.grafana_server_url() {
+    if let Some(url) = qos_service_arc.grafana_server_url() {
         info!("Grafana is running at: {}", url);
     } else {
         warn!("Grafana URL not available, but continuing");
@@ -1115,7 +1140,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         json_data: Some(serde_json::json!({"maxLines": 1000})),
     };
 
-    if let Some(grafana_client) = qos_service.grafana_client() {
+    if let Some(grafana_client) = qos_service_arc.grafana_client() {
         match grafana_client.create_or_update_datasource(loki_ds).await {
             Ok(response) => info!("Successfully created Loki datasource: {}", response.name),
             Err(e) => error!("Failed to create Loki datasource: {}", e),
@@ -1127,7 +1152,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     info!("Creating dashboard with pre-configured datasources using direct method...");
 
     // Use grafana_client directly to create dashboard without recreating datasources
-    if let Some(grafana_client) = qos_service.grafana_client() {
+    if let Some(grafana_client) = qos_service_arc.grafana_client() {
         match grafana_client
             .create_blueprint_dashboard(
                 service_id,
@@ -1150,13 +1175,14 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     } else {
         warn!("No Grafana client available to create dashboard");
     };
-    let otel_job_counter = qos_service
-        .get_otel_job_executions_counter()
-        .expect("OTel job counter should be available from QoSService after starting services");
+    let otel_job_counter = qos_service_arc
+        .metrics_provider()
+        .expect("Metrics provider should be configured and available in QoSService")
+        .get_otel_job_executions_counter();
     info!("Successfully fetched otel_job_counter from QoSService");
 
     // Set the QoSService on the NodeHandle (this moves qos_service)
-    node_handle.set_qos_service(qos_service).await;
+    node_handle.set_qos_service(qos_service_arc.clone()).await;
     info!("QoS Service has been set on NodeHandle");
 
     // Start the BlueprintRunner
@@ -1298,16 +1324,20 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
 
     // Verify OTel metrics are exposed
     info!("Verifying OTel metrics from embedded Prometheus server on port 9091...");
-    let metrics_url = "http://localhost:9091/metrics";
+    // Add a small delay to allow metrics to propagate through the OTel SDK pipeline
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    info!("Delay complete, fetching metrics...");
+    let metrics_url = "http://127.0.0.1:9091/metrics";
     match reqwest::get(metrics_url).await {
         Ok(response) => {
             if response.status().is_success() {
                 match response.text().await {
                     Ok(metrics_text) => {
                         info!("Successfully fetched /metrics content.");
+                        // Basic check for metric name presence. Refine later for full label set and value.
                         assert!(
-                            metrics_text.contains("blueprint_job_executions_total"),
-                            "OTel metric 'blueprint_job_executions_total' not found in /metrics output. Full output:\n{}",
+                            metrics_text.contains("otel_blueprint_job_executions_total"),
+                            "OTel metric 'otel_blueprint_job_executions_total' (substring check) not found in /metrics output. Full output:\n{}",
                             metrics_text
                         );
 
@@ -1383,7 +1413,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
 
     // Keep server running for a few seconds to allow viewing metrics
     info!("Attempting to query Prometheus from within Grafana container...");
-    let prom_query = "blueprint_job_executions_total{service_id=\"0\",blueprint_id=\"0\",otel_scope_name=\"blueprint_metrics\"}";
+    let prom_query = "otel_blueprint_job_executions_total{service_id=\"0\",blueprint_id=\"0\",otel_scope_name=\"blueprint_metrics\"}";
     let curl_command = format!(
         "curl -s 'http://host.docker.internal:9091/api/v1/query?query={}'",
         urlencoding::encode(prom_query)

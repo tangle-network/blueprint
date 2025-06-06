@@ -62,6 +62,8 @@ impl PrometheusServer {
             .route("/api/v1/query", get(api_v1_query_handler))
             .route("/api/v1/labels", get(api_v1_labels_handler))
             .route("/api/v1/metadata", get(api_v1_metadata_handler))
+            .route("/api/v1/series", get(api_v1_series_handler))
+            .route("/api/v1/query_range", get(api_v1_query_range_handler))
             .with_state(state);
 
         let (tx, rx) = oneshot::channel();
@@ -175,6 +177,31 @@ async fn api_v1_metadata_handler() -> (StatusCode, Json<serde_json::Value>) {
     let response_body = serde_json::json!({
         "status": "success",
         "data": {}
+    });
+    (StatusCode::OK, Json(response_body))
+}
+
+/// Handler for /api/v1/series endpoint
+///
+/// Returns an empty list of series, conforming to Prometheus API.
+async fn api_v1_series_handler() -> (StatusCode, Json<serde_json::Value>) {
+    let response_body = serde_json::json!({
+        "status": "success",
+        "data": []
+    });
+    (StatusCode::OK, Json(response_body))
+}
+
+/// Handler for /api/v1/query_range endpoint
+///
+/// Returns an empty matrix result, conforming to Prometheus API.
+async fn api_v1_query_range_handler() -> (StatusCode, Json<serde_json::Value>) {
+    let response_body = serde_json::json!({
+        "status": "success",
+        "data": {
+            "resultType": "matrix",
+            "result": []
+        }
     });
     (StatusCode::OK, Json(response_body))
 }

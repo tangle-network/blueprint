@@ -3,7 +3,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::error::{Error, Result};
+use super::loki::LokiConfig;
+use crate::error::{Error, Result}; // Adjusted import path assuming loki.rs is in the same logging module
 
 // Health check response structures
 #[derive(Debug, Deserialize, Clone)]
@@ -55,6 +56,9 @@ pub struct GrafanaConfig {
 
     /// Default dashboard folder
     pub folder: Option<String>,
+
+    /// Configuration for the Loki datasource, if Grafana is expected to use one.
+    pub loki_config: Option<LokiConfig>,
 }
 
 impl Default for GrafanaConfig {
@@ -66,6 +70,7 @@ impl Default for GrafanaConfig {
             admin_password: None,
             org_id: None,
             folder: None,
+            loki_config: None,
         }
     }
 }
@@ -413,6 +418,11 @@ impl GrafanaClient {
             .unwrap_or_default();
 
         Self { client, config }
+    }
+
+    /// Returns a reference to the Grafana client's configuration.
+    pub fn config(&self) -> &GrafanaConfig {
+        &self.config
     }
 
     /// Create or update a Grafana dashboard
@@ -1038,6 +1048,7 @@ mod tests {
             admin_password: Some("password".to_string()),
             org_id: Some(1),
             folder: None,
+            loki_config: None,
         };
 
         let _client = GrafanaClient::new(config.clone());

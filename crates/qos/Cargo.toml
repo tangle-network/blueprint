@@ -32,7 +32,7 @@ prometheus = { workspace = true, features = ["process"] }
 opentelemetry = { workspace = true, features = ["metrics"] }
 opentelemetry-prometheus = { workspace = true }
 opentelemetry-semantic-conventions = { workspace = true, features = ["semconv_experimental"] }
-opentelemetry_sdk = { workspace = true, default-features = true, features = ["metrics", "rt-tokio", "trace"] }
+opentelemetry_sdk = { workspace = true, features = ["metrics", "rt-tokio", "trace"] }
 axum = { workspace = true, features = ["tokio", "http1", "http2", "json"] }
 hyper = { workspace = true, features = ["http1", "server"] }
 futures = { workspace = true, features = ["executor"] }

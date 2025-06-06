@@ -1,104 +1,179 @@
-use blueprint_core::info;
-use opentelemetry::global::set_meter_provider;
-use opentelemetry::metrics::MeterProvider as _; // Import the trait
-// Note: GlobalMeterProviderGuard does not seem to exist for the current opentelemetry version.
-use opentelemetry::KeyValue;
-use opentelemetry_sdk::metrics::SdkMeterProvider;
-use opentelemetry_semantic_conventions::resource::{
-    SERVICE_INSTANCE_ID, SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION,
-};
-use prometheus::Registry;
 use std::sync::Arc;
+use std::fmt::Debug;
 
-use crate::error::{Error, Result};
-use crate::metrics::types::MetricsConfig;
+use blueprint_core::info;
+use opentelemetry::KeyValue;
+use opentelemetry::metrics::{Meter, MeterProvider as _}; 
+use opentelemetry_sdk::metrics::SdkMeterProvider;
+use opentelemetry_sdk::Resource;
+use opentelemetry_semantic_conventions as semcov;
+use serde::{Deserialize, Serialize}; 
+use uuid::Uuid;
 
-/// OpenTelemetry exporter configuration
-#[derive(Clone, Debug)]
+use crate::error::{Error, Result}; 
+
+use opentelemetry::metrics::{MetricsError, Result as OTelMetricsResult};
+use opentelemetry_prometheus::PrometheusExporter;
+use opentelemetry_sdk::metrics::data::ResourceMetrics;
+use opentelemetry_sdk::metrics::{Aggregation, AggregationSelector, InstrumentKind, MetricReader, Pipeline, Temporality, TemporalitySelector};
+use prometheus::{core::Collector as PrometheusCollectorTrait, core::Desc as PrometheusDesc, proto::MetricFamily as PrometheusMetricFamily};
+
+// Adapter to use Arc<PrometheusExporter> as a MetricReader
+#[derive(Debug, Clone)]
+struct ArcPrometheusReader(Arc<PrometheusExporter>);
+
+impl TemporalitySelector for ArcPrometheusReader {
+    fn temporality(&self, kind: InstrumentKind) -> Temporality {
+        self.0.temporality(kind)
+    }
+}
+
+impl AggregationSelector for ArcPrometheusReader {
+    fn aggregation(&self, kind: InstrumentKind) -> Aggregation {
+        self.0.aggregation(kind)
+    }
+}
+
+impl MetricReader for ArcPrometheusReader {
+    fn register_pipeline(&self, pipeline: std::sync::Weak<Pipeline>) {
+        self.0.register_pipeline(pipeline)
+    }
+
+    fn collect(&self, rm: &mut ResourceMetrics) -> OTelMetricsResult<()> {
+        self.0.collect(rm)
+    }
+
+    fn force_flush(&self) -> OTelMetricsResult<()> {
+        self.0.force_flush(&opentelemetry::Context::current())
+    }
+
+    fn shutdown(&self) -> OTelMetricsResult<()> {
+        self.0.shutdown()
+    }
+}
+
+// Adapter to use Arc<PrometheusExporter> as a prometheus::Collector
+#[derive(Debug, Clone)]
+pub struct ArcPrometheusCollector(Arc<PrometheusExporter>);
+
+impl PrometheusCollectorTrait for ArcPrometheusCollector {
+    fn desc(&self) -> Vec<&PrometheusDesc> {
+        self.0.desc()
+    }
+
+    fn collect(&self) -> Vec<PrometheusMetricFamily> {
+        self.0.collect()
+    }
+}
+
+
+/// Name for the OpenTelemetry meter used within the Blueprint system.
+const OTEL_METER_NAME: &str = "blueprint_metrics";
+
+// --- OpenTelemetryExporter ---
+
+/// Configuration for the OpenTelemetry exporter.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)] 
 pub struct OpenTelemetryConfig {
+    /// Service name to be used in OpenTelemetry resource attributes.
     pub service_name: String,
+    /// Service version to be used in OpenTelemetry resource attributes.
     pub service_version: String,
+    /// Service instance ID to be used in OpenTelemetry resource attributes.
     pub service_instance_id: String,
+    /// Service namespace to be used in OpenTelemetry resource attributes.
     pub service_namespace: String,
 }
 
 impl Default for OpenTelemetryConfig {
     fn default() -> Self {
         Self {
-            service_name: "blueprint".to_string(),
-            service_version: env!("CARGO_PKG_VERSION").to_string(),
-            service_instance_id: uuid::Uuid::new_v4().to_string(),
-            service_namespace: "tangle".to_string(),
+            service_name: "blueprint_service".to_string(),
+            service_version: "0.1.0".to_string(),
+            service_instance_id: Uuid::new_v4().to_string(),
+            service_namespace: "blueprint_namespace".to_string(),
         }
     }
 }
 
-/// OpenTelemetry exporter
+/// `OpenTelemetryExporter` sets up and manages the OpenTelemetry metrics pipeline,
+/// including a Prometheus exporter.
 #[derive(Debug)]
 pub struct OpenTelemetryExporter {
-    /// The OpenTelemetry SdkMeterProvider wrapped in an Arc for sharing.
-    /// This provider is configured with the Prometheus exporter and a resource.
     meter_provider: Arc<SdkMeterProvider>,
-    /// Meter
-    meter: opentelemetry::metrics::Meter,
-    /// Configuration
-    #[allow(dead_code)]
+    pub meter: opentelemetry::metrics::Meter,
     config: OpenTelemetryConfig,
+    shared_prometheus_exporter: Arc<PrometheusExporter>, // Store the Arc'd exporter
 }
 
 impl OpenTelemetryExporter {
-    /// Create a new OpenTelemetry exporter
+    /// Creates a new `OpenTelemetryExporter`.
+    ///
+    /// This function initializes an OpenTelemetry `SdkMeterProvider` configured with an
+    /// adapter for a `PrometheusExporter`. The `PrometheusExporter` uses its own internal
+    /// default registry. The created `SdkMeterProvider` is also set as the global
+    /// meter provider for the application.
+    ///
+    /// # Arguments
+    /// * `otel_config`: Configuration for OpenTelemetry resource attributes.
     ///
     /// # Errors
-    /// Returns an error if the OpenTelemetry meter provider or tracer provider initialization fails
-    pub fn new(
-        registry: &Registry,
-        otel_config: OpenTelemetryConfig,
-        _metrics_config: &MetricsConfig,
-    ) -> Result<Self> {
-        // 1. Create the PrometheusExporter (MetricReader) first.
-        let prometheus_exporter = opentelemetry_prometheus::exporter()
-            .with_registry(registry.clone())
-            .build() // Build the exporter itself
-            .map_err(|e| Error::Other(format!("Failed to create OpenTelemetry exporter: {}", e)))?;
+    /// Returns an `Error` if the setup of the OpenTelemetry pipeline or Prometheus exporter fails.
+    pub fn new(otel_config: OpenTelemetryConfig) -> Result<Self> { 
+        info!("Creating OpenTelemetryExporter with config: {:?}", otel_config);
 
-        // 2. Create a Resource for the SdkMeterProvider using the builder pattern.
+        // Define the OTel Resource attributes using the provided configuration.
         let resource_attributes = vec![
-            KeyValue::new(SERVICE_NAME, otel_config.service_name.clone()),
-            KeyValue::new(SERVICE_VERSION, otel_config.service_version.clone()),
-            KeyValue::new(SERVICE_INSTANCE_ID, otel_config.service_instance_id.clone()),
-            KeyValue::new(SERVICE_NAMESPACE, otel_config.service_namespace.clone()),
+            KeyValue::new(semcov::resource::SERVICE_NAME, otel_config.service_name.clone()),
+            KeyValue::new(semcov::resource::SERVICE_VERSION, otel_config.service_version.clone()),
+            KeyValue::new(
+                semcov::resource::SERVICE_INSTANCE_ID,
+                otel_config.service_instance_id.clone(),
+            ),
+            KeyValue::new(
+                semcov::resource::SERVICE_NAMESPACE,
+                otel_config.service_namespace.clone(),
+            ),
         ];
-        let resource = opentelemetry_sdk::resource::Resource::builder()
+        let resource = Resource::builder()
             .with_attributes(resource_attributes)
             .build();
 
-        // 3. Create the SdkMeterProvider, registering the exporter and resource with it.
+        // Create the PrometheusExporter instance. It will use its own default internal registry.
+        let actual_prom_exporter = opentelemetry_prometheus::exporter()
+            .build()
+            .map_err(|e| Error::Other(format!("Failed to build OTel PrometheusExporter: {}", e)))?;
+        
+        let shared_prom_exporter_arc = Arc::new(actual_prom_exporter);
+        let sdk_reader_adapter = ArcPrometheusReader(shared_prom_exporter_arc.clone());
+
+        info!("OTel PrometheusExporter instance created and wrapped in Arc. Adapter created for SdkMeterProvider.");
+        
         let meter_provider = SdkMeterProvider::builder()
-            .with_reader(prometheus_exporter) // Pass the exporter directly
-            .with_resource(resource) // Add the resource
+            .with_reader(sdk_reader_adapter) // Pass the adapter to the SDK
+            .with_resource(resource)
             .build();
-        info!("Built SdkMeterProvider in OpenTelemetryExporter");
 
-        // Set this meter provider as the global meter provider.
-        // The SdkMeterProvider itself (which is cloned and set) will keep the provider alive.
-        // Storing a guard seems unnecessary with current opentelemetry API (v0.22.x - v0.30.x).
-        set_meter_provider(meter_provider.clone());
-        info!("Set global meter provider.");
+        opentelemetry::global::set_meter_provider(meter_provider.clone());
 
-        // 4. Wrap SdkMeterProvider in Arc for storage and sharing.
-        let meter_provider_arc = Arc::new(meter_provider);
+        let meter = meter_provider.meter(OTEL_METER_NAME); // Use const &'static str for meter name
 
-        // 5. Create a meter from this provider.
-        let meter = meter_provider_arc.meter("blueprint_metrics");
-        info!("Created meter from SdkMeterProvider in OpenTelemetryExporter");
-        info!("Created OpenTelemetry exporter");
+        info!(
+            meter_name = %OTEL_METER_NAME,
+            "OpenTelemetryExporter created, global MeterProvider set."
+        );
 
-        Ok(Self {
-            meter_provider: meter_provider_arc,
+        Ok(OpenTelemetryExporter {
             meter,
+            meter_provider: Arc::new(meter_provider),
             config: otel_config,
+            shared_prometheus_exporter: shared_prom_exporter_arc,
         })
+    }
+
+    /// Returns a clone of the Arc-wrapped PrometheusExporter, adapted as a prometheus::Collector.
+    pub fn get_collector_adapter(&self) -> ArcPrometheusCollector {
+        ArcPrometheusCollector(self.shared_prometheus_exporter.clone())
     }
 
     /// Get the meter
