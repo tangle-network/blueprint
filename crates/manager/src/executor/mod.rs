@@ -9,7 +9,7 @@ use blueprint_auth::db::RocksDb;
 use blueprint_clients::tangle::EventsClient;
 use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
-use blueprint_core::{info, warn};
+use blueprint_core::{info, warn, error};
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
@@ -26,7 +26,6 @@ use std::task::{Context, Poll};
 use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::subxt::utils::AccountId32;
 use tokio::task::JoinHandle;
-use tracing::error;
 
 pub(crate) mod event_handler;
 

@@ -1,9 +1,9 @@
 use crate::error::{Error, Result};
+use blueprint_core::warn;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tracing::warn;
 
 const CLOUD_IMG_URL: &str =
     "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img";

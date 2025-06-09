@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
 use blueprint_auth::proxy::DEFAULT_AUTH_PROXY_PORT;
+use blueprint_core::{error, info};
 use clap::{Args, Parser};
 use docktopus::bollard::system::Version;
 use docktopus::bollard::{API_DEFAULT_VERSION, Docker};
@@ -13,7 +14,6 @@ use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-use tracing::{error, info};
 use url::Url;
 
 pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =

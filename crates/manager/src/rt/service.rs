@@ -4,11 +4,11 @@ use super::hypervisor::{HypervisorInstance, ServiceVmConfig};
 use crate::error::{Error, Result};
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_auth::db::RocksDb;
+use blueprint_core::error;
 use std::path::Path;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time;
-use tracing::error;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Status {

@@ -11,7 +11,7 @@ use tangle_subxt::subxt::ext::jsonrpsee::core::__reexports::serde_json;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{BlueprintBinary, GithubFetcher};
 use tar::Archive;
 use tokio::io::AsyncWriteExt;
-use tracing::{error, warn};
+use blueprint_core::{error, warn};
 use xz::read::XzDecoder;
 
 pub struct GithubBinaryFetcher {

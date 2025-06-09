@@ -3,6 +3,7 @@ use blueprint_auth::{
     models::{ServiceModel, ServiceOwnerModel},
     types::ServiceId,
 };
+use blueprint_core::{error, info};
 use blueprint_manager_bridge::blueprint_manager_bridge_server::{
     BlueprintManagerBridge, BlueprintManagerBridgeServer,
 };
@@ -20,7 +21,6 @@ use tokio::sync::{Mutex, oneshot};
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::{Request, Response, transport::Server};
-use tracing::{error, info};
 
 pub struct BridgeHandle {
     sock_path: PathBuf,

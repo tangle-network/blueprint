@@ -23,7 +23,7 @@ async fn main() -> color_eyre::Result<()> {
             match toml::from_str(&blueprint_config_settings) {
                 Ok(config) => config,
                 Err(e) => {
-                    tracing::error!(
+                    blueprint_core::error!(
                         "Failed to parse config file at `{}`: {e}",
                         config_path.display()
                     );
@@ -32,7 +32,7 @@ async fn main() -> color_eyre::Result<()> {
             }
         }
         None => {
-            tracing::warn!("No config file specified, using defaults");
+            blueprint_core::warn!("No config file specified, using defaults");
             BlueprintEnvironment::default()
         }
     };

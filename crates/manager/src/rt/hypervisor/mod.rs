@@ -7,6 +7,7 @@ use crate::error::{Error, Result};
 use crate::rt::hypervisor::images::CloudImage;
 use crate::rt::hypervisor::net::Lease;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
+use blueprint_core::{error, info, warn};
 use cloud_hypervisor_client::apis::DefaultApi;
 use cloud_hypervisor_client::models::console_config::Mode;
 use cloud_hypervisor_client::models::{
@@ -25,7 +26,6 @@ use std::time::Duration;
 use std::{fs, io};
 use tokio::process::{Child, Command};
 use tokio::time::sleep;
-use tracing::{error, info, warn};
 use url::{Host, Url};
 
 const VM_DATA_DIR: &str = "/mnt/data";
