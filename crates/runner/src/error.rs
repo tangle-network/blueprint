@@ -8,6 +8,9 @@ pub enum RunnerError {
     /// Unable to open/interact with the provided [`Keystore`](blueprint_keystore::Keystore)
     #[error("Keystore error: {0}")]
     Keystore(#[from] blueprint_keystore::Error),
+    /// Unable to connect to/interact with the blueprint manager bridge
+    #[error("Bridge error: {0}")]
+    Bridge(#[from] blueprint_manager_bridge::Error),
 
     #[cfg(feature = "networking")]
     #[error("Networking error: {0}")]

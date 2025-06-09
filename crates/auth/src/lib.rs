@@ -19,8 +19,8 @@ mod test_client;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Error related to the ECDSA signature verification.
-    #[error(transparent)]
-    K256(#[from] k256::ecdsa::Error),
+    #[error("k256 error: {0}")]
+    K256(k256::ecdsa::Error),
     /// Error related to the SR25519 signature verification.
     #[error("Schnorrkel error: {0}")]
     Schnorrkel(schnorrkel::SignatureError),
@@ -77,8 +77,8 @@ fn verify_challenge_ecdsa(
     pub_key: &[u8],
 ) -> Result<bool, Error> {
     use k256::ecdsa::signature::hazmat::PrehashVerifier;
-    let pub_key = k256::ecdsa::VerifyingKey::from_sec1_bytes(pub_key)?;
-    let signature = k256::ecdsa::Signature::try_from(signature)?;
+    let pub_key = k256::ecdsa::VerifyingKey::from_sec1_bytes(pub_key).map_err(Error::K256)?;
+    let signature = k256::ecdsa::Signature::try_from(signature).map_err(Error::K256)?;
     Ok(pub_key.verify_prehash(challenge, &signature).is_ok())
 }
 

@@ -1,4 +1,6 @@
 [env]
+CXXFLAGS = "-include cstdint"
+
 # Temporary hack for Tangle blueprints to get the workspace root
 #
 # See: https://github.com/rust-lang/cargo/issues/3946#issuecomment-973132993

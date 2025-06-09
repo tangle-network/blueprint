@@ -38,6 +38,7 @@ use tangle_subxt::tangle_testnet_runtime::api::{
         events::{JobCalled, JobResultSubmitted, MasterBlueprintServiceManagerRevised},
     },
 };
+use tracing::debug;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionError {
@@ -84,10 +85,10 @@ pub async fn deploy_new_mbsm_revision<T: Signer<TangleConfig>>(
         _protocolFeesReceiver: protocol_fees_receiver,
     };
     let encoded_constructor = constructor_call.abi_encode();
-    info!("Encoded constructor: {encoded_constructor:?}");
+    debug!("Encoded constructor: {encoded_constructor:?}");
 
     let deploy_code = [bytecode, encoded_constructor.as_ref()].concat();
-    info!("Deploy code length: {:?}", deploy_code.len());
+    debug!("Deploy code length: {:?}", deploy_code.len());
 
     let tx = alloy_rpc_types::TransactionRequest::default()
         .with_deploy_code(deploy_code)

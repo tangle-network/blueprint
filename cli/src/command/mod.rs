@@ -1,4 +1,5 @@
 pub mod create;
+pub mod debug;
 pub mod deploy;
 pub mod jobs;
 pub mod keys;

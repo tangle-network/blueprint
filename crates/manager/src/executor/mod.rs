@@ -1,8 +1,11 @@
 use crate::blueprint::ActiveBlueprints;
-use crate::config::{AuthProxyOpts, BlueprintManagerConfig, SourceCandidates};
+use crate::config::{AuthProxyOpts, BlueprintManagerConfig};
 use crate::error::Error;
 use crate::error::Result;
+use crate::rt;
+use crate::rt::hypervisor::net::NetworkManager;
 use crate::sdk::entry::SendFuture;
+use blueprint_auth::db::RocksDb;
 use blueprint_clients::tangle::EventsClient;
 use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
@@ -169,34 +172,18 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let _span = span.enter();
     info!("Starting blueprint manager ... waiting for start signal ...");
 
-    if !blueprint_manager_config.cache_dir.exists() {
-        info!(
-            "Cache directory does not exist, creating it at `{}`",
-            blueprint_manager_config.cache_dir.display()
-        );
-        std::fs::create_dir_all(&blueprint_manager_config.cache_dir)?;
-    }
+    blueprint_manager_config.verify_directories_exist()?;
 
-    let data_dir = &blueprint_manager_config.data_dir;
-    if !data_dir.exists() {
-        info!(
-            "Data directory does not exist, creating it at `{}`",
-            data_dir.display()
-        );
-        std::fs::create_dir_all(data_dir)?;
-    }
+    info!("Checking for VM images");
+    rt::hypervisor::images::download_image_if_needed(&blueprint_manager_config.cache_dir).await?;
 
-    let source_candidates = SourceCandidates::load(
-        blueprint_manager_config.preferred_source,
-        blueprint_manager_config.podman_host.clone(),
+    // Create the auth proxy task
+    let (db, auth_proxy_task) = run_auth_proxy(
+        blueprint_manager_config.data_dir.clone(),
+        blueprint_manager_config.auth_proxy_opts.clone(),
     )
     .await?;
 
-    // Create the auth proxy task
-    let auth_proxy_task = run_auth_proxy(
-        data_dir.clone(),
-        blueprint_manager_config.auth_proxy_opts.clone(),
-    );
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
         let sr_key_pub = keystore.first_local::<SpSr25519>()?;
@@ -216,6 +203,13 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
     let keystore_uri = env.keystore_uri.clone();
 
+    let network_candidates = blueprint_manager_config
+        .default_address_pool
+        .hosts()
+        .filter(|ip| ip.octets()[3] != 0 && ip.octets()[3] != 255)
+        .collect();
+    let network_manager = NetworkManager::new(network_candidates).await?;
+
     let manager_task = async move {
         let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
         let services_client = tangle_client.services_client();
@@ -227,11 +221,12 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         let mut operator_subscribed_blueprints = handle_init(
             &tangle_client,
             services_client,
-            &source_candidates,
             &sub_account_id,
             &mut active_blueprints,
             &env,
             &blueprint_manager_config,
+            network_manager.clone(),
+            db.clone(),
         )
         .await?;
 
@@ -252,9 +247,10 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
             event_handler::handle_tangle_event(
                 &event,
-                &source_candidates,
                 &operator_subscribed_blueprints,
                 &env,
+                network_manager.clone(),
+                db.clone(),
                 &blueprint_manager_config,
                 &mut active_blueprints,
                 result,
@@ -355,14 +351,16 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
 /// * For each `RpcServicesWithBlueprint`, fetch the associated blueprint binary (fetch/download)
 ///   -> If the services field is empty, just emit and log inside the executed binary "that states a new service instance got created by one of these blueprints"
 ///   -> If the services field is not empty, for each service in RpcServicesWithBlueprint.services, spawn the blueprint binary, using params to set the job type to listen to (in terms of our old language, each spawned service represents a single "`RoleType`")
+#[allow(clippy::too_many_arguments)]
 async fn handle_init(
     tangle_runtime: &TangleClient,
     services_client: &TangleServicesClient<TangleConfig>,
-    source_candidates: &SourceCandidates,
     sub_account_id: &AccountId32,
     active_blueprints: &mut ActiveBlueprints,
     blueprint_env: &BlueprintEnvironment,
     blueprint_manager_config: &BlueprintManagerConfig,
+    network_manager: NetworkManager,
+    db: RocksDb,
 ) -> Result<Vec<RpcServicesWithBlueprint>> {
     info!("Beginning initialization of Blueprint Manager");
 
@@ -374,16 +372,14 @@ async fn handle_init(
         .query_operator_blueprints(init_event.hash, sub_account_id.clone())
         .await;
 
-    let operator_subscribed_blueprints = match maybe_operator_subscribed_blueprints {
-        Ok(blueprints) => blueprints,
-        Err(err) => {
+    let operator_subscribed_blueprints =
+        maybe_operator_subscribed_blueprints.unwrap_or_else(|err| {
             warn!(
                 "Failed to query operator blueprints: {}, did you register as an operator?",
                 err
             );
-            blueprint_std::vec::Vec::new()
-        }
-    };
+            Vec::new()
+        });
 
     info!(
         "Received {} initial blueprints this operator is registered to",
@@ -396,9 +392,10 @@ async fn handle_init(
 
     event_handler::handle_tangle_event(
         &init_event,
-        source_candidates,
         &operator_subscribed_blueprints,
         blueprint_env,
+        network_manager,
+        db.clone(),
         blueprint_manager_config,
         active_blueprints,
         poll_result,
@@ -425,25 +422,33 @@ async fn handle_init(
 /// - It fails to create the necessary directories for the database.
 /// - It fails to bind to the specified host and port.
 /// - The Axum server encounters an error during operation.
-async fn run_auth_proxy(data_dir: PathBuf, auth_proxy_opts: AuthProxyOpts) -> Result<()> {
+pub async fn run_auth_proxy(
+    data_dir: PathBuf,
+    auth_proxy_opts: AuthProxyOpts,
+) -> Result<(RocksDb, impl Future<Output = Result<()>>)> {
     let db_path = data_dir.join("private").join("auth-proxy").join("db");
     tokio::fs::create_dir_all(&db_path).await?;
 
     let proxy = blueprint_auth::proxy::AuthenticatedProxy::new(&db_path)?;
-    let router = proxy.router();
-    let listener = tokio::net::TcpListener::bind((
-        auth_proxy_opts.auth_proxy_host,
-        auth_proxy_opts.auth_proxy_port,
-    ))
-    .await?;
-    info!(
-        "Auth proxy listening on {}:{}",
-        auth_proxy_opts.auth_proxy_host, auth_proxy_opts.auth_proxy_port
-    );
-    let result = axum::serve(listener, router).await;
-    if let Err(err) = result {
-        error!("Auth proxy error: {err}");
-    }
+    let db = proxy.db();
 
-    Ok(())
+    let router = proxy.router();
+
+    Ok((db, async move {
+        let listener = tokio::net::TcpListener::bind((
+            auth_proxy_opts.auth_proxy_host,
+            auth_proxy_opts.auth_proxy_port,
+        ))
+        .await?;
+        info!(
+            "Auth proxy listening on {}:{}",
+            auth_proxy_opts.auth_proxy_host, auth_proxy_opts.auth_proxy_port
+        );
+        let result = axum::serve(listener, router).await;
+        if let Err(err) = result {
+            error!("Auth proxy error: {err}");
+        }
+
+        Ok(())
+    }))
 }

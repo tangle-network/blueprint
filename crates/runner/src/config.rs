@@ -6,12 +6,15 @@ use crate::error::ConfigError;
 use alloc::string::{String, ToString};
 #[cfg(feature = "std")]
 use blueprint_keystore::{Keystore, KeystoreConfig};
+use blueprint_manager_bridge::Bridge;
 use clap::Parser;
 use core::fmt::{Debug, Display};
 use core::str::FromStr;
 #[cfg(feature = "networking")]
 pub use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use url::Url;
 
 pub trait ProtocolSettingsT: Sized + 'static {
@@ -29,7 +32,9 @@ pub trait ProtocolSettingsT: Sized + 'static {
     /// For example, [`TangleProtocolSettings`] will return `"tangle"`.
     ///
     /// [`TangleProtocolSettings`]: crate::tangle::config::TangleProtocolSettings
-    fn protocol(&self) -> &'static str;
+    fn protocol_name(&self) -> &'static str;
+
+    fn protocol(&self) -> Protocol;
 }
 
 /// The protocol on which a blueprint will be executed.
@@ -143,15 +148,27 @@ impl ProtocolSettingsT for ProtocolSettings {
         Ok(protocol_settings)
     }
 
-    fn protocol(&self) -> &'static str {
+    fn protocol_name(&self) -> &'static str {
         match self {
             #[cfg(feature = "tangle")]
-            ProtocolSettings::Tangle(val) => val.protocol(),
+            ProtocolSettings::Tangle(val) => val.protocol_name(),
             #[cfg(feature = "eigenlayer")]
-            ProtocolSettings::Eigenlayer(val) => val.protocol(),
+            ProtocolSettings::Eigenlayer(val) => val.protocol_name(),
             #[cfg(feature = "symbiotic")]
             ProtocolSettings::Symbiotic => "symbiotic",
             _ => unreachable!("should be exhaustive"),
+        }
+    }
+
+    fn protocol(&self) -> Protocol {
+        match self {
+            ProtocolSettings::None => unreachable!(),
+            #[cfg(feature = "tangle")]
+            ProtocolSettings::Tangle(_) => Protocol::Tangle,
+            #[cfg(feature = "eigenlayer")]
+            ProtocolSettings::Eigenlayer(_) => Protocol::Eigenlayer,
+            #[cfg(feature = "symbiotic")]
+            ProtocolSettings::Symbiotic => Protocol::Symbiotic,
         }
     }
 }
@@ -208,22 +225,22 @@ impl ProtocolSettings {
 
 /// Description of the environment in which the blueprint is running
 #[non_exhaustive]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintEnvironment {
     /// HTTP RPC endpoint for host restaking network (Tangle / Ethereum (Eigenlayer or Symbiotic)).
-    pub http_rpc_endpoint: String,
+    pub http_rpc_endpoint: Url,
     /// WS RPC endpoint for host restaking network (Tangle / Ethereum (Eigenlayer or Symbiotic)).
-    pub ws_rpc_endpoint: String,
+    pub ws_rpc_endpoint: Url,
     /// The keystore URI for the blueprint
     pub keystore_uri: String,
     /// Data directory exclusively for this blueprint
-    ///
-    /// This will be `None` if the blueprint manager was not provided a base directory.
-    pub data_dir: Option<PathBuf>,
+    pub data_dir: PathBuf,
     /// Protocol-specific settings
     pub protocol_settings: ProtocolSettings,
     /// Whether the blueprint is in test mode
     pub test_mode: bool,
+    #[serde(skip)]
+    bridge: Arc<Mutex<Option<Arc<Bridge>>>>,
 
     #[cfg(feature = "networking")]
     pub bootnodes: Vec<Multiaddr>,
@@ -238,6 +255,31 @@ pub struct BlueprintEnvironment {
     /// The target number of peers to connect to
     #[cfg(feature = "networking")]
     pub target_peer_count: u32,
+}
+
+impl Default for BlueprintEnvironment {
+    fn default() -> Self {
+        Self {
+            http_rpc_endpoint: default_http_rpc_url(),
+            ws_rpc_endpoint: default_ws_rpc_url(),
+            keystore_uri: String::default(),
+            data_dir: PathBuf::default(),
+            protocol_settings: ProtocolSettings::default(),
+            test_mode: false,
+            bridge: Arc::new(Mutex::new(None)),
+
+            #[cfg(feature = "networking")]
+            bootnodes: Vec::new(),
+            #[cfg(feature = "networking")]
+            network_bind_port: 0,
+            #[cfg(feature = "networking")]
+            enable_mdns: false,
+            #[cfg(feature = "networking")]
+            enable_kademlia: false,
+            #[cfg(feature = "networking")]
+            target_peer_count: 0,
+        }
+    }
 }
 
 impl BlueprintEnvironment {
@@ -281,6 +323,7 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         ..
     } = config;
 
+    let data_dir = settings.data_dir.clone();
     let test_mode = settings.test_mode;
     let http_rpc_url = settings.http_rpc_url.clone();
     let ws_rpc_url = settings.ws_rpc_url.clone();
@@ -301,11 +344,12 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
 
     Ok(BlueprintEnvironment {
         test_mode,
-        http_rpc_endpoint: http_rpc_url.to_string(),
-        ws_rpc_endpoint: ws_rpc_url.to_string(),
+        http_rpc_endpoint: http_rpc_url,
+        ws_rpc_endpoint: ws_rpc_url,
         keystore_uri,
-        data_dir: std::env::var("DATA_DIR").ok().map(PathBuf::from),
+        data_dir,
         protocol_settings,
+        bridge: Arc::new(Mutex::new(None)),
 
         #[cfg(feature = "networking")]
         bootnodes,
@@ -318,6 +362,23 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         #[cfg(feature = "networking")]
         target_peer_count,
     })
+}
+
+impl BlueprintEnvironment {
+    /// Returns the bridge to the blueprint manager.
+    ///
+    /// # Errors
+    /// - `blueprint_manager_bridge::Error` if the connection to the bridge fails.
+    pub async fn bridge(&self) -> Result<Arc<Bridge>, blueprint_manager_bridge::Error> {
+        let mut guard = self.bridge.lock().await;
+        if let Some(bridge) = &*guard {
+            return Ok(bridge.clone());
+        }
+
+        let bridge = Arc::new(Bridge::connect().await?);
+        *guard = Some(bridge.clone());
+        Ok(bridge)
+    }
 }
 
 #[cfg(feature = "networking")]
@@ -438,6 +499,7 @@ impl ContextConfig {
         ws_rpc_url: Url,
         keystore_uri: String,
         keystore_password: Option<String>,
+        data_dir: PathBuf,
         chain: SupportedChains,
         protocol: Protocol,
         protocol_settings: ProtocolSettings,
@@ -503,6 +565,7 @@ impl ContextConfig {
                 #[cfg(feature = "networking")]
                 target_peer_count: None,
                 keystore_uri,
+                data_dir,
                 chain,
                 verbose: 3,
                 pretty: true,
@@ -553,6 +616,7 @@ impl ContextConfig {
         ws_rpc_url: Url,
         keystore_uri: String,
         keystore_password: Option<String>,
+        data_dir: PathBuf,
         chain: SupportedChains,
         protocol: Protocol,
         protocol_settings: ProtocolSettings,
@@ -562,6 +626,7 @@ impl ContextConfig {
             ws_rpc_url,
             keystore_uri,
             keystore_password,
+            data_dir,
             chain,
             protocol,
             protocol_settings,
@@ -576,6 +641,7 @@ impl ContextConfig {
         ws_rpc_url: Url,
         keystore_uri: String,
         keystore_password: Option<String>,
+        data_dir: PathBuf,
         chain: SupportedChains,
         eigenlayer_contract_addresses: crate::eigenlayer::config::EigenlayerProtocolSettings,
     ) -> Self {
@@ -584,6 +650,7 @@ impl ContextConfig {
             ws_rpc_url,
             keystore_uri,
             keystore_password,
+            data_dir,
             chain,
             Protocol::Eigenlayer,
             ProtocolSettings::Eigenlayer(eigenlayer_contract_addresses),
@@ -593,11 +660,13 @@ impl ContextConfig {
     /// Creates a new context config with defaults for Tangle
     #[cfg(feature = "tangle")]
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn create_tangle_config(
         http_rpc_url: Url,
         ws_rpc_url: Url,
         keystore_uri: String,
         keystore_password: Option<String>,
+        data_dir: PathBuf,
         chain: SupportedChains,
         blueprint_id: u64,
         service_id: Option<u64>,
@@ -609,6 +678,7 @@ impl ContextConfig {
             ws_rpc_url,
             keystore_uri,
             keystore_password,
+            data_dir,
             chain,
             Protocol::Tangle,
             ProtocolSettings::Tangle(TangleProtocolSettings {
@@ -641,8 +711,10 @@ pub struct BlueprintSettings {
     #[arg(long, env, default_value_t = default_ws_rpc_url())]
     #[serde(default = "default_ws_rpc_url")]
     pub ws_rpc_url: Url,
-    #[arg(long, short = 'd', env, default_value_t = String::from("./keystore"))]
+    #[arg(long, short = 'k', env, default_value_t = String::from("./keystore"))]
     pub keystore_uri: String,
+    #[arg(long, short, env)]
+    pub data_dir: PathBuf,
     #[arg(long, value_enum, env, default_value_t)]
     pub chain: SupportedChains,
     #[arg(long, short = 'v', global = true, action = clap::ArgAction::Count)]
@@ -813,6 +885,7 @@ impl Default for BlueprintSettings {
             http_rpc_url: default_http_rpc_url(),
             ws_rpc_url: default_ws_rpc_url(),
             keystore_uri: String::new(),
+            data_dir: PathBuf::new(),
             chain: SupportedChains::default(),
             verbose: 0,
             pretty: false,

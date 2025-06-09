@@ -1,10 +1,7 @@
 use std::fs::File;
 use super::BlueprintSourceHandler;
-use super::ProcessHandle;
-use super::binary::{BinarySourceFetcher, generate_running_process_status_handle};
 use crate::error::{Error, Result};
 use crate::blueprint::native::get_blueprint_binary;
-use crate::sdk;
 use crate::sdk::utils::{make_executable, valid_file_exists};
 use blueprint_core::info;
 use std::path::{Path, PathBuf};
@@ -14,10 +11,8 @@ use tangle_subxt::subxt::ext::jsonrpsee::core::__reexports::serde_json;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{BlueprintBinary, GithubFetcher};
 use tar::Archive;
 use tokio::io::AsyncWriteExt;
-use tracing::error;
+use blueprint_core::{error, warn};
 use xz::read::XzDecoder;
-use blueprint_runner::config::BlueprintEnvironment;
-use crate::config::SourceCandidates;
 
 pub struct GithubBinaryFetcher {
     pub fetcher: GithubFetcher,
@@ -45,31 +40,42 @@ impl GithubBinaryFetcher {
             resolved_binary_path: None,
         }
     }
-}
 
-impl BinarySourceFetcher for GithubBinaryFetcher {
     async fn get_binary(&mut self, cache_dir: &Path) -> Result<PathBuf> {
         let relevant_binary =
             get_blueprint_binary(&self.fetcher.binaries.0).ok_or(Error::NoMatchingBinary)?;
-        let relevant_binary_name = String::from_utf8(relevant_binary.name.0.0.clone())?;
-
-        let expected_hash = sdk::utils::slice_32_to_sha_hex_string(relevant_binary.sha256);
 
         let tag_str = std::str::from_utf8(&self.fetcher.tag.0.0).map_or_else(
             |_| self.fetcher.tag.0.0.escape_ascii().to_string(),
             ToString::to_string,
         );
 
+        const DIST_MANIFEST_NAME: &str = "dist.json";
+
+        let relevant_binary_name = String::from_utf8(relevant_binary.name.0.0.clone())?;
+
         let archive_file_name = format!("archive-{tag_str}");
         let archive_download_path = cache_dir.join(archive_file_name);
+        let dist_manifest_path = cache_dir.join(DIST_MANIFEST_NAME);
+
+        let has_archive = valid_file_exists(&archive_download_path).await;
+        let has_manifest = valid_file_exists(&dist_manifest_path).await;
 
         // Check if the binary exists, if not download it
-        if valid_file_exists(&archive_download_path, &expected_hash).await {
+        if has_archive && has_manifest {
             info!(
                 "Archive already exists at: {}",
                 archive_download_path.display()
             );
+
+            self.target_binary_name = Some(relevant_binary_name);
             return Ok(archive_download_path);
+        }
+
+        if has_archive || has_manifest {
+            warn!("Missing archive or manifest, re-downloading...");
+            let _ = tokio::fs::remove_file(&archive_download_path).await;
+            let _ = tokio::fs::remove_file(&dist_manifest_path).await;
         }
 
         let urls = DownloadUrls::new(relevant_binary, &self.fetcher);
@@ -84,6 +90,8 @@ impl BinarySourceFetcher for GithubBinaryFetcher {
         };
 
         let manifest_contents = manifest.bytes().await?;
+        std::fs::write(&dist_manifest_path, &manifest_contents)?;
+
         let manifest: DistManifest = serde_json::from_slice(manifest_contents.as_ref())?;
 
         let mut found_asset = false;
@@ -133,9 +141,9 @@ impl BinarySourceFetcher for GithubBinaryFetcher {
 }
 
 impl BlueprintSourceHandler for GithubBinaryFetcher {
-    async fn fetch(&mut self, cache_dir: &Path) -> Result<()> {
-        if self.resolved_binary_path.is_some() {
-            return Ok(());
+    async fn fetch(&mut self, cache_dir: &Path) -> Result<PathBuf> {
+        if let Some(resolved_binary_path) = &self.resolved_binary_path {
+            return Ok(resolved_binary_path.clone());
         }
 
         let archive_path = self.get_binary(cache_dir).await?;
@@ -175,6 +183,7 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
             }
 
             binary_path = Some(entry.path().to_path_buf());
+            break;
         }
 
         let Some(mut binary_path) = binary_path else {
@@ -184,31 +193,8 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
 
         // Ensure the binary is executable
         binary_path = make_executable(&binary_path)?;
-        self.resolved_binary_path = Some(binary_path);
-        Ok(())
-    }
-
-    async fn spawn(
-        &mut self,
-        _source_candidates: &SourceCandidates,
-        _env: &BlueprintEnvironment,
-        service: &str,
-        args: Vec<String>,
-        env_vars: Vec<(String, String)>,
-    ) -> Result<ProcessHandle> {
-        let binary = self.resolved_binary_path.as_ref().expect("should be set");
-        let process_handle = tokio::process::Command::new(binary)
-            .kill_on_drop(true)
-            .stdin(std::process::Stdio::null())
-            .current_dir(&std::env::current_dir()?)
-            .envs(env_vars)
-            .args(args)
-            .spawn()?;
-
-        let (status, abort_handle) =
-            generate_running_process_status_handle(process_handle, service);
-
-        Ok(ProcessHandle::new(status, abort_handle))
+        self.resolved_binary_path = Some(binary_path.clone());
+        Ok(binary_path)
     }
 
     fn blueprint_id(&self) -> u64 {
@@ -234,6 +220,8 @@ impl DownloadUrls {
             String::from_utf8(binary.name.0.0.clone()).expect("Should be a valid binary name");
         let os_name = format!("{:?}", binary.os).to_lowercase();
         let arch_name = format!("{:?}", binary.arch).to_lowercase();
+
+        // TODO: This is NOT the correct format for cargo-dist. Need the target triple onchain
         let binary_archive_url = format!(
             "https://github.com/{owner}/{repo}/releases/download/{tag}/{binary_name}-{os_name}-{arch_name}.tar.xz"
         );

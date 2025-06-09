@@ -22,9 +22,12 @@ pub const SIGNATURE_EXPIRY: U256 = U256::from_limbs([86400, 0, 0, 0]);
 /// # Panics
 /// - If the provided http endpoint is not a valid URL
 #[must_use]
-pub fn get_provider_http(http_endpoint: &str) -> RootProvider {
+pub fn get_provider_http<T: TryInto<Url>>(http_endpoint: T) -> RootProvider
+where
+    <T as TryInto<Url>>::Error: std::fmt::Debug,
+{
     ProviderBuilder::new()
-        .on_http(http_endpoint.parse().unwrap())
+        .on_http(http_endpoint.try_into().unwrap())
         .root()
         .clone()
 }
@@ -37,10 +40,16 @@ pub fn get_provider_http(http_endpoint: &str) -> RootProvider {
 /// # Panics
 /// - If the provided http endpoint is not a valid URL
 #[must_use]
-pub fn get_wallet_provider_http(http_endpoint: &str, wallet: EthereumWallet) -> RootProvider {
+pub fn get_wallet_provider_http<T: TryInto<Url>>(
+    http_endpoint: T,
+    wallet: EthereumWallet,
+) -> RootProvider
+where
+    <T as TryInto<Url>>::Error: std::fmt::Debug,
+{
     ProviderBuilder::new()
         .wallet(wallet)
-        .on_http(http_endpoint.parse().unwrap())
+        .on_http(http_endpoint.try_into().unwrap())
         .root()
         .clone()
 }
@@ -71,13 +80,15 @@ pub async fn get_provider_ws(ws_endpoint: &str) -> RootProvider {
 /// # Panics
 /// - If the provided http endpoint is not a valid URL
 #[must_use]
-pub fn get_provider_from_signer(key: &str, rpc_url: &str) -> RootProvider {
+pub fn get_provider_from_signer<T: TryInto<Url>>(key: &str, rpc_url: T) -> RootProvider
+where
+    <T as TryInto<Url>>::Error: std::fmt::Debug,
+{
     let signer = PrivateKeySigner::from_str(key).expect("wrong key ");
     let wallet = EthereumWallet::from(signer);
-    let url = Url::parse(rpc_url).expect("Wrong rpc url");
     ProviderBuilder::new()
         .wallet(wallet.clone())
-        .on_http(url)
+        .on_http(rpc_url.try_into().unwrap())
         .root()
         .clone()
 }
@@ -100,10 +111,12 @@ pub fn get_provider_from_signer(key: &str, rpc_url: &str) -> RootProvider {
 ///
 /// [`TransportResult`]: alloy_transport::TransportResult
 pub async fn wait_transaction(
-    rpc_url: &str,
+    rpc_url: impl TryInto<Url>,
     tx_hash: FixedBytes<32>,
 ) -> Result<TransactionReceipt, PendingTransactionError> {
-    let url = Url::parse(rpc_url).map_err(|_| TransportErrorKind::custom_str("Invalid RPC URL"))?;
+    let url = rpc_url
+        .try_into()
+        .map_err(|_| TransportErrorKind::custom_str("Invalid RPC URL"))?;
     let root_provider = ProviderBuilder::new()
         .disable_recommended_fillers()
         .on_http(url);

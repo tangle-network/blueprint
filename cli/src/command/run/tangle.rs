@@ -15,9 +15,9 @@ use url::Url;
 #[derive(Clone)]
 pub struct RunOpts {
     /// The HTTP RPC URL of the Tangle Network
-    pub http_rpc_url: String,
+    pub http_rpc_url: Url,
     /// The WS RPC URL of the Tangle Network
-    pub ws_rpc_url: String,
+    pub ws_rpc_url: Url,
     /// The signer for Tangle operations
     pub signer: Option<TanglePairSigner<sr25519::Pair>>,
     /// The signer for EVM operations
@@ -55,8 +55,8 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         .ok_or_else(|| eyre!("Blueprint ID is required"))?;
 
     let mut blueprint_config = BlueprintEnvironment::default();
-    blueprint_config.http_rpc_endpoint = opts.http_rpc_url.clone();
-    blueprint_config.ws_rpc_endpoint = opts.ws_rpc_url.clone();
+    blueprint_config.http_rpc_endpoint = opts.http_rpc_url;
+    blueprint_config.ws_rpc_endpoint = opts.ws_rpc_url;
 
     if let Some(keystore_path) = opts.keystore_path {
         blueprint_config.keystore_uri = keystore_path;
@@ -66,14 +66,11 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         .display()
         .to_string();
 
-    blueprint_config.data_dir = opts.data_dir;
+    blueprint_config.data_dir = opts.data_dir.unwrap_or_else(|| PathBuf::from("./data"));
 
     let blueprint_manager_config = BlueprintManagerConfig {
         keystore_uri: blueprint_config.keystore_uri.clone(),
-        data_dir: blueprint_config
-            .data_dir
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("./data")),
+        data_dir: blueprint_config.data_dir.clone(),
         verbose: 2,
         pretty: true,
         instance_id: Some(format!("Blueprint-{}", blueprint_id)),

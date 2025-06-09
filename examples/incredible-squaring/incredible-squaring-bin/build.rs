@@ -6,9 +6,9 @@ use std::process;
 
 fn main() {
     let contract_dirs: Vec<&str> = vec!["./contracts"];
-    build::utils::soldeer_install();
-    build::utils::soldeer_update();
-    build::utils::build_contracts(contract_dirs);
+    build::soldeer_install();
+    build::soldeer_update();
+    build::build_contracts(contract_dirs);
 
     println!("cargo::rerun-if-changed=../incredible-squaring-lib");
 
