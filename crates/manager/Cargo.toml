@@ -53,11 +53,11 @@ walkdir.workspace = true
 tonic.workspace = true
 tokio-stream = { workspace = true, features = ["net"] }
 cloud-hypervisor-client = { workspace = true }
-fatfs.workspace = true
+fatfs = { workspace = true, features = ["std"] }
 nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"] }
 
 # Networking
-rtnetlink.workspace = true
+rtnetlink = { workspace = true, features = ["tokio_socket"] }
 ipnet.workspace = true
 
 # Binary extraction
