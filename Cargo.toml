@@ -186,7 +186,7 @@ serde_json = { version = "1.0", default-features = false }
 serde_test = { version = "1.0.177", default-features = false }
 dynosaur = { version = "0.2.0", default-features = false }
 bytes = { version = "1.10.1", default-features = false }
-hashbrown = { version = "0.15.2", default-features = false }
+hashbrown = { version = "0.15.4", default-features = false }
 base64 = { version = "0.22.0", default-features = false }
 rust_decimal = { version = "1.32", default-features = false }
 
