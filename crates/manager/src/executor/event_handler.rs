@@ -113,7 +113,9 @@ impl VerifiedBlueprint {
                 )
                 .await?;
 
-                let service_start_res = service.start().await;
+                let service_start_res = service
+                    .start(manager_config.network_interface.as_deref().unwrap())
+                    .await;
                 match service_start_res {
                     Ok(Some(is_alive)) => {
                         is_alive.await?;

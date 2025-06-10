@@ -9,8 +9,9 @@ use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_manager::config::{AuthProxyOpts, BlueprintManagerConfig};
 use blueprint_manager::executor::run_auth_proxy;
-use blueprint_manager::rt::hypervisor::ServiceVmConfig;
 use blueprint_manager::rt::hypervisor::net::NetworkManager;
+use blueprint_manager::rt::hypervisor::net::nftables::check_net_admin_capability;
+use blueprint_manager::rt::hypervisor::{ServiceVmConfig, net};
 use blueprint_manager::rt::service::Service;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol};
@@ -50,6 +51,8 @@ pub async fn execute(
 ) -> color_eyre::Result<()> {
     let mut manager_config = BlueprintManagerConfig::default();
 
+    check_net_admin_capability()?;
+
     let tmp = tempfile::tempdir()?;
     manager_config.data_dir = tmp.path().join("data");
     manager_config.cache_dir = tmp.path().join("cache");
@@ -57,6 +60,8 @@ pub async fn execute(
     manager_config.keystore_uri = tmp.path().join("keystore").to_string_lossy().into();
 
     manager_config.verify_directories_exist()?;
+    manager_config.verify_network_interface()?;
+
     let network_candidates = manager_config
         .default_address_pool
         .hosts()
@@ -120,7 +125,12 @@ pub async fn execute(
     .await?;
 
     // TODO: Check is_alive
-    let _is_alive = Box::pin(service.start().await?.unwrap());
+    let _is_alive = Box::pin(
+        service
+            .start(manager_config.network_interface.as_deref().unwrap())
+            .await?
+            .unwrap(),
+    );
 
     let pty = service.hypervisor().pty().await?.unwrap();
     info!("VM serial output to: {}", pty.display());
@@ -174,6 +184,12 @@ pub async fn execute(
     pty_to_stdout.join().unwrap();
 
     service.shutdown().await?;
+
+    if let Err(e) =
+        net::nftables::cleanup_firewall(manager_config.network_interface.as_deref().unwrap())
+    {
+        error!("Failed to cleanup iptables rules: {e}");
+    }
 
     Ok(())
 }

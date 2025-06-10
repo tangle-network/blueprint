@@ -387,7 +387,7 @@ impl HypervisorInstance {
                 ..Default::default()
             }),
             net: Some(vec![NetConfig {
-                tap: Some(format!("tap-tngl-{}", self.config.id)),
+                tap: Some(self.tap_interface_name()),
                 ip: Some(tap_interface_addr.to_string()),
                 ..Default::default()
             }]),
@@ -401,6 +401,10 @@ impl HypervisorInstance {
         })?;
 
         Ok(())
+    }
+
+    fn tap_interface_name(&self) -> String {
+        format!("tap-tngl-{}", self.config.id)
     }
 
     // Disable serial port logging in release builds, too much noise for production
@@ -442,7 +446,7 @@ impl HypervisorInstance {
     ///
     /// * This will error if the VM cannot be booted for any reason
     /// * See [`Self::client()`]
-    pub async fn start(&mut self) -> Result<()> {
+    pub async fn start(&mut self, network_interface: &str) -> Result<()> {
         info!("Booting VM...");
 
         let client = self
@@ -453,6 +457,12 @@ impl HypervisorInstance {
             error!("Failed to boot VM: {e:?}");
             Error::Hypervisor(format!("{e:?}"))
         })?;
+
+        let tap_interface = self.tap_interface_name();
+        let tap_interface_ip = self.lease.as_ref().expect("should exist").addr();
+
+        net::wait_for_interface(&tap_interface).await?;
+        net::nftables::setup_rules(network_interface, &tap_interface, tap_interface_ip)?;
 
         Ok(())
     }

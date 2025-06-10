@@ -1,7 +1,9 @@
 #[cfg(not(unix))]
 compile_error!("The blueprint manager cannot be run on non-unix systems");
 
+use blueprint_core::error;
 use blueprint_manager::config::BlueprintManagerCli;
+use blueprint_manager::rt::hypervisor::net;
 use blueprint_manager::run_blueprint_manager;
 use blueprint_manager::sdk::entry;
 use blueprint_runner::config::BlueprintEnvironment;
