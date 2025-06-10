@@ -270,6 +270,7 @@ opentelemetry = { version = "0.29", default-features = false }
 opentelemetry-prometheus = { version = "0.29", default-features = false }
 opentelemetry_sdk = { version = "0.29", default-features = false }
 opentelemetry-semantic-conventions = { version = "0.29", default-features = false }
+opentelemetry_api = { version = "0.20", default-features = false }
 tracing-loki = { version = "0.2", default-features = false }
 tracing-opentelemetry = { version = "0.30", default-features = false }
 

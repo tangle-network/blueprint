@@ -33,6 +33,7 @@ opentelemetry = { workspace = true, features = ["metrics"] }
 opentelemetry-prometheus = { workspace = true }
 opentelemetry-semantic-conventions = { workspace = true, features = ["semconv_experimental"] }
 opentelemetry_sdk = { workspace = true, features = ["metrics", "rt-tokio", "trace"] }
+opentelemetry_api = { workspace = true, features = ["metrics"] }
 axum = { workspace = true, features = ["tokio", "http1", "http2", "json"] }
 hyper = { workspace = true, features = ["http1", "server"] }
 futures = { workspace = true, features = ["executor"] }
@@ -43,11 +44,11 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 uuid = { workspace = true, features = ["v4"] }
-shiplift = "0.7"
-tokio-retry = "0.3"
+
 base64.workspace = true
 
 [dev-dependencies]
+anyhow = "1.0"
 urlencoding = "2.1.3"
 tempfile = { workspace = true }
 blueprint-testing-utils = { workspace = true, features = ["tangle"] }

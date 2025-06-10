@@ -2,7 +2,7 @@ use blueprint_core::{debug, info, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio_retry::{Retry, strategy::ExponentialBackoff};
+
 
 use crate::error::{Error, Result};
 use crate::logging::GrafanaConfig;
@@ -142,6 +142,7 @@ impl ServerManager for GrafanaServer {
                 ports,
                 volumes,
                 Some(vec!["host.docker.internal:host-gateway".to_string()]),
+                None, // health_check_cmd
             )
             .await?;
 
@@ -156,25 +157,27 @@ impl ServerManager for GrafanaServer {
         Ok(())
     }
 
-    async fn stop(&self) -> Result<()> {
+        async fn stop(&self) -> Result<()> {
         let container_id = {
             let id = self.container_id.lock().unwrap();
             match id.as_ref() {
                 Some(id) => id.clone(),
                 None => {
-                    info!("Grafana server is not running");
+                    info!("Grafana server is not running, nothing to stop.");
                     return Ok(());
                 }
             }
         };
 
-        info!("Stopping Grafana server");
-        self.docker.stop_container(&container_id).await?;
+        info!("Stopping Grafana server: {}", &self.config.container_name);
+        self.docker
+            .stop_and_remove_container(&container_id, &self.config.container_name)
+            .await?;
 
         let mut id = self.container_id.lock().unwrap();
         *id = None;
 
-        info!("Grafana server stopped successfully");
+        info!("Grafana server stopped successfully.");
         Ok(())
     }
 
@@ -197,78 +200,58 @@ impl ServerManager for GrafanaServer {
     async fn wait_until_ready(&self, timeout_secs: u64) -> Result<()> {
         let container_id = {
             let id = self.container_id.lock().unwrap();
-            match id.as_ref() {
-                Some(id) => id.clone(),
-                None => {
-                    return Err(Error::Other("Grafana server is not running".to_string()));
-                }
-            }
+            id.as_ref()
+                .map(String::clone)
+                .ok_or_else(|| Error::Generic("Grafana server is not running".to_string()))?
         };
 
-        // Wait for the container to be running (not necessarily healthy)
-        match self
+        // First, wait for the container to be considered healthy by Docker.
+        info!("Waiting for Grafana container to be healthy...");
+        if let Err(e) = self
             .docker
             .wait_for_container_health(&container_id, timeout_secs)
             .await
         {
-            Ok(()) => {
-                info!("Grafana container is running");
-            }
-            Err(e) => {
-                // Log the error but continue anyway - the container might still be usable
-                warn!("Grafana container health check failed: {}", e);
-                // Give it a moment to initialize even if health check failed
-                tokio::time::sleep(Duration::from_secs(2)).await;
-            }
+            warn!(
+                "Grafana container health check failed: {}. Proceeding with API check.",
+                e
+            );
+        } else {
+            info!("Grafana container health check passed.");
         }
 
-        // Increase timeout for API check to be more lenient
-        let api_timeout_secs = timeout_secs.max(60); // At least 60 seconds
+        // Second, wait for the API to be responsive.
+        info!("Waiting for Grafana API to be responsive...");
         let client = reqwest::Client::new();
         let url = format!("{}/api/health", self.url());
+        let start_time = tokio::time::Instant::now();
+        let timeout = Duration::from_secs(timeout_secs);
 
-        let retry_strategy = ExponentialBackoff::from_millis(500) // Start with longer delay
-            .factor(2)
-            .max_delay(Duration::from_secs(5)) // Allow longer delays between retries
-            .take(usize::try_from(api_timeout_secs).unwrap_or(60));
+        loop {
+            if start_time.elapsed() > timeout {
+                return Err(Error::Generic(format!(
+                    "Grafana API did not become responsive within {} seconds.",
+                    timeout_secs
+                )));
+            }
 
-        // Try to connect to the API, but don't fail if we can't
-        match Retry::spawn(retry_strategy, || async {
-            match client
-                .get(&url)
-                .timeout(Duration::from_secs(5)) // Longer timeout per request
-                .send()
-                .await
-            {
+            match client.get(&url).send().await {
                 Ok(response) if response.status().is_success() => {
-                    info!("Grafana API is responsive");
-                    Ok(())
+                    info!("Grafana API is responsive.");
+                    return Ok(());
                 }
                 Ok(response) => {
-                    warn!(
-                        "Grafana API returned status: {}, will retry",
+                    debug!(
+                        "Grafana API check failed with status: {}. Retrying...",
                         response.status()
                     );
-                    Err(())
                 }
                 Err(e) => {
-                    debug!("Still waiting for Grafana API: {}", e);
-                    Err(())
+                    debug!("Grafana API check failed with error: {}. Retrying...", e);
                 }
             }
-        })
-        .await
-        {
-            Ok(()) => {
-                info!("Successfully connected to Grafana API");
-                Ok(())
-            }
-            Err(()) => {
-                // Don't fail the startup if API isn't responsive yet
-                warn!("Grafana API not responsive yet, but continuing anyway");
-                info!("You may need to wait a bit longer before accessing Grafana in your browser");
-                Ok(())
-            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 }

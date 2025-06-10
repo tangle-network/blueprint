@@ -71,16 +71,13 @@ impl EnhancedMetricsProvider {
         // Create an OpenTelemetry exporter. It now manages its own internal registry for OTel metrics.
         let otel_exporter_instance = OpenTelemetryExporter::new(otel_config)?;
 
-        // Get the collector adapter from the OpenTelemetryExporter.
-        // This adapter will allow the main shared_registry to collect metrics from OTel's internal registry.
-        let otel_collector_adapter = otel_exporter_instance.get_collector_adapter();
-
-        // Register the OTel collector adapter with the main shared_registry.
-        shared_registry.register(Box::new(otel_collector_adapter))
+        // The OpenTelemetryExporter itself implements PrometheusCollectorTrait (prometheus::core::Collector).
+        // We clone it here for registration, and the original otel_exporter_instance will be moved into an Arc later.
+        shared_registry.register(Box::new(otel_exporter_instance.clone()))
             .map_err(|e| crate::error::Error::Other(format!(
-                "Failed to register OTel Prometheus collector adapter with shared registry: {}", e
+                "Failed to register OpenTelemetryExporter with shared registry: {}", e
             )))?;
-        info!("Registered OTel collector adapter with shared Prometheus registry.");
+        info!("Registered OpenTelemetryExporter with shared Prometheus registry.");
 
         // Store the OpenTelemetryExporter instance (wrapped in Arc) in the provider.
         let opentelemetry_exporter = Arc::new(otel_exporter_instance);

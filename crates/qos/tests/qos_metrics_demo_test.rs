@@ -11,6 +11,7 @@ use reqwest;
 
 const TEST_GRAFANA_CONTAINER_NAME: &str = "blueprint-grafana";
 const TEST_LOKI_CONTAINER_NAME: &str = "blueprint-loki";
+const TEST_PROMETHEUS_CONTAINER_NAME: &str = "blueprint-test-prometheus";
 
 use blueprint_qos::{
     GrafanaConfig, GrafanaServerConfig, PrometheusServerConfig, QoSService, default_qos_config,
@@ -32,7 +33,7 @@ use tokio::time::sleep;
 mod utils;
 
 // Port constants for the metrics servers
-const GRAFANA_PORT: u16 = 3000;
+const GRAFANA_PORT: u16 = 3001;
 const OPERATOR_COUNT: usize = 1; // Number of operators for the test
 const INPUT_VALUE: u64 = 5; // Value to square in our test job
 const TOTAL_JOBS_TO_RUN: u64 = 10; // Aim for ~70 seconds of active job processing
@@ -47,20 +48,31 @@ async fn cleanup_docker_containers(_harness: &TangleTestHarness<()>) -> Result<(
     info!("Cleaning up existing Docker containers before test...");
 
     // Remove Grafana container if it exists
-    // Remove Grafana container if it exists
     let _grafana_rm = Command::new("docker")
         .args(["rm", "-f", TEST_GRAFANA_CONTAINER_NAME])
-        .output();
+        .output()
+        .await;
 
     // Remove Loki container if it exists
     let _loki_rm = Command::new("docker")
         .args(["rm", "-f", TEST_LOKI_CONTAINER_NAME])
-        .output();
+        .output()
+        .await;
+
+    // Remove Prometheus container if it exists
+    let _prometheus_rm = Command::new("docker")
+        .args(["rm", "-f", TEST_PROMETHEUS_CONTAINER_NAME])
+        .output()
+        .await;
 
     // Also remove our custom Docker network if it exists
     let _network_rm = Command::new("docker")
         .args(["network", "rm", CUSTOM_NETWORK_NAME])
-        .output();
+        .output()
+        .await;
+
+    // Add a small delay to allow Docker to release ports
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     Ok(())
 }
@@ -1415,7 +1427,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     info!("Attempting to query Prometheus from within Grafana container...");
     let prom_query = "otel_blueprint_job_executions_total{service_id=\"0\",blueprint_id=\"0\",otel_scope_name=\"blueprint_metrics\"}";
     let curl_command = format!(
-        "curl -s 'http://host.docker.internal:9091/api/v1/query?query={}'",
+        "curl -s 'http://blueprint-test-prometheus:9090/api/v1/query?query={}'", // Corrected: Query Prometheus container
         urlencoding::encode(prom_query)
     );
     let grafana_container_name = GRAFANA_CONTAINER_NAME; // Use the constant
@@ -1435,56 +1447,61 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
                 );
 
                 // Diagnostic: Query Prometheus /api/v1/labels directly (not via Grafana proxy)
-                info!(
-                    "Attempting to query Prometheus /api/v1/labels directly from a container on the same network..."
-                );
-                let prom_labels_url = format!(
-                    "http://{}:{}/api/v1/labels",
-                    "blueprint-test-prometheus", 9090
-                );
-                // We can reuse the grafana container to exec curl, as it's on the same network
-                let cmd_prom_labels = Command::new("docker")
-                    .args([
-                        "exec",
-                        GRAFANA_CONTAINER_NAME, // Execute from Grafana container, it has curl and is on the network
-                        "curl",
-                        "-s", // Silent
-                        &prom_labels_url,
-                    ])
-                    .output()
-                    .await?;
+                // info!(
+                //     "Attempting to query Prometheus /api/v1/labels directly from a container on the same network..."
+                // );
+                // let prom_labels_url = format!(
+                //     "http://{}:{}/api/v1/labels",
+                //     "blueprint-test-prometheus", 9090
+                // );
+                // // We can reuse the grafana container to exec curl, as it's on the same network
+                // let cmd_prom_labels = Command::new("docker")
+                //     .args([
+                //         "exec",
+                //         GRAFANA_CONTAINER_NAME, // Execute from Grafana container, it has curl and is on the network
+                //         "curl",
+                //         "-s", // Silent
+                //         &prom_labels_url,
+                //     ])
+                //     .output()
+                //     .await?;
 
-                if cmd_prom_labels.status.success() {
-                    info!(
-                        "Successfully queried Prometheus /api/v1/labels. Output:\n{}",
-                        String::from_utf8_lossy(&cmd_prom_labels.stdout)
-                    );
-                } else {
-                    error!(
-                        "Failed to query Prometheus /api/v1/labels. Exit code: {}. Stderr: {}. Stdout: {}",
-                        cmd_prom_labels.status,
-                        String::from_utf8_lossy(&cmd_prom_labels.stderr),
-                        String::from_utf8_lossy(&cmd_prom_labels.stdout)
-                    );
-                    // Optionally, fail the test here if this is critical
-                }
+                // if cmd_prom_labels.status.success() {
+                //     info!(
+                //         "Successfully queried Prometheus /api/v1/labels. Output:\n{}",
+                //         String::from_utf8_lossy(&cmd_prom_labels.stdout)
+                //     );
+                // } else {
+                //     error!(
+                //         "Failed to query Prometheus /api/v1/labels. Exit code: {}. Stderr: {}. Stdout: {}",
+                //         cmd_prom_labels.status,
+                //         String::from_utf8_lossy(&cmd_prom_labels.stderr),
+                //         String::from_utf8_lossy(&cmd_prom_labels.stdout)
+                //     );
+                //     // Optionally, fail the test here if this is critical
+                // }
             } else {
                 warn!(
                     "Grafana container failed to query Prometheus. Status: {}. Stderr:\n{}. Stdout:\n{}",
                     output.status, stderr, stdout
                 );
+                return Err(Error::Setup(format!("Grafana container failed to query Prometheus. Status: {}. Stderr: {}. Stdout: {}", output.status, stderr, stdout)));
             }
-        }
+            // If successful, this arm implicitly evaluates to ()
+        },
         Err(e) => {
-            warn!("Failed to execute docker exec command: {}", e);
+            warn!("Failed to execute docker exec command to query Prometheus: {}", e);
+            // Optionally, convert 'e' to your Error type and return Err(e.converted())
+            // For now, we'll just warn and proceed, or you could return Err here.
+            // return Err(Error::Runtime(format!("Docker exec failed: {}", e))); // Example of returning error
+            return Err(Error::Setup(format!("Failed to execute docker exec command to query Prometheus: {}", e)));
         }
     }
 
-    info!("Attempting to print Grafana container logs before final wait...");
-    if let Err(e) = show_container_logs(GRAFANA_CONTAINER_NAME, 500).await {
-        // Show last 500 lines
-        warn!("Failed to show Grafana container logs: {}", e);
-    }
+    // info!("Attempting to print Grafana container logs before final wait...");
+    // if let Err(e) = show_container_logs(GRAFANA_CONTAINER_NAME, 500).await { // Show last 500 lines
+    //     warn!("Failed to show Grafana container logs: {}", e);
+    // }
     info!("Servers will remain running for 10 more seconds for metrics viewing");
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 

@@ -1,9 +1,17 @@
 use blueprint_core::{debug, error, info, warn};
+use bollard::{
+    container::{
+        Config, CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
+        StartContainerOptions, StopContainerOptions,
+    },
+    image::CreateImageOptions,
+    models::{HealthConfig, HealthStatusEnum, HostConfig, PortBinding},
+    network::{ConnectNetworkOptions, CreateNetworkOptions, InspectNetworkOptions},
+    Docker,
+};
 use futures::StreamExt;
-use shiplift::{ContainerOptions, Docker, PullOptions};
-use std::collections::HashMap;
-use std::time::Duration;
-use tokio_retry::{Retry, strategy::ExponentialBackoff};
+use std::{collections::HashMap, default::Default};
+use tokio::time::{sleep, Duration, Instant};
 
 use crate::error::{Error, Result};
 
@@ -23,50 +31,39 @@ impl DockerManager {
     /// Create a new Docker manager
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            docker: Docker::new(),
-        }
+        let docker = Docker::connect_with_local_defaults()
+            .expect("Failed to connect to Docker. Is the Docker daemon running?");
+        Self { docker }
     }
 
     /// Pull an image if it doesn't exist
-    ///
-    /// # Errors
-    /// Returns an error if the image pull fails
     pub async fn ensure_image(&self, image: &str) -> Result<()> {
-        // Skip checking if the image exists to avoid potential API version mismatches
-        // Just try to pull the image directly and handle any errors gracefully
-        info!("Attempting to pull image: {}", image);
-        let images = self.docker.images();
-        let options = PullOptions::builder().image(image).build();
-
-        // Try to pull the image but don't fail if it already exists
-        let mut stream = images.pull(&options);
-
-        while let Some(pull_result) = stream.next().await {
-            match pull_result {
-                Ok(output) => debug!("Pull progress: {:?}", output),
-                Err(e) => {
-                    // If the error indicates the image already exists, that's fine
-                    if e.to_string().contains("already exists") {
-                        info!("Image {} already exists", image);
-                        return Ok(());
-                    }
-
-                    // For other errors, log but continue - we'll try to use the image anyway
-                    error!("Error pulling image {}: {}", image, e);
-                    // Don't return error here, try to continue with container creation
-                }
-            }
+        info!("Ensuring image exists: {}", image);
+        if self.docker.inspect_image(image).await.is_ok() {
+            info!("Image '{}' already exists locally.", image);
+            return Ok(());
         }
 
-        info!("Image pull operation completed for: {}", image);
+        info!("Pulling image '{}'...", image);
+        let options = Some(CreateImageOptions {
+            from_image: image,
+            ..Default::default()
+        });
+
+        let mut stream = self.docker.create_image(options, None, None);
+        while let Some(pull_result) = stream.next().await {
+            if let Err(e) = pull_result {
+                let err_msg = format!("Failed to pull image '{}': {}", image, e);
+                error!("{}", err_msg);
+                return Err(Error::DockerOperation(err_msg));
+            }
+        }
+        info!("Image pull complete for: {}", image);
         Ok(())
     }
 
     /// Create and start a container
-    ///
-    /// # Errors
-    /// Returns an error if the container creation or start fails
+    #[allow(clippy::too_many_arguments)]
     pub async fn run_container(
         &self,
         image: &str,
@@ -75,242 +72,243 @@ impl DockerManager {
         ports: HashMap<String, String>,
         volumes: HashMap<String, String>,
         extra_hosts: Option<Vec<String>>,
+        health_check_cmd: Option<Vec<String>>,
     ) -> Result<String> {
-        // Try to ensure image exists, but continue even if there are issues
         if let Err(e) = self.ensure_image(image).await {
-            warn!(
-                "Issue ensuring image exists, but will try to continue: {}",
-                e
-            );
+            warn!("Failed to ensure image exists, but proceeding: {}", e);
         }
 
-        // Try to clean up any existing container with the same name
-        let containers = self.docker.containers();
-        match containers
-            .list(&shiplift::ContainerListOptions::default())
-            .await
-        {
-            Ok(all_containers) => {
-                for container in all_containers {
-                    if container.names.iter().any(|n| n == &format!("/{}", name)) {
-                        info!("Container {} already exists, stopping and removing", name);
-                        let container = containers.get(container.id);
-                        // Try to stop and remove, but don't fail if we can't
-                        if let Err(e) = container.stop(None).await {
-                            warn!(
-                                "Failed to stop container {}: {}, will try to continue",
-                                name, e
-                            );
-                        }
-                        if let Err(e) = container.delete().await {
-                            warn!(
-                                "Failed to delete container {}: {}, will try to continue",
-                                name, e
-                            );
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                // If we can't list containers, log and continue
-                warn!(
-                    "Failed to list Docker containers: {}, will try to continue",
-                    e
-                );
-            }
-        }
+        self.cleanup_container_by_name(name).await?;
 
-        // Create container options
-        let mut options = ContainerOptions::builder(image);
-        options.name(name);
+        let env: Vec<String> = env_vars
+            .into_iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect();
 
-        // Add extra hosts if provided
-        if let Some(hosts) = extra_hosts {
-            let host_strs: Vec<&str> = hosts.iter().map(AsRef::as_ref).collect();
-            options.extra_hosts(host_strs);
-        }
+        let port_bindings = ports
+            .into_iter()
+            .map(|(container_port, host_port)| {
+                (
+                    container_port.to_string(),
+                    Some(vec![PortBinding {
+                        host_ip: Some("0.0.0.0".to_string()),
+                        host_port: Some(host_port),
+                    }]),
+                )
+            })
+            .collect();
 
-        // Add environment variables
-        for (key, value) in &env_vars {
-            options.env(&[format!("{}={}", key, value)]);
-        }
-
-        // Add port mappings
-        for (container_port, host_port) in &ports {
-            // Parse the container port, defaulting to 3000 if it fails
-            let container_port_num = match container_port.split('/').next() {
-                Some(port_str) => port_str.parse::<u32>().unwrap_or(3000),
-                None => 3000,
-            };
-
-            // Use the expose method with the correct parameters
-            // expose(srcport, protocol, hostport)
-            options.expose(
-                container_port_num,
-                "tcp",
-                host_port.parse::<u32>().unwrap_or(3000),
-            );
-        }
-
-        // Add volume mappings if available
-        if volumes.is_empty() {
-            info!("No volume mappings provided");
+        let binds = if volumes.is_empty() {
+            None
         } else {
-            info!("Adding volume mappings: {:?}", volumes);
-            for (container_path, host_path) in &volumes {
-                // Format as "host_path:container_path" for volume mapping
-                let volume_mapping = format!("{}:{}", host_path, container_path);
-                options.volumes(vec![&volume_mapping]);
-            }
-        }
+            Some(
+                volumes
+                    .into_iter()
+                    .map(|(host_path, container_path)| format!("{}:{}", host_path, container_path))
+                    .collect(),
+            )
+        };
 
-        // Create and start the container
-        info!(
-            "Environment variables for container {}: {:?}",
-            name, &env_vars
-        );
-        info!("Creating and starting container: {}", name);
-        let container_id = match containers.create(&options.build()).await {
-            Ok(container) => container.id,
+        let host_config = HostConfig {
+            port_bindings: Some(port_bindings),
+            binds,
+            extra_hosts,
+            ..Default::default()
+        };
+
+        let health_config = health_check_cmd.map(|cmd| HealthConfig {
+            test: Some(cmd),
+            interval: Some(Duration::from_secs(5).as_nanos() as i64),
+            timeout: Some(Duration::from_secs(5).as_nanos() as i64),
+            retries: Some(3),
+            start_period: Some(Duration::from_secs(5).as_nanos() as i64),
+            start_interval: Some(Duration::from_secs(1).as_nanos() as i64),
+        });
+
+        let config = Config {
+            image: Some(image),
+            env: Some(env.iter().map(AsRef::as_ref).collect()),
+            host_config: Some(host_config),
+            healthcheck: health_config,
+            ..Default::default()
+        };
+
+        info!("Creating container '{}' from image '{}'", name, image);
+        let options = Some(CreateContainerOptions {
+            name: name.to_string(),
+            platform: None, // Explicitly set platform to None for wider compatibility
+        });
+
+        let container_id = match self.docker.create_container(options, config).await {
+            Ok(response) => response.id,
             Err(e) => {
-                error!(
-                    "[DOCKER ERROR] Failed to create container with volumes: {}",
-                    e
-                );
-                panic!(
-                    "[DOCKER PANIC] Could not create container '{}': {}.\n\nPossible causes: Docker is not running, permissions issue, or Docker daemon is not accessible to this user. Please run 'docker info' and ensure you can create containers manually.",
-                    name, e
-                );
+                let err_msg = format!("Failed to create container '{}': {}", name, e);
+                error!("[DOCKER ERROR] {}", err_msg);
+                panic!("[DOCKER PANIC] {}", err_msg);
             }
         };
 
-        let container = containers.get(&container_id);
-        match container.start().await {
-            Ok(()) => {
-                info!(
-                    "Successfully started container: {} (ID: {})",
-                    name, container_id
-                );
-                Ok(container_id)
+        info!("Starting container '{}' (ID: {})", name, &container_id);
+        if let Err(e) = self
+            .docker
+            .start_container(&container_id, None::<StartContainerOptions<String>>)
+            .await
+        {
+            let err_msg = format!("Failed to start container '{}': {}", name, e);
+            error!("[DOCKER ERROR] {}", err_msg);
+            panic!("[DOCKER PANIC] {}", err_msg);
+        }
+
+        info!("Successfully started container '{}' (ID: {})", name, &container_id);
+        Ok(container_id)
+    }
+
+    async fn cleanup_container_by_name(&self, name: &str) -> Result<()> {
+        let mut list_options = ListContainersOptions::<String>::default();
+        list_options.all = true;
+
+        let containers = self
+            .docker
+            .list_containers(Some(list_options))
+            .await
+            .map_err(|e| Error::DockerOperation(e.to_string()))?;
+
+        for container_summary in containers {
+            if container_summary
+                .names
+                .as_ref()
+                .map_or(false, |names| names.contains(&format!("/{}", name)))
+            {
+                info!("Found existing container '{}', stopping and removing.", name);
+                if let Some(container_id) = container_summary.id.as_deref() {
+                    self.stop_and_remove_container(container_id, name).await?;
+                }
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn stop_and_remove_container(
+        &self,
+        container_id: &str,
+        container_name: &str,
+    ) -> Result<()> {
+        info!("Stopping container '{}' ({})", container_name, container_id);
+        if let Err(e) = self.docker.stop_container(container_id, None::<StopContainerOptions>).await {
+            warn!(
+                "Could not stop container '{}' (may already be stopped): {}. Proceeding with removal.",
+                container_name, e
+            );
+        }
+
+        info!("Removing container '{}' ({})", container_name, container_id);
+        self.docker
+            .remove_container(
+                container_id,
+                Some(RemoveContainerOptions { force: true, ..Default::default() }),
+            )
+            .await
+            .map_err(|e| {
+                Error::DockerOperation(format!(
+                    "Failed to remove container '{}' ({}): {}",
+                    container_name, container_id, e
+                ))
+            })?;
+        Ok(())
+    }
+
+    pub async fn create_network(&self, network_name: &str) -> Result<()> {
+        match self.docker.inspect_network(network_name, None::<InspectNetworkOptions<String>>).await {
+            Ok(_) => {
+                info!("Network '{}' already exists.", network_name);
+                Ok(())
+            }
+            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. }) if status_code == 404 => {
+                info!("Creating Docker network: '{}'", network_name);
+                let options = CreateNetworkOptions { name: network_name, ..Default::default() };
+                self.docker
+                    .create_network(options)
+                    .await
+                    .map_err(|e| Error::DockerOperation(e.to_string()))?;
+                info!("Successfully created Docker network: '{}'", network_name);
+                Ok(())
             }
             Err(e) => {
-                error!("[DOCKER ERROR] Failed to start container: {}", e);
-                panic!(
-                    "[DOCKER PANIC] Could not start container '{}': {}.\n\nPossible causes: Docker is not running, permissions issue, or Docker daemon is not accessible to this user. Please run 'docker info' and ensure you can create containers manually.",
-                    name, e
-                );
+                let err_msg = format!("Failed to inspect Docker network '{}': {}", network_name, e);
+                error!("{}", err_msg);
+                Err(Error::DockerOperation(err_msg))
             }
         }
     }
 
-    /// Stop and remove a container
-    ///
-    /// # Errors
-    /// Returns an error if the container stop or removal fails
-    pub async fn stop_container(&self, container_id: &str) -> Result<()> {
-        let container = self.docker.containers().get(container_id);
-
-        // Stop the container
-        info!("Stopping container: {}", container_id);
-        container
-            .stop(Some(Duration::from_secs(5)))
-            .await
-            .map_err(|e| {
-                Error::Other(format!("Failed to stop container {}: {}", container_id, e))
-            })?;
-
-        // Remove the container
-        info!("Removing container: {}", container_id);
-        container.delete().await.map_err(|e| {
-            Error::Other(format!(
-                "Failed to remove container {}: {}",
-                container_id, e
-            ))
-        })?;
-
+    pub async fn connect_to_network(&self, container_name: &str, network_name: &str) -> Result<()> {
         info!(
-            "Successfully stopped and removed container: {}",
-            container_id
+            "Connecting container '{}' to network '{}'",
+            container_name, network_name
         );
-        Ok(())
+        let options = ConnectNetworkOptions { container: container_name, ..Default::default() };
+        self.docker
+            .connect_network(network_name, options)
+            .await
+            .map_err(|e| Error::DockerOperation(e.to_string()))
     }
 
-    /// Check if a container is running
-    ///
-    /// # Errors
-    /// Returns an error if the container inspection fails
     pub async fn is_container_running(&self, container_id: &str) -> Result<bool> {
-        let container = self.docker.containers().get(container_id);
-        let details = container.inspect().await.map_err(|e| {
-            Error::Other(format!(
-                "Failed to inspect container {}: {}",
-                container_id, e
-            ))
-        })?;
+        let container = self
+            .docker
+            .inspect_container(container_id, None)
+            .await
+            .map_err(|e| Error::DockerOperation(e.to_string()))?;
 
-        let running = details.state.running;
-        Ok(running)
+        Ok(container.state.map_or(false, |s| s.running.unwrap_or(false)))
     }
 
-    /// Wait for a container to be healthy
-    ///
-    /// # Errors
-    /// Returns an error if the health check fails
-    pub async fn wait_for_container_health(
-        &self,
-        container_id: &str,
-        timeout_secs: u64,
-    ) -> Result<()> {
-        let retry_strategy = ExponentialBackoff::from_millis(100)
-            .factor(2)
-            .max_delay(Duration::from_secs(1))
-            .take(usize::try_from(timeout_secs).unwrap_or(30));
+    pub async fn wait_for_container_health(&self, container_id: &str, timeout_secs: u64) -> Result<()> {
+        let timeout = Duration::from_secs(timeout_secs);
+        let start = Instant::now();
 
-        Retry::spawn(retry_strategy, || async {
-            let container = self.docker.containers().get(container_id);
-            let details = container.inspect().await.map_err(|e| {
-                error!("Failed to inspect container {}: {}", container_id, e);
-                // Map the error to unit type
-            })?;
+        while start.elapsed() < timeout {
+            let inspect_result = self.docker.inspect_container(container_id, None).await;
 
-            let health = Some(details.state.status.clone());
-
-            let running = details.state.running;
-
-            if running {
-                // If the container is running, consider it good enough
-                match health {
-                    Some(status) if status == "healthy" => {
-                        info!("Container {} is healthy", container_id);
-                        Ok(())
-                    }
-                    Some(status) => {
-                        // Accept any status as long as the container is running
-                        info!(
-                            "Container {} is running with status: {}",
-                            container_id, status
-                        );
-                        Ok(())
-                    }
-                    None => {
-                        info!(
-                            "Container {} is running (no health status available)",
-                            container_id
-                        );
-                        Ok(())
+            match inspect_result {
+                Ok(container) => {
+                    if let Some(state) = &container.state {
+                        if let Some(health) = &state.health {
+                            if let Some(status) = &health.status {
+                                match status {
+                                    HealthStatusEnum::HEALTHY => {
+                                        info!("Container {} is healthy.", container_id);
+                                        return Ok(());
+                                    }
+                                    HealthStatusEnum::UNHEALTHY => {
+                                        let err_msg = format!("Container {} reported unhealthy status.", container_id);
+                                        error!("{}", err_msg);
+                                        return Err(Error::DockerOperation(err_msg));
+                                    }
+                                    _ => {
+                                        debug!("Container {} health status: {:?}", container_id, status);
+                                    }
+                                }
+                            }
+                        } else if state.running.unwrap_or(false) {
+                            info!("Container {} is running (no health check configured).", container_id);
+                            return Ok(());
+                        }
                     }
                 }
-            } else {
-                debug!("Container {} is not running", container_id);
-                Err(())
+                Err(e) => {
+                    warn!("Error inspecting container {}: {}. Retrying...", container_id, e);
+                }
             }
-        })
-        .await
-        .map_err(|()| {
-            Error::Other(format!(
-                "Container {} did not become healthy within {} seconds",
-                container_id, timeout_secs
-            ))
-        })
+
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        Err(Error::DockerOperation(format!(
+            "Container {} did not become ready within {} seconds.",
+            container_id,
+            timeout_secs
+        )))
     }
 }

@@ -1,4 +1,4 @@
-use blueprint_core::{error, info};
+use blueprint_core::{error, info, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -120,6 +120,7 @@ impl PrometheusServer {
                 ports,
                 volumes,
                 None, // extra_hosts
+                None, // health_check_cmd
             )
             .await?;
 
@@ -258,22 +259,24 @@ impl ServerManager for PrometheusServer {
                 match id.as_ref() {
                     Some(id) => id.clone(),
                     None => {
-                        info!("Prometheus server is not running");
+                        info!("Prometheus Docker container is not running, nothing to stop.");
                         return Ok(());
                     }
                 }
             };
 
-            self.docker_manager.stop_container(&container_id).await?;
+            info!(
+                "Stopping Prometheus server in Docker container: {}",
+                &self.config.docker_container_name
+            );
+            self.docker_manager
+                .stop_and_remove_container(&container_id, &self.config.docker_container_name)
+                .await?;
 
-            // Clear the container ID
             let mut id = self.container_id.lock().unwrap();
             *id = None;
 
-            info!(
-                "Stopped Prometheus server in Docker container: {}",
-                self.config.docker_container_name
-            );
+            info!("Prometheus Docker container stopped successfully.");
         } else {
             let mut server_guard = self.embedded_server.lock().unwrap();
             if let Some(server) = server_guard.as_mut() {
@@ -320,20 +323,74 @@ impl ServerManager for PrometheusServer {
     }
 
     async fn wait_until_ready(&self, timeout_secs: u64) -> Result<()> {
-        let start_time = std::time::Instant::now();
-        let timeout = Duration::from_secs(timeout_secs);
+        if self.config.use_docker {
+            let container_id = {
+                let id = self.container_id.lock().unwrap();
+                id.as_ref().map(String::clone).ok_or_else(|| {
+                    crate::error::Error::Generic("Prometheus container not running".to_string())
+                })?
+            };
 
-        while start_time.elapsed() < timeout {
-            if self.is_running().await? {
-                return Ok(());
+            // First, wait for the container to be healthy.
+            info!("Waiting for Prometheus container to be healthy...");
+            if let Err(e) = self
+                .docker_manager
+                .wait_for_container_health(&container_id, timeout_secs)
+                .await
+            {
+                warn!(
+                    "Prometheus container health check failed: {}. Proceeding with API check.",
+                    e
+                );
+            } else {
+                info!("Prometheus container health check passed.");
             }
-            sleep(Duration::from_millis(500)).await;
-        }
 
-        Err(crate::error::Error::Other(format!(
-            "Prometheus server did not become ready within {} seconds",
-            timeout_secs
-        )))
+            // Second, wait for the API to be responsive.
+            info!("Waiting for Prometheus API to be responsive...");
+            let client = reqwest::Client::new();
+            let url = format!("{}/-/ready", self.url());
+            let start_time = tokio::time::Instant::now();
+            let timeout = Duration::from_secs(timeout_secs);
+
+            loop {
+                if start_time.elapsed() > timeout {
+                    return Err(crate::error::Error::Generic(format!(
+                        "Prometheus API did not become responsive within {} seconds.",
+                        timeout_secs
+                    )));
+                }
+
+                match client.get(&url).send().await {
+                    Ok(response) if response.status().is_success() => {
+                        info!("Prometheus API is responsive.");
+                        return Ok(());
+                    }
+                    _ => {
+                        // Still waiting, sleep and retry
+                    }
+                }
+
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        } else {
+            // Logic for embedded server
+            let start_time = std::time::Instant::now();
+            let timeout = Duration::from_secs(timeout_secs);
+
+            while start_time.elapsed() < timeout {
+                if self.is_running().await? {
+                    info!("Embedded Prometheus server is running.");
+                    return Ok(());
+                }
+                sleep(Duration::from_millis(500)).await;
+            }
+
+            Err(crate::error::Error::Generic(format!(
+                "Embedded Prometheus server did not become ready within {} seconds",
+                timeout_secs
+            )))
+        }
     }
 }
 

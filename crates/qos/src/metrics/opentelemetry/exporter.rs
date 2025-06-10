@@ -1,76 +1,77 @@
-use std::sync::Arc;
+// Std and common crates
 use std::fmt::Debug;
+use std::sync::{Arc, Weak};
 
-use blueprint_core::info;
-use opentelemetry::KeyValue;
-use opentelemetry::metrics::{Meter, MeterProvider as _}; 
-use opentelemetry_sdk::metrics::SdkMeterProvider;
-use opentelemetry_sdk::Resource;
-use opentelemetry_semantic_conventions as semcov;
-use serde::{Deserialize, Serialize}; 
+
+// Serde and Uuid (restored)
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::error::{Error, Result}; 
+// OpenTelemetry API (for Error)
 
-use opentelemetry::metrics::{MetricsError, Result as OTelMetricsResult};
+// OpenTelemetry SDK specific imports
+use opentelemetry_sdk::{
+    metrics::{
+        data::ResourceMetrics,
+        // Aggregation, // Unused import
+        InstrumentKind,
+        MetricError, // For MetricReader trait error types
+        Pipeline,
+        SdkMeterProvider,
+        Temporality,
+    },
+    metrics::reader::MetricReader, // MetricReader itself is in sdk::metrics::reader
+    Resource,
+};
+
+// Prometheus related
 use opentelemetry_prometheus::PrometheusExporter;
-use opentelemetry_sdk::metrics::data::ResourceMetrics;
-use opentelemetry_sdk::metrics::{Aggregation, AggregationSelector, InstrumentKind, MetricReader, Pipeline, Temporality, TemporalitySelector};
-use prometheus::{core::Collector as PrometheusCollectorTrait, core::Desc as PrometheusDesc, proto::MetricFamily as PrometheusMetricFamily};
+use prometheus::{
+    core::Collector as PrometheusCollectorTrait,
+    core::Desc as PrometheusDesc,
+    proto::MetricFamily as PrometheusMetricFamily,
+    Registry,
+};
 
-// Adapter to use Arc<PrometheusExporter> as a MetricReader
-#[derive(Debug, Clone)]
+// General OpenTelemetry
+use opentelemetry::{metrics::MeterProvider as _, KeyValue};
+use opentelemetry_semantic_conventions as semcov;
+
+// Local crate imports
+use crate::error::Error as CrateLocalError; // Keep aliased
+use blueprint_core::info;
+
+// Adapter to use Arc<PrometheusExporter> as a MetricReader.
+// MetricReader trait is implemented by this adapter.
+// These are provided by separate impl blocks for ArcPrometheusReader.
+#[derive(Clone, Debug)]
 struct ArcPrometheusReader(Arc<PrometheusExporter>);
 
-impl TemporalitySelector for ArcPrometheusReader {
-    fn temporality(&self, kind: InstrumentKind) -> Temporality {
-        self.0.temporality(kind)
-    }
-}
-
-impl AggregationSelector for ArcPrometheusReader {
-    fn aggregation(&self, kind: InstrumentKind) -> Aggregation {
-        self.0.aggregation(kind)
-    }
-}
-
 impl MetricReader for ArcPrometheusReader {
-    fn register_pipeline(&self, pipeline: std::sync::Weak<Pipeline>) {
-        self.0.register_pipeline(pipeline)
+    // Methods from MetricReader itself
+    fn register_pipeline(&self, pipeline: Weak<Pipeline>) {
+        self.0.register_pipeline(pipeline);
     }
 
-    fn collect(&self, rm: &mut ResourceMetrics) -> OTelMetricsResult<()> {
-        self.0.collect(rm)
+    fn temporality(&self, instrument_kind: InstrumentKind) -> Temporality {
+        self.0.temporality(instrument_kind)
     }
 
-    fn force_flush(&self) -> OTelMetricsResult<()> {
-        self.0.force_flush(&opentelemetry::Context::current())
+    fn collect(&self, rm: &mut ResourceMetrics) -> std::result::Result<(), MetricError> {
+        self.0.collect(rm).map_err(|e| e.into())
     }
 
-    fn shutdown(&self) -> OTelMetricsResult<()> {
-        self.0.shutdown()
-    }
-}
-
-// Adapter to use Arc<PrometheusExporter> as a prometheus::Collector
-#[derive(Debug, Clone)]
-pub struct ArcPrometheusCollector(Arc<PrometheusExporter>);
-
-impl PrometheusCollectorTrait for ArcPrometheusCollector {
-    fn desc(&self) -> Vec<&PrometheusDesc> {
-        self.0.desc()
+    fn force_flush(&self) -> std::result::Result<(), opentelemetry_sdk::error::OTelSdkError> {
+        self.0.force_flush().map_err(|e| e.into())
     }
 
-    fn collect(&self) -> Vec<PrometheusMetricFamily> {
-        self.0.collect()
+    fn shutdown(&self) -> std::result::Result<(), opentelemetry_sdk::error::OTelSdkError> {
+        self.0.shutdown().map_err(|e| e.into())
     }
 }
-
 
 /// Name for the OpenTelemetry meter used within the Blueprint system.
 const OTEL_METER_NAME: &str = "blueprint_metrics";
-
-// --- OpenTelemetryExporter ---
 
 /// Configuration for the OpenTelemetry exporter.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)] 
@@ -98,12 +99,11 @@ impl Default for OpenTelemetryConfig {
 
 /// `OpenTelemetryExporter` sets up and manages the OpenTelemetry metrics pipeline,
 /// including a Prometheus exporter.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OpenTelemetryExporter {
     meter_provider: Arc<SdkMeterProvider>,
     pub meter: opentelemetry::metrics::Meter,
-    config: OpenTelemetryConfig,
-    shared_prometheus_exporter: Arc<PrometheusExporter>, // Store the Arc'd exporter
+    pub prometheus_registry: Registry, // Registry used by the PrometheusExporter
 }
 
 impl OpenTelemetryExporter {
@@ -119,7 +119,7 @@ impl OpenTelemetryExporter {
     ///
     /// # Errors
     /// Returns an `Error` if the setup of the OpenTelemetry pipeline or Prometheus exporter fails.
-    pub fn new(otel_config: OpenTelemetryConfig) -> Result<Self> { 
+    pub fn new(otel_config: OpenTelemetryConfig) -> std::result::Result<Self, CrateLocalError> { 
         info!("Creating OpenTelemetryExporter with config: {:?}", otel_config);
 
         // Define the OTel Resource attributes using the provided configuration.
@@ -139,18 +139,20 @@ impl OpenTelemetryExporter {
             .with_attributes(resource_attributes)
             .build();
 
-        // Create the PrometheusExporter instance. It will use its own default internal registry.
+        // Create a Prometheus Registry
+        let prometheus_registry = Registry::new();
+
+        // Create the PrometheusExporter instance, configured with our registry.
         let actual_prom_exporter = opentelemetry_prometheus::exporter()
+            .with_registry(prometheus_registry.clone())
             .build()
-            .map_err(|e| Error::Other(format!("Failed to build OTel PrometheusExporter: {}", e)))?;
+            .map_err(|e| CrateLocalError::Other(format!("Failed to build OTel PrometheusExporter: {}", e)))?;
         
         let shared_prom_exporter_arc = Arc::new(actual_prom_exporter);
-        let sdk_reader_adapter = ArcPrometheusReader(shared_prom_exporter_arc.clone());
-
-        info!("OTel PrometheusExporter instance created and wrapped in Arc. Adapter created for SdkMeterProvider.");
+        info!("OTel PrometheusExporter instance created and wrapped in Arc. Attempting to use it directly as a reader.");
         
         let meter_provider = SdkMeterProvider::builder()
-            .with_reader(sdk_reader_adapter) // Pass the adapter to the SDK
+            .with_reader(ArcPrometheusReader(shared_prom_exporter_arc.clone())) // Pass the adapter
             .with_resource(resource)
             .build();
 
@@ -166,14 +168,8 @@ impl OpenTelemetryExporter {
         Ok(OpenTelemetryExporter {
             meter,
             meter_provider: Arc::new(meter_provider),
-            config: otel_config,
-            shared_prometheus_exporter: shared_prom_exporter_arc,
+            prometheus_registry,
         })
-    }
-
-    /// Returns a clone of the Arc-wrapped PrometheusExporter, adapted as a prometheus::Collector.
-    pub fn get_collector_adapter(&self) -> ArcPrometheusCollector {
-        ArcPrometheusCollector(self.shared_prometheus_exporter.clone())
     }
 
     /// Get the meter
@@ -257,5 +253,17 @@ impl OpenTelemetryExporter {
             .i64_up_down_counter(name)
             .with_description(description);
         builder.build()
+    }
+}
+
+impl PrometheusCollectorTrait for OpenTelemetryExporter {
+    fn desc(&self) -> Vec<&PrometheusDesc> {
+        // Descriptors can be complex for a registry; returning an empty vec is often acceptable.
+        // Alternatively, self.prometheus_registry.root_descriptors() could be used if lifetimes match.
+        vec![]
+    }
+
+    fn collect(&self) -> Vec<PrometheusMetricFamily> {
+        self.prometheus_registry.gather()
     }
 }
