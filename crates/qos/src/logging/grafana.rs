@@ -394,6 +394,7 @@ pub struct DataSourceDetails {
 // Specific jsonData structs
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct PrometheusJsonData {
     pub http_method: String, // e.g., "POST"
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -631,7 +632,10 @@ impl GrafanaClient {
             targets: vec![
                 Target {
                     ref_id: "A".to_string(),
-                    expr: "up{job=\"prometheus\"}".to_string(),
+                    expr: format!(
+                        "otel_job_executions_total{{service_id=\\\"{}\\\",blueprint_id=\\\"{}\\\"}}",
+                        service_id, blueprint_id
+                    ),
                     datasource: None,
                 },
                 Target {
@@ -920,7 +924,7 @@ impl GrafanaClient {
                 }
                 Err(e) => {
                     error!(target: "blueprint_qos::logging::grafana", "Failed to parse successful health check response for UID {} from body '{}': {}", uid, response_text, e);
-                    Err(Error::Json(format!(
+                    Err(Error::GrafanaApi(format!(
                         "Failed to parse health check response for UID {} from body '{}': {}",
                         uid, response_text, e
                     )))

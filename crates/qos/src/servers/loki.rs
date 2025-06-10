@@ -104,7 +104,7 @@ impl ServerManager for LokiServer {
             *id = Some(container_id.clone());
         }
 
-        self.wait_until_ready(30).await?;
+        self.wait_until_ready(90).await?;
 
         info!("Loki server started successfully");
         Ok(())

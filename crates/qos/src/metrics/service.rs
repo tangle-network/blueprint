@@ -91,6 +91,7 @@ pub async fn run_metrics_server(config: MetricsConfig) -> Result<Arc<EnhancedMet
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::servers::prometheus::PrometheusServerConfig;
 
     /// Tests that a new `MetricsService` can be created with a valid configuration.
     ///
@@ -102,9 +103,9 @@ mod tests {
     #[test]
     fn test_metrics_service_creation() {
         let config = MetricsConfig {
+            prometheus_server: Some(PrometheusServerConfig::default()),
             service_id: 42,
             blueprint_id: 24,
-            bind_address: "127.0.0.1:9090".to_string(),
             collection_interval_secs: 60,
             max_history: 100,
         };
@@ -126,9 +127,9 @@ mod tests {
     #[test]
     fn test_metrics_service_with_otel_config() {
         let config = MetricsConfig {
+            prometheus_server: Some(PrometheusServerConfig::default()),
             service_id: 42,
             blueprint_id: 24,
-            bind_address: "127.0.0.1:9090".to_string(),
             collection_interval_secs: 60,
             max_history: 100,
         };
@@ -152,9 +153,9 @@ mod tests {
     #[test]
     fn test_metrics_service_record_job_execution() {
         let config = MetricsConfig {
+            prometheus_server: Some(PrometheusServerConfig::default()),
             service_id: 42,
             blueprint_id: 24,
-            bind_address: "127.0.0.1:9090".to_string(),
             collection_interval_secs: 60,
             max_history: 100,
         };
@@ -174,9 +175,9 @@ mod tests {
     #[test]
     fn test_metrics_service_record_job_error() {
         let config = MetricsConfig {
+            prometheus_server: Some(PrometheusServerConfig::default()),
             service_id: 42,
             blueprint_id: 24,
-            bind_address: "127.0.0.1:9090".to_string(),
             collection_interval_secs: 60,
             max_history: 100,
         };

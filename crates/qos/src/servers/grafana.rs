@@ -10,6 +10,7 @@ use crate::logging::loki::LokiConfig;
 use crate::servers::ServerManager;
 use crate::servers::common::DockerManager;
 
+const HEALTH_CHECK_TIMEOUT_SECS: u64 = 90;
 const GRAFANA_IMAGE_NAME_FULL: &str = "grafana/grafana:10.4.3";
 
 /// Grafana server configuration
@@ -151,7 +152,7 @@ impl ServerManager for GrafanaServer {
             *id = Some(container_id.clone());
         }
 
-        self.wait_until_ready(30).await?;
+        self.wait_until_ready(HEALTH_CHECK_TIMEOUT_SECS).await?;
 
         info!("Grafana server started successfully");
         Ok(())

@@ -3568,8 +3568,10 @@ dependencies = [
  "blueprint-testing-utils",
  "bollard",
  "chrono",
+ "env_logger 0.11.8",
  "futures",
  "hyper 1.6.0",
+ "log",
  "opentelemetry",
  "opentelemetry-prometheus",
  "opentelemetry-semantic-conventions",
@@ -3581,6 +3583,7 @@ dependencies = [
  "reqwest 0.12.19",
  "serde",
  "serde_json",
+ "serial_test",
  "sysinfo",
  "tangle-subxt",
  "tempfile",
@@ -17323,6 +17326,7 @@ version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b258109f244e1d6891bf1053a55d63a5cd4f8f4c30cf9a1280989f80e7a1fa9"
 dependencies = [
+ "futures",
  "once_cell",
  "parking_lot 0.12.4",
  "scc",

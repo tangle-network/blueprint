@@ -1,4 +1,5 @@
 use blueprint_core::{debug, info};
+use blueprint_core::error;
 use prometheus::Registry;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -6,12 +7,13 @@ use tokio::sync::RwLock;
 
 use crate::error::Result;
 use crate::metrics::opentelemetry::{OpenTelemetryConfig, OpenTelemetryExporter};
-use crate::metrics::prometheus::{PrometheusCollector, PrometheusServer};
+use crate::metrics::prometheus::PrometheusCollector;
+use crate::servers::prometheus::PrometheusServer;
 use crate::metrics::types::{
     BlueprintMetrics, BlueprintStatus, MetricsConfig, MetricsProvider, SystemMetrics,
 };
 use opentelemetry::KeyValue;
-use opentelemetry_sdk::metrics::MetricsResult;
+use crate::servers::ServerManager; // Import ServerManager trait for .start()
 
 /// Enhanced metrics provider that integrates Prometheus and OpenTelemetry
 pub struct EnhancedMetricsProvider {
@@ -89,7 +91,7 @@ impl EnhancedMetricsProvider {
         // Create an OpenTelemetry counter for job executions
         let otel_job_executions_counter = opentelemetry_exporter
             .meter()
-            .u64_counter("otel_blueprint_job_executions")
+            .u64_counter("otel_job_executions")
             .with_description("Total number of job executions recorded via OTel")
             .build();
         info!("Created otel_job_executions_counter in EnhancedMetricsProvider");
@@ -300,7 +302,7 @@ impl EnhancedMetricsProvider {
     }
 
     /// Force flushes the OpenTelemetry metrics pipeline via the exporter.
-    pub fn force_flush_otel_metrics(&self) -> MetricsResult<()> {
+    pub fn force_flush_otel_metrics(&self) -> crate::error::Result<()> {
         info!("EnhancedMetricsProvider: Attempting to force flush OpenTelemetry metrics...");
         match self.opentelemetry_exporter.force_flush() {
             Ok(_) => {
@@ -309,7 +311,7 @@ impl EnhancedMetricsProvider {
             }
             Err(err) => {
                 error!("EnhancedMetricsProvider: OpenTelemetry metrics force_flush failed: {:?}", err);
-                Err(err)
+                Err(crate::error::Error::Metrics(format!("OpenTelemetry SDK flush error: {}", err)))
             }
         }
     }

@@ -1,186 +1,162 @@
-use blueprint_core::{error, info};
 use std::sync::Arc;
-
-use crate::QoSConfig;
-use crate::error::Result;
-use crate::heartbeat::{HeartbeatConsumer, HeartbeatService};
-use crate::logging::grafana::{CreateDataSourceRequest, LokiJsonData, PrometheusJsonData};
-use crate::logging::{GrafanaClient, init_loki_logging};
-use crate::metrics::opentelemetry::OpenTelemetryConfig;
-use crate::metrics::provider::EnhancedMetricsProvider;
-use crate::metrics::service::MetricsService;
-use crate::servers::{
-    ServerManager, grafana::GrafanaServer, loki::LokiServer, prometheus::PrometheusServer,
+use blueprint_core::{error as core_error, info};
+use tokio::sync::{oneshot, RwLock};
+use crate::{
+    error::{self, Result},
+    heartbeat::{HeartbeatConsumer, HeartbeatService},
+    logging::grafana::{
+        CreateDataSourceRequest, Dashboard, GrafanaClient, LokiJsonData,
+        PrometheusJsonData,
+    },
+    logging::loki::init_loki_logging,
+    metrics::{
+        opentelemetry::OpenTelemetryConfig, provider::EnhancedMetricsProvider,
+        service::MetricsService,
+    },
+    servers::{
+        grafana::GrafanaServer, loki::LokiServer, prometheus::PrometheusServer, ServerManager,
+    },
+    QoSConfig,
 };
-use tokio::sync::RwLock;
 
-/// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality
+/// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality.
 pub struct QoSService<C>
 where
     C: HeartbeatConsumer + Send + Sync + 'static,
 {
-    /// Heartbeat service
-    #[allow(dead_code)]
-    heartbeat_service: Option<Arc<HeartbeatService<C>>>, // Changed to Arc
-
-    /// Metrics service
-    metrics_service: Option<Arc<MetricsService>>, // Changed to Arc
-
-    /// Grafana client
+    #[allow(dead_code)] // TODO: Used for graceful shutdown
+    heartbeat_service: Option<Arc<HeartbeatService<C>>>,
+    metrics_service: Option<Arc<MetricsService>>,
     grafana_client: Option<Arc<GrafanaClient>>,
-
-    /// Dashboard URL
     dashboard_url: Option<String>,
-
-    /// Grafana server manager
+    #[allow(dead_code)] // TODO: Used for graceful shutdown
     grafana_server: Option<Arc<GrafanaServer>>,
-
-    /// Loki server manager
     loki_server: Option<Arc<LokiServer>>,
-
-    /// Prometheus server manager
     prometheus_server: Option<Arc<PrometheusServer>>,
-
-    /// Oneshot sender to signal completion when this service is dropped.
-    completion_tx: RwLock<Option<tokio::sync::oneshot::Sender<Result<()>>>>,
+    completion_tx: Arc<RwLock<Option<oneshot::Sender<Result<()>>>>>,
+    completion_rx: RwLock<Option<tokio::sync::oneshot::Receiver<Result<()>>>>,
 }
 
 impl<C> QoSService<C>
 where
     C: HeartbeatConsumer + Send + Sync + 'static,
 {
-    /// Create a new `QoS` service with heartbeat, metrics, and optional Loki/Grafana integration
-    ///
-    /// # Errors
-    /// Returns an error if the metrics service initialization fails
-    pub async fn new(config: QoSConfig, heartbeat_consumer: Arc<C>) -> Result<Self> {
-        // Initialize heartbeat service if configured
-        let _heartbeat_service = config.heartbeat.clone().map(|hc_config| {
-            Arc::new(HeartbeatService::new(hc_config, heartbeat_consumer.clone()))
-        });
+    pub fn heartbeat_service(&self) -> Option<&Arc<HeartbeatService<C>>> {
+        self.heartbeat_service.as_ref()
+    }
 
-        // Initialize metrics service if configured
-        let metrics_service = if let Some(metrics_config) = config.metrics.clone() {
-            Some(Arc::new(MetricsService::new(metrics_config)?))
-        } else {
-            None
+    /// Sets the completion sender for this QoS service.
+    /// This sender is used to signal that the service (or the component it's monitoring)
+    /// has completed its primary operation, often used in testing or graceful shutdown scenarios.
+    pub async fn set_completion_sender(&self, sender: oneshot::Sender<Result<()>>) {
+        let mut guard = self.completion_tx.write().await;
+        if guard.is_some() {
+            core_error!("Completion sender already set for QoSService, overwriting.");
+        }
+        *guard = Some(sender);
+    }
+
+    /// Common initialization logic for `QoSService`.
+    async fn initialize(
+        config: QoSConfig,
+        heartbeat_consumer: Arc<C>,
+        otel_config: Option<OpenTelemetryConfig>,
+    ) -> Result<Self> {
+        let heartbeat_service = config
+            .heartbeat
+            .clone()
+            .map(|hc| Arc::new(HeartbeatService::new(hc, heartbeat_consumer.clone())));
+
+        let metrics_service = match (config.metrics.clone(), otel_config) {
+            (Some(mc), Some(oc)) => Some(Arc::new(MetricsService::with_otel_config(mc, oc)?)),
+            (Some(mc), None) => Some(Arc::new(MetricsService::new(mc)?)),
+            (None, _) => None,
         };
 
-        // If metrics service is configured, start its collection process (which may start an embedded Prometheus server)
-        if let Some(ref metrics_service_arc) = metrics_service {
-            info!("QoSService::new: Metrics service is Some, attempting to start collection.");
-            metrics_service_arc.provider().clone().start_collection().await?;
+        if let Some(_ms) = &metrics_service {
+            info!("Metrics service is Some, attempting to start collection.");
+            // ms.provider().clone().start_collection().await?; // Removed: PrometheusServer manager handles this
         }
 
-        // Initialize Loki logging if configured
         if let Some(loki_config) = &config.loki {
             if let Err(e) = init_loki_logging(loki_config.clone()) {
-                error!("Failed to initialize Loki logging: {}", e);
+                core_error!("Failed to initialize Loki logging: {}", e);
             } else {
                 info!("Initialized Loki logging");
             }
         }
 
-        // (around line 88)
         let (grafana_server, loki_server, prometheus_server) = if config.manage_servers {
-            // Define instances with new names
-            let grafana_server_instance = config
+            let grafana = config
                 .grafana_server
                 .as_ref()
-                .map(|cfg| Arc::new(GrafanaServer::new(cfg.clone())));
-            let loki_server_instance = config
+                .map(|c| Arc::new(GrafanaServer::new(c.clone())));
+            let loki = config
                 .loki_server
                 .as_ref()
-                .map(|cfg| Arc::new(LokiServer::new(cfg.clone())));
-            let metrics_service_instance = metrics_service.clone();
-            let prometheus_registry_for_server: Option<Arc<prometheus::Registry>> =
-                metrics_service_instance
-                    .as_ref()
-                    .map(|ms| ms.provider().prometheus_collector().registry().clone());
+                .map(|c| Arc::new(LokiServer::new(c.clone())));
 
-            let prometheus_server_instance = config.prometheus_server.as_ref().map(|server_cfg| {
-                let registry_to_pass = if !server_cfg.use_docker {
-                    prometheus_registry_for_server.clone()
-                } else {
-                    None
-                };
-                Arc::new(PrometheusServer::new(server_cfg.clone(), registry_to_pass, metrics_provider.clone()))
+            let prometheus = config.prometheus_server.as_ref().map(|sc| {
+                let registry =
+                    metrics_service.as_ref().and_then(|ms| {
+                        if !sc.use_docker {
+                            Some(ms.provider().prometheus_collector().registry().clone())
+                        } else {
+                            None
+                        }
+                    });
+                // This unwrap is safe because prometheus_server config requires metrics config
+                let emp = metrics_service.as_ref().unwrap().provider().clone();
+                Arc::new(PrometheusServer::new(sc.clone(), registry, emp))
             });
-            // Start the servers using the *_instance variables (around line 118 onwards)
-            if let Some(server) = &grafana_server_instance {
-                // Use grafana_server_instance
+
+            if let Some(s) = &grafana {
                 info!("Starting Grafana server...");
-                if let Err(e) = server.start().await {
-                    error!("Failed to start Grafana server: {}", e); // Non-critical, just log
+                if let Err(e) = s.start().await {
+                    core_error!("Failed to start Grafana server: {}", e);
                 } else {
-                    info!("Grafana server started successfully: {}", server.url());
+                    info!("Grafana server started successfully: {}", s.url());
                 }
             }
 
-            if let Some(server) = &loki_server_instance {
-                // Use loki_server_instance
+            if let Some(s) = &loki {
                 info!("Starting Loki server...");
-                if let Err(e) = server.start().await {
-                    error!("Failed to start Loki server: {}", e); // Non-critical, just log
+                if let Err(e) = s.start().await {
+                    core_error!("Failed to start Loki server: {}", e);
                 } else {
-                    info!("Loki server started successfully: {}", server.url());
+                    info!("Loki server started successfully: {}", s.url());
                 }
             }
 
-            if let Some(server) = &prometheus_server_instance {
-                // Use prometheus_server_instance
-                info!("Starting Prometheus server (exposer)...");
-                if let Err(e) = server.start().await {
-                    error!(
-                        "Failed to start critical Prometheus server (exposer): {}",
-                        e
-                    );
-                    return Err(e); // This is critical
+            if let Some(s) = &prometheus {
+                info!("Starting Prometheus server...");
+                if let Err(e) = s.start().await {
+                    core_error!("Failed to start critical Prometheus server: {}", e);
+                    return Err(e); // Critical failure
                 } else {
-                    info!(
-                        "Prometheus server (exposer) started successfully: {}",
-                        server.url()
-                    );
+                    info!("Prometheus server started successfully: {}", s.url());
                 }
             }
 
-            // Return the instances (around line 145)
-            (
-                grafana_server_instance,
-                loki_server_instance,
-                prometheus_server_instance,
-            )
+            (grafana, loki, prometheus)
         } else {
             (None, None, None)
         };
-        // Now, the variables from line 88 (grafana_server, loki_server, etc.) are correctly populated
-        // and can be used for the struct initialization later.
 
-        // Update Grafana client if we are managing servers
-        let grafana_client = if let Some(server) = &grafana_server {
-            let mut client_grafana_config = server.client_config();
-            client_grafana_config.loki_config = config.loki.clone(); // Populate LokiConfig
-            Some(Arc::new(GrafanaClient::new(client_grafana_config)))
-        } else {
-            config.grafana.as_ref().map(|user_grafana_config| {
-                let mut client_grafana_config = user_grafana_config.clone();
-                client_grafana_config.loki_config = config.loki.clone(); // Populate LokiConfig
-                Arc::new(GrafanaClient::new(client_grafana_config))
-            })
+        let grafana_client = match &grafana_server {
+            Some(server) => {
+                let mut client_config = server.client_config();
+                client_config.loki_config = config.loki.clone();
+                Some(Arc::new(GrafanaClient::new(client_config)))
+            }
+            None => config.grafana.as_ref().map(|user_config| {
+                let mut client_config = user_config.clone();
+                client_config.loki_config = config.loki.clone();
+                Arc::new(GrafanaClient::new(client_config))
+            }),
         };
 
-        // Initialize MetricsService
-        let metrics_service = if let Some(ref mc) = config.metrics {
-            Some(Arc::new(MetricsService::new(mc.clone())?))
-        } else {
-            None
-        };
-
-        // Initialize HeartbeatService
-        let heartbeat_service = config.heartbeat.clone().map(|hc_config| {
-            Arc::new(HeartbeatService::new(hc_config, heartbeat_consumer.clone()))
-        });
-
+        let (tx, rx): (oneshot::Sender<Result<()>>, oneshot::Receiver<Result<()>>) = oneshot::channel();
         Ok(Self {
             heartbeat_service,
             metrics_service,
@@ -189,305 +165,120 @@ where
             grafana_server,
             loki_server,
             prometheus_server,
-            completion_tx: RwLock::new(None),
+            completion_tx: Arc::new(RwLock::new(Some(tx))),
+            completion_rx: RwLock::new(Some(rx)),
         })
     }
 
-    /// Create a new `QoS` service with custom OpenTelemetry configuration
-    ///
-    /// # Errors
-    /// Returns an error if the metrics service initialization fails
+    pub async fn new(config: QoSConfig, heartbeat_consumer: Arc<C>) -> Result<Self> {
+        Self::initialize(config, heartbeat_consumer, None).await
+    }
+
     pub async fn with_otel_config(
         config: QoSConfig,
         heartbeat_consumer: Arc<C>,
         otel_config: OpenTelemetryConfig,
     ) -> Result<Self> {
-        // Initialize heartbeat service if configured
-        let _heartbeat_service = config.heartbeat.clone().map(|hc_config| {
-            Arc::new(HeartbeatService::new(hc_config, heartbeat_consumer.clone()))
-        });
-
-        let mut metrics_service: Option<Arc<MetricsService>> = None;
-        if let Some(metrics_config) = config.metrics.clone() {
-            // Initialize metrics service with custom OpenTelemetry configuration
-            metrics_service = Some(Arc::new(MetricsService::with_otel_config(
-                metrics_config,
-                otel_config, // Passed in otel_config
-            )?));
-        } else {
-            metrics_service = None;
-        };
-
-        // If metrics service is configured, start its collection process (which may start an embedded Prometheus server)
-        if let Some(ref metrics_service_arc) = metrics_service {
-            info!("QoSService::with_otel_config: Metrics service is Some, attempting to start collection.");
-            metrics_service_arc.provider().clone().start_collection().await?;
-        }
-
-        // Initialize Loki logging if configured
-        if let Some(loki_config) = &config.loki {
-            if let Err(e) = init_loki_logging(loki_config.clone()) {
-                error!("Failed to initialize Loki logging: {}", e);
-            } else {
-                info!("Initialized Loki logging");
-            }
-        }
-
-        // Initialize server managers if configured
-        let (grafana_server, loki_server, prometheus_server) = if config.manage_servers {
-            let metrics_service_instance_otel = metrics_service.clone();
-            let prometheus_registry_for_server_otel: Option<Arc<prometheus::Registry>> =
-                metrics_service_instance_otel
-                    .as_ref()
-                    .map(|ms| ms.provider().prometheus_collector().registry().clone());
-
-            let (grafana_server, loki_server, prometheus_server) = (
-                config
-                    .grafana_server
-                    .as_ref()
-                    .map(|cfg| Arc::new(GrafanaServer::new(cfg.clone()))),
-                config
-                    .loki_server
-                    .as_ref()
-                    .map(|cfg| Arc::new(LokiServer::new(cfg.clone()))),
-                config.prometheus_server.as_ref().map(|server_cfg| {
-                    let registry_to_pass = if !server_cfg.use_docker {
-                        prometheus_registry_for_server_otel.clone()
-                    } else {
-                        None
-                    };
-                    Arc::new(PrometheusServer::new(server_cfg.clone(), registry_to_pass, metrics_provider.clone()))
-                }),
-            );
-
-            // Start the servers if configured
-            if let Some(server) = &grafana_server {
-                info!("Starting Grafana server...");
-                if let Err(e) = server.start().await {
-                    error!("Failed to start Grafana server: {}", e);
-                } else {
-                    info!("Grafana server started successfully");
-                }
-            }
-
-            if let Some(server) = &loki_server {
-                info!("Starting Loki server...");
-                if let Err(e) = server.start().await {
-                    error!("Failed to start Loki server: {}", e);
-                } else {
-                    info!("Loki server started successfully");
-                }
-            }
-
-            if let Some(server) = &prometheus_server {
-                info!("Starting Prometheus server...");
-                if let Err(e) = server.start().await {
-                    error!("Failed to start critical Prometheus server: {}", e);
-                    return Err(e);
-                } else {
-                    info!("Prometheus server started successfully");
-                }
-            }
-            // Return the tuple of server instances
-            (grafana_server, loki_server, prometheus_server)
-        } else {
-            (None, None, None)
-        }; // Closes the server management if/else block
-
-        // Initialize Grafana client
-        let grafana_client = if let Some(server) = &grafana_server {
-            let mut client_grafana_config = server.client_config();
-            client_grafana_config.loki_config = config.loki.clone();
-            Some(Arc::new(GrafanaClient::new(client_grafana_config)))
-        } else {
-            config.grafana.as_ref().map(|user_grafana_config| {
-                let mut client_grafana_config = user_grafana_config.clone();
-                client_grafana_config.loki_config = config.loki.clone();
-                Arc::new(GrafanaClient::new(client_grafana_config))
-            })
-        };
-
-        // METRICS SERVICE IS ALREADY INITIALIZED at the top of this function using the explicit otel_config.
-        // The local 'metrics_service' variable (which is an Option<Arc<MetricsService>>) correctly holds this instance.
-        // DO NOT RE-INITIALIZE OR OVERWRITE 'metrics_service' here.
-
-        // Initialize HeartbeatService
-        let heartbeat_service = config.heartbeat.clone().map(|hc_config| {
-            Arc::new(HeartbeatService::new(hc_config, heartbeat_consumer.clone()))
-        });
-
-        Ok(Self {
-            heartbeat_service,
-            metrics_service,
-            grafana_client,
-            dashboard_url: None,
-            grafana_server, // These are Option<Arc<ServerType>> from the manage_servers block
-            loki_server,
-            prometheus_server,
-            completion_tx: RwLock::new(None),
-        })
+        Self::initialize(config, heartbeat_consumer, Some(otel_config)).await
     }
 
-    /// Updates the URL for an existing Prometheus datasource in Grafana
-    /// This is particularly useful when switching from direct metrics scraping
-    /// to using the scraping Prometheus server
-    pub async fn update_prometheus_datasource(
-        &self,
-        datasource_uid: &str,
-        new_url: &str,
-    ) -> Result<Option<String>> {
-        if let Some(grafana) = &self.grafana_client {
-            info!(
-                "Updating Prometheus datasource {} to use URL: {}",
-                datasource_uid, new_url
-            );
-            return grafana.update_datasource_url(datasource_uid, new_url).await;
-        }
-        info!("Grafana not configured, skipping datasource URL update");
-        Ok(None)
-    }
-
-    /// Create a Grafana dashboard for the service
-    ///
-    /// # Errors
-    /// Returns an error if the dashboard creation fails due to Grafana API issues
-    pub async fn create_dashboard(
-        &mut self,
-        service_id: u64,
-        blueprint_id: u64,
-        prometheus_datasource_uid: &str, // Renamed for clarity to UID
-        loki_datasource_uid: &str,       // Renamed for clarity to UID
-    ) -> Result<Option<String>> {
-        if let Some(client) = &self.grafana_client {
-            let prometheus_ds_name = "Blueprint Prometheus";
-            let prometheus_url = self.prometheus_server_url().unwrap_or_else(|| {
-                blueprint_core::warn!("Prometheus server URL not available for Grafana data source creation, defaulting to http://localhost:9091");
-                "http://localhost:9091".to_string()
-            });
-
-            let prometheus_json_data = PrometheusJsonData {
-                http_method: "GET".to_string(),
-                timeout: Some(30),
-                disable_metrics_lookup: false, // Explicitly enable metrics lookup
-            };
-            let prometheus_request_payload = CreateDataSourceRequest {
-                name: prometheus_ds_name.to_string(),
-                ds_type: "prometheus".to_string(),
-                url: prometheus_url.clone(),
-                access: "proxy".to_string(),
-                uid: Some(prometheus_datasource_uid.to_string()),
-                is_default: Some(true),
-                json_data: Some(
-                    serde_json::to_value(prometheus_json_data)
-                        .map_err(|e| crate::error::Error::Json(e.to_string()))?,
-                ),
-            };
-
-            match client
-                .create_or_update_datasource(prometheus_request_payload)
-                .await
-            {
-                Ok(response) => {
-                    info!(
-                        "Successfully created/updated Prometheus datasource '{}' in Grafana with UID: {}",
-                        response.name, response.datasource.uid
-                    );
-                }
-                Err(e) => {
-                    error!(
-                        "Failed to create/update Prometheus datasource '{}' in Grafana: {}. Halting dashboard creation.",
-                        prometheus_ds_name, e
-                    );
-                    return Err(e);
-                }
-            }
-
-            if !loki_datasource_uid.is_empty() {
-                let loki_ds_name = "Blueprint Loki";
-                let loki_url = self.loki_server_url().or_else(|| {
-                    client.config().loki_config.as_ref().map(|lc| lc.url.clone())
-                }).unwrap_or_else(|| {
-                    blueprint_core::warn!("Loki server URL not available from managed server or Grafana config, defaulting to http://localhost:3100 for Grafana data source creation");
-                    "http://localhost:3100".to_string()
-                });
-
-                let loki_json_data = LokiJsonData {
-                    max_lines: Some(1000),
-                };
-                let loki_request_payload = CreateDataSourceRequest {
-                    name: loki_ds_name.to_string(),
-                    ds_type: "loki".to_string(),
-                    url: loki_url.clone(),
-                    access: "proxy".to_string(),
-                    uid: Some(loki_datasource_uid.to_string()),
-                    is_default: Some(false),
-                    json_data: Some(
-                        serde_json::to_value(loki_json_data)
-                            .map_err(|e| crate::error::Error::Json(e.to_string()))?,
-                    ),
-                };
-
-                match client
-                    .create_or_update_datasource(loki_request_payload)
-                    .await
-                {
-                    Ok(response) => {
-                        info!(
-                            "Successfully created/updated Loki datasource '{}' in Grafana with UID: {}",
-                            response.name, response.datasource.uid
-                        );
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to create/update Loki datasource in Grafana: {}. Proceeding with dashboard creation attempt.",
-                            e
-                        );
-                    }
-                }
-            }
-
-            // Now, create the dashboard using the provided datasource UIDs
-            match client
-                .create_blueprint_dashboard(
-                    service_id,   // Now passed as a parameter
-                    blueprint_id, // Now passed as a parameter
-                    prometheus_datasource_uid,
-                    loki_datasource_uid,
-                )
-                .await
-            {
-                Ok(url) => {
-                    self.dashboard_url = Some(url.clone());
-                    info!("Successfully created/updated Grafana dashboard: {}", url);
-                    Ok(Some(url))
-                }
-                Err(e) => {
-                    error!("Failed to create Grafana dashboard: {}", e);
-                    Err(e)
-                }
-            }
+    pub fn debug_server_status(&self) {
+        info!("--- QoS Server Status ---");
+        if self.grafana_server.is_some() {
+            info!("Grafana Server: Configured (instance present)");
         } else {
-            Ok(None)
+            info!("Grafana Server: Not configured");
         }
+        if self.loki_server.is_some() {
+            info!("Loki Server: Configured (instance present)");
+        } else {
+            info!("Loki Server: Not configured");
+        }
+        if self.prometheus_server.is_some() {
+            info!("Prometheus Server: Configured (instance present)");
+        } else {
+            info!("Prometheus Server: Not configured");
+        }
+        if self.grafana_client.is_some() {
+            info!("Grafana Client: Configured (instance present)");
+        } else {
+            info!("Grafana Client: Not configured");
+        }
+        if self.metrics_service.as_ref().map(|ms| ms.provider()).is_some() {
+            info!("Metrics Service: Configured (instance present)");
+        } else {
+            info!("Metrics Service: Not configured");
+        }
+        info!("-------------------------");
     }
 
-    /// Get the metrics provider if available
+    pub fn grafana_client(&self) -> Option<Arc<GrafanaClient>> {
+        self.grafana_client.clone()
+    }
+
+    pub fn grafana_server_url(&self) -> Option<String> {
+        self.grafana_server.as_ref().map(|server| server.url())
+    }
+
+    /// Get the Loki server URL, if configured and running.
     #[must_use]
-    pub fn metrics_provider(&self) -> Option<Arc<EnhancedMetricsProvider>> {
-        self.metrics_service
-            .as_ref()
-            .map(|arc_service| arc_service.provider())
+    pub fn loki_server_url(&self) -> Option<String> {
+        self.loki_server.as_ref().map(|s| s.url())
     }
 
-    /// Get a clone of the OpenTelemetry job executions counter, if the metrics service is available.
-    #[must_use]
-    pub fn get_otel_job_executions_counter(&self) -> Option<opentelemetry::metrics::Counter<u64>> {
-        self.metrics_service
-            .as_ref()
-            .map(|ms| ms.get_otel_job_executions_counter())
+    pub fn provider(&self) -> Option<Arc<EnhancedMetricsProvider>> {
+        self.metrics_service.as_ref().map(|s| s.provider())
     }
 
-    /// Record job execution if metrics service is available
+    pub async fn create_dashboard(&mut self, blueprint_name: &str) -> Result<()> {
+        let client = self.grafana_client.as_ref().ok_or(error::Error::Other(
+            "Grafana client not configured".to_string(),
+        ))?;
+
+        let loki_ds = CreateDataSourceRequest {
+            name: "Loki".to_string(),
+            ds_type: "loki".to_string(),
+            uid: Some("loki-blueprint".to_string()),
+            url: self
+                .loki_server
+                .as_ref()
+                .map_or_else(|| "http://loki:3100".to_string(), |s| s.url()),
+            access: "proxy".to_string(),
+            is_default: Some(false),
+            json_data: Some(serde_json::to_value(LokiJsonData {
+                max_lines: Some(1000),
+            })?),
+        };
+        client.create_or_update_datasource(loki_ds).await?;
+
+        let prometheus_ds = CreateDataSourceRequest {
+            name: "Prometheus".to_string(),
+            ds_type: "prometheus".to_string(),
+            uid: Some("prometheus-blueprint".to_string()),
+            url: self
+                .prometheus_server
+                .as_ref()
+                .map_or_else(|| "http://prometheus:9090".to_string(), |s| s.url()),
+            access: "proxy".to_string(),
+            is_default: Some(true),
+            json_data: Some(serde_json::to_value(PrometheusJsonData {
+                ..Default::default()
+            })?),
+        };
+        client.create_or_update_datasource(prometheus_ds).await?;
+
+        const DASHBOARD_TEMPLATE: &str = include_str!("../config/grafana_dashboard.json");
+        let mut dashboard: Dashboard = serde_json::from_str(DASHBOARD_TEMPLATE)?;
+        dashboard.title = format!("{} Dashboard", blueprint_name);
+
+        let dashboard_url = client
+            .create_dashboard(dashboard, None, "Provisioning Blueprint Dashboard")
+            .await?;
+        self.dashboard_url = Some(dashboard_url);
+
+        Ok(())
+    }
+
     pub fn record_job_execution(
         &self,
         job_id: u64,
@@ -495,131 +286,69 @@ where
         service_id: u64,
         blueprint_id: u64,
     ) {
-        if let Some(service) = &self.metrics_service {
-            service.record_job_execution(job_id, execution_time, service_id, blueprint_id);
+        if let Some(service) = self.metrics_service.as_ref() {
+            service
+                .provider()
+                .record_job_execution(job_id, execution_time, service_id, blueprint_id);
         }
     }
 
-    /// Record job error if metrics service is available
     pub fn record_job_error(&self, job_id: u64, error_type: &str) {
-        if let Some(service) = &self.metrics_service {
-            service.record_job_error(job_id, error_type);
+        if let Some(service) = self.metrics_service.as_ref() {
+            service.provider().record_job_error(job_id, error_type);
         }
     }
 
-    /// Get the Grafana server URL if available
-    #[must_use]
-    pub fn grafana_server_url(&self) -> Option<String> {
-        self.grafana_server.as_ref().map(|server| server.url())
-    }
+    pub async fn wait_for_completion(&self) -> Result<()> {
+        let rx_option = {
+            let mut guard = self.completion_rx.write().await; // tokio::sync::RwLock uses .await
+            guard.take()
+        };
 
-    /// Get the Loki server URL if available
-    #[must_use]
-    pub fn loki_server_url(&self) -> Option<String> {
-        self.loki_server.as_ref().map(|server| server.url())
-    }
-
-    /// Get the Grafana client if available
-    #[must_use]
-    pub fn grafana_client(&self) -> Option<&Arc<GrafanaClient>> {
-        self.grafana_client.as_ref()
-    }
-
-    /// Get the Prometheus server URL if available
-    #[must_use]
-    pub fn prometheus_server_url(&self) -> Option<String> {
-        self.prometheus_server.as_ref().map(|server| server.url())
-    }
-
-    /// Get the Prometheus registry if available
-    #[must_use]
-    pub fn prometheus_registry(&self) -> Option<Arc<prometheus::Registry>> {
-        self.metrics_provider().map(|provider| {
-            let collector = provider.prometheus_collector();
-            collector.registry().clone()
-        })
-    }
-
-    /// Get the heartbeat service if available
-    #[must_use]
-    pub fn heartbeat_service(&self) -> Option<&HeartbeatService<C>> {
-        self.heartbeat_service.as_ref().map(Arc::as_ref)
-    }
-
-    /// Debug method to check if servers are initialized
-    pub fn debug_server_status(&self) {
-        info!("Server status:");
-        info!("Grafana server: {}", self.grafana_server.is_some());
-        info!("Loki server: {}", self.loki_server.is_some());
-        info!(
-            "Prometheus server (exposer): {}",
-            self.prometheus_server.is_some()
-        );
-        if let Some(server) = &self.grafana_server {
-            info!("Grafana URL: {}", server.url());
-        }
-        if let Some(server) = &self.loki_server {
-            info!("Loki URL: {}", server.url());
-        }
-        if let Some(server) = &self.prometheus_server {
-            info!("Prometheus (exposer) URL: {}", server.url());
+        if let Some(rx) = rx_option {
+            match rx.await {
+                Ok(inner_result) => inner_result, // inner_result is Result<(), crate::error::Error>
+                Err(recv_error) => {
+                    // recv_error is tokio::sync::oneshot::error::RecvError
+                    Err(error::Error::Other(format!("Completion signal receiver dropped or channel closed prematurely: {:?}", recv_error)))
+                }
+            }
+        } else {
+            Err(error::Error::Other("wait_for_completion can only be called once or receiver was not initialized.".to_string()))
         }
     }
 
-    /// Sets the oneshot sender that will be used to signal completion when this QoSService is dropped.
-    /// This is typically called by an adapter (e.g., QoSServiceAdapter) when integrating QoSService
-    /// into a runner framework that expects a completion signal.
-    pub async fn set_completion_sender(&self, tx: tokio::sync::oneshot::Sender<Result<()>>) {
-        let mut guard = self.completion_tx.write().await;
-        if guard.is_some() {
-            blueprint_core::warn!(
-                "[QoSService::set_completion_sender] Completion sender was already set. Overwriting."
-            );
-        }
-        *guard = Some(tx);
+    pub async fn shutdown(&self) -> Result<()> {
+        info!("QoSService shutting down...");
+        // TODO: Implement graceful shutdown for servers
+        info!("QoSService shutdown complete.");
+        Ok(())
     }
-} // Closing brace for impl<C> QoSService<C>
+}
 
 impl<C> Drop for QoSService<C>
 where
     C: HeartbeatConsumer + Send + Sync + 'static,
 {
     fn drop(&mut self) {
-        // use std::backtrace::Backtrace;
-
-        // Stop the server managers
-        if let Some(server) = &self.grafana_server {
-            info!("[Drop] About to stop Grafana server...");
-            let _ = futures::executor::block_on(server.stop());
-            info!("[Drop] Grafana server stop returned.");
-        }
-
-        if let Some(server) = &self.loki_server {
-            info!("[Drop] About to stop Loki server...");
-            let _ = futures::executor::block_on(server.stop());
-            info!("[Drop] Loki server stop returned.");
-        }
-
-        if let Some(server) = &self.prometheus_server {
-            info!("[Drop] About to stop Prometheus server (exposer)...");
-            let _ = futures::executor::block_on(server.stop());
-            info!("[Drop] Prometheus server (exposer) stop returned.");
-        }
-
-        // Signal completion if a sender was provided
-        let mut sender_option_guard = self.completion_tx.blocking_write();
-
-        if let Some(tx) = sender_option_guard.take() {
-            if tx.send(Ok(())).is_err() {
-                info!(
-                    "[QoSService::Drop] Completion signal receiver was already dropped while sending Ok."
-                );
-            } else {
-                info!("[QoSService::Drop] Sent Ok(()) completion signal.");
+        if let Some(metrics_service) = self.metrics_service.as_ref() {
+            if let Err(e) = metrics_service.provider().force_flush_otel_metrics() {
+                core_error!("Failed to flush OpenTelemetry metrics on drop: {}", e);
             }
-        } else {
-            info!("[QoSService::Drop] No completion sender was set, so no explicit signal sent.");
         }
-        info!("[QoSService::Drop] Finished dropping QoSService<C>.");
+        match self.completion_tx.try_write() {
+            Ok(mut guard) => {
+                if let Some(tx) = guard.take() {
+                    if tx.send(Ok(())).is_err() {
+                        // Receiver was dropped, or channel was closed.
+                        // This is not necessarily an error during drop, as the service might have completed normally.
+                        info!("Attempted to send completion signal on drop, but receiver was already gone.");
+                    }
+                }
+            }
+            Err(_) => {
+                core_error!("Failed to acquire lock for completion_tx during drop (lock was contended). Signal not sent.");
+            }
+        }
     }
 }

@@ -26,17 +26,11 @@ use opentelemetry_sdk::{
 
 // Prometheus related
 use opentelemetry_prometheus::PrometheusExporter;
-use prometheus::{
-
-    core::Desc as PrometheusDesc,
-    proto::MetricFamily as PrometheusMetricFamily,
-    Registry,
-};
+use prometheus::Registry;
 
 // General OpenTelemetry
 use opentelemetry::KeyValue;
-use opentelemetry::metrics::MeterProvider as _;
-use opentelemetry_sdk::metrics::MeterProvider as _; // Allow use of meter() method
+use opentelemetry::metrics::MeterProvider as _; // Allow use of meter() method
 use opentelemetry_semantic_conventions::resource; // Import the resource module directly
 
 // Local crate imports
@@ -106,6 +100,7 @@ pub struct OpenTelemetryExporter {
     sdk_meter_provider: Arc<SdkMeterProvider>,
     pub meter: opentelemetry::metrics::Meter,
     pub prometheus_registry: Arc<Registry>, // Now an Arc to the shared registry
+    #[allow(dead_code)] // TODO: Used for graceful shutdown
     otel_prometheus_exporter: Arc<PrometheusExporter>,
 }
 

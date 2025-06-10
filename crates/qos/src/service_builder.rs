@@ -1,4 +1,3 @@
-use blueprint_core::error;
 use std::sync::Arc;
 
 use crate::QoSConfig;
@@ -143,38 +142,11 @@ where
             crate::error::Error::Other("Heartbeat consumer is required".to_string())
         })?;
 
-        // Extract service_id and blueprint_id for dashboard creation before config is moved
-        let service_id_for_dashboard = self.config.service_id.unwrap_or(0); // Defaulting to 0 if None
-        let blueprint_id_for_dashboard = self.config.blueprint_id.unwrap_or(0); // Defaulting to 0 if None
-
-        // Create the QoS service
-        let mut service = if let Some(otel_config) = self.otel_config {
-            QoSService::with_otel_config(self.config, heartbeat_consumer, otel_config).await?
+        if let Some(otel_config) = self.otel_config {
+            QoSService::with_otel_config(self.config, heartbeat_consumer, otel_config).await
         } else {
-            QoSService::new(self.config, heartbeat_consumer).await?
-        };
-
-        // Create a dashboard if requested
-        if self.create_dashboard && service.grafana_client().is_some() {
-            let prometheus_ds = self
-                .prometheus_datasource
-                .unwrap_or_else(|| "prometheus".to_string());
-            let loki_ds = self.loki_datasource.unwrap_or_else(|| "loki".to_string());
-
-            if let Err(e) = service
-                .create_dashboard(
-                    service_id_for_dashboard,
-                    blueprint_id_for_dashboard,
-                    &prometheus_ds,
-                    &loki_ds,
-                )
-                .await
-            {
-                error!("Failed to create dashboard: {}", e);
-            }
+            QoSService::new(self.config, heartbeat_consumer).await
         }
-
-        Ok(service)
     }
 }
 

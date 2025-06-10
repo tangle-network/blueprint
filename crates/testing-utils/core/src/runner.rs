@@ -124,9 +124,7 @@ where
 
                 // Set the completion sender on the QoSService instance.
                 // This now works because set_completion_sender takes &self and uses RwLock internally.
-                self.qos_service
-                    .set_completion_sender(qos_completion_tx)
-                    .await;
+                self.qos_service.set_completion_sender(qos_completion_tx).await;
                 blueprint_core::info!(
                     "QoSServiceAdapter: Successfully set completion sender on QoSService instance via &Arc<QoSService>."
                 );

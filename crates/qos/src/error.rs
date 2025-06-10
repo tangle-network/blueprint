@@ -1,4 +1,6 @@
+use blueprint_core::error as core_error;
 use thiserror::Error;
+use tokio::sync::oneshot;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -21,7 +23,7 @@ pub enum Error {
     Other(String),
 
     #[error("JSON serialization/deserialization error: {0}")]
-    Json(String),
+    Json(#[from] serde_json::Error),
 
     #[error("Grafana API error: {0}")]
     GrafanaApi(String),
@@ -33,10 +35,16 @@ pub enum Error {
     DockerOperation(String),
 
     #[error("I/O error: {0}")]
-    Io(String),
+    Io(#[from] std::io::Error),
 
     #[error("{0}")]
     Generic(String),
+
+    #[error("Core error: {0}")]
+    Core(#[from] core_error::Error),
+
+    #[error("Oneshot receive error: {0}")]
+    Recv(#[from] oneshot::error::RecvError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
