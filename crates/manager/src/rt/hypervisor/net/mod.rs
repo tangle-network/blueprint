@@ -1,4 +1,7 @@
-use crate::error::Result;
+pub mod nftables;
+
+use crate::error::{Error, Result};
+use blueprint_core::debug;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::stream::TryStreamExt;
 use rtnetlink::packet_core::{NetlinkMessage, NetlinkPayload};
@@ -10,7 +13,9 @@ use rtnetlink::sys::SocketAddr;
 use rtnetlink::{Handle, new_connection};
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
+use std::path::PathBuf;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
@@ -132,4 +137,29 @@ fn spawn_watcher(
             }
         }
     });
+}
+
+pub(super) async fn wait_for_interface(iface_name: &str) -> Result<()> {
+    let iface_path = PathBuf::from(format!("/sys/class/net/{iface_name}"));
+
+    debug!("Waiting for interface `{iface_name}` to appear...");
+
+    let res = tokio::time::timeout(Duration::from_secs(5), async move {
+        loop {
+            if iface_path.exists() {
+                return Ok(());
+            }
+
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await;
+
+    let Ok(res) = res else {
+        return Err(Error::Other(format!(
+            "Interface `{iface_name}` never appeared"
+        )));
+    };
+
+    res
 }

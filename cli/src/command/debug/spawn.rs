@@ -12,15 +12,19 @@ use blueprint_manager::config::{AuthProxyOpts, BlueprintManagerConfig};
 use blueprint_manager::executor::run_auth_proxy;
 use blueprint_manager::rt::hypervisor::ServiceVmConfig;
 use blueprint_manager::rt::hypervisor::net::NetworkManager;
+use blueprint_manager::rt::hypervisor::net::nftables::check_net_admin_capability;
 use blueprint_manager::rt::service::Service;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use nix::sys::termios;
 use nix::sys::termios::{InputFlags, LocalFlags, SetArg};
-use std::io::{self, Read, Write};
+use std::io;
 use std::path::{Path, PathBuf};
-use std::{fs, thread};
-use tracing::{error, info, warn};
+use std::pin::Pin;
+use std::{fs, future};
+use tokio::io::AsyncWriteExt;
+use tokio::task::{JoinError, JoinHandle};
+use tracing::{error, info};
 use url::Url;
 
 async fn setup_tangle_node(
@@ -117,6 +121,8 @@ pub async fn execute(
 ) -> color_eyre::Result<()> {
     let mut manager_config = BlueprintManagerConfig::default();
 
+    check_net_admin_capability()?;
+
     let tmp = tempfile::tempdir()?;
     manager_config.data_dir = tmp.path().join("data");
     manager_config.cache_dir = tmp.path().join("cache");
@@ -161,19 +167,44 @@ pub async fn execute(
         bridge_socket_path: None,
     };
 
-    let mut service = if no_vm {
-        setup_without_vm(manager_config, &service_name, binary, db, env, args)?
+    let (mut service, pty_io) = if no_vm {
+        let service = setup_without_vm(manager_config, &service_name, binary, db, env, args)?;
+        (service, None)
     } else {
-        setup_with_vm(manager_config, &service_name, id, binary, db, env, args).await?
+        manager_config.verify_network_interface()?;
+        let (service, pty) =
+            setup_with_vm(manager_config, &service_name, id, binary, db, env, args).await?;
+
+        (service, Some(pty))
     };
 
     // TODO: Check is_alive
     let _is_alive = Box::pin(service.start().await?.unwrap());
 
+    let stdin_task: Pin<Box<dyn Future<Output = Result<io::Result<()>, JoinError>>>>;
+    let stdout_task: Pin<Box<dyn Future<Output = Result<io::Result<()>, JoinError>>>>;
+    if let Some(VmPtyIo {
+        stdin_to_pty,
+        pty_to_stdout,
+    }) = pty_io
+    {
+        stdin_task = Box::pin(stdin_to_pty);
+        stdout_task = Box::pin(pty_to_stdout);
+    } else {
+        stdin_task = Box::pin(future::pending());
+        stdout_task = Box::pin(future::pending());
+    }
+
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {}
         _ = auth_proxy_task => {
-            warn!("Auth proxy shutdown");
+            error!("Auth proxy shutdown");
+        },
+        res = stdin_task => {
+            error!("stdin task died: {res:?}");
+        },
+        res = stdout_task => {
+            error!("stdout task died: {res:?}");
         },
     }
 
@@ -201,6 +232,11 @@ fn setup_without_vm(
     Ok(service)
 }
 
+pub struct VmPtyIo {
+    pub stdin_to_pty: JoinHandle<io::Result<()>>,
+    pub pty_to_stdout: JoinHandle<io::Result<()>>,
+}
+
 async fn setup_with_vm(
     manager_config: BlueprintManagerConfig,
     service_name: &str,
@@ -209,7 +245,7 @@ async fn setup_with_vm(
     db: RocksDb,
     env: BlueprintEnvVars,
     args: BlueprintArgs,
-) -> color_eyre::Result<Service> {
+) -> color_eyre::Result<(Service, VmPtyIo)> {
     let network_candidates = manager_config
         .default_address_pool
         .hosts()
@@ -227,6 +263,7 @@ async fn setup_with_vm(
             ..Default::default()
         },
         network_manager,
+        manager_config.network_interface.unwrap(),
         db,
         manager_config.data_dir,
         manager_config.keystore_uri,
@@ -251,44 +288,31 @@ async fn setup_with_vm(
 
     set_raw_mode(&pty)?;
 
-    let mut pty_reader = pty.try_clone()?;
-    let mut pty_writer = pty;
+    let pty_reader = tokio::fs::File::from_std(pty.try_clone()?);
+    let pty_writer = tokio::fs::File::from_std(pty);
 
-    let stdin_to_pty = thread::spawn(move || {
-        let mut stdin = std::io::stdin();
-        let mut buffer = [0u8; 1024];
-        loop {
-            match stdin.read(&mut buffer) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => {
-                    if pty_writer.write_all(&buffer[..n]).is_err() {
-                        break;
-                    }
-                }
-            }
-        }
+    let stdin_to_pty = tokio::spawn(async move {
+        let mut stdin = tokio::io::stdin();
+        let mut writer = pty_writer;
+        tokio::io::copy(&mut stdin, &mut writer).await?;
+        writer.flush().await?;
+        Ok(())
     });
 
-    let pty_to_stdout = thread::spawn(move || {
-        let mut stdout = std::io::stdout();
-        let mut buffer = [0u8; 1024];
-        loop {
-            match pty_reader.read(&mut buffer) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => {
-                    if stdout.write_all(&buffer[..n]).is_err() {
-                        break;
-                    }
-                    stdout.flush().ok();
-                }
-            }
-        }
+    let pty_to_stdout = tokio::spawn(async move {
+        let mut reader = pty_reader;
+        let mut stdout = tokio::io::stdout();
+        tokio::io::copy(&mut reader, &mut stdout).await?;
+        stdout.flush().await?;
+        Ok(())
     });
 
-    stdin_to_pty.join().unwrap();
-    pty_to_stdout.join().unwrap();
+    let io_handles = VmPtyIo {
+        stdin_to_pty,
+        pty_to_stdout,
+    };
 
-    Ok(service)
+    Ok((service, io_handles))
 }
 
 fn set_raw_mode(fd: &fs::File) -> io::Result<()> {

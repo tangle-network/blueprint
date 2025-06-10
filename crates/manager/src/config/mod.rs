@@ -83,6 +83,9 @@ pub struct BlueprintManagerConfig {
     /// The default address pool for VM TAP interfaces
     #[arg(long, default_value_t = *DEFAULT_ADDRESS_POOL)]
     pub default_address_pool: Ipv4Net,
+    /// The network interface to funnel blueprint VM traffic through
+    #[arg(long)]
+    pub network_interface: Option<String>,
 
     /// Authentication proxy options
     #[command(flatten)]
@@ -131,6 +134,29 @@ impl BlueprintManagerConfig {
 
         Ok(())
     }
+
+    /// Checks if a network interface was provided, and if not, attempts to determine the host's default
+    ///
+    /// # Errors
+    ///
+    /// This will error if it is unable to determine the default network interface
+    pub fn verify_network_interface(&mut self) -> Result<()> {
+        if self.network_interface.is_some() {
+            return Ok(());
+        }
+
+        let Ok(interface) = netdev::interface::get_default_interface().map(|i| i.name) else {
+            error!(
+                "Unable to determine the default network interface, you must specify it manually with --network-interface"
+            );
+            return Err(Error::Other(String::from(
+                "Failed to determine default network interface",
+            )));
+        };
+
+        self.network_interface = Some(interface);
+        Ok(())
+    }
 }
 
 fn default_cache_dir() -> PathBuf {
@@ -164,6 +190,7 @@ impl Default for BlueprintManagerConfig {
             preferred_source: SourceType::default(),
             podman_host: DEFAULT_DOCKER_HOST.clone(),
             default_address_pool: *DEFAULT_ADDRESS_POOL,
+            network_interface: None,
             auth_proxy_opts: AuthProxyOpts::default(),
         }
     }

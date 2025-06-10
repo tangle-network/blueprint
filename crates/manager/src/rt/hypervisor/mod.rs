@@ -15,7 +15,7 @@ use cloud_hypervisor_client::models::{
     ConsoleConfig, DiskConfig, MemoryConfig, NetConfig, PayloadConfig, VmConfig, VsockConfig,
 };
 use cloud_hypervisor_client::{SocketBasedApiClient, socket_based_api_client};
-use fatfs::{Dir, FileSystem, FormatVolumeOptions, FsOptions};
+use fatfs::{Dir, FatType, FileSystem, FormatVolumeOptions, FsOptions};
 use hyper::StatusCode;
 use ipnet::Ipv4Net;
 use std::fmt::Write as _;
@@ -61,6 +61,7 @@ pub struct HypervisorInstance {
     cloud_init_image_path: PathBuf,
     hypervisor: Child,
     lease: Option<net::Lease>,
+    network_interface: String,
 }
 
 impl HypervisorInstance {
@@ -76,6 +77,7 @@ impl HypervisorInstance {
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
+        network_interface: String,
     ) -> Result<HypervisorInstance> {
         info!("Initializing hypervisor for service `{service_name}`...");
 
@@ -119,6 +121,7 @@ impl HypervisorInstance {
             cloud_init_image_path,
             hypervisor: hypervisor_handle,
             lease: None,
+            network_interface,
         })
     }
 
@@ -388,7 +391,7 @@ impl HypervisorInstance {
                 ..Default::default()
             }),
             net: Some(vec![NetConfig {
-                tap: Some(format!("tap-tngl-{}", self.config.id)),
+                tap: Some(self.tap_interface_name()),
                 ip: Some(tap_interface_addr.to_string()),
                 ..Default::default()
             }]),
@@ -402,6 +405,10 @@ impl HypervisorInstance {
         })?;
 
         Ok(())
+    }
+
+    fn tap_interface_name(&self) -> String {
+        format!("tap-tngl-{}", self.config.id)
     }
 
     // Disable serial port logging in release builds, too much noise for production
@@ -443,6 +450,7 @@ impl HypervisorInstance {
     ///
     /// * This will error if the VM cannot be booted for any reason
     /// * See [`Self::client()`]
+    #[allow(clippy::missing_panics_doc)]
     pub async fn start(&mut self) -> Result<()> {
         info!("Booting VM...");
 
@@ -454,6 +462,12 @@ impl HypervisorInstance {
             error!("Failed to boot VM: {e:?}");
             Error::Hypervisor(format!("{e:?}"))
         })?;
+
+        let tap_interface = self.tap_interface_name();
+        let tap_interface_ip = self.lease.as_ref().expect("should exist").addr();
+
+        net::wait_for_interface(&tap_interface).await?;
+        net::nftables::setup_rules(&self.network_interface, &tap_interface, tap_interface_ip)?;
 
         Ok(())
     }
@@ -525,11 +539,14 @@ impl HypervisorInstance {
         if let Err(e) = client.shutdown_vmm().await {
             error!("Unable to gracefully shutdown VM manager, killing process: {e:?}");
             self.hypervisor.kill().await?;
-            return Ok(());
+        } else {
+            // VM manager shutting down, process will exit with it
+            self.hypervisor.wait().await?;
         }
 
-        // VM manager shutting down, process will exit with it
-        self.hypervisor.wait().await?;
+        if let Err(e) = net::nftables::cleanup_firewall(&self.network_interface) {
+            error!("Failed to cleanup iptables rules: {e}");
+        }
 
         Ok(())
     }
@@ -629,12 +646,14 @@ fn new_fat_fs(config: FatFsConfig) -> Result<()> {
         .truncate(true)
         .read(true)
         .write(true)
-        .open(config.image_path)?;
+        .open(&config.image_path)?;
     img.set_len(img_len)?;
 
     fatfs::format_volume(
         &mut img,
-        FormatVolumeOptions::new().volume_label(config.volume_label),
+        FormatVolumeOptions::new()
+            .volume_label(config.volume_label)
+            .fat_type(FatType::Fat32),
     )?;
 
     let fs = FileSystem::new(&mut img, FsOptions::new())?;

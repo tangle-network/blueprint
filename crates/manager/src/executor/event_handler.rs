@@ -111,6 +111,7 @@ impl VerifiedBlueprint {
                             ..Default::default()
                         },
                         network_manager.clone(),
+                        manager_config.network_interface.clone().unwrap(),
                         db.clone(),
                         &blueprint_config.data_dir,
                         &blueprint_config.keystore_uri,
