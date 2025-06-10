@@ -27,15 +27,17 @@ use opentelemetry_sdk::{
 // Prometheus related
 use opentelemetry_prometheus::PrometheusExporter;
 use prometheus::{
-    core::Collector as PrometheusCollectorTrait,
+
     core::Desc as PrometheusDesc,
     proto::MetricFamily as PrometheusMetricFamily,
     Registry,
 };
 
 // General OpenTelemetry
-use opentelemetry::{metrics::MeterProvider as _, KeyValue};
-use opentelemetry_semantic_conventions as semcov;
+use opentelemetry::KeyValue;
+use opentelemetry::metrics::MeterProvider as _;
+use opentelemetry_sdk::metrics::MeterProvider as _; // Allow use of meter() method
+use opentelemetry_semantic_conventions::resource; // Import the resource module directly
 
 // Local crate imports
 use crate::error::Error as CrateLocalError; // Keep aliased
@@ -99,11 +101,12 @@ impl Default for OpenTelemetryConfig {
 
 /// `OpenTelemetryExporter` sets up and manages the OpenTelemetry metrics pipeline,
 /// including a Prometheus exporter.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct OpenTelemetryExporter {
-    meter_provider: Arc<SdkMeterProvider>,
+    sdk_meter_provider: Arc<SdkMeterProvider>,
     pub meter: opentelemetry::metrics::Meter,
-    pub prometheus_registry: Registry, // Registry used by the PrometheusExporter
+    pub prometheus_registry: Arc<Registry>, // Now an Arc to the shared registry
+    otel_prometheus_exporter: Arc<PrometheusExporter>,
 }
 
 impl OpenTelemetryExporter {
@@ -119,19 +122,19 @@ impl OpenTelemetryExporter {
     ///
     /// # Errors
     /// Returns an `Error` if the setup of the OpenTelemetry pipeline or Prometheus exporter fails.
-    pub fn new(otel_config: OpenTelemetryConfig) -> std::result::Result<Self, CrateLocalError> { 
+    pub fn new(otel_config: OpenTelemetryConfig, shared_registry: Arc<Registry>) -> std::result::Result<Self, CrateLocalError> { 
         info!("Creating OpenTelemetryExporter with config: {:?}", otel_config);
 
         // Define the OTel Resource attributes using the provided configuration.
         let resource_attributes = vec![
-            KeyValue::new(semcov::resource::SERVICE_NAME, otel_config.service_name.clone()),
-            KeyValue::new(semcov::resource::SERVICE_VERSION, otel_config.service_version.clone()),
+            KeyValue::new(resource::SERVICE_NAME, otel_config.service_name.clone()),
+            KeyValue::new(resource::SERVICE_VERSION, otel_config.service_version.clone()),
             KeyValue::new(
-                semcov::resource::SERVICE_INSTANCE_ID,
+                resource::SERVICE_INSTANCE_ID,
                 otel_config.service_instance_id.clone(),
             ),
             KeyValue::new(
-                semcov::resource::SERVICE_NAMESPACE,
+                resource::SERVICE_NAMESPACE,
                 otel_config.service_namespace.clone(),
             ),
         ];
@@ -139,12 +142,9 @@ impl OpenTelemetryExporter {
             .with_attributes(resource_attributes)
             .build();
 
-        // Create a Prometheus Registry
-        let prometheus_registry = Registry::new();
-
-        // Create the PrometheusExporter instance, configured with our registry.
+        // Create the PrometheusExporter instance, configured with the shared_registry.
         let actual_prom_exporter = opentelemetry_prometheus::exporter()
-            .with_registry(prometheus_registry.clone())
+            .with_registry((*shared_registry).clone()) // Dereference Arc and clone the Registry
             .build()
             .map_err(|e| CrateLocalError::Other(format!("Failed to build OTel PrometheusExporter: {}", e)))?;
         
@@ -156,9 +156,10 @@ impl OpenTelemetryExporter {
             .with_resource(resource)
             .build();
 
-        opentelemetry::global::set_meter_provider(meter_provider.clone());
+        let sdk_meter_provider_arc = Arc::new(meter_provider);
+        opentelemetry::global::set_meter_provider((*sdk_meter_provider_arc).clone());
 
-        let meter = meter_provider.meter(OTEL_METER_NAME); // Use const &'static str for meter name
+        let meter = sdk_meter_provider_arc.meter(OTEL_METER_NAME); // Use const &'static str for meter name
 
         info!(
             meter_name = %OTEL_METER_NAME,
@@ -166,9 +167,10 @@ impl OpenTelemetryExporter {
         );
 
         Ok(OpenTelemetryExporter {
+            sdk_meter_provider: sdk_meter_provider_arc,
             meter,
-            meter_provider: Arc::new(meter_provider),
-            prometheus_registry,
+            prometheus_registry: shared_registry, // Store the shared_registry
+            otel_prometheus_exporter: shared_prom_exporter_arc.clone(),
         })
     }
 
@@ -181,7 +183,12 @@ impl OpenTelemetryExporter {
     /// Get the meter provider
     #[must_use]
     pub fn meter_provider(&self) -> Arc<SdkMeterProvider> {
-        self.meter_provider.clone()
+        self.sdk_meter_provider.clone()
+    }
+
+    /// Force flush the exporter
+    pub fn force_flush(&self) -> std::result::Result<(), opentelemetry_sdk::error::OTelSdkError> {
+        self.sdk_meter_provider.force_flush()
     }
 
     /// Create a counter
@@ -256,14 +263,3 @@ impl OpenTelemetryExporter {
     }
 }
 
-impl PrometheusCollectorTrait for OpenTelemetryExporter {
-    fn desc(&self) -> Vec<&PrometheusDesc> {
-        // Descriptors can be complex for a registry; returning an empty vec is often acceptable.
-        // Alternatively, self.prometheus_registry.root_descriptors() could be used if lifetimes match.
-        vec![]
-    }
-
-    fn collect(&self) -> Vec<PrometheusMetricFamily> {
-        self.prometheus_registry.gather()
-    }
-}

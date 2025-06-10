@@ -11,6 +11,7 @@ use crate::metrics::types::{
     BlueprintMetrics, BlueprintStatus, MetricsConfig, MetricsProvider, SystemMetrics,
 };
 use opentelemetry::KeyValue;
+use opentelemetry_sdk::metrics::MetricsResult;
 
 /// Enhanced metrics provider that integrates Prometheus and OpenTelemetry
 pub struct EnhancedMetricsProvider {
@@ -68,16 +69,15 @@ impl EnhancedMetricsProvider {
             )?,
         );
 
-        // Create an OpenTelemetry exporter. It now manages its own internal registry for OTel metrics.
-        let otel_exporter_instance = OpenTelemetryExporter::new(otel_config)?;
+        // Create an OpenTelemetry exporter, passing the shared_registry.
+        // The OpenTelemetryExporter will configure its underlying opentelemetry_prometheus::Exporter
+        // to use this shared_registry.
+        let otel_exporter_instance = OpenTelemetryExporter::new(otel_config, shared_registry.clone())?;
 
-        // The OpenTelemetryExporter itself implements PrometheusCollectorTrait (prometheus::core::Collector).
-        // We clone it here for registration, and the original otel_exporter_instance will be moved into an Arc later.
-        shared_registry.register(Box::new(otel_exporter_instance.clone()))
-            .map_err(|e| crate::error::Error::Other(format!(
-                "Failed to register OpenTelemetryExporter with shared registry: {}", e
-            )))?;
-        info!("Registered OpenTelemetryExporter with shared Prometheus registry.");
+        // The underlying opentelemetry_prometheus::Exporter is already configured to use the shared_registry.
+        // Explicitly registering our OpenTelemetryExporter wrapper (which calls shared_registry.gather() in its own collect method)
+        // would lead to a recursive loop. So, this registration is removed.
+        info!("OpenTelemetryExporter initialized with shared Prometheus registry.");
 
         // Store the OpenTelemetryExporter instance (wrapped in Arc) in the provider.
         let opentelemetry_exporter = Arc::new(otel_exporter_instance);
@@ -122,13 +122,20 @@ impl EnhancedMetricsProvider {
     ///
     /// # Errors
     /// Returns an error if the Prometheus server fails to start
-    pub async fn start_collection(&self) -> Result<()> {
+    pub async fn start_collection(self: Arc<Self>) -> Result<()> {
         // Start the Prometheus server
-        let bind_address = self.config.bind_address.clone();
-        // Use the shared registry stored in self
-        let registry_for_server = self.shared_registry.clone();
+        // Get the Prometheus server config, defaulting if not present
+        let prometheus_server_config = self.config.prometheus_server.clone().unwrap_or_default();
+        // The bind_address is part of the prometheus_server_config and handled by PrometheusServer internally.
 
-        let mut server = PrometheusServer::new(registry_for_server, bind_address);
+        // Use the shared registry stored in self
+        // let registry_for_server = self.shared_registry.clone(); // This is passed as Option
+
+        let server = PrometheusServer::new(
+            prometheus_server_config, // 1. PrometheusServerConfig
+            Some(self.shared_registry.clone()), // 2. Option<Arc<prometheus::Registry>>
+            self.clone(), // 3. Arc<EnhancedMetricsProvider> (self is Arc<Self>)
+        );
         server.start().await?;
 
         let mut prometheus_server = self.prometheus_server.write().await;
@@ -290,6 +297,21 @@ impl EnhancedMetricsProvider {
     #[must_use]
     pub fn get_otel_job_executions_counter(&self) -> opentelemetry::metrics::Counter<u64> {
         self.otel_job_executions_counter.clone()
+    }
+
+    /// Force flushes the OpenTelemetry metrics pipeline via the exporter.
+    pub fn force_flush_otel_metrics(&self) -> MetricsResult<()> {
+        info!("EnhancedMetricsProvider: Attempting to force flush OpenTelemetry metrics...");
+        match self.opentelemetry_exporter.force_flush() {
+            Ok(_) => {
+                info!("EnhancedMetricsProvider: OpenTelemetry metrics force_flush successful.");
+                Ok(())
+            }
+            Err(err) => {
+                error!("EnhancedMetricsProvider: OpenTelemetry metrics force_flush failed: {:?}", err);
+                Err(err)
+            }
+        }
     }
 }
 

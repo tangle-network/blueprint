@@ -8,9 +8,10 @@ use crate::error::Result;
 use crate::metrics::prometheus::server::PrometheusServer as PrometheusMetricsServer;
 use crate::servers::ServerManager;
 use crate::servers::common::DockerManager;
+use crate::metrics::EnhancedMetricsProvider;
 
 /// Configuration for the Prometheus server
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PrometheusServerConfig {
     /// The port to bind the Prometheus server to
     pub port: u16,
@@ -64,6 +65,9 @@ pub struct PrometheusServer {
 
     /// The metrics registry provided by EnhancedMetricsProvider (if not using Docker)
     metrics_registry: Option<Arc<prometheus::Registry>>,
+
+    /// The enhanced metrics provider, used to force flush OTEL metrics on scrape
+    enhanced_metrics_provider: Arc<EnhancedMetricsProvider>,
 }
 
 impl PrometheusServer {
@@ -72,6 +76,7 @@ impl PrometheusServer {
     pub fn new(
         config: PrometheusServerConfig,
         metrics_registry: Option<Arc<prometheus::Registry>>,
+        enhanced_metrics_provider: Arc<EnhancedMetricsProvider>,
     ) -> Self {
         Self {
             config,
@@ -79,6 +84,7 @@ impl PrometheusServer {
             container_id: Arc::new(Mutex::new(None)),
             embedded_server: Arc::new(Mutex::new(None)),
             metrics_registry,
+            enhanced_metrics_provider,
         }
     }
 
@@ -232,6 +238,7 @@ impl ServerManager for PrometheusServer {
 
             let mut server_instance = PrometheusMetricsServer::new(
                 registry_arc_clone,
+                self.enhanced_metrics_provider.clone(),
                 bind_address_for_new_server.clone(),
             );
 

@@ -1,8 +1,6 @@
-use axum::{
-    Router,
+use axum::{Json, Router,
     extract::State,
     http::StatusCode,
-    response::Json,
     response::{IntoResponse, Response},
     routing::get,
 };
@@ -13,16 +11,19 @@ use std::sync::Arc;
 use tokio::sync::oneshot;
 
 use crate::error::{Error, Result};
+use crate::metrics::provider::EnhancedMetricsProvider;
 
 /// Prometheus metrics server state
 #[derive(Clone)]
 struct ServerState {
     registry: Arc<Registry>,
+    enhanced_metrics_provider: Arc<EnhancedMetricsProvider>,
 }
 
 /// Prometheus metrics server
 pub struct PrometheusServer {
     registry: Arc<Registry>,
+    enhanced_metrics_provider: Arc<EnhancedMetricsProvider>,
     bind_address: String,
     shutdown_tx: Option<oneshot::Sender<()>>,
 }
@@ -30,9 +31,10 @@ pub struct PrometheusServer {
 impl PrometheusServer {
     /// Create a new Prometheus metrics server
     #[must_use]
-    pub fn new(registry: Arc<Registry>, bind_address: String) -> Self {
+    pub fn new(registry: Arc<Registry>, enhanced_metrics_provider: Arc<EnhancedMetricsProvider>, bind_address: String) -> Self {
         Self {
             registry,
+            enhanced_metrics_provider,
             bind_address,
             shutdown_tx: None,
         }
@@ -54,6 +56,7 @@ impl PrometheusServer {
 
         let state = ServerState {
             registry: self.registry.clone(),
+            enhanced_metrics_provider: self.enhanced_metrics_provider.clone(),
         };
 
         let app = Router::new()
@@ -119,8 +122,47 @@ impl Drop for PrometheusServer {
 ///
 /// Returns the current metrics in Prometheus text format
 async fn metrics_handler(State(state): State<ServerState>) -> Response {
+    // Attempt to force flush OpenTelemetry metrics via the EnhancedMetricsProvider
+    match state.enhanced_metrics_provider.force_flush_otel_metrics() {
+        Ok(_) => info!("PrometheusServer: OpenTelemetry metrics force_flush successful via EnhancedMetricsProvider."),
+        Err(err) => error!("PrometheusServer: OpenTelemetry metrics force_flush failed via EnhancedMetricsProvider: {:?}", err),
+    }
+
+    info!("Metrics handler invoked (post OTel flush via provider). Gathering metrics from registry...");
     let encoder = TextEncoder::new();
     let metric_families = state.registry.gather();
+
+    info!("Gathered {} metric families. Dumping details:", metric_families.len());
+    for mf in &metric_families {
+        info!("  Metric Family: {}", mf.name());
+        info!("    Type: {:?}", mf.get_field_type()); // get_field_type() is still valid
+        info!("    Help: {}", mf.help());
+        info!("    Metrics ({}):", mf.get_metric().len());
+        for m in mf.get_metric() {
+            if let Some(counter) = m.counter.as_ref() {
+                info!("      Counter Value: {}", counter.value.unwrap_or(0.0));
+            }
+            if let Some(gauge) = m.gauge.as_ref() {
+                info!("      Gauge Value: {}", gauge.value.unwrap_or(0.0));
+            }
+            if m.histogram.is_some() {
+                let hist = m.get_histogram();
+                info!("      Histogram: Sum={}, Count={}", hist.get_sample_sum(), hist.get_sample_count());
+            }
+            if m.summary.is_some() {
+                let sum = m.get_summary();
+                info!("      Summary: Sum={}, Count={}", sum.sample_sum(), sum.sample_count());
+            }
+            let mut labels_str = String::new();
+            for label_pair in m.get_label() {
+                labels_str.push_str(&format!("{}='{}' ", label_pair.name(), label_pair.value()));
+            }
+            if !labels_str.is_empty() {
+                info!("      Labels: {}", labels_str.trim());
+            }
+        }
+    }
+    info!("Finished dumping metric_families details.");
 
     match encoder.encode_to_string(&metric_families) {
         Ok(metrics) => (StatusCode::OK, metrics).into_response(),

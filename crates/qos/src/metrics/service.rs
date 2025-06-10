@@ -81,7 +81,7 @@ pub async fn run_metrics_server(config: MetricsConfig) -> Result<Arc<EnhancedMet
     let provider = Arc::new(EnhancedMetricsProvider::new(config, otel_config)?);
 
     // Start the metrics collection
-    provider.start_collection().await?;
+    provider.clone().start_collection().await?;
 
     info!("Started metrics server");
 

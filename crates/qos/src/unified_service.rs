@@ -66,6 +66,12 @@ where
             None
         };
 
+        // If metrics service is configured, start its collection process (which may start an embedded Prometheus server)
+        if let Some(ref metrics_service_arc) = metrics_service {
+            info!("QoSService::new: Metrics service is Some, attempting to start collection.");
+            metrics_service_arc.provider().clone().start_collection().await?;
+        }
+
         // Initialize Loki logging if configured
         if let Some(loki_config) = &config.loki {
             if let Err(e) = init_loki_logging(loki_config.clone()) {
@@ -98,7 +104,7 @@ where
                 } else {
                     None
                 };
-                Arc::new(PrometheusServer::new(server_cfg.clone(), registry_to_pass))
+                Arc::new(PrometheusServer::new(server_cfg.clone(), registry_to_pass, metrics_provider.clone()))
             });
             // Start the servers using the *_instance variables (around line 118 onwards)
             if let Some(server) = &grafana_server_instance {
@@ -201,11 +207,22 @@ where
             Arc::new(HeartbeatService::new(hc_config, heartbeat_consumer.clone()))
         });
 
-        // Initialize metrics service if configured
-        let metrics_service = Some(Arc::new(MetricsService::with_otel_config(
-            config.metrics.clone().unwrap_or_default(),
-            otel_config,
-        )?));
+        let mut metrics_service: Option<Arc<MetricsService>> = None;
+        if let Some(metrics_config) = config.metrics.clone() {
+            // Initialize metrics service with custom OpenTelemetry configuration
+            metrics_service = Some(Arc::new(MetricsService::with_otel_config(
+                metrics_config,
+                otel_config, // Passed in otel_config
+            )?));
+        } else {
+            metrics_service = None;
+        };
+
+        // If metrics service is configured, start its collection process (which may start an embedded Prometheus server)
+        if let Some(ref metrics_service_arc) = metrics_service {
+            info!("QoSService::with_otel_config: Metrics service is Some, attempting to start collection.");
+            metrics_service_arc.provider().clone().start_collection().await?;
+        }
 
         // Initialize Loki logging if configured
         if let Some(loki_config) = &config.loki {
@@ -239,7 +256,7 @@ where
                     } else {
                         None
                     };
-                    Arc::new(PrometheusServer::new(server_cfg.clone(), registry_to_pass))
+                    Arc::new(PrometheusServer::new(server_cfg.clone(), registry_to_pass, metrics_provider.clone()))
                 }),
             );
 
