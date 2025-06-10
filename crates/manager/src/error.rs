@@ -29,6 +29,10 @@ pub enum Error {
     Hypervisor(String),
     #[error("Networking error: {0}")]
     Net(#[from] rtnetlink::Error),
+    #[error("Capabilities error: {0}")]
+    Caps(#[from] capctl::Error),
+    #[error("nftables error: {0}")]
+    Nftables(#[from] nftables::helper::NftablesError),
 
     #[error("Failed to get initial block hash")]
     InitialBlock,

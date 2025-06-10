@@ -112,16 +112,22 @@ impl Service {
     /// # Errors
     ///
     /// * See [`HypervisorInstance::start()`]
-    pub async fn start(&mut self) -> Result<Option<impl Future<Output = Result<()>> + use<>>> {
+    pub async fn start(
+        &mut self,
+        network_interface: &str,
+    ) -> Result<Option<impl Future<Output = Result<()>> + use<>>> {
         let Some(alive_rx) = self.alive_rx.take() else {
             error!("Service already started!");
             return Ok(None);
         };
 
-        self.hypervisor.start().await.map_err(|e| {
-            error!("Failed to start hypervisor: {e}");
-            e
-        })?;
+        self.hypervisor
+            .start(network_interface)
+            .await
+            .map_err(|e| {
+                error!("Failed to start hypervisor: {e}");
+                e
+            })?;
 
         Ok(Some(async move {
             if time::timeout(Duration::from_secs(480), alive_rx)

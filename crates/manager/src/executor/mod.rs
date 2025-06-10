@@ -3,7 +3,9 @@ use crate::config::{AuthProxyOpts, BlueprintManagerConfig};
 use crate::error::Error;
 use crate::error::Result;
 use crate::rt;
+use crate::rt::hypervisor::net;
 use crate::rt::hypervisor::net::NetworkManager;
+use crate::rt::hypervisor::net::nftables::check_net_admin_capability;
 use crate::sdk::entry::SendFuture;
 use blueprint_auth::db::RocksDb;
 use blueprint_clients::tangle::EventsClient;
@@ -156,7 +158,7 @@ impl Future for BlueprintManagerHandle {
 /// * If the SR25519 or ECDSA keypair cannot be found
 #[allow(clippy::used_underscore_binding)]
 pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
-    blueprint_manager_config: BlueprintManagerConfig,
+    mut blueprint_manager_config: BlueprintManagerConfig,
     keystore: Keystore,
     env: BlueprintEnvironment,
     shutdown_cmd: F,
@@ -172,7 +174,11 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let _span = span.enter();
     info!("Starting blueprint manager ... waiting for start signal ...");
 
+    check_net_admin_capability()?;
     blueprint_manager_config.verify_directories_exist()?;
+    blueprint_manager_config.verify_network_interface()?;
+
+    let network_interface = blueprint_manager_config.network_interface.clone();
 
     info!("Checking for VM images");
     rt::hypervisor::images::download_image_if_needed(&blueprint_manager_config.cache_dir).await?;
@@ -292,6 +298,10 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
             },
 
             () = shutdown_task => {
+                if let Err(e) = net::nftables::cleanup_firewall(network_interface.as_deref().unwrap()) {
+                    error!("Failed to cleanup iptables rules: {e}");
+                }
+
                 Ok(())
             }
         }
