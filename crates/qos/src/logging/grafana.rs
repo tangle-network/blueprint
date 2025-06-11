@@ -766,6 +766,42 @@ impl GrafanaClient {
             field_config: FieldConfig::default(),
         };
 
+        // Add custom test metrics panel
+        let test_metrics_panel = Panel {
+            id: Some(7),
+            title: "Custom Test Metrics".to_string(),
+            panel_type: "timeseries".to_string(),
+            datasource: Some(DataSource {
+                ds_type: "prometheus".to_string(),
+                uid: prometheus_datasource.to_string(),
+            }),
+            grid_pos: GridPos {
+                x: 0,
+                y: 20,
+                w: 24,
+                h: 8,
+            },
+            targets: vec![
+                Target {
+                    ref_id: "A".to_string(),
+                    expr: "test_blueprint_job_executions".to_string(),
+                    datasource: None,
+                },
+                Target {
+                    ref_id: "B".to_string(),
+                    expr: "test_blueprint_job_success".to_string(),
+                    datasource: None,
+                },
+                Target {
+                    ref_id: "C".to_string(),
+                    expr: "test_blueprint_job_latency_ms".to_string(),
+                    datasource: None,
+                },
+            ],
+            options: HashMap::new(),
+            field_config: FieldConfig::default(),
+        };
+
         // Add panels to dashboard
         dashboard.panels.push(system_metrics_panel);
         dashboard.panels.push(job_metrics_panel);
@@ -773,6 +809,7 @@ impl GrafanaClient {
         dashboard.panels.push(heartbeat_panel);
         dashboard.panels.push(status_panel);
         dashboard.panels.push(uptime_panel);
+        dashboard.panels.push(test_metrics_panel);
 
         // Create folder if needed
         let folder_id = if let Some(folder) = &self.config.folder {

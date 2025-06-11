@@ -50,6 +50,7 @@ impl Default for PrometheusServerConfig {
 }
 
 /// Prometheus server manager
+#[derive(Clone)]
 pub struct PrometheusServer {
     /// The configuration for the Prometheus server
     config: PrometheusServerConfig,
@@ -154,6 +155,10 @@ impl PrometheusServer {
     pub fn registry(&self) -> Option<Arc<prometheus::Registry>> {
         self.metrics_registry.clone()
     }
+
+    pub fn is_docker_based(&self) -> bool {
+        self.config.use_docker
+    }
 }
 
 impl ServerManager for PrometheusServer {
@@ -208,13 +213,16 @@ impl ServerManager for PrometheusServer {
                         volumes.insert(data_host_path.clone(), "/prometheus".to_string());
                     }
 
+                    // Add host.docker.internal mapping for Linux, required for the container to find the host.
+                    let extra_hosts = vec!["host.docker.internal:host-gateway".to_string()];
+
                     let new_id_result = self.docker_manager.run_container(
                         &self.config.docker_image,
                         &self.config.docker_container_name,
                         std::collections::HashMap::new(), // env_vars
                         ports,                            // ports_map
                         volumes,                          // volumes_map
-                        None,                             // extra_hosts
+                        Some(extra_hosts),                // extra_hosts
                         None                              // health_check_cmd
                     ).await;
 

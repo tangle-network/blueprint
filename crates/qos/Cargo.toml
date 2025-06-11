@@ -62,6 +62,8 @@ blueprint-tangle-extra = { path = "../tangle-extra" }
 blueprint-router = { path = "../router" }
 tangle-subxt = { workspace = true, features = ["std"] }
 serial_test = { workspace = true, features = ["async"] }
+reqwest = { workspace = true, features = ["json"] }
+tokio = { workspace = true, features = ["rt", "macros", "time"] }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }

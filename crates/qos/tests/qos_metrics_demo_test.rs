@@ -24,12 +24,13 @@ use blueprint_testing_utils::tangle::runner::MockHeartbeatConsumer;
 use blueprint_qos::logging::grafana::CreateDataSourceRequest;
 use serde_json::json;
 use blueprint_core::debug;
+use blueprint_testing_utils::Error as TestRunnerError;
+use blueprint_testing_utils::tangle::multi_node::NodeSlot;
+// TangleTestHarness is already imported on line 21
+use reqwest::Client; // Ensure this is present for reqwest::Client
 use blueprint_testing_utils::{
-    Error, setup_log,
-    tangle::multi_node::NodeSlot,
-    tangle::{
-        InputValue, OutputValue, blueprint::create_test_blueprint, harness::SetupServicesOpts,
-    },
+    setup_log,
+    tangle::{InputValue, OutputValue, blueprint::create_test_blueprint, harness::SetupServicesOpts},
 };
 use prometheus::Registry;
 use prometheus::{IntGauge, Opts};
@@ -49,7 +50,7 @@ const CUSTOM_NETWORK_NAME: &str = "blueprint-metrics-network"; // Custom Docker 
 const GRAFANA_CONTAINER_NAME: &str = "blueprint-grafana"; // Consistent container name for Grafana
 
 /// Utility function to clean up any existing Docker containers and networks to avoid conflicts
-async fn cleanup_docker_containers(_harness: &TangleTestHarness<()>) -> Result<(), Error> {
+async fn cleanup_docker_containers(_harness: &TangleTestHarness<()>) -> Result<(), TestRunnerError> {
     info!("Cleaning up existing Docker containers before test...");
 
     // Remove Grafana container if it exists
@@ -87,7 +88,7 @@ async fn connect_container_to_network(
     container_name: &str,
     network_name: &str,
     alias: Option<&str>,
-) -> Result<(), Error> {
+) -> Result<(), TestRunnerError> {
     let mut attempts = 0;
     let max_attempts = 3;
 
@@ -212,14 +213,14 @@ async fn is_container_running(container_name: &str) -> bool {
 }
 
 /// Helper function to restart a container if it's not running
-async fn ensure_container_running(container_name: &str) -> Result<bool, Error> {
+async fn ensure_container_running(container_name: &str) -> Result<bool, TestRunnerError> {
     if !is_container_running(container_name).await {
         info!("Attempting to restart container {}", container_name);
         let restart_cmd = Command::new("docker")
             .args(["restart", container_name])
             .output()
             .await
-            .map_err(|e| Error::Setup(format!("Failed to restart container: {}", e)))?;
+            .map_err(|e| TestRunnerError::Setup(format!("Failed to restart container: {}", e)))?;
 
         if restart_cmd.status.success() {
             info!("✅ Successfully restarted container {}", container_name);
@@ -238,7 +239,7 @@ async fn ensure_container_running(container_name: &str) -> Result<bool, Error> {
 }
 
 /// Helper function to show container logs for debugging
-async fn show_container_logs(container_name: &str, lines: usize) -> Result<(), Error> {
+async fn show_container_logs(container_name: &str, lines: usize) -> Result<(), TestRunnerError> {
     info!(
         "Last {} lines of logs from container {}:",
         lines, container_name
@@ -254,7 +255,7 @@ async fn show_container_logs(container_name: &str, lines: usize) -> Result<(), E
         ])
         .output()
         .await
-        .map_err(|e| Error::Setup(format!("Failed to get container logs: {}", e)))?;
+        .map_err(|e| TestRunnerError::Setup(format!("Failed to get container logs: {}", e)))?;
 
     if logs_cmd.status.success() {
         let logs = String::from_utf8_lossy(&logs_cmd.stdout);
@@ -276,7 +277,7 @@ async fn show_container_logs(container_name: &str, lines: usize) -> Result<(), E
                 ])
                 .output()
                 .await
-                .map_err(|e| Error::Setup(format!("Failed to get container logs: {}", e)))?;
+                .map_err(|e| TestRunnerError::Setup(format!("Failed to get container logs: {}", e)))?;
 
             if previous_logs_cmd.status.success() {
                 let previous_logs = String::from_utf8_lossy(&previous_logs_cmd.stdout);
@@ -302,7 +303,7 @@ async fn show_container_logs(container_name: &str, lines: usize) -> Result<(), E
 }
 
 /// Helper function to get detailed container status including exit code and reason
-async fn get_container_status(container_name: &str) -> Result<(), Error> {
+async fn get_container_status(container_name: &str) -> Result<(), TestRunnerError> {
     info!(
         "Getting detailed status for container {}...",
         container_name
@@ -313,7 +314,7 @@ async fn get_container_status(container_name: &str) -> Result<(), Error> {
         .args(["inspect", container_name])
         .output()
         .await
-        .map_err(|e| Error::Setup(format!("Failed to inspect container: {}", e)))?;
+        .map_err(|e| TestRunnerError::Setup(format!("Failed to inspect container: {}", e)))?;
 
     if !inspect_cmd.status.success() {
         warn!("Container {} does not exist", container_name);
@@ -325,7 +326,7 @@ async fn get_container_status(container_name: &str) -> Result<(), Error> {
         .args(["inspect", "-f", "{{json .State}}", container_name])
         .output()
         .await
-        .map_err(|e| Error::Setup(format!("Failed to get container state: {}", e)))?;
+        .map_err(|e| TestRunnerError::Setup(format!("Failed to get container state: {}", e)))?;
 
     if state_cmd.status.success() {
         let state = String::from_utf8_lossy(&state_cmd.stdout);
@@ -336,7 +337,7 @@ async fn get_container_status(container_name: &str) -> Result<(), Error> {
             .args(["inspect", "-f", "{{.State.ExitCode}}", container_name])
             .output()
             .await
-            .map_err(|e| Error::Setup(format!("Failed to get exit code: {}", e)))?;
+            .map_err(|e| TestRunnerError::Setup(format!("Failed to get exit code: {}", e)))?;
 
         if exit_code_cmd.status.success() {
             let exit_code = String::from_utf8_lossy(&exit_code_cmd.stdout)
@@ -353,7 +354,7 @@ async fn get_container_status(container_name: &str) -> Result<(), Error> {
                     .args(["inspect", "-f", "{{.State.Error}}", container_name])
                     .output()
                     .await
-                    .map_err(|e| Error::Setup(format!("Failed to get error info: {}", e)))?;
+                    .map_err(|e| TestRunnerError::Setup(format!("Failed to get error info: {}", e)))?;
 
                 if error_cmd.status.success() {
                     let error_info = String::from_utf8_lossy(&error_cmd.stdout)
@@ -376,7 +377,7 @@ async fn get_container_status(container_name: &str) -> Result<(), Error> {
             .args(["inspect", "-f", "{{json .Config}}", container_name])
             .output()
             .await
-            .map_err(|e| Error::Setup(format!("Failed to get container config: {}", e)))?;
+            .map_err(|e| TestRunnerError::Setup(format!("Failed to get container config: {}", e)))?;
 
         if config_cmd.status.success() {
             let config = String::from_utf8_lossy(&config_cmd.stdout);
@@ -388,7 +389,7 @@ async fn get_container_status(container_name: &str) -> Result<(), Error> {
             .args(["inspect", "-f", "{{json .Mounts}}", container_name])
             .output()
             .await
-            .map_err(|e| Error::Setup(format!("Failed to get mount info: {}", e)))?;
+            .map_err(|e| TestRunnerError::Setup(format!("Failed to get mount info: {}", e)))?;
 
         if mounts_cmd.status.success() {
             let mounts = String::from_utf8_lossy(&mounts_cmd.stdout);
@@ -402,7 +403,7 @@ async fn get_container_status(container_name: &str) -> Result<(), Error> {
                 .args(["exec", container_name, "ls", "-la", "/etc/prometheus/"])
                 .output()
                 .await
-                .map_err(|e| Error::Setup(format!("Failed to inspect config file: {}", e)))?;
+                .map_err(|e| TestRunnerError::Setup(format!("Failed to inspect config file: {}", e)))?;
 
             if config_check_cmd.status.success() {
                 info!(
@@ -420,7 +421,7 @@ async fn get_container_status(container_name: &str) -> Result<(), Error> {
                     ])
                     .output()
                     .await
-                    .map_err(|e| Error::Setup(format!("Failed to cat config file: {}", e)))?;
+                    .map_err(|e| TestRunnerError::Setup(format!("Failed to cat config file: {}", e)))?;
 
                 if cat_cmd.status.success() {
                     info!(
@@ -457,7 +458,7 @@ async fn verify_container_dns_resolution(
     target_container: &str,
     target_port: u16,
     target_path: Option<&str>, // Added target_path
-) -> Result<bool, Error> {
+) -> Result<bool, TestRunnerError> {
     if source_container == "host.docker.internal" {
         warn!(
             "Attempted to use 'host.docker.internal' as source_container in verify_container_dns_resolution. This is not supported for exec-based checks."
@@ -514,7 +515,7 @@ async fn verify_container_dns_resolution(
         ])
         .output()
         .await
-        .map_err(|e| Error::Setup(format!("Failed to execute curl check: {}", e)))?;
+        .map_err(|e| TestRunnerError::Setup(format!("Failed to execute curl check: {}", e)))?;
 
     if curl_check.status.success() {
         let status_code = String::from_utf8_lossy(&curl_check.stdout)
@@ -547,8 +548,8 @@ async fn verify_container_dns_resolution(
 
 /// Demonstrates the complete QoS metrics system with Grafana, Loki, and Prometheus.
 #[tokio::test]
-async fn test_qos_metrics_demo() -> Result<(), Error> {
-        setup_log();
+async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
+    setup_log();
     info!(
         "Starting QoS metrics demonstration with {} job runs",
         TOTAL_JOBS_TO_RUN
@@ -587,7 +588,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         match &nodes[operator_index] {
             NodeSlot::Occupied(node) => node.clone(),
             NodeSlot::Empty => {
-                return Err(Error::Setup(format!(
+                return Err(TestRunnerError::Setup(format!(
                     "Node {} is not initialized",
                     operator_index
                 )));
@@ -599,6 +600,27 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     node_handle.add_job(utils::square.layer(TangleLayer)).await;
 
     let mut qos_config = default_qos_config();
+
+    // Configure the embedded metrics server (Prometheus exposer) to use port 9091
+    // This server is started by QoSService if manage_servers is true and metrics are configured.
+    if let Some(metrics_conf) = qos_config.metrics.as_mut() {
+        if let Some(prom_server_conf) = metrics_conf.prometheus_server.as_mut() {
+            prom_server_conf.port = 9091;
+            prom_server_conf.host = "0.0.0.0".to_string();
+            prom_server_conf.use_docker = false; // Embedded server does not use Docker for itself
+        } else {
+            // If prometheus_server was None in MetricsConfig, initialize it.
+            metrics_conf.prometheus_server = Some(PrometheusServerConfig {
+                port: 9091,
+                host: "0.0.0.0".to_string(),
+                use_docker: false,
+                docker_image: "prom/prometheus:latest".to_string(), // Default, not strictly used here
+                docker_container_name: "blueprint-embedded-prometheus".to_string(), // Default, not strictly used here
+                config_path: None,
+                data_path: None,
+            });
+        }
+    }
 
     qos_config.heartbeat = Some(HeartbeatConfig {
         interval_secs: 5,
@@ -615,10 +637,14 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     });
 
     // Configure Prometheus server to run in a Docker container
+    let prometheus_config_path = "/home/tjemmmic/webb/blueprint/crates/qos/tests/config/prometheus.yml";
     qos_config.prometheus_server = Some(PrometheusServerConfig {
         use_docker: true,
         docker_container_name: "blueprint-prometheus".to_string(),
-        ..Default::default()
+        config_path: Some(prometheus_config_path.to_string()), // Use the custom config
+        // port: 9090, // This is the port Prometheus itself listens on *inside* the container and exposes to host
+        // host: "0.0.0.0", // Host for Prometheus itself to bind to inside container
+        ..Default::default() // Keep other defaults like image, data_path if any
     });
 
     // Set the Grafana datasource URL to use the Prometheus container name
@@ -643,7 +669,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         Err(e) => {
             // It's okay if the network already exists. Any other error is a problem.
             if !e.to_string().contains("already exists") {
-                return Err(Error::Setup(format!("Failed to create docker network: {}", e)));
+                return Err(TestRunnerError::Setup(format!("Failed to create docker network: {}", e)));
             }
             info!("Docker network '{}' already exists.", CUSTOM_NETWORK_NAME);
         }
@@ -1032,7 +1058,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     node_handle
         .start_runner(())
         .await
-        .map_err(|e| Error::Setup(format!("Failed to start runner: {}", e)))?;
+        .map_err(|e| TestRunnerError::Setup(format!("Failed to start runner: {}", e)))?;
 
     info!(
         "BlueprintRunner started successfully - QoS service and heartbeat service should be running internally"
@@ -1107,13 +1133,13 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
                 vec![InputValue::Uint64(INPUT_VALUE)],
             )
             .await
-            .map_err(|e| Error::Setup(format!("Failed to submit job: {}", e)))?;
+            .map_err(|e| TestRunnerError::Setup(format!("Failed to submit job: {}", e)))?;
 
         // Wait for job execution completion
         let result = harness
             .wait_for_job_execution(service_id, call)
             .await
-            .map_err(|e| Error::Setup(format!("Failed to wait for job execution: {}", e)))?;
+            .map_err(|e| TestRunnerError::Setup(format!("Failed to wait for job execution: {}", e)))?;
 
         // Verify job result
         harness.verify_job(
@@ -1165,7 +1191,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     );
 
     // Verify OTel metrics are exposed
-    info!("Verifying OTel metrics from embedded Prometheus server on port 9090...");
+    info!("Verifying OTel metrics from embedded Prometheus server on port 9091...");
     // Add a small delay to allow metrics to propagate through the OTel SDK pipeline
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     info!("Delay complete, fetching metrics...");
@@ -1337,7 +1363,59 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     info!("Servers will remain running for 30 more seconds for metrics viewing");
     tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 
+    // Verify that the embedded metrics endpoint is serving metrics
+    info!("Verifying embedded metrics endpoint (http://127.0.0.1:9091/metrics)...");
+    verify_metrics_endpoint("http://127.0.0.1:9091/metrics", "otel_job_executions_total", 10, Duration::from_secs(2))
+        .await
+        .map_err(|e| TestRunnerError::Setup(format!("Metrics verification failed: {}", e)))?;
+    info!("Embedded metrics endpoint verification successful.");
+
     cleanup_docker_containers(&harness).await?;
 
     Ok(())
+}
+
+/// Verifies that a metrics endpoint is up and serving an expected metric string.
+async fn verify_metrics_endpoint(
+    url: &str,
+    expected_metric_substring: &str,
+    max_retries: u32,
+    retry_delay: Duration,
+) -> Result<(), blueprint_qos::error::Error> {
+    let client = Client::new();
+    for attempt in 0..max_retries {
+        info!("Attempt {} to fetch metrics from {}", attempt + 1, url);
+        match client.get(url).send().await {
+            Ok(response) => {
+                if response.status().is_success() {
+                    match response.text().await {
+                        Ok(text) => {
+                            if text.contains(expected_metric_substring) {
+                                info!("Successfully fetched metrics and found '{}' at {}", expected_metric_substring, url);
+                                return Ok(());
+                            }
+                            info!("Metrics fetched from {}, but '{}' not found. Retrying...", url, expected_metric_substring);
+                        }
+                        Err(e) => {
+                            info!("Failed to read response text from {}: {}. Retrying...", url, e);
+                        }
+                    }
+                } else {
+                    info!("Metrics endpoint {} returned status: {}. Retrying...", url, response.status());
+                }
+            }
+            Err(e) => {
+                info!("Failed to connect to metrics endpoint {}: {}. Retrying...", url, e);
+            }
+        }
+        sleep(retry_delay).await;
+    }
+    let error_msg = format!(
+        "Failed to verify metrics endpoint {} after {} retries: Expected substring '{}' not found or endpoint unreachable.",
+        url,
+        max_retries,
+        expected_metric_substring
+    );
+    error!("{}", error_msg);
+    Err(blueprint_qos::error::Error::Assertion(error_msg))
 }

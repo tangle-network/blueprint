@@ -73,9 +73,9 @@ where
             (None, _) => None,
         };
 
-        if let Some(_ms) = &metrics_service {
+        if let Some(ms) = &metrics_service {
             info!("Metrics service is Some, attempting to start collection.");
-            // ms.provider().clone().start_collection().await?; // Removed: PrometheusServer manager handles this
+            ms.provider().clone().start_collection().await?; // Ensure provider starts its collections, including embedded server if configured
         }
 
         if let Some(loki_config) = &config.loki {
@@ -100,6 +100,18 @@ where
             let mut prometheus = config.prometheus_server.as_ref().map(|c| {
                 PrometheusServer::new(c.clone(), Some(metrics_service.as_ref().unwrap().provider().shared_registry().clone()), metrics_service.as_ref().unwrap().provider().clone())
             });
+
+            if let Some(p) = &mut prometheus {
+                if !p.is_docker_based() {
+                    // This is an embedded server. We need to start it.
+                    let server_clone = p.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = server_clone.start(None).await {
+                            error!("Failed to start embedded Prometheus server: {}", e);
+                        }
+                    });
+                }
+            }
 
             if let Some(s) = &mut grafana {
                 info!("Starting Grafana server...");

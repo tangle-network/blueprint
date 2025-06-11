@@ -133,7 +133,7 @@ impl EnhancedMetricsProvider {
         // Use the shared registry stored in self
         // let registry_for_server = self.shared_registry.clone(); // This is passed as Option
 
-        let mut server = PrometheusServer::new(
+        let server = PrometheusServer::new(
             prometheus_server_config, // 1. PrometheusServerConfig
             Some(self.shared_registry.clone()), // 2. Option<Arc<prometheus::Registry>>
             self.clone(), // 3. Arc<EnhancedMetricsProvider> (self is Arc<Self>)

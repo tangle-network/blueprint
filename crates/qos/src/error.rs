@@ -45,6 +45,9 @@ pub enum Error {
 
     #[error("Oneshot receive error: {0}")]
     Recv(#[from] oneshot::error::RecvError),
+
+    #[error("Assertion failed: {0}")]
+    Assertion(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

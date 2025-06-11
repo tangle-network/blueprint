@@ -16,6 +16,7 @@ use tokio::time::{sleep, Duration, Instant};
 use crate::error::{Error, Result};
 
 /// Docker container manager
+#[derive(Clone)]
 pub struct DockerManager {
     /// Docker client
     docker: Docker,
