@@ -1,6 +1,6 @@
+use crate::servers::prometheus::PrometheusServerConfig;
 use std::collections::HashMap;
 use std::time::SystemTime;
-use crate::servers::prometheus::PrometheusServerConfig;
 
 /// Configuration for the metrics service
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

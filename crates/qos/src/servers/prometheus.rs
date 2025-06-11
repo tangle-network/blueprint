@@ -5,10 +5,10 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 use crate::error::Result;
+use crate::metrics::EnhancedMetricsProvider;
 use crate::metrics::prometheus::server::PrometheusServer as PrometheusMetricsServer;
 use crate::servers::ServerManager;
 use crate::servers::common::DockerManager;
-use crate::metrics::EnhancedMetricsProvider;
 
 /// Configuration for the Prometheus server
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -133,17 +133,30 @@ impl PrometheusServer {
 
         match new_container_id_result {
             Ok(id) => {
-                info!("PrometheusServer::start: docker_manager.run_container succeeded. Raw new_container_id: '{}'", id);
+                info!(
+                    "PrometheusServer::start: docker_manager.run_container succeeded. Raw new_container_id: '{}'",
+                    id
+                );
                 if id.trim().is_empty() {
-                    error!("PrometheusServer::start: docker_manager.run_container returned an EMPTY string for container ID.");
-                    return Err(crate::error::Error::Other("Docker manager returned empty container ID for Prometheus".to_string()));
+                    error!(
+                        "PrometheusServer::start: docker_manager.run_container returned an EMPTY string for container ID."
+                    );
+                    return Err(crate::error::Error::Other(
+                        "Docker manager returned empty container ID for Prometheus".to_string(),
+                    ));
                 }
                 let mut id_guard = self.container_id.lock().unwrap();
                 *id_guard = Some(id.clone());
-                info!("PrometheusServer::start: Stored new container_id into self.container_id. Current self.container_id: {:?}", *id_guard);
+                info!(
+                    "PrometheusServer::start: Stored new container_id into self.container_id. Current self.container_id: {:?}",
+                    *id_guard
+                );
             }
             Err(e) => {
-                error!("PrometheusServer::start: docker_manager.run_container FAILED: {}", e);
+                error!(
+                    "PrometheusServer::start: docker_manager.run_container FAILED: {}",
+                    e
+                );
                 return Err(e); // Propagate the error from run_container
             }
         }
@@ -168,7 +181,11 @@ impl ServerManager for PrometheusServer {
         if self.config.use_docker {
             info!(
                 "PrometheusServer::start: Attempting to run Docker container '{}' with name '{}' on network {:?}. Ports: {:?}, Config mount: {:?} -> /etc/prometheus/prometheus.yml",
-                self.config.docker_image, self.config.docker_container_name, network, self.config.port, self.config.config_path
+                self.config.docker_image,
+                self.config.docker_container_name,
+                network,
+                self.config.port,
+                self.config.config_path
             );
             let mut perform_health_check = true;
 
@@ -176,19 +193,38 @@ impl ServerManager for PrometheusServer {
             let initial_id_check = self.container_id.lock().unwrap().clone();
 
             if let Some(existing_id) = initial_id_check {
-                info!("PrometheusServer::start: Found existing container_id: {}. Checking if it's running.", existing_id);
-                let is_running = self.docker_manager.is_container_running(&existing_id).await?;
+                info!(
+                    "PrometheusServer::start: Found existing container_id: {}. Checking if it's running.",
+                    existing_id
+                );
+                let is_running = self
+                    .docker_manager
+                    .is_container_running(&existing_id)
+                    .await?;
                 if !is_running {
-                    warn!("PrometheusServer::start: Container {} was found but is not running. Attempting to remove and recreate.", existing_id);
-                    if let Err(e) = self.docker_manager.stop_and_remove_container(&existing_id, &self.config.docker_container_name).await {
-                        warn!("PrometheusServer::start: Failed to remove non-running container {}: {}. Proceeding to create a new one.", existing_id, e);
+                    warn!(
+                        "PrometheusServer::start: Container {} was found but is not running. Attempting to remove and recreate.",
+                        existing_id
+                    );
+                    if let Err(e) = self
+                        .docker_manager
+                        .stop_and_remove_container(&existing_id, &self.config.docker_container_name)
+                        .await
+                    {
+                        warn!(
+                            "PrometheusServer::start: Failed to remove non-running container {}: {}. Proceeding to create a new one.",
+                            existing_id, e
+                        );
                     }
                     // Mark that we need to create a new one by ensuring current_container_id_val remains None
                     current_container_id_val = None;
                     // also clear it from the shared state
                     *self.container_id.lock().unwrap() = None;
                 } else {
-                    info!("PrometheusServer::start: Container {} is already running.", existing_id);
+                    info!(
+                        "PrometheusServer::start: Container {} is already running.",
+                        existing_id
+                    );
                     current_container_id_val = Some(existing_id);
                     perform_health_check = false; // Already running, assume healthy or rely on external checks for now
                 }
@@ -198,61 +234,83 @@ impl ServerManager for PrometheusServer {
 
             // Step 2: Create container if needed (current_container_id_val is None)
             if current_container_id_val.is_none() {
-                    info!("PrometheusServer::start: No existing container_id found or old one was not running. Creating new container.");
-                    let mut ports = std::collections::HashMap::new();
-                    ports.insert(
-                        format!("9090/tcp"),
-                        self.config.port.to_string(),
+                info!(
+                    "PrometheusServer::start: No existing container_id found or old one was not running. Creating new container."
+                );
+                let mut ports = std::collections::HashMap::new();
+                ports.insert(format!("9090/tcp"), self.config.port.to_string());
+
+                let mut volumes = std::collections::HashMap::new();
+                if let Some(config_host_path) = &self.config.config_path {
+                    volumes.insert(
+                        config_host_path.clone(),
+                        "/etc/prometheus/prometheus.yml".to_string(),
                     );
+                }
+                if let Some(data_host_path) = &self.config.data_path {
+                    volumes.insert(data_host_path.clone(), "/prometheus".to_string());
+                }
 
-                    let mut volumes = std::collections::HashMap::new();
-                    if let Some(config_host_path) = &self.config.config_path {
-                        volumes.insert(config_host_path.clone(), "/etc/prometheus/prometheus.yml".to_string());
-                    }
-                    if let Some(data_host_path) = &self.config.data_path {
-                        volumes.insert(data_host_path.clone(), "/prometheus".to_string());
-                    }
+                // Add host.docker.internal mapping for Linux, required for the container to find the host.
+                let extra_hosts = vec!["host.docker.internal:host-gateway".to_string()];
 
-                    // Add host.docker.internal mapping for Linux, required for the container to find the host.
-                    let extra_hosts = vec!["host.docker.internal:host-gateway".to_string()];
-
-                    let new_id_result = self.docker_manager.run_container(
+                let new_id_result = self
+                    .docker_manager
+                    .run_container(
                         &self.config.docker_image,
                         &self.config.docker_container_name,
                         std::collections::HashMap::new(), // env_vars
                         ports,                            // ports_map
                         volumes,                          // volumes_map
                         Some(extra_hosts),                // extra_hosts
-                        None                              // health_check_cmd
-                    ).await;
+                        None,                             // health_check_cmd
+                    )
+                    .await;
 
-                    match new_id_result {
-                        Ok(id) => {
-                            if id.trim().is_empty() {
-                                error!("PrometheusServer::start: Docker manager returned an EMPTY string for container ID.");
-                                return Err(crate::error::Error::Other("Docker manager returned empty container ID for Prometheus".to_string()));
-                            }
-                            info!("PrometheusServer::start: Successfully created container with ID: {}", id);
-                            current_container_id_val = Some(id.clone());
-                            // Update shared state
-                            *self.container_id.lock().unwrap() = Some(id);
+                match new_id_result {
+                    Ok(id) => {
+                        if id.trim().is_empty() {
+                            error!(
+                                "PrometheusServer::start: Docker manager returned an EMPTY string for container ID."
+                            );
+                            return Err(crate::error::Error::Other(
+                                "Docker manager returned empty container ID for Prometheus"
+                                    .to_string(),
+                            ));
                         }
-                        Err(e) => {
-                            error!("PrometheusServer::start: Failed to run Prometheus container: {}", e);
-                            return Err(e);
-                        }
+                        info!(
+                            "PrometheusServer::start: Successfully created container with ID: {}",
+                            id
+                        );
+                        current_container_id_val = Some(id.clone());
+                        // Update shared state
+                        *self.container_id.lock().unwrap() = Some(id);
+                    }
+                    Err(e) => {
+                        error!(
+                            "PrometheusServer::start: Failed to run Prometheus container: {}",
+                            e
+                        );
+                        return Err(e);
                     }
                 }
+            }
 
             // Step 3: Network connection and health check using current_container_id_val
-            let final_id_for_connection_and_health_check = current_container_id_val
-                .clone()
-                .ok_or_else(|| crate::error::Error::Other("Prometheus container ID unexpectedly None after creation/check logic".to_string()))?;
+            let final_id_for_connection_and_health_check =
+                current_container_id_val.clone().ok_or_else(|| {
+                    crate::error::Error::Other(
+                        "Prometheus container ID unexpectedly None after creation/check logic"
+                            .to_string(),
+                    )
+                })?;
 
             if let Some(net) = network {
                 info!(
                     "Connecting Prometheus container {} ({}) to network {}",
-                    &self.config.docker_container_name, final_id_for_connection_and_health_check, net
+                    &self.config.docker_container_name,
+                    final_id_for_connection_and_health_check,
+                    net
                 );
                 self.docker_manager
                     .connect_to_network(&final_id_for_connection_and_health_check, net)
@@ -260,18 +318,35 @@ impl ServerManager for PrometheusServer {
             }
 
             if perform_health_check {
-                info!("Performing health check for Prometheus container {} ({})", &self.config.docker_container_name, final_id_for_connection_and_health_check);
-                if !self.docker_manager.wait_for_container_health(&final_id_for_connection_and_health_check, 120).await.is_ok() {
+                info!(
+                    "Performing health check for Prometheus container {} ({})",
+                    &self.config.docker_container_name, final_id_for_connection_and_health_check
+                );
+                if !self
+                    .docker_manager
+                    .wait_for_container_health(&final_id_for_connection_and_health_check, 120)
+                    .await
+                    .is_ok()
+                {
                     let err_msg = format!(
                         "Prometheus Docker container {} ({}) did not become healthy.",
                         self.config.docker_container_name, final_id_for_connection_and_health_check
                     );
                     error!("{}", err_msg);
-                    return Err(crate::error::Error::Other(format!("Prometheus container ({}) health check failed: {}", final_id_for_connection_and_health_check, err_msg)));
+                    return Err(crate::error::Error::Other(format!(
+                        "Prometheus container ({}) health check failed: {}",
+                        final_id_for_connection_and_health_check, err_msg
+                    )));
                 }
-                info!("Prometheus Docker container {} ({}) is healthy.", &self.config.docker_container_name, final_id_for_connection_and_health_check);
+                info!(
+                    "Prometheus Docker container {} ({}) is healthy.",
+                    &self.config.docker_container_name, final_id_for_connection_and_health_check
+                );
             } else {
-                info!("Skipping health check for already running Prometheus container {} ({})", &self.config.docker_container_name, final_id_for_connection_and_health_check);
+                info!(
+                    "Skipping health check for already running Prometheus container {} ({})",
+                    &self.config.docker_container_name, final_id_for_connection_and_health_check
+                );
             }
         } else {
             // Logic for non-Docker (embedded) server
@@ -509,7 +584,10 @@ impl Drop for PrometheusServer {
         }
 
         let final_container_id_check = self.container_id.lock().unwrap();
-        info!("PrometheusServer::start: For health check, read self.container_id as: {:?}", *final_container_id_check);
+        info!(
+            "PrometheusServer::start: For health check, read self.container_id as: {:?}",
+            *final_container_id_check
+        );
         let final_container_id = final_container_id_check.clone(); // Get the ID again after potential creation
         if let Some(id) = final_container_id {
             // We can't use async in drop, so we just log a warning

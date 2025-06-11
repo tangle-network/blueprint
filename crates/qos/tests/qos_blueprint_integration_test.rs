@@ -1,8 +1,8 @@
 #![allow(dead_code, unused_imports)]
 
 use blueprint_qos::{
-    default_qos_config, GrafanaConfig, GrafanaServerConfig, LokiConfig, QoSConfig,
-    QoSServiceBuilder,
+    GrafanaConfig, GrafanaServerConfig, LokiConfig, QoSConfig, QoSServiceBuilder,
+    default_qos_config,
 };
 use chrono::Utc;
 use log::{info, warn};
@@ -35,7 +35,7 @@ async fn test_qos_service_functionality() {
     setup_log();
     info!("Starting test: test_qos_service_functionality");
 
-        let consumer = std::sync::Arc::new(MockHeartbeatConsumer::new());
+    let consumer = std::sync::Arc::new(MockHeartbeatConsumer::new());
     let mut qos_config = QoSConfig::default();
 
     // Disable server management for this test to isolate heartbeat functionality
@@ -43,7 +43,8 @@ async fn test_qos_service_functionality() {
     qos_config.loki_server = None;
     qos_config.heartbeat = Some(Default::default());
 
-        let _qos_service = QoSServiceBuilder::new().with_config(qos_config)
+    let _qos_service = QoSServiceBuilder::new()
+        .with_config(qos_config)
         .with_heartbeat_consumer(consumer.clone())
         .build()
         .await
@@ -92,7 +93,8 @@ async fn test_grafana_loki_server_management() {
     });
 
     info!("Building QoS service to start Grafana and Loki containers...");
-    let qos_service = QoSServiceBuilder::new().with_config(qos_config)
+    let qos_service = QoSServiceBuilder::new()
+        .with_config(qos_config)
         .with_heartbeat_consumer(consumer)
         .build()
         .await
@@ -130,12 +132,17 @@ async fn test_grafana_loki_server_management() {
     // Verify servers are down
     info!("Verifying Grafana is down...");
     let grafana_resp_after_shutdown = reqwest::get(&grafana_health_url).await;
-    assert!(grafana_resp_after_shutdown.is_err(), "Grafana should be down after shutdown");
+    assert!(
+        grafana_resp_after_shutdown.is_err(),
+        "Grafana should be down after shutdown"
+    );
 
     info!("Verifying Loki is down...");
     let loki_resp_after_shutdown = reqwest::get(&loki_ready_url).await;
-    assert!(loki_resp_after_shutdown.is_err(), "Loki should be down after shutdown");
-
+    assert!(
+        loki_resp_after_shutdown.is_err(),
+        "Loki should be down after shutdown"
+    );
 
     info!("Test test_grafana_loki_server_management finished successfully.");
 }

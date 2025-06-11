@@ -1,4 +1,5 @@
-use axum::{Json, Router,
+use axum::{
+    Json, Router,
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -31,7 +32,11 @@ pub struct PrometheusServer {
 impl PrometheusServer {
     /// Create a new Prometheus metrics server
     #[must_use]
-    pub fn new(registry: Arc<Registry>, enhanced_metrics_provider: Arc<EnhancedMetricsProvider>, bind_address: String) -> Self {
+    pub fn new(
+        registry: Arc<Registry>,
+        enhanced_metrics_provider: Arc<EnhancedMetricsProvider>,
+        bind_address: String,
+    ) -> Self {
         Self {
             registry,
             enhanced_metrics_provider,
@@ -124,15 +129,25 @@ impl Drop for PrometheusServer {
 async fn metrics_handler(State(state): State<ServerState>) -> Response {
     // Attempt to force flush OpenTelemetry metrics via the EnhancedMetricsProvider
     match state.enhanced_metrics_provider.force_flush_otel_metrics() {
-        Ok(_) => info!("PrometheusServer: OpenTelemetry metrics force_flush successful via EnhancedMetricsProvider."),
-        Err(err) => error!("PrometheusServer: OpenTelemetry metrics force_flush failed via EnhancedMetricsProvider: {:?}", err),
+        Ok(_) => info!(
+            "PrometheusServer: OpenTelemetry metrics force_flush successful via EnhancedMetricsProvider."
+        ),
+        Err(err) => error!(
+            "PrometheusServer: OpenTelemetry metrics force_flush failed via EnhancedMetricsProvider: {:?}",
+            err
+        ),
     }
 
-    info!("Metrics handler invoked (post OTel flush via provider). Gathering metrics from registry...");
+    info!(
+        "Metrics handler invoked (post OTel flush via provider). Gathering metrics from registry..."
+    );
     let encoder = TextEncoder::new();
     let metric_families = state.registry.gather();
 
-    info!("Gathered {} metric families. Dumping details:", metric_families.len());
+    info!(
+        "Gathered {} metric families. Dumping details:",
+        metric_families.len()
+    );
     for mf in &metric_families {
         info!("  Metric Family: {}", mf.name());
         info!("    Type: {:?}", mf.get_field_type()); // get_field_type() is still valid
@@ -147,11 +162,19 @@ async fn metrics_handler(State(state): State<ServerState>) -> Response {
             }
             if m.histogram.is_some() {
                 let hist = m.get_histogram();
-                info!("      Histogram: Sum={}, Count={}", hist.get_sample_sum(), hist.get_sample_count());
+                info!(
+                    "      Histogram: Sum={}, Count={}",
+                    hist.get_sample_sum(),
+                    hist.get_sample_count()
+                );
             }
             if m.summary.is_some() {
                 let sum = m.get_summary();
-                info!("      Summary: Sum={}, Count={}", sum.sample_sum(), sum.sample_count());
+                info!(
+                    "      Summary: Sum={}, Count={}",
+                    sum.sample_sum(),
+                    sum.sample_count()
+                );
             }
             let mut labels_str = String::new();
             for label_pair in m.get_label() {

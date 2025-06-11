@@ -2,7 +2,6 @@
 use std::fmt::Debug;
 use std::sync::{Arc, Weak};
 
-
 // Serde and Uuid (restored)
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -11,17 +10,17 @@ use uuid::Uuid;
 
 // OpenTelemetry SDK specific imports
 use opentelemetry_sdk::{
+    Resource,
+    metrics::reader::MetricReader, // MetricReader itself is in sdk::metrics::reader
     metrics::{
-        data::ResourceMetrics,
         // Aggregation, // Unused import
         InstrumentKind,
         MetricError, // For MetricReader trait error types
         Pipeline,
         SdkMeterProvider,
         Temporality,
+        data::ResourceMetrics,
     },
-    metrics::reader::MetricReader, // MetricReader itself is in sdk::metrics::reader
-    Resource,
 };
 
 // Prometheus related
@@ -70,7 +69,7 @@ impl MetricReader for ArcPrometheusReader {
 const OTEL_METER_NAME: &str = "blueprint_metrics";
 
 /// Configuration for the OpenTelemetry exporter.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)] 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OpenTelemetryConfig {
     /// Service name to be used in OpenTelemetry resource attributes.
     pub service_name: String,
@@ -117,13 +116,22 @@ impl OpenTelemetryExporter {
     ///
     /// # Errors
     /// Returns an `Error` if the setup of the OpenTelemetry pipeline or Prometheus exporter fails.
-    pub fn new(otel_config: OpenTelemetryConfig, shared_registry: Arc<Registry>) -> std::result::Result<Self, CrateLocalError> { 
-        info!("Creating OpenTelemetryExporter with config: {:?}", otel_config);
+    pub fn new(
+        otel_config: OpenTelemetryConfig,
+        shared_registry: Arc<Registry>,
+    ) -> std::result::Result<Self, CrateLocalError> {
+        info!(
+            "Creating OpenTelemetryExporter with config: {:?}",
+            otel_config
+        );
 
         // Define the OTel Resource attributes using the provided configuration.
         let resource_attributes = vec![
             KeyValue::new(resource::SERVICE_NAME, otel_config.service_name.clone()),
-            KeyValue::new(resource::SERVICE_VERSION, otel_config.service_version.clone()),
+            KeyValue::new(
+                resource::SERVICE_VERSION,
+                otel_config.service_version.clone(),
+            ),
             KeyValue::new(
                 resource::SERVICE_INSTANCE_ID,
                 otel_config.service_instance_id.clone(),
@@ -141,11 +149,15 @@ impl OpenTelemetryExporter {
         let actual_prom_exporter = opentelemetry_prometheus::exporter()
             .with_registry((*shared_registry).clone()) // Dereference Arc and clone the Registry
             .build()
-            .map_err(|e| CrateLocalError::Other(format!("Failed to build OTel PrometheusExporter: {}", e)))?;
-        
+            .map_err(|e| {
+                CrateLocalError::Other(format!("Failed to build OTel PrometheusExporter: {}", e))
+            })?;
+
         let shared_prom_exporter_arc = Arc::new(actual_prom_exporter);
-        info!("OTel PrometheusExporter instance created and wrapped in Arc. Attempting to use it directly as a reader.");
-        
+        info!(
+            "OTel PrometheusExporter instance created and wrapped in Arc. Attempting to use it directly as a reader."
+        );
+
         let meter_provider = SdkMeterProvider::builder()
             .with_reader(ArcPrometheusReader(shared_prom_exporter_arc.clone())) // Pass the adapter
             .with_resource(resource)
@@ -257,4 +269,3 @@ impl OpenTelemetryExporter {
         builder.build()
     }
 }
-

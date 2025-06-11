@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-
 use crate::error::{Error, Result};
 use crate::logging::GrafanaConfig;
 use crate::logging::loki::LokiConfig;
@@ -151,8 +150,7 @@ impl ServerManager for GrafanaServer {
         if let Some(net) = network {
             info!(
                 "Connecting Grafana container {} to network {}",
-                &self.config.container_name,
-                net
+                &self.config.container_name, net
             );
             self.docker.connect_to_network(&container_id, net).await?;
         }
@@ -168,7 +166,7 @@ impl ServerManager for GrafanaServer {
         Ok(())
     }
 
-        async fn stop(&self) -> Result<()> {
+    async fn stop(&self) -> Result<()> {
         let container_id = {
             let id = self.container_id.lock().unwrap();
             match id.as_ref() {

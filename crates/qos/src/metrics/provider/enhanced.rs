@@ -1,5 +1,5 @@
-use blueprint_core::{debug, info};
 use blueprint_core::error;
+use blueprint_core::{debug, info};
 use prometheus::Registry;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -8,12 +8,12 @@ use tokio::sync::RwLock;
 use crate::error::Result;
 use crate::metrics::opentelemetry::{OpenTelemetryConfig, OpenTelemetryExporter};
 use crate::metrics::prometheus::PrometheusCollector;
-use crate::servers::prometheus::PrometheusServer;
 use crate::metrics::types::{
     BlueprintMetrics, BlueprintStatus, MetricsConfig, MetricsProvider, SystemMetrics,
 };
-use opentelemetry::KeyValue;
-use crate::servers::ServerManager; // Import ServerManager trait for .start()
+use crate::servers::ServerManager;
+use crate::servers::prometheus::PrometheusServer;
+use opentelemetry::KeyValue; // Import ServerManager trait for .start()
 
 /// Enhanced metrics provider that integrates Prometheus and OpenTelemetry
 pub struct EnhancedMetricsProvider {
@@ -74,7 +74,8 @@ impl EnhancedMetricsProvider {
         // Create an OpenTelemetry exporter, passing the shared_registry.
         // The OpenTelemetryExporter will configure its underlying opentelemetry_prometheus::Exporter
         // to use this shared_registry.
-        let otel_exporter_instance = OpenTelemetryExporter::new(otel_config, shared_registry.clone())?;
+        let otel_exporter_instance =
+            OpenTelemetryExporter::new(otel_config, shared_registry.clone())?;
 
         // The underlying opentelemetry_prometheus::Exporter is already configured to use the shared_registry.
         // Explicitly registering our OpenTelemetryExporter wrapper (which calls shared_registry.gather() in its own collect method)
@@ -134,7 +135,7 @@ impl EnhancedMetricsProvider {
         // let registry_for_server = self.shared_registry.clone(); // This is passed as Option
 
         let server = PrometheusServer::new(
-            prometheus_server_config, // 1. PrometheusServerConfig
+            prometheus_server_config,           // 1. PrometheusServerConfig
             Some(self.shared_registry.clone()), // 2. Option<Arc<prometheus::Registry>>
             self.clone(), // 3. Arc<EnhancedMetricsProvider> (self is Arc<Self>)
         );
@@ -316,8 +317,14 @@ impl EnhancedMetricsProvider {
                 Ok(())
             }
             Err(err) => {
-                error!("EnhancedMetricsProvider: OpenTelemetry metrics force_flush failed: {:?}", err);
-                Err(crate::error::Error::Metrics(format!("OpenTelemetry SDK flush error: {}", err)))
+                error!(
+                    "EnhancedMetricsProvider: OpenTelemetry metrics force_flush failed: {:?}",
+                    err
+                );
+                Err(crate::error::Error::Metrics(format!(
+                    "OpenTelemetry SDK flush error: {}",
+                    err
+                )))
             }
         }
     }

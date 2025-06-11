@@ -1,8 +1,5 @@
-use std::sync::Arc;
-use blueprint_core::{error as core_error, info};
-use log::error;
-use tokio::sync::{oneshot, RwLock};
 use crate::{
+    QoSConfig,
     error::{self as qos_error, Result},
     heartbeat::{HeartbeatConsumer, HeartbeatService},
     logging::grafana::{
@@ -14,10 +11,13 @@ use crate::{
         service::MetricsService,
     },
     servers::{
-        grafana::GrafanaServer, loki::LokiServer, prometheus::PrometheusServer, ServerManager,
+        ServerManager, grafana::GrafanaServer, loki::LokiServer, prometheus::PrometheusServer,
     },
-    QoSConfig,
 };
+use blueprint_core::{error as core_error, info};
+use log::error;
+use std::sync::Arc;
+use tokio::sync::{RwLock, oneshot};
 
 /// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality.
 pub struct QoSService<C>
@@ -98,7 +98,18 @@ where
                 .map(|c| LokiServer::new(c.clone()));
 
             let mut prometheus = config.prometheus_server.as_ref().map(|c| {
-                PrometheusServer::new(c.clone(), Some(metrics_service.as_ref().unwrap().provider().shared_registry().clone()), metrics_service.as_ref().unwrap().provider().clone())
+                PrometheusServer::new(
+                    c.clone(),
+                    Some(
+                        metrics_service
+                            .as_ref()
+                            .unwrap()
+                            .provider()
+                            .shared_registry()
+                            .clone(),
+                    ),
+                    metrics_service.as_ref().unwrap().provider().clone(),
+                )
             });
 
             if let Some(p) = &mut prometheus {
@@ -163,7 +174,8 @@ where
             }),
         };
 
-        let (tx, rx): (oneshot::Sender<Result<()>>, oneshot::Receiver<Result<()>>) = oneshot::channel();
+        let (tx, rx): (oneshot::Sender<Result<()>>, oneshot::Receiver<Result<()>>) =
+            oneshot::channel();
         Ok(Self {
             heartbeat_service,
             metrics_service,
@@ -211,7 +223,12 @@ where
         } else {
             info!("Grafana Client: Not configured");
         }
-        if self.metrics_service.as_ref().map(|ms| ms.provider()).is_some() {
+        if self
+            .metrics_service
+            .as_ref()
+            .map(|ms| ms.provider())
+            .is_some()
+        {
             info!("Metrics Service: Configured (instance present)");
         } else {
             info!("Metrics Service: Not configured");
@@ -252,7 +269,9 @@ where
                 .map_or_else(|| "http://loki:3100".to_string(), |s| s.url()),
             access: "proxy".to_string(),
             is_default: Some(false),
-            json_data: Some(serde_json::to_value(LokiJsonData { max_lines: Some(1000) })?),
+            json_data: Some(serde_json::to_value(LokiJsonData {
+                max_lines: Some(1000),
+            })?),
         };
         client.create_or_update_datasource(loki_ds).await?;
 
@@ -286,17 +305,44 @@ where
             })?),
         };
         let created_prometheus_ds = client.create_or_update_datasource(prometheus_ds).await?;
-        info!("Successfully provisioned Prometheus datasource '{}' with UID '{}'. Checking health...", created_prometheus_ds.name, created_prometheus_ds.datasource.uid);
-        match client.check_datasource_health(&created_prometheus_ds.datasource.uid).await {
+        info!(
+            "Successfully provisioned Prometheus datasource '{}' with UID '{}'. Checking health...",
+            created_prometheus_ds.name, created_prometheus_ds.datasource.uid
+        );
+        match client
+            .check_datasource_health(&created_prometheus_ds.datasource.uid)
+            .await
+        {
             Ok(health) if health.status.to_lowercase() == "ok" => {
-                info!("Prometheus datasource '{}' (UID: {}) is healthy: {}", created_prometheus_ds.name, created_prometheus_ds.datasource.uid, health.message);
+                info!(
+                    "Prometheus datasource '{}' (UID: {}) is healthy: {}",
+                    created_prometheus_ds.name,
+                    created_prometheus_ds.datasource.uid,
+                    health.message
+                );
             }
             Ok(health) => {
-                core_error!("Prometheus datasource '{}' (UID: {}) is not healthy: Status: {}, Message: {}", created_prometheus_ds.name, created_prometheus_ds.datasource.uid, health.status, health.message);
-                return Err(qos_error::Error::GrafanaApi(format!("Datasource {} (UID: {}) reported unhealthy: {}", created_prometheus_ds.name, created_prometheus_ds.datasource.uid, health.message)));
+                core_error!(
+                    "Prometheus datasource '{}' (UID: {}) is not healthy: Status: {}, Message: {}",
+                    created_prometheus_ds.name,
+                    created_prometheus_ds.datasource.uid,
+                    health.status,
+                    health.message
+                );
+                return Err(qos_error::Error::GrafanaApi(format!(
+                    "Datasource {} (UID: {}) reported unhealthy: {}",
+                    created_prometheus_ds.name,
+                    created_prometheus_ds.datasource.uid,
+                    health.message
+                )));
             }
             Err(e) => {
-                core_error!("Failed to check health for Prometheus datasource '{}' (UID: {}): {}", created_prometheus_ds.name, created_prometheus_ds.datasource.uid, e);
+                core_error!(
+                    "Failed to check health for Prometheus datasource '{}' (UID: {}): {}",
+                    created_prometheus_ds.name,
+                    created_prometheus_ds.datasource.uid,
+                    e
+                );
                 return Err(e.into());
             }
         }
@@ -321,9 +367,12 @@ where
         blueprint_id: u64,
     ) {
         if let Some(service) = self.metrics_service.as_ref() {
-            service
-                .provider()
-                .record_job_execution(job_id, execution_time, service_id, blueprint_id);
+            service.provider().record_job_execution(
+                job_id,
+                execution_time,
+                service_id,
+                blueprint_id,
+            );
         }
     }
 
@@ -344,11 +393,15 @@ where
                 Ok(inner_result) => inner_result, // inner_result is Result<(), crate::error::Error>
                 Err(_recv_error) => {
                     // recv_error is tokio::sync::oneshot::error::RecvError
-                    Err(qos_error::Error::Other(format!("Completion signal receiver dropped before completion")))
+                    Err(qos_error::Error::Other(format!(
+                        "Completion signal receiver dropped before completion"
+                    )))
                 }
             }
         } else {
-            Err(qos_error::Error::Other("wait_for_completion can only be called once".to_string()))
+            Err(qos_error::Error::Other(
+                "wait_for_completion can only be called once".to_string(),
+            ))
         }
     }
 
@@ -376,12 +429,16 @@ where
                     if tx.send(Ok(())).is_err() {
                         // Receiver was dropped, or channel was closed.
                         // This is not necessarily an error during drop, as the service might have completed normally.
-                        info!("Attempted to send completion signal on drop, but receiver was already gone.");
+                        info!(
+                            "Attempted to send completion signal on drop, but receiver was already gone."
+                        );
                     }
                 }
             }
             Err(_) => {
-                core_error!("Failed to acquire lock for completion_tx during drop (lock was contended). Signal not sent.");
+                core_error!(
+                    "Failed to acquire lock for completion_tx during drop (lock was contended). Signal not sent."
+                );
             }
         }
     }

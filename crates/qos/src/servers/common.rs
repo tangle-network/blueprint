@@ -1,5 +1,6 @@
 use blueprint_core::{debug, error, info, warn};
 use bollard::{
+    Docker,
     container::{
         Config, CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
         StartContainerOptions, StopContainerOptions,
@@ -7,11 +8,10 @@ use bollard::{
     image::CreateImageOptions,
     models::{HealthConfig, HealthStatusEnum, HostConfig, PortBinding},
     network::{ConnectNetworkOptions, CreateNetworkOptions, InspectNetworkOptions},
-    Docker,
 };
 use futures::StreamExt;
 use std::{collections::HashMap, default::Default};
-use tokio::time::{sleep, Duration, Instant};
+use tokio::time::{Duration, Instant, sleep};
 
 use crate::error::{Error, Result};
 
@@ -160,7 +160,10 @@ impl DockerManager {
             panic!("[DOCKER PANIC] {}", err_msg);
         }
 
-        info!("Successfully started container '{}' (ID: {})", name, &container_id);
+        info!(
+            "Successfully started container '{}' (ID: {})",
+            name, &container_id
+        );
         Ok(container_id)
     }
 
@@ -180,7 +183,10 @@ impl DockerManager {
                 .as_ref()
                 .map_or(false, |names| names.contains(&format!("/{}", name)))
             {
-                info!("Found existing container '{}', stopping and removing.", name);
+                info!(
+                    "Found existing container '{}', stopping and removing.",
+                    name
+                );
                 if let Some(container_id) = container_summary.id.as_deref() {
                     self.stop_and_remove_container(container_id, name).await?;
                 }
@@ -196,7 +202,11 @@ impl DockerManager {
         container_name: &str,
     ) -> Result<()> {
         info!("Stopping container '{}' ({})", container_name, container_id);
-        if let Err(e) = self.docker.stop_container(container_id, None::<StopContainerOptions>).await {
+        if let Err(e) = self
+            .docker
+            .stop_container(container_id, None::<StopContainerOptions>)
+            .await
+        {
             warn!(
                 "Could not stop container '{}' (may already be stopped): {}. Proceeding with removal.",
                 container_name, e
@@ -207,7 +217,10 @@ impl DockerManager {
         self.docker
             .remove_container(
                 container_id,
-                Some(RemoveContainerOptions { force: true, ..Default::default() }),
+                Some(RemoveContainerOptions {
+                    force: true,
+                    ..Default::default()
+                }),
             )
             .await
             .map_err(|e| {
@@ -220,14 +233,23 @@ impl DockerManager {
     }
 
     pub async fn create_network(&self, network_name: &str) -> Result<()> {
-        match self.docker.inspect_network(network_name, None::<InspectNetworkOptions<String>>).await {
+        match self
+            .docker
+            .inspect_network(network_name, None::<InspectNetworkOptions<String>>)
+            .await
+        {
             Ok(_) => {
                 info!("Network '{}' already exists.", network_name);
                 Ok(())
             }
-            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. }) if status_code == 404 => {
+            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
+                if status_code == 404 =>
+            {
                 info!("Creating Docker network: '{}'", network_name);
-                let options = CreateNetworkOptions { name: network_name, ..Default::default() };
+                let options = CreateNetworkOptions {
+                    name: network_name,
+                    ..Default::default()
+                };
                 self.docker
                     .create_network(options)
                     .await
@@ -248,7 +270,10 @@ impl DockerManager {
             "Connecting container '{}' to network '{}'",
             container_name, network_name
         );
-        let options = ConnectNetworkOptions { container: container_name, ..Default::default() };
+        let options = ConnectNetworkOptions {
+            container: container_name,
+            ..Default::default()
+        };
         self.docker
             .connect_network(network_name, options)
             .await
@@ -262,10 +287,16 @@ impl DockerManager {
             .await
             .map_err(|e| Error::DockerOperation(e.to_string()))?;
 
-        Ok(container.state.map_or(false, |s| s.running.unwrap_or(false)))
+        Ok(container
+            .state
+            .map_or(false, |s| s.running.unwrap_or(false)))
     }
 
-    pub async fn wait_for_container_health(&self, container_id: &str, timeout_secs: u64) -> Result<()> {
+    pub async fn wait_for_container_health(
+        &self,
+        container_id: &str,
+        timeout_secs: u64,
+    ) -> Result<()> {
         let timeout = Duration::from_secs(timeout_secs);
         let start = Instant::now();
 
@@ -283,23 +314,35 @@ impl DockerManager {
                                         return Ok(());
                                     }
                                     HealthStatusEnum::UNHEALTHY => {
-                                        let err_msg = format!("Container {} reported unhealthy status.", container_id);
+                                        let err_msg = format!(
+                                            "Container {} reported unhealthy status.",
+                                            container_id
+                                        );
                                         error!("{}", err_msg);
                                         return Err(Error::DockerOperation(err_msg));
                                     }
                                     _ => {
-                                        debug!("Container {} health status: {:?}", container_id, status);
+                                        debug!(
+                                            "Container {} health status: {:?}",
+                                            container_id, status
+                                        );
                                     }
                                 }
                             }
                         } else if state.running.unwrap_or(false) {
-                            info!("Container {} is running (no health check configured).", container_id);
+                            info!(
+                                "Container {} is running (no health check configured).",
+                                container_id
+                            );
                             return Ok(());
                         }
                     }
                 }
                 Err(e) => {
-                    warn!("Error inspecting container {}: {}. Retrying...", container_id, e);
+                    warn!(
+                        "Error inspecting container {}: {}. Retrying...",
+                        container_id, e
+                    );
                 }
             }
 
@@ -308,8 +351,7 @@ impl DockerManager {
 
         Err(Error::DockerOperation(format!(
             "Container {} did not become ready within {} seconds.",
-            container_id,
-            timeout_secs
+            container_id, timeout_secs
         )))
     }
 }

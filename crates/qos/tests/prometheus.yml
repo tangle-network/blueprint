@@ -1,10 +1,8 @@
 global:
-  scrape_interval: 10s # How frequently to scrape targets
-  evaluation_interval: 10s # How frequently to evaluate rules
+  scrape_interval: 10s
+  evaluation_interval: 10s
 
 scrape_configs:
   - job_name: 'blueprint-metrics'
     static_configs:
-      - targets: ['172.17.0.1:9091'] # Default Docker bridge IP on Linux.
-                                   # This assumes your Blueprint app's metrics are exposed on host's 9091
-                                   # and accessible via the bridge IP.
+      - targets: ['172.17.0.1:9091']

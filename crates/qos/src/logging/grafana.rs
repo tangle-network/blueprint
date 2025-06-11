@@ -409,8 +409,6 @@ pub struct DataSourceDetails {
     pub read_only: bool,
 }
 
-
-
 impl GrafanaClient {
     /// Returns the configured Prometheus datasource URL, if any.
     pub fn prometheus_datasource_url(&self) -> Option<&String> {
@@ -443,7 +441,10 @@ impl GrafanaClient {
         folder_id: Option<u64>,
         message: &str,
     ) -> Result<String> {
-        let url = format!("{}/api/dashboards/db", self.config.url.trim_end_matches('/'));
+        let url = format!(
+            "{}/api/dashboards/db",
+            self.config.url.trim_end_matches('/')
+        );
 
         let request = DashboardCreateRequest {
             dashboard,
@@ -839,7 +840,10 @@ impl GrafanaClient {
             self.config.url.trim_end_matches('/'),
             uid
         );
-        debug!("Performing health check for datasource UID {} at URL: {}", uid, url);
+        debug!(
+            "Performing health check for datasource UID {} at URL: {}",
+            uid, url
+        );
 
         let mut request_builder = self.client.get(&url);
 
@@ -884,7 +888,11 @@ impl GrafanaClient {
     /// # Errors
     /// Returns an error if the Grafana API request fails or returns an error response
     pub async fn get_datasource(&self, uid: &str) -> Result<Option<DataSourceDetails>> {
-        let url = format!("{}/api/datasources/uid/{}", self.config.url.trim_end_matches('/'), uid);
+        let url = format!(
+            "{}/api/datasources/uid/{}",
+            self.config.url.trim_end_matches('/'),
+            uid
+        );
         debug!("Getting datasource UID {} at URL: {}", uid, url);
 
         let mut request_builder = self.client.get(&url);
@@ -1014,7 +1022,10 @@ mod tests {
         assert_eq!(config.api_key, "");
         assert_eq!(config.org_id, None);
         assert_eq!(config.folder, None);
-        assert_eq!(config.prometheus_datasource_url.unwrap(), "http://localhost:9090");
+        assert_eq!(
+            config.prometheus_datasource_url.unwrap(),
+            "http://localhost:9090"
+        );
     }
 
     /// Tests that a new `GrafanaClient` can be created with a valid configuration.

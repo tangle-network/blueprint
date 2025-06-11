@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-
 use crate::error::{Error, Result};
 use crate::logging::LokiConfig;
 use crate::servers::ServerManager;
@@ -102,8 +101,7 @@ impl ServerManager for LokiServer {
         if let Some(net) = network {
             info!(
                 "Connecting Loki container {} to network {}",
-                &self.config.container_name,
-                net
+                &self.config.container_name, net
             );
             self.docker.connect_to_network(&container_id, net).await?;
         }
@@ -211,7 +209,7 @@ impl ServerManager for LokiServer {
                     }
                 }
             }
-            
+
             debug!("Loki API not yet responsive. Retrying...");
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
