@@ -46,9 +46,9 @@ reqwest = { workspace = true, features = ["json"] }
 uuid = { workspace = true, features = ["v4"] }
 
 base64.workspace = true
+log = "0.4.21"
 
 [dev-dependencies]
-log = "0.4.21"
 env_logger = "0.11.3"
 anyhow = "1.0"
 urlencoding = "2.1.3"

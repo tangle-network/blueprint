@@ -133,12 +133,12 @@ impl EnhancedMetricsProvider {
         // Use the shared registry stored in self
         // let registry_for_server = self.shared_registry.clone(); // This is passed as Option
 
-        let server = PrometheusServer::new(
+        let mut server = PrometheusServer::new(
             prometheus_server_config, // 1. PrometheusServerConfig
             Some(self.shared_registry.clone()), // 2. Option<Arc<prometheus::Registry>>
             self.clone(), // 3. Arc<EnhancedMetricsProvider> (self is Arc<Self>)
         );
-        server.start().await?;
+        server.start(None).await?;
 
         let mut prometheus_server = self.prometheus_server.write().await;
         *prometheus_server = Some(server);
@@ -299,6 +299,12 @@ impl EnhancedMetricsProvider {
     #[must_use]
     pub fn get_otel_job_executions_counter(&self) -> opentelemetry::metrics::Counter<u64> {
         self.otel_job_executions_counter.clone()
+    }
+
+    /// Get the shared Prometheus registry.
+    #[must_use]
+    pub fn shared_registry(&self) -> Arc<Registry> {
+        self.shared_registry.clone()
     }
 
     /// Force flushes the OpenTelemetry metrics pipeline via the exporter.

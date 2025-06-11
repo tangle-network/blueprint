@@ -8,17 +8,22 @@ use blueprint_core::{Job, error, info, warn};
 use blueprint_qos::heartbeat::HeartbeatConfig;
 use blueprint_tangle_extra::layers::TangleLayer;
 use reqwest;
+use blueprint_qos::servers::common::DockerManager;
 
 const TEST_GRAFANA_CONTAINER_NAME: &str = "blueprint-grafana";
 const TEST_LOKI_CONTAINER_NAME: &str = "blueprint-loki";
 const TEST_PROMETHEUS_CONTAINER_NAME: &str = "blueprint-test-prometheus";
+const PROMETHEUS_PORT: u16 = 9090;
 
 use blueprint_qos::{
-    GrafanaConfig, GrafanaServerConfig, PrometheusServerConfig, QoSService, default_qos_config,
+    GrafanaServerConfig, PrometheusServerConfig, QoSService, default_qos_config,
 };
 use blueprint_testing_utils::tangle::harness::TangleTestHarness;
 
 use blueprint_testing_utils::tangle::runner::MockHeartbeatConsumer;
+use blueprint_qos::logging::grafana::CreateDataSourceRequest;
+use serde_json::json;
+use blueprint_core::debug;
 use blueprint_testing_utils::{
     Error, setup_log,
     tangle::multi_node::NodeSlot,
@@ -602,139 +607,61 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         blueprint_id: 1,
         max_missed_heartbeats: 3,
     });
-    // Configure Grafana server to disable anonymous access and enable login form
+
+    // Configure Grafana server
     qos_config.grafana_server = Some(GrafanaServerConfig {
-        port: GRAFANA_PORT,     // Ensure this matches the constant used
-        allow_anonymous: false, // Enable anonymous access for proxy health check
-        // anonymous_role: "Editor".to_string(), // Set role to Editor for datasource proxy access
-        admin_user: "admin".to_string(),     // Default credentials
-        admin_password: "admin".to_string(), // Default credentials
+        port: GRAFANA_PORT,
         ..Default::default()
     });
+
+    // Configure Prometheus server to run in a Docker container
+    qos_config.prometheus_server = Some(PrometheusServerConfig {
+        use_docker: true,
+        docker_container_name: "blueprint-prometheus".to_string(),
+        ..Default::default()
+    });
+
+    // Set the Grafana datasource URL to use the Prometheus container name
+    let prometheus_datasource_url = "http://blueprint-prometheus:9090".to_string();
 
     qos_config.grafana = Some(blueprint_qos::logging::grafana::GrafanaConfig {
         url: format!("http://localhost:{}", GRAFANA_PORT),
-        api_key: String::new(), // No API key, rely on admin user/pass
-        org_id: None,           // Use default org
+        api_key: String::new(),
+        org_id: None,
         admin_user: Some("admin".to_string()),
         admin_password: Some("admin".to_string()),
-        folder: None, // Default to no specific folder
+        folder: None,
         loki_config: None,
+        prometheus_datasource_url: Some(prometheus_datasource_url),
     });
 
-    // Configure metrics exposer to use 0.0.0.0 for accessibility from Docker containers
-    qos_config.prometheus_server = Some(PrometheusServerConfig {
-        host: "0.0.0.0".to_string(), // Listen on all interfaces
-        port: 9090,                  // Must match port used in Grafana datasource URL
-        use_docker: false,           // We are running the native Rust server
-        ..Default::default()
-    });
-
-    // Create a custom Docker network for container-to-container communication if it doesn't exist
-    info!("Creating custom Docker network: {}", CUSTOM_NETWORK_NAME);
-    let create_network_result = Command::new("docker")
-        .args([
-            "network",
-            "create",
-            "--driver",
-            "bridge",
-            CUSTOM_NETWORK_NAME,
-        ])
-        .output()
-        .await
-        .map_err(|e| Error::Setup(format!("Failed to create Docker network: {}", e)))?;
-
-    if !create_network_result.status.success() {
-        let error = String::from_utf8_lossy(&create_network_result.stderr);
-        if error.contains("already exists") {
-            info!(
-                "Docker network {} already exists, will reuse it",
-                CUSTOM_NETWORK_NAME
-            );
-        } else {
-            return Err(Error::Setup(format!(
-                "Failed to create Docker network: {}",
-                error
-            )));
+    // Create a custom Docker network for container-to-container communication
+    let docker = DockerManager::new();
+    info!("Ensuring custom Docker network '{}' exists...", CUSTOM_NETWORK_NAME);
+    match docker.create_network(CUSTOM_NETWORK_NAME).await {
+        Ok(_) => info!("Docker network '{}' created.", CUSTOM_NETWORK_NAME),
+        Err(e) => {
+            // It's okay if the network already exists. Any other error is a problem.
+            if !e.to_string().contains("already exists") {
+                return Err(Error::Setup(format!("Failed to create docker network: {}", e)));
+            }
+            info!("Docker network '{}' already exists.", CUSTOM_NETWORK_NAME);
         }
-    } else {
-        info!(
-            "Successfully created Docker network: {}",
-            CUSTOM_NETWORK_NAME
-        );
     }
 
-    // Explicitly use IPv4 addresses throughout the test for better reliability
-
-    // Add logging for diagnostics
-
-    info!("Starting Loki container: {}", TEST_LOKI_CONTAINER_NAME);
-    let loki_run_status = Command::new("docker")
-        .args([
-            "run",
-            "--name",
-            TEST_LOKI_CONTAINER_NAME,
-            "-d", // detached mode
-            "-p",
-            "3100:3100", // expose Loki port
-            "grafana/loki:latest",
-        ])
-        .status()
-        .await
-        .expect("Failed to execute docker run for Loki");
-
-    if !loki_run_status.success() {
-        panic!(
-            "Failed to start Loki container. Docker run exited with: {:?}",
-            loki_run_status.code()
-        );
-    }
-    info!(
-        "Loki container {} started, connecting to network...",
-        TEST_LOKI_CONTAINER_NAME
-    );
-
-    // Connect Loki to the custom network
-    if let Err(e) =
-        connect_container_to_network(TEST_LOKI_CONTAINER_NAME, CUSTOM_NETWORK_NAME, None).await
-    {
-        error!(
-            "Failed to connect Loki container {} to network {}: {}",
-            TEST_LOKI_CONTAINER_NAME, CUSTOM_NETWORK_NAME, e
-        );
-        // Consider panicking here if Loki is critical and connection fails
-        // For now, logging error and continuing.
-    } else {
-        info!(
-            "Successfully connected Loki container {} to network {}",
-            TEST_LOKI_CONTAINER_NAME, CUSTOM_NETWORK_NAME
-        );
-    }
-
-    // Brief pause to allow Loki to initialize. A proper health check would be better.
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-
+    // Configure QoS service to use the network and manage all servers
+    qos_config.docker_network = Some(CUSTOM_NETWORK_NAME.to_string());
     qos_config.manage_servers = true;
+
+    // Configure Loki (to be managed by QoSService)
     qos_config.loki = Some(blueprint_qos::logging::loki::LokiConfig {
         url: "http://blueprint-loki:3100".to_string(),
         username: Some("test-tenant".to_string()),
         ..Default::default()
     });
-    let _grafana_client_config = GrafanaConfig {
-        url: format!("http://localhost:{}", GRAFANA_PORT),
-        api_key: String::new(), // No API key, rely on admin user/pass
-        org_id: None,           // Use default org
-        admin_user: Some("admin".to_string()),
-        admin_password: Some("admin".to_string()),
-        folder: None,
-        loki_config: None, // Added missing field
-    };
-    qos_config.grafana = Some(blueprint_qos::logging::grafana::GrafanaConfig {
-        url: "http://localhost:3000".to_string(),
-        api_key: "test-api-key".to_string(),
-        folder: Some("TestDashboards".to_string()),
-        ..Default::default()
-    });
+
+    // The QoSService will now start and manage Grafana, Prometheus, and Loki
+    // on the specified Docker network.
     let qos_service = QoSService::new(qos_config.clone(), Arc::new(MockHeartbeatConsumer::new()))
         .await
         .unwrap();
@@ -795,170 +722,7 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         prometheus_datasource_url
     );
 
-    // The original logic to determine prometheus_access_url has been removed.
-    // We will directly use prometheus_datasource_url for the Grafana datasource.
-    if let Some(prometheus_url) = Some(prometheus_datasource_url.clone()) {
-        // Create or update datasource with the best URL we found
-        info!(
-            "Setting Prometheus datasource to use URL: {}",
-            prometheus_url
-        );
 
-        // Create a properly configured Prometheus datasource
-        let prometheus_ds = blueprint_qos::logging::grafana::CreateDataSourceRequest {
-            name: "Blueprint Prometheus".to_string(),
-            ds_type: "prometheus".to_string(),
-            url: prometheus_url.clone(),
-            access: "proxy".to_string(),
-            uid: Some(PROMETHEUS_BLUEPRINT_UID.to_string()),
-            is_default: Some(true),
-            json_data: Some(serde_json::json!({
-                "httpMethod": "GET",
-                "timeout": 30
-            })),
-        };
-
-        // Create the datasource directly using the GrafanaClient to ensure it exists
-        if let Some(grafana_client) = qos_service_arc.grafana_client() {
-            info!(
-                "Creating or updating Prometheus datasource with URL: {}",
-                prometheus_url
-            );
-            match grafana_client
-                .create_or_update_datasource(prometheus_ds)
-                .await
-            {
-                Ok(_) => {
-                    info!("✅ Successfully created/updated Prometheus datasource");
-
-                    // Diagnostic: Curl Prometheus /health endpoint from within Grafana container
-                    info!("Attempting to curl Prometheus /health ({}/health) from within Grafana container...", prometheus_datasource_url);
-                    let grafana_container_name_for_health_check =
-                        blueprint_qos::servers::grafana::GrafanaServerConfig::default()
-                            .container_name;
-                    let curl_health_output = Command::new("docker")
-                        .args([
-                            "exec",
-                            &grafana_container_name_for_health_check,
-                            "curl",
-                            "-v",
-                            "--max-time",
-                            "10", // 10-second timeout
-                            &format!("{}/health", prometheus_datasource_url),
-                        ])
-                        .output()
-                        .await
-                        .expect("Failed to execute docker exec curl for /health");
-
-                    if curl_health_output.status.success() {
-                        info!(
-                            "✅ Successfully curled Prometheus /health from Grafana container. Stdout:\n{}",
-                            String::from_utf8_lossy(&curl_health_output.stdout)
-                        );
-                    } else {
-                        error!(
-                            "❌ Failed to curl Prometheus /health from Grafana container. Status: {}. Stderr:\n{}. Stdout:\n{}",
-                            curl_health_output.status,
-                            String::from_utf8_lossy(&curl_health_output.stderr),
-                            String::from_utf8_lossy(&curl_health_output.stdout)
-                        );
-                    }
-
-                    // Diagnostic: Curl Prometheus /metrics endpoint from within Grafana container
-                    info!("Attempting to curl Prometheus /metrics ({}/metrics) from within Grafana container...", prometheus_datasource_url);
-                    let grafana_container_name =
-                        blueprint_qos::servers::grafana::GrafanaServerConfig::default()
-                            .container_name;
-                    let curl_metrics_output = Command::new("docker")
-                        .args([
-                            "exec",
-                            &grafana_container_name,
-                            "curl",
-                            "-v", // Added verbose flag
-                            "--max-time",
-                            "10",
-                            &format!("{}/metrics", prometheus_datasource_url),
-                        ])
-                        .output()
-                        .await
-                        .expect("Failed to execute docker exec curl for /metrics command");
-
-                    if curl_metrics_output.status.success() {
-                        info!(
-                            "✅ Successfully curled Prometheus /metrics from Grafana container. Stdout:\n{}",
-                            String::from_utf8_lossy(&curl_metrics_output.stdout)
-                        );
-                    } else {
-                        error!(
-                            "❌ Failed to curl Prometheus /metrics from Grafana container. Status: {}. Stderr:\n{}. Stdout:\n{}",
-                            curl_metrics_output.status,
-                            String::from_utf8_lossy(&curl_metrics_output.stderr),
-                            String::from_utf8_lossy(&curl_metrics_output.stdout)
-                        );
-                    }
-
-                    // Perform health check for Prometheus datasource via GrafanaClient...
-                    match grafana_client
-                        .check_datasource_health(PROMETHEUS_BLUEPRINT_UID)
-                        .await
-                    {
-                        Ok(health_response) => {
-                            if health_response.status.to_lowercase() == "ok"
-                                || health_response.status.to_lowercase() == "success"
-                                || health_response
-                                    .message
-                                    .to_lowercase()
-                                    .contains("successfully queried")
-                            {
-                                info!(
-                                    "✅ Prometheus datasource health check successful via GrafanaClient: Status '{}', Message '{}'",
-                                    health_response.status, health_response.message
-                                );
-                                if let Some(details) = health_response.details {
-                                    info!("Health check details: {:?}", details.extra);
-                                }
-                            } else {
-                                error!(
-                                    "❌ Prometheus datasource health check reported an issue via GrafanaClient: Status '{}', Message '{}'. Details: {:?}",
-                                    health_response.status,
-                                    health_response.message,
-                                    health_response.details
-                                );
-                                panic!(
-                                    "Prometheus datasource health check reported an issue via GrafanaClient: Status '{}', Message '{}'",
-                                    health_response.status, health_response.message
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            error!(
-                                "❌ Grafana datasource health check failed via GrafanaClient: {:?}",
-                                e
-                            );
-                            panic!(
-                                "Grafana datasource health check failed via GrafanaClient: {:?}",
-                                e
-                            );
-                        }
-                    }
-                    // End of new health check block
-                }
-                Err(e) => {
-                    error!("Failed to create Prometheus datasource: {}", e);
-                    return Err(Error::from(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Failed to create Prometheus datasource: {}", e),
-                    )));
-                }
-            }
-        } else {
-            error!("No Grafana client available");
-            return Err(Error::from(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "No Grafana client available",
-            )));
-        }
-    }
     sleep(Duration::from_secs(5)).await;
 
     info!("Attempting to create Grafana dashboard and datasources...");
@@ -1148,30 +912,89 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         }
     }
 
-    // Create the Loki datasource separately
-    let loki_ds = blueprint_qos::logging::grafana::CreateDataSourceRequest {
-        name: "Blueprint Loki".to_string(),
-        ds_type: "loki".to_string(),
-        url: "http://localhost:3100".to_string(),
-        access: "proxy".to_string(),
-        uid: Some(LOKI_BLUEPRINT_UID.to_string()),
-        is_default: Some(false),
-        json_data: Some(serde_json::json!({"maxLines": 1000})),
-    };
-
     if let Some(grafana_client) = qos_service_arc.grafana_client() {
-        match grafana_client.create_or_update_datasource(loki_ds).await {
-            Ok(response) => info!("Successfully created Loki datasource: {}", response.name),
-            Err(e) => error!("Failed to create Loki datasource: {}", e),
+        // Create the Loki datasource
+        info!("Attempting to create Loki datasource: UID {}", LOKI_BLUEPRINT_UID);
+        let loki_ds_request = CreateDataSourceRequest {
+            name: "Blueprint Loki (Test)".to_string(),
+            ds_type: "loki".to_string(),
+            url: "http://localhost:3100".to_string(), // Assuming Loki runs on localhost for the test harness
+            access: "proxy".to_string(),
+            uid: Some(LOKI_BLUEPRINT_UID.to_string()),
+            is_default: Some(false),
+            json_data: Some(serde_json::json!({"maxLines": 1000})),
+        };
+        match grafana_client.create_or_update_datasource(loki_ds_request).await {
+            Ok(response) => {
+                info!(
+                    "Successfully created/updated Loki datasource '{}' (UID: {}) via test. Name from response: '{}', ID: {:?}", 
+                    "Blueprint Loki (Test)", 
+                    LOKI_BLUEPRINT_UID, 
+                    response.datasource.name, 
+                    response.datasource.id
+                );
+                debug!("Full Loki datasource creation response: {:?}", response);
+            }
+            Err(e) => error!("Failed to create/update Loki datasource (UID: {}) via test: {}", LOKI_BLUEPRINT_UID, e),
         }
-    }
 
-    // Skip create_dashboard which would try to create datasources again
-    // Instead, directly call create_blueprint_dashboard which only creates the dashboard
-    info!("Creating dashboard with pre-configured datasources using direct method...");
+        // Explicitly create the Prometheus datasource
+        info!("Attempting to create Prometheus datasource: UID {}", PROMETHEUS_BLUEPRINT_UID);
+        let prometheus_ds_request = CreateDataSourceRequest {
+            name: "Blueprint Prometheus (Test)".to_string(),
+            ds_type: "prometheus".to_string(),
+            url: prometheus_datasource_url.clone(), // This should be http://host.docker.internal:9090 for Grafana container to reach host Prometheus
+            access: "proxy".to_string(),
+            uid: Some(PROMETHEUS_BLUEPRINT_UID.to_string()),
+            is_default: Some(false),
+            json_data: Some(json!({
+                "httpMethod": "GET",
+                "timeInterval": "15s",
+            })),
+        };
 
-    // Use grafana_client directly to create dashboard without recreating datasources
-    if let Some(grafana_client) = qos_service_arc.grafana_client() {
+        match grafana_client.create_or_update_datasource(prometheus_ds_request).await {
+            Ok(response) => {
+                info!(
+                    "Successfully created/updated Prometheus datasource '{}' (UID: {}) via test. Name from response: '{}', ID: {:?}",
+                    "Blueprint Prometheus (Test)",
+                    PROMETHEUS_BLUEPRINT_UID,
+                    response.datasource.name,
+                    response.datasource.id
+                );
+                debug!("Full Prometheus datasource creation response: {:?}", response);
+
+                // Perform a health check on the newly created Prometheus datasource
+                info!("Performing health check for Prometheus datasource UID: {}", PROMETHEUS_BLUEPRINT_UID);
+                match grafana_client.check_datasource_health(PROMETHEUS_BLUEPRINT_UID).await {
+                    Ok(health_response) => {
+                        if health_response.status == "OK" {
+                            info!(
+                                "Prometheus datasource '{}' (UID: {}) health check successful: Status: {}, Message: '{}'",
+                                "Blueprint Prometheus (Test)", PROMETHEUS_BLUEPRINT_UID, health_response.status, health_response.message
+                            );
+                        } else {
+                            warn!(
+                                "Prometheus datasource '{}' (UID: {}) is not healthy: Status: {}, Message: '{}'. This might cause dashboard issues.",
+                                "Blueprint Prometheus (Test)", PROMETHEUS_BLUEPRINT_UID, health_response.status, health_response.message
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to check Prometheus datasource health for UID {} in test: {}. Dashboard panels might fail.",
+                            PROMETHEUS_BLUEPRINT_UID, e
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to create/update Prometheus datasource (UID: {}) via test: {}", PROMETHEUS_BLUEPRINT_UID, e);
+            }
+        }
+
+        // Create the dashboard, assuming datasources are now set up
+        info!("Creating dashboard with pre-configured datasources using direct method...");
         match grafana_client
             .create_blueprint_dashboard(
                 service_id,
@@ -1183,17 +1006,17 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
         {
             Ok(dashboard_url) => {
                 info!("Successfully created Grafana dashboard: {}", dashboard_url);
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await; // Allow time for dashboard to settle if needed
                 info!("Waited 5 seconds after dashboard creation.");
             }
             Err(e) => warn!(
                 "Failed to create Grafana dashboard: {:?}. Proceeding without it.",
                 e
             ),
-        };
+        }
     } else {
-        warn!("No Grafana client available to create dashboard");
-    };
+        warn!("No Grafana client available; skipping Loki & Prometheus datasource creation and dashboard creation.");
+    }
     let otel_job_counter = qos_service_arc
         .provider()
         .expect("Metrics provider should be configured and available in QoSService")
@@ -1511,8 +1334,8 @@ async fn test_qos_metrics_demo() -> Result<(), Error> {
     // if let Err(e) = show_container_logs(GRAFANA_CONTAINER_NAME, 500).await { // Show last 500 lines
     //     warn!("Failed to show Grafana container logs: {}", e);
     // }
-    info!("Servers will remain running for 10 more seconds for metrics viewing");
-    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    info!("Servers will remain running for 30 more seconds for metrics viewing");
+    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 
     cleanup_docker_containers(&harness).await?;
 

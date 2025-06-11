@@ -90,12 +90,13 @@ impl GrafanaServer {
             admin_user: Some(self.config.admin_user.clone()),
             admin_password: Some(self.config.admin_password.clone()),
             loki_config: self.config.loki_config.clone(),
+            prometheus_datasource_url: None,
         }
     }
 }
 
 impl ServerManager for GrafanaServer {
-    async fn start(&self) -> Result<()> {
+    async fn start(&self, network: Option<&str>) -> Result<()> {
         info!("Starting Grafana server on port {}", self.config.port);
 
         // Set up environment variables
@@ -146,6 +147,15 @@ impl ServerManager for GrafanaServer {
                 None, // health_check_cmd
             )
             .await?;
+
+        if let Some(net) = network {
+            info!(
+                "Connecting Grafana container {} to network {}",
+                &self.config.container_name,
+                net
+            );
+            self.docker.connect_to_network(&container_id, net).await?;
+        }
 
         {
             let mut id = self.container_id.lock().unwrap();

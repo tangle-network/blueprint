@@ -71,7 +71,7 @@ impl LokiServer {
 }
 
 impl ServerManager for LokiServer {
-    async fn start(&self) -> Result<()> {
+    async fn start(&self, network: Option<&str>) -> Result<()> {
         info!("Starting Loki server on port {}", self.config.port);
 
         let env_vars = HashMap::new();
@@ -98,6 +98,15 @@ impl ServerManager for LokiServer {
                 None, // health_check_cmd
             )
             .await?;
+
+        if let Some(net) = network {
+            info!(
+                "Connecting Loki container {} to network {}",
+                &self.config.container_name,
+                net
+            );
+            self.docker.connect_to_network(&container_id, net).await?;
+        }
 
         {
             let mut id = self.container_id.lock().unwrap();

@@ -47,6 +47,9 @@ pub struct QoSConfig {
     /// Grafana server configuration (if None, no server will be started)
     pub grafana_server: Option<servers::grafana::GrafanaServerConfig>,
 
+    /// Docker network for managed servers (if None, default network will be used)
+    pub docker_network: Option<String>,
+
     /// Loki server configuration (if None, no server will be started)
     pub loki_server: Option<servers::loki::LokiServerConfig>,
 
@@ -74,7 +77,8 @@ pub fn default_qos_config() -> QoSConfig {
         grafana_server: Some(servers::grafana::GrafanaServerConfig::default()),
         loki_server: Some(servers::loki::LokiServerConfig::default()),
         prometheus_server: None,
-        manage_servers: true,
+        docker_network: None,
+        manage_servers: false,
         service_id: None,
         blueprint_id: None,
     }

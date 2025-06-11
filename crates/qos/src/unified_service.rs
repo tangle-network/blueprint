@@ -1,12 +1,12 @@
 use std::sync::Arc;
 use blueprint_core::{error as core_error, info};
+use log::error;
 use tokio::sync::{oneshot, RwLock};
 use crate::{
-    error::{self, Result},
+    error::{self as qos_error, Result},
     heartbeat::{HeartbeatConsumer, HeartbeatService},
     logging::grafana::{
-        CreateDataSourceRequest, Dashboard, GrafanaClient, LokiJsonData,
-        PrometheusJsonData,
+        CreateDataSourceRequest, Dashboard, GrafanaClient, LokiJsonData, PrometheusJsonData,
     },
     logging::loki::init_loki_logging,
     metrics::{
@@ -87,50 +87,41 @@ where
         }
 
         let (grafana_server, loki_server, prometheus_server) = if config.manage_servers {
-            let grafana = config
+            let mut grafana = config
                 .grafana_server
                 .as_ref()
-                .map(|c| Arc::new(GrafanaServer::new(c.clone())));
-            let loki = config
+                .map(|c| GrafanaServer::new(c.clone()));
+
+            let mut loki = config
                 .loki_server
                 .as_ref()
-                .map(|c| Arc::new(LokiServer::new(c.clone())));
+                .map(|c| LokiServer::new(c.clone()));
 
-            let prometheus = config.prometheus_server.as_ref().map(|sc| {
-                let registry =
-                    metrics_service.as_ref().and_then(|ms| {
-                        if !sc.use_docker {
-                            Some(ms.provider().prometheus_collector().registry().clone())
-                        } else {
-                            None
-                        }
-                    });
-                // This unwrap is safe because prometheus_server config requires metrics config
-                let emp = metrics_service.as_ref().unwrap().provider().clone();
-                Arc::new(PrometheusServer::new(sc.clone(), registry, emp))
+            let mut prometheus = config.prometheus_server.as_ref().map(|c| {
+                PrometheusServer::new(c.clone(), Some(metrics_service.as_ref().unwrap().provider().shared_registry().clone()), metrics_service.as_ref().unwrap().provider().clone())
             });
 
-            if let Some(s) = &grafana {
+            if let Some(s) = &mut grafana {
                 info!("Starting Grafana server...");
-                if let Err(e) = s.start().await {
-                    core_error!("Failed to start Grafana server: {}", e);
+                if let Err(e) = s.start(config.docker_network.as_deref()).await {
+                    error!("Failed to start Grafana server: {}", e);
                 } else {
                     info!("Grafana server started successfully: {}", s.url());
                 }
             }
 
-            if let Some(s) = &loki {
+            if let Some(s) = &mut loki {
                 info!("Starting Loki server...");
-                if let Err(e) = s.start().await {
-                    core_error!("Failed to start Loki server: {}", e);
+                if let Err(e) = s.start(config.docker_network.as_deref()).await {
+                    error!("Failed to start Loki server: {}", e);
                 } else {
                     info!("Loki server started successfully: {}", s.url());
                 }
             }
 
-            if let Some(s) = &prometheus {
+            if let Some(s) = &mut prometheus {
                 info!("Starting Prometheus server...");
-                if let Err(e) = s.start().await {
+                if let Err(e) = s.start(config.docker_network.as_deref()).await {
                     core_error!("Failed to start critical Prometheus server: {}", e);
                     return Err(e); // Critical failure
                 } else {
@@ -138,7 +129,11 @@ where
                 }
             }
 
-            (grafana, loki, prometheus)
+            (
+                grafana.map(Arc::new),
+                loki.map(Arc::new),
+                prometheus.map(Arc::new),
+            )
         } else {
             (None, None, None)
         };
@@ -231,7 +226,7 @@ where
     }
 
     pub async fn create_dashboard(&mut self, blueprint_name: &str) -> Result<()> {
-        let client = self.grafana_client.as_ref().ok_or(error::Error::Other(
+        let client = self.grafana_client.as_ref().ok_or(qos_error::Error::Other(
             "Grafana client not configured".to_string(),
         ))?;
 
@@ -245,27 +240,54 @@ where
                 .map_or_else(|| "http://loki:3100".to_string(), |s| s.url()),
             access: "proxy".to_string(),
             is_default: Some(false),
-            json_data: Some(serde_json::to_value(LokiJsonData {
-                max_lines: Some(1000),
-            })?),
+            json_data: Some(serde_json::to_value(LokiJsonData { max_lines: Some(1000) })?),
         };
         client.create_or_update_datasource(loki_ds).await?;
+
+        // Determine the correct Prometheus URL for Grafana to use.
+        // Priority:
+        // 1. Explicit URL from GrafanaConfig (via GrafanaClient).
+        // 2. URL from the managed Prometheus server instance.
+        let prometheus_url = self
+            .grafana_client
+            .as_ref()
+            .and_then(|gc| gc.prometheus_datasource_url())
+            .cloned()
+            .or_else(|| self.prometheus_server.as_ref().map(|s| s.url()))
+            .ok_or_else(|| {
+                qos_error::Error::Other(
+                    "Prometheus datasource URL is not configured and no managed server is available."
+                        .to_string(),
+                )
+            })?;
 
         let prometheus_ds = CreateDataSourceRequest {
             name: "Prometheus".to_string(),
             ds_type: "prometheus".to_string(),
-            uid: Some("prometheus-blueprint".to_string()),
-            url: self
-                .prometheus_server
-                .as_ref()
-                .map_or_else(|| "http://prometheus:9090".to_string(), |s| s.url()),
+            uid: Some("prometheus_blueprint_default".to_string()),
+            url: prometheus_url,
             access: "proxy".to_string(),
             is_default: Some(true),
             json_data: Some(serde_json::to_value(PrometheusJsonData {
-                ..Default::default()
+                http_method: "GET".to_string(),
+                timeout: 30,
             })?),
         };
-        client.create_or_update_datasource(prometheus_ds).await?;
+        let created_prometheus_ds = client.create_or_update_datasource(prometheus_ds).await?;
+        info!("Successfully provisioned Prometheus datasource '{}' with UID '{}'. Checking health...", created_prometheus_ds.name, created_prometheus_ds.datasource.uid);
+        match client.check_datasource_health(&created_prometheus_ds.datasource.uid).await {
+            Ok(health) if health.status.to_lowercase() == "ok" => {
+                info!("Prometheus datasource '{}' (UID: {}) is healthy: {}", created_prometheus_ds.name, created_prometheus_ds.datasource.uid, health.message);
+            }
+            Ok(health) => {
+                core_error!("Prometheus datasource '{}' (UID: {}) is not healthy: Status: {}, Message: {}", created_prometheus_ds.name, created_prometheus_ds.datasource.uid, health.status, health.message);
+                return Err(qos_error::Error::GrafanaApi(format!("Datasource {} (UID: {}) reported unhealthy: {}", created_prometheus_ds.name, created_prometheus_ds.datasource.uid, health.message)));
+            }
+            Err(e) => {
+                core_error!("Failed to check health for Prometheus datasource '{}' (UID: {}): {}", created_prometheus_ds.name, created_prometheus_ds.datasource.uid, e);
+                return Err(e.into());
+            }
+        }
 
         const DASHBOARD_TEMPLATE: &str = include_str!("../config/grafana_dashboard.json");
         let mut dashboard: Dashboard = serde_json::from_str(DASHBOARD_TEMPLATE)?;
@@ -308,13 +330,13 @@ where
         if let Some(rx) = rx_option {
             match rx.await {
                 Ok(inner_result) => inner_result, // inner_result is Result<(), crate::error::Error>
-                Err(recv_error) => {
+                Err(_recv_error) => {
                     // recv_error is tokio::sync::oneshot::error::RecvError
-                    Err(error::Error::Other(format!("Completion signal receiver dropped or channel closed prematurely: {:?}", recv_error)))
+                    Err(qos_error::Error::Other(format!("Completion signal receiver dropped before completion")))
                 }
             }
         } else {
-            Err(error::Error::Other("wait_for_completion can only be called once or receiver was not initialized.".to_string()))
+            Err(qos_error::Error::Other("wait_for_completion can only be called once".to_string()))
         }
     }
 
