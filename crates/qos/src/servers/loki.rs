@@ -78,8 +78,6 @@ impl ServerManager for LokiServer {
         let mut ports = HashMap::new();
         ports.insert("3100/tcp".to_string(), self.config.port.to_string());
 
-        // Only use volume mounts if the data_dir starts with a valid path
-        // This helps avoid permission issues in environments where volume mounts are problematic
         let mut volumes = HashMap::new();
         if !self.config.data_dir.is_empty() && self.config.data_dir != "/loki" {
             volumes.insert(self.config.data_dir.clone(), "/loki".to_string());
@@ -93,8 +91,8 @@ impl ServerManager for LokiServer {
                 env_vars,
                 ports,
                 volumes,
-                None, // extra_hosts
-                None, // health_check_cmd
+                None,
+                None,
             )
             .await?;
 
@@ -165,7 +163,6 @@ impl ServerManager for LokiServer {
                 .ok_or_else(|| Error::Generic("Loki server is not running".to_string()))?
         };
 
-        // First, wait for the container to be considered healthy by Docker.
         info!("Waiting for Loki container to be healthy...");
         if let Err(e) = self
             .docker
@@ -180,7 +177,6 @@ impl ServerManager for LokiServer {
             info!("Loki container health check passed.");
         }
 
-        // Second, wait for the API to be responsive on any of its health endpoints.
         info!("Waiting for Loki API to be responsive...");
         let client = reqwest::Client::new();
         let urls = [
@@ -204,9 +200,7 @@ impl ServerManager for LokiServer {
                         info!("Loki API is responsive at {}.", url);
                         return Ok(());
                     }
-                    _ => { // Catches both Err and non-success status
-                        // Continue to the next URL or next sleep cycle
-                    }
+                    _ => {}
                 }
             }
 

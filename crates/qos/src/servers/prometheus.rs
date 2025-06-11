@@ -97,14 +97,11 @@ impl PrometheusServer {
     /// # Panics
     /// Panics if mutex locks cannot be acquired
     pub async fn create_docker_container(&self) -> Result<()> {
-        // Create environment variables
         let env_vars = HashMap::new();
 
-        // Create port mappings
         let mut ports = HashMap::new();
         ports.insert(self.config.port.to_string(), self.config.port.to_string());
 
-        // Create volume mappings
         let mut volumes = HashMap::new();
         if let Some(config_path) = &self.config.config_path {
             volumes.insert(
@@ -117,7 +114,6 @@ impl PrometheusServer {
             volumes.insert(data_path.clone(), "/prometheus".to_string());
         }
 
-        // Run the container
         let new_container_id_result = self
             .docker_manager
             .run_container(
@@ -126,8 +122,8 @@ impl PrometheusServer {
                 env_vars,
                 ports,
                 volumes,
-                None, // extra_hosts
-                None, // health_check_cmd
+                None,
+                None,
             )
             .await;
 
@@ -157,7 +153,7 @@ impl PrometheusServer {
                     "PrometheusServer::start: docker_manager.run_container FAILED: {}",
                     e
                 );
-                return Err(e); // Propagate the error from run_container
+                return Err(e);
             }
         }
 
@@ -176,7 +172,6 @@ impl PrometheusServer {
 
 impl ServerManager for PrometheusServer {
     async fn start(&self, network: Option<&str>) -> Result<()> {
-        // Temporary variable to hold container ID to avoid holding MutexGuard across awaits
         let mut current_container_id_val: Option<String> = None;
         if self.config.use_docker {
             info!(
@@ -189,7 +184,6 @@ impl ServerManager for PrometheusServer {
             );
             let mut perform_health_check = true;
 
-            // Step 1: Check existing container ID status without holding lock over await
             let initial_id_check = self.container_id.lock().unwrap().clone();
 
             if let Some(existing_id) = initial_id_check {
@@ -216,9 +210,7 @@ impl ServerManager for PrometheusServer {
                             existing_id, e
                         );
                     }
-                    // Mark that we need to create a new one by ensuring current_container_id_val remains None
                     current_container_id_val = None;
-                    // also clear it from the shared state
                     *self.container_id.lock().unwrap() = None;
                 } else {
                     info!(
@@ -226,13 +218,10 @@ impl ServerManager for PrometheusServer {
                         existing_id
                     );
                     current_container_id_val = Some(existing_id);
-                    perform_health_check = false; // Already running, assume healthy or rely on external checks for now
+                    perform_health_check = false;
                 }
-            } else {
-                // No initial ID, so current_container_id_val remains None, signaling creation
             }
 
-            // Step 2: Create container if needed (current_container_id_val is None)
             if current_container_id_val.is_none() {
                 info!(
                     "PrometheusServer::start: No existing container_id found or old one was not running. Creating new container."
@@ -251,7 +240,6 @@ impl ServerManager for PrometheusServer {
                     volumes.insert(data_host_path.clone(), "/prometheus".to_string());
                 }
 
-                // Add host.docker.internal mapping for Linux, required for the container to find the host.
                 let extra_hosts = vec!["host.docker.internal:host-gateway".to_string()];
 
                 let new_id_result = self
@@ -259,11 +247,11 @@ impl ServerManager for PrometheusServer {
                     .run_container(
                         &self.config.docker_image,
                         &self.config.docker_container_name,
-                        std::collections::HashMap::new(), // env_vars
-                        ports,                            // ports_map
-                        volumes,                          // volumes_map
-                        Some(extra_hosts),                // extra_hosts
-                        None,                             // health_check_cmd
+                        std::collections::HashMap::new(),
+                        ports,
+                        volumes,
+                        Some(extra_hosts),
+                        None,
                     )
                     .await;
 
@@ -283,7 +271,6 @@ impl ServerManager for PrometheusServer {
                             id
                         );
                         current_container_id_val = Some(id.clone());
-                        // Update shared state
                         *self.container_id.lock().unwrap() = Some(id);
                     }
                     Err(e) => {
@@ -296,7 +283,6 @@ impl ServerManager for PrometheusServer {
                 }
             }
 
-            // Step 3: Network connection and health check using current_container_id_val
             let final_id_for_connection_and_health_check =
                 current_container_id_val.clone().ok_or_else(|| {
                     crate::error::Error::Other(
@@ -349,8 +335,6 @@ impl ServerManager for PrometheusServer {
                 );
             }
         } else {
-            // Logic for non-Docker (embedded) server
-            // Check if already started
             {
                 let guard = self.embedded_server.lock().unwrap();
                 if guard.is_some() {
@@ -360,9 +344,8 @@ impl ServerManager for PrometheusServer {
                     );
                     return Ok(());
                 }
-            } // Guard dropped here
+            }
 
-            // Prepare for start if not started
             let registry_arc_clone;
             let bind_address_for_new_server;
 
@@ -379,10 +362,8 @@ impl ServerManager for PrometheusServer {
                 ));
             }
 
-            // Pre-bind check to ensure the port is not already in use
             match std::net::TcpListener::bind(&bind_address_for_new_server) {
                 Ok(listener) => {
-                    // Port is free, drop the listener immediately so Axum can bind
                     drop(listener);
                     info!(
                         "Port {} is free, proceeding to start embedded Prometheus server.",
@@ -417,13 +398,12 @@ impl ServerManager for PrometheusServer {
                 bind_address_for_new_server.clone(),
             );
 
-            server_instance.start().await?; // Async operation, no locks held from self.embedded_server
+            server_instance.start().await?;
 
-            // Store the started server
             {
                 let mut guard = self.embedded_server.lock().unwrap();
                 *guard = Some(server_instance);
-            } // Guard dropped here
+            }
 
             info!(
                 "Successfully started embedded Prometheus server on {}",
@@ -498,8 +478,6 @@ impl ServerManager for PrometheusServer {
                 .await;
         }
 
-        // For embedded server, we don't have a good way to check if it's running
-        // So we just return true if it's initialized
         let server = self.embedded_server.lock().unwrap();
         Ok(server.is_some())
     }
@@ -513,7 +491,6 @@ impl ServerManager for PrometheusServer {
                 })?
             };
 
-            // First, wait for the container to be healthy.
             info!("Waiting for Prometheus container to be healthy...");
             if let Err(e) = self
                 .docker_manager
@@ -528,7 +505,6 @@ impl ServerManager for PrometheusServer {
                 info!("Prometheus container health check passed.");
             }
 
-            // Second, wait for the API to be responsive.
             info!("Waiting for Prometheus API to be responsive...");
             let client = reqwest::Client::new();
             let url = format!("{}/-/ready", self.url());
@@ -548,9 +524,7 @@ impl ServerManager for PrometheusServer {
                         info!("Prometheus API is responsive.");
                         return Ok(());
                     }
-                    _ => {
-                        // Still waiting, sleep and retry
-                    }
+                    _ => {}
                 }
 
                 tokio::time::sleep(Duration::from_secs(1)).await;
@@ -588,9 +562,8 @@ impl Drop for PrometheusServer {
             "PrometheusServer::start: For health check, read self.container_id as: {:?}",
             *final_container_id_check
         );
-        let final_container_id = final_container_id_check.clone(); // Get the ID again after potential creation
+        let final_container_id = final_container_id_check.clone();
         if let Some(id) = final_container_id {
-            // We can't use async in drop, so we just log a warning
             info!(
                 "Note: Docker container {} will not be automatically stopped on drop",
                 id

@@ -100,7 +100,6 @@ impl PrometheusServer {
                 })
                 .await
                 .unwrap_or_else(|e| {
-                    // This unwrap is for the server's execution, not bind
                     error!("Prometheus metrics server execution error: {}", e);
                 });
         });
@@ -150,7 +149,7 @@ async fn metrics_handler(State(state): State<ServerState>) -> Response {
     );
     for mf in &metric_families {
         info!("  Metric Family: {}", mf.name());
-        info!("    Type: {:?}", mf.get_field_type()); // get_field_type() is still valid
+        info!("    Type: {:?}", mf.get_field_type());
         info!("    Help: {}", mf.help());
         info!("    Metrics ({}):", mf.get_metric().len());
         for m in mf.get_metric() {
@@ -216,8 +215,8 @@ async fn api_v1_query_handler() -> (StatusCode, Json<serde_json::Value>) {
         "data": {
             "resultType": "scalar",
             "result": [
-                0, // Placeholder timestamp
-                "1" // Placeholder value
+                0,
+                "1"
             ]
         }
     });

@@ -5,7 +5,6 @@ use std::time::SystemTime;
 /// Configuration for the metrics service
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct MetricsConfig {
-    // pub bind_address: String, // This is now part of PrometheusServerConfig
     pub prometheus_server: Option<PrometheusServerConfig>,
     pub collection_interval_secs: u64,
     pub max_history: usize,
@@ -16,7 +15,6 @@ pub struct MetricsConfig {
 impl Default for MetricsConfig {
     fn default() -> Self {
         Self {
-            // bind_address: "0.0.0.0:9090".to_string(),
             prometheus_server: Some(PrometheusServerConfig::default()),
             collection_interval_secs: 60,
             max_history: 100,

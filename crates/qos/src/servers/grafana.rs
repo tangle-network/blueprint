@@ -98,7 +98,6 @@ impl ServerManager for GrafanaServer {
     async fn start(&self, network: Option<&str>) -> Result<()> {
         info!("Starting Grafana server on port {}", self.config.port);
 
-        // Set up environment variables
         let mut env_vars = HashMap::new();
         env_vars.insert(
             "GF_SECURITY_ADMIN_USER".to_string(),
@@ -127,8 +126,6 @@ impl ServerManager for GrafanaServer {
         let mut ports = HashMap::new();
         ports.insert("3000/tcp".to_string(), self.config.port.to_string());
 
-        // Only use volume mounts if the data_dir starts with a valid path
-        // This helps avoid permission issues in environments where volume mounts are problematic
         let mut volumes = HashMap::new();
         if !self.config.data_dir.is_empty() && self.config.data_dir != "/var/lib/grafana" {
             volumes.insert(self.config.data_dir.clone(), "/var/lib/grafana".to_string());

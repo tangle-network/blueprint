@@ -24,12 +24,10 @@ pub struct QoSService<C>
 where
     C: HeartbeatConsumer + Send + Sync + 'static,
 {
-    #[allow(dead_code)] // TODO: Used for graceful shutdown
     heartbeat_service: Option<Arc<HeartbeatService<C>>>,
     metrics_service: Option<Arc<MetricsService>>,
     grafana_client: Option<Arc<GrafanaClient>>,
     dashboard_url: Option<String>,
-    #[allow(dead_code)] // TODO: Used for graceful shutdown
     grafana_server: Option<Arc<GrafanaServer>>,
     loki_server: Option<Arc<LokiServer>>,
     prometheus_server: Option<Arc<PrometheusServer>>,
@@ -46,8 +44,6 @@ where
     }
 
     /// Sets the completion sender for this QoS service.
-    /// This sender is used to signal that the service (or the component it's monitoring)
-    /// has completed its primary operation, often used in testing or graceful shutdown scenarios.
     pub async fn set_completion_sender(&self, sender: oneshot::Sender<Result<()>>) {
         let mut guard = self.completion_tx.write().await;
         if guard.is_some() {
@@ -114,7 +110,6 @@ where
 
             if let Some(p) = &mut prometheus {
                 if !p.is_docker_based() {
-                    // This is an embedded server. We need to start it.
                     let server_clone = p.clone();
                     tokio::spawn(async move {
                         if let Err(e) = server_clone.start(None).await {
@@ -275,10 +270,6 @@ where
         };
         client.create_or_update_datasource(loki_ds).await?;
 
-        // Determine the correct Prometheus URL for Grafana to use.
-        // Priority:
-        // 1. Explicit URL from GrafanaConfig (via GrafanaClient).
-        // 2. URL from the managed Prometheus server instance.
         let prometheus_url = self
             .grafana_client
             .as_ref()
@@ -384,19 +375,16 @@ where
 
     pub async fn wait_for_completion(&self) -> Result<()> {
         let rx_option = {
-            let mut guard = self.completion_rx.write().await; // tokio::sync::RwLock uses .await
+            let mut guard = self.completion_rx.write().await;
             guard.take()
         };
 
         if let Some(rx) = rx_option {
             match rx.await {
-                Ok(inner_result) => inner_result, // inner_result is Result<(), crate::error::Error>
-                Err(_recv_error) => {
-                    // recv_error is tokio::sync::oneshot::error::RecvError
-                    Err(qos_error::Error::Other(format!(
-                        "Completion signal receiver dropped before completion"
-                    )))
-                }
+                Ok(inner_result) => inner_result,
+                Err(_recv_error) => Err(qos_error::Error::Other(format!(
+                    "Completion signal receiver dropped before completion"
+                ))),
             }
         } else {
             Err(qos_error::Error::Other(
@@ -407,7 +395,6 @@ where
 
     pub async fn shutdown(&self) -> Result<()> {
         info!("QoSService shutting down...");
-        // TODO: Implement graceful shutdown for servers
         info!("QoSService shutdown complete.");
         Ok(())
     }
@@ -427,8 +414,6 @@ where
             Ok(mut guard) => {
                 if let Some(tx) = guard.take() {
                     if tx.send(Ok(())).is_err() {
-                        // Receiver was dropped, or channel was closed.
-                        // This is not necessarily an error during drop, as the service might have completed normally.
                         info!(
                             "Attempted to send completion signal on drop, but receiver was already gone."
                         );

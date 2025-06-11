@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::loki::LokiConfig;
-use crate::error::{Error, Result}; // Adjusted import path assuming loki.rs is in the same logging module
+use crate::error::{Error, Result};
 
 // Health check response structures
 #[derive(Debug, Deserialize, Clone)]
@@ -18,7 +18,7 @@ pub struct DatasourceHealthDetails {
 #[serde(rename_all = "camelCase")]
 pub struct DatasourceHealthResponse {
     pub message: String,
-    pub status: String, // "OK", "ERROR", etc.
+    pub status: String,
     pub details: Option<DatasourceHealthDetails>,
 }
 
@@ -382,12 +382,10 @@ pub struct CreateDataSourceRequest {
 #[serde(rename_all = "camelCase")]
 pub struct CreateDataSourceResponse {
     pub id: u64,
-    // pub uid: String, // Removed: UID is nested in datasource_config
     pub name: String,
     pub message: String,
     #[serde(rename = "datasource")]
-    // Ensure this matches the previous working version if it was datasource_config
-    pub datasource: DataSourceDetails, // Renamed from datasource_config for consistency if needed, or keep as datasource_config if that was correct
+    pub datasource: DataSourceDetails,
 }
 
 #[derive(Deserialize, Debug)]

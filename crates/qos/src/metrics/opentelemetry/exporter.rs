@@ -2,43 +2,28 @@
 use std::fmt::Debug;
 use std::sync::{Arc, Weak};
 
-// Serde and Uuid (restored)
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-// OpenTelemetry API (for Error)
-
-// OpenTelemetry SDK specific imports
 use opentelemetry_sdk::{
     Resource,
-    metrics::reader::MetricReader, // MetricReader itself is in sdk::metrics::reader
+    metrics::reader::MetricReader,
     metrics::{
-        // Aggregation, // Unused import
-        InstrumentKind,
-        MetricError, // For MetricReader trait error types
-        Pipeline,
-        SdkMeterProvider,
-        Temporality,
-        data::ResourceMetrics,
+        InstrumentKind, MetricError, Pipeline, SdkMeterProvider, Temporality, data::ResourceMetrics,
     },
 };
 
-// Prometheus related
+use opentelemetry::metrics::MeterProvider;
 use opentelemetry_prometheus::PrometheusExporter;
 use prometheus::Registry;
 
-// General OpenTelemetry
 use opentelemetry::KeyValue;
-use opentelemetry::metrics::MeterProvider as _; // Allow use of meter() method
-use opentelemetry_semantic_conventions::resource; // Import the resource module directly
+use opentelemetry_semantic_conventions::resource;
 
-// Local crate imports
-use crate::error::Error as CrateLocalError; // Keep aliased
+use crate::error::Error as CrateLocalError;
 use blueprint_core::info;
 
 // Adapter to use Arc<PrometheusExporter> as a MetricReader.
-// MetricReader trait is implemented by this adapter.
-// These are provided by separate impl blocks for ArcPrometheusReader.
 #[derive(Clone, Debug)]
 struct ArcPrometheusReader(Arc<PrometheusExporter>);
 
@@ -98,8 +83,7 @@ impl Default for OpenTelemetryConfig {
 pub struct OpenTelemetryExporter {
     sdk_meter_provider: Arc<SdkMeterProvider>,
     pub meter: opentelemetry::metrics::Meter,
-    pub prometheus_registry: Arc<Registry>, // Now an Arc to the shared registry
-    #[allow(dead_code)] // TODO: Used for graceful shutdown
+    pub prometheus_registry: Arc<Registry>,
     otel_prometheus_exporter: Arc<PrometheusExporter>,
 }
 
@@ -166,7 +150,7 @@ impl OpenTelemetryExporter {
         let sdk_meter_provider_arc = Arc::new(meter_provider);
         opentelemetry::global::set_meter_provider((*sdk_meter_provider_arc).clone());
 
-        let meter = sdk_meter_provider_arc.meter(OTEL_METER_NAME); // Use const &'static str for meter name
+        let meter = sdk_meter_provider_arc.meter(OTEL_METER_NAME);
 
         info!(
             meter_name = %OTEL_METER_NAME,
@@ -176,7 +160,7 @@ impl OpenTelemetryExporter {
         Ok(OpenTelemetryExporter {
             sdk_meter_provider: sdk_meter_provider_arc,
             meter,
-            prometheus_registry: shared_registry, // Store the shared_registry
+            prometheus_registry: shared_registry,
             otel_prometheus_exporter: shared_prom_exporter_arc.clone(),
         })
     }

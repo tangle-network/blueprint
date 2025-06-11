@@ -126,32 +126,17 @@ impl EnhancedMetricsProvider {
     /// # Errors
     /// Returns an error if the Prometheus server fails to start
     pub async fn start_collection(self: Arc<Self>) -> Result<()> {
-        // Start the Prometheus server
-        // Get the Prometheus server config, defaulting if not present
         let prometheus_server_config = self.config.prometheus_server.clone().unwrap_or_default();
-        // The bind_address is part of the prometheus_server_config and handled by PrometheusServer internally.
-
-        // Use the shared registry stored in self
-        // let registry_for_server = self.shared_registry.clone(); // This is passed as Option
 
         let server = PrometheusServer::new(
-            prometheus_server_config,           // 1. PrometheusServerConfig
-            Some(self.shared_registry.clone()), // 2. Option<Arc<prometheus::Registry>>
-            self.clone(), // 3. Arc<EnhancedMetricsProvider> (self is Arc<Self>)
+            prometheus_server_config,
+            Some(self.shared_registry.clone()),
+            self.clone(),
         );
         server.start(None).await?;
 
         let mut prometheus_server = self.prometheus_server.write().await;
         *prometheus_server = Some(server);
-
-        // if let Ok(mut prometheus_server) = self.prometheus_server.write().await {
-        //     *prometheus_server = Some(server);
-        // } else {
-        //     error!("Failed to acquire prometheus_server write lock");
-        //     return Err(crate::error::Error::Other(
-        //         "Failed to acquire prometheus_server write lock".to_string(),
-        //     ));
-        // }
 
         // Start the metrics collection
         let system_metrics = self.system_metrics.clone();

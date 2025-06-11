@@ -1,48 +1,11 @@
 use blueprint_core::info;
 use blueprint_qos::{
-    QoSServiceBuilder, default_qos_config,
-    error::Error as QosError,
-    heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatStatus},
+    QoSServiceBuilder, default_qos_config, error::Error as QosError, heartbeat::HeartbeatConfig,
 };
-use blueprint_testing_utils::setup_log;
+use blueprint_testing_utils::{setup_log, tangle::runner::MockHeartbeatConsumer};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-
-#[derive(Clone, Debug)]
-struct MockHeartbeatConsumer {
-    heartbeat_count: Arc<tokio::sync::Mutex<usize>>,
-    last_status: Arc<tokio::sync::Mutex<Option<HeartbeatStatus>>>,
-}
-
-impl MockHeartbeatConsumer {
-    fn new() -> Self {
-        Self {
-            heartbeat_count: Arc::new(tokio::sync::Mutex::new(0)),
-            last_status: Arc::new(tokio::sync::Mutex::new(None)),
-        }
-    }
-
-    async fn heartbeat_count(&self) -> usize {
-        *self.heartbeat_count.lock().await
-    }
-}
-
-impl HeartbeatConsumer for MockHeartbeatConsumer {
-    async fn send_heartbeat(&self, status: &HeartbeatStatus) -> std::result::Result<(), QosError> {
-        let mut count = self.heartbeat_count.lock().await;
-        *count += 1;
-
-        let mut last = self.last_status.lock().await;
-        *last = Some(status.clone());
-
-        info!(
-            "Heartbeat sent via consumer, count: {}, status: {:?}",
-            *count, status
-        );
-        Ok(())
-    }
-}
 
 // Test configuration constants
 const SERVICE_ID: u64 = 1;

@@ -20,10 +20,9 @@ use tonic::transport::Channel;
 mod utils;
 
 const QOS_PORT: u16 = 8085;
-const OPERATOR_COUNT: usize = 1; // Number of operators for the test
-const INPUT_VALUE: u64 = 5; // Value to square in our test job
+const OPERATOR_COUNT: usize = 1;
+const INPUT_VALUE: u64 = 5;
 
-/// Utility function to clean up any existing Docker containers to avoid conflicts
 fn cleanup_docker_containers() -> Result<(), Error> {
     let containers = ["loki", "grafana", "prometheus", "qos-test"];
     for container_name in &containers {
@@ -40,7 +39,6 @@ fn cleanup_docker_containers() -> Result<(), Error> {
     Ok(())
 }
 
-/// Integration test for QoS functionality with the Tangle Blueprint
 #[tokio::test]
 async fn test_qos_integration() -> Result<(), Error> {
     setup_log();
@@ -67,7 +65,6 @@ async fn test_qos_integration() -> Result<(), Error> {
         .setup_services_with_options::<OPERATOR_COUNT>(setup_services_opts)
         .await?;
 
-    // Verify that the blueprint includes QoS imports
     let main_rs_content = fs::read_to_string(blueprint_dir.join("src/main.rs"))
         .map_err(|e| Error::Setup(format!("Failed to read main.rs: {}", e)))?;
 

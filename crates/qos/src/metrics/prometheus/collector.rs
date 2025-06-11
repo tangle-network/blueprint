@@ -42,12 +42,6 @@ impl PrometheusCollector {
     /// # Errors
     /// Returns an error if any of the Prometheus metrics cannot be registered
     pub fn new(config: MetricsConfig, registry: Arc<Registry>) -> Result<Self, prometheus::Error> {
-        // The passed-in 'registry: Arc<Registry>' will be used.
-
-        // Register process metrics (if enabled in the future)
-        // let process_collector = prometheus::process_collector::ProcessCollector::for_self();
-        // registry.register(Box::new(process_collector))?;
-
         // System metrics
         let cpu_usage = Gauge::new("blueprint_cpu_usage", "CPU usage percentage")?;
         let memory_usage = IntGauge::new("blueprint_memory_usage", "Memory usage in bytes")?;
@@ -101,7 +95,7 @@ impl PrometheusCollector {
         registry.register(Box::new(status_code.clone()))?;
 
         Ok(Self {
-            registry, // Store the passed-in Arc<Registry>
+            registry,
             cpu_usage,
             memory_usage,
             total_memory,
@@ -129,7 +123,6 @@ impl PrometheusCollector {
     /// Update system metrics
     pub fn update_system_metrics(&self, metrics: &SystemMetrics) {
         self.cpu_usage.set(f64::from(metrics.cpu_usage));
-        // Safely convert u64 to i64, capping at i64::MAX if needed
         self.memory_usage
             .set(metrics.memory_usage.try_into().unwrap_or(i64::MAX));
         self.total_memory
@@ -139,7 +132,6 @@ impl PrometheusCollector {
         self.total_disk
             .set(metrics.total_disk.try_into().unwrap_or(i64::MAX));
 
-        // For counters, we need to increment by the difference
         self.network_rx_bytes.inc_by(metrics.network_rx_bytes);
         self.network_tx_bytes.inc_by(metrics.network_tx_bytes);
 

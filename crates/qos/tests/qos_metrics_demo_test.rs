@@ -11,7 +11,7 @@ use blueprint_tangle_extra::layers::TangleLayer;
 const TEST_GRAFANA_CONTAINER_NAME: &str = "blueprint-grafana";
 const TEST_LOKI_CONTAINER_NAME: &str = "blueprint-loki";
 const TEST_PROMETHEUS_CONTAINER_NAME: &str = "blueprint-test-prometheus";
-const PROMETHEUS_PORT: u16 = 9090;
+// const PROMETHEUS_PORT: u16 = 9090;
 
 use blueprint_qos::{GrafanaServerConfig, PrometheusServerConfig, QoSService, default_qos_config};
 use blueprint_testing_utils::tangle::harness::TangleTestHarness;
@@ -50,31 +50,26 @@ async fn cleanup_docker_containers(
 ) -> Result<(), TestRunnerError> {
     info!("Cleaning up existing Docker containers before test...");
 
-    // Remove Grafana container if it exists
     let _grafana_rm = Command::new("docker")
         .args(["rm", "-f", TEST_GRAFANA_CONTAINER_NAME])
         .output()
         .await;
 
-    // Remove Loki container if it exists
     let _loki_rm = Command::new("docker")
         .args(["rm", "-f", TEST_LOKI_CONTAINER_NAME])
         .output()
         .await;
 
-    // Remove Prometheus container if it exists
     let _prometheus_rm = Command::new("docker")
         .args(["rm", "-f", TEST_PROMETHEUS_CONTAINER_NAME])
         .output()
         .await;
 
-    // Also remove our custom Docker network if it exists
     let _network_rm = Command::new("docker")
         .args(["network", "rm", CUSTOM_NETWORK_NAME])
         .output()
         .await;
 
-    // Add a small delay to allow Docker to release ports
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     Ok(())
@@ -89,7 +84,6 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
         TOTAL_JOBS_TO_RUN
     );
 
-    // Create a test blueprint with QoS integration
     info!("Creating test blueprint with QoS integration");
     let (temp_dir, blueprint_dir) = create_test_blueprint();
 
@@ -109,11 +103,9 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
 
     info!("Blueprint includes QoS integration");
 
-    // Initialize test environment
     info!("Initializing test environment");
     test_env.initialize().await?;
 
-    // Get node handle for operator
     let operator_index = 0;
     info!("Using operator index {} for testing", operator_index);
 
