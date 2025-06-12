@@ -122,7 +122,12 @@ pub async fn execute(
     // TODO: Check is_alive
     let _is_alive = Box::pin(service.start().await?.unwrap());
 
-    let pty = service.hypervisor().pty().await?.unwrap();
+    let pty = service
+        .hypervisor()
+        .expect("is a hypervisor service")
+        .pty()
+        .await?
+        .unwrap();
     info!("VM serial output to: {}", pty.display());
 
     let pty = fs::OpenOptions::new().read(true).write(true).open(pty)?;

@@ -1,27 +1,67 @@
 use super::bridge::{Bridge, BridgeHandle};
 use super::hypervisor::net::NetworkManager;
 use super::hypervisor::{HypervisorInstance, ServiceVmConfig};
+use super::native::ProcessHandle;
 use crate::error::{Error, Result};
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_auth::db::RocksDb;
 use blueprint_core::error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time;
+use tracing::{info, warn};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Status {
+    NotStarted,
     Running,
     Finished,
     Error,
 }
 
+struct NativeProcessInfo {
+    binary_path: PathBuf,
+    service_name: String,
+    env_vars: BlueprintEnvVars,
+    arguments: BlueprintArgs,
+}
+
+enum NativeProcess {
+    NotStarted(NativeProcessInfo),
+    Started(ProcessHandle),
+}
+
+enum Runtime {
+    Hypervisor(HypervisorInstance),
+    Native(NativeProcess),
+}
+
 /// A service instance
 pub struct Service {
-    hypervisor: HypervisorInstance,
+    runtime: Runtime,
     bridge: BridgeHandle,
     alive_rx: Option<oneshot::Receiver<()>>,
+}
+
+fn create_bridge(
+    runtime_dir: impl AsRef<Path>,
+    service_name: &str,
+    db: RocksDb,
+) -> Result<(PathBuf, BridgeHandle, oneshot::Receiver<()>)> {
+    let bridge = Bridge::new(
+        runtime_dir.as_ref().to_path_buf(),
+        service_name.to_string(),
+        db,
+    );
+    let bridge_base_socket = bridge.base_socket_path();
+
+    let (handle, alive_rx) = bridge.spawn().map_err(|e| {
+        error!("Failed to spawn manager <-> service bridge: {e}");
+        e
+    })?;
+
+    Ok((bridge_base_socket, handle, alive_rx))
 }
 
 impl Service {
@@ -51,17 +91,8 @@ impl Service {
         env_vars: BlueprintEnvVars,
         arguments: BlueprintArgs,
     ) -> Result<Service> {
-        let bridge = Bridge::new(
-            runtime_dir.as_ref().to_path_buf(),
-            service_name.to_string(),
-            db,
-        );
-        let bridge_base_socket = bridge.base_socket_path();
-
-        let (bridge_handle, alive_rx) = bridge.spawn().map_err(|e| {
-            error!("Failed to spawn manager <-> service bridge: {e}");
-            e
-        })?;
+        let (bridge_base_socket, bridge_handle, alive_rx) =
+            create_bridge(runtime_dir.as_ref(), service_name, db)?;
 
         let mut hypervisor = HypervisorInstance::new(
             vm_config,
@@ -84,7 +115,43 @@ impl Service {
             .await?;
 
         Ok(Self {
-            hypervisor,
+            runtime: Runtime::Hypervisor(hypervisor),
+            bridge: bridge_handle,
+            alive_rx: Some(alive_rx),
+        })
+    }
+
+    /// Create a new `Service` instance
+    ///
+    /// This will:
+    /// * Spawn a [`Bridge`]
+    /// * Configure and create a VM to be started with [`Self::start()`].
+    ///
+    /// # Errors
+    ///
+    /// See:
+    /// * [`Bridge::spawn()`]
+    /// * [`HypervisorInstance::new()`]
+    /// * [`HypervisorInstance::prepare()`]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_native(
+        db: RocksDb,
+        runtime_dir: impl AsRef<Path>,
+        service_name: &str,
+        binary_path: impl AsRef<Path>,
+        env_vars: BlueprintEnvVars,
+        arguments: BlueprintArgs,
+    ) -> Result<Service> {
+        let (_bridge_base_socket, bridge_handle, alive_rx) =
+            create_bridge(runtime_dir.as_ref(), service_name, db)?;
+
+        Ok(Self {
+            runtime: Runtime::Native(NativeProcess::NotStarted(NativeProcessInfo {
+                binary_path: binary_path.as_ref().to_path_buf(),
+                service_name: service_name.to_string(),
+                env_vars,
+                arguments,
+            })),
             bridge: bridge_handle,
             alive_rx: Some(alive_rx),
         })
@@ -96,10 +163,14 @@ impl Service {
     ///
     /// # Errors
     ///
-    /// * See [`HypervisorInstance::client()`]
-    pub fn status(&self) -> Result<Status> {
-        // TODO: A way to actually check the status
-        Ok(Status::Running)
+    /// * See [`HypervisorInstance::statuc()`]
+    /// * See [`ProcessHandle::status()`]
+    pub async fn status(&mut self) -> Result<Status> {
+        match &mut self.runtime {
+            Runtime::Hypervisor(hypervisor) => hypervisor.status().await,
+            Runtime::Native(NativeProcess::Started(instance)) => Ok(instance.status()),
+            Runtime::Native(NativeProcess::NotStarted(_)) => Ok(Status::NotStarted),
+        }
     }
 
     /// Starts the service and returns a health check future
@@ -118,10 +189,33 @@ impl Service {
             return Ok(None);
         };
 
-        self.hypervisor.start().await.map_err(|e| {
-            error!("Failed to start hypervisor: {e}");
-            e
-        })?;
+        match &mut self.runtime {
+            Runtime::Hypervisor(hypervisor) => {
+                hypervisor.start().await.map_err(|e| {
+                    error!("Failed to start hypervisor: {e}");
+                    e
+                })?;
+            }
+            Runtime::Native(instance) => match instance {
+                NativeProcess::NotStarted(info) => {
+                    let process_handle = tokio::process::Command::new(&info.binary_path)
+                        .kill_on_drop(true)
+                        .stdin(std::process::Stdio::null())
+                        .current_dir(&std::env::current_dir()?)
+                        .envs(info.env_vars.encode())
+                        .args(info.arguments.encode())
+                        .spawn()?;
+
+                    let handle =
+                        generate_running_process_status_handle(process_handle, &info.service_name);
+                    *instance = NativeProcess::Started(handle);
+                }
+                NativeProcess::Started(_) => {
+                    error!("Service already started!");
+                    return Ok(None);
+                }
+            },
+        }
 
         Ok(Some(async move {
             if time::timeout(Duration::from_secs(480), alive_rx)
@@ -145,17 +239,65 @@ impl Service {
     /// * [`HypervisorInstance::shutdown()`]
     /// * [`BridgeHandle::shutdown()`]
     pub async fn shutdown(self) -> Result<()> {
-        self.hypervisor.shutdown().await.map_err(|e| {
-            error!("Failed to shut down hypervisor: {e}");
-            e
-        })?;
+        match self.runtime {
+            Runtime::Hypervisor(hypervisor) => {
+                hypervisor.shutdown().await.map_err(|e| {
+                    error!("Failed to shut down hypervisor: {e}");
+                    e
+                })?;
+            }
+            Runtime::Native(NativeProcess::Started(instance)) => {
+                if !instance.abort() {
+                    error!("Failed to abort service");
+                }
+            }
+            _ => warn!("No process attached"),
+        }
+
         self.bridge.shutdown();
 
         Ok(())
     }
 
     #[must_use]
-    pub fn hypervisor(&self) -> &HypervisorInstance {
-        &self.hypervisor
+    pub fn hypervisor(&self) -> Option<&HypervisorInstance> {
+        match &self.runtime {
+            Runtime::Hypervisor(hypervisor) => Some(hypervisor),
+            _ => None,
+        }
     }
+}
+
+#[must_use]
+fn generate_running_process_status_handle(
+    process: tokio::process::Child,
+    service_name: &str,
+) -> ProcessHandle {
+    let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
+    let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<Status>();
+    let service_name = service_name.to_string();
+
+    let task = async move {
+        info!("Starting process execution for {service_name}");
+        let _ = status_tx.send(Status::Running);
+        let output = process.wait_with_output().await;
+        if output.is_ok() {
+            let _ = status_tx.send(Status::Finished).ok();
+        } else {
+            let _ = status_tx.send(Status::Error).ok();
+        }
+
+        warn!("Process for {service_name} exited: {output:?}");
+    };
+
+    let task = async move {
+        tokio::select! {
+            _ = abort_rx => {},
+            () = task => {},
+        }
+    };
+
+    tokio::spawn(task);
+
+    ProcessHandle::new(status_rx, abort_tx)
 }

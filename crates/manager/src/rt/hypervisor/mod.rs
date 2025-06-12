@@ -3,6 +3,7 @@ pub mod net;
 
 use net::NetworkManager;
 
+use super::service::Status;
 use crate::error::{Error, Result};
 use crate::rt::hypervisor::images::CloudImage;
 use crate::rt::hypervisor::net::Lease;
@@ -531,6 +532,19 @@ impl HypervisorInstance {
         self.hypervisor.wait().await?;
 
         Ok(())
+    }
+
+    /// Check the status of the running service
+    ///
+    /// If this returns an error, the service may be dead.
+    ///
+    /// # Errors
+    ///
+    /// * See [`HypervisorInstance::client()`]
+    #[expect(clippy::unused_async, reason = "Does no actual work yet")]
+    pub async fn status(&self) -> Result<Status> {
+        // TODO: A way to actually check the status
+        Ok(Status::Running)
     }
 
     /// Get the pty path, if the VM is configured to output to one

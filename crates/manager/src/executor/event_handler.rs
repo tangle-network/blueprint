@@ -94,24 +94,35 @@ impl VerifiedBlueprint {
                 let runtime_dir = manager_config.runtime_dir.join(id.to_string());
                 fs::create_dir_all(&runtime_dir)?;
 
-                let mut service = Service::new(
-                    // TODO: !!! Actually configure the VM with resource limits
-                    ServiceVmConfig {
-                        id,
-                        ..Default::default()
-                    },
-                    network_manager.clone(),
-                    db.clone(),
-                    &blueprint_config.data_dir,
-                    &blueprint_config.keystore_uri,
-                    &cache_dir,
-                    runtime_dir,
-                    &sub_service_str,
-                    &binary_path,
-                    env,
-                    args,
-                )
-                .await?;
+                let mut service = if manager_config.no_vm {
+                    Service::new_native(
+                        db.clone(),
+                        runtime_dir,
+                        &sub_service_str,
+                        &binary_path,
+                        env,
+                        args,
+                    )?
+                } else {
+                    Service::new(
+                        // TODO: !!! Actually configure the VM with resource limits
+                        ServiceVmConfig {
+                            id,
+                            ..Default::default()
+                        },
+                        network_manager.clone(),
+                        db.clone(),
+                        &blueprint_config.data_dir,
+                        &blueprint_config.keystore_uri,
+                        &cache_dir,
+                        runtime_dir,
+                        &sub_service_str,
+                        &binary_path,
+                        env,
+                        args,
+                    )
+                    .await?
+                };
 
                 let service_start_res = service.start().await;
                 match service_start_res {
@@ -363,7 +374,7 @@ pub(crate) async fn handle_tangle_event(
 
             // Check to see if any process handles have died
             if !to_remove.contains(&(*blueprint_id, *service_id))
-                && !matches!(process_handle.status(), Ok(Status::Running))
+                && !matches!(process_handle.status().await, Ok(Status::Running))
             {
                 // By removing any killed processes, we will auto-restart them on the next finality notification if required
                 warn!("Killing service that has died to allow for auto-restart");
