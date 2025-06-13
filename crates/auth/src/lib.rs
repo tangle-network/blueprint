@@ -90,11 +90,11 @@ fn verify_challenge_sr25519(
     signature: &[u8],
     pub_key: &[u8],
 ) -> Result<bool, Error> {
+    // We must make sure that this is the same as declared in the substrate source code.
+    const CTX: &[u8] = b"substrate";
     let pub_key = schnorrkel::PublicKey::from_bytes(pub_key).map_err(Error::Schnorrkel)?;
     let signature = schnorrkel::Signature::from_bytes(signature).map_err(Error::Schnorrkel)?;
-    Ok(pub_key
-        .verify_simple(&b"substrate"[..], challenge, &signature)
-        .is_ok())
+    Ok(pub_key.verify_simple(CTX, challenge, &signature).is_ok())
 }
 
 #[cfg(test)]
