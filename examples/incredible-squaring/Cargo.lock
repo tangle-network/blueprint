@@ -3168,6 +3168,7 @@ dependencies = [
 name = "blueprint-sdk"
 version = "0.1.0-alpha.12"
 dependencies = [
+ "blueprint-auth",
  "blueprint-build-utils",
  "blueprint-chain-setup",
  "blueprint-clients",
@@ -3180,6 +3181,7 @@ dependencies = [
  "blueprint-evm-extra",
  "blueprint-keystore",
  "blueprint-macros",
+ "blueprint-manager-bridge",
  "blueprint-networking",
  "blueprint-producers-extra",
  "blueprint-router",

@@ -100,6 +100,12 @@ pub mod extract {
 /// Blueprint execution and runtime utilities
 pub use blueprint_runner as runner;
 
+/// Blueprint authentication proxy and utilities
+pub use blueprint_auth as auth;
+
+/// Manager <-> service communication bridge
+pub use blueprint_manager_bridge as bridge;
+
 pub mod producers {
     #[cfg(feature = "cronjob")]
     pub use blueprint_producers_extra::cron::CronJob;

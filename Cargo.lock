@@ -3612,6 +3612,7 @@ version = "0.1.0-alpha.12"
 dependencies = [
  "alloy",
  "alloy-json-abi",
+ "blueprint-auth",
  "blueprint-build-utils",
  "blueprint-chain-setup",
  "blueprint-clients",
@@ -3624,6 +3625,7 @@ dependencies = [
  "blueprint-evm-extra",
  "blueprint-keystore",
  "blueprint-macros",
+ "blueprint-manager-bridge",
  "blueprint-networking",
  "blueprint-networking-round-based-extension",
  "blueprint-producers-extra",
