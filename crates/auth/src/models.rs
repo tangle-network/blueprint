@@ -54,7 +54,7 @@ pub struct ServiceModel {
 pub struct ServiceOwnerModel {
     /// The Public key type.
     ///
-    /// See [`KeyType`](crate::types::KeyType) for more details.
+    /// See [`KeyType`] for more details.
     #[prost(enumeration = "KeyType")]
     pub key_type: i32,
     /// The public key bytes.

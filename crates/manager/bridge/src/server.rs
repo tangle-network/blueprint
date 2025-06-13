@@ -75,7 +75,7 @@ impl Bridge {
     ///
     /// This socket is only created for sandboxed services. It will **not** exist for native services.
     #[must_use]
-    fn guest_socket_path(&self) -> PathBuf {
+    pub fn guest_socket_path(&self) -> PathBuf {
         let sock_name = format!("{}.sock_{VSOCK_PORT}", self.service_name);
         self.runtime_dir.join(sock_name)
     }
@@ -88,7 +88,7 @@ impl Bridge {
     ///
     /// * Unable to bind to the socket, possibly an issue with the [`HypervisorInstance`] startup.
     ///
-    /// [HypervisorInstance]: crate::rt::hypervisor::HypervisorInstance
+    /// [`HypervisorInstance`]: https://docs.rs/blueprint-manager/latest/blueprint_manager/rt/struct.HypervisorInstance.html
     pub fn spawn(self) -> Result<(BridgeHandle, oneshot::Receiver<()>), Error> {
         let (sock_path, listener) = if self.no_vm {
             self.spawn_for_native()?

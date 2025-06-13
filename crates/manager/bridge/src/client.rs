@@ -21,8 +21,13 @@ pub struct Bridge {
 impl Bridge {
     /// Connect to the blueprint manager bridge.
     ///
+    /// NOTE: This should not be used directly in blueprints, see [`BlueprintEnvironment::bridge()`].
+    ///
     /// # Errors
-    /// - If the connection to the bridge fails.
+    ///
+    /// * Unable to connect to the bridge (the host never created a server?)
+    ///
+    /// [`BlueprintEnvironment::bridge()`]: https://docs.rs/blueprint-runner/latest/blueprint_runner/config/struct.BlueprintEnvironment.html#method.bridge
     pub async fn connect(socket_path: Option<&Path>) -> Result<Self, Error> {
         let channel = match socket_path {
             Some(path) => {
