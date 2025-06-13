@@ -254,22 +254,16 @@ where
     /// # }
     /// ```
     #[must_use]
-    pub fn heartbeat_service<C>(
+    pub fn heartbeat_service(
         mut self,
-        service: blueprint_qos::heartbeat::HeartbeatService<C>,
-    ) -> Self
-    where
-        C: Send + Sync + 'static,
-    {
-        struct HeartbeatServiceAdapter<C> {
+        service: blueprint_qos::heartbeat::HeartbeatService,
+    ) -> Self {
+        struct HeartbeatServiceAdapter {
             #[allow(dead_code)]
-            service: blueprint_qos::heartbeat::HeartbeatService<C>,
+            service: blueprint_qos::heartbeat::HeartbeatService,
         }
 
-        impl<C> BackgroundService for HeartbeatServiceAdapter<C>
-        where
-            C: Send + Sync + 'static,
-        {
+        impl BackgroundService for HeartbeatServiceAdapter {
             async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
                 let (_tx, rx) = oneshot::channel();
 
@@ -340,25 +334,16 @@ where
     /// This method instantiates and manages a `QoSService` internally, automatically starting its heartbeat and metrics
     /// background tasks if configured. Custom heartbeat and metrics logic can still be added via `.heartbeat_service` and
     /// `.metrics_server`, but the core QoS logic is always running if this is called.
-    pub fn qos_service<C>(
+    pub fn qos_service(
         mut self,
         config: blueprint_qos::QoSConfig,
-        heartbeat_consumer: std::sync::Arc<C>,
-    ) -> Self
-    where
-        C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
-    {
-        struct QoSServiceAdapter<
-            C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
-        > {
-            qos_service: std::sync::Arc<
-                tokio::sync::Mutex<Option<blueprint_qos::unified_service::QoSService<C>>>,
-            >,
+        heartbeat_consumer: Option<Arc<dyn blueprint_qos::heartbeat::HeartbeatConsumer>>,
+    ) -> Self {
+        struct QoSServiceAdapter {
+            qos_service: Arc<Mutex<Option<blueprint_qos::QoSService>>>,
         }
-        impl<C> BackgroundService for QoSServiceAdapter<C>
-        where
-            C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
-        {
+
+        impl BackgroundService for QoSServiceAdapter {
             async fn start(
                 &self,
             ) -> Result<
@@ -377,18 +362,38 @@ where
                 Ok(rx)
             }
         }
-        let qos_service = std::sync::Arc::new(tokio::sync::Mutex::new(Some(
-            tokio::runtime::Handle::current()
-                .block_on(blueprint_qos::unified_service::QoSService::new(
-                    config,
-                    heartbeat_consumer,
-                    self.env.http_rpc_endpoint.clone().unwrap_or_default(),
-                    self.env.ws_rpc_endpoint.clone().unwrap_or_default(),
-                    self.env.keystore_uri.clone().unwrap_or_default(),
-                ))
-                .expect("Failed to initialize QoSService"),
-        )));
-        let adapter = QoSServiceAdapter { qos_service };
+
+        // Create a placeholder for the QoSService, which will be initialized asynchronously.
+        let qos_service_arc = Arc::new(Mutex::new(None::<blueprint_qos::QoSService>));
+        let qos_service_arc_clone = qos_service_arc.clone();
+        let _env_clone = self.env.clone(); // Clone env for the async task
+
+        // Spawn a task to build the QoSService asynchronously
+        tokio::spawn(async move {
+            blueprint_core::debug!(target: "blueprint-runner", "Initializing QoS Service asynchronously...");
+            let mut builder = blueprint_qos::QoSServiceBuilder::new()
+                .with_config(config) // Use the 'config' argument passed to qos_service
+                .manage_servers(true); // Assuming we want to manage servers like Prometheus
+
+            if let Some(consumer) = heartbeat_consumer {
+                builder = builder.with_heartbeat_consumer(consumer);
+            }
+
+            match builder.build().await {
+                Ok(service) => {
+                    let mut guard = qos_service_arc_clone.lock().await;
+                    *guard = Some(service);
+                    blueprint_core::info!(target: "blueprint-runner", "QoS Service initialized and running.");
+                }
+                Err(e) => {
+                    blueprint_core::error!(target: "blueprint-runner", "Failed to build or start QoS service: {:?}", e);
+                }
+            }
+        });
+
+        let adapter = QoSServiceAdapter {
+            qos_service: qos_service_arc,
+        };
         self.background_services
             .push(DynBackgroundService::boxed(adapter));
         self

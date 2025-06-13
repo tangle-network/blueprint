@@ -14,6 +14,7 @@ use blueprint_client_core::{BlueprintServicesClient, OperatorSet};
 use blueprint_crypto_sp_core::{SpEcdsa, SpSr25519};
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_keystore::backends::Backend;
+use blueprint_std::{format, boxed::Box, collections::BTreeMap, result, string::String, vec::Vec};
 use crate::services::TangleServicesClient;
 
 /// The [Config](subxt::Config) providing the runtime types.
@@ -41,8 +42,8 @@ pub struct TangleClient {
     keystore: Arc<Keystore>,
     services_client: TangleServicesClient<TangleConfig>,
     // Fields previously from BlueprintEnvironment
-    ws_rpc_endpoint: String,
-    keystore_uri: String, // Retained for potential direct use if needed, though new passes it to KeystoreConfig
+    _ws_rpc_endpoint: String,
+    _keystore_uri: String, // Retained for potential direct use if needed, though new passes it to KeystoreConfig
     blueprint_id: BlueprintId,
     service_id: u64,
 }
@@ -59,7 +60,7 @@ impl TangleClient {
         keystore_uri: String,
         blueprint_id: BlueprintId,
         service_id: u64,
-    ) -> std::result::Result<Self, Error> {
+    ) -> result::Result<Self, Error> {
         let keystore_config = KeystoreConfig::new().fs_root(keystore_uri.replace("file://", ""));
 
         Self::with_keystore(
@@ -83,7 +84,7 @@ impl TangleClient {
         blueprint_id: BlueprintId,
         service_id: u64,
         keystore_uri: String, // Added to initialize the field
-    ) -> std::result::Result<Self, Error> {
+    ) -> result::Result<Self, Error> {
         let rpc_url = ws_rpc_endpoint.as_str();
         let client =
             TangleServicesClient::new(subxt::OnlineClient::from_insecure_url(rpc_url).await?);
@@ -101,8 +102,8 @@ impl TangleClient {
             finality_notification_stream: Arc::new(tokio::sync::Mutex::new(None)),
             latest_finality_notification: Arc::new(tokio::sync::Mutex::new(None)),
             account_id,
-            ws_rpc_endpoint,
-            keystore_uri, // Initialize the field
+            _ws_rpc_endpoint: ws_rpc_endpoint,
+            _keystore_uri: keystore_uri, // Initialize the field
             blueprint_id,
             service_id,
         })
@@ -152,7 +153,7 @@ impl TangleClient {
     pub async fn operator_metadata(
         &self,
         operator: AccountId32,
-    ) -> std::result::Result<
+    ) -> result::Result<
         Option<
             OperatorMetadata<
                 AccountId32,
@@ -184,13 +185,7 @@ impl TangleClient {
     /// - Current party is not found in the operator list
     pub async fn get_party_index_and_operators(
         &self,
-    ) -> std::result::Result<
-        (
-            usize,
-            std::collections::BTreeMap<AccountId32, ecdsa::Public>,
-        ),
-        Error,
-    > {
+    ) -> result::Result<(usize, BTreeMap<AccountId32, ecdsa::Public>), Error> {
         let parties = self.get_operators().await?;
         let my_id = self
             .keystore
@@ -292,7 +287,7 @@ impl BlueprintServicesClient for TangleClient {
     /// - Missing ECDSA key for any operator
     async fn get_operators(
         &self,
-    ) -> std::result::Result<
+    ) -> result::Result<
         OperatorSet<Self::PublicAccountIdentity, Self::PublicApplicationIdentity>,
         Self::Error,
     > {
@@ -309,7 +304,7 @@ impl BlueprintServicesClient for TangleClient {
             .await?;
         let storage = client.rpc_client.storage().at_latest().await?;
 
-        let mut map = std::collections::BTreeMap::new();
+        let mut map = BTreeMap::new();
         for (operator, _) in current_service_op {
             let addr = api::storage()
                 .services()
@@ -337,9 +332,7 @@ impl BlueprintServicesClient for TangleClient {
         Ok(map)
     }
 
-    async fn operator_id(
-        &self,
-    ) -> std::result::Result<Self::PublicApplicationIdentity, Self::Error> {
+    async fn operator_id(&self) -> result::Result<Self::PublicApplicationIdentity, Self::Error> {
         Ok(self.keystore.first_local::<SpEcdsa>()?.0)
     }
 
@@ -347,7 +340,7 @@ impl BlueprintServicesClient for TangleClient {
     ///
     /// # Errors
     /// Returns an error if the blueprint ID is not found in the configuration
-    async fn blueprint_id(&self) -> std::result::Result<Self::Id, Self::Error> {
+    async fn blueprint_id(&self) -> result::Result<Self::Id, Self::Error> {
         Ok(self.blueprint_id)
     }
 }

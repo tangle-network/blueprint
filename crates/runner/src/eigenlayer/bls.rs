@@ -132,7 +132,7 @@ async fn register_bls_impl(
         rewards_coordinator_address,
         avs_directory_address,
         Some(permission_controller_address),
-        env.http_rpc_endpoint.clone(),
+        env.http_rpc_endpoint.to_string(),
     );
 
     info!("Eigenlayer BLS Registration: Creating EL Chain Writer");
@@ -143,7 +143,7 @@ async fn register_bls_impl(
         Some(allocation_manager_address),
         registry_coordinator_address,
         el_chain_reader.clone(),
-        env.http_rpc_endpoint.clone(),
+        env.http_rpc_endpoint.to_string(),
         operator_private_key.clone(),
     );
 
@@ -161,7 +161,7 @@ async fn register_bls_impl(
         .register_as_operator(operator_details)
         .await
         .map_err(EigenlayerError::ElContracts)?;
-    let registration_receipt = wait_transaction(&env.http_rpc_endpoint, tx_hash)
+    let registration_receipt = wait_transaction(&env.http_rpc_endpoint.to_string(), tx_hash)
         .await
         .map_err(|e| EigenlayerError::Registration(format!("AVS registration error: {}", e)))?;
     if registration_receipt.status() {
@@ -187,7 +187,7 @@ async fn register_bls_impl(
         .map_err(EigenlayerError::ElContracts)?;
 
     info!("Deposit hash: {:?}", avs_deposit_hash);
-    let avs_deposit_receipt = wait_transaction(&env.http_rpc_endpoint, avs_deposit_hash)
+    let avs_deposit_receipt = wait_transaction(&env.http_rpc_endpoint.to_string(), avs_deposit_hash)
         .await
         .map_err(|e| EigenlayerError::Registration(format!("AVS deposit error: {}", e)))?;
     if avs_deposit_receipt.status() {
@@ -201,7 +201,7 @@ async fn register_bls_impl(
     }
 
     let allocation_delay = 0u32; // TODO: User-defined allocation delay
-    let provider = get_provider_http(&env.http_rpc_endpoint);
+    let provider = get_provider_http(&env.http_rpc_endpoint.to_string());
     let allocation_manager = AllocationManager::new(allocation_manager_address, provider);
     let allocation_delay_receipt = allocation_manager
         .setAllocationDelay(operator_address, allocation_delay)
@@ -250,7 +250,7 @@ async fn register_bls_impl(
         .await
         .map_err(|e| EigenlayerError::Registration(e.to_string()))?;
 
-    let stake_receipt = wait_transaction(&env.http_rpc_endpoint, stake_hash)
+    let stake_receipt = wait_transaction(&env.http_rpc_endpoint.to_string(), stake_hash)
         .await
         .map_err(|e| EigenlayerError::Registration(format!("Quorum staking error: {}", e)))?;
 
@@ -276,7 +276,7 @@ async fn register_bls_impl(
         .await
         .map_err(EigenlayerError::ElContracts)?;
 
-    let registration_receipt = wait_transaction(&env.http_rpc_endpoint, registration_hash)
+    let registration_receipt = wait_transaction(&env.http_rpc_endpoint.to_string(), registration_hash)
         .await
         .map_err(|e| {
             EigenlayerError::Registration(format!("Operator sets registration error: {}", e))
@@ -310,7 +310,7 @@ async fn is_operator_registered(env: &BlueprintEnvironment) -> Result<bool, Runn
         get_test_logger(),
         registry_coordinator_address,
         operator_state_retriever_address,
-        env.http_rpc_endpoint.clone(),
+        env.http_rpc_endpoint.to_string(),
     )
     .await
     .map_err(EigenlayerError::AvsRegistry)?;

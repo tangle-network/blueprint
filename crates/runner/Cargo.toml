@@ -68,7 +68,7 @@ default = ["std", "networking"]
 #! ### Core
 
 ## Enable standard library support
-std = ["blueprint-tangle-extra?/std", "blueprint-evm-extra?/std", "blueprint-keystore/std", "blueprint-std/std"]
+std = ["blueprint-tangle-extra?/std", "blueprint-evm-extra?/std", "blueprint-keystore/std", "blueprint-std/std", "blueprint-qos/std"]
 
 ## Enable networking support for [`BlueprintEnvironment`](crate::config::BlueprintEnvironment)
 networking = ["dep:blueprint-networking", "dep:crossbeam-channel", "dep:libp2p", "blueprint-keystore/zebra"]

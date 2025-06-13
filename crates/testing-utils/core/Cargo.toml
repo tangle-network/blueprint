@@ -16,7 +16,7 @@ workspace = true
 blueprint-core = { workspace = true }
 blueprint-runner = { workspace = true }
 blueprint-router = { workspace = true }
-blueprint-qos = { workspace = true }
+blueprint-qos = { workspace = true, features = ["std"] }
 
 blueprint-clients = { workspace = true, features = ["std"] }
 blueprint-keystore = { workspace = true, features = ["std"] }

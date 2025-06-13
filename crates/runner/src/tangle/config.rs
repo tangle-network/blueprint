@@ -1,5 +1,5 @@
 use crate::BlueprintConfig;
-use crate::config::{BlueprintEnvironment, BlueprintSettings, ProtocolSettingsT};
+use crate::config::{BlueprintEnvironment, BlueprintSettings, Protocol, ProtocolSettingsT};
 use crate::error::{ConfigError, RunnerError};
 use crate::tangle::error::TangleError;
 use blueprint_keystore::backends::Backend;
@@ -40,8 +40,12 @@ impl ProtocolSettingsT for TangleProtocolSettings {
         })
     }
 
-    fn protocol(&self) -> &'static str {
+    fn protocol_name(&self) -> &'static str {
         "tangle"
+    }
+
+    fn protocol(&self) -> Protocol {
+        Protocol::Tangle
     }
 }
 
@@ -198,8 +202,8 @@ async fn get_client(
     ws_url: &str,
     http_url: &str,
 ) -> Result<Arc<OnlineClient<PolkadotConfig>>, TangleError> {
-    let task0 = OnlineClient::<PolkadotConfig>::from_url(ws_url);
-    let task1 = OnlineClient::<PolkadotConfig>::from_url(http_url);
+    let task0 = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url);
+    let task1 = OnlineClient::<PolkadotConfig>::from_insecure_url(http_url);
     let client = select_ok([Box::pin(task0), Box::pin(task1)])
         .await
         .map_err(TangleError::Network)?

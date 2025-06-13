@@ -50,7 +50,7 @@ impl BlueprintConfig for EigenlayerECDSAConfig {
 }
 
 async fn requires_registration_ecdsa_impl(env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
-    let provider = get_provider_http(&env.http_rpc_endpoint);
+    let provider = get_provider_http(&env.http_rpc_endpoint.to_string());
     let contract_addresses = env.protocol_settings.eigenlayer()?;
 
     let ecdsa_public = env.keystore().first_local::<K256Ecdsa>()?;
@@ -108,7 +108,7 @@ async fn register_ecdsa_impl(
     let wallet = PrivateKeySigner::from_str(&operator_private_key)
         .map_err(|_| EigenlayerError::Other("Invalid private key".into()))?;
 
-    let provider = get_provider_http(&env.http_rpc_endpoint);
+    let provider = get_provider_http(&env.http_rpc_endpoint.to_string());
 
     let logger = get_test_logger();
     let el_chain_reader = ELChainReader::new(
@@ -118,7 +118,7 @@ async fn register_ecdsa_impl(
         rewards_coordinator_address,
         avs_directory_address,
         Some(permission_controller_address),
-        env.http_rpc_endpoint.clone(),
+        env.http_rpc_endpoint.to_string(),
     );
 
     let el_writer = ELChainWriter::new(
@@ -128,7 +128,7 @@ async fn register_ecdsa_impl(
         Some(allocation_manager_address),
         registry_coordinator_address,
         el_chain_reader.clone(),
-        env.http_rpc_endpoint.clone(),
+        env.http_rpc_endpoint.to_string(),
         operator_private_key.clone(),
     );
 

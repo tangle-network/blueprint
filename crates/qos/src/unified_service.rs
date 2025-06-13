@@ -20,8 +20,8 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, oneshot};
 
 /// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality.
-pub struct QoSService {
-    heartbeat_service: Option<Arc<HeartbeatService>>,
+pub struct QoSService<C: HeartbeatConsumer + Send + Sync + 'static> {
+    heartbeat_service: Option<Arc<HeartbeatService<C>>>,
     metrics_service: Option<Arc<MetricsService>>,
     grafana_client: Option<Arc<GrafanaClient>>,
     dashboard_url: Option<String>,
@@ -32,8 +32,8 @@ pub struct QoSService {
     completion_rx: RwLock<Option<tokio::sync::oneshot::Receiver<Result<()>>>>,
 }
 
-impl QoSService {
-    pub fn heartbeat_service(&self) -> Option<&Arc<HeartbeatService>> {
+impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
+    pub fn heartbeat_service(&self) -> Option<&Arc<HeartbeatService<C>>> {
         self.heartbeat_service.as_ref()
     }
 
@@ -49,7 +49,7 @@ impl QoSService {
     /// Common initialization logic for `QoSService`.
     async fn initialize(
         config: QoSConfig,
-        heartbeat_consumer: Arc<dyn HeartbeatConsumer + Send + Sync + 'static>,
+        heartbeat_consumer: Arc<C>,
         http_rpc_endpoint: String,
         ws_rpc_endpoint: String,
         keystore_uri: String,
@@ -194,7 +194,7 @@ impl QoSService {
 
     pub async fn new(
         config: QoSConfig,
-        heartbeat_consumer: Arc<dyn HeartbeatConsumer + Send + Sync + 'static>,
+        heartbeat_consumer: Arc<C>,
         http_rpc_endpoint: String,
         ws_rpc_endpoint: String,
         keystore_uri: String,
@@ -212,7 +212,7 @@ impl QoSService {
 
     pub async fn with_otel_config(
         config: QoSConfig,
-        heartbeat_consumer: Arc<dyn HeartbeatConsumer + Send + Sync + 'static>,
+        heartbeat_consumer: Arc<C>,
         http_rpc_endpoint: String,
         ws_rpc_endpoint: String,
         keystore_uri: String,
@@ -433,7 +433,7 @@ impl QoSService {
     }
 }
 
-impl Drop for QoSService {
+impl<C: HeartbeatConsumer + Send + Sync + 'static> Drop for QoSService<C> {
     fn drop(&mut self) {
         if let Some(metrics_service) = self.metrics_service.as_ref() {
             if let Err(e) = metrics_service.provider().force_flush_otel_metrics() {

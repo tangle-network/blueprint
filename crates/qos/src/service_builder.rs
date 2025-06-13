@@ -12,9 +12,10 @@ use crate::servers::{
 use crate::unified_service::QoSService;
 
 /// Builder for `QoS` service
-pub struct QoSServiceBuilder {
+pub struct QoSServiceBuilder<C: HeartbeatConsumer + Send + Sync + 'static> {
     config: QoSConfig,
-    heartbeat_consumer: Option<Arc<dyn HeartbeatConsumer + Send + Sync + 'static>>,
+    heartbeat_consumer: Option<Arc<C>>,
+    _phantom_c: std::marker::PhantomData<C>,
     otel_config: Option<OpenTelemetryConfig>,
     prometheus_datasource: Option<String>,
     loki_datasource: Option<String>,
@@ -24,13 +25,14 @@ pub struct QoSServiceBuilder {
     keystore_uri: Option<String>,
 }
 
-impl QoSServiceBuilder {
+impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
     /// Create a new `QoS` service builder
     #[must_use]
     pub fn new() -> Self {
         Self {
             config: QoSConfig::default(),
             heartbeat_consumer: None,
+            _phantom_c: std::marker::PhantomData,
             otel_config: None,
             prometheus_datasource: None,
             loki_datasource: None,
@@ -80,7 +82,7 @@ impl QoSServiceBuilder {
     #[must_use]
     pub fn with_heartbeat_consumer(
         mut self,
-        consumer: Arc<dyn HeartbeatConsumer + Send + Sync + 'static>,
+        consumer: Arc<C>,
     ) -> Self {
         self.heartbeat_consumer = Some(consumer);
         self
@@ -161,7 +163,7 @@ impl QoSServiceBuilder {
         self
     }
 
-    pub async fn build(self) -> Result<QoSService> {
+    pub async fn build(self) -> Result<QoSService<C>> {
         let heartbeat_consumer = self.heartbeat_consumer.ok_or_else(|| {
             crate::error::Error::Other("Heartbeat consumer is required".to_string())
         })?;

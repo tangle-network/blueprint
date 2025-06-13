@@ -84,7 +84,7 @@ pub struct OpenTelemetryExporter {
     sdk_meter_provider: Arc<SdkMeterProvider>,
     pub meter: opentelemetry::metrics::Meter,
     pub prometheus_registry: Arc<Registry>,
-    otel_prometheus_exporter: Arc<PrometheusExporter>,
+    _otel_prometheus_exporter: Arc<PrometheusExporter>,
 }
 
 impl OpenTelemetryExporter {
@@ -161,7 +161,7 @@ impl OpenTelemetryExporter {
             sdk_meter_provider: sdk_meter_provider_arc,
             meter,
             prometheus_registry: shared_registry,
-            otel_prometheus_exporter: shared_prom_exporter_arc.clone(),
+            _otel_prometheus_exporter: shared_prom_exporter_arc.clone(),
         })
     }
 

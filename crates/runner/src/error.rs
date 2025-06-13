@@ -83,6 +83,8 @@ pub enum RunnerError {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ConfigError {
+    #[error("Invalid argument: {0}")]
+    InvalidArgument(String),
     /// Missing `RPC_URL` environment variable.
     #[error("Missing Tangle RPC endpoint")]
     MissingTangleRpcEndpoint,
