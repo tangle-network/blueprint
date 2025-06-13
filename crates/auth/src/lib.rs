@@ -1,6 +1,6 @@
 //! Authentication module for the Blueprint SDK.
 
-use rand::{CryptoRng, Rng};
+use blueprint_std::rand::{CryptoRng, Rng};
 
 /// Generates API Tokens for the authentication process.
 pub mod api_tokens;
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn test_generate_challenge() {
         // Test with system RNG
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
         let challenge1 = generate_challenge(&mut rng);
 
         // Generate another challenge with the same RNG
@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_verify_challenge_ecdsa_valid() {
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
 
         // Generate a random challenge
         let challenge = generate_challenge(&mut rng);
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn test_verify_challenge_ecdsa_invalid_signature() {
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
 
         // Generate random challenges
         let challenge = generate_challenge(&mut rng);
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_verify_challenge_ecdsa_invalid_key() {
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
 
         // Generate a random challenge
         let challenge = generate_challenge(&mut rng);
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn test_verify_challenge_unknown_key_type() {
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
         let challenge = generate_challenge(&mut rng);
         let result = verify_challenge(&challenge, &[0u8; 64], &[0u8; 33], KeyType::Unknown);
         assert!(matches!(result, Err(Error::UnknownKeyType)));
@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn test_verify_challenge_integration() {
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
 
         // Generate a random challenge
         let challenge = generate_challenge(&mut rng);
@@ -234,7 +234,7 @@ mod tests {
     // Note: For SR25519, we'll do a basic test since we can't easily create valid signatures in tests
     #[test]
     fn test_verify_challenge_sr25519_error_handling() {
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
         let challenge = generate_challenge(&mut rng);
 
         // Create invalid signature and public key data

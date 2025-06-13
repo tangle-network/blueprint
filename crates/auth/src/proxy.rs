@@ -78,7 +78,7 @@ async fn auth_challenge(
     State(s): State<AuthenticatedProxyState>,
     Json(payload): Json<crate::types::ChallengeRequest>,
 ) -> Result<Json<crate::types::ChallengeResponse>, StatusCode> {
-    let mut rng = rand::thread_rng();
+    let mut rng = blueprint_std::BlueprintRng::new();
     let service = ServiceModel::find_by_id(service_id, &s.db)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -106,7 +106,7 @@ async fn auth_verify(
     State(s): State<AuthenticatedProxyState>,
     Json(payload): Json<crate::types::VerifyChallengeRequest>,
 ) -> impl IntoResponse {
-    let mut rng = rand::thread_rng();
+    let mut rng = blueprint_std::BlueprintRng::new();
     let service = match ServiceModel::find_by_id(service_id, &s.db) {
         Ok(Some(service)) => service,
         Ok(None) => {
@@ -233,7 +233,7 @@ mod tests {
 
     #[tokio::test]
     async fn auth_flow_works() {
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
         let tmp = tempdir().unwrap();
         let proxy = AuthenticatedProxy::new(tmp.path()).unwrap();
 

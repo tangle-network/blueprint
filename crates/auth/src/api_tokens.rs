@@ -1,6 +1,6 @@
 use base64::Engine;
+use blueprint_std::rand::{CryptoRng, RngCore};
 use core::fmt::Display;
-use rand::{CryptoRng, RngCore};
 
 use crate::types::ServiceId;
 
@@ -241,7 +241,8 @@ mod tests {
     #[test]
     fn test_api_token_generator_new() {
         let generator = ApiTokenGenerator::new();
-        let token = generator.generate_token(ServiceId::new(1), &mut rand::thread_rng());
+        let token =
+            generator.generate_token(ServiceId::new(1), &mut blueprint_std::BlueprintRng::new());
         assert!(!token.token.is_empty());
     }
 
@@ -249,7 +250,7 @@ mod tests {
     fn test_api_token_generator_with_prefix() {
         let prefix = "test-prefix-";
         let generator = ApiTokenGenerator::with_prefix(prefix);
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
 
         // Generate token with prefix
         let token1 = generator.generate_token(ServiceId::new(1), &mut rng);
@@ -271,7 +272,7 @@ mod tests {
         let expiry = now + 3600; // 1 hour from now
 
         let generator = ApiTokenGenerator::new();
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
 
         // Token with expiration
         let token_with_expiry =
@@ -288,7 +289,7 @@ mod tests {
     #[test]
     fn test_plaintext_token() {
         let generator = ApiTokenGenerator::new();
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
         let token = generator.generate_token(ServiceId::new(1), &mut rng);
 
         let id = 42;

@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn token_generator() {
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
         let tmp_dir = tempfile::tempdir().unwrap();
         let db = RocksDb::open(tmp_dir.path(), &Default::default()).unwrap();
         let service_id = ServiceId::new(1);
