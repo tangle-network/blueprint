@@ -92,7 +92,7 @@ fn verify_challenge_sr25519(
 ) -> Result<bool, Error> {
     let pub_key = schnorrkel::PublicKey::from_bytes(pub_key).map_err(Error::Schnorrkel)?;
     let signature = schnorrkel::Signature::from_bytes(signature).map_err(Error::Schnorrkel)?;
-    let mut ctx = schnorrkel::signing_context(b"tangle").bytes(challenge);
+    let mut ctx = schnorrkel::signing_context(b"substrate").bytes(challenge);
     pub_key
         .verify(&mut ctx, &signature)
         .map_err(Error::Schnorrkel)?;
