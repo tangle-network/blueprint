@@ -2746,6 +2746,7 @@ dependencies = [
  "blueprint-clients",
  "blueprint-core",
  "blueprint-keystore",
+ "blueprint-manager-bridge",
  "blueprint-router",
  "blueprint-runner",
  "cargo_toml",
@@ -3167,6 +3168,7 @@ dependencies = [
 name = "blueprint-sdk"
 version = "0.1.0-alpha.12"
 dependencies = [
+ "blueprint-auth",
  "blueprint-build-utils",
  "blueprint-chain-setup",
  "blueprint-clients",
@@ -3179,6 +3181,7 @@ dependencies = [
  "blueprint-evm-extra",
  "blueprint-keystore",
  "blueprint-macros",
+ "blueprint-manager-bridge",
  "blueprint-networking",
  "blueprint-producers-extra",
  "blueprint-router",
@@ -3238,6 +3241,7 @@ dependencies = [
  "blueprint-core-testing-utils",
  "blueprint-crypto-tangle-pair-signer",
  "blueprint-keystore",
+ "blueprint-manager-bridge",
  "blueprint-pricing-engine",
  "blueprint-runner",
  "blueprint-std",

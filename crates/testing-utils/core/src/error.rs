@@ -21,4 +21,6 @@ pub enum TestRunnerError {
     WaitResponse(String),
     #[error(transparent)]
     Auth(#[from] blueprint_auth::Error),
+    #[error(transparent)]
+    Bridge(#[from] blueprint_manager_bridge::Error),
 }

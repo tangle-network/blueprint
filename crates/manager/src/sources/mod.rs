@@ -76,6 +76,7 @@ pub struct BlueprintEnvVars {
     pub blueprint_id: u64,
     pub service_id: u64,
     pub protocol: Protocol,
+    pub chain: Option<SupportedChains>,
     pub bootnodes: String,
     pub registration_mode: bool,
     pub bridge_socket_path: Option<PathBuf>,
@@ -107,6 +108,7 @@ impl BlueprintEnvVars {
             blueprint_id,
             service_id,
             protocol: blueprint.protocol,
+            chain: None,
             bootnodes,
             registration_mode: blueprint.registration_mode,
             bridge_socket_path: env.bridge_socket_path.clone(),
@@ -123,17 +125,18 @@ impl BlueprintEnvVars {
             blueprint_id,
             service_id,
             protocol,
+            chain,
             bootnodes,
             registration_mode,
             bridge_socket_path,
         } = self;
 
-        let chain = match http_rpc_endpoint.as_str() {
+        let chain = chain.unwrap_or_else(|| match http_rpc_endpoint.as_str() {
             url if url.contains("127.0.0.1") || url.contains("localhost") => {
                 SupportedChains::LocalTestnet
             }
             _ => SupportedChains::Testnet,
-        };
+        });
 
         // Add required env vars for all child processes/blueprints
         let mut env_vars = vec![

@@ -6,7 +6,7 @@ use crate::error::ConfigError;
 use alloc::string::{String, ToString};
 #[cfg(feature = "std")]
 use blueprint_keystore::{Keystore, KeystoreConfig};
-use blueprint_manager_bridge::Bridge;
+use blueprint_manager_bridge::client::Bridge;
 use clap::Parser;
 use core::fmt::{Debug, Display};
 use core::str::FromStr;
@@ -371,8 +371,12 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
 impl BlueprintEnvironment {
     /// Returns the bridge to the blueprint manager.
     ///
+    /// NOTE: Only the first call will attempt a connection. Future calls will be cached, so this
+    ///       is cheap to call repeatedly.
+    ///
     /// # Errors
-    /// - `blueprint_manager_bridge::Error` if the connection to the bridge fails.
+    ///
+    /// - See [`Bridge::connect()`]
     pub async fn bridge(&self) -> Result<Arc<Bridge>, blueprint_manager_bridge::Error> {
         let mut guard = self.bridge.lock().await;
         if let Some(bridge) = &*guard {

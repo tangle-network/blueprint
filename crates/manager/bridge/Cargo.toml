@@ -19,10 +19,12 @@ blueprint-auth.workspace = true
 tokio = { workspace = true, features = ["net"] }
 tonic = { workspace = true, features = ["codegen", "transport", "prost"] }
 prost = { workspace = true, features = ["derive"] }
-tower = { workspace = true, features = ["util"] }
 thiserror.workspace = true
-tokio-vsock.workspace = true
-hyper-util = { workspace = true, features = ["tokio"] }
+
+# Client
+hyper-util = { workspace = true, features = ["tokio"], optional = true }
+tokio-vsock = { workspace = true, optional = true }
+tower = { workspace = true, features = ["util"], optional = true }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
@@ -30,3 +32,5 @@ tonic-build = { workspace = true, features = ["prost"] }
 [features]
 default = ["tracing"]
 tracing = ["blueprint-core/tracing"]
+client = ["dep:hyper-util", "dep:tokio-vsock", "dep:tower"]
+server = ["tonic/router"]

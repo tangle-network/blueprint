@@ -43,7 +43,7 @@
 //! ### Producers
 //!
 //! * `evm-polling-producer` - [`PollingProducer`]
-//! * `tangle-producer` - [`TangleConsumer`]
+//! * `tangle-producer` - [`TangleProducer`]
 //!
 //! ### Consumers
 //!
@@ -57,7 +57,7 @@
 //!
 //! ### Other
 //!
-//! * `tangle-node` - The stdout of a Tangle node spawned with [`SubstrateNode`]
+//! * `tangle-node` - The stdout of a local Tangle node
 //!     * These are spawned by both the [`TangleTestHarness`] and [`cargo tangle`] local testing commands.
 //! * `build-output` - The stderr of `cargo build` when deploying with [`cargo tangle`]
 //!     * By default, the output of `cargo build` is hidden. If diagnosing a build error, use `RUST_LOG=build-output=debug`.
@@ -99,6 +99,12 @@ pub mod extract {
 
 /// Blueprint execution and runtime utilities
 pub use blueprint_runner as runner;
+
+/// Blueprint authentication proxy and utilities
+pub use blueprint_auth as auth;
+
+/// Manager <-> service communication bridge
+pub use blueprint_manager_bridge as bridge;
 
 pub mod producers {
     #[cfg(feature = "cronjob")]

@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 
 type MultiThreadedRocksDb = rocksdb::OptimisticTransactionDB<rocksdb::MultiThreaded>;
 
-/// RocksDB instance this satisfies the [Store] interface.
+/// RocksDB instance
+///
+/// This is cheap to clone, as it uses an [`Arc`] internally.
 #[derive(Debug, Clone)]
 pub struct RocksDb {
     db: Arc<MultiThreadedRocksDb>,
@@ -21,7 +23,6 @@ impl std::ops::Deref for RocksDb {
     }
 }
 
-/// RocksDb is used as the KV store.
 impl RocksDb {
     pub fn open<P>(path: P, config: &RocksDbConfig) -> Result<Self, crate::Error>
     where

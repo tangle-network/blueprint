@@ -22,6 +22,8 @@ blueprint-keystore = { workspace = true }
 blueprint-clients = { workspace = true }
 blueprint-crypto = { workspace = true }
 blueprint-std = { workspace = true }
+blueprint-manager-bridge = { workspace = true, features = ["client"] }
+blueprint-auth = { workspace = true }
 
 # The keystore context is the only one that doesn't bring in extra dependencies, so we can always include it
 blueprint-contexts = { workspace = true, features = ["keystore"] }
@@ -83,6 +85,7 @@ std = [
     "blueprint-clients/std",
     "blueprint-crypto/std",
     "blueprint-context-derive?/std",
+    "blueprint-auth/std",
     # Tangle
     "tangle-subxt/std",
     # Extras

@@ -1,4 +1,5 @@
-use blueprint_runner::config::{BlueprintEnvironment, SupportedChains};
+use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
+use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use blueprint_std::fs;
 use blueprint_std::path::PathBuf;
 use color_eyre::eyre::{Result, eyre};
@@ -80,21 +81,29 @@ pub async fn run_eigenlayer_avs(
     println!("Starting AVS...");
     let mut command = Command::new(&binary_path);
 
-    // Add the run subcommand
-    command.arg("run");
+    let env = BlueprintEnvVars {
+        http_rpc_endpoint: config.http_rpc_endpoint,
+        ws_rpc_endpoint: config.ws_rpc_endpoint,
+        keystore_uri: config.keystore_uri,
+        data_dir: config.data_dir,
+        blueprint_id: 0,
+        service_id: 0,
+        protocol: Protocol::Eigenlayer,
+        chain: Some(chain),
+        bootnodes: String::new(),
+        registration_mode: false,
+        bridge_socket_path: None,
+    };
 
-    // Required arguments
-    command
-        .arg("--http-rpc-url")
-        .arg(config.http_rpc_endpoint.as_str())
-        .arg("--ws-rpc-url")
-        .arg(config.ws_rpc_endpoint.as_str())
-        .arg("--keystore-uri")
-        .arg(&config.keystore_uri)
-        .arg("--chain")
-        .arg(chain.to_string())
-        .arg("--protocol")
-        .arg("eigenlayer");
+    command.envs(env.encode());
+
+    let args = BlueprintArgs {
+        test_mode: false,
+        pretty: false,
+        verbose: 0,
+    };
+
+    command.args(args.encode());
 
     // Optional arguments
     // TODO: Implement Keystore Password

@@ -24,7 +24,7 @@ blueprint-crypto = { workspace = true, features = ["std", "tangle-pair-signer"] 
 blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
-blueprint-manager-bridge.workspace = true
+blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
 
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
 docktopus = { workspace = true, features = ["deploy"] }
@@ -50,8 +50,6 @@ hyper-util.workspace = true
 http-body-util.workspace = true
 dirs.workspace = true
 walkdir.workspace = true
-tonic.workspace = true
-tokio-stream = { workspace = true, features = ["net"] }
 cloud-hypervisor-client = { workspace = true }
 fatfs = { workspace = true, features = ["std"] }
 nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"] }

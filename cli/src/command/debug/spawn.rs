@@ -14,7 +14,7 @@ use blueprint_manager::rt::hypervisor::ServiceVmConfig;
 use blueprint_manager::rt::hypervisor::net::NetworkManager;
 use blueprint_manager::rt::service::Service;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
-use blueprint_runner::config::{BlueprintEnvironment, Protocol};
+use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use nix::sys::termios;
 use nix::sys::termios::{InputFlags, LocalFlags, SetArg};
 use std::io::{self, Read, Write};
@@ -154,6 +154,7 @@ pub async fn execute(
         blueprint_id: 0,
         service_id: 0,
         protocol,
+        chain: Some(SupportedChains::LocalTestnet),
         bootnodes: String::new(),
         registration_mode: false,
         // Set later

@@ -1,4 +1,3 @@
-use super::bridge::{Bridge, BridgeHandle};
 use super::hypervisor::net::NetworkManager;
 use super::hypervisor::{HypervisorInstance, ServiceVmConfig};
 use super::native::ProcessHandle;
@@ -6,6 +5,7 @@ use crate::error::{Error, Result};
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_auth::db::RocksDb;
 use blueprint_core::error;
+use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::oneshot;

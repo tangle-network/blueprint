@@ -1,35 +1,41 @@
+use crate::blueprint_manager_bridge_server::{
+    BlueprintManagerBridge, BlueprintManagerBridgeServer,
+};
+use crate::client::VSOCK_PORT;
+use crate::{
+    AddOwnerToServiceRequest, Error, PortRequest, PortResponse,
+    RegisterBlueprintServiceProxyRequest, RemoveOwnerFromServiceRequest,
+    UnregisterBlueprintServiceProxyRequest,
+};
 use blueprint_auth::{
     db::RocksDb,
     models::{ServiceModel, ServiceOwnerModel},
     types::ServiceId,
 };
 use blueprint_core::{error, info};
-use blueprint_manager_bridge::blueprint_manager_bridge_server::{
-    BlueprintManagerBridge, BlueprintManagerBridgeServer,
-};
-use blueprint_manager_bridge::{
-    AddOwnerToServiceRequest, RemoveOwnerFromServiceRequest,
-    UnregisterBlueprintServiceProxyRequest, VSOCK_PORT,
-};
-use blueprint_manager_bridge::{
-    Error, PortRequest, PortResponse, RegisterBlueprintServiceProxyRequest,
-};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::UnixListener;
 use tokio::sync::{Mutex, oneshot};
 use tokio::task::JoinHandle;
-use tokio_stream::wrappers::UnixListenerStream;
+use tonic::codegen::tokio_stream::wrappers::UnixListenerStream;
 use tonic::{Request, Response, transport::Server};
 
+/// Handle to a running bridge
+///
+/// Dropping this handle will shut down the bridge.
 pub struct BridgeHandle {
     sock_path: PathBuf,
     handle: JoinHandle<Result<(), Error>>,
 }
 
 impl BridgeHandle {
-    pub fn shutdown(self) {
-        let _ = std::fs::remove_file(self.sock_path);
+    pub fn shutdown(self) {}
+}
+
+impl Drop for BridgeHandle {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.sock_path);
         self.handle.abort();
     }
 }
@@ -53,14 +59,23 @@ impl Bridge {
         }
     }
 
+    /// The *base* bridge socket
+    ///
+    /// For native services, this is the only socket that exists.
+    ///
+    /// For sandboxed services, this is the base path. When a guest connects to the bridge, it will
+    /// be through the socket at `<base>_VSOCK_PORT`. See [`Self::guest_socket_path()`].
     #[must_use]
     pub fn base_socket_path(&self) -> PathBuf {
         let sock_name = format!("{}.sock", self.service_name);
         self.runtime_dir.join(sock_name)
     }
 
+    /// The socket path on the *host* for guest connections
+    ///
+    /// This socket is only created for sandboxed services. It will **not** exist for native services.
     #[must_use]
-    fn guest_socket_path(&self) -> PathBuf {
+    pub fn guest_socket_path(&self) -> PathBuf {
         let sock_name = format!("{}.sock_{VSOCK_PORT}", self.service_name);
         self.runtime_dir.join(sock_name)
     }
@@ -73,7 +88,7 @@ impl Bridge {
     ///
     /// * Unable to bind to the socket, possibly an issue with the [`HypervisorInstance`] startup.
     ///
-    /// [HypervisorInstance]: crate::rt::hypervisor::HypervisorInstance
+    /// [`HypervisorInstance`]: https://docs.rs/blueprint-manager/latest/blueprint_manager/rt/struct.HypervisorInstance.html
     pub fn spawn(self) -> Result<(BridgeHandle, oneshot::Receiver<()>), Error> {
         let (sock_path, listener) = if self.no_vm {
             self.spawn_for_native()?
