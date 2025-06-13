@@ -68,17 +68,22 @@ where
             http_endpoint,
             ws_endpoint,
             eigenlayer_contract_addresses,
-        } = setup_eigenlayer_test_environment(&testnet.http_endpoint, &testnet.ws_endpoint).await;
+        } = setup_eigenlayer_test_environment(testnet.http_endpoint, testnet.ws_endpoint).await;
 
         // Setup temporary testing keystore
-        let test_dir_path = test_dir.path().to_string_lossy().into_owned();
-        inject_anvil_key(&test_dir, ANVIL_PRIVATE_KEYS[0])?;
+        let keystore_path = test_dir.path().join("keystore");
+        inject_anvil_key(&keystore_path, ANVIL_PRIVATE_KEYS[0])?;
+
+        let data_dir = test_dir.path().join("data");
+        tokio::fs::create_dir_all(&data_dir).await?;
 
         // Create context config
         let context_config = ContextConfig::create_eigenlayer_config(
             Url::parse(&http_endpoint)?,
             Url::parse(&ws_endpoint)?,
-            test_dir_path.clone(),
+            keystore_path.to_string_lossy().into_owned(),
+            None,
+            data_dir,
             None,
             PathBuf::from(test_dir_path),
             SupportedChains::LocalTestnet,

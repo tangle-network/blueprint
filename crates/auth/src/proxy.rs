@@ -15,10 +15,15 @@ use axum::{
 use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor, rt::TokioTimer};
 
 use crate::api_tokens::{ApiToken, ApiTokenGenerator};
+use crate::db::RocksDb;
 use crate::models::{ApiTokenModel, ServiceModel};
 use crate::types::{ServiceId, VerifyChallengeResponse};
 
 type HTTPClient = hyper_util::client::legacy::Client<HttpConnector, Body>;
+
+/// The default port for the authenticated proxy server
+// T9 Mapping of TBPM (Tangle Blueprint Manager)
+pub const DEFAULT_AUTH_PROXY_PORT: u16 = 8276;
 
 pub struct AuthenticatedProxy {
     client: HTTPClient,
@@ -55,6 +60,10 @@ impl AuthenticatedProxy {
             .with_state(state)
     }
 
+    pub fn db(&self) -> RocksDb {
+        self.db.clone()
+    }
+
     /// Internal API router for version 1
     pub fn internal_api_router_v1() -> Router<AuthenticatedProxyState> {
         Router::new()
@@ -69,7 +78,7 @@ async fn auth_challenge(
     State(s): State<AuthenticatedProxyState>,
     Json(payload): Json<crate::types::ChallengeRequest>,
 ) -> Result<Json<crate::types::ChallengeResponse>, StatusCode> {
-    let mut rng = rand::thread_rng();
+    let mut rng = blueprint_std::BlueprintRng::new();
     let service = ServiceModel::find_by_id(service_id, &s.db)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -97,7 +106,7 @@ async fn auth_verify(
     State(s): State<AuthenticatedProxyState>,
     Json(payload): Json<crate::types::VerifyChallengeRequest>,
 ) -> impl IntoResponse {
-    let mut rng = rand::thread_rng();
+    let mut rng = blueprint_std::BlueprintRng::new();
     let service = match ServiceModel::find_by_id(service_id, &s.db) {
         Ok(Some(service)) => service,
         Ok(None) => {
@@ -224,7 +233,7 @@ mod tests {
 
     #[tokio::test]
     async fn auth_flow_works() {
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
         let tmp = tempdir().unwrap();
         let proxy = AuthenticatedProxy::new(tmp.path()).unwrap();
 

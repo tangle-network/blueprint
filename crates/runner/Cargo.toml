@@ -19,6 +19,8 @@ blueprint-std.workspace = true
 blueprint-keystore = { workspace = true }
 blueprint-crypto = { workspace = true }
 blueprint-qos = { workspace = true }
+blueprint-manager-bridge = { workspace = true, features = ["client"] }
+
 futures-core.workspace = true
 futures-util.workspace = true
 tower.workspace = true

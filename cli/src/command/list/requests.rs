@@ -25,9 +25,9 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 ///
 /// Panics if the key bytes cannot be converted to a request ID.
 pub async fn list_requests(
-    ws_rpc_url: String,
+    ws_rpc_url: impl AsRef<str>,
 ) -> Result<Vec<(u64, ServiceRequest<AccountId32, u64, u128>)>> {
-    let client = OnlineClient::from_url(ws_rpc_url.clone()).await?;
+    let client = OnlineClient::from_url(ws_rpc_url.as_ref()).await?;
 
     let service_requests_addr = tangle_subxt::tangle_testnet_runtime::api::storage()
         .services()

@@ -33,12 +33,12 @@ async fn test_register_request_and_list() -> Result<()> {
 
     std::env::set_current_dir(&blueprint_dir)?;
 
-    let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await?;
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::<()>::setup(temp_dir)).await?;
 
     let deployment_env = generate_env_from_node_id(
         "Bob",
-        harness.http_endpoint.clone(),
-        harness.ws_endpoint.clone(),
+        harness.config().http_endpoint.clone(),
+        harness.config().ws_endpoint.clone(),
         deploy_dir.as_path(),
     )
     .await?;
@@ -61,8 +61,8 @@ async fn test_register_request_and_list() -> Result<()> {
 
     let deploy_opts = DeployOpts {
         pkg_name: None,
-        http_rpc_url: harness.http_endpoint.to_string(),
-        ws_rpc_url: harness.ws_endpoint.to_string(),
+        http_rpc_url: harness.config().http_endpoint.to_string(),
+        ws_rpc_url: harness.config().ws_endpoint.to_string(),
         manifest_path: blueprint_dir.join("Cargo.toml"),
         signer: Some(deployment_signer.clone()),
         signer_evm: Some(deployment_alloy_key.clone()),
@@ -122,12 +122,12 @@ async fn test_accept_request() -> Result<()> {
 
     std::env::set_current_dir(&blueprint_dir)?;
 
-    let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await?;
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::<()>::setup(temp_dir)).await?;
 
     let deployment_env = generate_env_from_node_id(
         "Bob",
-        harness.http_endpoint.clone(),
-        harness.ws_endpoint.clone(),
+        harness.config().http_endpoint.clone(),
+        harness.config().ws_endpoint.clone(),
         deploy_dir.as_path(),
     )
     .await?;
@@ -150,8 +150,8 @@ async fn test_accept_request() -> Result<()> {
 
     let deploy_opts = DeployOpts {
         pkg_name: None,
-        http_rpc_url: harness.http_endpoint.to_string(),
-        ws_rpc_url: harness.ws_endpoint.to_string(),
+        http_rpc_url: harness.config().http_endpoint.to_string(),
+        ws_rpc_url: harness.config().ws_endpoint.to_string(),
         manifest_path: blueprint_dir.join("Cargo.toml"),
         signer: Some(deployment_signer.clone()),
         signer_evm: Some(deployment_alloy_key.clone()),
@@ -224,12 +224,12 @@ async fn test_reject_request() -> Result<()> {
 
     std::env::set_current_dir(&blueprint_dir)?;
 
-    let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await?;
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::<()>::setup(temp_dir)).await?;
 
     let deployment_env = generate_env_from_node_id(
         "Bob",
-        harness.http_endpoint.clone(),
-        harness.ws_endpoint.clone(),
+        harness.config().http_endpoint.clone(),
+        harness.config().ws_endpoint.clone(),
         deploy_dir.as_path(),
     )
     .await?;
@@ -252,8 +252,8 @@ async fn test_reject_request() -> Result<()> {
 
     let deploy_opts = DeployOpts {
         pkg_name: None,
-        http_rpc_url: harness.http_endpoint.to_string(),
-        ws_rpc_url: harness.ws_endpoint.to_string(),
+        http_rpc_url: harness.config().http_endpoint.to_string(),
+        ws_rpc_url: harness.config().ws_endpoint.to_string(),
         manifest_path: blueprint_dir.join("Cargo.toml"),
         signer: Some(deployment_signer.clone()),
         signer_evm: Some(deployment_alloy_key.clone()),
@@ -315,12 +315,12 @@ async fn test_submit_job() -> Result<()> {
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(&blueprint_dir)?;
 
-    let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await?;
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::<()>::setup(temp_dir)).await?;
 
     let deployment_env = generate_env_from_node_id(
         "Bob",
-        harness.http_endpoint.clone(),
-        harness.ws_endpoint.clone(),
+        harness.config().http_endpoint.clone(),
+        harness.config().ws_endpoint.clone(),
         deploy_dir.as_path(),
     )
     .await?;
@@ -343,8 +343,8 @@ async fn test_submit_job() -> Result<()> {
 
     let deploy_opts = DeployOpts {
         pkg_name: None,
-        http_rpc_url: harness.http_endpoint.to_string(),
-        ws_rpc_url: harness.ws_endpoint.to_string(),
+        http_rpc_url: harness.config().http_endpoint.to_string(),
+        ws_rpc_url: harness.config().ws_endpoint.to_string(),
         manifest_path: blueprint_dir.join("Cargo.toml"),
         signer: Some(deployment_signer.clone()),
         signer_evm: Some(deployment_alloy_key.clone()),

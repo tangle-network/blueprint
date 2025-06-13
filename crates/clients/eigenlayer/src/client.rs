@@ -41,7 +41,7 @@ impl EigenlayerClient {
     /// - [`The HTTP provider`](RootProvider)
     #[must_use]
     pub fn get_provider_http(&self) -> RootProvider {
-        get_provider_http(self.config.http_rpc_endpoint.as_str())
+        get_provider_http(self.config.http_rpc_endpoint.clone())
     }
 
     /// Get the provider for this client's http endpoint with the specified [`EthereumWallet`]
@@ -52,7 +52,7 @@ impl EigenlayerClient {
     /// [`EthereumWallet`]: alloy_network::EthereumWallet
     #[must_use]
     pub fn get_wallet_provider_http(&self, wallet: alloy_network::EthereumWallet) -> RootProvider {
-        get_wallet_provider_http(self.config.http_rpc_endpoint.as_str(), wallet)
+        get_wallet_provider_http(self.config.http_rpc_endpoint.clone(), wallet)
     }
 
     /// Get the provider for this client's websocket endpoint
@@ -126,14 +126,13 @@ impl EigenlayerClient {
         &self,
         private_key: String,
     ) -> Result<eigensdk::client_avsregistry::writer::AvsRegistryChainWriter> {
-        let http_rpc_endpoint = self.config.http_rpc_endpoint.clone();
         let contract_addresses = self.config.protocol_settings.eigenlayer()?;
         let registry_coordinator_address = contract_addresses.registry_coordinator_address;
         let service_manager_address = contract_addresses.service_manager_address;
 
         eigensdk::client_avsregistry::writer::AvsRegistryChainWriter::build_avs_registry_chain_writer(
             eigensdk::logging::get_test_logger(),
-            http_rpc_endpoint.to_string(),
+            self.config.http_rpc_endpoint.to_string(),
             private_key,
             registry_coordinator_address,
             service_manager_address,
@@ -158,12 +157,11 @@ impl EigenlayerClient {
         >,
     )> {
         let avs_registry_reader = self.avs_registry_reader().await?;
-        let ws_endpoint = self.config.ws_rpc_endpoint.clone();
 
         eigensdk::services_operatorsinfo::operatorsinfo_inmemory::OperatorInfoServiceInMemory::new(
             eigensdk::logging::get_test_logger(),
             avs_registry_reader,
-            ws_endpoint.to_string(),
+            self.config.ws_rpc_endpoint.to_string(),
         )
         .await
         .map_err(Into::into)
@@ -482,13 +480,12 @@ impl EigenlayerClient {
         Vec<Address>,
         Vec<eigensdk::types::operator::OperatorPubKeys>,
     )> {
-        let ws_rpc_endpoint = self.config.ws_rpc_endpoint.clone();
         self.avs_registry_reader()
             .await?
             .query_existing_registered_operator_pub_keys(
                 start_block,
                 to_block,
-                ws_rpc_endpoint.to_string(),
+                self.config.ws_rpc_endpoint.to_string(),
             )
             .await
             .map_err(Into::into)

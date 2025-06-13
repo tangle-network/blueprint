@@ -30,6 +30,45 @@
 #![doc(
     html_logo_url = "https://cdn.prod.website-files.com/6494562b44a28080aafcbad4/65aaf8b0818b1d504cbdf81b_Tnt%20Logo.png"
 )]
+//!
+//! ## Logging Targets
+//!
+//! The SDK is split into multiple logging targets to make debugging different components easier.
+//! When testing, by default, only `ERROR`, `WARN`, and `INFO` logs will be printed. This can be controlled
+//! with the [RUST_LOG] environment variable.
+//!
+//! An example use-case would be setting `RUST_LOG=tangle-consumer=trace` to determine the cause of a failing
+//! job submission.
+//!
+//! ### Producers
+//!
+//! * `evm-polling-producer` - [`PollingProducer`]
+//! * `tangle-producer` - [`TangleProducer`]
+//!
+//! ### Consumers
+//!
+//! * `tangle-consumer` - [`TangleConsumer`]
+//!
+//! ### Runner
+//!
+//! * `blueprint-runner` - [`BlueprintRunner`]
+//! * `blueprint-router` - [`Router`]
+//! * `blueprint-rejection` - All [`Job`] call failures
+//!
+//! ### Other
+//!
+//! * `tangle-node` - The stdout of a local Tangle node
+//!     * These are spawned by both the [`TangleTestHarness`] and [`cargo tangle`] local testing commands.
+//! * `build-output` - The stderr of `cargo build` when deploying with [`cargo tangle`]
+//!     * By default, the output of `cargo build` is hidden. If diagnosing a build error, use `RUST_LOG=build-output=debug`.
+//!
+//! [RUST_LOG]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives
+//! [`PollingProducer`]: evm::producer::PollingProducer
+//! [`TangleProducer`]: tangle::producer::TangleProducer
+//! [`TangleConsumer`]: tangle::consumer::TangleConsumer
+//! [`BlueprintRunner`]: runner::BlueprintRunner
+//! [`TangleTestHarness`]: testing::utils::tangle::TangleTestHarness
+//! [`cargo tangle`]: https://docs.rs/cargo_tangle
 
 // == Core utilities ==
 
@@ -61,6 +100,12 @@ pub mod extract {
 
 /// Blueprint execution and runtime utilities
 pub use blueprint_runner as runner;
+
+/// Blueprint authentication proxy and utilities
+pub use blueprint_auth as auth;
+
+/// Manager <-> service communication bridge
+pub use blueprint_manager_bridge as bridge;
 
 pub mod producers {
     #[cfg(feature = "cronjob")]

@@ -10,6 +10,7 @@ use color_eyre::Result;
 use dialoguer::console::style;
 use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::tangle_testnet_runtime::api;
+use tracing::debug;
 
 /// Registers a blueprint.
 ///
@@ -33,13 +34,13 @@ use tangle_subxt::tangle_testnet_runtime::api;
 /// * Failed to create keystore
 /// * Failed to get keys from keystore
 pub async fn register(
-    ws_rpc_url: String,
+    ws_rpc_url: impl AsRef<str>,
     blueprint_id: u64,
     keystore_uri: String,
     rpc_address: impl AsRef<str>,
     // keystore_password: Option<String>, // TODO: Add keystore password support
 ) -> Result<()> {
-    let client = OnlineClient::from_url(ws_rpc_url.clone()).await?;
+    let client = OnlineClient::from_url(ws_rpc_url.as_ref()).await?;
 
     let config = KeystoreConfig::new().fs_root(keystore_uri.clone());
     let keystore = Keystore::new(config).expect("Failed to create keystore");
@@ -132,13 +133,13 @@ pub async fn register(
     println!("{}", style("Verifying registration...").cyan());
     let latest_block = client.blocks().at_latest().await?;
     let latest_block_hash = latest_block.hash();
-    info!("Latest block: {:?}", latest_block.number());
+    debug!("Latest block: {:?}", latest_block.number());
 
     // Create a TangleServicesClient to query operator blueprints
     let services_client =
         blueprint_clients::tangle::services::TangleServicesClient::new(client.clone());
 
-    info!("Querying blueprints for account: {:?}", account_id);
+    debug!("Querying blueprints for account: {:?}", account_id);
 
     // Query operator blueprints at the latest block
     let block_hash = latest_block_hash.0;

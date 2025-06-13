@@ -1,4 +1,5 @@
 use axum::http::uri;
+use base64::Engine;
 use prost::Message;
 
 use crate::{
@@ -37,23 +38,23 @@ pub struct ApiTokenModel {
 pub struct ServiceModel {
     /// The service API Key prefix.
     #[prost(string)]
-    pub(crate) api_key_prefix: String,
+    pub api_key_prefix: String,
     /// A List of service owners.
     #[prost(message, repeated)]
-    pub(crate) owners: Vec<ServiceOwnerModel>,
+    pub owners: Vec<ServiceOwnerModel>,
     /// The service upstream URL.
     ///
     /// This what the proxy will use to forward requests to the service.
     #[prost(string)]
-    pub(crate) upstream_url: String,
+    pub upstream_url: String,
 }
 
 /// A service owner model stored in the database.
-#[derive(prost::Message, Clone)]
+#[derive(prost::Message, Clone, PartialEq, Eq)]
 pub struct ServiceOwnerModel {
     /// The Public key type.
     ///
-    /// See [`KeyType`](crate::types::KeyType) for more details.
+    /// See [`KeyType`] for more details.
     #[prost(enumeration = "KeyType")]
     pub key_type: i32,
     /// The public key bytes.
@@ -84,7 +85,7 @@ impl ApiTokenModel {
         let mut output = [0u8; 32];
         hasher.finalize(&mut output);
 
-        let token_hash = base64::Engine::encode(&CUSTOM_ENGINE, output);
+        let token_hash = CUSTOM_ENGINE.encode(output);
 
         self.token == token_hash
     }
@@ -222,6 +223,15 @@ impl ServiceModel {
         Ok(())
     }
 
+    /// Deletes the service from the database.
+    pub fn delete(id: ServiceId, db: &RocksDb) -> Result<(), crate::Error> {
+        let cf = db
+            .cf_handle(cf::SERVICES_USER_KEYS_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(cf::SERVICES_USER_KEYS_CF))?;
+        db.delete_cf(&cf, id.to_be_bytes())?;
+        Ok(())
+    }
+
     pub fn api_key_prefix(&self) -> &str {
         &self.api_key_prefix
     }
@@ -267,7 +277,7 @@ mod tests {
 
     #[test]
     fn token_generator() {
-        let mut rng = rand::thread_rng();
+        let mut rng = blueprint_std::BlueprintRng::new();
         let tmp_dir = tempfile::tempdir().unwrap();
         let db = RocksDb::open(tmp_dir.path(), &Default::default()).unwrap();
         let service_id = ServiceId::new(1);

@@ -10,22 +10,23 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+blueprint-std = { workspace = true }
+
 thiserror = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 hashbrown = { workspace = true, default-features = false, features = ["default-hasher", "inline-more"] }
 tiny-keccak = { workspace = true, features = ["keccak"] }
 tracing = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-hex = { workspace = true, features = ["serde"] }
-rand = { workspace = true }
-base64 = { workspace = true }
+serde = { workspace = true, features = ["derive", "alloc"] }
+hex = { workspace = true, features = ["serde", "alloc"] }
+base64 = { workspace = true, features = ["alloc"] }
 crc32fast = { workspace = true }
 
 k256 = { workspace = true, features = ["ecdsa", "alloc", "serde", "pem"] }
 schnorrkel = { workspace = true }
 
 axum = { workspace = true, default-features = false, features = ["json"] }
-hyper-util = { workspace = true, features = ["client"] }
+hyper-util = { workspace = true, features = ["client", "client-legacy", "tokio", "http2"] }
 
 # Database
 rocksdb = { workspace = true, features = ["lz4"] }
@@ -46,5 +47,5 @@ tempfile = { workspace = true }
 
 [features]
 default = ["std", "tracing"]
-std = ["rand/std", "crc32fast/std", "k256/std", "schnorrkel/std", "base64/std", "prost/std"]
+std = ["blueprint-std/std", "crc32fast/std", "k256/std", "schnorrkel/std", "base64/std", "prost/std"]
 tracing = []

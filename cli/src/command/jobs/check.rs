@@ -1,11 +1,10 @@
+use crate::command::jobs::helpers::print_job_results;
 use blueprint_clients::tangle::client::OnlineClient;
 use color_eyre::Result;
 use dialoguer::console::style;
 use std::time::Duration;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
 use tangle_subxt::tangle_testnet_runtime::api::services::events::JobResultSubmitted;
-
-use crate::command::jobs::helpers::print_job_results;
 
 /// Waits for the completion of a Tangle job and prints the results.
 ///
@@ -24,13 +23,13 @@ use crate::command::jobs::helpers::print_job_results;
 /// * Timeout reached before job completion
 /// * No job result found
 pub async fn check_job(
-    ws_rpc_url: String,
+    ws_rpc_url: impl AsRef<str>,
     service_id: u64,
     call_id: u64,
     result_types: Vec<FieldType>,
     timeout_seconds: u64,
 ) -> Result<()> {
-    let client = OnlineClient::from_url(ws_rpc_url.clone()).await?;
+    let client = OnlineClient::from_url(ws_rpc_url.as_ref()).await?;
 
     println!(
         "{}",

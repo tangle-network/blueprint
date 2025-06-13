@@ -612,13 +612,14 @@ where
         let state = Arc::new(RwLock::new(NodeState { is_running: true }));
 
         // Create node environment and client
-        let env = generate_env_from_node_id(
+        let mut env = generate_env_from_node_id(
             ENDOWED_TEST_NAMES[node_id],
             config.http_endpoint.clone(),
             config.ws_endpoint.clone(),
             config.temp_dir.as_path(),
         )
         .await?;
+        env.bridge_socket_path = Some(config.bridge_socket_path.clone());
 
         let client = env.tangle_client().await?;
         let keystore = env.keystore();

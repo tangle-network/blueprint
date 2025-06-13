@@ -9,6 +9,7 @@ use blueprint_std::fs;
 use blueprint_std::process::Command;
 use blueprint_testing_utils::setup_log;
 use color_eyre::eyre::Result;
+use std::io::Write;
 use tempfile::TempDir;
 
 use crate::command::deploy::eigenlayer::EigenlayerDeployOpts;
@@ -27,7 +28,9 @@ async fn test_run_eigenlayer_avs() -> Result<()> {
     fs::create_dir_all(&contract_src_dir)?;
     fs::create_dir_all(&contract_out_dir)?;
 
-    let keystore_path = temp_dir.path().join("./keystore");
+    let keystore_path = temp_dir.path().join("keystore");
+    let data_dir_path = temp_dir.path().join("data");
+    fs::create_dir_all(&data_dir_path)?;
 
     // Write the test contract
     let contract_content = r"// SPDX-License-Identifier: MIT
@@ -171,7 +174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
 
     // Create a provider
     let http_url = env.http_rpc_endpoint.clone();
-    let provider = get_provider_http(&http_url);
+    let provider = get_provider_http(http_url);
 
     // Read the ABI from the JSON file
     let json_path = PathBuf::from(&temp_dir_str).join("out/TestContract.sol/TestContract.json");
@@ -236,7 +239,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     } else {
         let output = build_output?;
         if !output.status.success() {
-            info!("Cargo build output: {:?}", output);
+            info!("Cargo build output: {:?}", output.status);
+            std::io::stderr().write_all(&output.stderr)?;
+            eprintln!();
+
             panic!("Failed to build binary")
         }
         info!("Binary built successfully!");
@@ -253,9 +259,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
 
     // Run the binary using the run command
     let config = ContextConfig::create_config(
-        testnet.http_endpoint.parse()?,
-        testnet.ws_endpoint.parse()?,
+        testnet.http_endpoint,
+        testnet.ws_endpoint,
         keystore_path.to_string_lossy().to_string(),
+        None,
+        data_dir_path,
         None,
         SupportedChains::LocalTestnet,
         Protocol::Eigenlayer,

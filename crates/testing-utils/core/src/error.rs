@@ -19,4 +19,8 @@ pub enum TestRunnerError {
     Runner(#[from] RunnerError),
     #[error("Failed to wait for response: {0}")]
     WaitResponse(String),
+    #[error(transparent)]
+    Auth(#[from] blueprint_auth::Error),
+    #[error(transparent)]
+    Bridge(#[from] blueprint_manager_bridge::Error),
 }

@@ -1,6 +1,6 @@
 use blueprint_manager::config::DEFAULT_DOCKER_HOST;
 use std::path::PathBuf;
-use cargo_tangle::command::{create, deploy};
+use cargo_tangle::command::{create, deploy, debug};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, ProtocolSettings, SupportedChains};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use blueprint_runner::error::ConfigError;
@@ -68,6 +68,13 @@ enum Commands {
     Key {
         #[command(subcommand)]
         command: KeyCommands,
+    },
+
+    /// Service debugging
+    #[command(visible_alias = "d")]
+    Debug {
+        #[command(subcommand)]
+        command: DebugCommands,
     },
 }
 
@@ -415,6 +422,35 @@ pub enum DeployTarget {
         /// The keystore path (defaults to ./keystore)
         #[arg(short = 'k', long)]
         keystore_path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum DebugCommands {
+    Spawn {
+        /// HTTP RPC URL to use
+        #[arg(long, value_name = "URL", env)]
+        http_rpc_url: Option<Url>,
+        /// WS RPC URL to use
+        #[arg(long, value_name = "URL", env)]
+        ws_rpc_url: Option<Url>,
+        /// The package to deploy (if the workspace has multiple packages).
+        #[arg(short = 'p', long, value_name = "PACKAGE", env = "CARGO_PACKAGE")]
+        package: Option<String>,
+
+        #[arg(default_value_t = 0)]
+        id: u32,
+        #[arg(default_value = "service")]
+        service_name: String,
+        #[arg(long, required = true)]
+        binary: PathBuf,
+        #[arg(long, default_value_t = Protocol::Tangle)]
+        protocol: Protocol,
+        /// Disables the VM sandbox
+        #[arg(long)]
+        no_vm: bool,
+        #[arg(long, default_value_t = true)]
+        verify_network_connection: bool,
     },
 }
 
@@ -783,6 +819,68 @@ async fn main() -> color_eyre::Result<()> {
                 eprintln!(
                     "\nWARNING: Store this mnemonic phrase securely. It can be used to recover your keys."
                 );
+            }
+        },
+        Commands::Debug { command } => match command {
+            DebugCommands::Spawn {
+                mut http_rpc_url,
+                mut ws_rpc_url,
+                package,
+                id,
+                service_name,
+                binary,
+                protocol,
+                no_vm,
+                verify_network_connection,
+            } => {
+                match (&mut http_rpc_url, &mut ws_rpc_url) {
+                    (Some(http), None) => match http.scheme() {
+                        "http" => {
+                            let mut ws = http.clone();
+                            ws.set_scheme("ws").unwrap();
+                            ws_rpc_url = Some(ws);
+                        }
+                        "https" => {
+                            let mut ws = http.clone();
+                            ws.set_scheme("wss").unwrap();
+                            ws_rpc_url = Some(ws);
+                        }
+                        _ => panic!("Unknown URL scheme"),
+                    },
+                    (None, Some(ws)) => match ws.scheme() {
+                        "ws" => {
+                            let mut http = ws.clone();
+                            http.set_scheme("http").unwrap();
+                            http_rpc_url = Some(http);
+                        }
+                        "wss" => {
+                            let mut http = ws.clone();
+                            http.set_scheme("https").unwrap();
+                            http_rpc_url = Some(http);
+                        }
+                        _ => panic!("Unknown URL scheme"),
+                    },
+                    (Some(_), Some(_)) | (None, None) => {}
+                }
+
+                let manifest_path = cli
+                    .manifest
+                    .manifest_path
+                    .unwrap_or_else(|| PathBuf::from("Cargo.toml"));
+
+                Box::pin(debug::spawn::execute(
+                    http_rpc_url,
+                    ws_rpc_url,
+                    manifest_path,
+                    package,
+                    id,
+                    service_name,
+                    binary,
+                    protocol,
+                    no_vm,
+                    verify_network_connection,
+                ))
+                .await?;
             }
         },
     }

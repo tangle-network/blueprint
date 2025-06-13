@@ -2,6 +2,7 @@ use crate::runner::MockHeartbeatConsumer;
 use crate::Error;
 use crate::multi_node::{find_open_tcp_bind_port, MultiNodeTestEnv};
 use crate::{InputValue, OutputValue, keys::inject_tangle_key};
+use blueprint_auth::proxy::DEFAULT_AUTH_PROXY_PORT;
 use blueprint_chain_setup::tangle::testnet::SubstrateNode;
 use blueprint_chain_setup::tangle::transactions;
 use blueprint_chain_setup::tangle::transactions::setup_operators_with_service;
@@ -24,6 +25,7 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{AssetSecurityCommitment, AssetSecurityRequirement};
 use blueprint_tangle_extra::serde::new_bounded_string;
 use std::marker::PhantomData;
+use std::net::Ipv4Addr;
 use std::sync::Arc;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::register::RegistrationArgs;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::request::RequestArgs;
@@ -35,8 +37,10 @@ use tangle_subxt::tangle_testnet_runtime::api::services::{
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tracing::info;
+use tracing::{error, info};
 use url::Url;
+use blueprint_auth::db::RocksDb;
+use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
 use blueprint_pricing_engine_lib::{init_benchmark_cache, init_operator_signer, load_pricing_from_toml, OperatorConfig, DEFAULT_CONFIG};
 use blueprint_pricing_engine_lib::service::rpc::server::run_rpc_server;
 
@@ -59,20 +63,23 @@ pub struct TangleTestConfig {
     pub http_endpoint: Url,
     pub ws_endpoint: Url,
     pub temp_dir: PathBuf,
+    pub bridge_socket_path: PathBuf,
 }
 
 /// Test harness for Tangle network tests
 pub struct TangleTestHarness<Ctx = ()> {
-    pub http_endpoint: Url,
-    pub ws_endpoint: Url,
     client: TangleClient,
     pub sr25519_signer: TanglePairSigner<sp_core::sr25519::Pair>,
     pub ecdsa_signer: TanglePairSigner<sp_core::ecdsa::Pair>,
     pub alloy_key: alloy_signer_local::PrivateKeySigner,
     config: TangleTestConfig,
-    temp_dir: tempfile::TempDir,
-    _node: SubstrateNode,
     _phantom: PhantomData<Ctx>,
+
+    // Handles to keep alive
+    _temp_dir: tempfile::TempDir,
+    _node: SubstrateNode,
+    _auth_proxy: JoinHandle<Result<(), Error>>,
+    _bridge: BridgeHandle,
 }
 
 /// Create a new Tangle test harness
@@ -90,10 +97,14 @@ pub async fn generate_env_from_node_id(
     ws_endpoint: Url,
     test_dir: &Path,
 ) -> Result<BlueprintEnvironment, RunnerError> {
-    let keystore_path = test_dir.join(identity.to_ascii_lowercase());
+    let node_dir = test_dir.join(identity.to_ascii_lowercase());
+    let keystore_path = node_dir.join("keystore");
     tokio::fs::create_dir_all(&keystore_path).await?;
     inject_tangle_key(&keystore_path, &format!("//{identity}"))
         .map_err(|err| RunnerError::Tangle(TangleError::Keystore(err)))?;
+
+    let data_dir = node_dir.join("data");
+    tokio::fs::create_dir_all(&data_dir).await?;
 
     // Create context config
     let context_config = ContextConfig::create_tangle_config(
@@ -101,7 +112,8 @@ pub async fn generate_env_from_node_id(
         ws_endpoint,
         keystore_path.display().to_string(),
         None,
-        PathBuf::from(keystore_path.display().to_string()),
+        data_dir,
+        None,
         SupportedChains::LocalTestnet,
         0,
         Some(0),
@@ -150,8 +162,13 @@ where
         let http_endpoint = Url::parse(&format!("http://127.0.0.1:{}", node.ws_port()))?;
         let ws_endpoint = Url::parse(&format!("ws://127.0.0.1:{}", node.ws_port()))?;
 
+        let (auth_proxy_db, auth_proxy_task) =
+            run_auth_proxy(test_dir.path().to_path_buf(), DEFAULT_AUTH_PROXY_PORT).await?;
+
+        let auth_proxy = tokio::spawn(auth_proxy_task);
+
         // Alice idx = 0
-        let alice_env = generate_env_from_node_id(
+        let mut alice_env = generate_env_from_node_id(
             ENDOWED_TEST_NAMES[0],
             http_endpoint.clone(),
             ws_endpoint.clone(),
@@ -159,11 +176,22 @@ where
         )
         .await?;
 
+        // Setup bridge
+        let runtime_dir = test_dir.path().join("runtime");
+        tokio::fs::create_dir_all(&runtime_dir).await?;
+
+        let bridge = Bridge::new(runtime_dir, String::from("service"), auth_proxy_db, true);
+        let bridge_socket_path = bridge.base_socket_path();
+
+        let (bridge_handle, _alive_rx) = bridge.spawn()?;
+        alice_env.bridge_socket_path = Some(bridge_socket_path.clone());
+
         // Create config
         let config = TangleTestConfig {
             http_endpoint: http_endpoint.clone(),
             ws_endpoint: ws_endpoint.clone(),
             temp_dir: test_dir.path().to_path_buf(),
+            bridge_socket_path,
         };
 
         // Setup signers
@@ -180,17 +208,18 @@ where
             .map_err(|e| Error::Setup(e.to_string()))?;
 
         let client = alice_env.tangle_client().await?;
+
         let harness = TangleTestHarness {
-            http_endpoint,
-            ws_endpoint,
             client,
             sr25519_signer,
             ecdsa_signer,
             alloy_key,
-            temp_dir: test_dir,
             config,
-            _node: node,
             _phantom: PhantomData,
+            _temp_dir: test_dir,
+            _node: node,
+            _auth_proxy: auth_proxy,
+            _bridge: bridge_handle,
         };
 
         // Deploy MBSM if needed
@@ -205,6 +234,11 @@ where
     #[must_use]
     pub fn env(&self) -> &BlueprintEnvironment {
         &self.client.config
+    }
+
+    #[must_use]
+    pub fn config(&self) -> &TangleTestConfig {
+        &self.config
     }
 }
 
@@ -247,13 +281,14 @@ where
         let mut nodes = vec![];
 
         for name in &ENDOWED_TEST_NAMES[..N] {
-            let env = generate_env_from_node_id(
+            let mut env = generate_env_from_node_id(
                 name,
-                self.http_endpoint.clone(),
-                self.ws_endpoint.clone(),
-                self.temp_dir.path(),
+                self.config.http_endpoint.clone(),
+                self.config.ws_endpoint.clone(),
+                &self.config.temp_dir,
             )
             .await?;
+            env.bridge_socket_path = Some(self.config.bridge_socket_path.clone());
 
             let client = env
                 .tangle_client()
@@ -270,7 +305,7 @@ where
             info!("Binding node {name} to {rpc_address}");
 
             let operator_config = OperatorConfig {
-                keystore_path: self.temp_dir.path().join(name),
+                keystore_path: self.config.temp_dir.join(name),
                 rpc_port,
                 ..Default::default()
             };
@@ -337,7 +372,7 @@ where
 
         let bytecode = tnt_core_bytecode::bytecode::MASTER_BLUEPRINT_SERVICE_MANAGER;
         transactions::deploy_new_mbsm_revision(
-            self.ws_endpoint.as_str(),
+            self.config.ws_endpoint.as_str(),
             &self.client,
             &self.sr25519_signer,
             self.alloy_key.clone(),
@@ -363,8 +398,8 @@ where
     ) -> io::Result<blueprint_chain_setup::tangle::deploy::Opts> {
         Ok(blueprint_chain_setup::tangle::deploy::Opts {
             pkg_name: Some(self.get_blueprint_name(&manifest_path)?),
-            http_rpc_url: self.http_endpoint.to_string(),
-            ws_rpc_url: self.ws_endpoint.to_string(),
+            http_rpc_url: self.config.http_endpoint.to_string(),
+            ws_rpc_url: self.config.ws_endpoint.to_string(),
             manifest_path,
             signer: Some(self.sr25519_signer.clone()),
             signer_evm: Some(self.alloy_key.clone()),
@@ -614,6 +649,52 @@ where
     }
 }
 
+/// Runs the authentication proxy server.
+///
+/// This function sets up and runs an authenticated proxy server that listens on the configured host and port.
+/// It creates necessary directories for the proxy's database and then starts the server.
+///
+/// # Arguments
+///
+/// * `data_dir` - The path to the data directory where the proxy's database will be stored.
+/// * `auth_proxy_port` - The port on which the proxy server will listen.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - It fails to create the necessary directories for the database.
+/// - It fails to bind to the specified host and port.
+/// - The Axum server encounters an error during operation.
+async fn run_auth_proxy(
+    data_dir: PathBuf,
+    auth_proxy_port: u16,
+) -> Result<(RocksDb, impl Future<Output = Result<(), Error>>), Error> {
+    let db_path = data_dir.join("private").join("auth-proxy").join("db");
+    tokio::fs::create_dir_all(&db_path).await?;
+
+    let proxy = blueprint_auth::proxy::AuthenticatedProxy::new(&db_path)?;
+    let db = proxy.db();
+
+    let task = async move {
+        let router = proxy.router();
+        let listener =
+            tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, auth_proxy_port)).await?;
+        info!(
+            "Auth proxy listening on {}:{}",
+            Ipv4Addr::LOCALHOST,
+            auth_proxy_port
+        );
+        let result = axum::serve(listener, router).await;
+        if let Err(err) = result {
+            error!("Auth proxy error: {err}");
+        }
+
+        Ok(())
+    };
+
+    Ok((db, task))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -621,7 +702,7 @@ mod tests {
     #[tokio::test]
     async fn test_harness_setup() {
         let test_dir = TempDir::new().unwrap();
-        let harness = TangleTestHarness::<()>::setup(test_dir).await;
+        let harness = Box::pin(TangleTestHarness::<()>::setup(test_dir)).await;
         assert!(harness.is_ok(), "Harness setup should succeed");
 
         let harness = harness.unwrap();
@@ -634,7 +715,9 @@ mod tests {
     #[tokio::test]
     async fn test_deploy_mbsm() {
         let test_dir = TempDir::new().unwrap();
-        let harness = TangleTestHarness::<()>::setup(test_dir).await.unwrap();
+        let harness = Box::pin(TangleTestHarness::<()>::setup(test_dir))
+            .await
+            .unwrap();
 
         // MBSM should be deployed during setup
         let latest_revision = transactions::get_latest_mbsm_revision(harness.client())

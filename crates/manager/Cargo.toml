@@ -22,29 +22,25 @@ blueprint-runner = { workspace = true, features = ["networking", "tangle", "std"
 blueprint-clients = { workspace = true, features = ["std", "tangle"] }
 blueprint-crypto = { workspace = true, features = ["std", "tangle-pair-signer"] }
 blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
-blueprint-networking = { workspace = true, features = ["std"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
+blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
 
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
 docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace", "issue-url"] }
-serde = { workspace = true }
 tangle-subxt = { workspace = true }
-toml = { workspace = true }
+toml = { workspace = true, features = ["parse"] }
 hex = { workspace = true }
 tokio = { workspace = true, features = ["process", "io-util", "signal", "macros"] }
 reqwest = { workspace = true }
 sha2 = { workspace = true }
 futures = { workspace = true }
-itertools = { workspace = true }
 thiserror.workspace = true
 tracing = { workspace = true, features = ["log"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "ansi", "tracing-log"] }
-libp2p = { workspace = true }
 auto_impl = { workspace = true }
-parking_lot = { workspace = true }
 dynosaur = { workspace = true }
 sp-core = { workspace = true }
 url.workspace = true
@@ -52,11 +48,20 @@ hyper.workspace = true
 hyperlocal.workspace = true
 hyper-util.workspace = true
 http-body-util.workspace = true
+dirs.workspace = true
+walkdir.workspace = true
+cloud-hypervisor-client = { workspace = true }
+fatfs = { workspace = true, features = ["std"] }
+nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"] }
+
+# Networking
+rtnetlink = { workspace = true, features = ["tokio_socket"] }
+ipnet.workspace = true
+
+# Binary extraction
+cargo-dist-schema.workspace = true
 tar.workspace = true
 xz.workspace = true
-dirs.workspace = true
-cargo-dist-schema.workspace = true
-walkdir.workspace = true
 
 [package.metadata.dist]
 dist = false

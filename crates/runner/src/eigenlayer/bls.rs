@@ -161,7 +161,7 @@ async fn register_bls_impl(
         .register_as_operator(operator_details)
         .await
         .map_err(EigenlayerError::ElContracts)?;
-    let registration_receipt = wait_transaction(&env.http_rpc_endpoint.to_string(), tx_hash)
+    let registration_receipt = wait_transaction(env.http_rpc_endpoint.clone(), tx_hash)
         .await
         .map_err(|e| EigenlayerError::Registration(format!("AVS registration error: {}", e)))?;
     if registration_receipt.status() {
@@ -187,10 +187,9 @@ async fn register_bls_impl(
         .map_err(EigenlayerError::ElContracts)?;
 
     info!("Deposit hash: {:?}", avs_deposit_hash);
-    let avs_deposit_receipt =
-        wait_transaction(&env.http_rpc_endpoint.to_string(), avs_deposit_hash)
-            .await
-            .map_err(|e| EigenlayerError::Registration(format!("AVS deposit error: {}", e)))?;
+    let avs_deposit_receipt = wait_transaction(env.http_rpc_endpoint.clone(), avs_deposit_hash)
+        .await
+        .map_err(|e| EigenlayerError::Registration(format!("AVS deposit error: {}", e)))?;
     if avs_deposit_receipt.status() {
         info!(
             "Deposited into strategy {} for Eigenlayer",
@@ -202,7 +201,7 @@ async fn register_bls_impl(
     }
 
     let allocation_delay = 0u32; // TODO: User-defined allocation delay
-    let provider = get_provider_http(&env.http_rpc_endpoint.to_string());
+    let provider = get_provider_http(env.http_rpc_endpoint.clone());
     let allocation_manager = AllocationManager::new(allocation_manager_address, provider);
     let allocation_delay_receipt = allocation_manager
         .setAllocationDelay(operator_address, allocation_delay)
@@ -251,7 +250,7 @@ async fn register_bls_impl(
         .await
         .map_err(|e| EigenlayerError::Registration(e.to_string()))?;
 
-    let stake_receipt = wait_transaction(&env.http_rpc_endpoint.to_string(), stake_hash)
+    let stake_receipt = wait_transaction(env.http_rpc_endpoint.clone(), stake_hash)
         .await
         .map_err(|e| EigenlayerError::Registration(format!("Quorum staking error: {}", e)))?;
 
@@ -277,12 +276,11 @@ async fn register_bls_impl(
         .await
         .map_err(EigenlayerError::ElContracts)?;
 
-    let registration_receipt =
-        wait_transaction(&env.http_rpc_endpoint.to_string(), registration_hash)
-            .await
-            .map_err(|e| {
-                EigenlayerError::Registration(format!("Operator sets registration error: {}", e))
-            })?;
+    let registration_receipt = wait_transaction(env.http_rpc_endpoint.clone(), registration_hash)
+        .await
+        .map_err(|e| {
+            EigenlayerError::Registration(format!("Operator sets registration error: {}", e))
+        })?;
     if registration_receipt.status() {
         info!("Registered to operator sets for Eigenlayer");
     } else {

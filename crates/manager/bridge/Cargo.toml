@@ -1,0 +1,36 @@
+[package]
+name = "blueprint-manager-bridge"
+version = "0.1.0-alpha.1"
+description = ""                  # TODO
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+blueprint-core.workspace = true
+blueprint-auth.workspace = true
+
+tokio = { workspace = true, features = ["net"] }
+tonic = { workspace = true, features = ["codegen", "transport", "prost"] }
+prost = { workspace = true, features = ["derive"] }
+thiserror.workspace = true
+
+# Client
+hyper-util = { workspace = true, features = ["tokio"], optional = true }
+tokio-vsock = { workspace = true, optional = true }
+tower = { workspace = true, features = ["util"], optional = true }
+
+[build-dependencies]
+tonic-build = { workspace = true, features = ["prost"] }
+
+[features]
+default = ["tracing"]
+tracing = ["blueprint-core/tracing"]
+client = ["dep:hyper-util", "dep:tokio-vsock", "dep:tower"]
+server = ["tonic/router"]

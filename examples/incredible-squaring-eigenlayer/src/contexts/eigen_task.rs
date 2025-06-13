@@ -11,6 +11,7 @@ use blueprint_sdk::evm::util::get_provider_from_signer;
 use eigensdk::crypto_bls::{BlsG1Point, BlsG2Point, convert_to_g1_point, convert_to_g2_point};
 use eigensdk::services_blsaggregation::bls_aggregation_service_response::BlsAggregationServiceResponse;
 use eigensdk::types::avs::TaskIndex;
+use reqwest::Url;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -65,7 +66,7 @@ impl GenericTaskResponse for TaskResponse {
 #[derive(Clone)]
 pub struct SquaringTaskResponseSender {
     pub task_manager_address: alloy_primitives::Address,
-    pub http_rpc_url: String,
+    pub http_rpc_url: Url,
 }
 
 impl ResponseSender<IndexedTask, TaskResponse> for SquaringTaskResponseSender {
@@ -84,7 +85,7 @@ impl ResponseSender<IndexedTask, TaskResponse> for SquaringTaskResponseSender {
 
         Box::pin(async move {
             let key = "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"; // Private key from our Aggregator Anvil account
-            let provider = get_provider_from_signer(key, &http_rpc_url);
+            let provider = get_provider_from_signer(key, http_rpc_url);
 
             let contract =
                 IncredibleSquaringTaskManager::new(task_manager_address, provider.clone());
