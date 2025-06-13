@@ -284,7 +284,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     let heartbeat_consumer = Arc::new(MockHeartbeatConsumer::new());
     
     // Build the QoS service
-    let qos_service = match QoSServiceBuilder::new()
+    let qos_service = match QoSServiceBuilder::new(env.clone())
         .with_config(qos_config)
         .with_heartbeat_consumer(heartbeat_consumer.clone())
         .build()

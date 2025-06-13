@@ -1,11 +1,27 @@
-use blueprint_core::{info, warn};
-use rand::Rng;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
-
 use crate::error::Result;
+use blueprint_crypto::sp_core::SpSr25519;
+use blueprint_crypto::{hashing, sp_core::SpEcdsa};
+
+use blueprint_client_tangle::client::TangleClient;
+use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+use blueprint_keystore::backends::Backend;
+use sp_core::{
+    Pair, // The main Pair trait
+    // crypto::{Ss58Codec, SpEcdsa, SpSr25519},
+    ecdsa::{Pair as SpEcdsaPair, Public as SpEcdsaPublic, Signature as SpEcdsaSignature},
+    sr25519::{Pair as SpSr25519Pair, Public as SpSr25519Public, Signature as SpSr25519Signature},
+};
+
+use blueprint_core::{info, warn};
+use parity_scale_codec::{Decode, Encode};
+use rand::Rng;
+use std::{
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+use tangle_subxt::tangle_testnet_runtime::api as tangle_api;
+use tokio::{sync::Mutex, task::JoinHandle};
 
 /// Configuration for the heartbeat service
 #[derive(Clone, Debug)]
@@ -34,7 +50,7 @@ impl Default for HeartbeatConfig {
 }
 
 /// Status information included in a heartbeat
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Encode, Decode)] // Added Encode, Decode
 pub struct HeartbeatStatus {
     pub block_number: u64,
 
@@ -55,32 +71,47 @@ pub trait HeartbeatConsumer: Send + Sync + 'static {
     fn send_heartbeat(
         &self,
         status: &HeartbeatStatus,
-    ) -> impl std::future::Future<Output = Result<()>> + Send;
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'static>>;
 }
 
 /// Service for sending heartbeats to the chain
-pub struct HeartbeatService<C> {
+#[derive(Clone)]
+pub struct HeartbeatService {
+    // C (HeartbeatConsumer) is now a trait object
     config: HeartbeatConfig,
-
-    consumer: Arc<C>,
-
+    consumer: Arc<dyn HeartbeatConsumer + Send + Sync + 'static>,
     last_heartbeat: Arc<Mutex<Option<HeartbeatStatus>>>,
-
     running: Arc<Mutex<bool>>,
-
-    /// Handle to the background task that sends heartbeats
     task_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+    http_rpc_endpoint: String,
+    ws_rpc_endpoint: String,
+    keystore_uri: String,
+    service_id: u64,
+    blueprint_id: u64,
 }
 
-impl<C> HeartbeatService<C> {
+impl HeartbeatService {
     /// Create a new heartbeat service
-    pub fn new(config: HeartbeatConfig, consumer: Arc<C>) -> Self {
+    pub fn new(
+        config: HeartbeatConfig,
+        consumer: Arc<dyn HeartbeatConsumer + Send + Sync + 'static>,
+        http_rpc_endpoint: String,
+        ws_rpc_endpoint: String,
+        keystore_uri: String,
+        service_id: u64,
+        blueprint_id: u64,
+    ) -> Self {
         Self {
             config,
             consumer,
             last_heartbeat: Arc::new(Mutex::new(None)),
             running: Arc::new(Mutex::new(false)),
             task_handle: Arc::new(Mutex::new(None)),
+            http_rpc_endpoint,
+            ws_rpc_endpoint,
+            keystore_uri,
+            service_id,
+            blueprint_id,
         }
     }
 
@@ -100,31 +131,129 @@ impl<C> HeartbeatService<C> {
     ///
     /// # Errors
     /// Returns an error if the heartbeat cannot be sent to the consumer
-    async fn send_heartbeat(&self) -> Result<()>
-    where
-        C: HeartbeatConsumer,
-    {
+    async fn send_heartbeat(&self) -> Result<()> {
+        // --- Part 1: Local heartbeat via consumer ---
         let status = HeartbeatStatus {
-            block_number: 0,
+            block_number: 0, // For local consumer, block_number might not be critical or fetched from chain here
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .map_err(|e| crate::error::Error::Other(format!("System time error: {}", e)))?
                 .as_secs(),
             service_id: self.config.service_id,
             blueprint_id: self.config.blueprint_id,
-            status_code: 0,
+            status_code: 0, // Assuming 0 is OK
             status_message: None,
         };
 
         self.consumer.send_heartbeat(&status).await?;
+        *self.last_heartbeat.lock().await = Some(status.clone());
 
-        *self.last_heartbeat.lock().await = Some(status);
-
-        // Log the heartbeat
+        // --- Part 2: On-chain heartbeat ---
         info!(
             service_id = self.config.service_id,
             blueprint_id = self.config.blueprint_id,
-            "Sent heartbeat to chain"
+            "Attempting to send heartbeat to chain..."
+        );
+
+        // Connect to the Tangle node RPC using the configured endpoints
+        let http_rpc_endpoint = self.http_rpc_endpoint.clone();
+        let ws_rpc_endpoint = self.ws_rpc_endpoint.clone();
+        let client = TangleClient::new(
+            self.ws_rpc_endpoint.clone(),
+            self.keystore_uri.clone(),
+            self.blueprint_id, // Use HeartbeatService.blueprint_id
+            self.service_id,   // Use HeartbeatService.service_id
+        )
+        .await
+        .map_err(|e| crate::error::Error::Other(format!("Failed to create TangleClient: {}", e)))?;
+
+        // Initialize Keystore
+        let keystore_uri = self.keystore_uri.clone();
+        let keystore_config = blueprint_keystore::KeystoreConfig::new().fs_root(keystore_uri);
+        let keystore = blueprint_keystore::Keystore::new(keystore_config).map_err(|e| {
+            crate::error::Error::Other(format!("Failed to initialize keystore: {}", e))
+        })?;
+
+        // Load ECDSA key for signing the heartbeat payload
+        let operator_ecdsa_public_key = keystore.first_local::<SpEcdsa>().map_err(|e| {
+            crate::error::Error::Other(format!(
+                "Failed to query ECDSA public key from keystore: {}",
+                e
+            ))
+        })?;
+
+        let operator_ecdsa_secret = keystore
+            .get_secret::<SpEcdsa>(&operator_ecdsa_public_key)
+            .map_err(|e| {
+                crate::error::Error::Other(format!("Failed to get ECDSA secret key: {}", e))
+            })?;
+
+        // Load SR25519 key for submitting the extrinsic
+        let submitter_sr25519_public_key = keystore.first_local::<SpSr25519>().map_err(|e| {
+            crate::error::Error::Other(format!(
+                "Failed to query SR25519 public key for submission: {}",
+                e
+            ))
+        })?;
+
+        let submitter_sr25519_secret = keystore
+            .get_secret::<SpSr25519>(&submitter_sr25519_public_key)
+            .map_err(|e| {
+                crate::error::Error::Other(format!(
+                    "Failed to get SR25519 secret key for submission: {}",
+                    e
+                ))
+            })?;
+
+        let submitter_signer = TanglePairSigner::new(submitter_sr25519_secret.0);
+
+        // Prepare data for signing payload
+        // The 'status' instance from Part 1 is used directly.
+        // We need its SCALE-encoded form for metrics_data.
+        let metrics_data_bytes = status.encode(); // SCALE-encode the HeartbeatStatus
+
+        // The message to sign is H(service_id | blueprint_id | metrics_data_bytes)
+        // Use service_id and blueprint_id from the status struct for consistency in the payload.
+        let service_id_for_payload = status.service_id;
+        let blueprint_id_for_payload = status.blueprint_id;
+
+        let mut message_to_sign = service_id_for_payload.to_le_bytes().to_vec();
+        message_to_sign.extend_from_slice(&blueprint_id_for_payload.to_le_bytes());
+        message_to_sign.extend_from_slice(&metrics_data_bytes);
+
+        let message_hash = hashing::keccak_256(&message_to_sign);
+        let signature: SpEcdsaSignature = operator_ecdsa_secret.sign(&message_hash);
+
+        // Construct the transaction
+        // Pass the SCALE-encoded HeartbeatStatus as metrics_data
+        let heartbeat_call = tangle_api::tx().services().heartbeat(
+            service_id_for_payload,
+            blueprint_id_for_payload,
+            metrics_data_bytes.clone(),
+            signature.0,
+        );
+
+        // Sign and submit the extrinsic
+        let extrinsic_result = client
+            .tx()
+            .sign_and_submit_then_watch_default(&heartbeat_call, &submitter_signer)
+            .await
+            .map_err(|e| {
+                crate::error::Error::Other(format!("Failed to submit heartbeat extrinsic: {}", e))
+            })?;
+
+        // Wait for finalization
+        let _events = extrinsic_result
+            .wait_for_finalized_success()
+            .await
+            .map_err(|e| {
+                crate::error::Error::Other(format!("Heartbeat extrinsic failed to finalize: {}", e))
+            })?;
+
+        info!(
+            service_id = self.config.service_id,
+            blueprint_id = self.config.blueprint_id,
+            "Successfully sent heartbeat to chain and it finalized."
         );
 
         Ok(())
@@ -134,10 +263,7 @@ impl<C> HeartbeatService<C> {
     ///
     /// # Errors
     /// Returns an error if the service is already running
-    pub async fn start_heartbeat(&self) -> Result<()>
-    where
-        C: HeartbeatConsumer,
-    {
+    pub async fn start_heartbeat(&self) -> Result<()> {
         let mut running = self.running.lock().await;
         if *running {
             return Err(crate::error::Error::Other(
@@ -197,10 +323,7 @@ impl<C> HeartbeatService<C> {
     ///
     /// # Errors
     /// Returns an error if the service is not running
-    pub async fn stop_heartbeat(&self) -> Result<()>
-    where
-        C: HeartbeatConsumer,
-    {
+    pub async fn stop_heartbeat(&self) -> Result<()> {
         let mut running = self.running.lock().await;
         if !*running {
             return Err(crate::error::Error::Other(
@@ -220,19 +343,7 @@ impl<C> HeartbeatService<C> {
     }
 }
 
-impl<C> Clone for HeartbeatService<C> {
-    fn clone(&self) -> Self {
-        Self {
-            config: self.config.clone(),
-            consumer: self.consumer.clone(),
-            last_heartbeat: self.last_heartbeat.clone(),
-            running: self.running.clone(),
-            task_handle: self.task_handle.clone(),
-        }
-    }
-}
-
-impl<C> Drop for HeartbeatService<C> {
+impl Drop for HeartbeatService {
     fn drop(&mut self) {
         if let Ok(mut handle) = self.task_handle.try_lock() {
             if let Some(h) = handle.take() {

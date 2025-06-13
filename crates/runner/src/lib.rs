@@ -307,7 +307,7 @@ where
     ///     let context = Arc::new(MyContext);
     ///     let router = Router::new().with_context(context.clone());
     ///
-    ///     let qos_service = QoSServiceBuilder::new()
+    ///     let qos_service = QoSServiceBuilder::new(env.clone())
     ///         .with_prometheus_server_config(PrometheusServerConfig::default())
     ///         .manage_servers(true)
     ///         .build()
@@ -382,6 +382,9 @@ where
                 .block_on(blueprint_qos::unified_service::QoSService::new(
                     config,
                     heartbeat_consumer,
+                    self.env.http_rpc_endpoint.clone().unwrap_or_default(),
+                    self.env.ws_rpc_endpoint.clone().unwrap_or_default(),
+                    self.env.keystore_uri.clone().unwrap_or_default(),
                 ))
                 .expect("Failed to initialize QoSService"),
         )));

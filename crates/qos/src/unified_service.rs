@@ -20,11 +20,8 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, oneshot};
 
 /// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality.
-pub struct QoSService<C>
-where
-    C: HeartbeatConsumer + Send + Sync + 'static,
-{
-    heartbeat_service: Option<Arc<HeartbeatService<C>>>,
+pub struct QoSService {
+    heartbeat_service: Option<Arc<HeartbeatService>>,
     metrics_service: Option<Arc<MetricsService>>,
     grafana_client: Option<Arc<GrafanaClient>>,
     dashboard_url: Option<String>,
@@ -35,11 +32,8 @@ where
     completion_rx: RwLock<Option<tokio::sync::oneshot::Receiver<Result<()>>>>,
 }
 
-impl<C> QoSService<C>
-where
-    C: HeartbeatConsumer + Send + Sync + 'static,
-{
-    pub fn heartbeat_service(&self) -> Option<&Arc<HeartbeatService<C>>> {
+impl QoSService {
+    pub fn heartbeat_service(&self) -> Option<&Arc<HeartbeatService>> {
         self.heartbeat_service.as_ref()
     }
 
@@ -55,13 +49,27 @@ where
     /// Common initialization logic for `QoSService`.
     async fn initialize(
         config: QoSConfig,
-        heartbeat_consumer: Arc<C>,
+        heartbeat_consumer: Arc<dyn HeartbeatConsumer + Send + Sync + 'static>,
+        http_rpc_endpoint: String,
+        ws_rpc_endpoint: String,
+        keystore_uri: String,
         otel_config: Option<OpenTelemetryConfig>,
     ) -> Result<Self> {
-        let heartbeat_service = config
-            .heartbeat
-            .clone()
-            .map(|hc| Arc::new(HeartbeatService::new(hc, heartbeat_consumer.clone())));
+        let heartbeat_service = config.heartbeat.clone().map(|hc| {
+            // Parameters are now passed directly
+            let http_rpc = http_rpc_endpoint.clone();
+            let ws_rpc = ws_rpc_endpoint.clone();
+            let keystore_uri_val = keystore_uri.clone();
+            Arc::new(HeartbeatService::new(
+                hc.clone(),
+                heartbeat_consumer.clone(),
+                http_rpc,
+                ws_rpc,
+                keystore_uri_val,
+                hc.service_id,
+                hc.blueprint_id,
+            ))
+        });
 
         let metrics_service = match (config.metrics.clone(), otel_config) {
             (Some(mc), Some(oc)) => Some(Arc::new(MetricsService::with_otel_config(mc, oc)?)),
@@ -184,16 +192,41 @@ where
         })
     }
 
-    pub async fn new(config: QoSConfig, heartbeat_consumer: Arc<C>) -> Result<Self> {
-        Self::initialize(config, heartbeat_consumer, None).await
+    pub async fn new(
+        config: QoSConfig,
+        heartbeat_consumer: Arc<dyn HeartbeatConsumer + Send + Sync + 'static>,
+        http_rpc_endpoint: String,
+        ws_rpc_endpoint: String,
+        keystore_uri: String,
+    ) -> Result<Self> {
+        Self::initialize(
+            config,
+            heartbeat_consumer,
+            http_rpc_endpoint,
+            ws_rpc_endpoint,
+            keystore_uri,
+            None,
+        )
+        .await
     }
 
     pub async fn with_otel_config(
         config: QoSConfig,
-        heartbeat_consumer: Arc<C>,
+        heartbeat_consumer: Arc<dyn HeartbeatConsumer + Send + Sync + 'static>,
+        http_rpc_endpoint: String,
+        ws_rpc_endpoint: String,
+        keystore_uri: String,
         otel_config: OpenTelemetryConfig,
     ) -> Result<Self> {
-        Self::initialize(config, heartbeat_consumer, Some(otel_config)).await
+        Self::initialize(
+            config,
+            heartbeat_consumer,
+            http_rpc_endpoint,
+            ws_rpc_endpoint,
+            keystore_uri,
+            Some(otel_config),
+        )
+        .await
     }
 
     pub fn debug_server_status(&self) {
@@ -400,10 +433,7 @@ where
     }
 }
 
-impl<C> Drop for QoSService<C>
-where
-    C: HeartbeatConsumer + Send + Sync + 'static,
-{
+impl Drop for QoSService {
     fn drop(&mut self) {
         if let Some(metrics_service) = self.metrics_service.as_ref() {
             if let Err(e) = metrics_service.provider().force_flush_otel_metrics() {

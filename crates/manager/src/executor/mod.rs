@@ -217,7 +217,28 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let keystore_uri = env.keystore_uri.clone();
 
     let manager_task = async move {
-        let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
+        let ws_rpc_endpoint = env.ws_rpc_endpoint.clone().ok_or_else(|| {
+            Error::Config("Missing ws_rpc_endpoint in BlueprintEnvironment for manager".into())
+        })?;
+        // keystore_uri is from line 217: let keystore_uri = env.keystore_uri.clone();
+        let final_keystore_uri = keystore_uri.ok_or_else(|| {
+            Error::Config("Missing keystore_uri (from env.keystore_uri) for manager".into())
+        })?;
+
+        let tangle_settings = env.protocol_settings.tangle().map_err(Error::Config)?;
+        let blueprint_id = tangle_settings.blueprint_id;
+        let service_id = tangle_settings.service_id.ok_or_else(|| {
+            Error::Config("Missing service_id in TangleProtocolSettings for manager".into())
+        })?;
+
+        let tangle_client = TangleClient::with_keystore(
+            ws_rpc_endpoint,
+            keystore,
+            blueprint_id,
+            service_id,
+            final_keystore_uri,
+        )
+        .await?;
         let services_client = tangle_client.services_client();
 
         // With the basics setup, we must now implement the main logic of the Blueprint Manager

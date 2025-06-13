@@ -12,22 +12,19 @@ use crate::servers::{
 use crate::unified_service::QoSService;
 
 /// Builder for `QoS` service
-pub struct QoSServiceBuilder<C>
-where
-    C: HeartbeatConsumer + Send + Sync + 'static,
-{
+pub struct QoSServiceBuilder {
     config: QoSConfig,
-    heartbeat_consumer: Option<Arc<C>>,
+    heartbeat_consumer: Option<Arc<dyn HeartbeatConsumer + Send + Sync + 'static>>,
     otel_config: Option<OpenTelemetryConfig>,
     prometheus_datasource: Option<String>,
     loki_datasource: Option<String>,
     create_dashboard: bool,
+    http_rpc_endpoint: Option<String>,
+    ws_rpc_endpoint: Option<String>,
+    keystore_uri: Option<String>,
 }
 
-impl<C> QoSServiceBuilder<C>
-where
-    C: HeartbeatConsumer + Send + Sync + 'static,
-{
+impl QoSServiceBuilder {
     /// Create a new `QoS` service builder
     #[must_use]
     pub fn new() -> Self {
@@ -38,6 +35,9 @@ where
             prometheus_datasource: None,
             loki_datasource: None,
             create_dashboard: false,
+            http_rpc_endpoint: None,
+            ws_rpc_endpoint: None,
+            keystore_uri: None,
         }
     }
 
@@ -78,7 +78,10 @@ where
 
     /// Set the heartbeat consumer
     #[must_use]
-    pub fn with_heartbeat_consumer(mut self, consumer: Arc<C>) -> Self {
+    pub fn with_heartbeat_consumer(
+        mut self,
+        consumer: Arc<dyn HeartbeatConsumer + Send + Sync + 'static>,
+    ) -> Self {
         self.heartbeat_consumer = Some(consumer);
         self
     }
@@ -137,24 +140,48 @@ where
     ///
     /// # Errors
     /// Returns an error if the heartbeat consumer is not provided or if the service initialization fails
-    pub async fn build(self) -> Result<QoSService<C>> {
+    /// Set the HTTP RPC endpoint for HeartbeatService
+    #[must_use]
+    pub fn with_http_rpc_endpoint(mut self, endpoint: String) -> Self {
+        self.http_rpc_endpoint = Some(endpoint);
+        self
+    }
+
+    /// Set the WebSocket RPC endpoint for HeartbeatService
+    #[must_use]
+    pub fn with_ws_rpc_endpoint(mut self, endpoint: String) -> Self {
+        self.ws_rpc_endpoint = Some(endpoint);
+        self
+    }
+
+    /// Set the Keystore URI for HeartbeatService
+    #[must_use]
+    pub fn with_keystore_uri(mut self, uri: String) -> Self {
+        self.keystore_uri = Some(uri);
+        self
+    }
+
+    pub async fn build(self) -> Result<QoSService> {
         let heartbeat_consumer = self.heartbeat_consumer.ok_or_else(|| {
             crate::error::Error::Other("Heartbeat consumer is required".to_string())
         })?;
 
-        if let Some(otel_config) = self.otel_config {
-            QoSService::with_otel_config(self.config, heartbeat_consumer, otel_config).await
-        } else {
-            QoSService::new(self.config, heartbeat_consumer).await
-        }
-    }
-}
+        let http_rpc = self.http_rpc_endpoint.unwrap_or_default();
+        let ws_rpc = self.ws_rpc_endpoint.unwrap_or_default();
+        let keystore = self.keystore_uri.unwrap_or_default();
 
-impl<C> Default for QoSServiceBuilder<C>
-where
-    C: HeartbeatConsumer + Send + Sync + 'static,
-{
-    fn default() -> Self {
-        Self::new()
+        if let Some(otel_config) = self.otel_config {
+            QoSService::with_otel_config(
+                self.config,
+                heartbeat_consumer,
+                http_rpc,
+                ws_rpc,
+                keystore,
+                otel_config,
+            )
+            .await
+        } else {
+            QoSService::new(self.config, heartbeat_consumer, http_rpc, ws_rpc, keystore).await
+        }
     }
 }
