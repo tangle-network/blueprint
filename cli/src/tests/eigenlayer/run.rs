@@ -9,6 +9,7 @@ use blueprint_std::fs;
 use blueprint_std::process::Command;
 use blueprint_testing_utils::setup_log;
 use color_eyre::eyre::Result;
+use std::io::Write;
 use tempfile::TempDir;
 
 use crate::command::deploy::eigenlayer::EigenlayerDeployOpts;
@@ -173,7 +174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
 
     // Create a provider
     let http_url = env.http_rpc_endpoint.clone();
-    let provider = get_provider_http(&http_url);
+    let provider = get_provider_http(http_url);
 
     // Read the ABI from the JSON file
     let json_path = PathBuf::from(&temp_dir_str).join("out/TestContract.sol/TestContract.json");
@@ -238,7 +239,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     } else {
         let output = build_output?;
         if !output.status.success() {
-            info!("Cargo build output: {:?}", output);
+            info!("Cargo build output: {:?}", output.status);
+            std::io::stderr().write_all(&output.stderr)?;
+            eprintln!();
+
             panic!("Failed to build binary")
         }
         info!("Binary built successfully!");

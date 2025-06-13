@@ -21,8 +21,10 @@ tonic = { workspace = true, features = ["codegen", "transport", "prost"] }
 prost = { workspace = true, features = ["derive"] }
 tower = { workspace = true, features = ["util"] }
 thiserror.workspace = true
-tokio-vsock.workspace = true
 hyper-util = { workspace = true, features = ["tokio"] }
+
+# Client
+tokio-vsock = { workspace = true, optional = true }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
@@ -30,3 +32,5 @@ tonic-build = { workspace = true, features = ["prost"] }
 [features]
 default = ["tracing"]
 tracing = ["blueprint-core/tracing"]
+client = ["dep:tokio-vsock"]
+server = []

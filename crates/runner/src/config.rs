@@ -6,7 +6,7 @@ use crate::error::ConfigError;
 use alloc::string::{String, ToString};
 #[cfg(feature = "std")]
 use blueprint_keystore::{Keystore, KeystoreConfig};
-use blueprint_manager_bridge::Bridge;
+use blueprint_manager_bridge::client::Bridge;
 use clap::Parser;
 use core::fmt::{Debug, Display};
 use core::str::FromStr;

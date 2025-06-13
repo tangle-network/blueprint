@@ -19,6 +19,7 @@ blueprint-router = { workspace = true }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-clients = { workspace = true, features = ["std"] }
 blueprint-keystore = { workspace = true, features = ["std"] }
+blueprint-manager-bridge.workspace = true
 
 cargo_toml = { workspace = true }
 thiserror = { workspace = true }
