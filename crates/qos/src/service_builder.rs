@@ -80,10 +80,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
 
     /// Set the heartbeat consumer
     #[must_use]
-    pub fn with_heartbeat_consumer(
-        mut self,
-        consumer: Arc<C>,
-    ) -> Self {
+    pub fn with_heartbeat_consumer(mut self, consumer: Arc<C>) -> Self {
         self.heartbeat_consumer = Some(consumer);
         self
     }

@@ -100,9 +100,9 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
                 .duration_since(UNIX_EPOCH)
                 .map_err(|e| crate::error::Error::Other(format!("System time error: {}", e)))?
                 .as_secs(),
-            service_id: config_service_id, // Use passed parameter
+            service_id: config_service_id,     // Use passed parameter
             blueprint_id: config_blueprint_id, // Use passed parameter
-            status_code: 0, // Assuming 0 is OK
+            status_code: 0,                    // Assuming 0 is OK
             status_message: None,
         };
 
@@ -125,9 +125,12 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         // .await
         // .map_err(|e| crate::error::Error::Other(format!("Failed to create TangleClient: {}", e)))?;
 
-        let client = tangle_subxt::subxt::OnlineClient::from_insecure_url(ws_rpc_endpoint.clone()).await.unwrap();
+        let client = tangle_subxt::subxt::OnlineClient::from_insecure_url(ws_rpc_endpoint.clone())
+            .await
+            .unwrap();
 
-        let keystore_config = blueprint_keystore::KeystoreConfig::new().fs_root(keystore_uri.clone());
+        let keystore_config =
+            blueprint_keystore::KeystoreConfig::new().fs_root(keystore_uri.clone());
         let keystore = blueprint_keystore::Keystore::new(keystore_config).map_err(|e| {
             crate::error::Error::Other(format!("Failed to initialize keystore: {}", e))
         })?;
@@ -236,8 +239,6 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         *self.running.lock().await
     }
 
-
-
     /// Start sending heartbeats at the configured interval
     ///
     /// # Errors
@@ -246,7 +247,8 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         let initial_jitter_percent = self.config.jitter_percent;
         let initial_interval_ms = self.config.interval_secs * 1000;
         let initial_jitter = if initial_jitter_percent > 0 {
-            let max_jitter = (initial_interval_ms as f64 * (initial_jitter_percent as f64 / 100.0)) as u64;
+            let max_jitter =
+                (initial_interval_ms as f64 * (initial_jitter_percent as f64 / 100.0)) as u64;
             rand::thread_rng().gen_range(0..=max_jitter)
         } else {
             0
@@ -284,12 +286,15 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
                     keystore_uri.clone(),
                     service_id,
                     blueprint_id,
-                ).await {
+                )
+                .await
+                {
                     warn!("Failed to send heartbeat: {}", e);
                 }
 
                 let sleep_duration = if jitter_percent_val > 0 {
-                    let max_jitter = (interval_ms as f64 * (jitter_percent_val as f64 / 100.0)) as u64;
+                    let max_jitter =
+                        (interval_ms as f64 * (jitter_percent_val as f64 / 100.0)) as u64;
                     let current_jitter = rand::thread_rng().gen_range(0..=max_jitter);
                     base_interval + Duration::from_millis(current_jitter)
                 } else {

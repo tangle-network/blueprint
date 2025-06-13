@@ -187,9 +187,10 @@ async fn register_bls_impl(
         .map_err(EigenlayerError::ElContracts)?;
 
     info!("Deposit hash: {:?}", avs_deposit_hash);
-    let avs_deposit_receipt = wait_transaction(&env.http_rpc_endpoint.to_string(), avs_deposit_hash)
-        .await
-        .map_err(|e| EigenlayerError::Registration(format!("AVS deposit error: {}", e)))?;
+    let avs_deposit_receipt =
+        wait_transaction(&env.http_rpc_endpoint.to_string(), avs_deposit_hash)
+            .await
+            .map_err(|e| EigenlayerError::Registration(format!("AVS deposit error: {}", e)))?;
     if avs_deposit_receipt.status() {
         info!(
             "Deposited into strategy {} for Eigenlayer",
@@ -276,11 +277,12 @@ async fn register_bls_impl(
         .await
         .map_err(EigenlayerError::ElContracts)?;
 
-    let registration_receipt = wait_transaction(&env.http_rpc_endpoint.to_string(), registration_hash)
-        .await
-        .map_err(|e| {
-            EigenlayerError::Registration(format!("Operator sets registration error: {}", e))
-        })?;
+    let registration_receipt =
+        wait_transaction(&env.http_rpc_endpoint.to_string(), registration_hash)
+            .await
+            .map_err(|e| {
+                EigenlayerError::Registration(format!("Operator sets registration error: {}", e))
+            })?;
     if registration_receipt.status() {
         info!("Registered to operator sets for Eigenlayer");
     } else {

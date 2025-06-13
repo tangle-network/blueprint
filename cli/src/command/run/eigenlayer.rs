@@ -86,9 +86,9 @@ pub async fn run_eigenlayer_avs(
     // Required arguments
     command
         .arg("--http-rpc-url")
-        .arg(&config.http_rpc_endpoint)
+        .arg(config.http_rpc_endpoint.as_str())
         .arg("--ws-rpc-url")
-        .arg(&config.ws_rpc_endpoint)
+        .arg(config.ws_rpc_endpoint.as_str())
         .arg("--keystore-uri")
         .arg(&config.keystore_uri)
         .arg("--chain")

@@ -186,7 +186,7 @@ pub enum BlueprintCommands {
 
         /// The HTTP RPC endpoint URL (required)
         #[arg(short = 'u', long, default_value = "http://127.0.0.1:9944")]
-        rpc_url: String,
+        rpc_url: Url,
 
         /// The keystore path (defaults to ./keystore)
         #[arg(short = 'k', long)]
@@ -230,7 +230,7 @@ pub enum BlueprintCommands {
     ListRequests {
         /// WebSocket RPC URL to use
         #[arg(long, env = "WS_RPC_URL", default_value = "ws://127.0.0.1:9944")]
-        ws_rpc_url: String,
+        ws_rpc_url: Url,
     },
 
     /// List Blueprints on target Tangle network
@@ -355,7 +355,7 @@ pub enum BlueprintCommands {
     DeployMBSM {
         /// The HTTP RPC URL to use
         #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:9944", env)]
-        http_rpc_url: String,
+        http_rpc_url: Url,
 
         /// Force deployment even if the contract is already deployed
         #[arg(short, long, value_name = "VALUE", default_value_t = false)]
@@ -534,7 +534,9 @@ async fn main() -> color_eyre::Result<()> {
                     "local" => SupportedChains::LocalTestnet,
                     "testnet" => SupportedChains::Testnet,
                     "mainnet" => {
-                        if rpc_url.contains("127.0.0.1") || rpc_url.contains("localhost") {
+                        if rpc_url.as_str().contains("127.0.0.1")
+                            || rpc_url.as_str().contains("localhost")
+                        {
                             SupportedChains::LocalMainnet
                         } else {
                             SupportedChains::Mainnet
@@ -549,13 +551,19 @@ async fn main() -> color_eyre::Result<()> {
                 };
 
                 let mut config = BlueprintEnvironment::default();
-                let ws_url = if let Some(stripped) = rpc_url.strip_prefix("http://") {
-                    format!("ws://{}", stripped)
-                } else if let Some(stripped) = rpc_url.strip_prefix("https://") {
-                    format!("wss://{}", stripped)
-                } else {
-                    panic!("Invalid RPC URL format");
-                };
+
+                let mut ws_url = rpc_url.clone();
+                match rpc_url.scheme() {
+                    "http" => ws_url.set_scheme("ws").unwrap(),
+                    "https" => ws_url.set_scheme("wss").unwrap(),
+                    _ => {
+                        return Err(color_eyre::Report::msg(format!(
+                            "Invalid scheme: {}",
+                            rpc_url.scheme()
+                        )));
+                    }
+                }
+
                 config.http_rpc_endpoint = rpc_url.clone();
                 config.ws_rpc_endpoint = ws_url;
                 let keystore_path = keystore_path.unwrap_or_else(|| PathBuf::from("./keystore"));
@@ -581,7 +589,6 @@ async fn main() -> color_eyre::Result<()> {
                     }
                 }
                 config.keystore_uri = keystore_path.to_string_lossy().to_string();
-                config.data_dir = data_dir.or_else(|| Some(PathBuf::from("./data")));
                 config.bootnodes = bootnodes
                     .unwrap_or_default()
                     .iter()
@@ -607,7 +614,7 @@ async fn main() -> color_eyre::Result<()> {
                                     .map_err(|e| color_eyre::Report::msg(format!("Blueprint ID is required in the protocol settings: {e:?}")))?,
                             ),
                             keystore_path: Some(config.keystore_uri.clone()),
-                            data_dir: config.data_dir.clone(),
+                            data_dir,
                             allow_unchecked_attestations,
                             podman_host: Some(podman_host)
                         };
@@ -621,11 +628,11 @@ async fn main() -> color_eyre::Result<()> {
                 }
             }
             BlueprintCommands::ListRequests { ws_rpc_url } => {
-                let requests = list_requests(ws_rpc_url).await?;
+                let requests = list_requests(ws_rpc_url.to_string()).await?;
                 print_requests(requests);
             }
             BlueprintCommands::ListBlueprints { ws_rpc_url } => {
-                let blueprints = list_blueprints(ws_rpc_url).await?;
+                let blueprints = list_blueprints(ws_rpc_url.to_string()).await?;
                 print_blueprints(blueprints);
             }
             BlueprintCommands::Register {
@@ -705,7 +712,7 @@ async fn main() -> color_eyre::Result<()> {
                 http_rpc_url,
                 force,
             } => {
-                deploy::mbsm::deploy_mbsm(http_rpc_url, force).await?;
+                deploy::mbsm::deploy_mbsm(http_rpc_url.to_string(), force).await?;
             }
         },
         Commands::Key { command } => match command {

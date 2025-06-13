@@ -217,11 +217,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let keystore_uri = env.keystore_uri.clone();
 
     let manager_task = async move {
-        let tangle_client = TangleClient::with_keystore(
-            env.clone(),
-            keystore,
-        )
-        .await?;
+        let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
         let services_client = tangle_client.services_client();
 
         // With the basics setup, we must now implement the main logic of the Blueprint Manager

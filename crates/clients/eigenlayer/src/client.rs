@@ -485,7 +485,11 @@ impl EigenlayerClient {
         let ws_rpc_endpoint = self.config.ws_rpc_endpoint.clone();
         self.avs_registry_reader()
             .await?
-            .query_existing_registered_operator_pub_keys(start_block, to_block, ws_rpc_endpoint.to_string())
+            .query_existing_registered_operator_pub_keys(
+                start_block,
+                to_block,
+                ws_rpc_endpoint.to_string(),
+            )
             .await
             .map_err(Into::into)
     }

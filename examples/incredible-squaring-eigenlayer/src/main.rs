@@ -70,7 +70,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
 
     info!("~~~ Executing the incredible squaring blueprint ~~~");
     let eigen_config = EigenlayerBLSConfig::new(Address::default(), Address::default());
-    BlueprintRunner::<MockHeartbeatConsumer>::builder(eigen_config, BlueprintEnvironment::default())
+    BlueprintRunner::builder(eigen_config, BlueprintEnvironment::default())
         .router(
             Router::new()
                 .route(XSQUARE_JOB_ID, xsquare_eigen)

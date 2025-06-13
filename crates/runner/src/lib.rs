@@ -20,9 +20,11 @@ mod symbiotic;
 #[cfg(feature = "tangle")]
 pub mod tangle;
 
+use crate::error::RunnerError;
 use crate::error::{JobCallError, ProducerError};
 use blueprint_core::error::BoxError;
 use blueprint_core::{JobCall, JobResult};
+use blueprint_qos::heartbeat::HeartbeatConsumer;
 use blueprint_router::Router;
 use config::BlueprintEnvironment;
 use core::future::{self, poll_fn};
@@ -35,9 +37,6 @@ use futures_util::{SinkExt, StreamExt, TryStreamExt, stream};
 use std::sync::Arc;
 use tokio::sync::{Mutex, oneshot};
 use tower::Service;
-use std::marker::PhantomData;
-use crate::error::RunnerError;
-use blueprint_qos::heartbeat::HeartbeatConsumer;
 
 /// Configuration for the blueprint registration procedure
 #[dynosaur::dynosaur(DynBlueprintConfig)]
@@ -123,7 +122,7 @@ type Consumer = Arc<Mutex<Box<dyn Sink<JobResult, Error = BoxError> + Send + Unp
 /// A builder for a [`BlueprintRunner`]
 ///
 /// This is created with [`BlueprintRunner::builder()`].
-pub struct BlueprintRunnerBuilder<C: HeartbeatConsumer + Send + Sync + 'static, F> {
+pub struct BlueprintRunnerBuilder<F> {
     config: Box<DynBlueprintConfig<'static>>,
     env: BlueprintEnvironment,
     producers: Vec<Producer>,
@@ -131,10 +130,9 @@ pub struct BlueprintRunnerBuilder<C: HeartbeatConsumer + Send + Sync + 'static, 
     router: Option<Router>,
     background_services: Vec<Box<DynBackgroundService<'static>>>,
     shutdown_handler: F,
-    _consumer: PhantomData<C>,
 }
 
-impl<C: HeartbeatConsumer + Send + Sync + 'static, F> BlueprintRunnerBuilder<C, F>
+impl<F> BlueprintRunnerBuilder<F>
 where
     F: Future<Output = ()> + Send + 'static,
 {
@@ -258,7 +256,7 @@ where
     /// # }
     /// ```
     #[must_use]
-    pub fn heartbeat_service(
+    pub fn heartbeat_service<C: HeartbeatConsumer + Send + Sync + 'static>(
         mut self,
         service: blueprint_qos::heartbeat::HeartbeatService<C>,
     ) -> Self {
@@ -267,9 +265,14 @@ where
             service: blueprint_qos::heartbeat::HeartbeatService<C>,
         }
 
-        impl<C: HeartbeatConsumer + Send + Sync + 'static> BackgroundService for HeartbeatServiceAdapter<C> {
+        impl<C: HeartbeatConsumer + Send + Sync + 'static> BackgroundService
+            for HeartbeatServiceAdapter<C>
+        {
             async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
-                self.service.start_heartbeat().await.map_err(|e| RunnerError::Other(e.into()))?;
+                self.service
+                    .start_heartbeat()
+                    .await
+                    .map_err(|e| RunnerError::Other(e.into()))?;
                 let (_tx, rx) = oneshot::channel();
                 Ok(rx)
             }
@@ -338,7 +341,7 @@ where
     /// This method instantiates and manages a `QoSService` internally, automatically starting its heartbeat and metrics
     /// background tasks if configured. Custom heartbeat and metrics logic can still be added via `.heartbeat_service` and
     /// `.metrics_server`, but the core QoS logic is always running if this is called.
-    pub fn qos_service(
+    pub fn qos_service<C: HeartbeatConsumer + Send + Sync + 'static>(
         mut self,
         config: blueprint_qos::QoSConfig,
         heartbeat_consumer: Option<Arc<C>>,
@@ -502,7 +505,7 @@ where
     ///     // ...
     /// }
     /// ```
-    pub fn with_shutdown_handler<F2>(self, handler: F2) -> BlueprintRunnerBuilder<C, F2>
+    pub fn with_shutdown_handler<F2>(self, handler: F2) -> BlueprintRunnerBuilder<F2>
     where
         F2: Future<Output = ()> + Send + 'static,
     {
@@ -514,7 +517,6 @@ where
             router: self.router,
             background_services: self.background_services,
             shutdown_handler: handler,
-            _consumer: PhantomData,
         }
     }
 
@@ -645,18 +647,16 @@ where
 ///
 /// [Consumers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/consumers/index.html
 /// [Producers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/producers/index.html
-pub struct BlueprintRunner<C: HeartbeatConsumer + Send + Sync + 'static> {
-    _consumer: PhantomData<C>,
-}
+pub struct BlueprintRunner {}
 
-impl<C: HeartbeatConsumer + Send + Sync + 'static> BlueprintRunner<C> {
+impl BlueprintRunner {
     /// Create a new [`BlueprintRunnerBuilder`]
     ///
     /// See the usage section of [`BlueprintRunner`]
     pub fn builder<Conf: BlueprintConfig + 'static>(
         config: Conf,
         env: BlueprintEnvironment,
-    ) -> BlueprintRunnerBuilder<C, impl Future<Output = ()> + Send + 'static> {
+    ) -> BlueprintRunnerBuilder<impl Future<Output = ()> + Send + 'static> {
         BlueprintRunnerBuilder {
             config: DynBlueprintConfig::boxed(config),
             env,
@@ -665,7 +665,6 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> BlueprintRunner<C> {
             router: None,
             background_services: Vec::new(),
             shutdown_handler: future::pending(),
-            _consumer: PhantomData,
         }
     }
 }

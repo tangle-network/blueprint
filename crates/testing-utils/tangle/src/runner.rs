@@ -14,11 +14,11 @@ use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::Multiaddr;
 use blueprint_runner::error::{JobCallError, RunnerError as Error};
 use blueprint_runner::tangle::config::TangleConfig;
-use blueprint_tangle_extra::consumer::TangleConsumer;
-use blueprint_tangle_extra::producer::TangleProducer;
 use blueprint_std::fmt::{Debug, Formatter};
 use blueprint_std::pin::Pin;
 use blueprint_std::sync::Arc;
+use blueprint_tangle_extra::consumer::TangleConsumer;
+use blueprint_tangle_extra::producer::TangleProducer;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
@@ -235,7 +235,8 @@ impl HeartbeatConsumer for MockHeartbeatConsumer {
     fn send_heartbeat(
         &self,
         status: &HeartbeatStatus,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<(), blueprint_qos::error::Error>> + Send>> {
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<(), blueprint_qos::error::Error>> + Send>>
+    {
         let status = status.clone();
         let heartbeats = self.heartbeats.clone();
 

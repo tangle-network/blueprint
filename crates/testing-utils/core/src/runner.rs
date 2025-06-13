@@ -4,15 +4,15 @@ use blueprint_runner::BlueprintConfig;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::error::RunnerError as Error;
 // use blueprint_runner::metrics_server::MetricsServerAdapter; // Removed unused import
+use blueprint_qos::error::Result as QoSResult;
+use blueprint_qos::heartbeat::{HeartbeatConsumer, HeartbeatStatus};
 use blueprint_runner::{BackgroundService, BlueprintRunner, BlueprintRunnerBuilder};
 use std::future::{self, Pending}; // Consolidate Pending import
 use std::sync::Arc;
-use tokio::sync::oneshot;
-use blueprint_qos::heartbeat::{HeartbeatConsumer, HeartbeatStatus};
-use blueprint_qos::error::Result as QoSResult; // For the Result<()> in send_heartbeat
+use tokio::sync::oneshot; // For the Result<()> in send_heartbeat
 // use async_trait::async_trait; // Not needed as send_heartbeat is not async in trait
-use std::pin::Pin;
 use std::future::Future;
+use std::pin::Pin;
 
 // A background service that never completes on its own.
 // Its purpose is to keep the BlueprintRunner's main loop alive in test environments
@@ -56,7 +56,7 @@ pub struct TestRunner<Ctx> {
     router: Option<Router<Ctx>>,
     job_index: usize,
     #[doc(hidden)]
-    pub builder: Option<BlueprintRunnerBuilder<NoOpHeartbeatConsumer, Pending<()>>>,
+    pub builder: Option<BlueprintRunnerBuilder<Pending<()>>>,
     _phantom: core::marker::PhantomData<Ctx>,
 }
 

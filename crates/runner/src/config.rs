@@ -705,7 +705,6 @@ pub struct BlueprintSettings {
     #[arg(long, value_enum, env)]
     pub protocol: Option<Protocol>,
     #[arg(long, env)]
-
     // ========
     // NETWORKING
     // ========
