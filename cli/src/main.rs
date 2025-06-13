@@ -446,6 +446,9 @@ pub enum DebugCommands {
         binary: PathBuf,
         #[arg(long, default_value_t = Protocol::Tangle)]
         protocol: Protocol,
+        /// Disables the VM sandbox
+        #[arg(long)]
+        no_vm: bool,
         #[arg(long, default_value_t = true)]
         verify_network_connection: bool,
     },
@@ -827,6 +830,7 @@ async fn main() -> color_eyre::Result<()> {
                 service_name,
                 binary,
                 protocol,
+                no_vm,
                 verify_network_connection,
             } => {
                 match (&mut http_rpc_url, &mut ws_rpc_url) {
@@ -873,6 +877,7 @@ async fn main() -> color_eyre::Result<()> {
                     service_name,
                     binary,
                     protocol,
+                    no_vm,
                     verify_network_connection,
                 ))
                 .await?;

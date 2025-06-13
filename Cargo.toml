@@ -261,9 +261,9 @@ num_cpus = { version = "1.17", default-features = false }
 libc = { version = "0.2.147", default-features = false }
 
 # gRPC & Protocol Buffers
-tonic = { version = "0.11", default-features = false }
-prost = { version = "0.12", default-features = false }
-tonic-build = { version = "0.11", default-features = false }
+tonic = { version = "0.13.1", default-features = false }
+prost = { version = "0.13", default-features = false }
+tonic-build = { version = "0.13.1", default-features = false }
 
 # Testing
 test-log = { version = "0.2", default-features = false }

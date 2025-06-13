@@ -260,6 +260,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
         keystore_path.to_string_lossy().to_string(),
         None,
         data_dir_path,
+        None,
         SupportedChains::LocalTestnet,
         Protocol::Eigenlayer,
         ProtocolSettings::Eigenlayer(EigenlayerProtocolSettings::default()),

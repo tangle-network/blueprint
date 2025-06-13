@@ -83,6 +83,7 @@ where
             keystore_path.to_string_lossy().into_owned(),
             None,
             data_dir,
+            None,
             SupportedChains::LocalTestnet,
             eigenlayer_contract_addresses,
         );

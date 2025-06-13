@@ -61,6 +61,11 @@ pub struct BlueprintManagerConfig {
     pub instance_id: Option<String>,
     #[arg(long, short = 't')]
     pub test_mode: bool,
+    /// Disables the VM sandbox for native blueprints
+    ///
+    /// This should only be used for testing and never for production setups.
+    #[arg(long)]
+    pub no_vm: bool,
     /// Whether to allow invalid GitHub attestations (binary integrity checks)
     ///
     /// This will also allow for running the manager without the GitHub CLI installed.
@@ -154,6 +159,7 @@ impl Default for BlueprintManagerConfig {
             pretty: false,
             instance_id: None,
             test_mode: false,
+            no_vm: false,
             allow_unchecked_attestations: false,
             preferred_source: SourceType::default(),
             podman_host: DEFAULT_DOCKER_HOST.clone(),

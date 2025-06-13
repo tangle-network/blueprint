@@ -78,6 +78,7 @@ pub struct BlueprintEnvVars {
     pub protocol: Protocol,
     pub bootnodes: String,
     pub registration_mode: bool,
+    pub bridge_socket_path: Option<PathBuf>,
 }
 
 impl BlueprintEnvVars {
@@ -108,6 +109,7 @@ impl BlueprintEnvVars {
             protocol: blueprint.protocol,
             bootnodes,
             registration_mode: blueprint.registration_mode,
+            bridge_socket_path: env.bridge_socket_path.clone(),
         }
     }
 
@@ -123,6 +125,7 @@ impl BlueprintEnvVars {
             protocol,
             bootnodes,
             registration_mode,
+            bridge_socket_path,
         } = self;
 
         let chain = match http_rpc_endpoint.as_str() {
@@ -144,6 +147,13 @@ impl BlueprintEnvVars {
             ("CHAIN".to_string(), chain.to_string()),
             ("BOOTNODES".to_string(), bootnodes.clone()),
         ];
+
+        if let Some(bridge_socket_path) = bridge_socket_path {
+            env_vars.push((
+                "BRIDGE_SOCKET_PATH".to_string(),
+                bridge_socket_path.display().to_string(),
+            ));
+        }
 
         if *registration_mode {
             env_vars.push((

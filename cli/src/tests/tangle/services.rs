@@ -33,7 +33,7 @@ async fn test_register_request_and_list() -> Result<()> {
 
     std::env::set_current_dir(&blueprint_dir)?;
 
-    let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await?;
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::<()>::setup(temp_dir)).await?;
 
     let deployment_env = generate_env_from_node_id(
         "Bob",
@@ -122,7 +122,7 @@ async fn test_accept_request() -> Result<()> {
 
     std::env::set_current_dir(&blueprint_dir)?;
 
-    let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await?;
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::<()>::setup(temp_dir)).await?;
 
     let deployment_env = generate_env_from_node_id(
         "Bob",
@@ -224,7 +224,7 @@ async fn test_reject_request() -> Result<()> {
 
     std::env::set_current_dir(&blueprint_dir)?;
 
-    let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await?;
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::<()>::setup(temp_dir)).await?;
 
     let deployment_env = generate_env_from_node_id(
         "Bob",
@@ -315,7 +315,7 @@ async fn test_submit_job() -> Result<()> {
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(&blueprint_dir)?;
 
-    let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await?;
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::<()>::setup(temp_dir)).await?;
 
     let deployment_env = generate_env_from_node_id(
         "Bob",
