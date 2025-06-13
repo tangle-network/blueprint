@@ -13,15 +13,20 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+blueprint-core.workspace = true
+blueprint-auth.workspace = true
+
 tokio = { workspace = true, features = ["net"] }
-uuid.workspace = true
 tonic = { workspace = true, features = ["codegen", "transport", "prost"] }
 prost = { workspace = true, features = ["derive"] }
 tower = { workspace = true, features = ["util"] }
-tokio-stream.workspace = true
 thiserror.workspace = true
 tokio-vsock.workspace = true
-blueprint-auth.workspace = true
+hyper-util = { workspace = true, features = ["tokio"] }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
+
+[features]
+default = ["tracing"]
+tracing = ["blueprint-core/tracing"]

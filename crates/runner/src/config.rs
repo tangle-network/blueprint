@@ -239,6 +239,7 @@ pub struct BlueprintEnvironment {
     pub protocol_settings: ProtocolSettings,
     /// Whether the blueprint is in test mode
     pub test_mode: bool,
+    pub bridge_socket_path: Option<PathBuf>,
     #[serde(skip)]
     bridge: Arc<Mutex<Option<Arc<Bridge>>>>,
 
@@ -266,6 +267,7 @@ impl Default for BlueprintEnvironment {
             data_dir: PathBuf::default(),
             protocol_settings: ProtocolSettings::default(),
             test_mode: false,
+            bridge_socket_path: None,
             bridge: Arc::new(Mutex::new(None)),
 
             #[cfg(feature = "networking")]
@@ -328,6 +330,7 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
     let http_rpc_url = settings.http_rpc_url.clone();
     let ws_rpc_url = settings.ws_rpc_url.clone();
     let keystore_uri = settings.keystore_uri.clone();
+    let bridge_socket_path = settings.bridge_socket_path.clone();
 
     #[cfg(feature = "networking")]
     let bootnodes = settings.bootnodes.clone().unwrap_or_default();
@@ -349,6 +352,7 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         keystore_uri,
         data_dir,
         protocol_settings,
+        bridge_socket_path,
         bridge: Arc::new(Mutex::new(None)),
 
         #[cfg(feature = "networking")]
@@ -375,7 +379,7 @@ impl BlueprintEnvironment {
             return Ok(bridge.clone());
         }
 
-        let bridge = Arc::new(Bridge::connect().await?);
+        let bridge = Arc::new(Bridge::connect(self.bridge_socket_path.as_deref()).await?);
         *guard = Some(bridge.clone());
         Ok(bridge)
     }
@@ -500,6 +504,7 @@ impl ContextConfig {
         keystore_uri: String,
         keystore_password: Option<String>,
         data_dir: PathBuf,
+        bridge_socket_path: Option<PathBuf>,
         chain: SupportedChains,
         protocol: Protocol,
         protocol_settings: ProtocolSettings,
@@ -571,6 +576,7 @@ impl ContextConfig {
                 pretty: true,
                 keystore_password,
                 protocol: Some(protocol),
+                bridge_socket_path,
                 ws_rpc_url,
                 #[cfg(feature = "tangle")]
                 blueprint_id,
@@ -617,6 +623,7 @@ impl ContextConfig {
         keystore_uri: String,
         keystore_password: Option<String>,
         data_dir: PathBuf,
+        bridge_socket_path: Option<PathBuf>,
         chain: SupportedChains,
         protocol: Protocol,
         protocol_settings: ProtocolSettings,
@@ -627,6 +634,7 @@ impl ContextConfig {
             keystore_uri,
             keystore_password,
             data_dir,
+            bridge_socket_path,
             chain,
             protocol,
             protocol_settings,
@@ -636,12 +644,14 @@ impl ContextConfig {
     /// Creates a new context config with defaults for Eigenlayer
     #[cfg(feature = "eigenlayer")]
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn create_eigenlayer_config(
         http_rpc_url: Url,
         ws_rpc_url: Url,
         keystore_uri: String,
         keystore_password: Option<String>,
         data_dir: PathBuf,
+        bridge_socket_path: Option<PathBuf>,
         chain: SupportedChains,
         eigenlayer_contract_addresses: crate::eigenlayer::config::EigenlayerProtocolSettings,
     ) -> Self {
@@ -651,6 +661,7 @@ impl ContextConfig {
             keystore_uri,
             keystore_password,
             data_dir,
+            bridge_socket_path,
             chain,
             Protocol::Eigenlayer,
             ProtocolSettings::Eigenlayer(eigenlayer_contract_addresses),
@@ -667,6 +678,7 @@ impl ContextConfig {
         keystore_uri: String,
         keystore_password: Option<String>,
         data_dir: PathBuf,
+        bridge_socket_path: Option<PathBuf>,
         chain: SupportedChains,
         blueprint_id: u64,
         service_id: Option<u64>,
@@ -679,6 +691,7 @@ impl ContextConfig {
             keystore_uri,
             keystore_password,
             data_dir,
+            bridge_socket_path,
             chain,
             Protocol::Tangle,
             ProtocolSettings::Tangle(TangleProtocolSettings {
@@ -727,6 +740,8 @@ pub struct BlueprintSettings {
     /// The protocol to use
     #[arg(long, value_enum, env)]
     pub protocol: Option<Protocol>,
+    #[arg(long, env)]
+    pub bridge_socket_path: Option<PathBuf>,
 
     // ========
     // NETWORKING
@@ -891,6 +906,7 @@ impl Default for BlueprintSettings {
             pretty: false,
             keystore_password: None,
             protocol: None,
+            bridge_socket_path: None,
 
             // Networking
             #[cfg(feature = "networking")]

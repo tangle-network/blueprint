@@ -108,6 +108,7 @@ pub async fn generate_env_from_node_id(
         keystore_path.display().to_string(),
         None,
         data_dir,
+        None,
         SupportedChains::LocalTestnet,
         0,
         Some(0),
@@ -668,7 +669,7 @@ mod tests {
     #[tokio::test]
     async fn test_harness_setup() {
         let test_dir = TempDir::new().unwrap();
-        let harness = TangleTestHarness::<()>::setup(test_dir).await;
+        let harness = Box::pin(TangleTestHarness::<()>::setup(test_dir)).await;
         assert!(harness.is_ok(), "Harness setup should succeed");
 
         let harness = harness.unwrap();
@@ -681,7 +682,9 @@ mod tests {
     #[tokio::test]
     async fn test_deploy_mbsm() {
         let test_dir = TempDir::new().unwrap();
-        let harness = TangleTestHarness::<()>::setup(test_dir).await.unwrap();
+        let harness = Box::pin(TangleTestHarness::<()>::setup(test_dir))
+            .await
+            .unwrap();
 
         // MBSM should be deployed during setup
         let latest_revision = transactions::get_latest_mbsm_revision(harness.client())

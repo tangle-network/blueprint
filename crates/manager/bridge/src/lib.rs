@@ -1,11 +1,15 @@
 pub mod error;
-use blueprint_auth::models::ServiceOwnerModel;
 pub use error::Error;
 
 mod api;
 pub use api::*;
 
 use crate::blueprint_manager_bridge_client::BlueprintManagerBridgeClient;
+use blueprint_auth::models::ServiceOwnerModel;
+use blueprint_core::debug;
+use hyper_util::rt::TokioIo;
+use std::path::Path;
+use tokio::net::UnixStream;
 use tokio_vsock::{VsockAddr, VsockStream};
 use tonic::transport::Channel;
 
@@ -21,12 +25,36 @@ impl Bridge {
     ///
     /// # Errors
     /// - If the connection to the bridge fails.
-    pub async fn connect() -> Result<Self, Error> {
-        let channel = Channel::from_static("http://[::]:50051")
-            .connect_with_connector(tower::service_fn(move |_| {
-                VsockStream::connect(VsockAddr::new(tokio_vsock::VMADDR_CID_HOST, VSOCK_PORT))
-            }))
-            .await?;
+    pub async fn connect(socket_path: Option<&Path>) -> Result<Self, Error> {
+        let channel = match socket_path {
+            Some(path) => {
+                debug!("Connecting to UDS bridge at {}", path.display());
+
+                let path = path.to_path_buf();
+                Channel::from_static("http://[::]:50051")
+                    .connect_with_connector(tower::service_fn(move |_| {
+                        let path = path.clone();
+                        async move {
+                            Ok::<_, std::io::Error>(TokioIo::new(UnixStream::connect(&path).await?))
+                        }
+                    }))
+                    .await?
+            }
+            None => {
+                debug!("Connecting to VSOCK bridge at port {}", VSOCK_PORT);
+                Channel::from_static("http://[::]:50051")
+                    .connect_with_connector(tower::service_fn(|_| async {
+                        Ok::<_, std::io::Error>(TokioIo::new(
+                            VsockStream::connect(VsockAddr::new(
+                                tokio_vsock::VMADDR_CID_HOST,
+                                VSOCK_PORT,
+                            ))
+                            .await?,
+                        ))
+                    }))
+                    .await?
+            }
+        };
 
         Ok(Self {
             client: BlueprintManagerBridgeClient::new(channel),

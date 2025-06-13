@@ -48,11 +48,13 @@ fn create_bridge(
     runtime_dir: impl AsRef<Path>,
     service_name: &str,
     db: RocksDb,
+    no_vm: bool,
 ) -> Result<(PathBuf, BridgeHandle, oneshot::Receiver<()>)> {
     let bridge = Bridge::new(
         runtime_dir.as_ref().to_path_buf(),
         service_name.to_string(),
         db,
+        no_vm,
     );
     let bridge_base_socket = bridge.base_socket_path();
 
@@ -88,11 +90,14 @@ impl Service {
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
         binary_path: impl AsRef<Path>,
-        env_vars: BlueprintEnvVars,
+        mut env_vars: BlueprintEnvVars,
         arguments: BlueprintArgs,
     ) -> Result<Service> {
+        // Not used by sandboxed services
+        env_vars.bridge_socket_path = None;
+
         let (bridge_base_socket, bridge_handle, alive_rx) =
-            create_bridge(runtime_dir.as_ref(), service_name, db)?;
+            create_bridge(runtime_dir.as_ref(), service_name, db, false)?;
 
         let mut hypervisor = HypervisorInstance::new(
             vm_config,
@@ -139,11 +144,13 @@ impl Service {
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
         binary_path: impl AsRef<Path>,
-        env_vars: BlueprintEnvVars,
+        mut env_vars: BlueprintEnvVars,
         arguments: BlueprintArgs,
     ) -> Result<Service> {
-        let (_bridge_base_socket, bridge_handle, alive_rx) =
-            create_bridge(runtime_dir.as_ref(), service_name, db)?;
+        let (bridge_base_socket, bridge_handle, alive_rx) =
+            create_bridge(runtime_dir.as_ref(), service_name, db, true)?;
+
+        env_vars.bridge_socket_path = Some(bridge_base_socket);
 
         Ok(Self {
             runtime: Runtime::Native(NativeProcess::NotStarted(NativeProcessInfo {

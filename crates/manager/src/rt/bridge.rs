@@ -39,15 +39,17 @@ pub struct Bridge {
     runtime_dir: PathBuf,
     service_name: String,
     db: RocksDb,
+    no_vm: bool,
 }
 
 impl Bridge {
     #[must_use]
-    pub fn new(runtime_dir: PathBuf, service_name: String, db: RocksDb) -> Self {
+    pub fn new(runtime_dir: PathBuf, service_name: String, db: RocksDb, no_vm: bool) -> Self {
         Self {
             runtime_dir,
             service_name,
             db,
+            no_vm,
         }
     }
 
@@ -73,6 +75,28 @@ impl Bridge {
     ///
     /// [HypervisorInstance]: crate::rt::hypervisor::HypervisorInstance
     pub fn spawn(self) -> Result<(BridgeHandle, oneshot::Receiver<()>), Error> {
+        let (sock_path, listener) = if self.no_vm {
+            self.spawn_for_native()?
+        } else {
+            self.spawn_for_vm()?
+        };
+
+        let (tx, rx) = oneshot::channel();
+
+        let handle = tokio::task::spawn(async move {
+            Server::builder()
+                .add_service(BlueprintManagerBridgeServer::new(BridgeService::new(
+                    tx, self.db,
+                )))
+                .serve_with_incoming(UnixListenerStream::new(listener))
+                .await
+                .map_err(Error::from)
+        });
+
+        Ok((BridgeHandle { sock_path, handle }, rx))
+    }
+
+    fn spawn_for_vm(&self) -> Result<(PathBuf, UnixListener), Error> {
         let sock_path = self.guest_socket_path();
         let _ = std::fs::remove_file(&sock_path);
         let listener = UnixListener::bind(&sock_path).map_err(|e| {
@@ -88,19 +112,27 @@ impl Bridge {
             self.service_name
         );
 
-        let (tx, rx) = oneshot::channel();
+        Ok((sock_path, listener))
+    }
 
-        let handle = tokio::task::spawn(async move {
-            Server::builder()
-                .add_service(BlueprintManagerBridgeServer::new(BridgeService::new(
-                    tx, self.db,
-                )))
-                .serve_with_incoming(UnixListenerStream::new(listener))
-                .await
-                .map_err(Error::from)
-        });
+    fn spawn_for_native(&self) -> Result<(PathBuf, UnixListener), Error> {
+        let sock_path = self.base_socket_path();
+        let _ = std::fs::remove_file(&sock_path);
+        let listener = UnixListener::bind(&sock_path).map_err(|e| {
+            error!(
+                "Failed to bind bridge socket at {}: {e}",
+                sock_path.display()
+            );
+            e
+        })?;
 
-        Ok((BridgeHandle { sock_path, handle }, rx))
+        info!(
+            "Connected to bridge for service `{}`, listening on socket `{}`",
+            self.service_name,
+            sock_path.display()
+        );
+
+        Ok((sock_path, listener))
     }
 }
 

@@ -77,8 +77,8 @@ rust_decimal = { workspace = true, features = ["serde"] }
 
 
 # gRPC
-tonic = { workspace = true, features = ["transport", "codegen", "prost"] }
-prost = { workspace = true, features = ["prost-derive"] }
+tonic = { workspace = true, features = ["transport", "codegen", "prost", "router"] }
+prost = { workspace = true, features = ["derive"] }
 
 # Proof of work
 sha2 = { workspace = true }
