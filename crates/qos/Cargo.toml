@@ -21,7 +21,6 @@ blueprint-keystore = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 tangle-subxt = { workspace = true, features = ["std"] }
 parity-scale-codec = { workspace = true, features = ["derive"] }
-blueprint-client-tangle = { workspace = true }
 sp-core = { workspace = true, features = ["std"] }
 
 thiserror = { workspace = true }
@@ -79,6 +78,5 @@ std = [
     "blueprint-core/std",
     "blueprint-crypto/std",
     "blueprint-keystore/std",
-    "blueprint-client-tangle/std",
     "sp-core/std",
 ]

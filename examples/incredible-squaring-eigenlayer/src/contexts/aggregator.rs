@@ -44,7 +44,7 @@ impl AggregatorContext {
         let mut aggregator_context = AggregatorContext {
             port_address,
             task_manager_address,
-            http_rpc_url: env.http_rpc_endpoint.clone(),
+            http_rpc_url: env.http_rpc_endpoint.clone().to_string(),
             wallet,
             response_cache: Arc::new(Mutex::new(VecDeque::new())),
             env: env.clone(),
@@ -64,7 +64,7 @@ impl AggregatorContext {
         // Create the response sender
         let response_sender = SquaringTaskResponseSender {
             task_manager_address,
-            http_rpc_url: env.http_rpc_endpoint.clone(),
+            http_rpc_url: env.http_rpc_endpoint.clone().to_string(),
         };
 
         // Create the task aggregator with default config

@@ -13,6 +13,7 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+blueprint-runner = { workspace = true, features = ["tangle"] }
 blueprint-core = { workspace = true }
 blueprint-std = { workspace = true }
 blueprint-client-core = { workspace = true }
@@ -30,6 +31,7 @@ tokio = { workspace = true }
 [features]
 default = ["std", "tracing"]
 std = [
+	"blueprint-runner/std",
 	"blueprint-client-core/std",
 	"blueprint-keystore/std",
 	"blueprint-std/std",

@@ -2,7 +2,6 @@ use crate::error::Result;
 use blueprint_crypto::sp_core::SpSr25519;
 use blueprint_crypto::{hashing, sp_core::SpEcdsa};
 
-use blueprint_client_tangle::client::TangleClient;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use sp_core::{Pair, ecdsa::Signature as SpEcdsaSignature};
@@ -72,13 +71,11 @@ pub trait HeartbeatConsumer: Send + Sync + 'static {
 /// Service for sending heartbeats to the chain
 #[derive(Clone)]
 pub struct HeartbeatService<C: HeartbeatConsumer + Send + Sync + 'static> {
-    // C (HeartbeatConsumer) is now a trait object
     config: HeartbeatConfig,
     consumer: Arc<C>,
     last_heartbeat: Arc<Mutex<Option<HeartbeatStatus>>>,
     running: Arc<Mutex<bool>>,
     task_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
-    http_rpc_endpoint: String,
     ws_rpc_endpoint: String,
     keystore_uri: String,
     service_id: u64,
@@ -119,14 +116,16 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
             "Attempting to send heartbeat to chain..."
         );
 
-        let client = TangleClient::new(
-            ws_rpc_endpoint.clone(), // Use passed parameter
-            keystore_uri.clone(),    // Use passed parameter
-            blueprint_id,            // Use passed parameter (direct service_id for TangleClient)
-            service_id,              // Use passed parameter (direct blueprint_id for TangleClient)
-        )
-        .await
-        .map_err(|e| crate::error::Error::Other(format!("Failed to create TangleClient: {}", e)))?;
+        // let client = TangleClient::new(
+        //     ws_rpc_endpoint.clone(), // Use passed parameter
+        //     keystore_uri.clone(),    // Use passed parameter
+        //     blueprint_id,            // Use passed parameter (direct service_id for TangleClient)
+        //     service_id,              // Use passed parameter (direct blueprint_id for TangleClient)
+        // )
+        // .await
+        // .map_err(|e| crate::error::Error::Other(format!("Failed to create TangleClient: {}", e)))?;
+
+        let client = tangle_subxt::subxt::OnlineClient::from_insecure_url(ws_rpc_endpoint.clone()).await.unwrap();
 
         let keystore_config = blueprint_keystore::KeystoreConfig::new().fs_root(keystore_uri.clone());
         let keystore = blueprint_keystore::Keystore::new(keystore_config).map_err(|e| {
@@ -207,7 +206,6 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
     pub fn new(
         config: HeartbeatConfig,
         consumer: Arc<C>,
-        http_rpc_endpoint: String,
         ws_rpc_endpoint: String,
         keystore_uri: String,
         service_id: u64,
@@ -219,7 +217,6 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
             last_heartbeat: Arc::new(Mutex::new(None)),
             running: Arc::new(Mutex::new(false)),
             task_handle: Arc::new(Mutex::new(None)),
-            http_rpc_endpoint,
             ws_rpc_endpoint,
             keystore_uri,
             service_id,
@@ -246,71 +243,60 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
     /// # Errors
     /// Returns an error if the service is already running
     pub async fn start_heartbeat(&self) -> Result<()> {
-        let mut running = self.running.lock().await;
-        if *running {
-            return Err(crate::error::Error::Other(
-                "Heartbeat service is already running".to_string(),
-            ));
-        }
+        let initial_jitter_percent = self.config.jitter_percent;
+        let initial_interval_ms = self.config.interval_secs * 1000;
+        let initial_jitter = if initial_jitter_percent > 0 {
+            let max_jitter = (initial_interval_ms as f64 * (initial_jitter_percent as f64 / 100.0)) as u64;
+            rand::thread_rng().gen_range(0..=max_jitter)
+        } else {
+            0
+        };
+        tokio::time::sleep(Duration::from_millis(initial_jitter)).await;
 
-        *running = true;
-        drop(running);
-
-        let service = self.clone();
-        let interval_secs = self.config.interval_secs;
-        let jitter_percent = self.config.jitter_percent;
+        // Extract all necessary data to be moved into the async block
+        let config_service_id = self.config.service_id;
+        let config_blueprint_id = self.config.blueprint_id;
+        let consumer = Arc::clone(&self.consumer);
+        let last_heartbeat_lock = Arc::clone(&self.last_heartbeat);
+        let ws_rpc_endpoint = self.ws_rpc_endpoint.clone();
+        let keystore_uri = self.keystore_uri.clone();
+        let service_id = self.service_id;
+        let blueprint_id = self.blueprint_id;
+        let interval_ms = self.config.interval_secs * 1000;
+        let jitter_percent_val = self.config.jitter_percent;
+        let running_status = Arc::clone(&self.running);
 
         let handle = tokio::spawn(async move {
+            let base_interval = Duration::from_millis(interval_ms);
             loop {
-                                let cfg_service_id = service.config.service_id;
-                let cfg_blueprint_id = service.config.blueprint_id;
-                let consumer_clone = Arc::clone(&service.consumer);
-                let last_heartbeat_clone = Arc::clone(&service.last_heartbeat);
-                let ws_endpoint_clone = service.ws_rpc_endpoint.clone();
-                let keystore_clone = service.keystore_uri.clone();
-                let service_id_val = service.service_id; // direct field
-                let blueprint_id_val = service.blueprint_id; // direct field
+                if !*running_status.lock().await {
+                    info!("Heartbeat service stopping as requested.");
+                    break;
+                }
 
+                // Clone Arcs and Strings for the call as do_send_heartbeat takes them by value
                 if let Err(e) = HeartbeatService::do_send_heartbeat(
-                    cfg_service_id,
-                    cfg_blueprint_id,
-                    consumer_clone,
-                    last_heartbeat_clone,
-                    ws_endpoint_clone,
-                    keystore_clone,
-                    service_id_val,
-                    blueprint_id_val,
+                    config_service_id,
+                    config_blueprint_id,
+                    Arc::clone(&consumer),
+                    Arc::clone(&last_heartbeat_lock),
+                    ws_rpc_endpoint.clone(),
+                    keystore_uri.clone(),
+                    service_id,
+                    blueprint_id,
                 ).await {
                     warn!("Failed to send heartbeat: {}", e);
                 }
-                let sleep_duration = if jitter_percent > 0 {
-                    let interval_ms = interval_secs * 1000;
-                    let max_jitter_ms = (interval_ms * u64::from(jitter_percent)) / 100;
 
-                    let mut rng = rand::thread_rng();
-                    let jitter_ms = if max_jitter_ms > 0 {
-                        #[allow(clippy::cast_possible_wrap)]
-                        let max_jitter_ms_i64 = max_jitter_ms as i64;
-                        rng.gen_range(-max_jitter_ms_i64..max_jitter_ms_i64)
-                    } else {
-                        0
-                    };
-
-                    #[allow(clippy::cast_possible_wrap)]
-                    let final_ms = interval_ms as i64 + jitter_ms;
-                    let final_ms = final_ms.max(100);
-
-                    #[allow(clippy::cast_sign_loss)]
-                    Duration::from_millis(final_ms as u64)
+                let sleep_duration = if jitter_percent_val > 0 {
+                    let max_jitter = (interval_ms as f64 * (jitter_percent_val as f64 / 100.0)) as u64;
+                    let current_jitter = rand::thread_rng().gen_range(0..=max_jitter);
+                    base_interval + Duration::from_millis(current_jitter)
                 } else {
-                    Duration::from_secs(interval_secs)
+                    base_interval
                 };
 
                 tokio::time::sleep(sleep_duration).await;
-
-                if !*service.running.lock().await {
-                    break;
-                }
             }
         });
 

@@ -8,6 +8,7 @@ use blueprint_evm_extra::util::get_provider_http;
 use blueprint_runner::config::{BlueprintEnvironment, ContextConfig, SupportedChains};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use std::marker::PhantomData;
+use std::path::PathBuf;
 use tempfile::TempDir;
 use url::Url;
 
@@ -77,8 +78,9 @@ where
         let context_config = ContextConfig::create_eigenlayer_config(
             Url::parse(&http_endpoint)?,
             Url::parse(&ws_endpoint)?,
-            test_dir_path,
+            test_dir_path.clone(),
             None,
+            PathBuf::from(test_dir_path),
             SupportedChains::LocalTestnet,
             eigenlayer_contract_addresses,
         );

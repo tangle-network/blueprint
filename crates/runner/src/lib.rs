@@ -35,6 +35,9 @@ use futures_util::{SinkExt, StreamExt, TryStreamExt, stream};
 use std::sync::Arc;
 use tokio::sync::{Mutex, oneshot};
 use tower::Service;
+use std::marker::PhantomData;
+use crate::error::RunnerError;
+use blueprint_qos::heartbeat::HeartbeatConsumer;
 
 /// Configuration for the blueprint registration procedure
 #[dynosaur::dynosaur(DynBlueprintConfig)]
@@ -120,7 +123,7 @@ type Consumer = Arc<Mutex<Box<dyn Sink<JobResult, Error = BoxError> + Send + Unp
 /// A builder for a [`BlueprintRunner`]
 ///
 /// This is created with [`BlueprintRunner::builder()`].
-pub struct BlueprintRunnerBuilder<F> {
+pub struct BlueprintRunnerBuilder<C: HeartbeatConsumer + Send + Sync + 'static, F> {
     config: Box<DynBlueprintConfig<'static>>,
     env: BlueprintEnvironment,
     producers: Vec<Producer>,
@@ -128,9 +131,10 @@ pub struct BlueprintRunnerBuilder<F> {
     router: Option<Router>,
     background_services: Vec<Box<DynBackgroundService<'static>>>,
     shutdown_handler: F,
+    _consumer: PhantomData<C>,
 }
 
-impl<F> BlueprintRunnerBuilder<F>
+impl<C: HeartbeatConsumer + Send + Sync + 'static, F> BlueprintRunnerBuilder<C, F>
 where
     F: Future<Output = ()> + Send + 'static,
 {
@@ -256,17 +260,17 @@ where
     #[must_use]
     pub fn heartbeat_service(
         mut self,
-        service: blueprint_qos::heartbeat::HeartbeatService,
+        service: blueprint_qos::heartbeat::HeartbeatService<C>,
     ) -> Self {
-        struct HeartbeatServiceAdapter {
-            #[allow(dead_code)]
-            service: blueprint_qos::heartbeat::HeartbeatService,
+        #[derive(Clone)]
+        struct HeartbeatServiceAdapter<C: HeartbeatConsumer + Send + Sync + 'static> {
+            service: blueprint_qos::heartbeat::HeartbeatService<C>,
         }
 
-        impl BackgroundService for HeartbeatServiceAdapter {
+        impl<C: HeartbeatConsumer + Send + Sync + 'static> BackgroundService for HeartbeatServiceAdapter<C> {
             async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
+                self.service.start_heartbeat().await.map_err(|e| RunnerError::Other(e.into()))?;
                 let (_tx, rx) = oneshot::channel();
-
                 Ok(rx)
             }
         }
@@ -337,13 +341,13 @@ where
     pub fn qos_service(
         mut self,
         config: blueprint_qos::QoSConfig,
-        heartbeat_consumer: Option<Arc<dyn blueprint_qos::heartbeat::HeartbeatConsumer>>,
+        heartbeat_consumer: Option<Arc<C>>,
     ) -> Self {
-        struct QoSServiceAdapter {
-            qos_service: Arc<Mutex<Option<blueprint_qos::QoSService>>>,
+        struct QoSServiceAdapter<C: HeartbeatConsumer + Send + Sync + 'static> {
+            qos_service: Arc<Mutex<Option<blueprint_qos::QoSService<C>>>>,
         }
 
-        impl BackgroundService for QoSServiceAdapter {
+        impl<C: HeartbeatConsumer + Send + Sync + 'static> BackgroundService for QoSServiceAdapter<C> {
             async fn start(
                 &self,
             ) -> Result<
@@ -364,14 +368,14 @@ where
         }
 
         // Create a placeholder for the QoSService, which will be initialized asynchronously.
-        let qos_service_arc = Arc::new(Mutex::new(None::<blueprint_qos::QoSService>));
+        let qos_service_arc = Arc::new(Mutex::new(None::<blueprint_qos::QoSService<C>>));
         let qos_service_arc_clone = qos_service_arc.clone();
         let _env_clone = self.env.clone(); // Clone env for the async task
 
         // Spawn a task to build the QoSService asynchronously
         tokio::spawn(async move {
             blueprint_core::debug!(target: "blueprint-runner", "Initializing QoS Service asynchronously...");
-            let mut builder = blueprint_qos::QoSServiceBuilder::new()
+            let mut builder = blueprint_qos::QoSServiceBuilder::<C>::new()
                 .with_config(config) // Use the 'config' argument passed to qos_service
                 .manage_servers(true); // Assuming we want to manage servers like Prometheus
 
@@ -391,7 +395,7 @@ where
             }
         });
 
-        let adapter = QoSServiceAdapter {
+        let adapter = QoSServiceAdapter::<C> {
             qos_service: qos_service_arc,
         };
         self.background_services
@@ -498,7 +502,7 @@ where
     ///     // ...
     /// }
     /// ```
-    pub fn with_shutdown_handler<F2>(self, handler: F2) -> BlueprintRunnerBuilder<F2>
+    pub fn with_shutdown_handler<F2>(self, handler: F2) -> BlueprintRunnerBuilder<C, F2>
     where
         F2: Future<Output = ()> + Send + 'static,
     {
@@ -510,6 +514,7 @@ where
             router: self.router,
             background_services: self.background_services,
             shutdown_handler: handler,
+            _consumer: PhantomData,
         }
     }
 
@@ -640,16 +645,18 @@ where
 ///
 /// [Consumers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/consumers/index.html
 /// [Producers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/producers/index.html
-pub struct BlueprintRunner;
+pub struct BlueprintRunner<C: HeartbeatConsumer + Send + Sync + 'static> {
+    _consumer: PhantomData<C>,
+}
 
-impl BlueprintRunner {
+impl<C: HeartbeatConsumer + Send + Sync + 'static> BlueprintRunner<C> {
     /// Create a new [`BlueprintRunnerBuilder`]
     ///
     /// See the usage section of [`BlueprintRunner`]
-    pub fn builder<C: BlueprintConfig + 'static>(
-        config: C,
+    pub fn builder<Conf: BlueprintConfig + 'static>(
+        config: Conf,
         env: BlueprintEnvironment,
-    ) -> BlueprintRunnerBuilder<impl Future<Output = ()> + Send + 'static> {
+    ) -> BlueprintRunnerBuilder<C, impl Future<Output = ()> + Send + 'static> {
         BlueprintRunnerBuilder {
             config: DynBlueprintConfig::boxed(config),
             env,
@@ -658,6 +665,7 @@ impl BlueprintRunner {
             router: None,
             background_services: Vec::new(),
             shutdown_handler: future::pending(),
+            _consumer: PhantomData,
         }
     }
 }

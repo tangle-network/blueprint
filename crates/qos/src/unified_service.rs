@@ -59,13 +59,11 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
             // Parameters are now passed directly
             let http_rpc = http_rpc_endpoint.clone();
             let ws_rpc = ws_rpc_endpoint.clone();
-            let keystore_uri_val = keystore_uri.clone();
             Arc::new(HeartbeatService::new(
                 hc.clone(),
                 heartbeat_consumer.clone(),
                 http_rpc,
                 ws_rpc,
-                keystore_uri_val,
                 hc.service_id,
                 hc.blueprint_id,
             ))

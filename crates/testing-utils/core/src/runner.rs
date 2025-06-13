@@ -5,16 +5,35 @@ use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::error::RunnerError as Error;
 // use blueprint_runner::metrics_server::MetricsServerAdapter; // Removed unused import
 use blueprint_runner::{BackgroundService, BlueprintRunner, BlueprintRunnerBuilder};
-use std::future; // Retained for `Pending` type and potential `future::pending` elsewhere
-use std::future::Pending;
+use std::future::{self, Pending}; // Consolidate Pending import
 use std::sync::Arc;
 use tokio::sync::oneshot;
+use blueprint_qos::heartbeat::{HeartbeatConsumer, HeartbeatStatus};
+use blueprint_qos::error::Result as QoSResult; // For the Result<()> in send_heartbeat
+// use async_trait::async_trait; // Not needed as send_heartbeat is not async in trait
+use std::pin::Pin;
+use std::future::Future;
 
 // A background service that never completes on its own.
 // Its purpose is to keep the BlueprintRunner's main loop alive in test environments
 // where there might not be any active producers, but background services (like QoS)
 // need to continue running for the duration of the test.
 struct KeepAliveService;
+
+// A no-operation HeartbeatConsumer for testing purposes.
+#[derive(Default, Clone)]
+pub struct NoOpHeartbeatConsumer;
+
+// #[async_trait] // send_heartbeat itself returns a Pinned Future, so async_trait might not be needed directly on the impl block
+impl HeartbeatConsumer for NoOpHeartbeatConsumer {
+    fn send_heartbeat(
+        &self,
+        _status: &HeartbeatStatus,
+    ) -> Pin<Box<dyn Future<Output = QoSResult<()>> + Send + 'static>> {
+        blueprint_core::trace!("NoOpHeartbeatConsumer: send_heartbeat called (and ignored).");
+        Box::pin(async { Ok(()) })
+    }
+}
 
 impl BackgroundService for KeepAliveService {
     async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
@@ -37,7 +56,7 @@ pub struct TestRunner<Ctx> {
     router: Option<Router<Ctx>>,
     job_index: usize,
     #[doc(hidden)]
-    pub builder: Option<BlueprintRunnerBuilder<Pending<()>>>,
+    pub builder: Option<BlueprintRunnerBuilder<NoOpHeartbeatConsumer, Pending<()>>>,
     _phantom: core::marker::PhantomData<Ctx>,
 }
 
@@ -50,7 +69,7 @@ where
         C: BlueprintConfig + 'static,
     {
         let builder = BlueprintRunner::builder(config, env)
-            .with_shutdown_handler(future::pending())
+            .with_shutdown_handler(future::pending::<()>())
             .background_service(KeepAliveService); // Add KeepAliveService
         blueprint_core::error!("!!! TestRunner::new - KeepAliveService ADDED to builder !!!");
         TestRunner {

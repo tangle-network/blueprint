@@ -10,29 +10,10 @@ pub trait TangleClientContext {
 
 impl TangleClientContext for BlueprintEnvironment {
     async fn tangle_client(&self) -> Result<TangleClient, Error> {
-        let keystore = self.keystore()?;
-        let ws_rpc_endpoint = self.ws_rpc_endpoint.clone().ok_or_else(|| {
-            Error::Config("Missing ws_rpc_endpoint in BlueprintEnvironment".into())
-        })?;
-        let keystore_uri = self
-            .keystore_uri
-            .clone()
-            .ok_or_else(|| Error::Config("Missing keystore_uri in BlueprintEnvironment".into()))?;
-
-        let tangle_settings = self.protocol_settings.tangle().map_err(Error::Config)?;
-        let blueprint_id = tangle_settings.blueprint_id;
-        let service_id = tangle_settings.service_id.ok_or_else(|| {
-            Error::Config(
-                "Missing service_id in TangleProtocolSettings for BlueprintEnvironment".into(),
-            )
-        })?;
-
+        let keystore = self.keystore();
         TangleClient::with_keystore(
-            ws_rpc_endpoint,
+            self.clone(),
             keystore,
-            blueprint_id,
-            service_id,
-            keystore_uri,
         )
         .await
         .map_err(Into::into)

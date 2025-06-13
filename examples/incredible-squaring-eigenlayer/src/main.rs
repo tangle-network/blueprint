@@ -33,7 +33,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
         .parse()
         .expect("failed to generate wallet ");
     let wallet = EthereumWallet::from(signer);
-    let provider = get_wallet_provider_http(&env.http_rpc_endpoint, wallet.clone());
+    let provider = get_wallet_provider_http(env.http_rpc_endpoint.as_str(), wallet.clone());
 
     let server_address = format!("{}:{}", "127.0.0.1", 8081);
     let eigen_client_context = EigenSquareContext {
@@ -70,7 +70,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
 
     info!("~~~ Executing the incredible squaring blueprint ~~~");
     let eigen_config = EigenlayerBLSConfig::new(Address::default(), Address::default());
-    BlueprintRunner::builder(eigen_config, BlueprintEnvironment::default())
+    BlueprintRunner::<MockHeartbeatConsumer>::builder(eigen_config, BlueprintEnvironment::default())
         .router(
             Router::new()
                 .route(XSQUARE_JOB_ID, xsquare_eigen)

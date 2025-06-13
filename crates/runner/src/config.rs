@@ -322,7 +322,6 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
     let http_rpc_url = settings.http_rpc_url.clone();
     let ws_rpc_url = settings.ws_rpc_url.clone();
     let keystore_uri = settings.keystore_uri.clone();
-    let bridge_socket_path = settings.bridge_socket_path.clone();
 
     #[cfg(feature = "networking")]
     let bootnodes = settings.bootnodes.clone().unwrap_or_default();
@@ -477,7 +476,6 @@ impl ContextConfig {
         keystore_uri: String,
         keystore_password: Option<String>,
         data_dir: PathBuf,
-        bridge_socket_path: Option<PathBuf>,
         chain: SupportedChains,
         protocol: Protocol,
         protocol_settings: ProtocolSettings,
@@ -549,7 +547,6 @@ impl ContextConfig {
                 pretty: true,
                 keystore_password,
                 protocol: Some(protocol),
-                bridge_socket_path,
                 ws_rpc_url,
                 #[cfg(feature = "tangle")]
                 blueprint_id,
@@ -596,7 +593,6 @@ impl ContextConfig {
         keystore_uri: String,
         keystore_password: Option<String>,
         data_dir: PathBuf,
-        bridge_socket_path: Option<PathBuf>,
         chain: SupportedChains,
         protocol: Protocol,
         protocol_settings: ProtocolSettings,
@@ -607,7 +603,6 @@ impl ContextConfig {
             keystore_uri,
             keystore_password,
             data_dir,
-            bridge_socket_path,
             chain,
             protocol,
             protocol_settings,
@@ -624,7 +619,6 @@ impl ContextConfig {
         keystore_uri: String,
         keystore_password: Option<String>,
         data_dir: PathBuf,
-        bridge_socket_path: Option<PathBuf>,
         chain: SupportedChains,
         eigenlayer_contract_addresses: crate::eigenlayer::config::EigenlayerProtocolSettings,
     ) -> Self {
@@ -634,7 +628,6 @@ impl ContextConfig {
             keystore_uri,
             keystore_password,
             data_dir,
-            bridge_socket_path,
             chain,
             Protocol::Eigenlayer,
             ProtocolSettings::Eigenlayer(eigenlayer_contract_addresses),
@@ -651,7 +644,6 @@ impl ContextConfig {
         keystore_uri: String,
         keystore_password: Option<String>,
         data_dir: PathBuf,
-        bridge_socket_path: Option<PathBuf>,
         chain: SupportedChains,
         blueprint_id: u64,
         service_id: Option<u64>,
@@ -664,7 +656,6 @@ impl ContextConfig {
             keystore_uri,
             keystore_password,
             data_dir,
-            bridge_socket_path,
             chain,
             Protocol::Tangle,
             ProtocolSettings::Tangle(TangleProtocolSettings {
@@ -714,7 +705,6 @@ pub struct BlueprintSettings {
     #[arg(long, value_enum, env)]
     pub protocol: Option<Protocol>,
     #[arg(long, env)]
-    pub bridge_socket_path: Option<PathBuf>,
 
     // ========
     // NETWORKING
@@ -879,7 +869,6 @@ impl Default for BlueprintSettings {
             pretty: false,
             keystore_password: None,
             protocol: None,
-            bridge_socket_path: None,
 
             // Networking
             #[cfg(feature = "networking")]

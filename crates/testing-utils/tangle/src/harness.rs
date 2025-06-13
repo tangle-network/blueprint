@@ -101,6 +101,7 @@ pub async fn generate_env_from_node_id(
         ws_endpoint,
         keystore_path.display().to_string(),
         None,
+        PathBuf::from(keystore_path.display().to_string()),
         SupportedChains::LocalTestnet,
         0,
         Some(0),
