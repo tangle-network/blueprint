@@ -165,7 +165,6 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
             crate::error::Error::Other("Heartbeat consumer is required".to_string())
         })?;
 
-        let http_rpc = self.http_rpc_endpoint.unwrap_or_default();
         let ws_rpc = self.ws_rpc_endpoint.unwrap_or_default();
         let keystore = self.keystore_uri.unwrap_or_default();
 
@@ -173,14 +172,13 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
             QoSService::with_otel_config(
                 self.config,
                 heartbeat_consumer,
-                http_rpc,
                 ws_rpc,
                 keystore,
                 otel_config,
             )
             .await
         } else {
-            QoSService::new(self.config, heartbeat_consumer, http_rpc, ws_rpc, keystore).await
+            QoSService::new(self.config, heartbeat_consumer, ws_rpc, keystore).await
         }
     }
 }

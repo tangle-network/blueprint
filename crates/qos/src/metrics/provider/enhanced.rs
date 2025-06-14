@@ -75,7 +75,7 @@ impl EnhancedMetricsProvider {
         // The OpenTelemetryExporter will configure its underlying opentelemetry_prometheus::Exporter
         // to use this shared_registry.
         let otel_exporter_instance =
-            OpenTelemetryExporter::new(otel_config, shared_registry.clone())?;
+            OpenTelemetryExporter::new(&otel_config, shared_registry.clone())?;
 
         // The underlying opentelemetry_prometheus::Exporter is already configured to use the shared_registry.
         // Explicitly registering our OpenTelemetryExporter wrapper (which calls shared_registry.gather() in its own collect method)

@@ -82,48 +82,51 @@ pub struct HeartbeatService<C: HeartbeatConsumer + Send + Sync + 'static> {
     blueprint_id: u64,
 }
 
+struct HeartbeatContextArgs<C: HeartbeatConsumer + Send + Sync + 'static> {
+    config_service_id: u64,
+    config_blueprint_id: u64,
+    consumer: Arc<C>,
+    last_heartbeat_lock: Arc<Mutex<Option<HeartbeatStatus>>>,
+    ws_rpc_endpoint: String,
+    keystore_uri: String,
+    instance_service_id: u64,
+    instance_blueprint_id: u64,
+}
+
 impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
-    async fn do_send_heartbeat(
-        config_service_id: u64,
-        config_blueprint_id: u64,
-        consumer: Arc<C>,
-        last_heartbeat_lock: Arc<Mutex<Option<HeartbeatStatus>>>,
-        ws_rpc_endpoint: String,
-        keystore_uri: String,
-        service_id: u64,
-        blueprint_id: u64,
-    ) -> Result<()> {
-        // --- Part 1: Local heartbeat via consumer ---
+    async fn do_send_heartbeat(args: HeartbeatContextArgs<C>) -> Result<()> {
+        let HeartbeatContextArgs {
+            config_service_id,
+            config_blueprint_id,
+            consumer,
+            last_heartbeat_lock,
+            ws_rpc_endpoint,
+            keystore_uri,
+            instance_service_id,
+            instance_blueprint_id,
+        } = args;
         let status = HeartbeatStatus {
-            block_number: 0, // For local consumer, block_number might not be critical or fetched from chain here
+            block_number: 0,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_err(|e| crate::error::Error::Other(format!("System time error: {}", e)))?
                 .as_secs(),
-            service_id: config_service_id,     // Use passed parameter
-            blueprint_id: config_blueprint_id, // Use passed parameter
-            status_code: 0,                    // Assuming 0 is OK
+            service_id: config_service_id,
+            blueprint_id: config_blueprint_id,
+            status_code: 0,
             status_message: None,
         };
 
         consumer.send_heartbeat(&status).await?;
         *last_heartbeat_lock.lock().await = Some(status.clone());
 
-        // --- Part 2: On-chain heartbeat ---
         info!(
             service_id = config_service_id,
             blueprint_id = config_blueprint_id,
+            instance_service_id = instance_service_id,
+            instance_blueprint_id = instance_blueprint_id,
             "Attempting to send heartbeat to chain..."
         );
-
-        // let client = TangleClient::new(
-        //     ws_rpc_endpoint.clone(), // Use passed parameter
-        //     keystore_uri.clone(),    // Use passed parameter
-        //     blueprint_id,            // Use passed parameter (direct service_id for TangleClient)
-        //     service_id,              // Use passed parameter (direct blueprint_id for TangleClient)
-        // )
-        // .await
-        // .map_err(|e| crate::error::Error::Other(format!("Failed to create TangleClient: {}", e)))?;
 
         let client = tangle_subxt::subxt::OnlineClient::from_insecure_url(ws_rpc_endpoint.clone())
             .await
@@ -247,15 +250,13 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         let initial_jitter_percent = self.config.jitter_percent;
         let initial_interval_ms = self.config.interval_secs * 1000;
         let initial_jitter = if initial_jitter_percent > 0 {
-            let max_jitter =
-                (initial_interval_ms as f64 * (initial_jitter_percent as f64 / 100.0)) as u64;
+            let max_jitter = (initial_interval_ms * u64::from(initial_jitter_percent)) / 100;
             rand::thread_rng().gen_range(0..=max_jitter)
         } else {
             0
         };
         tokio::time::sleep(Duration::from_millis(initial_jitter)).await;
 
-        // Extract all necessary data to be moved into the async block
         let config_service_id = self.config.service_id;
         let config_blueprint_id = self.config.blueprint_id;
         let consumer = Arc::clone(&self.consumer);
@@ -276,25 +277,22 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
                     break;
                 }
 
-                // Clone Arcs and Strings for the call as do_send_heartbeat takes them by value
-                if let Err(e) = HeartbeatService::do_send_heartbeat(
+                let context_args = HeartbeatContextArgs {
                     config_service_id,
                     config_blueprint_id,
-                    Arc::clone(&consumer),
-                    Arc::clone(&last_heartbeat_lock),
-                    ws_rpc_endpoint.clone(),
-                    keystore_uri.clone(),
-                    service_id,
-                    blueprint_id,
-                )
-                .await
-                {
+                    consumer: Arc::clone(&consumer),
+                    last_heartbeat_lock: Arc::clone(&last_heartbeat_lock),
+                    ws_rpc_endpoint: ws_rpc_endpoint.clone(),
+                    keystore_uri: keystore_uri.clone(),
+                    instance_service_id: service_id,
+                    instance_blueprint_id: blueprint_id,
+                };
+                if let Err(e) = HeartbeatService::do_send_heartbeat(context_args).await {
                     warn!("Failed to send heartbeat: {}", e);
                 }
 
                 let sleep_duration = if jitter_percent_val > 0 {
-                    let max_jitter =
-                        (interval_ms as f64 * (jitter_percent_val as f64 / 100.0)) as u64;
+                    let max_jitter = (interval_ms * u64::from(jitter_percent_val)) / 100;
                     let current_jitter = rand::thread_rng().gen_range(0..=max_jitter);
                     base_interval + Duration::from_millis(current_jitter)
                 } else {

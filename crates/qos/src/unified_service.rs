@@ -37,7 +37,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         self.heartbeat_service.as_ref()
     }
 
-    /// Sets the completion sender for this QoS service.
+    /// Sets the completion sender for this `QoS` service.
     pub async fn set_completion_sender(&self, sender: oneshot::Sender<Result<()>>) {
         let mut guard = self.completion_tx.write().await;
         if guard.is_some() {
@@ -50,20 +50,18 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
     async fn initialize(
         config: QoSConfig,
         heartbeat_consumer: Arc<C>,
-        http_rpc_endpoint: String,
         ws_rpc_endpoint: String,
         keystore_uri: String,
         otel_config: Option<OpenTelemetryConfig>,
     ) -> Result<Self> {
         let heartbeat_service = config.heartbeat.clone().map(|hc| {
             // Parameters are now passed directly
-            let http_rpc = http_rpc_endpoint.clone();
             let ws_rpc = ws_rpc_endpoint.clone();
             Arc::new(HeartbeatService::new(
                 hc.clone(),
                 heartbeat_consumer.clone(),
-                http_rpc,
                 ws_rpc,
+                keystore_uri.clone(),
                 hc.service_id,
                 hc.blueprint_id,
             ))
@@ -148,9 +146,8 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
                 if let Err(e) = s.start(config.docker_network.as_deref()).await {
                     core_error!("Failed to start critical Prometheus server: {}", e);
                     return Err(e); // Critical failure
-                } else {
-                    info!("Prometheus server started successfully: {}", s.url());
                 }
+                info!("Prometheus server started successfully: {}", s.url());
             }
 
             (
@@ -190,17 +187,18 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         })
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if initialization of any underlying service fails.
     pub async fn new(
         config: QoSConfig,
         heartbeat_consumer: Arc<C>,
-        http_rpc_endpoint: String,
         ws_rpc_endpoint: String,
         keystore_uri: String,
     ) -> Result<Self> {
         Self::initialize(
             config,
             heartbeat_consumer,
-            http_rpc_endpoint,
             ws_rpc_endpoint,
             keystore_uri,
             None,
@@ -208,10 +206,12 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if initialization of any underlying service fails.
     pub async fn with_otel_config(
         config: QoSConfig,
         heartbeat_consumer: Arc<C>,
-        http_rpc_endpoint: String,
         ws_rpc_endpoint: String,
         keystore_uri: String,
         otel_config: OpenTelemetryConfig,
@@ -219,7 +219,6 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         Self::initialize(
             config,
             heartbeat_consumer,
-            http_rpc_endpoint,
             ws_rpc_endpoint,
             keystore_uri,
             Some(otel_config),
@@ -280,6 +279,9 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         self.metrics_service.as_ref().map(|s| s.provider())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if creating the Grafana dashboard fails.
     pub async fn create_dashboard(&mut self, blueprint_name: &str) -> Result<()> {
         let client = self.grafana_client.as_ref().ok_or(qos_error::Error::Other(
             "Grafana client not configured".to_string(),
@@ -365,7 +367,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
                     created_prometheus_ds.datasource.uid,
                     e
                 );
-                return Err(e.into());
+                return Err(e);
             }
         }
 
@@ -404,6 +406,9 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the completion signal receiver is dropped prematurely.
     pub async fn wait_for_completion(&self) -> Result<()> {
         let rx_option = {
             let mut guard = self.completion_rx.write().await;
@@ -413,9 +418,9 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         if let Some(rx) = rx_option {
             match rx.await {
                 Ok(inner_result) => inner_result,
-                Err(_recv_error) => Err(qos_error::Error::Other(format!(
-                    "Completion signal receiver dropped before completion"
-                ))),
+                Err(_recv_error) => Err(qos_error::Error::Other(
+                    "Completion signal receiver dropped before completion".to_string(),
+                )),
             }
         } else {
             Err(qos_error::Error::Other(
@@ -424,7 +429,10 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         }
     }
 
-    pub async fn shutdown(&self) -> Result<()> {
+    /// # Errors
+    ///
+    /// This function currently does not return errors but is designed to in the future.
+    pub fn shutdown(&self) -> Result<()> {
         info!("QoSService shutting down...");
         info!("QoSService shutdown complete.");
         Ok(())

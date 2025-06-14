@@ -38,15 +38,15 @@ impl MetricReader for ArcPrometheusReader {
     }
 
     fn collect(&self, rm: &mut ResourceMetrics) -> std::result::Result<(), MetricError> {
-        self.0.collect(rm).map_err(|e| e.into())
+        self.0.collect(rm)
     }
 
     fn force_flush(&self) -> std::result::Result<(), opentelemetry_sdk::error::OTelSdkError> {
-        self.0.force_flush().map_err(|e| e.into())
+        self.0.force_flush()
     }
 
     fn shutdown(&self) -> std::result::Result<(), opentelemetry_sdk::error::OTelSdkError> {
-        self.0.shutdown().map_err(|e| e.into())
+        self.0.shutdown()
     }
 }
 
@@ -101,7 +101,7 @@ impl OpenTelemetryExporter {
     /// # Errors
     /// Returns an `Error` if the setup of the OpenTelemetry pipeline or Prometheus exporter fails.
     pub fn new(
-        otel_config: OpenTelemetryConfig,
+        otel_config: &OpenTelemetryConfig,
         shared_registry: Arc<Registry>,
     ) -> std::result::Result<Self, CrateLocalError> {
         info!(
@@ -178,6 +178,11 @@ impl OpenTelemetryExporter {
     }
 
     /// Force flush the exporter
+    /// Flushes the OTLP exporter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the flush operation fails.
     pub fn force_flush(&self) -> std::result::Result<(), opentelemetry_sdk::error::OTelSdkError> {
         self.sdk_meter_provider.force_flush()
     }

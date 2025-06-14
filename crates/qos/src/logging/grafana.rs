@@ -409,6 +409,7 @@ pub struct DataSourceDetails {
 
 impl GrafanaClient {
     /// Returns the configured Prometheus datasource URL, if any.
+    #[must_use]
     pub fn prometheus_datasource_url(&self) -> Option<&String> {
         self.config.prometheus_datasource_url.as_ref()
     }
@@ -425,6 +426,7 @@ impl GrafanaClient {
     }
 
     /// Returns a reference to the Grafana client's configuration.
+    #[must_use]
     pub fn config(&self) -> &GrafanaConfig {
         &self.config
     }
@@ -933,6 +935,10 @@ impl GrafanaClient {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the request to Grafana fails, if the response cannot be parsed,
+    /// or if Grafana returns a non-success status code.
     pub async fn create_or_update_datasource(
         &self,
         payload: CreateDataSourceRequest,
@@ -992,8 +998,7 @@ impl GrafanaClient {
             );
             // Attempt to parse Grafana's specific error message format
             let grafana_error_message = serde_json::from_str::<GrafanaApiError>(&error_body)
-                .map(|e| e.message)
-                .unwrap_or_else(|_| error_body.clone());
+                .map_or_else(|_| error_body.clone(), |e| e.message);
 
             Err(Error::GrafanaApi(format!(
                 "Grafana API error ({}) creating/updating datasource '{}': {}",

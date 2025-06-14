@@ -119,11 +119,11 @@ impl DockerManager {
 
         let health_config = health_check_cmd.map(|cmd| HealthConfig {
             test: Some(cmd),
-            interval: Some(Duration::from_secs(5).as_nanos() as i64),
-            timeout: Some(Duration::from_secs(5).as_nanos() as i64),
+            interval: Some(5_000_000_000),
+            timeout: Some(5_000_000_000),
             retries: Some(3),
-            start_period: Some(Duration::from_secs(5).as_nanos() as i64),
-            start_interval: Some(Duration::from_secs(1).as_nanos() as i64),
+            start_period: Some(5_000_000_000),
+            start_interval: Some(1_000_000_000),
         });
 
         let config = Config {

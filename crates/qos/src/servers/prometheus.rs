@@ -64,7 +64,7 @@ pub struct PrometheusServer {
     /// The embedded Prometheus server (if not using Docker)
     embedded_server: Arc<Mutex<Option<PrometheusMetricsServer>>>,
 
-    /// The metrics registry provided by EnhancedMetricsProvider (if not using Docker)
+    /// The metrics registry provided by `EnhancedMetricsProvider` (if not using Docker)
     metrics_registry: Option<Arc<prometheus::Registry>>,
 
     /// The enhanced metrics provider, used to force flush OTEL metrics on scrape
@@ -161,10 +161,17 @@ impl PrometheusServer {
     }
 
     /// Get the metrics registry used by the embedded Prometheus server
+    #[must_use]
     pub fn registry(&self) -> Option<Arc<prometheus::Registry>> {
         self.metrics_registry.clone()
     }
 
+    #[must_use]
+    pub fn container_id(&self) -> Option<String> {
+        self.container_id.lock().unwrap().clone()
+    }
+
+    #[must_use]
     pub fn is_docker_based(&self) -> bool {
         self.config.use_docker
     }
@@ -195,7 +202,14 @@ impl ServerManager for PrometheusServer {
                     .docker_manager
                     .is_container_running(&existing_id)
                     .await?;
-                if !is_running {
+                if is_running {
+                    info!(
+                        "PrometheusServer::start: Container {} is already running.",
+                        existing_id
+                    );
+                    current_container_id_val = Some(existing_id);
+                    perform_health_check = false;
+                } else {
                     warn!(
                         "PrometheusServer::start: Container {} was found but is not running. Attempting to remove and recreate.",
                         existing_id
@@ -210,15 +224,9 @@ impl ServerManager for PrometheusServer {
                             existing_id, e
                         );
                     }
+                    // Reset container ID to indicate we need to create a new one
                     current_container_id_val = None;
                     *self.container_id.lock().unwrap() = None;
-                } else {
-                    info!(
-                        "PrometheusServer::start: Container {} is already running.",
-                        existing_id
-                    );
-                    current_container_id_val = Some(existing_id);
-                    perform_health_check = false;
                 }
             }
 
@@ -227,7 +235,7 @@ impl ServerManager for PrometheusServer {
                     "PrometheusServer::start: No existing container_id found or old one was not running. Creating new container."
                 );
                 let mut ports = std::collections::HashMap::new();
-                ports.insert(format!("9090/tcp"), self.config.port.to_string());
+                ports.insert("9090/tcp".to_string(), self.config.port.to_string());
 
                 let mut volumes = std::collections::HashMap::new();
                 if let Some(config_host_path) = &self.config.config_path {
@@ -308,11 +316,11 @@ impl ServerManager for PrometheusServer {
                     "Performing health check for Prometheus container {} ({})",
                     &self.config.docker_container_name, final_id_for_connection_and_health_check
                 );
-                if !self
+                if self
                     .docker_manager
                     .wait_for_container_health(&final_id_for_connection_and_health_check, 120)
                     .await
-                    .is_ok()
+                    .is_err()
                 {
                     let err_msg = format!(
                         "Prometheus Docker container {} ({}) did not become healthy.",
