@@ -3568,6 +3568,7 @@ dependencies = [
  "blueprint-keystore",
  "blueprint-router",
  "blueprint-sdk",
+ "blueprint-std",
  "blueprint-tangle-extra",
  "blueprint-testing-utils",
  "bollard",

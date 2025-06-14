@@ -68,7 +68,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         });
 
         let metrics_service = match (config.metrics.clone(), otel_config) {
-            (Some(mc), Some(oc)) => Some(Arc::new(MetricsService::with_otel_config(mc, oc)?)),
+            (Some(mc), Some(oc)) => Some(Arc::new(MetricsService::with_otel_config(mc, &oc)?)),
             (Some(mc), None) => Some(Arc::new(MetricsService::new(mc)?)),
             (None, _) => None,
         };
@@ -87,17 +87,17 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         }
 
         let (grafana_server, loki_server, prometheus_server) = if config.manage_servers {
-            let mut grafana = config
+            let grafana = config
                 .grafana_server
                 .as_ref()
-                .map(|c| GrafanaServer::new(c.clone()));
+                .and_then(|c| GrafanaServer::new(c.clone()).ok());
 
-            let mut loki = config
+            let loki = config
                 .loki_server
                 .as_ref()
-                .map(|c| LokiServer::new(c.clone()));
+                .and_then(|c| LokiServer::new(c.clone()).ok());
 
-            let mut prometheus = config.prometheus_server.as_ref().map(|c| {
+            let mut prometheus = config.prometheus_server.as_ref().and_then(|c| {
                 PrometheusServer::new(
                     c.clone(),
                     Some(
@@ -110,6 +110,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
                     ),
                     metrics_service.as_ref().unwrap().provider().clone(),
                 )
+                .ok()
             });
 
             if let Some(p) = &mut prometheus {
@@ -123,7 +124,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
                 }
             }
 
-            if let Some(s) = &mut grafana {
+            if let Some(s) = &grafana {
                 info!("Starting Grafana server...");
                 if let Err(e) = s.start(config.docker_network.as_deref()).await {
                     error!("Failed to start Grafana server: {}", e);
@@ -132,7 +133,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
                 }
             }
 
-            if let Some(s) = &mut loki {
+            if let Some(s) = &loki {
                 info!("Starting Loki server...");
                 if let Err(e) = s.start(config.docker_network.as_deref()).await {
                     error!("Failed to start Loki server: {}", e);
@@ -141,7 +142,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
                 }
             }
 
-            if let Some(s) = &mut prometheus {
+            if let Some(s) = &prometheus {
                 info!("Starting Prometheus server...");
                 if let Err(e) = s.start(config.docker_network.as_deref()).await {
                     core_error!("Failed to start critical Prometheus server: {}", e);

@@ -88,6 +88,8 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
     let (temp_dir, blueprint_dir) = create_test_blueprint();
 
     let harness: TangleTestHarness<()> = TangleTestHarness::setup(temp_dir).await?;
+    let ws_rpc_url = harness.env().ws_rpc_endpoint.clone();
+    let keystore_uri = harness.env().keystore_uri.clone();
     std::env::set_current_dir(&blueprint_dir).unwrap();
     cleanup_docker_containers(&harness).await?;
 
@@ -180,7 +182,7 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
         prometheus_datasource_url: Some(prometheus_datasource_url),
     });
 
-    let docker = DockerManager::new();
+    let docker = DockerManager::new().unwrap();
     info!(
         "Ensuring custom Docker network '{}' exists...",
         CUSTOM_NETWORK_NAME
@@ -207,9 +209,14 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
         ..Default::default()
     });
 
-    let qos_service = QoSService::new(qos_config.clone(), Arc::new(MockHeartbeatConsumer::new()))
-        .await
-        .unwrap();
+    let qos_service = QoSService::new(
+        qos_config.clone(),
+        Arc::new(MockHeartbeatConsumer::new()),
+        ws_rpc_url.to_string(),
+        keystore_uri,
+    )
+    .await
+    .unwrap();
 
     info!("Creating QoS service...");
     let qos_service_arc = Arc::new(qos_service);

@@ -3,9 +3,10 @@
 use blueprint_qos::error::Error as QosError;
 use blueprint_qos::heartbeat::{HeartbeatConsumer, HeartbeatStatus};
 use blueprint_qos::proto::qos_metrics_client::QosMetricsClient;
+use blueprint_std::pin::Pin;
+use blueprint_std::sync::{Arc, Mutex};
 use blueprint_tangle_extra::extract::{TangleArg, TangleResult};
 use blueprint_testing_utils::Error;
-use std::sync::{Arc, Mutex};
 use tonic::transport::Channel;
 
 // Square job ID
@@ -58,14 +59,14 @@ impl HeartbeatConsumer for MockHeartbeatConsumer {
     fn send_heartbeat(
         &self,
         status: &HeartbeatStatus,
-    ) -> impl std::future::Future<Output = Result<(), QosError>> + Send {
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<(), QosError>> + Send>> {
         let status = status.clone();
         let heartbeats = self.heartbeats.clone();
 
-        async move {
+        Box::pin(async move {
             heartbeats.lock().unwrap().push(status);
             Ok(())
-        }
+        })
     }
 }
 

@@ -24,7 +24,7 @@ impl MetricsService {
     /// Returns an error if the metrics provider initialization fails
     pub fn new(config: MetricsConfig) -> Result<Self> {
         let otel_config = OpenTelemetryConfig::default();
-        let provider = Arc::new(EnhancedMetricsProvider::new(config.clone(), otel_config)?);
+        let provider = Arc::new(EnhancedMetricsProvider::new(config.clone(), &otel_config)?);
 
         Ok(Self { provider, config })
     }
@@ -35,7 +35,7 @@ impl MetricsService {
     /// Returns an error if the metrics provider initialization fails
     pub fn with_otel_config(
         config: MetricsConfig,
-        otel_config: OpenTelemetryConfig,
+        otel_config: &OpenTelemetryConfig,
     ) -> Result<Self> {
         let provider = Arc::new(EnhancedMetricsProvider::new(config.clone(), otel_config)?);
 
@@ -78,7 +78,7 @@ impl MetricsService {
 /// Returns an error if the metrics provider initialization or server startup fails
 pub async fn run_metrics_server(config: MetricsConfig) -> Result<Arc<EnhancedMetricsProvider>> {
     let otel_config = OpenTelemetryConfig::default();
-    let provider = Arc::new(EnhancedMetricsProvider::new(config, otel_config)?);
+    let provider = Arc::new(EnhancedMetricsProvider::new(config, &otel_config)?);
 
     // Start the metrics collection
     provider.clone().start_collection().await?;
@@ -136,7 +136,7 @@ mod tests {
 
         let otel_config = OpenTelemetryConfig::default();
 
-        let service = MetricsService::with_otel_config(config.clone(), otel_config);
+        let service = MetricsService::with_otel_config(config.clone(), &otel_config);
         assert!(service.is_ok());
 
         let service = service.unwrap();

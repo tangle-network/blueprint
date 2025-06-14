@@ -47,11 +47,11 @@ where
         self.env.network_bind_port = network_bind_port;
     }
 
-    /// Set the QoS config for this test environment
+    /// Set the `QoS` config for this test environment
     pub fn set_qos_config(&mut self, config: QoSConfig) {
         self.qos_config = Some(config);
     }
-    /// Set the QoS service for this test environment
+    /// Set the `QoS` service for this test environment
     pub fn set_qos_service(&mut self, service: Arc<QoSService<C>>) {
         self.qos_service = Some(service);
     }

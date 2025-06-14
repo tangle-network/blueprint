@@ -56,7 +56,7 @@ impl EnhancedMetricsProvider {
     ///
     /// # Errors
     /// Returns an error if the Prometheus collector or OpenTelemetry exporter initialization fails
-    pub fn new(metrics_config: MetricsConfig, otel_config: OpenTelemetryConfig) -> Result<Self> {
+    pub fn new(metrics_config: MetricsConfig, otel_config: &OpenTelemetryConfig) -> Result<Self> {
         // Create a single shared Prometheus registry
         let shared_registry = Arc::new(Registry::new());
         // Create a Prometheus collector, passing the shared registry
@@ -75,7 +75,7 @@ impl EnhancedMetricsProvider {
         // The OpenTelemetryExporter will configure its underlying opentelemetry_prometheus::Exporter
         // to use this shared_registry.
         let otel_exporter_instance =
-            OpenTelemetryExporter::new(&otel_config, shared_registry.clone())?;
+            OpenTelemetryExporter::new(otel_config, shared_registry.clone())?;
 
         // The underlying opentelemetry_prometheus::Exporter is already configured to use the shared_registry.
         // Explicitly registering our OpenTelemetryExporter wrapper (which calls shared_registry.gather() in its own collect method)
@@ -132,7 +132,7 @@ impl EnhancedMetricsProvider {
             prometheus_server_config,
             Some(self.shared_registry.clone()),
             self.clone(),
-        );
+        )?;
         server.start(None).await?;
 
         let mut prometheus_server = self.prometheus_server.write().await;
@@ -294,10 +294,14 @@ impl EnhancedMetricsProvider {
     }
 
     /// Force flushes the OpenTelemetry metrics pipeline via the exporter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the OpenTelemetry exporter fails to force flush
     pub fn force_flush_otel_metrics(&self) -> crate::error::Result<()> {
         info!("EnhancedMetricsProvider: Attempting to force flush OpenTelemetry metrics...");
         match self.opentelemetry_exporter.force_flush() {
-            Ok(_) => {
+            Ok(()) => {
                 info!("EnhancedMetricsProvider: OpenTelemetry metrics force_flush successful.");
                 Ok(())
             }

@@ -655,7 +655,7 @@ where
         Ok(node)
     }
 
-    /// Set the QoS config for this node
+    /// Set the `QoS` config for this node
     pub async fn set_qos_config(&self, config: QoSConfig) {
         self.test_env.write().await.set_qos_config(config);
     }

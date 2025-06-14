@@ -45,13 +45,15 @@ pub struct LokiServer {
 
 impl LokiServer {
     /// Create a new Loki server manager
-    #[must_use]
-    pub fn new(config: LokiServerConfig) -> Self {
-        Self {
-            docker: DockerManager::new(),
+    ///
+    /// # Errors
+    /// Returns an error if the Docker manager fails to create a new container
+    pub fn new(config: LokiServerConfig) -> Result<Self> {
+        Ok(Self {
+            docker: DockerManager::new().map_err(|e| Error::DockerConnection(e.to_string()))?,
             config,
             container_id: Arc::new(Mutex::new(None)),
-        }
+        })
     }
 
     /// Get the Loki client configuration
@@ -63,7 +65,8 @@ impl LokiServer {
             password: None,
             batch_size: 1024,
             labels: HashMap::new(),
-            timeout_secs: 30,
+            // TODO: Update once Loki is fixed
+            timeout_secs: 5,
             otel_config: None,
         }
     }
@@ -109,7 +112,8 @@ impl ServerManager for LokiServer {
             *id = Some(container_id.clone());
         }
 
-        self.wait_until_ready(90).await?;
+        // TODO: Update once Loki is fixed
+        self.wait_until_ready(5).await?;
 
         info!("Loki server started successfully");
         Ok(())

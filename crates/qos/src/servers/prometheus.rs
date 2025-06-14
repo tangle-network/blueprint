@@ -73,20 +73,23 @@ pub struct PrometheusServer {
 
 impl PrometheusServer {
     /// Create a new Prometheus server manager
-    #[must_use]
+    ///
+    /// # Errors
+    /// Returns an error if the Docker manager fails to create a new container
     pub fn new(
         config: PrometheusServerConfig,
         metrics_registry: Option<Arc<prometheus::Registry>>,
         enhanced_metrics_provider: Arc<EnhancedMetricsProvider>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             config,
-            docker_manager: DockerManager::new(),
+            docker_manager: DockerManager::new()
+                .map_err(|e| crate::error::Error::DockerConnection(e.to_string()))?,
             container_id: Arc::new(Mutex::new(None)),
             embedded_server: Arc::new(Mutex::new(None)),
             metrics_registry,
             enhanced_metrics_provider,
-        }
+        })
     }
 
     /// Create a new Docker container for the Prometheus server
@@ -168,7 +171,7 @@ impl PrometheusServer {
 
     #[must_use]
     pub fn container_id(&self) -> Option<String> {
-        self.container_id.lock().unwrap().clone()
+        self.container_id.lock().map(|id| id.clone()).ok()?
     }
 
     #[must_use]

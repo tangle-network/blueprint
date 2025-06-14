@@ -1,56 +1,50 @@
 use blueprint_core::Job;
+use blueprint_qos::error::Result as QoSResult;
+use blueprint_qos::heartbeat::{HeartbeatConsumer, HeartbeatStatus};
 use blueprint_router::Router;
 use blueprint_runner::BlueprintConfig;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::error::RunnerError as Error;
-// use blueprint_runner::metrics_server::MetricsServerAdapter; // Removed unused import
-use blueprint_qos::error::Result as QoSResult;
-use blueprint_qos::heartbeat::{HeartbeatConsumer, HeartbeatStatus};
 use blueprint_runner::{BackgroundService, BlueprintRunner, BlueprintRunnerBuilder};
-use std::future::{self, Pending}; // Consolidate Pending import
-use std::sync::Arc;
-use tokio::sync::oneshot; // For the Result<()> in send_heartbeat
-// use async_trait::async_trait; // Not needed as send_heartbeat is not async in trait
 use std::future::Future;
+use std::future::{self, Pending};
 use std::pin::Pin;
+use std::sync::Arc;
+use tokio::sync::oneshot;
 
-// A background service that never completes on its own.
-// Its purpose is to keep the BlueprintRunner's main loop alive in test environments
-// where there might not be any active producers, but background services (like QoS)
-// need to continue running for the duration of the test.
-struct KeepAliveService;
+// // A background service that never completes on its own.
+// // Its purpose is to keep the BlueprintRunner's main loop alive in test environments
+// // where there might not be any active producers, but background services (like QoS)
+// // need to continue running for the duration of the test.
+// struct KeepAliveService;
 
-// A no-operation HeartbeatConsumer for testing purposes.
-#[derive(Default, Clone)]
-pub struct NoOpHeartbeatConsumer;
+// // A no-operation HeartbeatConsumer for testing purposes.
+// #[derive(Default, Clone)]
+// pub struct NoOpHeartbeatConsumer;
 
-// #[async_trait] // send_heartbeat itself returns a Pinned Future, so async_trait might not be needed directly on the impl block
-impl HeartbeatConsumer for NoOpHeartbeatConsumer {
-    fn send_heartbeat(
-        &self,
-        _status: &HeartbeatStatus,
-    ) -> Pin<Box<dyn Future<Output = QoSResult<()>> + Send + 'static>> {
-        blueprint_core::trace!("NoOpHeartbeatConsumer: send_heartbeat called (and ignored).");
-        Box::pin(async { Ok(()) })
-    }
-}
+// impl HeartbeatConsumer for NoOpHeartbeatConsumer {
+//     fn send_heartbeat(
+//         &self,
+//         _status: &HeartbeatStatus,
+//     ) -> Pin<Box<dyn Future<Output = QoSResult<()>> + Send + 'static>> {
+//         blueprint_core::trace!("NoOpHeartbeatConsumer: send_heartbeat called (and ignored).");
+//         Box::pin(async { Ok(()) })
+//     }
+// }
 
-impl BackgroundService for KeepAliveService {
-    async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
-        blueprint_core::error!("!!! KEEPALIVESERVICE STARTING NOW (Forget Strategy) !!!");
-        let (tx, rx) = oneshot::channel();
+// impl BackgroundService for KeepAliveService {
+//     async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
+//         blueprint_core::error!("!!! KEEPALIVESERVICE STARTING NOW (Forget Strategy) !!!");
+//         let (tx, rx) = oneshot::channel();
 
-        // Forget the sender. This means the sender is not dropped,
-        // and since no message is sent on it, the receiver (rx)
-        // will pend indefinitely.
-        std::mem::forget(tx);
+//         std::mem::forget(tx);
 
-        blueprint_core::info!(
-            "KeepAliveService: tx sender forgotten, returning receiver that should pend indefinitely."
-        );
-        Ok(rx)
-    }
-}
+//         blueprint_core::info!(
+//             "KeepAliveService: tx sender forgotten, returning receiver that should pend indefinitely."
+//         );
+//         Ok(rx)
+//     }
+// }
 
 pub struct TestRunner<Ctx> {
     router: Option<Router<Ctx>>,
@@ -68,10 +62,9 @@ where
     where
         C: BlueprintConfig + 'static,
     {
-        let builder = BlueprintRunner::builder(config, env)
-            .with_shutdown_handler(future::pending::<()>())
-            .background_service(KeepAliveService); // Add KeepAliveService
-        blueprint_core::error!("!!! TestRunner::new - KeepAliveService ADDED to builder !!!");
+        let builder =
+            BlueprintRunner::builder(config, env).with_shutdown_handler(future::pending::<()>());
+        // .background_service(KeepAliveService);
         TestRunner {
             router: Some(Router::<Ctx>::new()),
             job_index: 0,
@@ -110,7 +103,11 @@ where
         self
     }
 
-    /// Integrate the unified QoS service (heartbeat, metrics, logging, dashboards) as an always-on background service.
+    /// Integrate the unified `QoS` service (heartbeat, metrics, logging, dashboards) as an always-on background service.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the builder is not initialized.
     pub fn qos_service<C>(
         &mut self,
         qos_service: Arc<blueprint_qos::unified_service::QoSService<C>>,
@@ -136,27 +133,16 @@ where
                 );
                 let (runner_tx, runner_rx) = oneshot::channel();
 
-                // self.qos_service is Arc<QoSService<C>>
-                // Create the oneshot channel that QoSService will use to signal its completion (on Drop).
                 let (qos_completion_tx, qos_completion_rx) =
                     tokio::sync::oneshot::channel::<Result<(), blueprint_qos::error::Error>>();
 
-                // Set the completion sender on the QoSService instance.
-                // This now works because set_completion_sender takes &self and uses RwLock internally.
                 self.qos_service
                     .set_completion_sender(qos_completion_tx)
                     .await;
-                blueprint_core::info!(
-                    "QoSServiceAdapter: Successfully set completion sender on QoSService instance via &Arc<QoSService>."
-                );
 
-                // Spawn a task to await QoSService completion and forward it to the runner's channel.
                 tokio::spawn(async move {
                     match qos_completion_rx.await {
                         Ok(Ok(())) => {
-                            blueprint_core::info!(
-                                "QoSServiceAdapter: QoSService completed successfully. Signaling runner."
-                            );
                             if runner_tx.send(Ok(())).is_err() {
                                 blueprint_core::warn!(
                                     "QoSServiceAdapter: runner_rx dropped before successful QoS completion signal."
@@ -168,7 +154,6 @@ where
                                 "QoSServiceAdapter: QoSService completed with an internal error: {}. Signaling runner.",
                                 qos_internal_err
                             );
-                            // Map the QoS-specific error to a general BackgroundService error string for the runner.
                             if runner_tx
                                 .send(Err(Error::BackgroundService(format!(
                                     "QoS service internal error: {}",
@@ -182,7 +167,6 @@ where
                             }
                         }
                         Err(_recv_err) => {
-                            // This is a tokio::sync::oneshot::error::RecvError
                             blueprint_core::error!(
                                 "QoSServiceAdapter: QoSService completion sender (qos_completion_tx) was dropped. This typically means QoSService panicked or did not complete cleanly. Signaling runner."
                             );
@@ -206,7 +190,7 @@ where
         self.builder = Some(
             self.builder
                 .take()
-                .expect("failed to add QoS service")
+                .expect("BlueprintRunnerBuilder should always exist")
                 .background_service(adapter),
         );
         self

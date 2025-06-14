@@ -8,7 +8,6 @@ use blueprint_evm_extra::util::get_provider_http;
 use blueprint_runner::config::{BlueprintEnvironment, ContextConfig, SupportedChains};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use std::marker::PhantomData;
-use std::path::PathBuf;
 use tempfile::TempDir;
 use url::Url;
 

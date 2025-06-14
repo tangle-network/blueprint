@@ -24,20 +24,27 @@ pub struct DockerManager {
 
 impl Default for DockerManager {
     fn default() -> Self {
-        Self::new()
+        Self::new().expect("Failed to create Docker manager")
     }
 }
 
 impl DockerManager {
     /// Create a new Docker manager
-    #[must_use]
-    pub fn new() -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Docker client cannot be created
+    pub fn new() -> Result<Self> {
         let docker = Docker::connect_with_local_defaults()
-            .expect("Failed to connect to Docker. Is the Docker daemon running?");
-        Self { docker }
+            .map_err(|e| Error::DockerConnection(e.to_string()))?;
+        Ok(Self { docker })
     }
 
     /// Pull an image if it doesn't exist
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the image cannot be pulled
     pub async fn ensure_image(&self, image: &str) -> Result<()> {
         info!("Ensuring image exists: {}", image);
         if self.docker.inspect_image(image).await.is_ok() {
@@ -64,6 +71,10 @@ impl DockerManager {
     }
 
     /// Create and start a container
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the container cannot be created or started
     #[allow(clippy::too_many_arguments)]
     pub async fn run_container(
         &self,
@@ -145,7 +156,7 @@ impl DockerManager {
             Err(e) => {
                 let err_msg = format!("Failed to create container '{}': {}", name, e);
                 error!("[DOCKER ERROR] {}", err_msg);
-                panic!("[DOCKER PANIC] {}", err_msg);
+                return Err(crate::error::Error::DockerOperation(err_msg));
             }
         };
 
@@ -157,7 +168,7 @@ impl DockerManager {
         {
             let err_msg = format!("Failed to start container '{}': {}", name, e);
             error!("[DOCKER ERROR] {}", err_msg);
-            panic!("[DOCKER PANIC] {}", err_msg);
+            return Err(crate::error::Error::DockerOperation(err_msg));
         }
 
         info!(
@@ -167,9 +178,13 @@ impl DockerManager {
         Ok(container_id)
     }
 
+    /// Cleans up a Docker container by name
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the container cannot be cleaned up
     async fn cleanup_container_by_name(&self, name: &str) -> Result<()> {
-        let mut list_options = ListContainersOptions::<String>::default();
-        list_options.all = true;
+        let list_options = ListContainersOptions::<String>::default();
 
         let containers = self
             .docker
@@ -181,7 +196,7 @@ impl DockerManager {
             if container_summary
                 .names
                 .as_ref()
-                .map_or(false, |names| names.contains(&format!("/{}", name)))
+                .is_some_and(|names| names.contains(&format!("/{}", name)))
             {
                 info!(
                     "Found existing container '{}', stopping and removing.",
@@ -196,6 +211,11 @@ impl DockerManager {
         Ok(())
     }
 
+    /// Stops and removes a Docker container
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the container cannot be stopped or removed
     pub async fn stop_and_remove_container(
         &self,
         container_id: &str,
@@ -232,6 +252,11 @@ impl DockerManager {
         Ok(())
     }
 
+    /// Creates a Docker network
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network cannot be created
     pub async fn create_network(&self, network_name: &str) -> Result<()> {
         match self
             .docker
@@ -242,9 +267,9 @@ impl DockerManager {
                 info!("Network '{}' already exists.", network_name);
                 Ok(())
             }
-            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
-                if status_code == 404 =>
-            {
+            Err(bollard::errors::Error::DockerResponseServerError {
+                status_code: 404, ..
+            }) => {
                 info!("Creating Docker network: '{}'", network_name);
                 let options = CreateNetworkOptions {
                     name: network_name,
@@ -265,6 +290,11 @@ impl DockerManager {
         }
     }
 
+    /// Connects a container to a Docker network
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the container cannot be connected to the network
     pub async fn connect_to_network(&self, container_name: &str, network_name: &str) -> Result<()> {
         info!(
             "Connecting container '{}' to network '{}'",
@@ -280,6 +310,11 @@ impl DockerManager {
             .map_err(|e| Error::DockerOperation(e.to_string()))
     }
 
+    /// Checks if the container is running
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the container cannot be inspected
     pub async fn is_container_running(&self, container_id: &str) -> Result<bool> {
         let container = self
             .docker
@@ -287,11 +322,14 @@ impl DockerManager {
             .await
             .map_err(|e| Error::DockerOperation(e.to_string()))?;
 
-        Ok(container
-            .state
-            .map_or(false, |s| s.running.unwrap_or(false)))
+        Ok(container.state.is_some_and(|s| s.running.unwrap_or(false)))
     }
 
+    /// Wait for the container to become healthy
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the container is not healthy within the timeout period
     pub async fn wait_for_container_health(
         &self,
         container_id: &str,

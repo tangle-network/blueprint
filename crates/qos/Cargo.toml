@@ -18,6 +18,7 @@ tempfile = { workspace = true }
 blueprint-core = { workspace = true, default-features = false, features = ["tracing"] }
 blueprint-crypto = { workspace = true, features = ["hashing", "sp-core", "tangle-pair-signer"] }
 blueprint-keystore = { workspace = true }
+blueprint-std = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 tangle-subxt = { workspace = true, features = ["std"] }
 parity-scale-codec = { workspace = true, features = ["derive"] }
@@ -78,5 +79,6 @@ std = [
     "blueprint-core/std",
     "blueprint-crypto/std",
     "blueprint-keystore/std",
+    "blueprint-std/std",
     "sp-core/std",
 ]

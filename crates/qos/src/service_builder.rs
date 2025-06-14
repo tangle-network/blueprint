@@ -25,6 +25,12 @@ pub struct QoSServiceBuilder<C: HeartbeatConsumer + Send + Sync + 'static> {
     keystore_uri: Option<String>,
 }
 
+impl<C: HeartbeatConsumer + Send + Sync + 'static> Default for QoSServiceBuilder<C> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
     /// Create a new `QoS` service builder
     #[must_use]
@@ -139,27 +145,31 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
     ///
     /// # Errors
     /// Returns an error if the heartbeat consumer is not provided or if the service initialization fails
-    /// Set the HTTP RPC endpoint for HeartbeatService
+    /// Set the HTTP RPC endpoint for `HeartbeatService`
     #[must_use]
     pub fn with_http_rpc_endpoint(mut self, endpoint: String) -> Self {
         self.http_rpc_endpoint = Some(endpoint);
         self
     }
 
-    /// Set the WebSocket RPC endpoint for HeartbeatService
+    /// Set the WebSocket RPC endpoint for `HeartbeatService`
     #[must_use]
     pub fn with_ws_rpc_endpoint(mut self, endpoint: String) -> Self {
         self.ws_rpc_endpoint = Some(endpoint);
         self
     }
 
-    /// Set the Keystore URI for HeartbeatService
+    /// Set the Keystore URI for `HeartbeatService`
     #[must_use]
     pub fn with_keystore_uri(mut self, uri: String) -> Self {
         self.keystore_uri = Some(uri);
         self
     }
 
+    /// Build the `QoS` service
+    ///
+    /// # Errors
+    /// Returns an error if the heartbeat consumer is not provided or if the service initialization fails
     pub async fn build(self) -> Result<QoSService<C>> {
         let heartbeat_consumer = self.heartbeat_consumer.ok_or_else(|| {
             crate::error::Error::Other("Heartbeat consumer is required".to_string())

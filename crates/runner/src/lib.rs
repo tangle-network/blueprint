@@ -212,7 +212,7 @@ where
     ///
     /// This method is a convenience wrapper around `background_service` specifically for
     /// adding a custom heartbeat service from the `QoS` crate. The core heartbeat logic from the
-    /// unified QoS service is always running if `.qos_service(...)` is called. This method should only
+    /// unified `QoS` service is always running if `.qos_service(...)` is called. This method should only
     /// be used to add additional, blueprint-specific health checks.
     /// periodic heartbeats to the chain or other monitoring systems.
     ///
@@ -337,11 +337,12 @@ where
         self
     }
 
-    /// Integrate the unified QoS service (heartbeat, metrics, logging, dashboards) as an always-on background service.
+    /// Integrate the unified `QoS` service (heartbeat, metrics, logging, dashboards) as an always-on background service.
     ///
     /// This method instantiates and manages a `QoSService` internally, automatically starting its heartbeat and metrics
     /// background tasks if configured. Custom heartbeat and metrics logic can still be added via `.heartbeat_service` and
-    /// `.metrics_server`, but the core QoS logic is always running if this is called.
+    /// `.metrics_server`, but the core `QoS` logic is always running if this is called.
+    #[must_use]
     pub fn qos_service<C: HeartbeatConsumer + Send + Sync + 'static>(
         mut self,
         config: blueprint_qos::QoSConfig,

@@ -69,13 +69,15 @@ pub struct GrafanaServer {
 
 impl GrafanaServer {
     /// Create a new Grafana server manager
-    #[must_use]
-    pub fn new(config: GrafanaServerConfig) -> Self {
-        Self {
-            docker: DockerManager::new(),
+    ///
+    /// # Errors
+    /// Returns an error if the Docker manager fails to create a new container
+    pub fn new(config: GrafanaServerConfig) -> Result<Self> {
+        Ok(Self {
+            docker: DockerManager::new().map_err(|e| Error::DockerConnection(e.to_string()))?,
             config,
             container_id: Arc::new(Mutex::new(None)),
-        }
+        })
     }
 
     /// Get the Grafana client configuration

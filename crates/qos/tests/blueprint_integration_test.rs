@@ -126,7 +126,7 @@ async fn test_qos_integration() -> Result<(), Error> {
         };
 
         let provider =
-            match EnhancedMetricsProvider::new(metrics_config, OpenTelemetryConfig::default()) {
+            match EnhancedMetricsProvider::new(metrics_config, &OpenTelemetryConfig::default()) {
                 Ok(provider) => provider,
                 Err(e) => {
                     panic!("Failed to create metrics provider: {}", e);

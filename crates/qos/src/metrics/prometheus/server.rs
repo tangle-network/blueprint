@@ -1,3 +1,5 @@
+#![allow(clippy::doc_markdown)]
+
 use axum::{
     Json, Router,
     extract::State,
@@ -6,9 +8,10 @@ use axum::{
     routing::get,
 };
 use blueprint_core::{error, info};
+use blueprint_std::fmt::Write;
+use blueprint_std::net::SocketAddr;
+use blueprint_std::sync::Arc;
 use prometheus::{Registry, TextEncoder};
-use std::net::SocketAddr;
-use std::sync::Arc;
 use tokio::sync::oneshot;
 
 use crate::error::{Error, Result};
@@ -128,7 +131,7 @@ impl Drop for PrometheusServer {
 async fn metrics_handler(State(state): State<ServerState>) -> Response {
     // Attempt to force flush OpenTelemetry metrics via the EnhancedMetricsProvider
     match state.enhanced_metrics_provider.force_flush_otel_metrics() {
-        Ok(_) => info!(
+        Ok(()) => info!(
             "PrometheusServer: OpenTelemetry metrics force_flush successful via EnhancedMetricsProvider."
         ),
         Err(err) => error!(
@@ -177,7 +180,13 @@ async fn metrics_handler(State(state): State<ServerState>) -> Response {
             }
             let mut labels_str = String::new();
             for label_pair in m.get_label() {
-                labels_str.push_str(&format!("{}='{}' ", label_pair.name(), label_pair.value()));
+                write!(
+                    labels_str,
+                    "{}='{}' ",
+                    label_pair.name(),
+                    label_pair.value()
+                )
+                .unwrap();
             }
             if !labels_str.is_empty() {
                 info!("      Labels: {}", labels_str.trim());
