@@ -238,10 +238,10 @@ impl HeartbeatConsumer for MockHeartbeatConsumer {
     ) -> Pin<Box<dyn std::future::Future<Output = Result<(), blueprint_qos::error::Error>> + Send>>
     {
         let status = status.clone();
-        let heartbeats = self.heartbeats.clone();
+        let heartbeats_store = self.heartbeats.clone();
 
         Box::pin(async move {
-            heartbeats.lock().await.push(status);
+            heartbeats_store.lock().await.push(status.clone());
             Ok(())
         })
     }
