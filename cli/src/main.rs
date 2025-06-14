@@ -748,7 +748,7 @@ async fn main() -> color_eyre::Result<()> {
                 http_rpc_url,
                 force,
             } => {
-                deploy::mbsm::deploy_mbsm(http_rpc_url.to_string(), force).await?;
+                deploy::mbsm::deploy_mbsm(http_rpc_url, force).await?;
             }
         },
         Commands::Key { command } => match command {

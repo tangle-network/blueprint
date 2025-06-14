@@ -85,7 +85,6 @@ where
             None,
             data_dir,
             None,
-            PathBuf::from(test_dir_path),
             SupportedChains::LocalTestnet,
             eigenlayer_contract_addresses,
         );
