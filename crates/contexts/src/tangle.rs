@@ -10,7 +10,8 @@ pub trait TangleClientContext {
 
 impl TangleClientContext for BlueprintEnvironment {
     async fn tangle_client(&self) -> Result<TangleClient, Error> {
-        TangleClient::with_keystore(self.clone(), self.keystore())
+        let keystore = self.keystore();
+        TangleClient::with_keystore(self.clone(), keystore)
             .await
             .map_err(Into::into)
     }

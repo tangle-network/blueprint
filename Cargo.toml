@@ -101,6 +101,9 @@ blueprint-pricing-engine = { version = "0.1.5", path = "./crates/pricing-engine"
 blueprint-macros = { version = "0.1.0-alpha.4", path = "./crates/macros", default-features = false }
 blueprint-context-derive = { version = "0.1.0-alpha.6", path = "./crates/macros/context-derive", default-features = false }
 
+# Quality of Service
+blueprint-qos = { version = "0.1.0-alpha.1", path = "./crates/qos", default-features = false }
+
 # Stores
 blueprint-stores = { version = "0.1.0-alpha.4", path = "./crates/stores", default-features = false }
 blueprint-store-local-database = { version = "0.1.0-alpha.4", path = "./crates/stores/local-database", default-features = false }
@@ -128,10 +131,13 @@ blueprint-metrics-rpc-calls = { version = "0.1.0-alpha.3", path = "./crates/metr
 
 cargo-tangle = { version = "0.4.0-alpha.15", path = "./cli", default-features = false }
 cargo_metadata = { version = "0.18.1" }
-tnt-core-bytecode = { version = "0.5.0", default-features = false }
+tnt-core-bytecode = { path = "./../tnt-core/bytecode", default-features = false }
+bollard = { version = "0.18.0", features = ["ssl"] }
+# tnt-core-bytecode = { version = "0.5.0", default-features = false }
 
 # Tangle-related dependencies
-tangle-subxt = { version = "0.17", default-features = false }
+tangle-subxt = { path = "./../tangle/tangle-subxt", default-features = false }
+# tangle-subxt = { version = "0.17", default-features = false }
 round-based = { version = "0.4.1", default-features = false }
 
 # Substrate dependencies
@@ -226,9 +232,9 @@ parking_lot = { version = "0.12.3", default-features = false }
 tempfile = { version = "3.13.0", default-features = false }
 uuid = { version = "1.17.0", default-features = false }
 blake3 = { version = "1.8.2", default-features = false }
-tar = "0.4.44"
-xz = "0.1.0"
-walkdir = "2.5.0"
+tar = { version = "0.4.44", default-features = false }
+xz = { version = "0.1.0", default-features = false }
+walkdir = { version = "2.5.0", default-features = false }
 fatfs = { version = "0.3.6", default-features = false }
 tokio-vsock = { version = "0.7.1", default-features = false }
 nix = { version = "0.30.1", default-features = false }
@@ -263,6 +269,16 @@ libc = { version = "0.2.147", default-features = false }
 tonic = { version = "0.13.1", default-features = false }
 prost = { version = "0.13", default-features = false }
 tonic-build = { version = "0.13.1", default-features = false }
+
+# Quality of Service
+prometheus = { version = "0.14", default-features = false }
+opentelemetry = { version = "0.29", default-features = false }
+opentelemetry-prometheus = { version = "0.29", default-features = false }
+opentelemetry_sdk = { version = "0.29", default-features = false }
+opentelemetry-semantic-conventions = { version = "0.29", default-features = false }
+opentelemetry_api = { version = "0.20", default-features = false }
+tracing-loki = { version = "0.2", default-features = false }
+tracing-opentelemetry = { version = "0.30", default-features = false }
 
 # Testing
 test-log = { version = "0.2", default-features = false }

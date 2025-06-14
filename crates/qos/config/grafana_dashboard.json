@@ -1,0 +1,25 @@
+{
+  "dashboard": {
+    "title": "Blueprint QoS Dashboard",
+    "panels": [
+      {
+        "title": "Job Executions (Test)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(otel_job_executions_total[$__rate_interval]))",
+            "legendFormat": "Executions / sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+      }
+    ],
+    "time": {
+      "from": "now-5m",
+      "to": "now"
+    },
+    "timezone": "browser"
+  },
+  "folderId": 0,
+  "overwrite": true
+}
