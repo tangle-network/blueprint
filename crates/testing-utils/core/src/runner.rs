@@ -1,50 +1,12 @@
 use blueprint_core::Job;
-use blueprint_qos::error::Result as QoSResult;
-use blueprint_qos::heartbeat::{HeartbeatConsumer, HeartbeatStatus};
 use blueprint_router::Router;
 use blueprint_runner::BlueprintConfig;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::error::RunnerError as Error;
 use blueprint_runner::{BackgroundService, BlueprintRunner, BlueprintRunnerBuilder};
-use std::future::Future;
 use std::future::{self, Pending};
-use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::oneshot;
-
-// // A background service that never completes on its own.
-// // Its purpose is to keep the BlueprintRunner's main loop alive in test environments
-// // where there might not be any active producers, but background services (like QoS)
-// // need to continue running for the duration of the test.
-// struct KeepAliveService;
-
-// // A no-operation HeartbeatConsumer for testing purposes.
-// #[derive(Default, Clone)]
-// pub struct NoOpHeartbeatConsumer;
-
-// impl HeartbeatConsumer for NoOpHeartbeatConsumer {
-//     fn send_heartbeat(
-//         &self,
-//         _status: &HeartbeatStatus,
-//     ) -> Pin<Box<dyn Future<Output = QoSResult<()>> + Send + 'static>> {
-//         blueprint_core::trace!("NoOpHeartbeatConsumer: send_heartbeat called (and ignored).");
-//         Box::pin(async { Ok(()) })
-//     }
-// }
-
-// impl BackgroundService for KeepAliveService {
-//     async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
-//         blueprint_core::error!("!!! KEEPALIVESERVICE STARTING NOW (Forget Strategy) !!!");
-//         let (tx, rx) = oneshot::channel();
-
-//         std::mem::forget(tx);
-
-//         blueprint_core::info!(
-//             "KeepAliveService: tx sender forgotten, returning receiver that should pend indefinitely."
-//         );
-//         Ok(rx)
-//     }
-// }
 
 pub struct TestRunner<Ctx> {
     router: Option<Router<Ctx>>,
@@ -64,7 +26,6 @@ where
     {
         let builder =
             BlueprintRunner::builder(config, env).with_shutdown_handler(future::pending::<()>());
-        // .background_service(KeepAliveService);
         TestRunner {
             router: Some(Router::<Ctx>::new()),
             job_index: 0,

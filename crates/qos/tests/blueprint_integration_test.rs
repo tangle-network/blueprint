@@ -40,6 +40,7 @@ fn cleanup_docker_containers() -> Result<(), Error> {
 }
 
 #[tokio::test]
+#[allow(clippy::large_futures)]
 async fn test_qos_integration() -> Result<(), Error> {
     setup_log();
     info!("Starting QoS Blueprint integration test");
@@ -192,9 +193,10 @@ async fn test_qos_integration() -> Result<(), Error> {
             panic!("Could not retrieve events from the latest block");
         }
 
-        if !found_heartbeat_on_chain {
-            panic!("No heartbeat events found on-chain in the latest block");
-        }
+        assert!(
+            found_heartbeat_on_chain,
+            "No heartbeat events found on-chain in the latest block"
+        );
     } else {
         panic!("Failed to get latest block from the chain");
     }

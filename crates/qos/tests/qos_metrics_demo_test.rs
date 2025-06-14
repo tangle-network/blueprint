@@ -77,6 +77,11 @@ async fn cleanup_docker_containers(
 
 /// Demonstrates the complete QoS metrics system with Grafana, Loki, and Prometheus.
 #[tokio::test]
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
+    clippy::large_futures
+)]
 async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
     setup_log();
     info!(
@@ -188,7 +193,7 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
         CUSTOM_NETWORK_NAME
     );
     match docker.create_network(CUSTOM_NETWORK_NAME).await {
-        Ok(_) => info!("Docker network '{}' created.", CUSTOM_NETWORK_NAME),
+        Ok(()) => info!("Docker network '{}' created.", CUSTOM_NETWORK_NAME),
         Err(e) => {
             if !e.to_string().contains("already exists") {
                 return Err(TestRunnerError::Setup(format!(
@@ -507,7 +512,7 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
         jobs_completed += 1;
         job_executions.set(jobs_completed as i64);
         job_success.set(jobs_completed as i64);
-        let latency = job_start.elapsed().as_millis() as i64;
+        let latency = i64::try_from(job_start.elapsed().as_millis()).unwrap();
         job_latency.set(latency);
 
         info!(
