@@ -287,7 +287,7 @@ mod tests {
         // Step 2
         let req = crate::types::VerifyChallengeRequest {
             challenge: res.challenge,
-            signature: signature.to_vec(),
+            signature: signature.to_bytes().into(),
             challenge_request: req,
             expires_at: 0,
         };

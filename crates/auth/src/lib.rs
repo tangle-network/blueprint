@@ -101,7 +101,7 @@ fn verify_challenge_sr25519(
 mod tests {
     use super::*;
 
-    use crate::types::KeyType;
+    use crate::types::{KeyType, VerifyChallengeRequest};
     use k256::ecdsa::SigningKey;
 
     #[test]
@@ -229,7 +229,6 @@ mod tests {
         assert!(result.unwrap());
     }
 
-    // Note: For SR25519, we'll do a basic test since we can't easily create valid signatures in tests
     #[test]
     fn test_verify_challenge_sr25519_error_handling() {
         let mut rng = blueprint_std::BlueprintRng::new();
@@ -248,5 +247,59 @@ mod tests {
             Err(Error::Schnorrkel(_)) => {}
             _ => panic!("Expected Schnorrkel error"),
         }
+    }
+
+    #[test]
+    fn js_compat_ecdsa() {
+        // Test ECDSA compatibility with JavaScript
+        // See `fixtures/sign.ts` for the original JavaScript code that generates this data.
+        let data = serde_json::json!({
+            "pub_key": "020a1091341fe5664bfa1782d5e04779689068c916b04cb365ec3153755684d9a1",
+            "key_type": "Ecdsa",
+            "challenge": "0000000000000000000000000000000000000000000000000000000000000000",
+            "signature": "26138be19cfc76e800bdcbba5e3bbc5bd79168cd06ea6afd5be6860d23d5e0340c728508ca0b47b49627b5560fbca6cdd92cbf6ac402d0941bba7e42b9d7a20c",
+            "expires_at": 0
+        });
+
+        let req: VerifyChallengeRequest = serde_json::from_value(data).unwrap();
+        let result = verify_challenge(
+            &req.challenge,
+            &req.signature,
+            &req.challenge_request.pub_key,
+            req.challenge_request.key_type,
+        );
+        assert!(
+            result.is_ok(),
+            "Failed to verify ECDSA challenge: {}",
+            result.err().unwrap()
+        );
+        assert!(result.is_ok(), "ECDSA verification failed");
+    }
+
+    #[test]
+    fn js_compat_sr25519() {
+        // Test Sr25519 compatibility with JavaScript
+        // See `fixtures/sign_sr25519.ts` for the original JavaScript code that generates this data.
+        let data = serde_json::json!({
+            "pub_key": "d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d",
+            "key_type": "Sr25519",
+            "challenge": "0000000000000000000000000000000000000000000000000000000000000000",
+            "signature": "f05fa2a2074d5295a34aae0d5383792a6cc34304c9cb4f6a0c577df4b374fe7bab051bd7570415578ba2da67e056d8f89b420d2e5b82412dc0f0e02877b9e48c",
+            "expires_at": 0
+        });
+
+        let req: VerifyChallengeRequest = serde_json::from_value(data).unwrap();
+        let result = verify_challenge(
+            &req.challenge,
+            &req.signature,
+            &req.challenge_request.pub_key,
+            req.challenge_request.key_type,
+        );
+        assert!(
+            result.is_ok(),
+            "Failed to verify Sr25519 challenge: {}",
+            result.err().unwrap()
+        );
+        assert!(result.is_ok(), "Sr25519 verification failed");
     }
 }
