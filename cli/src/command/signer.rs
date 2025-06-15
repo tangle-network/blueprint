@@ -46,7 +46,7 @@ generally be equivalent to no password at all.
 /// # Errors
 ///
 /// * The `SIGNER` environment variable isn't set
-/// * The `SIGNER` envionment variable isn't a valid SURI
+/// * The `SIGNER` environment variable isn't a valid SURI
 pub fn load_signer_from_env() -> Result<TanglePairSigner<sp_core::sr25519::Pair>> {
     let s = std::env::var(SIGNER_ENV)
         .with_suggestion(|| {
@@ -65,7 +65,7 @@ pub fn load_signer_from_env() -> Result<TanglePairSigner<sp_core::sr25519::Pair>
 /// # Errors
 ///
 /// * The `SIGNER` environment variable isn't set
-/// * The `SIGNER` envionment variable isn't a valid SURI
+/// * The `SIGNER` environment variable isn't a valid SURI
 pub fn load_evm_signer_from_env() -> Result<PrivateKeySigner> {
     let secret = std::env::var(EVM_SIGNER_ENV).with_suggestion(|| {
         format!(
