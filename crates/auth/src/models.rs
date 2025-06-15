@@ -64,6 +64,7 @@ pub struct ServiceOwnerModel {
 
 impl ApiTokenModel {
     /// Find a token by its ID in the database.
+    #[tracing::instrument(skip(db), err)]
     pub fn find_token_id(id: u64, db: &RocksDb) -> Result<Option<Self>, crate::Error> {
         let cf = db
             .cf_handle(cf::TOKENS_OPTS_CF)
@@ -77,6 +78,7 @@ impl ApiTokenModel {
     }
 
     /// Checks if the given plaintext matches the stored token hash.
+    #[tracing::instrument(skip(self), ret)]
     pub fn is(&self, plaintext: &str) -> bool {
         use tiny_keccak::Hasher;
 
@@ -86,6 +88,14 @@ impl ApiTokenModel {
         hasher.finalize(&mut output);
 
         let token_hash = CUSTOM_ENGINE.encode(output);
+
+        tracing::debug!(
+            %plaintext,
+            %self.token,
+            %token_hash,
+            token_match = self.token == token_hash,
+            "Checking token match",
+        );
 
         self.token == token_hash
     }
@@ -167,6 +177,7 @@ impl ApiTokenModel {
     }
 
     /// Checks if the token is expired.
+    #[tracing::instrument(skip(self), ret)]
     pub fn is_expired(&self) -> bool {
         if self.expires_at == 0 {
             return false;

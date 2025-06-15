@@ -93,7 +93,7 @@ impl ApiTokenGenerator {
         hasher.finalize(&mut output);
 
         GeneratedApiToken {
-            plaintext: token_str,
+            plaintext: final_token,
             token: CUSTOM_ENGINE.encode(output),
             service_id,
             expires_at: if expires_at != 0 {
@@ -149,7 +149,7 @@ impl ApiToken {
     }
 
     /// Parses a string into an `ApiToken`.
-    fn from_str(s: &str) -> Result<ApiToken, ParseApiTokenError> {
+    pub(crate) fn from_str(s: &str) -> Result<ApiToken, ParseApiTokenError> {
         let mut parts = s.splitn(3, '|');
 
         let id_part = parts.next().ok_or(ParseApiTokenError::MalformedToken)?;
