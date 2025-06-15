@@ -2763,6 +2763,7 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "tracing",
+ "tracing-subscriber 0.3.19",
 ]
 
 [[package]]

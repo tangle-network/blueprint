@@ -217,7 +217,7 @@ pub struct VerifyChallengeRequest {
     pub challenge: [u8; 32],
     /// The signed challenge string sent from the client to the server
     #[serde(with = "hex")]
-    pub signature: Vec<u8>,
+    pub signature: [u8; 64],
     /// The timestamp in seconds since epoch at which the token will expire
     pub expires_at: u64,
 }
