@@ -135,8 +135,7 @@ bollard = { version = "0.18.0", features = ["ssl"] }
 tnt-core-bytecode = { git = "https://github.com/tangle-network/tnt-core.git", default-features = false }
 
 # Tangle-related dependencies
-# tangle-subxt = { git = "https://github.com/tangle-network/tangle.git", default-features = false }
-tangle-subxt = { path = "./../tangle/tangle-subxt", default-features = false }
+tangle-subxt = { git = "https://github.com/tangle-network/tangle.git", branch = "donovan/metadata", default-features = false }
 round-based = { version = "0.4.1", default-features = false }
 
 # Substrate dependencies
