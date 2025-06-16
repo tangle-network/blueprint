@@ -11,7 +11,7 @@ use crate::servers::ServerManager;
 use crate::servers::common::DockerManager;
 
 /// Configuration settings for a Prometheus metrics server.
-/// 
+///
 /// This struct defines all the parameters needed to set up and run a Prometheus server,
 /// either as a Docker container or as an embedded server within the application.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -117,7 +117,7 @@ impl PrometheusServer {
     ///
     /// # Errors
     /// Returns an error if the Docker API fails to create the container
-    /// 
+    ///
     /// # Panics
     /// Panics if mutex locks cannot be acquired
     pub async fn create_docker_container(&self) -> Result<()> {
@@ -349,7 +349,8 @@ impl ServerManager for PrometheusServer {
                                 "PrometheusServer::start: Docker manager returned an EMPTY string for container ID."
                             );
                             return Err(crate::error::Error::Other(
-                                "Docker manager returned empty container ID for Prometheus".to_string(),
+                                "Docker manager returned empty container ID for Prometheus"
+                                    .to_string(),
                             ));
                         }
                         info!(

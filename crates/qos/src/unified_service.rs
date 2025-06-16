@@ -140,7 +140,10 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
 
             if let Some(s) = &grafana {
                 info!("Starting Grafana server...");
-                if let Err(e) = s.start(config.docker_network.as_deref(), bind_ip.clone()).await {
+                if let Err(e) = s
+                    .start(config.docker_network.as_deref(), bind_ip.clone())
+                    .await
+                {
                     error!("Failed to start Grafana server: {}", e);
                 } else {
                     info!("Grafana server started successfully: {}", s.url());
@@ -149,7 +152,10 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
 
             if let Some(s) = &loki {
                 info!("Starting Loki server...");
-                if let Err(e) = s.start(config.docker_network.as_deref(), bind_ip.clone()).await {
+                if let Err(e) = s
+                    .start(config.docker_network.as_deref(), bind_ip.clone())
+                    .await
+                {
                     error!("Failed to start Loki server: {}", e);
                 } else {
                     info!("Loki server started successfully: {}", s.url());
@@ -158,7 +164,10 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
 
             if let Some(s) = &prometheus {
                 info!("Starting Prometheus server...");
-                if let Err(e) = s.start(config.docker_network.as_deref(), bind_ip.clone()).await {
+                if let Err(e) = s
+                    .start(config.docker_network.as_deref(), bind_ip.clone())
+                    .await
+                {
                     error!("Failed to start critical Prometheus server: {}", e);
                     return Err(e);
                 }
