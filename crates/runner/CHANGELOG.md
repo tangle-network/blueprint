@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.1.0-alpha.11...blueprint-runner-v0.1.0-alpha.12) - 2025-06-16
+
+### Added
+
+- *(tangle-testing-utils)* support manager bridge in test harness (#1024)
+- *(manager)* [**breaking**] allow spawning services without sandboxing (#1022)
+- *(manager)* [**breaking**] add manager <-> service bridge (#969)
+
 ## [0.1.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.1.0-alpha.10...blueprint-runner-v0.1.0-alpha.11) - 2025-05-14
 
 ### Other

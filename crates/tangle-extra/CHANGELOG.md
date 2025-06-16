@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-extra-v0.1.0-alpha.7...blueprint-tangle-extra-v0.1.0-alpha.8) - 2025-06-16
+
+### Added
+
+- *(manager)* [**breaking**] allow spawning services without sandboxing (#1022)
+
 ## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-extra-v0.1.0-alpha.6...blueprint-tangle-extra-v0.1.0-alpha.7) - 2025-05-14
 
 ### Other
