@@ -222,7 +222,7 @@ rtnetlink = { version = "0.16.0", default-features = false }
 ipnet = { version = "2.11.0", default-features = false }
 
 # System & OS
-parking_lot = { version = "0.12.3", default-features = false }
+parking_lot = { version = "0.12.4", default-features = false }
 tempfile = { version = "3.13.0", default-features = false }
 uuid = { version = "1.17.0", default-features = false }
 blake3 = { version = "1.8.2", default-features = false }
