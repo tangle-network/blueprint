@@ -163,7 +163,7 @@ async-stream = { version = "0.3.6", default-features = false }
 
 # CLI & Configuration
 cargo-generate = { version = "0.23", default-features = false }
-clap = { version = "4.5.39" }
+clap = { version = "4.5.40" }
 clap-cargo = { version = "0.14", default-features = false }
 toml = { version = "0.8.19", default-features = false }
 dialoguer = { version = "0.11.0", default-features = false }
@@ -213,7 +213,7 @@ libp2p = { version = "0.55.0", default-features = false }
 reqwest = { version = "0.12.19", default-features = false }
 http = { version = "1.0.0", default-features = false }
 url = { version = "2.5.2", default-features = false }
-serde_with = { version = "3.12.0", default-features = false }
+serde_with = { version = "3.13.0", default-features = false }
 hyper = { version = "1.6.0", default-features = false }
 hyperlocal = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.14", default-features = false }
@@ -261,7 +261,7 @@ chrono = { version = "0.4", default-features = false }
 # System & OS
 sysinfo = { version = "0.34.2", default-features = false }
 num_cpus = { version = "1.17", default-features = false }
-libc = { version = "0.2.147", default-features = false }
+libc = { version = "0.2.173", default-features = false }
 
 # gRPC & Protocol Buffers
 tonic = { version = "0.13.1", default-features = false }
