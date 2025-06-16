@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@polkadot/keyring": "^13.5.1"
+  }
+}
