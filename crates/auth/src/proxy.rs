@@ -2,6 +2,7 @@ use std::ops::Add;
 use std::path::Path;
 
 use axum::Json;
+use axum::http::uri;
 use axum::{
     Router,
     body::Body,
@@ -180,6 +181,7 @@ async fn auth_verify(
 }
 
 /// Reverse proxy handler that forwards requests to the target host based on the service ID
+#[tracing::instrument(skip_all, fields(token_id = %token_id))]
 async fn reverse_proxy(
     ApiToken(token_id, token_str): ApiToken,
     State(s): State<AuthenticatedProxyState>,
@@ -187,7 +189,10 @@ async fn reverse_proxy(
 ) -> Result<Response, StatusCode> {
     let token = match ApiTokenModel::find_token_id(token_id, &s.db) {
         Ok(Some(token)) if token.is(&token_str) && !token.is_expired() && token.is_enabled => token,
-        Ok(Some(_)) | Ok(None) => return Err(StatusCode::UNAUTHORIZED),
+        Ok(Some(_)) | Ok(None) => {
+            tracing::warn!("Invalid or expired token");
+            return Err(StatusCode::UNAUTHORIZED);
+        }
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
     let service = match ServiceModel::find_by_id(token.service_id(), &s.db) {
@@ -205,8 +210,17 @@ async fn reverse_proxy(
         .path_and_query()
         .map(|v| v.as_str())
         .unwrap_or(path);
-    let target_uri = format!("{}/{}", target_host, path_query);
-    let target_uri: Uri = target_uri.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
+    let target_uri = Uri::builder()
+        .scheme(target_host.scheme().cloned().unwrap_or(uri::Scheme::HTTP))
+        .authority(
+            target_host
+                .authority()
+                .cloned()
+                .unwrap_or(uri::Authority::from_static("localhost")),
+        )
+        .path_and_query(path_query)
+        .build()
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Set the target URI in the request
     *req.uri_mut() = target_uri;
@@ -223,6 +237,8 @@ async fn reverse_proxy(
 
 #[cfg(test)]
 mod tests {
+    use std::net::Ipv4Addr;
+
     use tempfile::tempdir;
 
     use super::*;
@@ -233,16 +249,44 @@ mod tests {
 
     #[tokio::test]
     async fn auth_flow_works() {
+        let _guard = tracing::subscriber::set_default(
+            tracing_subscriber::fmt()
+                .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                .with_line_number(true)
+                .with_file(true)
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+                .with_test_writer()
+                .finish(),
+        );
         let mut rng = blueprint_std::BlueprintRng::new();
         let tmp = tempdir().unwrap();
         let proxy = AuthenticatedProxy::new(tmp.path()).unwrap();
+
+        // Create a simple hello world http server using axum
+        let hello_world_router =
+            Router::new().route("/hello", axum::routing::get(|| async { "Hello, World!" }));
+
+        // Start the simple hello world server in a separate task
+        let (hello_world_server, local_addr) = {
+            let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+                .await
+                .expect("Failed to bind to address");
+            let server = axum::serve(listener, hello_world_router);
+            let local_address = server.local_addr().unwrap();
+            let handle = tokio::spawn(async move {
+                if let Err(e) = server.await {
+                    eprintln!("Hello world server error: {}", e);
+                }
+            });
+            (handle, local_address)
+        };
 
         // Create a service in the database first
         let service_id = ServiceId::new(0);
         let mut service = crate::models::ServiceModel {
             api_key_prefix: "test_".to_string(),
             owners: Vec::new(),
-            upstream_url: "http://localhost:8080".to_string(),
+            upstream_url: format!("http://localhost:{}", local_addr.port()),
         };
 
         let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -287,7 +331,7 @@ mod tests {
         // Step 2
         let req = crate::types::VerifyChallengeRequest {
             challenge: res.challenge,
-            signature: signature.to_vec(),
+            signature: signature.to_bytes().into(),
             challenge_request: req,
             expires_at: 0,
         };
@@ -300,5 +344,23 @@ mod tests {
         let res: VerifyChallengeResponse = res.json().await;
 
         assert!(matches!(res, VerifyChallengeResponse::Verified { .. }));
+        let access_token = match res {
+            VerifyChallengeResponse::Verified { access_token, .. } => access_token,
+            _ => panic!("Expected a verified response"),
+        };
+
+        let access_token = ApiToken::from_str(&access_token).expect("Failed to parse access token");
+        // Try to send a request to the reverse proxy with the token in the header
+        let res = client
+            .get("/hello")
+            .header(headers::AUTHORIZATION, format!("Bearer {}", access_token))
+            .await;
+        assert!(
+            res.status().is_success(),
+            "Request to reverse proxy failed: {:?}",
+            res
+        );
+
+        hello_world_server.abort(); // Stop the hello world server
     }
 }
