@@ -3,6 +3,13 @@ allow_dirty = true         # allow updating repositories with uncommitted change
 publish_allow_dirty = true # add `--allow-dirty` to `cargo publish`
 publish_no_verify = true   # add `--no-verify` to `cargo publish`
 publish_timeout = "10m"    # set a timeout for `cargo publish`
+# TODO: Remove this when no longer in alpha
+# This is needed since the release workflow now takes ~90min, which goes outside the generated token's lifetime.
+# Will need to look into solutions:
+# * fixing the release-plz workflow to refresh the token
+# * Cutting down on dependencies to reduce build time
+# * Upgraded runners
+semver_check = false
 
 [changelog]
 commit_preprocessors = [
