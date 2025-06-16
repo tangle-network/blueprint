@@ -9,6 +9,7 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::ServiceBlueprint as SubxtServiceBlueprint;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::ServiceMetadata as SubxtServiceMetadata;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::MembershipModelType;
+// use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::create_blueprint::PricingModel;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ServiceMetadata<'a> {
@@ -133,6 +134,7 @@ impl TryFrom<ServiceBlueprint<'_>> for SubxtServiceBlueprint {
             supported_membership_models: BoundedVec(vec![MembershipModelType::Fixed]),
             // TODO: Not supported in the macro yet
             recommended_resources: BoundedVec(vec![]),
+            // pricing_model: PricingModel::PayOnce { amount: 0 },
         })
     }
 }

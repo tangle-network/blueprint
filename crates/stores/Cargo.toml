@@ -15,7 +15,7 @@ workspace = true
 [dependencies]
 blueprint-store-local-database = { workspace = true, optional = true }
 thiserror.workspace = true
-document-features = { workspace = true }
+document-features = { workspace = true, features = ["default"] }
 
 [features]
 default = ["local"]

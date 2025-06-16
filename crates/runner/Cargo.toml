@@ -32,7 +32,7 @@ futures.workspace = true
 thiserror.workspace = true
 url = { workspace = true, features = ["serde"] }
 dynosaur = { workspace = true }
-document-features = { workspace = true }
+document-features = { workspace = true, features = ["default"] }
 
 # Networking
 crossbeam-channel = { workspace = true, optional = true }

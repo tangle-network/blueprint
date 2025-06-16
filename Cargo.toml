@@ -131,13 +131,12 @@ blueprint-metrics-rpc-calls = { version = "0.1.0-alpha.3", path = "./crates/metr
 
 cargo-tangle = { version = "0.4.0-alpha.15", path = "./cli", default-features = false }
 cargo_metadata = { version = "0.18.1" }
-tnt-core-bytecode = { path = "./../tnt-core/bytecode", default-features = false }
 bollard = { version = "0.18.0", features = ["ssl"] }
-# tnt-core-bytecode = { version = "0.5.0", default-features = false }
+tnt-core-bytecode = { git = "https://github.com/tangle-network/tnt-core.git", default-features = false }
 
 # Tangle-related dependencies
+# tangle-subxt = { git = "https://github.com/tangle-network/tangle.git", default-features = false }
 tangle-subxt = { path = "./../tangle/tangle-subxt", default-features = false }
-# tangle-subxt = { version = "0.17", default-features = false }
 round-based = { version = "0.4.1", default-features = false }
 
 # Substrate dependencies
@@ -252,9 +251,9 @@ syn = { version = "2.0", default-features = false }
 trybuild = { version = "1.0", default-features = false }
 dirs = { version = "6.0.0", default-features = false }
 indicatif = { version = "0.17.8", default-features = false }
-document-features = "0.2.11"
-rustversion = "1.0.21"
-cargo-dist-schema = "0.28.0"
+document-features = { version = "0.2.11", default-features = false }
+rustversion = { version = "1.0.21", default-features = false }
+cargo-dist-schema = { version = "0.28.0", default-features = false }
 
 # Time & Date
 time = { version = "0.3.41", default-features = false }
