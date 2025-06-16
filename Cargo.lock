@@ -4558,9 +4558,9 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
 name = "cloud-hypervisor-client"
-version = "0.3.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99431617db7b7cb67d477004477bc481f59aadf3c436f02408f48f15c4679bcc"
+checksum = "eaed0af519520f149d85d5e8898c7743459c059ace4243aedfdd239b3bb7cb33"
 dependencies = [
  "base64 0.7.0",
  "futures",
@@ -4572,7 +4572,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
- "serde_with",
  "url",
  "uuid 1.17.0",
 ]
