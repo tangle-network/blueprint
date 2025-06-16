@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-evm-extra"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 description = "EVM extra utilities for Blueprint framework"
 authors.workspace = true
 edition.workspace = true

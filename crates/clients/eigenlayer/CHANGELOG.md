@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-client-eigenlayer-v0.1.0-alpha.11...blueprint-client-eigenlayer-v0.1.0-alpha.12) - 2025-06-16
+
+### Added
+
+- *(manager)* [**breaking**] add manager <-> service bridge (#969)
+
 ## [0.1.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-client-eigenlayer-v0.1.0-alpha.10...blueprint-client-eigenlayer-v0.1.0-alpha.11) - 2025-05-14
 
 ### Other

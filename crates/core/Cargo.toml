@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-core"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 description = "Blueprint SDK Core functionality"
 authors.workspace = true
 edition.workspace = true
