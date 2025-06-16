@@ -18,7 +18,17 @@ use blueprint_core::{error, info};
 use std::sync::Arc;
 use tokio::sync::{RwLock, oneshot};
 
-/// Unified `QoS` service that combines heartbeat, metrics, logging, and dashboard functionality.
+/// Unified Quality of Service (`QoS`) service that integrates heartbeat monitoring, metrics collection,
+/// logging, and dashboard visualization into a single cohesive system.
+///
+/// `QoSService` orchestrates multiple components:
+/// - Heartbeat service for liveness monitoring and reporting
+/// - Metrics collection and exposure via Prometheus
+/// - Log aggregation via Loki
+/// - Dashboard visualization via Grafana
+/// - Server management for the above components
+///
+/// It can be configured to automatically manage server instances or connect to externally managed services.
 pub struct QoSService<C: HeartbeatConsumer + Send + Sync + 'static> {
     heartbeat_service: Option<Arc<HeartbeatService<C>>>,
     metrics_service: Option<Arc<MetricsService>>,
@@ -32,6 +42,10 @@ pub struct QoSService<C: HeartbeatConsumer + Send + Sync + 'static> {
 }
 
 impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
+    /// Returns a reference to the heartbeat service if configured.
+    ///
+    /// The `HeartbeatService` is responsible for sending periodic liveness updates
+    /// to the blockchain or other monitoring systems.
     pub fn heartbeat_service(&self) -> Option<&Arc<HeartbeatService<C>>> {
         self.heartbeat_service.as_ref()
     }
@@ -261,27 +275,55 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         info!("-------------------------");
     }
 
+    /// Returns a reference to the Grafana API client if configured.
+    ///
+    /// The Grafana client can be used to programmatically create or update dashboards,
+    /// manage data sources, and configure alerts.
     pub fn grafana_client(&self) -> Option<Arc<GrafanaClient>> {
         self.grafana_client.clone()
     }
 
+    /// Returns the URL of the Grafana server if running.
+    ///
+    /// This URL can be used to access the Grafana web interface for viewing dashboards
+    /// and visualizations.
     pub fn grafana_server_url(&self) -> Option<String> {
         self.grafana_server.as_ref().map(|server| server.url())
     }
 
-    /// Get the Loki server URL, if configured and running.
+    /// Returns the URL of the Loki server if configured and running.
+    ///
+    /// This URL can be used to configure log shipping or to query logs directly
+    /// via the Loki API.
     #[must_use]
     pub fn loki_server_url(&self) -> Option<String> {
         self.loki_server.as_ref().map(|s| s.url())
     }
 
+    /// Returns a reference to the metrics provider if configured.
+    ///
+    /// The `EnhancedMetricsProvider` collects and aggregates system and application metrics
+    /// that can be exposed via Prometheus or queried programmatically.
     pub fn provider(&self) -> Option<Arc<EnhancedMetricsProvider>> {
         self.metrics_service.as_ref().map(|s| s.provider())
     }
 
-    /// # Errors
+    /// Creates a Grafana dashboard for visualizing metrics from the blueprint.
     ///
-    /// Returns an error if creating the Grafana dashboard fails.
+    /// This method:
+    /// 1. Creates or updates required data sources (Prometheus and Loki)
+    /// 2. Creates a dashboard with panels for system metrics, job execution statistics,
+    ///    and log visualization
+    /// 3. Sets up appropriate refresh intervals and time ranges
+    ///
+    /// # Parameters
+    /// * `blueprint_name` - The name of the blueprint to use in dashboard titles
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - Creating or updating data sources fails
+    /// - Dashboard creation fails
+    /// - The Grafana client is not configured
     pub async fn create_dashboard(&mut self, blueprint_name: &str) -> Result<()> {
         let client = self.grafana_client.as_ref().ok_or(qos_error::Error::Other(
             "Grafana client not configured".to_string(),
@@ -381,6 +423,16 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         Ok(())
     }
 
+    /// Records metrics about a job execution for monitoring and visualization.
+    ///
+    /// This method tracks job execution frequency and performance metrics, which are
+    /// exposed via Prometheus and can be visualized in Grafana dashboards.
+    ///
+    /// # Parameters
+    /// * `job_id` - Unique identifier of the executed job
+    /// * `execution_time` - Time taken to execute the job in seconds
+    /// * `service_id` - ID of the service that executed the job
+    /// * `blueprint_id` - ID of the blueprint that contains the job
     pub fn record_job_execution(
         &self,
         job_id: u64,
@@ -398,15 +450,29 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         }
     }
 
+    /// Records metrics about job execution errors for monitoring and alerting.
+    ///
+    /// This method tracks job failures by type, which can be used for alerting
+    /// and diagnostic purposes in Grafana dashboards.
+    ///
+    /// # Parameters
+    /// * `job_id` - Unique identifier of the job that encountered an error
+    /// * `error_type` - Classification or description of the error that occurred
     pub fn record_job_error(&self, job_id: u64, error_type: &str) {
         if let Some(service) = self.metrics_service.as_ref() {
             service.provider().record_job_error(job_id, error_type);
         }
     }
 
-    /// # Errors
+    /// Waits for the `QoS` service to complete its operation.
     ///
-    /// Returns an error if the completion signal receiver is dropped prematurely.
+    /// This method blocks until a completion signal is received, which typically
+    /// happens when the service is being shut down gracefully. It's useful for
+    /// coordinating shutdown of the `QoS` service with the rest of the application.
+    ///
+    /// # Errors
+    /// Returns an error if the completion signal receiver is dropped prematurely,
+    /// indicating an unexpected termination of the service.
     pub async fn wait_for_completion(&self) -> Result<()> {
         let rx_option = {
             let mut guard = self.completion_rx.write().await;
@@ -427,9 +493,14 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         }
     }
 
-    /// # Errors
+    /// Initiates a graceful shutdown of the `QoS` service and all managed components.
     ///
-    /// This function currently does not return errors but is designed to in the future.
+    /// This method stops all server instances (Grafana, Prometheus, Loki) if they
+    /// were started by this service, and signals completion to any waiting tasks.
+    ///
+    /// # Errors
+    /// This function is designed to return errors from shutdown operations,
+    /// though the current implementation always returns Ok(()).
     pub fn shutdown(&self) -> Result<()> {
         info!("QoSService shutting down...");
         info!("QoSService shutdown complete.");

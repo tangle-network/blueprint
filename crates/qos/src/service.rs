@@ -12,7 +12,9 @@ use crate::proto::{
     SystemMetrics as ProtoSystemMetrics,
 };
 
-/// `QoS` metrics service implementation
+/// Implementation of the `QoS` gRPC service for exposing metrics via a remote API.
+/// This service provides endpoints for retrieving blueprint status, resource usage,
+/// custom metrics, and historical data over a standardized protocol.
 #[derive(Debug)]
 pub struct QosMetricsService<T> {
     provider: Arc<T>,
@@ -22,7 +24,9 @@ impl<T> QosMetricsService<T>
 where
     T: MetricsProvider,
 {
-    /// Create a new `QoS` metrics service
+    /// Creates a new `QoS` metrics service with the provided metrics provider.
+    ///
+    /// The provider supplies the actual metric data that will be exposed through the gRPC service.
     pub fn new(provider: Arc<T>) -> Self {
         Self { provider }
     }
@@ -182,10 +186,15 @@ where
     }
 }
 
-/// Run a `QoS` server with the given metrics provider
+/// Starts a gRPC server that exposes `QoS` metrics on the specified address.
+///
+/// This function binds to the provided address and serves the `QosMetrics` gRPC service
+/// using the supplied metrics provider as the data source. It runs indefinitely until
+/// the server is shut down or encounters an error.
 ///
 /// # Errors
-/// Returns an error if the server fails to start or encounters an error during operation
+/// Returns an error if the server fails to bind to the address, fails to start,
+/// or encounters an error during operation.
 pub async fn run_qos_server<T>(bind_address: String, provider: Arc<T>) -> Result<()>
 where
     T: MetricsProvider,

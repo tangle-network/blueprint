@@ -66,7 +66,12 @@ pub struct QoSConfig {
     pub blueprint_id: Option<u64>,
 }
 
-/// Create a new `QoS` configuration with default values
+/// Creates a new `QoS` configuration with sensible default values for all components.
+///
+/// This function initializes `QoSConfig` with defaults for heartbeat, metrics, Loki logging,
+/// and Grafana, but disables automatic server management. Prometheus server is not
+/// enabled by default. This configuration is suitable as a starting point that can be
+/// further customized.
 #[must_use]
 pub fn default_qos_config() -> QoSConfig {
     QoSConfig {

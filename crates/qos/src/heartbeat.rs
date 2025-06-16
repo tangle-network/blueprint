@@ -17,7 +17,11 @@ use std::{
 use tangle_subxt::tangle_testnet_runtime::api as tangle_api;
 use tokio::{sync::Mutex, task::JoinHandle};
 
-/// Configuration for the heartbeat service
+/// Configuration for the heartbeat service that sends periodic liveness signals to the chain.
+///
+/// Heartbeats are critical for service reliability monitoring and slashing prevention.
+/// They signal that the service is alive and functional, allowing the blockchain to
+/// track operator performance and trigger penalties when services fail.
 #[derive(Clone, Debug)]
 pub struct HeartbeatConfig {
     pub interval_secs: u64,
@@ -43,7 +47,11 @@ impl Default for HeartbeatConfig {
     }
 }
 
-/// Status information included in a heartbeat
+/// Status information included in a heartbeat submission to the chain.
+///
+/// This struct contains essential metadata that identifies the service and its current state,
+/// including the current block number, timestamp, service and blueprint identifiers, and
+/// optional status information. This data is encoded and signed before submission.
 #[derive(Clone, Debug, Encode, Decode)] // Added Encode, Decode
 pub struct HeartbeatStatus {
     pub block_number: u64,
@@ -59,16 +67,29 @@ pub struct HeartbeatStatus {
     pub status_message: Option<String>,
 }
 
-/// Trait for sending heartbeats to the chain
+/// Trait for sending heartbeats to the blockchain.
+///
+/// Implementers of this trait handle the actual submission of heartbeat data
+/// to the chain, allowing for different transport mechanisms or chain targets
+/// while maintaining a consistent heartbeat protocol.
 pub trait HeartbeatConsumer: Send + Sync + 'static {
-    /// Send a heartbeat to the chain
+    /// Sends a heartbeat status update to the blockchain.
+    ///
+    /// This method handles the actual submission of the heartbeat data to the chain,
+    /// which typically involves signing the heartbeat message and submitting it
+    /// as an extrinsic to the `Tangle` blockchain.
     fn send_heartbeat(
         &self,
         status: &HeartbeatStatus,
     ) -> Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'static>>;
 }
 
-/// Service for sending heartbeats to the chain
+/// Service for sending periodic heartbeats to the `Tangle` blockchain.
+///
+/// This service runs in the background and periodically submits signed `heartbeat`
+/// messages to the chain according to the configured interval. Heartbeats provide
+/// proof that a service is alive and help prevent slashing due to inactivity.
+/// The service includes jitter to prevent thundering herd problems.
 #[derive(Clone)]
 pub struct HeartbeatService<C: HeartbeatConsumer + Send + Sync + 'static> {
     config: HeartbeatConfig,
@@ -208,7 +229,15 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         Ok(())
     }
 
-    /// Create a new heartbeat service
+    /// Creates a new heartbeat service with the specified configuration and consumer.
+    ///
+    /// # Parameters
+    /// * `config` - Configuration settings for heartbeat intervals, jitter, and thresholds
+    /// * `consumer` - The component responsible for sending heartbeats to the chain
+    /// * `ws_rpc_endpoint` - WebSocket RPC endpoint for blockchain communication
+    /// * `keystore_uri` - URI of the keystore containing signing credentials
+    /// * `service_id` - Unique identifier of the service on the blockchain
+    /// * `blueprint_id` - Identifier of the blueprint the service is running
     pub fn new(
         config: HeartbeatConfig,
         consumer: Arc<C>,
@@ -230,19 +259,30 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         }
     }
 
-    /// Get the last heartbeat status
+    /// Returns the most recent heartbeat status sent to the chain, if available.
+    ///
+    /// This information can be used to verify when the last successful heartbeat
+    /// was sent and what status information was included.
     #[must_use]
     pub async fn last_heartbeat(&self) -> Option<HeartbeatStatus> {
         self.last_heartbeat.lock().await.clone()
     }
 
-    /// Check if the service is running
+    /// Checks if the heartbeat service is currently active and sending heartbeats.
+    ///
+    /// Returns `true` if the service is running and sending heartbeats at the configured
+    /// interval, `false` otherwise.
     #[must_use]
     pub async fn is_running(&self) -> bool {
         *self.running.lock().await
     }
 
-    /// Start sending heartbeats at the configured interval
+    /// Starts the heartbeat service, which will periodically send heartbeats to the chain.
+    ///
+    /// This method launches a background task that sends heartbeats according to the
+    /// configured interval with some jitter to prevent synchronized heartbeats across
+    /// the network. Each heartbeat includes current service status and is cryptographically
+    /// signed to verify authenticity.
     ///
     /// # Errors
     /// Returns an error if the service is already running
@@ -308,10 +348,15 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         Ok(())
     }
 
-    /// Stop sending heartbeats
+    /// Stops the heartbeat service and terminates the background heartbeat task.
+    ///
+    /// This will prevent further heartbeats from being sent to the chain. Services
+    /// should call this method during graceful shutdown to avoid resource leaks.
+    /// Note that stopping heartbeats may eventually trigger slashing if the service
+    /// remains inactive beyond the threshold period defined on-chain.
     ///
     /// # Errors
-    /// Returns an error if the service is not running
+    /// Returns an error if the service is not currently running
     pub async fn stop_heartbeat(&self) -> Result<()> {
         let mut running = self.running.lock().await;
         if !*running {

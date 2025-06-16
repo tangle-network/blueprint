@@ -6,7 +6,13 @@ use tracing_subscriber::{Registry, layer::SubscriberExt};
 
 use crate::error::{Error, Result};
 
-/// Configuration for Loki logging
+/// Configuration for Loki log aggregation integration.
+///
+/// This structure defines settings for connecting to and sending logs to a Loki server,
+/// which is part of the Grafana observability stack. Loki is designed for storing and
+/// querying log data, providing an efficient way to centralize logs from Blueprint services.
+/// The configuration includes connection details, authentication, log batching parameters,
+/// and custom labels that will be attached to all logs sent to Loki.
 #[derive(Clone, Debug)]
 pub struct LokiConfig {
     /// Loki server URL
@@ -56,10 +62,19 @@ pub struct OtelConfig {
     pub max_attributes_per_span: Option<u32>,
 }
 
-/// Initialize Loki logging with the given configuration
+/// Initializes Loki logging with the provided configuration.
+///
+/// This function sets up the tracing infrastructure to send logs to a Loki server,
+/// creating a background task that collects logs and sends them in batches. It configures
+/// labels, authentication, and connection details according to the provided configuration.
+/// The function integrates with Rust's tracing ecosystem for seamless log forwarding.
+///
+/// # Parameters
+/// * `config` - Configuration settings for the Loki connection and log processing
 ///
 /// # Errors
-/// Returns an error if the Loki layer initialization fails
+/// Returns an error if the Loki layer initialization fails, including URL parsing errors,
+/// label configuration errors, or connection setup failures
 pub fn init_loki_logging(config: LokiConfig) -> Result<()> {
     // Parse the Loki URL
     let url = Url::parse(&config.url)
@@ -117,10 +132,21 @@ pub fn init_loki_logging(config: LokiConfig) -> Result<()> {
     Ok(())
 }
 
-/// Initialize Loki logging with OpenTelemetry integration
+/// Initializes Loki logging with OpenTelemetry integration for distributed tracing.
+///
+/// This function sets up both Loki logging and OpenTelemetry tracing, creating an
+/// integrated observability pipeline. OpenTelemetry traces can be correlated with
+/// logs, providing a unified view of request flows across distributed systems. The
+/// integration enriches logs with trace context and enables more powerful debugging
+/// and monitoring capabilities.
+///
+/// # Parameters
+/// * `loki_config` - Configuration for the Loki connection and log processing
+/// * `service_name` - Name of the service, used for identifying the source in traces and logs
 ///
 /// # Errors
-/// Returns an error if the Loki layer or OpenTelemetry initialization fails
+/// Returns an error if the Loki layer or OpenTelemetry initialization fails, including
+/// configuration errors, connection issues, or pipeline setup problems
 pub fn init_loki_with_opentelemetry(loki_config: &LokiConfig, service_name: &str) -> Result<()> {
     // Parse the Loki URL
     let url = Url::parse(&loki_config.url)
@@ -181,10 +207,20 @@ pub fn init_loki_with_opentelemetry(loki_config: &LokiConfig, service_name: &str
     Ok(())
 }
 
-/// Initialize OpenTelemetry tracer with Loki integration
+/// Initializes an OpenTelemetry tracer with Loki integration for trace export.
+///
+/// This function configures and starts an OpenTelemetry tracer that sends trace
+/// data to Loki. It sets up the trace context propagation, sampling strategies,
+/// and export pipelines according to the provided configuration. The tracer captures
+/// distributed tracing information that can be viewed alongside logs in Grafana.
+///
+/// # Parameters
+/// * `loki_config` - Configuration for the Loki connection including OpenTelemetry settings
+/// * `service_name` - Name of the service to identify the source of traces
 ///
 /// # Errors
-/// Returns an error if the OpenTelemetry tracer initialization fails
+/// Returns an error if the OpenTelemetry tracer initialization fails, such as
+/// invalid configuration, resource allocation issues, or export pipeline setup failures
 pub fn init_otel_tracer(loki_config: &LokiConfig, service_name: &str) -> Result<()> {
     use opentelemetry::KeyValue;
 

@@ -15,7 +15,13 @@ use crate::servers::ServerManager;
 use crate::servers::prometheus::PrometheusServer;
 use opentelemetry::KeyValue; // Import ServerManager trait for .start()
 
-/// Enhanced metrics provider that integrates Prometheus and OpenTelemetry
+/// A comprehensive metrics provider that integrates Prometheus and OpenTelemetry systems.
+///
+/// This provider acts as the central metrics collection and export hub for the `QoS` system,
+/// collecting system metrics, application-specific metrics, and custom metrics. It manages
+/// metric collection, storage, and export to monitoring systems through Prometheus and
+/// OpenTelemetry protocols. The provider supports historical metrics collection and
+/// can manage an embedded Prometheus server for metrics exposure.
 pub struct EnhancedMetricsProvider {
     /// System metrics
     system_metrics: Arc<RwLock<Vec<SystemMetrics>>>,
@@ -52,7 +58,16 @@ pub struct EnhancedMetricsProvider {
 }
 
 impl EnhancedMetricsProvider {
-    /// Create a new enhanced metrics provider with OpenTelemetry support
+    /// Creates a new enhanced metrics provider with Prometheus and OpenTelemetry support.
+    ///
+    /// Initializes the metrics collection infrastructure including Prometheus collectors,
+    /// OpenTelemetry exporters, and shared registries. Sets up metric collection for both
+    /// system-level and application-specific metrics, and prepares the provider for metrics
+    /// export through multiple protocols.
+    ///
+    /// # Parameters
+    /// * `metrics_config` - Configuration for metrics collection, retention, and reporting
+    /// * `otel_config` - OpenTelemetry-specific configuration settings
     ///
     /// # Errors
     /// Returns an error if the Prometheus collector or OpenTelemetry exporter initialization fails
@@ -121,10 +136,16 @@ impl EnhancedMetricsProvider {
         Ok(provider)
     }
 
-    /// Start the metrics collection process
+    /// Starts the metrics collection and reporting process.
+    ///
+    /// This method initializes the background metrics collection task that periodically gathers
+    /// system and blueprint metrics. It also starts the Prometheus server if configured to
+    /// expose metrics via HTTP endpoints. This method should be called once after creating
+    /// the provider to begin the metrics pipeline.
     ///
     /// # Errors
-    /// Returns an error if the Prometheus server fails to start
+    /// Returns an error if the Prometheus server fails to start or if the background
+    /// metrics collection task cannot be created
     pub async fn start_collection(self: Arc<Self>) -> Result<()> {
         let prometheus_server_config = self.config.prometheus_server.clone().unwrap_or_default();
 
@@ -198,7 +219,11 @@ impl EnhancedMetricsProvider {
         Ok(())
     }
 
-    /// Collect system metrics
+    /// Collects current system metrics including CPU, memory, and network usage.
+    ///
+    /// This method gathers real-time system metrics using system APIs and formats them
+    /// into a structured `SystemMetrics` object. It includes CPU utilization, memory usage,
+    /// disk activity, and network statistics from the host system.
     fn collect_system_metrics() -> SystemMetrics {
         let mut sys = sysinfo::System::new_all();
         sys.refresh_all();
@@ -230,7 +255,18 @@ impl EnhancedMetricsProvider {
         }
     }
 
-    /// Record job execution
+    /// Records metrics for a successful job execution.
+    ///
+    /// Updates both Prometheus and OpenTelemetry metrics with information about a completed job.
+    /// This includes recording the execution time, incrementing job counters, and updating histograms
+    /// with execution duration data. Job metrics are tagged with service ID, blueprint ID, and job ID
+    /// to enable detailed filtering and analysis.
+    ///
+    /// # Parameters
+    /// * `job_id` - Unique identifier for the executed job
+    /// * `execution_time` - Duration of the job execution in seconds
+    /// * `service_id` - Identifier for the service that executed the job
+    /// * `blueprint_id` - Identifier for the blueprint that executed the job
     pub fn record_job_execution(
         &self,
         job_id: u64,
@@ -259,7 +295,14 @@ impl EnhancedMetricsProvider {
         );
     }
 
-    /// Record job error
+    /// Records metrics for a failed job execution.
+    ///
+    /// Updates error counters and metrics when a job fails, categorizing the error by type.
+    /// This method enables tracking of error rates and common failure modes across jobs.
+    ///
+    /// # Parameters
+    /// * `job_id` - Unique identifier for the failed job
+    /// * `error_type` - Classification of the error that occurred
     pub fn record_job_error(&self, job_id: u64, error_type: &str) {
         self.prometheus_collector.record_job_error(
             job_id,
@@ -269,35 +312,52 @@ impl EnhancedMetricsProvider {
         );
     }
 
-    /// Get the OpenTelemetry exporter
+    /// Returns a reference to the OpenTelemetry exporter.
+    ///
+    /// Provides access to the underlying OpenTelemetry exporter for advanced operations
+    /// such as creating custom meters, recorders, or manually pushing metrics to the
+    /// OpenTelemetry backend.
     #[must_use]
     pub fn opentelemetry_exporter(&self) -> Arc<OpenTelemetryExporter> {
         self.opentelemetry_exporter.clone()
     }
 
-    /// Get the Prometheus collector
+    /// Returns a reference to the Prometheus collector.
+    ///
+    /// Provides access to the underlying Prometheus collector for advanced operations
+    /// such as registering custom collectors or directly manipulating Prometheus metrics.
     #[must_use]
     pub fn prometheus_collector(&self) -> Arc<PrometheusCollector> {
         self.prometheus_collector.clone()
     }
 
-    /// Get a clone of the OpenTelemetry job executions counter
+    /// Returns a clone of the OpenTelemetry job executions counter.
+    ///
+    /// This counter tracks the total number of job executions recorded through OpenTelemetry.
+    /// It can be used to increment execution counts from external components.
     #[must_use]
     pub fn get_otel_job_executions_counter(&self) -> opentelemetry::metrics::Counter<u64> {
         self.otel_job_executions_counter.clone()
     }
 
-    /// Get the shared Prometheus registry.
+    /// Returns the shared Prometheus registry used for all metrics.
+    ///
+    /// This registry consolidates all Prometheus metrics from both direct Prometheus collectors
+    /// and OpenTelemetry exporters. It's useful for registering additional custom collectors
+    /// or exporting all metrics to external systems.
     #[must_use]
     pub fn shared_registry(&self) -> Arc<Registry> {
         self.shared_registry.clone()
     }
 
-    /// Force flushes the OpenTelemetry metrics pipeline via the exporter.
+    /// Forces flush of accumulated OpenTelemetry metrics to their destination.
+    ///
+    /// This method triggers an immediate export of all buffered OpenTelemetry metrics
+    /// rather than waiting for the normal export interval. This is useful during graceful
+    /// shutdown or when immediate metric visibility is required.
     ///
     /// # Errors
-    ///
-    /// Returns an error if the OpenTelemetry exporter fails to force flush
+    /// Returns an error if the OpenTelemetry exporter fails to force flush metrics
     pub fn force_flush_otel_metrics(&self) -> crate::error::Result<()> {
         info!("EnhancedMetricsProvider: Attempting to force flush OpenTelemetry metrics...");
         match self.opentelemetry_exporter.force_flush() {

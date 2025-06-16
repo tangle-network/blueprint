@@ -49,7 +49,12 @@ pub struct PrometheusJsonData {
     pub timeout: u32,
 }
 
-/// Configuration for Grafana
+/// Configuration for connecting to and interacting with a Grafana server.
+///
+/// This structure encapsulates the connection details, authentication credentials,
+/// and integration settings needed to communicate with a Grafana instance. It supports
+/// both API key authentication (preferred) and basic authentication as a fallback.
+/// The configuration also includes references to related data sources like Prometheus and Loki.
 #[derive(Clone, Debug)]
 pub struct GrafanaConfig {
     /// Grafana server URL
@@ -93,7 +98,12 @@ impl Default for GrafanaConfig {
     }
 }
 
-/// Grafana client for managing dashboards
+/// Client for interacting with the Grafana HTTP API.
+///
+/// This client provides methods to create and manage Grafana resources including
+/// dashboards, folders, and data sources. It handles authentication, request formatting,
+/// and response parsing for the Grafana API. The client is designed to support Blueprint
+/// monitoring by creating pre-configured dashboards that visualize metrics and logs.
 pub struct GrafanaClient {
     /// HTTP client
     client: Client,
@@ -409,12 +419,20 @@ pub struct DataSourceDetails {
 
 impl GrafanaClient {
     /// Returns the configured Prometheus datasource URL, if any.
+    ///
+    /// This method provides access to the Prometheus URL that has been configured
+    /// for use with Grafana dashboards. It's used when setting up Prometheus
+    /// as a data source for created dashboards.
     #[must_use]
     pub fn prometheus_datasource_url(&self) -> Option<&String> {
         self.config.prometheus_datasource_url.as_ref()
     }
 
-    /// Create a new Grafana client
+    /// Creates a new Grafana client with the specified configuration.
+    ///
+    /// Initializes an HTTP client with appropriate authentication headers based on
+    /// the provided configuration. The client will use API key authentication if available,
+    /// falling back to basic authentication if credentials are provided.
     #[must_use]
     pub fn new(config: GrafanaConfig) -> Self {
         let client = Client::builder()
@@ -426,12 +444,28 @@ impl GrafanaClient {
     }
 
     /// Returns a reference to the Grafana client's configuration.
+    ///
+    /// Provides access to the underlying configuration settings that this client
+    /// was initialized with, including connection URLs and authentication details.
     #[must_use]
     pub fn config(&self) -> &GrafanaConfig {
         &self.config
     }
 
-    /// Create or update a Grafana dashboard
+    /// Creates or updates a Grafana dashboard.
+    ///
+    /// This method sends a dashboard configuration to the Grafana API, either creating
+    /// a new dashboard or updating an existing one if the dashboard UID already exists.
+    /// It handles the proper JSON formatting required by the Grafana API and processes
+    /// the response.
+    ///
+    /// # Parameters
+    /// * `dashboard` - The dashboard configuration to create or update
+    /// * `folder_id` - Optional folder ID to organize the dashboard in
+    /// * `message` - Commit message for the dashboard change
+    ///
+    /// # Returns
+    /// The dashboard URL on success
     ///
     /// # Errors
     /// Returns an error if the Grafana API request fails or returns an error response
@@ -502,7 +536,19 @@ impl GrafanaClient {
         Ok(dashboard_response.url)
     }
 
-    /// Create a folder in Grafana
+    /// Creates a folder in Grafana for organizing dashboards.
+    ///
+    /// Folders help organize dashboards in the Grafana UI. This method attempts
+    /// to create a new folder with the specified title and optional UID.
+    /// If a folder with the same title already exists, it returns the existing
+    /// folder's ID rather than creating a duplicate.
+    ///
+    /// # Parameters
+    /// * `title` - The display name for the folder
+    /// * `uid` - Optional unique identifier for the folder
+    ///
+    /// # Returns
+    /// The folder ID (either newly created or existing)
     ///
     /// # Errors
     /// Returns an error if the Grafana API request fails or returns an error response
@@ -561,7 +607,21 @@ impl GrafanaClient {
         Ok(folder_id)
     }
 
-    /// Create a blueprint dashboard in Grafana
+    /// Creates a pre-configured dashboard for monitoring a Blueprint service.
+    ///
+    /// Generates a comprehensive dashboard with panels for system metrics,
+    /// application metrics, and logs specific to the identified Blueprint service.
+    /// The dashboard includes panels for CPU usage, memory usage, job execution metrics,
+    /// and log streams from the specified Loki datasource.
+    ///
+    /// # Parameters
+    /// * `service_id` - The service ID to monitor
+    /// * `blueprint_id` - The blueprint ID to monitor
+    /// * `prometheus_datasource` - Name of the Prometheus datasource to use
+    /// * `loki_datasource` - Name of the Loki datasource to use for logs
+    ///
+    /// # Returns
+    /// The URL of the created dashboard
     ///
     /// # Errors
     /// Returns an error if the dashboard creation fails or if the Grafana API returns an error

@@ -2,7 +2,11 @@ use crate::servers::prometheus::PrometheusServerConfig;
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-/// Configuration for the metrics service
+/// Configuration for the metrics collection, storage, and exposure service.
+///
+/// This structure defines settings for how metrics should be collected,
+/// how long they should be retained, sampling rates, and how they
+/// should be exposed to external systems (e.g., through a Prometheus server).
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct MetricsConfig {
     pub prometheus_server: Option<PrometheusServerConfig>,
@@ -24,7 +28,11 @@ impl Default for MetricsConfig {
     }
 }
 
-/// System metrics
+/// System-level metrics representing hardware and OS resource utilization.
+///
+/// These metrics include information about the host system's resource usage,
+/// such as CPU utilization, memory consumption, disk I/O, and network traffic.
+/// They provide a snapshot of the system's state at a point in time.
 #[derive(Clone, Debug)]
 pub struct SystemMetrics {
     pub cpu_usage: f32,
@@ -55,7 +63,12 @@ impl Default for SystemMetrics {
     }
 }
 
-/// Blueprint-specific metrics
+/// Blueprint-specific application metrics for monitoring application behavior.
+///
+/// These metrics track application-specific measurements relevant to blueprint
+/// operation such as job execution counts, processing durations, queue depths,
+/// and custom metrics defined by the application. They focus on business logic
+/// rather than system resources.
 #[derive(Clone, Debug)]
 pub struct BlueprintMetrics {
     pub custom_metrics: HashMap<String, String>,
@@ -74,7 +87,12 @@ impl Default for BlueprintMetrics {
     }
 }
 
-/// Status information for a blueprint
+/// Operational status information for a blueprint service instance.
+///
+/// This structure tracks the operational state of a blueprint service,
+/// including its status code, descriptive message, uptime metrics, startup time,
+/// and heartbeat activity. It provides a holistic view of service health and
+/// availability that can be queried through the `QoS` system.
 #[derive(Clone, Debug)]
 pub struct BlueprintStatus {
     pub service_id: u64,
@@ -106,7 +124,12 @@ impl Default for BlueprintStatus {
     }
 }
 
-/// Trait for providing metrics
+/// Trait for providing access to system and application metrics.
+///
+/// This trait defines the core interface for metric collection and retrieval in the `QoS` system.
+/// Implementers of this trait are responsible for collecting, storing, and exposing metrics
+/// about both the system (CPU, memory, etc.) and the application (blueprint-specific metrics).
+/// It supports both current and historical metric access as well as status updates.
 pub trait MetricsProvider: Send + Sync + 'static {
     fn get_system_metrics(&self) -> SystemMetrics;
     fn get_blueprint_metrics(&self) -> BlueprintMetrics;

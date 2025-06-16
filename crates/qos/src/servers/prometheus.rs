@@ -10,7 +10,10 @@ use crate::metrics::prometheus::server::PrometheusServer as PrometheusMetricsSer
 use crate::servers::ServerManager;
 use crate::servers::common::DockerManager;
 
-/// Configuration for the Prometheus server
+/// Configuration settings for a Prometheus metrics server.
+/// 
+/// This struct defines all the parameters needed to set up and run a Prometheus server,
+/// either as a Docker container or as an embedded server within the application.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PrometheusServerConfig {
     /// The port to bind the Prometheus server to
@@ -49,7 +52,11 @@ impl Default for PrometheusServerConfig {
     }
 }
 
-/// Prometheus server manager
+/// Manager for a Prometheus metrics server instance.
+///
+/// This struct handles the lifecycle of a Prometheus server, which can either run
+/// as a Docker container or as an embedded server within the application process.
+/// It provides methods for starting, stopping, and monitoring the server.
 #[derive(Clone)]
 pub struct PrometheusServer {
     /// The configuration for the Prometheus server
@@ -72,10 +79,18 @@ pub struct PrometheusServer {
 }
 
 impl PrometheusServer {
-    /// Create a new Prometheus server manager
+    /// Creates a new Prometheus server manager with the provided configuration and metrics registry.
+    ///
+    /// This constructor prepares the Prometheus server infrastructure but does not start the server.
+    /// The actual server (Docker container or embedded) is started when `start()` is called.
+    ///
+    /// # Parameters
+    /// * `config` - The configuration settings for the Prometheus server
+    /// * `metrics_registry` - Optional Prometheus registry for the embedded server mode
+    /// * `enhanced_metrics_provider` - Provider that generates metrics data
     ///
     /// # Errors
-    /// Returns an error if the Docker manager fails to create a new container
+    /// Returns an error if the Docker manager connection fails to initialize
     pub fn new(
         config: PrometheusServerConfig,
         metrics_registry: Option<Arc<prometheus::Registry>>,
@@ -92,11 +107,17 @@ impl PrometheusServer {
         })
     }
 
-    /// Create a new Docker container for the Prometheus server
+    /// Creates and configures a new Docker container for the Prometheus server.
+    ///
+    /// Sets up a new container with appropriate port mappings, volume mounts, and configuration
+    /// based on the server settings. This does not start the container, only creates it.
+    ///
+    /// # Parameters
+    /// * `network` - Optional Docker network to attach the container to
     ///
     /// # Errors
-    /// Returns an error if the container creation fails
-    ///
+    /// Returns an error if the Docker API fails to create the container
+    /// 
     /// # Panics
     /// Panics if mutex locks cannot be acquired
     pub async fn create_docker_container(&self) -> Result<()> {
@@ -163,17 +184,41 @@ impl PrometheusServer {
         Ok(())
     }
 
-    /// Get the metrics registry used by the embedded Prometheus server
+    /// Returns a reference to the metrics registry used by the embedded Prometheus server.
+    ///
+    /// This registry contains all the metrics that are exposed by the embedded Prometheus server.
+    /// Returns None if no registry was provided during initialization.
     #[must_use]
     pub fn registry(&self) -> Option<Arc<prometheus::Registry>> {
         self.metrics_registry.clone()
     }
 
+    /// Returns the Docker container ID if the server is running in Docker mode.
+    ///
+    /// This identifier can be used to reference the specific Prometheus container for
+    /// management operations via Docker API. The container ID is only available when the
+    /// server is configured to run in Docker mode and after the container has been created.
+    ///
+    /// # Returns
+    /// * `Some(String)` - Container ID if the server is using Docker and a container has been created
+    /// * `None` - If the server is not using Docker, the container hasn't been created yet,
+    ///   or if there was an error acquiring the lock on the container ID
     #[must_use]
     pub fn container_id(&self) -> Option<String> {
         self.container_id.lock().map(|id| id.clone()).ok()?
     }
 
+    /// Checks if this server is configured to use Docker.
+    ///
+    /// The Prometheus server can operate in two modes:
+    /// 1. Docker mode: Runs Prometheus in a separate Docker container, providing isolation
+    ///    and easier management but requiring Docker to be available
+    /// 2. Embedded mode: Runs a Prometheus-compatible metrics HTTP server directly within
+    ///    the application process, with no external dependencies
+    ///
+    /// # Returns
+    /// * `true` - If the server is configured to use Docker
+    /// * `false` - If the server is using the embedded mode
     #[must_use]
     pub fn is_docker_based(&self) -> bool {
         self.config.use_docker
@@ -181,6 +226,35 @@ impl PrometheusServer {
 }
 
 impl ServerManager for PrometheusServer {
+    /// Starts the Prometheus server in either Docker or embedded mode.
+    ///
+    /// * **`Docker`** – Creates (or reuses) a container, mounts configuration/data volumes,
+    ///   optionally connects it to a network, and waits for the container health-check.
+    /// * **`Embedded`** – Binds an in-process HTTP server to `host:port` and serves the
+    ///   `/metrics` endpoint backed by the supplied registry.
+    ///
+    /// The call blocks until the server is ready.
+    ///
+    /// # Parameters
+    /// * `network` – Optional Docker network name (`Docker` mode only).
+    ///
+    /// # Errors
+    /// Returns an error if the container or server fails to start, health-check fails, the
+    /// port is already in use, or required configuration is missing.
+    ///
+    ///
+    /// * `network` - Optional Docker network name to connect the container to. Only used in `Docker` mode.
+    ///   When provided, the container will be connected to this network to allow service discovery
+    ///   between services (e.g., Prometheus to scrape metrics from other containers).
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// * Docker container creation or startup fails (permission issues, Docker daemon not running, image not found)
+    /// * Port binding fails for the embedded server (port already in use or insufficient permissions)
+    /// * Server startup times out or fails for any other reason
+    /// * Configuration file generation fails or specified paths are invalid (Docker mode only)
+    /// * Health check fails for Docker container
+    /// * No metrics registry is provided for embedded server mode
     async fn start(&self, network: Option<&str>) -> Result<()> {
         let mut current_container_id_val: Option<String> = None;
         if self.config.use_docker {
@@ -425,6 +499,33 @@ impl ServerManager for PrometheusServer {
         Ok(())
     }
 
+    /// Stops the running Prometheus server and performs necessary cleanup.
+    ///
+    /// This method safely terminates the Prometheus server instance based on its operational mode:
+    ///
+    /// ## Docker Mode
+    /// When running as a Docker container:
+    /// * Retrieves the container ID from internal state
+    /// * Stops the Docker container using the Docker API
+    /// * Removes the container to free up resources
+    /// * Clears the internal container ID reference
+    /// * Handles cases where container is already stopped gracefully
+    ///
+    /// ## Embedded Mode
+    /// When running as an embedded server:
+    /// * Acquires lock on the server instance
+    /// * Triggers a graceful shutdown of the HTTP server
+    /// * Waits for in-flight requests to complete
+    /// * Releases resources associated with the server
+    ///
+    /// The method is idempotent and safe to call multiple times, even if the server
+    /// is not running.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// * Docker API encounters errors when stopping or removing the container
+    /// * Communication with Docker daemon fails
+    /// * Container removal fails due to permission issues
     async fn stop(&self) -> Result<()> {
         if self.config.use_docker {
             let container_id = {
@@ -461,6 +562,20 @@ impl ServerManager for PrometheusServer {
         Ok(())
     }
 
+    /// Returns the fully qualified URL where the Prometheus server can be accessed.
+    ///
+    /// Constructs a URL using the configured host and port values in the format:
+    /// `http://{host}:{port}`
+    ///
+    /// This URL can be used to:
+    /// * Access the Prometheus web UI for manual query and visualization
+    /// * Configure Grafana datasources programmatically
+    /// * Set up health checks or monitoring of the Prometheus instance
+    /// * Access the Prometheus HTTP API for programmatic queries
+    ///
+    /// The URL is valid regardless of whether the server is running in Docker mode
+    /// or embedded mode, as both modes expose the same interface on the configured
+    /// host:port combination.
     fn url(&self) -> String {
         format!(
             "http://{}:{}",
@@ -473,6 +588,14 @@ impl ServerManager for PrometheusServer {
         )
     }
 
+    /// Checks if the Prometheus server is currently running.
+    ///
+    /// For Docker-based servers, checks the container status.
+    /// For embedded servers, checks if the server instance exists.
+    ///
+    /// # Errors
+    /// Returns an error if checking the server status fails or if
+    /// the Docker API reports an error.
     async fn is_running(&self) -> Result<bool> {
         if self.config.use_docker {
             let container_id = {
@@ -493,6 +616,18 @@ impl ServerManager for PrometheusServer {
         Ok(server.is_some())
     }
 
+    /// Waits until the Prometheus server is ready to accept connections.
+    ///
+    /// Periodically checks the server status until it's ready or until the timeout expires.
+    /// For Docker-based servers, performs HTTP health checks.
+    /// For embedded servers, verifies the server is bound and responding.
+    ///
+    /// # Parameters
+    /// * `timeout_secs` - Maximum time to wait in seconds
+    ///
+    /// # Errors
+    /// Returns an error if the server fails to become ready within the timeout period
+    /// or if health checks fail.
     async fn wait_until_ready(&self, timeout_secs: u64) -> Result<()> {
         if self.config.use_docker {
             let container_id = {

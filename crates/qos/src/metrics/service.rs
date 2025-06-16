@@ -6,7 +6,13 @@ use crate::metrics::opentelemetry::OpenTelemetryConfig;
 use crate::metrics::provider::EnhancedMetricsProvider;
 use crate::metrics::types::MetricsConfig;
 
-/// Metrics service for collecting and exposing metrics
+/// Service responsible for metrics collection, processing, and exposure.
+///
+/// The `MetricsService` orchestrates the metrics collection pipeline, managing the
+/// lifecycle of the underlying metrics provider. It serves as the main entry point
+/// for recording application metrics (like job execution statistics) and provides
+/// access to the configured metrics infrastructure. The service works with Prometheus
+/// and OpenTelemetry to provide comprehensive observability for Blueprint services.
 #[derive(Clone)]
 pub struct MetricsService {
     /// Metrics provider
@@ -18,10 +24,19 @@ pub struct MetricsService {
 }
 
 impl MetricsService {
-    /// Create a new metrics service
+    /// Creates a new metrics service with default OpenTelemetry configuration.
+    ///
+    /// Initializes the metrics collection infrastructure with the specified configuration,
+    /// creating an `EnhancedMetricsProvider` with default OpenTelemetry settings. This
+    /// provider will collect system metrics, application metrics, and expose them through
+    /// Prometheus and OpenTelemetry.
+    ///
+    /// # Parameters
+    /// * `config` - Configuration for metrics collection, retention and exposure
     ///
     /// # Errors
-    /// Returns an error if the metrics provider initialization fails
+    /// Returns an error if the metrics provider initialization fails, which could occur
+    /// due to invalid configuration or resource allocation issues
     pub fn new(config: MetricsConfig) -> Result<Self> {
         let otel_config = OpenTelemetryConfig::default();
         let provider = Arc::new(EnhancedMetricsProvider::new(config.clone(), &otel_config)?);
@@ -29,10 +44,19 @@ impl MetricsService {
         Ok(Self { provider, config })
     }
 
-    /// Create a new metrics service with custom OpenTelemetry configuration
+    /// Creates a new metrics service with custom OpenTelemetry configuration.
+    ///
+    /// Similar to `new()`, but allows for customized OpenTelemetry settings, enabling
+    /// fine-tuning of the tracing and metrics export behavior. Use this constructor when
+    /// you need to customize the OpenTelemetry pipeline for advanced observability requirements.
+    ///
+    /// # Parameters
+    /// * `config` - Configuration for metrics collection, retention and exposure
+    /// * `otel_config` - Custom OpenTelemetry configuration for trace and metrics export
     ///
     /// # Errors
-    /// Returns an error if the metrics provider initialization fails
+    /// Returns an error if the metrics provider initialization fails, which could occur
+    /// due to invalid configuration or resource allocation issues
     pub fn with_otel_config(
         config: MetricsConfig,
         otel_config: &OpenTelemetryConfig,
@@ -42,19 +66,37 @@ impl MetricsService {
         Ok(Self { provider, config })
     }
 
-    /// Get the metrics provider
+    /// Returns a reference to the underlying metrics provider.
+    ///
+    /// Provides access to the `EnhancedMetricsProvider` which handles the actual collection,
+    /// storage, and exposure of metrics. This can be used for advanced metrics operations
+    /// not directly exposed by the `MetricsService` interface.
     #[must_use]
     pub fn provider(&self) -> Arc<EnhancedMetricsProvider> {
         self.provider.clone()
     }
 
-    /// Get a clone of the OpenTelemetry job executions counter from the provider.
+    /// Returns a clone of the OpenTelemetry job executions counter.
+    ///
+    /// This counter tracks the total number of job executions across the Blueprint service.
+    /// It can be used directly to increment execution counts from components that have
+    /// access to the metrics service but not the full provider.
     #[must_use]
     pub fn get_otel_job_executions_counter(&self) -> opentelemetry::metrics::Counter<u64> {
         self.provider.get_otel_job_executions_counter()
     }
 
-    /// Record job execution
+    /// Records metrics for a successful job execution.
+    ///
+    /// Updates both Prometheus and OpenTelemetry metrics with information about a completed job.
+    /// This information is used to track job throughput, execution time distributions, and
+    /// success rates for the specified job, service, and blueprint IDs.
+    ///
+    /// # Parameters
+    /// * `job_id` - Unique identifier for the executed job
+    /// * `execution_time` - Duration of the job execution in seconds
+    /// * `service_id` - Identifier for the service that executed the job
+    /// * `blueprint_id` - Identifier for the blueprint that executed the job
     pub fn record_job_execution(
         &self,
         job_id: u64,
@@ -66,13 +108,32 @@ impl MetricsService {
             .record_job_execution(job_id, execution_time, service_id, blueprint_id);
     }
 
-    /// Record job error
+    /// Records metrics for a failed job execution.
+    ///
+    /// Updates error counters and metrics when a job fails, categorizing the error by type.
+    /// This allows for tracking error rates and the distribution of different failure modes
+    /// across jobs to help with debugging and reliability improvements.
+    ///
+    /// # Parameters
+    /// * `job_id` - Unique identifier for the failed job
+    /// * `error_type` - Classification of the error that occurred
     pub fn record_job_error(&self, job_id: u64, error_type: &str) {
         self.provider.record_job_error(job_id, error_type);
     }
 }
 
-/// Run a metrics server with the given configuration
+/// Runs a standalone metrics server with the given configuration.
+///
+/// This function initializes the metrics collection infrastructure and starts a
+/// metrics server that exposes collected metrics via HTTP endpoints compatible with
+/// Prometheus scraping. It also initializes the background tasks for collecting
+/// system and application metrics at regular intervals.
+///
+/// # Parameters
+/// * `config` - Configuration for metrics collection, retention, and server settings
+///
+/// # Returns
+/// A reference to the initialized and started metrics provider on success
 ///
 /// # Errors
 /// Returns an error if the metrics provider initialization or server startup fails
