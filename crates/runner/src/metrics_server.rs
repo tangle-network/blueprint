@@ -35,7 +35,7 @@ impl BackgroundService for MetricsServerAdapter {
             tokio::spawn(async move {
                 info!("Starting metrics server...");
 
-                if let Err(e) = server.start(None).await {
+                if let Err(e) = server.start(None, None).await {
                     error!("Failed to start metrics server: {}", e);
                     let _ = tx.send(Err(Error::Other(
                         format!("Failed to start metrics server: {}", e).into(),

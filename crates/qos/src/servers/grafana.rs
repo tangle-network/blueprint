@@ -97,7 +97,7 @@ impl GrafanaServer {
 }
 
 impl ServerManager for GrafanaServer {
-    async fn start(&self, network: Option<&str>) -> Result<()> {
+    async fn start(&self, network: Option<&str>, bind_ip: Option<String>) -> Result<()> {
         info!("Starting Grafana server on port {}", self.config.port);
 
         let mut env_vars = HashMap::new();
@@ -109,7 +109,7 @@ impl ServerManager for GrafanaServer {
             "GF_SECURITY_ADMIN_PASSWORD".to_string(),
             self.config.admin_password.clone(),
         );
-        env_vars.insert("GF_LOG_LEVEL".to_string(), "debug".to_string()); // Enable debug logging
+        env_vars.insert("GF_LOG_LEVEL".to_string(), "debug".to_string());
 
         if self.config.allow_anonymous {
             env_vars.insert("GF_AUTH_ANONYMOUS_ENABLED".to_string(), "true".to_string());
@@ -142,7 +142,8 @@ impl ServerManager for GrafanaServer {
                 ports,
                 volumes,
                 Some(vec!["host.docker.internal:host-gateway".to_string()]),
-                None, // health_check_cmd
+                None,
+                bind_ip,
             )
             .await?;
 
@@ -213,7 +214,6 @@ impl ServerManager for GrafanaServer {
                 .ok_or_else(|| Error::Generic("Grafana server is not running".to_string()))?
         };
 
-        // First, wait for the container to be considered healthy by Docker.
         info!("Waiting for Grafana container to be healthy...");
         if let Err(e) = self
             .docker
@@ -228,7 +228,6 @@ impl ServerManager for GrafanaServer {
             info!("Grafana container health check passed.");
         }
 
-        // Second, wait for the API to be responsive.
         info!("Waiting for Grafana API to be responsive...");
         let client = reqwest::Client::new();
         let url = format!("{}/api/health", self.url());

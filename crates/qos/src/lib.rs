@@ -64,6 +64,9 @@ pub struct QoSConfig {
 
     /// Optional Blueprint ID for Grafana dashboard context
     pub blueprint_id: Option<u64>,
+
+    /// Optional Docker bind IP for managed servers (defaults to 127.0.0.1)
+    pub docker_bind_ip: Option<String>,
 }
 
 /// Creates a new `QoS` configuration with sensible default values for all components.
@@ -86,5 +89,6 @@ pub fn default_qos_config() -> QoSConfig {
         manage_servers: false,
         service_id: None,
         blueprint_id: None,
+        docker_bind_ip: None,
     }
 }

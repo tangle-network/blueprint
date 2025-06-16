@@ -148,6 +148,7 @@ impl PrometheusServer {
                 volumes,
                 None,
                 None,
+                None,
             )
             .await;
 
@@ -255,7 +256,7 @@ impl ServerManager for PrometheusServer {
     /// * Configuration file generation fails or specified paths are invalid (Docker mode only)
     /// * Health check fails for Docker container
     /// * No metrics registry is provided for embedded server mode
-    async fn start(&self, network: Option<&str>) -> Result<()> {
+    async fn start(&self, network: Option<&str>, bind_ip: Option<String>) -> Result<()> {
         let mut current_container_id_val: Option<String> = None;
         if self.config.use_docker {
             info!(
@@ -337,6 +338,7 @@ impl ServerManager for PrometheusServer {
                         volumes,
                         Some(extra_hosts),
                         None,
+                        bind_ip,
                     )
                     .await;
 
@@ -347,8 +349,7 @@ impl ServerManager for PrometheusServer {
                                 "PrometheusServer::start: Docker manager returned an EMPTY string for container ID."
                             );
                             return Err(crate::error::Error::Other(
-                                "Docker manager returned empty container ID for Prometheus"
-                                    .to_string(),
+                                "Docker manager returned empty container ID for Prometheus".to_string(),
                             ));
                         }
                         info!(
@@ -356,7 +357,6 @@ impl ServerManager for PrometheusServer {
                             id
                         );
                         current_container_id_val = Some(id.clone());
-                        *self.container_id.lock().unwrap() = Some(id);
                     }
                     Err(e) => {
                         error!(
@@ -676,7 +676,6 @@ impl ServerManager for PrometheusServer {
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         } else {
-            // Logic for embedded server
             let start_time = std::time::Instant::now();
             let timeout = Duration::from_secs(timeout_secs);
 

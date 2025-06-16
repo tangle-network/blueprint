@@ -11,7 +11,7 @@ pub trait ServerManager: Send + Sync {
     ///
     /// # Errors
     /// Returns an error if the server fails to start
-    async fn start(&self, network: Option<&str>) -> Result<()>;
+    async fn start(&self, network: Option<&str>, bind_ip: Option<String>) -> Result<()>;
 
     /// Stop the server
     ///

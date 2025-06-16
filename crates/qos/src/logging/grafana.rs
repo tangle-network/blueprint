@@ -378,14 +378,13 @@ pub struct CreateDataSourceRequest {
     #[serde(rename = "type")]
     pub ds_type: String,
     pub url: String,
-    pub access: String, // "proxy" or "direct"
+    pub access: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_default: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub json_data: Option<serde_json::Value>,
-    // secure_json_data can be added if needed for auth later
 }
 
 #[derive(Deserialize, Debug)]

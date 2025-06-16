@@ -85,6 +85,7 @@ impl DockerManager {
         volumes: HashMap<String, String>,
         extra_hosts: Option<Vec<String>>,
         health_check_cmd: Option<Vec<String>>,
+        bind_ip: Option<String>,
     ) -> Result<String> {
         if let Err(e) = self.ensure_image(image).await {
             warn!("Failed to ensure image exists, but proceeding: {}", e);
@@ -97,13 +98,14 @@ impl DockerManager {
             .map(|(k, v)| format!("{}={}", k, v))
             .collect();
 
+        let final_bind_ip = bind_ip.unwrap_or_else(|| "127.0.0.1".to_string());
         let port_bindings = ports
             .into_iter()
             .map(|(container_port, host_port)| {
                 (
                     container_port.to_string(),
                     Some(vec![PortBinding {
-                        host_ip: Some("0.0.0.0".to_string()),
+                        host_ip: Some(final_bind_ip.clone()),
                         host_port: Some(host_port),
                     }]),
                 )

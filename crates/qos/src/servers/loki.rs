@@ -73,7 +73,7 @@ impl LokiServer {
 }
 
 impl ServerManager for LokiServer {
-    async fn start(&self, network: Option<&str>) -> Result<()> {
+    async fn start(&self, network: Option<&str>, bind_ip: Option<String>) -> Result<()> {
         info!("Starting Loki server on port {}", self.config.port);
 
         let env_vars = HashMap::new();
@@ -96,6 +96,7 @@ impl ServerManager for LokiServer {
                 volumes,
                 None,
                 None,
+                bind_ip,
             )
             .await?;
 

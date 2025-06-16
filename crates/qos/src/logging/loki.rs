@@ -233,7 +233,7 @@ pub fn init_otel_tracer(loki_config: &LokiConfig, service_name: &str) -> Result<
         ])
         .build();
 
-    // Apply settings from loki_config.otel_config if present
+    // Apply settings from config if present
     if let Some(_otel_cfg) = &loki_config.otel_config {}
 
     let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()

@@ -13,7 +13,7 @@ use crate::metrics::types::{
 };
 use crate::servers::ServerManager;
 use crate::servers::prometheus::PrometheusServer;
-use opentelemetry::KeyValue; // Import ServerManager trait for .start()
+use opentelemetry::KeyValue;
 
 /// A comprehensive metrics provider that integrates Prometheus and OpenTelemetry systems.
 ///
@@ -86,15 +86,10 @@ impl EnhancedMetricsProvider {
             )?,
         );
 
-        // Create an OpenTelemetry exporter, passing the shared_registry.
-        // The OpenTelemetryExporter will configure its underlying opentelemetry_prometheus::Exporter
-        // to use this shared_registry.
+        // Create an OpenTelemetry exporter with the shared_registry.
         let otel_exporter_instance =
             OpenTelemetryExporter::new(otel_config, shared_registry.clone())?;
 
-        // The underlying opentelemetry_prometheus::Exporter is already configured to use the shared_registry.
-        // Explicitly registering our OpenTelemetryExporter wrapper (which calls shared_registry.gather() in its own collect method)
-        // would lead to a recursive loop. So, this registration is removed.
         info!("OpenTelemetryExporter initialized with shared Prometheus registry.");
 
         // Store the OpenTelemetryExporter instance (wrapped in Arc) in the provider.
@@ -127,8 +122,8 @@ impl EnhancedMetricsProvider {
             prometheus_collector,
             opentelemetry_exporter,
             prometheus_server: Arc::new(RwLock::new(None)),
-            shared_registry,             // Store the shared registry
-            otel_job_executions_counter, // Store the OTel counter
+            shared_registry,
+            otel_job_executions_counter,
             config: metrics_config,
             start_time: Instant::now(),
         };
@@ -154,7 +149,7 @@ impl EnhancedMetricsProvider {
             Some(self.shared_registry.clone()),
             self.clone(),
         )?;
-        server.start(None).await?;
+        server.start(None, None).await?;
 
         let mut prometheus_server = self.prometheus_server.write().await;
         *prometheus_server = Some(server);

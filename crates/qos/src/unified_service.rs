@@ -68,7 +68,6 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         otel_config: Option<OpenTelemetryConfig>,
     ) -> Result<Self> {
         let heartbeat_service = config.heartbeat.clone().map(|hc| {
-            // Parameters are now passed directly
             let ws_rpc = ws_rpc_endpoint.clone();
             Arc::new(HeartbeatService::new(
                 hc.clone(),
@@ -88,7 +87,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
 
         if let Some(ms) = &metrics_service {
             info!("Metrics service is Some, attempting to start collection.");
-            ms.provider().clone().start_collection().await?; // Ensure provider starts its collections, including embedded server if configured
+            ms.provider().clone().start_collection().await?;
         }
 
         if let Some(loki_config) = &config.loki {
@@ -99,6 +98,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
             }
         }
 
+        let bind_ip = config.docker_bind_ip.clone();
         let (grafana_server, loki_server, prometheus_server) = if config.manage_servers {
             let grafana = config
                 .grafana_server
@@ -129,8 +129,9 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
             if let Some(p) = &mut prometheus {
                 if !p.is_docker_based() {
                     let server_clone = p.clone();
+                    let bind_ip_for_spawn = bind_ip.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = server_clone.start(None).await {
+                        if let Err(e) = server_clone.start(None, bind_ip_for_spawn).await {
                             error!("Failed to start embedded Prometheus server: {}", e);
                         }
                     });
@@ -139,7 +140,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
 
             if let Some(s) = &grafana {
                 info!("Starting Grafana server...");
-                if let Err(e) = s.start(config.docker_network.as_deref()).await {
+                if let Err(e) = s.start(config.docker_network.as_deref(), bind_ip.clone()).await {
                     error!("Failed to start Grafana server: {}", e);
                 } else {
                     info!("Grafana server started successfully: {}", s.url());
@@ -148,7 +149,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
 
             if let Some(s) = &loki {
                 info!("Starting Loki server...");
-                if let Err(e) = s.start(config.docker_network.as_deref()).await {
+                if let Err(e) = s.start(config.docker_network.as_deref(), bind_ip.clone()).await {
                     error!("Failed to start Loki server: {}", e);
                 } else {
                     info!("Loki server started successfully: {}", s.url());
@@ -157,9 +158,9 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
 
             if let Some(s) = &prometheus {
                 info!("Starting Prometheus server...");
-                if let Err(e) = s.start(config.docker_network.as_deref()).await {
+                if let Err(e) = s.start(config.docker_network.as_deref(), bind_ip.clone()).await {
                     error!("Failed to start critical Prometheus server: {}", e);
-                    return Err(e); // Critical failure
+                    return Err(e);
                 }
                 info!("Prometheus server started successfully: {}", s.url());
             }

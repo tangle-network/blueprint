@@ -305,7 +305,7 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
         let prometheus_ds_request = CreateDataSourceRequest {
             name: "Blueprint Prometheus (Test)".to_string(),
             ds_type: "prometheus".to_string(),
-            url: prometheus_datasource_url.clone(), // This should be http://host.docker.internal:9090 for Grafana container to reach host Prometheus
+            url: prometheus_datasource_url.clone(),
             access: "proxy".to_string(),
             uid: Some(PROMETHEUS_BLUEPRINT_UID.to_string()),
             is_default: Some(false),
@@ -389,7 +389,7 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
         {
             Ok(dashboard_url) => {
                 info!("Successfully created Grafana dashboard: {}", dashboard_url);
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await; // Allow time for dashboard to settle if needed
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 info!("Waited 5 seconds after dashboard creation.");
             }
             Err(e) => warn!(
@@ -408,7 +408,7 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
         .get_otel_job_executions_counter();
     info!("Successfully fetched otel_job_counter from QoSService");
 
-    // Set the QoSService on the NodeHandle (this moves qos_service)
+    // Set the QoSService on the NodeHandle
     node_handle.set_qos_service(qos_service_arc.clone()).await;
     info!("QoS Service has been set on NodeHandle");
 
@@ -429,7 +429,6 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
     // Setup registry for job metrics
     let registry = Registry::new();
 
-    // Helper function to create and register a gauge with labels using the actual service_id and blueprint_id
     let create_gauge = |name: &str, help: &str| {
         let opts = Opts::new(name, help)
             .const_label("service_id", service_id.to_string())
@@ -472,14 +471,13 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
         GRAFANA_PORT
     );
 
-    // Run jobs in a loop to generate continuous metrics
     let mut jobs_completed = 0;
     let start_time = Instant::now();
 
     while jobs_completed < TOTAL_JOBS_TO_RUN {
         let job_start = Instant::now();
 
-        // Submit a job to square a number using the actual service_id from setup
+        // Submit a job to square a number using the service_id
         info!(
             "Submitting job #{} to square {}",
             jobs_completed + 1,
