@@ -171,7 +171,7 @@ dialoguer = { version = "0.11.0", default-features = false }
 dotenv = { version = "0.15", default-features = false }
 
 # Cryptography & Blockchain
-bip39 = { version = "2.1.0", default-features = false }
+bip39 = { version = "2.2.0", default-features = false }
 ed25519-zebra = { version = "4", default-features = false }
 hex = { version = "0.4.3", default-features = false }
 k256 = { version = "0.13.3", default-features = false }
@@ -195,7 +195,7 @@ dynosaur = { version = "0.2.0", default-features = false }
 bytes = { version = "1.10.1", default-features = false }
 hashbrown = { version = "0.15.4", default-features = false }
 base64 = { version = "0.22.0", default-features = false }
-rust_decimal = { version = "1.32", default-features = false }
+rust_decimal = { version = "1.37", default-features = false }
 
 # Error Handling & Logging
 anyhow = { version = "1.0.98", default-features = false }
@@ -217,17 +217,17 @@ url = { version = "2.5.2", default-features = false }
 serde_with = { version = "3.12.0", default-features = false }
 hyper = { version = "1.6.0", default-features = false }
 hyperlocal = { version = "0.9.1", default-features = false }
-hyper-util = { version = "0.1.13", default-features = false }
+hyper-util = { version = "0.1.14", default-features = false }
 http-body-util = { version = "0.1.3", default-features = false }
 dashmap = { version = "6.1.0", default-features = false }
 cloud-hypervisor-client = { version = "0.3.0", default-features = false }
 axum = { version = "0.8", default-features = false }
-openssl-sys = { version = "0.9.108", default-features = false }
+openssl-sys = { version = "0.9.109", default-features = false }
 rtnetlink = { version = "0.16.0", default-features = false }
 ipnet = { version = "2.11.0", default-features = false }
 
 # System & OS
-parking_lot = { version = "0.12.3", default-features = false }
+parking_lot = { version = "0.12.4", default-features = false }
 tempfile = { version = "3.13.0", default-features = false }
 uuid = { version = "1.17.0", default-features = false }
 blake3 = { version = "1.8.2", default-features = false }
