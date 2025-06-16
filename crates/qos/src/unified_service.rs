@@ -14,8 +14,7 @@ use crate::{
         ServerManager, grafana::GrafanaServer, loki::LokiServer, prometheus::PrometheusServer,
     },
 };
-use blueprint_core::{error as core_error, info};
-use log::error;
+use blueprint_core::{error, info};
 use std::sync::Arc;
 use tokio::sync::{RwLock, oneshot};
 
@@ -41,7 +40,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
     pub async fn set_completion_sender(&self, sender: oneshot::Sender<Result<()>>) {
         let mut guard = self.completion_tx.write().await;
         if guard.is_some() {
-            core_error!("Completion sender already set for QoSService, overwriting.");
+            error!("Completion sender already set for QoSService, overwriting.");
         }
         *guard = Some(sender);
     }
@@ -80,7 +79,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
 
         if let Some(loki_config) = &config.loki {
             if let Err(e) = init_loki_logging(loki_config.clone()) {
-                core_error!("Failed to initialize Loki logging: {}", e);
+                error!("Failed to initialize Loki logging: {}", e);
             } else {
                 info!("Initialized Loki logging");
             }
@@ -145,7 +144,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
             if let Some(s) = &prometheus {
                 info!("Starting Prometheus server...");
                 if let Err(e) = s.start(config.docker_network.as_deref()).await {
-                    core_error!("Failed to start critical Prometheus server: {}", e);
+                    error!("Failed to start critical Prometheus server: {}", e);
                     return Err(e); // Critical failure
                 }
                 info!("Prometheus server started successfully: {}", s.url());
@@ -347,7 +346,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
                 );
             }
             Ok(health) => {
-                core_error!(
+                error!(
                     "Prometheus datasource '{}' (UID: {}) is not healthy: Status: {}, Message: {}",
                     created_prometheus_ds.name,
                     created_prometheus_ds.datasource.uid,
@@ -362,11 +361,9 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
                 )));
             }
             Err(e) => {
-                core_error!(
+                error!(
                     "Failed to check health for Prometheus datasource '{}' (UID: {}): {}",
-                    created_prometheus_ds.name,
-                    created_prometheus_ds.datasource.uid,
-                    e
+                    created_prometheus_ds.name, created_prometheus_ds.datasource.uid, e
                 );
                 return Err(e);
             }
@@ -444,7 +441,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> Drop for QoSService<C> {
     fn drop(&mut self) {
         if let Some(metrics_service) = self.metrics_service.as_ref() {
             if let Err(e) = metrics_service.provider().force_flush_otel_metrics() {
-                core_error!("Failed to flush OpenTelemetry metrics on drop: {}", e);
+                error!("Failed to flush OpenTelemetry metrics on drop: {}", e);
             }
         }
         match self.completion_tx.try_write() {
@@ -458,7 +455,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> Drop for QoSService<C> {
                 }
             }
             Err(_) => {
-                core_error!(
+                error!(
                     "Failed to acquire lock for completion_tx during drop (lock was contended). Signal not sent."
                 );
             }

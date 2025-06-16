@@ -59,7 +59,6 @@ eigensdk = { workspace = true, features = [
     "client-avsregistry",
     "crypto-bls",
 ], optional = true }
-async-trait = "0.1.88"
 
 [dev-dependencies]
 blueprint-sdk = { path = "../sdk", features = ["std", "tangle"] }
