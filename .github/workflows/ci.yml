@@ -41,6 +41,8 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v2
 
+      - uses: ./.github/actions/free-disk-space
+
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
@@ -135,6 +137,8 @@ jobs:
     steps:
       - name: checkout code
         uses: actions/checkout@v2
+
+      - uses: ./.github/actions/free-disk-space
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
