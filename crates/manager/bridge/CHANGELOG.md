@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2](https://github.com/tangle-network/blueprint/compare/blueprint-manager-bridge-v0.1.0-alpha.1...blueprint-manager-bridge-v0.1.0-alpha.2) - 2025-06-16
+
+### Other
+
+- release (#1043)
+
 ## [0.1.0-alpha.1](https://github.com/tangle-network/blueprint/releases/tag/blueprint-manager-bridge-v0.1.0-alpha.1) - 2025-06-16
 
 ### Added
