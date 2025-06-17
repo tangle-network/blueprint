@@ -178,7 +178,7 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
 
     qos_config.grafana = Some(blueprint_qos::logging::grafana::GrafanaConfig {
         url: format!("http://localhost:{}", GRAFANA_PORT),
-        api_key: String::new(),
+        api_key: None,
         org_id: None,
         admin_user: Some("admin".to_string()),
         admin_password: Some("admin".to_string()),

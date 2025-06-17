@@ -1,10 +1,12 @@
-use blueprint_core::{debug, error, info};
+use blueprint_core::{debug, error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::loki::LokiConfig;
 use crate::error::{Error, Result};
+
+const DEFAULT_ADMIN_PASSWORD: &str = "please_change_this_default_password";
 
 // Health check response structures
 #[derive(Debug, Deserialize, Clone)]
@@ -57,16 +59,16 @@ pub struct PrometheusJsonData {
 /// The configuration also includes references to related data sources like Prometheus and Loki.
 #[derive(Clone, Debug)]
 pub struct GrafanaConfig {
-    /// Grafana server URL
+    /// The base URL for the Grafana server (e.g., "http://localhost:3000").
     pub url: String,
 
-    /// API key for authentication (preferred)
-    pub api_key: String,
+    /// API key for Grafana, if used. This is the preferred authentication method.
+    pub api_key: Option<String>,
 
-    /// Admin username for basic authentication (fallback)
+    /// Optional admin username for basic authentication (fallback if API key is not provided).
     pub admin_user: Option<String>,
 
-    /// Admin password for basic authentication (fallback)
+    /// Optional admin password for basic authentication.
     pub admin_password: Option<String>,
 
     /// Default organization ID
@@ -87,9 +89,9 @@ impl Default for GrafanaConfig {
     fn default() -> Self {
         Self {
             url: "http://localhost:3000".to_string(),
-            api_key: String::new(),
-            admin_user: None,
-            admin_password: None,
+            api_key: None,
+            admin_user: Some("admin".to_string()),
+            admin_password: Some(DEFAULT_ADMIN_PASSWORD.to_string()),
             org_id: None,
             folder: None,
             loki_config: None,
@@ -439,6 +441,16 @@ impl GrafanaClient {
             .build()
             .unwrap_or_default();
 
+        if config.api_key.as_deref().unwrap_or("").is_empty() {
+            if let Some(pass) = &config.admin_password {
+                if pass == DEFAULT_ADMIN_PASSWORD {
+                    warn!(
+                        "GrafanaClient is configured to use basic authentication with the default insecure password. Please change it or provide an API key."
+                    );
+                }
+            }
+        }
+
         Self { client, config }
     }
 
@@ -496,15 +508,19 @@ impl GrafanaClient {
 
         let mut request_builder = self.client.post(&url);
 
-        if !self.config.api_key.is_empty() {
-            request_builder = request_builder.header(
-                "Authorization",
-                format!("Bearer {}", self.config.api_key.trim()),
-            );
-        } else if let (Some(user), Some(pass)) =
-            (&self.config.admin_user, &self.config.admin_password)
-        {
-            request_builder = request_builder.basic_auth(user, Some(pass.as_str()));
+        if let Some(api_key) = &self.config.api_key {
+            if !api_key.is_empty() {
+                request_builder = request_builder.bearer_auth(api_key);
+            }
+        } else if let (Some(user), Some(pass)) = (&self.config.admin_user, &self.config.admin_password) {
+            if !user.is_empty() && !pass.is_empty() {
+                if pass == DEFAULT_ADMIN_PASSWORD {
+                    warn!(
+                        "Grafana basic authentication is using the default insecure password. Please change it."
+                    );
+                }
+                request_builder = request_builder.basic_auth(user, Some(pass.clone()));
+            }
         }
 
         let response = request_builder
@@ -563,15 +579,19 @@ impl GrafanaClient {
 
         let mut request_builder = self.client.post(&url);
 
-        if !self.config.api_key.is_empty() {
-            request_builder = request_builder.header(
-                "Authorization",
-                format!("Bearer {}", self.config.api_key.trim()),
-            );
-        } else if let (Some(username), Some(password)) =
-            (&self.config.admin_user, &self.config.admin_password)
-        {
-            request_builder = request_builder.basic_auth(username, Some(password.as_str()));
+        if let Some(api_key) = &self.config.api_key {
+            if !api_key.is_empty() {
+                request_builder = request_builder.bearer_auth(api_key);
+            }
+        } else if let (Some(user), Some(pass)) = (&self.config.admin_user, &self.config.admin_password) {
+            if !user.is_empty() && !pass.is_empty() {
+                if pass == DEFAULT_ADMIN_PASSWORD {
+                    warn!(
+                        "Grafana basic authentication is using the default insecure password. Please change it."
+                    );
+                }
+                request_builder = request_builder.basic_auth(user, Some(pass.clone()));
+            }
         }
 
         let response = request_builder
@@ -906,12 +926,19 @@ impl GrafanaClient {
 
         let mut request_builder = self.client.get(&url);
 
-        if !self.config.api_key.is_empty() {
-            request_builder = request_builder.bearer_auth(self.config.api_key.trim());
-        } else if let (Some(user), Some(pass)) =
-            (&self.config.admin_user, &self.config.admin_password)
-        {
-            request_builder = request_builder.basic_auth(user, Some(pass.as_str()));
+        if let Some(api_key) = &self.config.api_key {
+            if !api_key.is_empty() {
+                request_builder = request_builder.bearer_auth(api_key);
+            }
+        } else if let (Some(user), Some(pass)) = (&self.config.admin_user, &self.config.admin_password) {
+            if !user.is_empty() && !pass.is_empty() {
+                if pass == DEFAULT_ADMIN_PASSWORD {
+                    warn!(
+                        "Grafana basic authentication is using the default insecure password. Please change it."
+                    );
+                }
+                request_builder = request_builder.basic_auth(user, Some(pass.clone()));
+            }
         }
 
         let response = request_builder.send().await.map_err(|e| {
@@ -956,12 +983,19 @@ impl GrafanaClient {
 
         let mut request_builder = self.client.get(&url);
 
-        if !self.config.api_key.is_empty() {
-            request_builder = request_builder.bearer_auth(self.config.api_key.trim());
-        } else if let (Some(user), Some(pass)) =
-            (&self.config.admin_user, &self.config.admin_password)
-        {
-            request_builder = request_builder.basic_auth(user, Some(pass.as_str()));
+        if let Some(api_key) = &self.config.api_key {
+            if !api_key.is_empty() {
+                request_builder = request_builder.bearer_auth(api_key);
+            }
+        } else if let (Some(user), Some(pass)) = (&self.config.admin_user, &self.config.admin_password) {
+            if !user.is_empty() && !pass.is_empty() {
+                if pass == DEFAULT_ADMIN_PASSWORD {
+                    warn!(
+                        "Grafana basic authentication is using the default insecure password. Please change it."
+                    );
+                }
+                request_builder = request_builder.basic_auth(user, Some(pass.clone()));
+            }
         }
 
         let response = request_builder.send().await.map_err(|e| {
@@ -1009,12 +1043,19 @@ impl GrafanaClient {
         );
 
         let mut request_builder = self.client.post(&url);
-        if !self.config.api_key.is_empty() {
-            request_builder = request_builder.bearer_auth(self.config.api_key.trim());
-        } else if let (Some(user), Some(pass)) =
-            (&self.config.admin_user, &self.config.admin_password)
-        {
-            request_builder = request_builder.basic_auth(user, Some(pass.as_str()));
+        if let Some(api_key) = &self.config.api_key {
+            if !api_key.is_empty() {
+                request_builder = request_builder.bearer_auth(api_key);
+            }
+        } else if let (Some(user), Some(pass)) = (&self.config.admin_user, &self.config.admin_password) {
+            if !user.is_empty() && !pass.is_empty() {
+                if pass == DEFAULT_ADMIN_PASSWORD {
+                    warn!(
+                        "Grafana basic authentication is using the default insecure password. Please change it."
+                    );
+                }
+                request_builder = request_builder.basic_auth(user, Some(pass.clone()));
+            }
         }
 
         let response = request_builder.json(&payload).send().await.map_err(|e| {
@@ -1081,7 +1122,7 @@ mod tests {
     fn test_grafana_config_default() {
         let config = GrafanaConfig::default();
         assert_eq!(config.url, "http://localhost:3000");
-        assert_eq!(config.api_key, "");
+        assert_eq!(config.api_key, None);
         assert_eq!(config.org_id, None);
         assert_eq!(config.folder, None);
         assert_eq!(
@@ -1101,7 +1142,7 @@ mod tests {
     fn test_grafana_client_creation() {
         let config = GrafanaConfig {
             url: "http://localhost:3000".to_string(),
-            api_key: "test_key".to_string(),
+            api_key: Some("test_api_key".to_string()),
             admin_user: Some("admin".to_string()),
             admin_password: Some("password".to_string()),
             org_id: Some(1),

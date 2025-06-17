@@ -85,7 +85,7 @@ impl GrafanaServer {
     pub fn client_config(&self) -> GrafanaConfig {
         GrafanaConfig {
             url: self.url(),
-            api_key: String::new(),
+            api_key: None,
             org_id: None,
             folder: None,
             admin_user: Some(self.config.admin_user.clone()),
