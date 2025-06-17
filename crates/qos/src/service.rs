@@ -35,7 +35,7 @@ where
 #[tonic::async_trait]
 impl<T> QosMetrics for QosMetricsService<T>
 where
-    T: MetricsProvider,
+    T: MetricsProvider + 'static,
 {
     async fn get_status(
         &self,
@@ -48,7 +48,7 @@ where
             "Received GetStatus request"
         );
 
-        let status = self.provider.get_blueprint_status();
+        let status = self.provider.get_blueprint_status().await;
 
         if status.blueprint_id != req.blueprint_id || status.service_id != req.service_id {
             return Err(Status::not_found("Blueprint or service ID not found"));
@@ -79,13 +79,13 @@ where
             "Received GetResourceUsage request"
         );
 
-        let status = self.provider.get_blueprint_status();
+        let status = self.provider.get_blueprint_status().await;
 
         if status.blueprint_id != req.blueprint_id || status.service_id != req.service_id {
             return Err(Status::not_found("Blueprint or service ID not found"));
         }
 
-        let metrics = self.provider.get_system_metrics();
+        let metrics = self.provider.get_system_metrics().await;
 
         let response = GetResourceUsageResponse {
             cpu_usage: metrics.cpu_usage,
@@ -112,13 +112,13 @@ where
             "Received GetBlueprintMetrics request"
         );
 
-        let status = self.provider.get_blueprint_status();
+        let status = self.provider.get_blueprint_status().await;
 
         if status.blueprint_id != req.blueprint_id || status.service_id != req.service_id {
             return Err(Status::not_found("Blueprint or service ID not found"));
         }
 
-        let metrics = self.provider.get_blueprint_metrics();
+        let metrics = self.provider.get_blueprint_metrics().await;
 
         let response = GetBlueprintMetricsResponse {
             custom_metrics: metrics.custom_metrics,
@@ -139,7 +139,7 @@ where
             "Received GetHistoricalMetrics request"
         );
 
-        let status = self.provider.get_blueprint_status();
+        let status = self.provider.get_blueprint_status().await;
 
         if status.blueprint_id != req.blueprint_id || status.service_id != req.service_id {
             return Err(Status::not_found("Blueprint or service ID not found"));
@@ -148,6 +148,7 @@ where
         let system_metrics_history = if req.metrics_type == 0 {
             self.provider
                 .get_system_metrics_history()
+                .await
                 .into_iter()
                 .map(|m| ProtoSystemMetrics {
                     cpu_usage: m.cpu_usage,
@@ -167,6 +168,7 @@ where
         let blueprint_metrics_history = if req.metrics_type == 1 {
             self.provider
                 .get_blueprint_metrics_history()
+                .await
                 .into_iter()
                 .map(|m| ProtoBlueprintMetrics {
                     custom_metrics: m.custom_metrics,
@@ -197,7 +199,7 @@ where
 /// or encounters an error during operation.
 pub async fn run_qos_server<T>(bind_address: String, provider: Arc<T>) -> Result<()>
 where
-    T: MetricsProvider,
+    T: MetricsProvider + 'static,
 {
     let addr = bind_address
         .parse()

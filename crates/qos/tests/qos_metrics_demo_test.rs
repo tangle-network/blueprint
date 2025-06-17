@@ -11,9 +11,10 @@ use blueprint_tangle_extra::layers::TangleLayer;
 const TEST_GRAFANA_CONTAINER_NAME: &str = "blueprint-grafana";
 const TEST_LOKI_CONTAINER_NAME: &str = "blueprint-loki";
 const TEST_PROMETHEUS_CONTAINER_NAME: &str = "blueprint-test-prometheus";
-// const PROMETHEUS_PORT: u16 = 9090;
 
-use blueprint_qos::{GrafanaServerConfig, PrometheusServerConfig, QoSService, default_qos_config};
+use blueprint_qos::{
+    GrafanaServerConfig, LokiServerConfig, PrometheusServerConfig, QoSService, default_qos_config,
+};
 use blueprint_testing_utils::tangle::harness::TangleTestHarness;
 
 use blueprint_core::debug;
@@ -165,16 +166,23 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
         ..Default::default()
     });
 
-    let prometheus_config_path =
-        "/home/tjemmmic/webb/blueprint/crates/qos/tests/config/prometheus.yml";
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+
+    let prometheus_config_path = format!("{}/tests/config/prometheus.yml", manifest_dir);
     qos_config.prometheus_server = Some(PrometheusServerConfig {
         use_docker: true,
-        docker_container_name: "blueprint-prometheus".to_string(),
-        config_path: Some(prometheus_config_path.to_string()),
+        docker_container_name: TEST_PROMETHEUS_CONTAINER_NAME.to_string(),
+        config_path: Some(prometheus_config_path),
         ..Default::default()
     });
 
-    let prometheus_datasource_url = "http://blueprint-prometheus:9090".to_string();
+    let loki_config_path = format!("{}/config/loki-config.yaml", manifest_dir);
+    qos_config.loki_server = Some(LokiServerConfig {
+        config_path: Some(loki_config_path),
+        ..Default::default()
+    });
+
+    let prometheus_datasource_url = format!("http://{}:9090", TEST_PROMETHEUS_CONTAINER_NAME);
 
     qos_config.grafana = Some(blueprint_qos::logging::grafana::GrafanaConfig {
         url: format!("http://localhost:{}", GRAFANA_PORT),

@@ -16,7 +16,7 @@ use crate::{
 };
 use blueprint_core::{error, info};
 use std::sync::Arc;
-use tokio::sync::{RwLock, oneshot};
+use tokio::sync::{Mutex, oneshot};
 
 /// Unified Quality of Service (`QoS`) service that integrates heartbeat monitoring, metrics collection,
 /// logging, and dashboard visualization into a single cohesive system.
@@ -37,8 +37,8 @@ pub struct QoSService<C: HeartbeatConsumer + Send + Sync + 'static> {
     grafana_server: Option<Arc<GrafanaServer>>,
     loki_server: Option<Arc<LokiServer>>,
     prometheus_server: Option<Arc<PrometheusServer>>,
-    completion_tx: Arc<RwLock<Option<oneshot::Sender<Result<()>>>>>,
-    completion_rx: RwLock<Option<tokio::sync::oneshot::Receiver<Result<()>>>>,
+    completion_tx: Arc<Mutex<Option<oneshot::Sender<Result<()>>>>>,
+    completion_rx: Mutex<Option<tokio::sync::oneshot::Receiver<Result<()>>>>,
 }
 
 impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
@@ -52,7 +52,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
 
     /// Sets the completion sender for this `QoS` service.
     pub async fn set_completion_sender(&self, sender: oneshot::Sender<Result<()>>) {
-        let mut guard = self.completion_tx.write().await;
+        let mut guard = self.completion_tx.lock().await;
         if guard.is_some() {
             error!("Completion sender already set for QoSService, overwriting.");
         }
@@ -103,63 +103,50 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
             let grafana = config
                 .grafana_server
                 .as_ref()
-                .and_then(|c| GrafanaServer::new(c.clone()).ok());
+                .map(|c| GrafanaServer::new(c.clone()))
+                .transpose()?;
 
             let loki = config
                 .loki_server
                 .as_ref()
-                .and_then(|c| LokiServer::new(c.clone()).ok());
+                .map(|c| LokiServer::new(c.clone()))
+                .transpose()?;
 
-            let mut prometheus = config.prometheus_server.as_ref().and_then(|c| {
+            let prometheus = config.prometheus_server.as_ref().map(|c| {
                 PrometheusServer::new(
                     c.clone(),
                     Some(
                         metrics_service
                             .as_ref()
-                            .unwrap()
+                            .ok_or_else(|| qos_error::Error::Generic("Metrics service is required for Prometheus but not configured".to_string()))?
                             .provider()
                             .shared_registry()
                             .clone(),
                     ),
-                    metrics_service.as_ref().unwrap().provider().clone(),
+                    metrics_service.as_ref().ok_or_else(|| qos_error::Error::Generic("Metrics service is required for Prometheus but not configured".to_string()))?.provider().clone(),
                 )
-                .ok()
-            });
-
-            if let Some(p) = &mut prometheus {
-                if !p.is_docker_based() {
-                    let server_clone = p.clone();
-                    let bind_ip_for_spawn = bind_ip.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = server_clone.start(None, bind_ip_for_spawn).await {
-                            error!("Failed to start embedded Prometheus server: {}", e);
-                        }
-                    });
-                }
-            }
+            }).transpose()?;
 
             if let Some(s) = &grafana {
                 info!("Starting Grafana server...");
-                if let Err(e) = s
-                    .start(config.docker_network.as_deref(), bind_ip.clone())
+                s.start(config.docker_network.as_deref(), bind_ip.clone())
                     .await
-                {
-                    error!("Failed to start Grafana server: {}", e);
-                } else {
-                    info!("Grafana server started successfully: {}", s.url());
-                }
+                    .map_err(|e| {
+                        error!("Failed to start Grafana server: {}", e);
+                        e
+                    })?;
+                info!("Grafana server started successfully: {}", s.url());
             }
 
             if let Some(s) = &loki {
                 info!("Starting Loki server...");
-                if let Err(e) = s
-                    .start(config.docker_network.as_deref(), bind_ip.clone())
+                s.start(config.docker_network.as_deref(), bind_ip.clone())
                     .await
-                {
-                    error!("Failed to start Loki server: {}", e);
-                } else {
-                    info!("Loki server started successfully: {}", s.url());
-                }
+                    .map_err(|e| {
+                        error!("Failed to start Loki server: {}", e);
+                        e
+                    })?;
+                info!("Loki server started successfully: {}", s.url());
             }
 
             if let Some(s) = &prometheus {
@@ -206,8 +193,8 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
             grafana_server,
             loki_server,
             prometheus_server,
-            completion_tx: Arc::new(RwLock::new(Some(tx))),
-            completion_rx: RwLock::new(Some(rx)),
+            completion_tx: Arc::new(Mutex::new(Some(tx))),
+            completion_rx: Mutex::new(Some(rx)),
         })
     }
 
@@ -485,7 +472,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
     /// indicating an unexpected termination of the service.
     pub async fn wait_for_completion(&self) -> Result<()> {
         let rx_option = {
-            let mut guard = self.completion_rx.write().await;
+            let mut guard = self.completion_rx.lock().await;
             guard.take()
         };
 
@@ -520,15 +507,17 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
 
 impl<C: HeartbeatConsumer + Send + Sync + 'static> Drop for QoSService<C> {
     fn drop(&mut self) {
-        if let Some(metrics_service) = self.metrics_service.as_ref() {
-            if let Err(e) = metrics_service.provider().force_flush_otel_metrics() {
+        let flush_result = self.metrics_service.as_ref().map_or(Ok(()), |ms| {
+            ms.provider().force_flush_otel_metrics().map_err(|e| {
                 error!("Failed to flush OpenTelemetry metrics on drop: {}", e);
-            }
-        }
-        match self.completion_tx.try_write() {
+                qos_error::Error::Metrics(format!("OpenTelemetry flush failed on drop: {}", e))
+            })
+        });
+
+        match self.completion_tx.try_lock() {
             Ok(mut guard) => {
                 if let Some(tx) = guard.take() {
-                    if tx.send(Ok(())).is_err() {
+                    if tx.send(flush_result).is_err() {
                         info!(
                             "Attempted to send completion signal on drop, but receiver was already gone."
                         );

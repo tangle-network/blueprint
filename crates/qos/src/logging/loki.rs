@@ -4,6 +4,15 @@ use tracing_loki::url::Url;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 
+// Default values for LokiConfig
+const DEFAULT_LOKI_LABEL_SERVICE_KEY: &str = "service";
+const DEFAULT_LOKI_LABEL_SERVICE_VALUE: &str = "blueprint";
+const DEFAULT_LOKI_LABEL_ENVIRONMENT_KEY: &str = "environment";
+const DEFAULT_LOKI_LABEL_ENVIRONMENT_VALUE: &str = "development";
+const DEFAULT_LOKI_URL: &str = "http://localhost:3100";
+const DEFAULT_LOKI_BATCH_SIZE: usize = 100;
+const DEFAULT_LOKI_TIMEOUT_SECS: u64 = 5;
+
 use crate::error::{Error, Result};
 
 /// Configuration for Loki log aggregation integration.
@@ -40,16 +49,22 @@ pub struct LokiConfig {
 impl Default for LokiConfig {
     fn default() -> Self {
         let mut labels = HashMap::new();
-        labels.insert("service".to_string(), "blueprint".to_string());
-        labels.insert("environment".to_string(), "development".to_string());
+        labels.insert(
+            DEFAULT_LOKI_LABEL_SERVICE_KEY.to_string(),
+            DEFAULT_LOKI_LABEL_SERVICE_VALUE.to_string(),
+        );
+        labels.insert(
+            DEFAULT_LOKI_LABEL_ENVIRONMENT_KEY.to_string(),
+            DEFAULT_LOKI_LABEL_ENVIRONMENT_VALUE.to_string(),
+        );
 
         Self {
-            url: "http://localhost:3100".to_string(),
+            url: DEFAULT_LOKI_URL.to_string(),
             username: None,
             password: None,
             labels,
-            batch_size: 100,
-            timeout_secs: 5,
+            batch_size: DEFAULT_LOKI_BATCH_SIZE,
+            timeout_secs: DEFAULT_LOKI_TIMEOUT_SECS,
             otel_config: None,
         }
     }

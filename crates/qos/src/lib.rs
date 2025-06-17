@@ -1,3 +1,4 @@
+#![allow(clippy::must_use_candidate)]
 pub mod error;
 pub mod heartbeat;
 pub mod logging;
@@ -9,9 +10,6 @@ pub mod unified_service;
 
 // Allow clippy lints in generated code
 #[allow(
-    clippy::all,
-    clippy::pedantic,
-    clippy::nursery,
     clippy::missing_errors_doc,
     clippy::wildcard_imports,
     clippy::doc_markdown,

@@ -38,14 +38,21 @@ pub struct PrometheusServerConfig {
     pub data_path: Option<String>,
 }
 
+// Default values for PrometheusServerConfig
+const DEFAULT_PROMETHEUS_PORT: u16 = 9090;
+const DEFAULT_PROMETHEUS_HOST: &str = "0.0.0.0";
+const DEFAULT_PROMETHEUS_DOCKER_IMAGE: &str = "prom/prometheus:latest";
+const DEFAULT_PROMETHEUS_CONTAINER_NAME: &str = "blueprint-prometheus";
+const PROMETHEUS_DOCKER_HEALTH_TIMEOUT_SECS: u64 = 120;
+
 impl Default for PrometheusServerConfig {
     fn default() -> Self {
         Self {
-            port: 9090,
-            host: "0.0.0.0".to_string(),
+            port: DEFAULT_PROMETHEUS_PORT,
+            host: DEFAULT_PROMETHEUS_HOST.to_string(),
             use_docker: false,
-            docker_image: "prom/prometheus:latest".to_string(),
-            docker_container_name: "blueprint-prometheus".to_string(),
+            docker_image: DEFAULT_PROMETHEUS_DOCKER_IMAGE.to_string(),
+            docker_container_name: DEFAULT_PROMETHEUS_CONTAINER_NAME.to_string(),
             config_path: None,
             data_path: None,
         }
@@ -146,6 +153,7 @@ impl PrometheusServer {
                 env_vars,
                 ports,
                 volumes,
+                None,
                 None,
                 None,
                 None,
@@ -333,11 +341,12 @@ impl ServerManager for PrometheusServer {
                     .run_container(
                         &self.config.docker_image,
                         &self.config.docker_container_name,
-                        std::collections::HashMap::new(),
+                        std::collections::HashMap::new(), // env_vars
                         ports,
                         volumes,
+                        None, // cmd
                         Some(extra_hosts),
-                        None,
+                        None, // health_check_cmd
                         bind_ip,
                     )
                     .await;
@@ -396,7 +405,10 @@ impl ServerManager for PrometheusServer {
                 );
                 if self
                     .docker_manager
-                    .wait_for_container_health(&final_id_for_connection_and_health_check, 120)
+                    .wait_for_container_health(
+                        &final_id_for_connection_and_health_check,
+                        PROMETHEUS_DOCKER_HEALTH_TIMEOUT_SECS,
+                    )
                     .await
                     .is_err()
                 {

@@ -359,30 +359,73 @@ where
                 tokio::sync::oneshot::Receiver<Result<(), crate::error::RunnerError>>,
                 crate::error::RunnerError,
             > {
-                let mut lock = self.qos_service.lock().await;
-                if let Some(qos) = lock.as_mut() {
-                    // Start heartbeat if present
-                    if let Some(hb) = qos.heartbeat_service() {
-                        let _ = hb.start_heartbeat().await;
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                let qos_arc_for_adapter_task = self.qos_service.clone();
+
+                tokio::spawn(async move {
+                    blueprint_core::debug!(target: "blueprint-runner", "QoS Adapter Task (Task 2): Waiting for QoS Service build...");
+
+                    let mut attempt_count = 0;
+                    let max_attempts = 300; // Approx 30 seconds with 100ms polling
+
+                    let mut service_guard = loop {
+                        let guard = qos_arc_for_adapter_task.lock().await;
+                        if guard.is_some() {
+                            blueprint_core::debug!(target: "blueprint-runner", "QoS Adapter Task (Task 2): QoS Service is built. Proceeding to start components.");
+                            break guard;
+                        }
+                        drop(guard);
+
+                        attempt_count += 1;
+                        if attempt_count >= max_attempts {
+                            let err_msg = "QoS Adapter Task (Task 2): QoS service did not initialize (build task may have failed or timed out).";
+                            blueprint_core::error!(target: "blueprint-runner", "{}", err_msg);
+                            let _ = tx.send(Err(crate::error::RunnerError::Other(Box::new(
+                                std::io::Error::new(std::io::ErrorKind::Other, err_msg),
+                            ))));
+                            return;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    };
+
+                    let qos_service_mut = service_guard
+                        .as_mut()
+                        .expect("QoS service was Some but now None, this should not happen");
+
+                    if let Some(hb_service) = qos_service_mut.heartbeat_service() {
+                        blueprint_core::debug!(target: "blueprint-runner", "QoS Adapter Task (Task 2): Starting heartbeat service...");
+                        if let Err(e) = hb_service.start_heartbeat().await {
+                            let err_msg = format!(
+                                "QoS Adapter Task (Task 2): Heartbeat service failed to start: {:?}",
+                                e
+                            );
+                            blueprint_core::error!(target: "blueprint-runner", "{}", err_msg);
+                            let _ = tx.send(Err(crate::error::RunnerError::Other(Box::new(
+                                std::io::Error::new(std::io::ErrorKind::Other, err_msg),
+                            ))));
+                            return;
+                        }
+                        blueprint_core::info!(target: "blueprint-runner", "QoS Adapter Task (Task 2): Heartbeat service started.");
+                    } else {
+                        blueprint_core::debug!(target: "blueprint-runner", "QoS Adapter Task (Task 2): No heartbeat service configured in QoSService.");
                     }
-                    // Metrics server (Prometheus) is started by QoSService::new if configured
-                }
-                let (_tx, rx) = tokio::sync::oneshot::channel();
+
+                    blueprint_core::info!(target: "blueprint-runner", "QoS Adapter Task (Task 2): QoS Service components initialized successfully.");
+                    let _ = tx.send(Ok(()));
+                });
+
                 Ok(rx)
             }
         }
 
-        // Create a placeholder for the QoSService, which will be initialized asynchronously.
         let qos_service_arc = Arc::new(Mutex::new(None::<blueprint_qos::QoSService<C>>));
-        let qos_service_arc_clone = qos_service_arc.clone();
-        let _env_clone = self.env.clone(); // Clone env for the async task
 
-        // Spawn a task to build the QoSService asynchronously
+        let builder_task_qos_arc = qos_service_arc.clone();
         tokio::spawn(async move {
-            blueprint_core::debug!(target: "blueprint-runner", "Initializing QoS Service asynchronously...");
+            blueprint_core::debug!(target: "blueprint-runner", "QoS Builder Task (Task 1): Initializing QoS Service...");
             let mut builder = blueprint_qos::QoSServiceBuilder::<C>::new()
-                .with_config(config) // Use the 'config' argument passed to qos_service
-                .manage_servers(true); // Assuming we want to manage servers like Prometheus
+                .with_config(config)
+                .manage_servers(true);
 
             if let Some(consumer) = heartbeat_consumer {
                 builder = builder.with_heartbeat_consumer(consumer);
@@ -390,12 +433,12 @@ where
 
             match builder.build().await {
                 Ok(service) => {
-                    let mut guard = qos_service_arc_clone.lock().await;
+                    let mut guard = builder_task_qos_arc.lock().await;
                     *guard = Some(service);
-                    blueprint_core::info!(target: "blueprint-runner", "QoS Service initialized and running.");
+                    blueprint_core::info!(target: "blueprint-runner", "QoS Builder Task (Task 1): QoS Service built and stored.");
                 }
                 Err(e) => {
-                    blueprint_core::error!(target: "blueprint-runner", "Failed to build or start QoS service: {:?}", e);
+                    blueprint_core::error!(target: "blueprint-runner", "QoS Builder Task (Task 1): Failed to build QoS service: {:?}", e);
                 }
             }
         });

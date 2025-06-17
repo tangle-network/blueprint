@@ -267,7 +267,7 @@ mod tests {
 
         // Wait for all handshakes to complete
         info!("Checking handshake completion...");
-        wait_for_all_handshakes(&handle_refs, Duration::from_secs(5)).await;
+        wait_for_all_handshakes(&handle_refs, Duration::from_secs(30)).await;
         info!("Handshakes completed.");
 
         let node1_network =

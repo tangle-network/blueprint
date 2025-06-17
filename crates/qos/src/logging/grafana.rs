@@ -7,6 +7,9 @@ use super::loki::LokiConfig;
 use crate::error::{Error, Result};
 
 const DEFAULT_ADMIN_PASSWORD: &str = "please_change_this_default_password";
+const DEFAULT_GRAFANA_URL: &str = "http://localhost:3000";
+const DEFAULT_GRAFANA_ADMIN_USER: &str = "admin";
+const DEFAULT_GRAFANA_PROMETHEUS_DATASOURCE_URL: &str = "http://localhost:9090";
 
 // Health check response structures
 #[derive(Debug, Deserialize, Clone)]
@@ -55,11 +58,11 @@ pub struct PrometheusJsonData {
 ///
 /// This structure encapsulates the connection details, authentication credentials,
 /// and integration settings needed to communicate with a Grafana instance. It supports
-/// both API key authentication (preferred) and basic authentication as a fallback.
-/// The configuration also includes references to related data sources like Prometheus and Loki.
+/// both `API` key authentication (preferred) and basic authentication as a fallback.
+/// The configuration also includes references to related data sources like `Prometheus` and `Loki`.
 #[derive(Clone, Debug)]
 pub struct GrafanaConfig {
-    /// The base URL for the Grafana server (e.g., "http://localhost:3000").
+    /// The base URL for the Grafana server (e.g., "<http://localhost:3000>").
     pub url: String,
 
     /// API key for Grafana, if used. This is the preferred authentication method.
@@ -88,14 +91,14 @@ pub struct GrafanaConfig {
 impl Default for GrafanaConfig {
     fn default() -> Self {
         Self {
-            url: "http://localhost:3000".to_string(),
+            url: DEFAULT_GRAFANA_URL.to_string(),
             api_key: None,
-            admin_user: Some("admin".to_string()),
+            admin_user: Some(DEFAULT_GRAFANA_ADMIN_USER.to_string()),
             admin_password: Some(DEFAULT_ADMIN_PASSWORD.to_string()),
             org_id: None,
             folder: None,
             loki_config: None,
-            prometheus_datasource_url: Some("http://localhost:9090".to_string()),
+            prometheus_datasource_url: Some(DEFAULT_GRAFANA_PROMETHEUS_DATASOURCE_URL.to_string()),
         }
     }
 }
@@ -512,7 +515,9 @@ impl GrafanaClient {
             if !api_key.is_empty() {
                 request_builder = request_builder.bearer_auth(api_key);
             }
-        } else if let (Some(user), Some(pass)) = (&self.config.admin_user, &self.config.admin_password) {
+        } else if let (Some(user), Some(pass)) =
+            (&self.config.admin_user, &self.config.admin_password)
+        {
             if !user.is_empty() && !pass.is_empty() {
                 if pass == DEFAULT_ADMIN_PASSWORD {
                     warn!(
@@ -583,7 +588,9 @@ impl GrafanaClient {
             if !api_key.is_empty() {
                 request_builder = request_builder.bearer_auth(api_key);
             }
-        } else if let (Some(user), Some(pass)) = (&self.config.admin_user, &self.config.admin_password) {
+        } else if let (Some(user), Some(pass)) =
+            (&self.config.admin_user, &self.config.admin_password)
+        {
             if !user.is_empty() && !pass.is_empty() {
                 if pass == DEFAULT_ADMIN_PASSWORD {
                     warn!(
@@ -930,7 +937,9 @@ impl GrafanaClient {
             if !api_key.is_empty() {
                 request_builder = request_builder.bearer_auth(api_key);
             }
-        } else if let (Some(user), Some(pass)) = (&self.config.admin_user, &self.config.admin_password) {
+        } else if let (Some(user), Some(pass)) =
+            (&self.config.admin_user, &self.config.admin_password)
+        {
             if !user.is_empty() && !pass.is_empty() {
                 if pass == DEFAULT_ADMIN_PASSWORD {
                     warn!(
@@ -987,7 +996,9 @@ impl GrafanaClient {
             if !api_key.is_empty() {
                 request_builder = request_builder.bearer_auth(api_key);
             }
-        } else if let (Some(user), Some(pass)) = (&self.config.admin_user, &self.config.admin_password) {
+        } else if let (Some(user), Some(pass)) =
+            (&self.config.admin_user, &self.config.admin_password)
+        {
             if !user.is_empty() && !pass.is_empty() {
                 if pass == DEFAULT_ADMIN_PASSWORD {
                     warn!(
@@ -1047,7 +1058,9 @@ impl GrafanaClient {
             if !api_key.is_empty() {
                 request_builder = request_builder.bearer_auth(api_key);
             }
-        } else if let (Some(user), Some(pass)) = (&self.config.admin_user, &self.config.admin_password) {
+        } else if let (Some(user), Some(pass)) =
+            (&self.config.admin_user, &self.config.admin_password)
+        {
             if !user.is_empty() && !pass.is_empty() {
                 if pass == DEFAULT_ADMIN_PASSWORD {
                     warn!(

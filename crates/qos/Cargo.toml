@@ -28,7 +28,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "time", "signal", "macros"] }
 tonic = { workspace = true, features = ["transport", "codegen", "prost", "router"] }
 prost = { workspace = true, features = ["prost-derive"] }
-sysinfo = { workspace = true, features = ["system"] }
+sysinfo = { workspace = true, features = ["system", "disk", "network"] }
 rand = { workspace = true }
 chrono = { workspace = true }
 prometheus = { workspace = true, features = ["process"] }

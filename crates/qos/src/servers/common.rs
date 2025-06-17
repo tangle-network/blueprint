@@ -2,7 +2,7 @@ use blueprint_core::{debug, error, info, warn};
 use bollard::{
     Docker,
     container::{
-        Config, CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
+        Config, CreateContainerOptions, ListContainersOptions, LogsOptions, RemoveContainerOptions,
         StartContainerOptions, StopContainerOptions,
     },
     image::CreateImageOptions,
@@ -12,6 +12,8 @@ use bollard::{
 use futures::StreamExt;
 use std::{collections::HashMap, default::Default};
 use tokio::time::{Duration, Instant, sleep};
+
+const DEFAULT_CONTAINER_HEALTH_POLL_INTERVAL_SECS: u64 = 1;
 
 use crate::error::{Error, Result};
 
@@ -29,6 +31,18 @@ impl Default for DockerManager {
 }
 
 impl DockerManager {
+    // Helper function to validate a single path component for volume mounts
+    fn validate_volume_path_component(path_str: &str) -> Result<()> {
+        if path_str.contains("..") {
+            error!("Invalid volume path component due to '..': {}", path_str);
+            return Err(Error::DockerOperation(format!(
+                "Volume path component cannot contain '..': {}",
+                path_str
+            )));
+        }
+        Ok(())
+    }
+
     /// Create a new Docker manager
     ///
     /// # Errors
@@ -83,6 +97,7 @@ impl DockerManager {
         env_vars: HashMap<String, String>,
         ports: HashMap<String, String>,
         volumes: HashMap<String, String>,
+        cmd: Option<Vec<String>>,
         extra_hosts: Option<Vec<String>>,
         health_check_cmd: Option<Vec<String>>,
         bind_ip: Option<String>,
@@ -118,8 +133,12 @@ impl DockerManager {
             Some(
                 volumes
                     .into_iter()
-                    .map(|(host_path, container_path)| format!("{}:{}", host_path, container_path))
-                    .collect(),
+                    .map(|(host_path, container_path)| {
+                        Self::validate_volume_path_component(&host_path)?;
+                        Self::validate_volume_path_component(&container_path)?;
+                        Ok(format!("{}:{}", host_path, container_path))
+                    })
+                    .collect::<Result<Vec<String>>>()?,
             )
         };
 
@@ -139,18 +158,22 @@ impl DockerManager {
             start_interval: Some(1_000_000_000),
         });
 
+        let cmd_slices: Option<Vec<&str>> =
+            cmd.as_ref().map(|v| v.iter().map(AsRef::as_ref).collect());
+
         let config = Config {
             image: Some(image),
             env: Some(env.iter().map(AsRef::as_ref).collect()),
             host_config: Some(host_config),
             healthcheck: health_config,
+            cmd: cmd_slices,
             ..Default::default()
         };
 
         info!("Creating container '{}' from image '{}'", name, image);
         let options = Some(CreateContainerOptions {
             name: name.to_string(),
-            platform: None, // Explicitly set platform to None for wider compatibility
+            platform: None,
         });
 
         let container_id = match self.docker.create_container(options, config).await {
@@ -332,6 +355,43 @@ impl DockerManager {
     /// # Errors
     ///
     /// Returns an error if the container is not healthy within the timeout period
+    pub async fn dump_container_logs(&self, container_id: &str) {
+        let options = Some(LogsOptions {
+            stdout: true,
+            stderr: true,
+            tail: "all".to_string(),
+            ..Default::default()
+        });
+        error!("Dumping logs for container {}:", container_id);
+        let mut logs_stream = self.docker.logs(container_id, options);
+        while let Some(log_result) = logs_stream.next().await {
+            match log_result {
+                Ok(log_output) => {
+                    error!("[CONTAINER LOG]: {}", log_output);
+                }
+                Err(e) => {
+                    error!("Error reading container logs: {}", e);
+                }
+            }
+        }
+    }
+
+    /// Waits for a specified Docker container to report a healthy status.
+    ///
+    /// This function polls the container's health status periodically until it becomes
+    /// healthy, an unhealthy status is reported, or the timeout is reached.
+    /// If the container reports unhealthy, its logs will be dumped.
+    ///
+    /// # Arguments
+    /// * `container_id` - The ID of the container to monitor.
+    /// * `timeout_secs` - The maximum time in seconds to wait for the container to become healthy.
+    ///
+    /// # Errors
+    /// This function will return an error if:
+    /// * Inspecting the container fails (e.g., due to Docker API issues).
+    /// * The container reports an `UNHEALTHY` status.
+    /// * The timeout is reached before the container becomes healthy.
+    /// * The container is not running and has no health check configured.
     pub async fn wait_for_container_health(
         &self,
         container_id: &str,
@@ -354,12 +414,15 @@ impl DockerManager {
                                         return Ok(());
                                     }
                                     HealthStatusEnum::UNHEALTHY => {
-                                        let err_msg = format!(
+                                        error!(
+                                            "Container {} reported unhealthy status.",
+                                            container_id.chars().take(12).collect::<String>()
+                                        );
+                                        self.dump_container_logs(container_id).await;
+                                        return Err(Error::DockerOperation(format!(
                                             "Container {} reported unhealthy status.",
                                             container_id
-                                        );
-                                        error!("{}", err_msg);
-                                        return Err(Error::DockerOperation(err_msg));
+                                        )));
                                     }
                                     _ => {
                                         debug!(
@@ -386,9 +449,18 @@ impl DockerManager {
                 }
             }
 
-            sleep(Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(
+                DEFAULT_CONTAINER_HEALTH_POLL_INTERVAL_SECS,
+            ))
+            .await;
         }
 
+        warn!(
+            "Container {} did not become ready within {} seconds.",
+            container_id.chars().take(12).collect::<String>(),
+            timeout_secs
+        );
+        self.dump_container_logs(container_id).await;
         Err(Error::DockerOperation(format!(
             "Container {} did not become ready within {} seconds.",
             container_id, timeout_secs

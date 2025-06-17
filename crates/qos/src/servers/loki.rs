@@ -1,7 +1,10 @@
 use blueprint_core::{debug, info, warn};
 use std::collections::HashMap;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tempfile::{TempDir, TempPath};
 
 use crate::error::{Error, Result};
 use crate::logging::LokiConfig;
@@ -19,6 +22,9 @@ pub struct LokiServerConfig {
 
     /// Container name
     pub container_name: String,
+
+    /// Path to the Loki configuration file
+    pub config_path: Option<String>,
 }
 
 impl Default for LokiServerConfig {
@@ -27,6 +33,7 @@ impl Default for LokiServerConfig {
             port: 3100,
             data_dir: "/var/lib/loki".to_string(),
             container_name: "blueprint-loki".to_string(),
+            config_path: None,
         }
     }
 }
@@ -41,6 +48,12 @@ pub struct LokiServer {
 
     /// Container ID
     container_id: Arc<Mutex<Option<String>>>,
+
+    /// Temporary config file path
+    temp_config_path: Arc<Mutex<Option<TempPath>>>,
+
+    /// Temporary data directory
+    temp_data_dir: Arc<Mutex<Option<TempDir>>>,
 }
 
 impl LokiServer {
@@ -53,6 +66,8 @@ impl LokiServer {
             docker: DockerManager::new().map_err(|e| Error::DockerConnection(e.to_string()))?,
             config,
             container_id: Arc::new(Mutex::new(None)),
+            temp_config_path: Arc::new(Mutex::new(None)),
+            temp_data_dir: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -77,14 +92,43 @@ impl ServerManager for LokiServer {
         info!("Starting Loki server on port {}", self.config.port);
 
         let env_vars = HashMap::new();
+        let mut args = Vec::new();
 
         let mut ports = HashMap::new();
         ports.insert("3100/tcp".to_string(), self.config.port.to_string());
 
         let mut volumes = HashMap::new();
-        if !self.config.data_dir.is_empty() && self.config.data_dir != "/loki" {
-            volumes.insert(self.config.data_dir.clone(), "/loki".to_string());
+        let temp_data_dir = tempfile::Builder::new().prefix("loki-data-").tempdir()?;
+        fs::set_permissions(temp_data_dir.path(), fs::Permissions::from_mode(0o777))?;
+        volumes.insert(
+            temp_data_dir.path().to_str().unwrap().to_string(),
+            "/loki".to_string(),
+        );
+        self.temp_data_dir.lock().unwrap().replace(temp_data_dir);
+
+        if let Some(config_path) = &self.config.config_path {
+            let config_content = std::fs::read_to_string(config_path)?;
+            let mut temp_file = tempfile::NamedTempFile::new()?;
+            std::io::Write::write_all(&mut temp_file, config_content.as_bytes())?;
+
+            // Set permissions to be world-readable for the Docker container
+            fs::set_permissions(temp_file.path(), fs::Permissions::from_mode(0o644))?;
+
+            let temp_path = temp_file.into_temp_path();
+            let temp_path_str = temp_path.to_str().unwrap().to_string();
+            volumes.insert(
+                temp_path_str.to_string(),
+                "/etc/loki/config.yaml".to_string(),
+            );
+            // Keep the temp file alive until the container is started
+            self.temp_config_path.lock().unwrap().replace(temp_path);
+            args.push("-config.file=/etc/loki/config.yaml".to_string());
         }
+
+        let health_check_cmd = Some(vec![
+            "CMD-SHELL".to_string(),
+            "wget -q -O /dev/null http://localhost:3100/ready".to_string(),
+        ]);
 
         let container_id = self
             .docker
@@ -94,8 +138,9 @@ impl ServerManager for LokiServer {
                 env_vars,
                 ports,
                 volumes,
+                Some(args),
                 None,
-                None,
+                health_check_cmd,
                 bind_ip,
             )
             .await?;
@@ -114,7 +159,7 @@ impl ServerManager for LokiServer {
         }
 
         // TODO: Update once Loki is fixed
-        self.wait_until_ready(5).await?;
+        self.wait_until_ready(30).await?;
 
         info!("Loki server started successfully");
         Ok(())

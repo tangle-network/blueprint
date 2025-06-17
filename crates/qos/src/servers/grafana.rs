@@ -141,6 +141,7 @@ impl ServerManager for GrafanaServer {
                 env_vars,
                 ports,
                 volumes,
+                None,
                 Some(vec!["host.docker.internal:host-gateway".to_string()]),
                 None,
                 bind_ip,
