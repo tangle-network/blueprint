@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.17](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.16...cargo-tangle-v0.4.0-alpha.17) - 2025-06-17
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.4.0-alpha.16](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.15...cargo-tangle-v0.4.0-alpha.16) - 2025-06-16
 
 ### Added
