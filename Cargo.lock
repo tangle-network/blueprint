@@ -465,7 +465,7 @@ dependencies = [
  "lru 0.13.0",
  "parking_lot 0.12.4",
  "pin-project 1.1.10",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
@@ -532,7 +532,7 @@ dependencies = [
  "async-stream",
  "futures",
  "pin-project 1.1.10",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "serde",
  "serde_json",
  "tokio",
@@ -891,7 +891,7 @@ checksum = "a082c9473c6642cce8b02405a979496126a03b096997888e86229afad05db06c"
 dependencies = [
  "alloy-json-rpc",
  "alloy-transport",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "serde_json",
  "tower 0.5.2",
  "tracing",
@@ -2752,7 +2752,7 @@ dependencies = [
  "hyper-util",
  "k256",
  "prost",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "rocksdb",
  "schnorrkel",
  "serde",
@@ -2859,7 +2859,7 @@ dependencies = [
  "dialoguer",
  "dirs 6.0.0",
  "indicatif",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "serde_json",
  "sp-core",
  "tangle-subxt",
@@ -3207,7 +3207,7 @@ dependencies = [
  "jsonrpc-core",
  "jsonrpc-http-server",
  "num-bigint 0.4.6",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
@@ -3358,7 +3358,7 @@ dependencies = [
  "hyperlocal",
  "ipnet",
  "nix 0.30.1",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "rtnetlink 0.16.0",
  "sha2 0.10.9",
  "sp-core",
@@ -5673,7 +5673,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.103",
 ]
 
 [[package]]
@@ -5968,7 +5968,7 @@ dependencies = [
  "ipnet",
  "log",
  "regex",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -6448,7 +6448,7 @@ checksum = "0813ece83d4e9c95eddad48bf6cbfe2e1c083ffbd9eac87a40d818225be31db0"
 dependencies = [
  "alloy",
  "regex",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
 ]
 
 [[package]]
@@ -7842,7 +7842,7 @@ dependencies = [
  "once_cell",
  "prost",
  "prost-types",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "secret-vault-value",
  "serde",
  "serde_json",
@@ -9221,7 +9221,7 @@ dependencies = [
  "libp2p",
  "num-bigint 0.4.6",
  "parking_lot 0.12.4",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "serde",
  "serde_json",
  "sp-core",
@@ -15800,9 +15800,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.19"
+version = "0.12.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2f8e5513d63f2e5b386eb5106dc67eaf3f84e95258e210489136b8b92ad6119"
+checksum = "eabf4c97d9130e2bf606614eb937e86edac8292eaa6f422f995d7e8de1eb1813"
 dependencies = [
  "async-compression",
  "base64 0.22.1",
@@ -15818,13 +15818,11 @@ dependencies = [
  "hyper-rustls 0.27.5",
  "hyper-tls 0.6.0",
  "hyper-util",
- "ipnet",
  "js-sys",
  "log",
  "mime",
  "mime_guess",
  "native-tls",
- "once_cell",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
