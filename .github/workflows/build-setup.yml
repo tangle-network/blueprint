@@ -5,3 +5,22 @@
 
 - name: Verify Forge installation
   run: forge --version
+
+- name: Install Solidity Dependencies
+  run: forge soldeer update -d
+
+- name: install protobuf and gmp (Linux)
+  if: runner.os == 'Linux'
+  run: |
+    sudo apt-get update
+    sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
+
+- name: install protobuf and gmp (macOS)
+  if: runner.os == 'macOS'
+  run: |
+    brew install protobuf gmp
+
+- name: Install LLVM and Clang
+  uses: KyleMayes/install-llvm-action@v2
+  with:
+    version: "19.1.7"
