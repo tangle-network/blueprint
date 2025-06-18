@@ -4,10 +4,14 @@
   uses: foundry-rs/foundry-toolchain@v1
 
 - name: Verify Forge installation
-  run: forge --version
+  run: |
+    forge --version
+    echo "Forge version check completed"
 
 - name: Install Solidity Dependencies
-  run: forge soldeer update -d
+  run: |
+    forge soldeer update -d
+    echo "Solidity dependencies installed"
 
 - name: install protobuf and gmp (Linux)
   if: runner.os == 'Linux'
@@ -19,6 +23,7 @@
   if: runner.os == 'macOS'
   run: |
     brew install protobuf gmp
+    echo "Installed protobuf and gmp on macOS"
 
 - name: Install LLVM and Clang
   uses: KyleMayes/install-llvm-action@v2
