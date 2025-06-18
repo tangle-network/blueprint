@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3](https://github.com/tangle-network/blueprint/compare/blueprint-auth-v0.1.0-alpha.2...blueprint-auth-v0.1.0-alpha.3) - 2025-06-16
+
+### Added
+
+- *(tangle-testing-utils)* support manager bridge in test harness (#1024)
+- *(manager)* [**breaking**] add manager <-> service bridge (#969)
+- add auth proxy to blueprint manager (#994)
+
+### Fixed
+
+- change the schnorrkel ctx to substrate instead of tangle (#1026)
+- *(auth)* use `blueprint_std` rand (#1023)
+
 ## [0.1.0-alpha.2](https://github.com/tangle-network/blueprint/compare/blueprint-auth-v0.1.0-alpha.1...blueprint-auth-v0.1.0-alpha.2) - 2025-05-14
 
 ### Other

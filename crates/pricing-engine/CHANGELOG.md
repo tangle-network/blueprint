@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.1.5...blueprint-pricing-engine-v0.2.0) - 2025-06-16
+
+### Added
+
+- *(manager)* [**breaking**] allow spawning services without sandboxing (#1022)
+- *(manager)* [**breaking**] add manager <-> service bridge (#969)
+
 ## [0.1.5](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.1.4...blueprint-pricing-engine-v0.1.5) - 2025-05-14
 
 ### Other
