@@ -234,7 +234,7 @@ where
     ///         &self,
     ///         status: &blueprint_qos::heartbeat::HeartbeatStatus,
     ///     ) -> Result<(), blueprint_qos::error::Error> {
-    ///         // Send heartbeat to the chain or other monitoring systems
+    ///         // Custom heartbeat logic
     ///         Ok(())
     ///     }
     /// }
@@ -330,7 +330,6 @@ where
         mut self,
         server: Arc<blueprint_qos::servers::prometheus::PrometheusServer>,
     ) -> Self {
-        // Create a background service adapter for the metrics server
         let adapter = self::metrics_server::MetricsServerAdapter::new(server);
         self.background_services
             .push(DynBackgroundService::boxed(adapter));
