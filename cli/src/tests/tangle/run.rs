@@ -150,13 +150,6 @@ async fn test_run_blueprint() -> Result<()> {
     fs::write(&job_args_file, job_args_content).await?;
     info!("Created job arguments file at: {}", job_args_file.display());
 
-    loop {
-        if std::env::var_os("BLUEPRINT_BINARY_TEST_BUILD").is_some() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }
-
     let job_called = submit_job(
         env.ws_rpc_endpoint.clone(),
         Some(0),

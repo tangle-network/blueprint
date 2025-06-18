@@ -3,6 +3,7 @@ use crate::error::{Error, Result};
 use crate::sdk::utils::make_executable;
 use blueprint_core::trace;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
 
 pub struct TestSourceFetcher {
@@ -78,8 +79,13 @@ impl TestSourceFetcher {
             command.arg("--release");
         }
 
-        trace!("Running build command in {}", base_path.display());
-        let output = match command.current_dir(&base_path).output().await {
+        let output = match command
+            .current_dir(&base_path)
+            .stdin(Stdio::null())
+            .kill_on_drop(true)
+            .output()
+            .await
+        {
             Ok(output) => output,
             Err(err) => {
                 blueprint_core::warn!(
@@ -88,14 +94,10 @@ impl TestSourceFetcher {
                 return Err(Error::from(err));
             }
         };
-        trace!("Build command run");
+        trace!("Build command run, this may take a while...");
         if !output.status.success() {
             blueprint_core::warn!("Failed to build binary");
             return Err(Error::BuildBinary(output));
-        }
-        unsafe {
-            // Set the environment variable to indicate that the binary was built for testing
-            std::env::set_var("BLUEPRINT_BINARY_TEST_BUILD", "true");
         }
 
         trace!("Successfully built binary");
