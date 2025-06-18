@@ -22,6 +22,10 @@ pub enum RunnerError {
     #[error(transparent)]
     AddrParse(#[from] std::net::AddrParseError),
 
+    /// `QoS` service error
+    #[error("QoS error: {0}")]
+    QoS(#[from] blueprint_qos::error::Error),
+
     /// Unable to read/use the provided configuration values
     #[error("Configuration error: {0}")]
     Config(#[from] ConfigError),

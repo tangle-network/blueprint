@@ -218,8 +218,10 @@ where
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// use blueprint_qos::heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatService};
+    /// use blueprint_qos::servers::prometheus::{PrometheusServer, PrometheusServerConfig};
+    /// use blueprint_qos::service_builder::QoSServiceBuilder;
     /// use blueprint_router::Router;
     /// use blueprint_runner::BlueprintRunner;
     /// use blueprint_runner::config::BlueprintEnvironment;
@@ -228,14 +230,19 @@ where
     /// // Define a custom heartbeat consumer
     /// struct MyHeartbeatConsumer;
     ///
-    /// #[tonic::async_trait]
     /// impl HeartbeatConsumer for MyHeartbeatConsumer {
-    ///     async fn send_heartbeat(
+    ///     fn send_heartbeat(
     ///         &self,
     ///         status: &blueprint_qos::heartbeat::HeartbeatStatus,
-    ///     ) -> Result<(), blueprint_qos::error::Error> {
+    ///     ) -> std::pin::Pin<
+    ///         Box<
+    ///             dyn std::future::Future<Output = Result<(), blueprint_qos::error::Error>>
+    ///                 + Send
+    ///                 + 'static,
+    ///         >,
+    ///     > {
     ///         // Custom heartbeat logic
-    ///         Ok(())
+    ///         Box::pin(async { Ok(()) })
     ///     }
     /// }
     ///
@@ -246,7 +253,20 @@ where
     /// // Create a heartbeat service with custom consumer
     /// let config = HeartbeatConfig::default();
     /// let consumer = Arc::new(MyHeartbeatConsumer);
-    /// let heartbeat_service = HeartbeatService::new(config, consumer);
+    /// // Extract values from environment
+    /// let ws_rpc_endpoint = env.ws_rpc_endpoint.to_string();
+    /// let keystore_uri = env.keystore_uri.clone();
+    /// // Use constant values for doc tests
+    /// let service_id = 0;
+    /// let blueprint_id = 0;
+    /// let heartbeat_service = HeartbeatService::new(
+    ///     config,
+    ///     consumer,
+    ///     ws_rpc_endpoint,
+    ///     keystore_uri,
+    ///     service_id,
+    ///     blueprint_id,
+    /// );
     ///
     /// BlueprintRunner::builder((), env)
     ///     .router(router)
@@ -295,35 +315,60 @@ where
     ///
     /// ```rust
     /// use blueprint_runner::config::BlueprintEnvironment;
+    /// use blueprint_runner::BlueprintRunner;
     /// use blueprint_router::Router;
-    /// use blueprint_qos::servers::prometheus::PrometheusServerConfig;
-    /// use blueprint_qos::QoSServiceBuilder;
+    /// use blueprint_qos::servers::prometheus::{PrometheusServer, PrometheusServerConfig};
+    /// use blueprint_qos::metrics::types::MetricsConfig;
+    /// use blueprint_qos::metrics::opentelemetry::OpenTelemetryConfig;
+    /// use blueprint_qos::metrics::provider::EnhancedMetricsProvider;
     /// use std::sync::Arc;
     ///
     /// #[derive(Clone)]
     /// struct MyContext;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), blueprint_runner::error::RunnerError> {
-    ///     let env = BlueprintEnvironment::load()?;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    ///     // Set up the core components
+    ///     let env = BlueprintEnvironment::default();
     ///     let context = Arc::new(MyContext);
     ///     let router = Router::new().with_context(context.clone());
-    ///
-    ///     let qos_service = QoSServiceBuilder::new(env.clone())
-    ///         .with_prometheus_server_config(PrometheusServerConfig::default())
-    ///         .manage_servers(true)
-    ///         .build()
+    ///     
+    ///     // Create metrics config and OpenTelemetry config
+    ///     let metrics_config = MetricsConfig::default();
+    ///     let otel_config = OpenTelemetryConfig::default();
+    ///     
+    ///     // Create a metrics provider for the Prometheus server
+    ///     let metrics_provider = Arc::new(
+    ///         EnhancedMetricsProvider::new(metrics_config.clone(), &otel_config)?
+    ///     );
+    ///     
+    ///     // Get the shared registry from the metrics provider
+    ///     let registry = metrics_provider.shared_registry();
+    ///     
+    ///     // Create a Prometheus server with proper configuration
+    ///     let prometheus_config = PrometheusServerConfig {
+    ///         port: 9090,
+    ///         host: "0.0.0.0".to_string(),
+    ///         ..Default::default()
+    ///     };
+    ///     
+    ///     // Create a Prometheus server
+    ///     let prometheus_server = Arc::new(
+    ///         PrometheusServer::new(
+    ///             prometheus_config,
+    ///             Some(registry),
+    ///             metrics_provider.clone()
+    ///         )?
+    ///     );
+    ///     
+    ///     // Now we can use the BlueprintRunner with this Prometheus server
+    ///     let blueprint_runner = BlueprintRunner::builder((), env)
+    ///         .router(router)
+    ///         .metrics_server(prometheus_server) // Add the metrics server
+    ///         .run()
     ///         .await?;
-    ///
-    ///     if let Some(prometheus_server) = qos_service.prometheus_server {
-    ///         blueprint_runner::BlueprintRunner::builder((), env)
-    ///             .router(router)
-    ///             .metrics_server(prometheus_server)
-    ///             .run()
-    ///             .await?;
-    ///     }
-    ///     # Ok(())
-    ///     # }
+    ///     
+    ///     Ok(())
+    /// }
     /// ```
     #[must_use]
     pub fn metrics_server(
