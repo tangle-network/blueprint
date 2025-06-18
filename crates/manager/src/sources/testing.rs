@@ -3,6 +3,7 @@ use crate::error::{Error, Result};
 use crate::sdk::utils::make_executable;
 use blueprint_core::trace;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
 
 pub struct TestSourceFetcher {
@@ -33,18 +34,18 @@ impl TestSourceFetcher {
             .map_err(|err| Error::Other(format!("Failed to parse `cargo_bin`: {:?}", err)))?;
         let base_path_str = String::from_utf8(base_path.0.0.clone())
             .map_err(|err| Error::Other(format!("Failed to parse `base_path`: {:?}", err)))?;
-        let git_repo_root = get_git_repo_root_path().await?;
+        let git_repo_root = get_git_repo_root_path_in(&base_path_str).await?;
 
         let profile = if cfg!(debug_assertions) {
             "debug"
         } else {
             "release"
         };
-        let base_path = std::path::absolute(git_repo_root.join(&base_path_str))?;
+        let base_path = std::path::absolute(&git_repo_root)?;
 
         let target_dir = match std::env::var("CARGO_TARGET_DIR") {
             Ok(target) => PathBuf::from(target),
-            Err(_) => git_repo_root.join(&base_path).join("target"),
+            Err(_) => git_repo_root.join("target"),
         };
 
         let binary_path = target_dir.join(profile).join(&cargo_bin);
@@ -52,6 +53,19 @@ impl TestSourceFetcher {
 
         trace!("Base Path: {}", base_path.display());
         trace!("Binary Path: {}", binary_path.display());
+
+        // Check if the binary already exists and is built (only when we are not in debug mode)
+        if binary_path.exists() && !cfg!(debug_assertions) {
+            trace!(
+                "Binary already built, using existing binary at {}",
+                binary_path.display()
+            );
+            trace!(
+                binary_path = %binary_path.display(),
+                "if you want to rebuild the binary, run `cargo clean` in the repository root or remove the built binary manually"
+            );
+            return Ok(binary_path);
+        }
 
         // Run cargo build on the cargo_bin and ensure it build to the binary_path
         let mut command = tokio::process::Command::new("cargo");
@@ -65,16 +79,25 @@ impl TestSourceFetcher {
             command.arg("--release");
         }
 
-        trace!("Running build command in {}", base_path.display());
-        let output = command.current_dir(&base_path).output().await.unwrap();
-        trace!("Build command run");
+        let output = match command
+            .current_dir(&base_path)
+            .stdin(Stdio::null())
+            .kill_on_drop(true)
+            .output()
+            .await
+        {
+            Ok(output) => output,
+            Err(err) => {
+                blueprint_core::warn!(
+                    "Failed to run build command using cargo: {err}. Ensure that cargo is installed and available in your PATH."
+                );
+                return Err(Error::from(err));
+            }
+        };
+        trace!("Build command run, this may take a while...");
         if !output.status.success() {
             blueprint_core::warn!("Failed to build binary");
             return Err(Error::BuildBinary(output));
-        }
-        unsafe {
-            // Set the environment variable to indicate that the binary was built for testing
-            std::env::set_var("BLUEPRINT_BINARY_TEST_BUILD", "true");
         }
 
         trace!("Successfully built binary");
@@ -83,11 +106,12 @@ impl TestSourceFetcher {
     }
 }
 
-async fn get_git_repo_root_path() -> Result<PathBuf> {
+async fn get_git_repo_root_path_in<P: AsRef<Path>>(cwd: P) -> Result<PathBuf> {
     // Run a process to determine the root directory for this repo
     let output = tokio::process::Command::new("git")
         .arg("rev-parse")
         .arg("--show-toplevel")
+        .current_dir(cwd)
         .output()
         .await?;
 

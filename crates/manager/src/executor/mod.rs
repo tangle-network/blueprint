@@ -174,8 +174,13 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
     blueprint_manager_config.verify_directories_exist()?;
 
-    info!("Checking for VM images");
-    rt::hypervisor::images::download_image_if_needed(&blueprint_manager_config.cache_dir).await?;
+    if blueprint_manager_config.no_vm {
+        info!("Skipping VM image check, running in no-vm mode");
+    } else {
+        info!("Checking for VM images");
+        rt::hypervisor::images::download_image_if_needed(&blueprint_manager_config.cache_dir)
+            .await?;
+    }
 
     // Create the auth proxy task
     let (db, auth_proxy_task) = run_auth_proxy(

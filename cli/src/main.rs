@@ -438,6 +438,7 @@ pub enum DebugCommands {
         #[arg(short = 'p', long, value_name = "PACKAGE", env = "CARGO_PACKAGE")]
         package: Option<String>,
 
+        /// The ID of the service to spawn
         #[arg(default_value_t = 0)]
         id: u32,
         #[arg(default_value = "service")]
@@ -449,6 +450,7 @@ pub enum DebugCommands {
         /// Disables the VM sandbox
         #[arg(long)]
         no_vm: bool,
+        /// Verify network connection before starting the service
         #[arg(long, default_value_t = true)]
         verify_network_connection: bool,
     },

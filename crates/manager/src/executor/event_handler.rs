@@ -66,7 +66,12 @@ impl VerifiedBlueprint {
                 Ok(binary_path) => binary_path,
                 Err(e) => {
                     error!(
-                        "Failed to fetch blueprint from source {index}, attempting next available: {e}"
+                        "Failed to fetch blueprint from source at index #{index}[{source_type}]: {e} (blueprint: {blueprint_name}, id: {blueprint_id}). attempting next source",
+                        index = index,
+                        source_type = core::any::type_name_of_val(source),
+                        e = e,
+                        blueprint_name = blueprint.name,
+                        blueprint_id = blueprint.blueprint_id
                     );
                     continue;
                 }
