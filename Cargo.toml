@@ -45,17 +45,17 @@ broken_intra_doc_links = "deny"
 
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
-blueprint-sdk = { version = "0.1.0-alpha.13", path = "./crates/sdk", default-features = false }
+blueprint-sdk = { version = "0.1.0-alpha.14", path = "./crates/sdk", default-features = false }
 
 # Job system
 blueprint-core = { version = "0.1.0-alpha.4", path = "crates/core", default-features = false }
 blueprint-router = { version = "0.1.0-alpha.4", path = "crates/router", default-features = false }
-blueprint-runner = { version = "0.1.0-alpha.12", path = "crates/runner", default-features = false }
+blueprint-runner = { version = "0.1.0-alpha.13", path = "crates/runner", default-features = false }
 
 # Extras
 blueprint-tangle-extra = { version = "0.1.0-alpha.8", path = "crates/tangle-extra", default-features = false }
 blueprint-evm-extra = { version = "0.1.0-alpha.5", path = "crates/evm-extra", default-features = false }
-blueprint-eigenlayer-extra = { version = "0.1.0-alpha.7", path = "crates/eigenlayer-extra", default-features = false }
+blueprint-eigenlayer-extra = { version = "0.1.0-alpha.8", path = "crates/eigenlayer-extra", default-features = false }
 blueprint-producers-extra = { version = "0.1.0-alpha.4", path = "crates/producers-extra", default-features = false }
 
 # Blueprint Examples
@@ -63,16 +63,16 @@ incredible-squaring-blueprint = { version = "0.1.1", path = "./examples/incredib
 incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./examples/incredible-squaring-eigenlayer", default-features = false }
 
 # Blueprint utils
-blueprint-manager = { version = "0.3.0-alpha.14", path = "./crates/manager", default-features = false }
-blueprint-manager-bridge = { version = "0.1.0-alpha.2", path = "./crates/manager/bridge", default-features = false }
+blueprint-manager = { version = "0.3.0-alpha.15", path = "./crates/manager", default-features = false }
+blueprint-manager-bridge = { version = "0.1.0-alpha.3", path = "./crates/manager/bridge", default-features = false }
 blueprint-build-utils = { version = "0.1.0-alpha.3", path = "./crates/build-utils", default-features = false }
-blueprint-auth = { version = "0.1.0-alpha.3", path = "./crates/auth", default-features = false }
+blueprint-auth = { version = "0.1.0-alpha.4", path = "./crates/auth", default-features = false }
 
 # Chain Setup
-blueprint-chain-setup = { version = "0.1.0-alpha.13", path = "./crates/chain-setup", default-features = false }
-blueprint-chain-setup-common = { version = "0.1.0-alpha.13", path = "./crates/chain-setup/common", default-features = false }
-blueprint-chain-setup-tangle = { version = "0.1.0-alpha.13", path = "./crates/chain-setup/tangle", default-features = false }
-blueprint-chain-setup-anvil = { version = "0.1.0-alpha.13", path = "./crates/chain-setup/anvil", default-features = false }
+blueprint-chain-setup = { version = "0.1.0-alpha.14", path = "./crates/chain-setup", default-features = false }
+blueprint-chain-setup-common = { version = "0.1.0-alpha.14", path = "./crates/chain-setup/common", default-features = false }
+blueprint-chain-setup-tangle = { version = "0.1.0-alpha.14", path = "./crates/chain-setup/tangle", default-features = false }
+blueprint-chain-setup-anvil = { version = "0.1.0-alpha.14", path = "./crates/chain-setup/anvil", default-features = false }
 
 # Crypto
 blueprint-crypto-core = { version = "0.1.0-alpha.7", path = "./crates/crypto/core", default-features = false }
@@ -87,12 +87,12 @@ blueprint-crypto = { version = "0.1.0-alpha.9", path = "./crates/crypto", defaul
 blueprint-crypto-tangle-pair-signer = { version = "0.1.0-alpha.9", path = "./crates/crypto/tangle-pair-signer", default-features = false }
 
 # Clients
-blueprint-clients = { version = "0.1.0-alpha.13", path = "./crates/clients", default-features = false }
+blueprint-clients = { version = "0.1.0-alpha.14", path = "./crates/clients", default-features = false }
 blueprint-client-core = { version = "0.1.0-alpha.3", path = "./crates/clients/core", default-features = false }
-blueprint-client-eigenlayer = { version = "0.1.0-alpha.12", path = "./crates/clients/eigenlayer", default-features = false }
+blueprint-client-eigenlayer = { version = "0.1.0-alpha.13", path = "./crates/clients/eigenlayer", default-features = false }
 blueprint-client-evm = { version = "0.1.0-alpha.5", path = "./crates/clients/evm", default-features = false }
-blueprint-client-tangle = { version = "0.1.0-alpha.13", path = "./crates/clients/tangle", default-features = false }
-blueprint-contexts = { version = "0.1.0-alpha.13", path = "./crates/contexts", default-features = false }
+blueprint-client-tangle = { version = "0.1.0-alpha.14", path = "./crates/clients/tangle", default-features = false }
+blueprint-contexts = { version = "0.1.0-alpha.14", path = "./crates/contexts", default-features = false }
 
 # Pricing Engine
 blueprint-pricing-engine = { version = "0.2.0", path = "./crates/pricing-engine", default-features = false }
@@ -116,17 +116,17 @@ blueprint-networking-round-based-extension = { version = "0.1.0-alpha.10", path 
 blueprint-networking-agg-sig-gossip-extension = { version = "0.1.0-alpha.9", path = "./crates/networking/extensions/agg-sig-gossip", default-features = false }
 
 # Testing utilities
-blueprint-testing-utils = { version = "0.1.0-alpha.13", path = "./crates/testing-utils", default-features = false }
-blueprint-core-testing-utils = { version = "0.1.0-alpha.13", path = "./crates/testing-utils/core", default-features = false }
-blueprint-anvil-testing-utils = { version = "0.1.0-alpha.13", path = "./crates/testing-utils/anvil", default-features = false }
-blueprint-tangle-testing-utils = { version = "0.1.0-alpha.13", path = "./crates/testing-utils/tangle", default-features = false }
-blueprint-eigenlayer-testing-utils = { version = "0.1.0-alpha.13", path = "./crates/testing-utils/eigenlayer", default-features = false }
+blueprint-testing-utils = { version = "0.1.0-alpha.14", path = "./crates/testing-utils", default-features = false }
+blueprint-core-testing-utils = { version = "0.1.0-alpha.14", path = "./crates/testing-utils/core", default-features = false }
+blueprint-anvil-testing-utils = { version = "0.1.0-alpha.14", path = "./crates/testing-utils/anvil", default-features = false }
+blueprint-tangle-testing-utils = { version = "0.1.0-alpha.14", path = "./crates/testing-utils/tangle", default-features = false }
+blueprint-eigenlayer-testing-utils = { version = "0.1.0-alpha.14", path = "./crates/testing-utils/eigenlayer", default-features = false }
 
 # Metrics
 blueprint-metrics = { version = "0.1.0-alpha.3", path = "./crates/metrics", default-features = false }
 blueprint-metrics-rpc-calls = { version = "0.1.0-alpha.3", path = "./crates/metrics/rpc-calls", default-features = false }
 
-cargo-tangle = { version = "0.4.0-alpha.16", path = "./cli", default-features = false }
+cargo-tangle = { version = "0.4.0-alpha.17", path = "./cli", default-features = false }
 cargo_metadata = { version = "0.18.1" }
 tnt-core-bytecode = { version = "0.5.0", default-features = false }
 
