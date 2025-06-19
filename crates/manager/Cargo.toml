@@ -26,6 +26,7 @@ blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
 
+document-features.workspace = true
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
 docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
@@ -70,6 +71,12 @@ nftables = { workspace = true, optional = true }
 
 [features]
 default = ["vm-sandbox"]
+
+## Enable the VM sandbox
+##
+## **NOTE**: This is only supported on Linux
+##
+## Enabling this will also add additional CLI arguments: `--no-vm`, `--network-interface`, and `--default-address-pool`
 vm-sandbox = ["dep:cloud-hypervisor-client", "dep:fatfs", "dep:nix", "dep:capctl", "dep:rtnetlink", "dep:ipnet", "dep:netdev", "dep:nftables"]
 
 [package.metadata.dist]
