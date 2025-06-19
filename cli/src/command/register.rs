@@ -92,10 +92,12 @@ pub async fn register(
             if e.to_string().contains("AlreadyOperator") {
                 println!(
                     "{}",
-                    style("Account is already an operator, skipping join step...")
-                        .yellow()
+                    style("Account is already an operator, skipping join step...").yellow()
                 );
-                info!("Account {} is already an operator, continuing with registration", account_id);
+                info!(
+                    "Account {} is already an operator, continuing with registration",
+                    account_id
+                );
             } else {
                 // Re-throw any other error
                 return Err(e.into());
