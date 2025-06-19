@@ -53,10 +53,13 @@ walkdir.workspace = true
 cloud-hypervisor-client = { workspace = true }
 fatfs = { workspace = true, features = ["std"] }
 nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"] }
+capctl = { workspace = true, features = ["std"] }
 
 # Networking
 rtnetlink = { workspace = true, features = ["tokio_socket"] }
 ipnet.workspace = true
+netdev = { workspace = true, features = ["gateway"] }
+nftables.workspace = true
 
 # Binary extraction
 cargo-dist-schema.workspace = true

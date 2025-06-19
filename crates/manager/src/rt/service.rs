@@ -83,6 +83,7 @@ impl Service {
     pub async fn new(
         vm_config: ServiceVmConfig,
         network_manager: NetworkManager,
+        network_interface: String,
         db: RocksDb,
         data_dir: impl AsRef<Path>,
         keystore: impl AsRef<Path>,
@@ -104,6 +105,7 @@ impl Service {
             cache_dir.as_ref(),
             runtime_dir.as_ref(),
             service_name,
+            network_interface,
         )?;
 
         hypervisor

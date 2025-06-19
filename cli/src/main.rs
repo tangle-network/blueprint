@@ -879,8 +879,8 @@ async fn main() -> color_eyre::Result<()> {
                     service_name,
                     binary,
                     protocol,
-                    no_vm,
                     verify_network_connection,
+                    no_vm,
                 ))
                 .await?;
             }

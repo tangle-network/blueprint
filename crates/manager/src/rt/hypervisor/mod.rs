@@ -15,7 +15,7 @@ use cloud_hypervisor_client::models::{
     ConsoleConfig, DiskConfig, MemoryConfig, NetConfig, PayloadConfig, VmConfig, VsockConfig,
 };
 use cloud_hypervisor_client::{SocketBasedApiClient, socket_based_api_client};
-use fatfs::{Dir, FileSystem, FormatVolumeOptions, FsOptions};
+use fatfs::{Dir, FatType, FileSystem, FormatVolumeOptions, FsOptions};
 use hyper::StatusCode;
 use ipnet::Ipv4Net;
 use std::fmt::Write as _;
@@ -61,6 +61,7 @@ pub struct HypervisorInstance {
     cloud_init_image_path: PathBuf,
     hypervisor: Child,
     lease: Option<net::Lease>,
+    network_interface: String,
 }
 
 impl HypervisorInstance {
@@ -76,6 +77,7 @@ impl HypervisorInstance {
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
+        network_interface: String,
     ) -> Result<HypervisorInstance> {
         info!("Initializing hypervisor for service `{service_name}`...");
 
@@ -119,6 +121,7 @@ impl HypervisorInstance {
             cloud_init_image_path,
             hypervisor: hypervisor_handle,
             lease: None,
+            network_interface,
         })
     }
 
@@ -388,7 +391,7 @@ impl HypervisorInstance {
                 ..Default::default()
             }),
             net: Some(vec![NetConfig {
-                tap: Some(format!("tap-tngl-{}", self.config.id)),
+                tap: Some(self.tap_interface_name()),
                 ip: Some(tap_interface_addr.to_string()),
                 ..Default::default()
             }]),
@@ -402,6 +405,10 @@ impl HypervisorInstance {
         })?;
 
         Ok(())
+    }
+
+    fn tap_interface_name(&self) -> String {
+        format!("tap-tngl-{}", self.config.id)
     }
 
     // Disable serial port logging in release builds, too much noise for production
@@ -443,6 +450,7 @@ impl HypervisorInstance {
     ///
     /// * This will error if the VM cannot be booted for any reason
     /// * See [`Self::client()`]
+    #[allow(clippy::missing_panics_doc)]
     pub async fn start(&mut self) -> Result<()> {
         info!("Booting VM...");
 
@@ -454,6 +462,12 @@ impl HypervisorInstance {
             error!("Failed to boot VM: {e:?}");
             Error::Hypervisor(format!("{e:?}"))
         })?;
+
+        let tap_interface = self.tap_interface_name();
+        let tap_interface_ip = self.lease.as_ref().expect("should exist").addr();
+
+        net::wait_for_interface(&tap_interface).await?;
+        net::nftables::setup_rules(&self.network_interface, &tap_interface, tap_interface_ip)?;
 
         Ok(())
     }
@@ -483,55 +497,65 @@ impl HypervisorInstance {
     /// * See [`Self::client()`]
     #[allow(clippy::cast_possible_wrap)]
     pub async fn shutdown(mut self) -> Result<()> {
-        const VM_SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(30);
+        async fn vm_shutdown(hypervisor: &mut HypervisorInstance) -> Result<()> {
+            const VM_SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(30);
 
-        let client = self
-            .client()
-            .await
-            .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
+            let client = hypervisor
+                .client()
+                .await
+                .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
 
-        // Wait for the VM to power down (sends SIGINT to the blueprint)
-        client
-            .power_button_vm()
-            .await
-            .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
+            // Wait for the VM to power down (sends SIGINT to the blueprint)
+            client
+                .power_button_vm()
+                .await
+                .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
 
-        let shutdown_task = async {
-            loop {
-                let r = client.vm_info_get().await;
-                match r {
-                    Ok(_info) => sleep(Duration::from_millis(500)).await,
-                    Err(cloud_hypervisor_client::apis::Error::Api(
-                        cloud_hypervisor_client::apis::ApiError {
-                            code: StatusCode::NOT_FOUND,
-                            ..
-                        },
-                    )) => return Ok(()),
-                    Err(e) => return Err(Error::Hypervisor(format!("{e:?}"))),
+            let shutdown_task = async {
+                loop {
+                    let r = client.vm_info_get().await;
+                    match r {
+                        Ok(_info) => sleep(Duration::from_millis(500)).await,
+                        Err(cloud_hypervisor_client::apis::Error::Api(
+                            cloud_hypervisor_client::apis::ApiError {
+                                code: StatusCode::NOT_FOUND,
+                                ..
+                            },
+                        )) => return Ok(()),
+                        Err(e) => return Err(Error::Hypervisor(format!("{e:?}"))),
+                    }
                 }
+            };
+
+            info!("Attempting to shutdown VM...");
+            if tokio::time::timeout(VM_SHUTDOWN_GRACE_PERIOD, shutdown_task)
+                .await
+                .is_err()
+            {
+                warn!("Unable to shutdown VM");
             }
-        };
 
-        info!("Attempting to shutdown VM...");
-        if tokio::time::timeout(VM_SHUTDOWN_GRACE_PERIOD, shutdown_task)
-            .await
-            .is_err()
-        {
-            warn!("Unable to shutdown VM");
+            let _ = fs::remove_file(&hypervisor.sock_path);
+
+            if let Err(e) = client.shutdown_vmm().await {
+                error!("Unable to gracefully shutdown VM manager, killing process: {e:?}");
+                hypervisor.hypervisor.kill().await?;
+            } else {
+                // VM manager shutting down, process will exit with it
+                hypervisor.hypervisor.wait().await?;
+            }
+
+            Ok(())
         }
 
-        let _ = fs::remove_file(self.sock_path);
+        let vm_shutdown_res = vm_shutdown(&mut self).await;
 
-        if let Err(e) = client.shutdown_vmm().await {
-            error!("Unable to gracefully shutdown VM manager, killing process: {e:?}");
-            self.hypervisor.kill().await?;
-            return Ok(());
+        let tap_iface = self.tap_interface_name();
+        if let Err(e) = net::nftables::remove_rules(&tap_iface) {
+            error!("Failed to cleanup nftables rules: {e}");
         }
 
-        // VM manager shutting down, process will exit with it
-        self.hypervisor.wait().await?;
-
-        Ok(())
+        vm_shutdown_res
     }
 
     /// Check the status of the running service
@@ -629,12 +653,14 @@ fn new_fat_fs(config: FatFsConfig) -> Result<()> {
         .truncate(true)
         .read(true)
         .write(true)
-        .open(config.image_path)?;
+        .open(&config.image_path)?;
     img.set_len(img_len)?;
 
     fatfs::format_volume(
         &mut img,
-        FormatVolumeOptions::new().volume_label(config.volume_label),
+        FormatVolumeOptions::new()
+            .volume_label(config.volume_label)
+            .fat_type(FatType::Fat32),
     )?;
 
     let fs = FileSystem::new(&mut img, FsOptions::new())?;
