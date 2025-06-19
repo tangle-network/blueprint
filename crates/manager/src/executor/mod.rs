@@ -299,7 +299,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
             () = shutdown_task => {
                 if let Err(e) = net::nftables::cleanup_firewall(network_interface.as_deref().unwrap()) {
-                    error!("Failed to cleanup iptables rules: {e}");
+                    error!("Failed to cleanup nftables rules: {e}");
                 }
 
                 Ok(())

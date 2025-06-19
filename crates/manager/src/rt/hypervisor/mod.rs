@@ -497,58 +497,65 @@ impl HypervisorInstance {
     /// * See [`Self::client()`]
     #[allow(clippy::cast_possible_wrap)]
     pub async fn shutdown(mut self) -> Result<()> {
-        const VM_SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(30);
+        async fn vm_shutdown(hypervisor: &mut HypervisorInstance) -> Result<()> {
+            const VM_SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(30);
 
-        let client = self
-            .client()
-            .await
-            .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
+            let client = hypervisor
+                .client()
+                .await
+                .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
 
-        // Wait for the VM to power down (sends SIGINT to the blueprint)
-        client
-            .power_button_vm()
-            .await
-            .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
+            // Wait for the VM to power down (sends SIGINT to the blueprint)
+            client
+                .power_button_vm()
+                .await
+                .map_err(|e| Error::Hypervisor(format!("{e:?}")))?;
 
-        let shutdown_task = async {
-            loop {
-                let r = client.vm_info_get().await;
-                match r {
-                    Ok(_info) => sleep(Duration::from_millis(500)).await,
-                    Err(cloud_hypervisor_client::apis::Error::Api(
-                        cloud_hypervisor_client::apis::ApiError {
-                            code: StatusCode::NOT_FOUND,
-                            ..
-                        },
-                    )) => return Ok(()),
-                    Err(e) => return Err(Error::Hypervisor(format!("{e:?}"))),
+            let shutdown_task = async {
+                loop {
+                    let r = client.vm_info_get().await;
+                    match r {
+                        Ok(_info) => sleep(Duration::from_millis(500)).await,
+                        Err(cloud_hypervisor_client::apis::Error::Api(
+                            cloud_hypervisor_client::apis::ApiError {
+                                code: StatusCode::NOT_FOUND,
+                                ..
+                            },
+                        )) => return Ok(()),
+                        Err(e) => return Err(Error::Hypervisor(format!("{e:?}"))),
+                    }
                 }
+            };
+
+            info!("Attempting to shutdown VM...");
+            if tokio::time::timeout(VM_SHUTDOWN_GRACE_PERIOD, shutdown_task)
+                .await
+                .is_err()
+            {
+                warn!("Unable to shutdown VM");
             }
-        };
 
-        info!("Attempting to shutdown VM...");
-        if tokio::time::timeout(VM_SHUTDOWN_GRACE_PERIOD, shutdown_task)
-            .await
-            .is_err()
-        {
-            warn!("Unable to shutdown VM");
+            let _ = fs::remove_file(&hypervisor.sock_path);
+
+            if let Err(e) = client.shutdown_vmm().await {
+                error!("Unable to gracefully shutdown VM manager, killing process: {e:?}");
+                hypervisor.hypervisor.kill().await?;
+            } else {
+                // VM manager shutting down, process will exit with it
+                hypervisor.hypervisor.wait().await?;
+            }
+
+            Ok(())
         }
 
-        let _ = fs::remove_file(self.sock_path);
+        let vm_shutdown_res = vm_shutdown(&mut self).await;
 
-        if let Err(e) = client.shutdown_vmm().await {
-            error!("Unable to gracefully shutdown VM manager, killing process: {e:?}");
-            self.hypervisor.kill().await?;
-        } else {
-            // VM manager shutting down, process will exit with it
-            self.hypervisor.wait().await?;
+        let tap_iface = self.tap_interface_name();
+        if let Err(e) = net::nftables::remove_rules(&tap_iface) {
+            error!("Failed to cleanup nftables rules: {e}");
         }
 
-        if let Err(e) = net::nftables::cleanup_firewall(&self.network_interface) {
-            error!("Failed to cleanup iptables rules: {e}");
-        }
-
-        Ok(())
+        vm_shutdown_res
     }
 
     /// Check the status of the running service

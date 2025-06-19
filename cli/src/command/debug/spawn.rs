@@ -10,9 +10,9 @@ use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_manager::blueprint_auth::db::RocksDb;
 use blueprint_manager::config::{AuthProxyOpts, BlueprintManagerConfig};
 use blueprint_manager::executor::run_auth_proxy;
-use blueprint_manager::rt::hypervisor::ServiceVmConfig;
 use blueprint_manager::rt::hypervisor::net::NetworkManager;
 use blueprint_manager::rt::hypervisor::net::nftables::check_net_admin_capability;
+use blueprint_manager::rt::hypervisor::{ServiceVmConfig, net};
 use blueprint_manager::rt::service::Service;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
@@ -167,11 +167,14 @@ pub async fn execute(
         bridge_socket_path: None,
     };
 
+    let mut network_interface = None;
     let (mut service, pty_io) = if no_vm {
         let service = setup_without_vm(manager_config, &service_name, binary, db, env, args)?;
         (service, None)
     } else {
         manager_config.verify_network_interface()?;
+        network_interface = manager_config.network_interface.clone();
+
         let (service, pty) =
             setup_with_vm(manager_config, &service_name, id, binary, db, env, args).await?;
 
@@ -208,9 +211,14 @@ pub async fn execute(
         },
     }
 
-    service.shutdown().await?;
+    let shutdown_res = service.shutdown().await;
+    if !no_vm {
+        if let Err(e) = net::nftables::cleanup_firewall(network_interface.as_deref().unwrap()) {
+            error!("Failed to cleanup nftables rules: {e}");
+        }
+    }
 
-    Ok(())
+    shutdown_res.map_err(Into::into)
 }
 
 fn setup_without_vm(

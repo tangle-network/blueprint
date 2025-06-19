@@ -6,7 +6,7 @@ use nftables::batch::Batch;
 use nftables::expr::{
     CT, Expression, Meta, MetaKey, NamedExpression, Payload, PayloadField, Prefix, SetItem,
 };
-use nftables::schema::{Chain, Rule};
+use nftables::schema::{Chain, NfObject, Rule};
 use nftables::schema::{NfCmd, NfListObject, Table};
 use nftables::stmt::{Accept, Match, NAT, Operator, Statement};
 use nftables::types::{NfChainPolicy, NfChainType, NfFamily, NfHook};
@@ -57,16 +57,31 @@ fn setup_chains_if_needed() -> Result<()> {
     Ok(())
 }
 
-/// Removes all rules, chains, and cleans up.
+fn cleanup_firewall_inner() -> Result<()> {
+    let mut batch = Batch::new();
+    batch.add_cmd(NfCmd::Delete(NfListObject::Table(Table {
+        family: NfFamily::INet,
+        name: TANGLE_ROUTER_TABLE.into(),
+        ..Default::default()
+    })));
+    let nft = batch.to_nftables();
+    nftables::helper::apply_ruleset(&nft)?;
+
+    Ok(())
+}
+
+/// Removes the `tangle_router` table (w/ chains and rules)
 ///
 /// # Errors
 ///
-/// TODO
+/// Unable to delete the `tangle_router` table, likely due to it already being deleted.
 pub fn cleanup_firewall(host_iface: &str) -> Result<()> {
-    // TODO: Actually do cleanup
+    capctl::ambient::raise(Cap::NET_ADMIN)?;
+    let res = cleanup_firewall_inner();
+    capctl::ambient::lower(Cap::NET_ADMIN)?;
 
     debug!("Removed custom chains and rules on interface {host_iface}");
-    Ok(())
+    res
 }
 
 fn setup_rules_inner(host_iface: &str, tap_iface: &str, vm_ip: Ipv4Addr) -> Result<()> {
@@ -108,7 +123,9 @@ fn setup_rules_inner(host_iface: &str, tap_iface: &str, vm_ip: Ipv4Addr) -> Resu
         ]),
         handle: None,
         index: None,
-        comment: Some(Cow::from("Allow established traffic to Blueprint VM")),
+        comment: Some(
+            format!("Allow established traffic to Blueprint VM; {tap_iface}-established").into(),
+        ),
     }));
 
     // Allow new connections from the VM's network out
@@ -148,7 +165,7 @@ fn setup_rules_inner(host_iface: &str, tap_iface: &str, vm_ip: Ipv4Addr) -> Resu
         ]),
         handle: None,
         index: None,
-        comment: Some(Cow::from("Allow new traffic from Blueprint VM")),
+        comment: Some(format!("Allow new traffic from Blueprint VM; {tap_iface}-new").into()),
     }));
 
     // Masquerade outgoing traffic from the VM's network
@@ -186,7 +203,7 @@ fn setup_rules_inner(host_iface: &str, tap_iface: &str, vm_ip: Ipv4Addr) -> Resu
         ]),
         handle: None,
         index: None,
-        comment: Some(Cow::from("NAT traffic from Blueprint VM")),
+        comment: Some(format!("NAT traffic from Blueprint VM; {tap_iface}-masquerade").into()),
     }));
 
     let nft = batch.to_nftables();
@@ -201,6 +218,104 @@ pub(crate) fn setup_rules(host_iface: &str, tap_iface: &str, vm_ip: Ipv4Addr) ->
     let res =
         setup_chains_if_needed().and_then(|()| setup_rules_inner(host_iface, tap_iface, vm_ip));
     capctl::ambient::lower(Cap::NET_ADMIN)?;
+    res
+}
+
+fn remove_rules_inner(tap_iface: &str) -> Result<()> {
+    let current_rules = nftables::helper::get_current_ruleset()?;
+
+    let mut established_traffic_rule_handle = None;
+    let mut new_traffic_rule_handle = None;
+    let mut masquerade_rule_handle = None;
+
+    for obj in &*current_rules.objects {
+        let NfObject::ListObject(obj) = obj else {
+            continue;
+        };
+
+        let NfListObject::Rule(rule) = obj else {
+            continue;
+        };
+
+        if rule.table != TANGLE_ROUTER_TABLE {
+            continue;
+        }
+
+        let Some(comment) = &rule.comment else {
+            continue;
+        };
+
+        // Only rules for this VM
+        if !comment.contains(tap_iface) {
+            continue;
+        }
+
+        if comment.ends_with("established") {
+            established_traffic_rule_handle = rule.handle;
+        }
+
+        if comment.ends_with("new") {
+            new_traffic_rule_handle = rule.handle;
+        }
+
+        if comment.ends_with("masquerade") {
+            masquerade_rule_handle = rule.handle;
+        }
+    }
+
+    let mut batch = Batch::new();
+
+    if let Some(handle) = established_traffic_rule_handle {
+        batch.add_cmd(NfCmd::Delete(NfListObject::Rule(Rule {
+            family: NfFamily::INet,
+            table: Cow::from(TANGLE_ROUTER_TABLE),
+            chain: Cow::from(FORWARD_CHAIN),
+            expr: Cow::from(vec![]),
+            handle: Some(handle),
+            index: None,
+            comment: None,
+        })));
+    }
+
+    if let Some(handle) = new_traffic_rule_handle {
+        batch.add_cmd(NfCmd::Delete(NfListObject::Rule(Rule {
+            family: NfFamily::INet,
+            table: Cow::from(TANGLE_ROUTER_TABLE),
+            chain: Cow::from(FORWARD_CHAIN),
+            expr: Cow::from(vec![]),
+            handle: Some(handle),
+            index: None,
+            comment: None,
+        })));
+    }
+
+    if let Some(handle) = masquerade_rule_handle {
+        batch.add_cmd(NfCmd::Delete(NfListObject::Rule(Rule {
+            family: NfFamily::INet,
+            table: Cow::from(TANGLE_ROUTER_TABLE),
+            chain: Cow::from(NAT_CHAIN),
+            expr: Cow::from(vec![]),
+            handle: Some(handle),
+            index: None,
+            comment: None,
+        })));
+    }
+
+    let nft = batch.to_nftables();
+    nftables::helper::apply_ruleset(&nft)?;
+
+    Ok(())
+}
+
+pub(crate) fn remove_rules(tap_iface: &str) -> Result<()> {
+    capctl::ambient::raise(Cap::NET_ADMIN)?;
+    let res = remove_rules_inner(tap_iface);
+    capctl::ambient::lower(Cap::NET_ADMIN)?;
+
+    if res.is_ok() {
+        debug!("Removed firewall rules for VM on interface {tap_iface}");
+    }
+
     res
 }
 

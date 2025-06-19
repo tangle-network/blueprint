@@ -11289,7 +11289,7 @@ version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "180f5f3983a76df4a48e01b9317832cc6fa6aa90ef0c73328658e0e5653f175a"
 dependencies = [
- "schemars",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "serde_path_to_error",
