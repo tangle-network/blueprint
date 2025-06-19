@@ -11,6 +11,7 @@ extern crate alloc;
 
 pub mod config;
 pub mod error;
+pub mod metrics_server;
 
 #[cfg(feature = "eigenlayer")]
 pub mod eigenlayer;
@@ -19,9 +20,11 @@ mod symbiotic;
 #[cfg(feature = "tangle")]
 pub mod tangle;
 
+use crate::error::RunnerError;
 use crate::error::{JobCallError, ProducerError};
 use blueprint_core::error::BoxError;
 use blueprint_core::{JobCall, JobResult};
+use blueprint_qos::heartbeat::HeartbeatConsumer;
 use blueprint_router::Router;
 use config::BlueprintEnvironment;
 use core::future::{self, poll_fn};
@@ -202,6 +205,293 @@ where
     {
         let consumer: Consumer = Arc::new(Mutex::new(Box::new(consumer.sink_map_err(Into::into))));
         self.consumers.push(consumer);
+        self
+    }
+
+    /// Add a custom heartbeat service as a background service
+    ///
+    /// This method is a convenience wrapper around `background_service` specifically for
+    /// adding a custom heartbeat service from the `QoS` crate. The core heartbeat logic from the
+    /// unified `QoS` service is always running if `.qos_service(...)` is called. This method should only
+    /// be used to add additional, blueprint-specific health checks.
+    /// periodic heartbeats to the chain or other monitoring systems.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blueprint_qos::heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatService};
+    /// use blueprint_qos::servers::prometheus::{PrometheusServer, PrometheusServerConfig};
+    /// use blueprint_qos::service_builder::QoSServiceBuilder;
+    /// use blueprint_router::Router;
+    /// use blueprint_runner::BlueprintRunner;
+    /// use blueprint_runner::config::BlueprintEnvironment;
+    /// use std::sync::Arc;
+    ///
+    /// // Define a custom heartbeat consumer
+    /// struct MyHeartbeatConsumer;
+    ///
+    /// impl HeartbeatConsumer for MyHeartbeatConsumer {
+    ///     fn send_heartbeat(
+    ///         &self,
+    ///         status: &blueprint_qos::heartbeat::HeartbeatStatus,
+    ///     ) -> std::pin::Pin<
+    ///         Box<
+    ///             dyn std::future::Future<Output = Result<(), blueprint_qos::error::Error>>
+    ///                 + Send
+    ///                 + 'static,
+    ///         >,
+    ///     > {
+    ///         // Custom heartbeat logic
+    ///         Box::pin(async { Ok(()) })
+    ///     }
+    /// }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let env = BlueprintEnvironment::load()?;
+    /// let router = Router::new();
+    ///
+    /// // Create a heartbeat service with custom consumer
+    /// let config = HeartbeatConfig::default();
+    /// let consumer = Arc::new(MyHeartbeatConsumer);
+    /// // Extract values from environment
+    /// let ws_rpc_endpoint = env.ws_rpc_endpoint.to_string();
+    /// let keystore_uri = env.keystore_uri.clone();
+    /// // Use constant values for doc tests
+    /// let service_id = 0;
+    /// let blueprint_id = 0;
+    /// let heartbeat_service = HeartbeatService::new(
+    ///     config,
+    ///     consumer,
+    ///     ws_rpc_endpoint,
+    ///     keystore_uri,
+    ///     service_id,
+    ///     blueprint_id,
+    /// );
+    ///
+    /// BlueprintRunner::builder((), env)
+    ///     .router(router)
+    ///     .heartbeat_service(heartbeat_service)
+    ///     .run()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn heartbeat_service<C: HeartbeatConsumer + Send + Sync + 'static>(
+        mut self,
+        service: blueprint_qos::heartbeat::HeartbeatService<C>,
+    ) -> Self {
+        #[derive(Clone)]
+        struct HeartbeatServiceAdapter<C: HeartbeatConsumer + Send + Sync + 'static> {
+            service: blueprint_qos::heartbeat::HeartbeatService<C>,
+        }
+
+        impl<C: HeartbeatConsumer + Send + Sync + 'static> BackgroundService
+            for HeartbeatServiceAdapter<C>
+        {
+            async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
+                self.service
+                    .start_heartbeat()
+                    .await
+                    .map_err(|e| RunnerError::Other(e.into()))?;
+                let (_tx, rx) = oneshot::channel();
+                Ok(rx)
+            }
+        }
+
+        let adapter = HeartbeatServiceAdapter { service };
+        self.background_services
+            .push(DynBackgroundService::boxed(adapter));
+        self
+    }
+
+    /// Add a metrics server as a background service
+    ///
+    /// This method is a convenience wrapper around `background_service` specifically for
+    /// adding a metrics server from the `QoS` crate. The metrics server will serve
+    /// Prometheus metrics on the configured endpoint.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blueprint_runner::config::BlueprintEnvironment;
+    /// use blueprint_runner::BlueprintRunner;
+    /// use blueprint_router::Router;
+    /// use blueprint_qos::servers::prometheus::{PrometheusServer, PrometheusServerConfig};
+    /// use blueprint_qos::metrics::types::MetricsConfig;
+    /// use blueprint_qos::metrics::opentelemetry::OpenTelemetryConfig;
+    /// use blueprint_qos::metrics::provider::EnhancedMetricsProvider;
+    /// use std::sync::Arc;
+    ///
+    /// #[derive(Clone)]
+    /// struct MyContext;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    ///     // Set up the core components
+    ///     let env = BlueprintEnvironment::default();
+    ///     let context = Arc::new(MyContext);
+    ///     let router = Router::new().with_context(context.clone());
+    ///     
+    ///     // Create metrics config and OpenTelemetry config
+    ///     let metrics_config = MetricsConfig::default();
+    ///     let otel_config = OpenTelemetryConfig::default();
+    ///     
+    ///     // Create a metrics provider for the Prometheus server
+    ///     let metrics_provider = Arc::new(
+    ///         EnhancedMetricsProvider::new(metrics_config.clone(), &otel_config)?
+    ///     );
+    ///     
+    ///     // Get the shared registry from the metrics provider
+    ///     let registry = metrics_provider.shared_registry();
+    ///     
+    ///     // Create a Prometheus server with proper configuration
+    ///     let prometheus_config = PrometheusServerConfig {
+    ///         port: 9090,
+    ///         host: "0.0.0.0".to_string(),
+    ///         ..Default::default()
+    ///     };
+    ///     
+    ///     // Create a Prometheus server
+    ///     let prometheus_server = Arc::new(
+    ///         PrometheusServer::new(
+    ///             prometheus_config,
+    ///             Some(registry),
+    ///             metrics_provider.clone()
+    ///         )?
+    ///     );
+    ///     
+    ///     // Now we can use the BlueprintRunner with this Prometheus server
+    ///     let blueprint_runner = BlueprintRunner::builder((), env)
+    ///         .router(router)
+    ///         .metrics_server(prometheus_server) // Add the metrics server
+    ///         .run()
+    ///         .await?;
+    ///     
+    ///     Ok(())
+    /// }
+    /// ```
+    #[must_use]
+    pub fn metrics_server(
+        mut self,
+        server: Arc<blueprint_qos::servers::prometheus::PrometheusServer>,
+    ) -> Self {
+        let adapter = self::metrics_server::MetricsServerAdapter::new(server);
+        self.background_services
+            .push(DynBackgroundService::boxed(adapter));
+        self
+    }
+
+    /// Integrate the unified `QoS` service (heartbeat, metrics, logging, dashboards) as an always-on background service.
+    ///
+    /// This method instantiates and manages a `QoSService` internally, automatically starting its heartbeat and metrics
+    /// background tasks if configured. Custom heartbeat and metrics logic can still be added via `.heartbeat_service` and
+    /// `.metrics_server`, but the core `QoS` logic is always running if this is called.
+    #[must_use]
+    pub fn qos_service<C: HeartbeatConsumer + Send + Sync + 'static>(
+        mut self,
+        config: blueprint_qos::QoSConfig,
+        heartbeat_consumer: Option<Arc<C>>,
+    ) -> Self {
+        struct QoSServiceAdapter<C: HeartbeatConsumer + Send + Sync + 'static> {
+            qos_service: Arc<Mutex<Option<blueprint_qos::QoSService<C>>>>,
+        }
+
+        impl<C: HeartbeatConsumer + Send + Sync + 'static> BackgroundService for QoSServiceAdapter<C> {
+            async fn start(
+                &self,
+            ) -> Result<
+                tokio::sync::oneshot::Receiver<Result<(), crate::error::RunnerError>>,
+                crate::error::RunnerError,
+            > {
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                let qos_arc_for_adapter_task = self.qos_service.clone();
+
+                tokio::spawn(async move {
+                    blueprint_core::debug!(target: "blueprint-runner", "QoS Adapter Task (Task 2): Waiting for QoS Service build...");
+
+                    let mut attempt_count = 0;
+                    let max_attempts = 300; // Approx 30 seconds with 100ms polling
+
+                    let mut service_guard = loop {
+                        let guard = qos_arc_for_adapter_task.lock().await;
+                        if guard.is_some() {
+                            blueprint_core::debug!(target: "blueprint-runner", "QoS Adapter Task (Task 2): QoS Service is built. Proceeding to start components.");
+                            break guard;
+                        }
+                        drop(guard);
+
+                        attempt_count += 1;
+                        if attempt_count >= max_attempts {
+                            let err_msg = "QoS Adapter Task (Task 2): QoS service did not initialize (build task may have failed or timed out).";
+                            blueprint_core::error!(target: "blueprint-runner", "{}", err_msg);
+                            let _ = tx.send(Err(crate::error::RunnerError::Other(Box::new(
+                                std::io::Error::new(std::io::ErrorKind::Other, err_msg),
+                            ))));
+                            return;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    };
+
+                    let qos_service_mut = service_guard
+                        .as_mut()
+                        .expect("QoS service was Some but now None, this should not happen");
+
+                    if let Some(hb_service) = qos_service_mut.heartbeat_service() {
+                        blueprint_core::debug!(target: "blueprint-runner", "QoS Adapter Task (Task 2): Starting heartbeat service...");
+                        if let Err(e) = hb_service.start_heartbeat().await {
+                            let err_msg = format!(
+                                "QoS Adapter Task (Task 2): Heartbeat service failed to start: {:?}",
+                                e
+                            );
+                            blueprint_core::error!(target: "blueprint-runner", "{}", err_msg);
+                            let _ = tx.send(Err(crate::error::RunnerError::Other(Box::new(
+                                std::io::Error::new(std::io::ErrorKind::Other, err_msg),
+                            ))));
+                            return;
+                        }
+                        blueprint_core::info!(target: "blueprint-runner", "QoS Adapter Task (Task 2): Heartbeat service started.");
+                    } else {
+                        blueprint_core::debug!(target: "blueprint-runner", "QoS Adapter Task (Task 2): No heartbeat service configured in QoSService.");
+                    }
+
+                    blueprint_core::info!(target: "blueprint-runner", "QoS Adapter Task (Task 2): QoS Service components initialized successfully.");
+                    let _ = tx.send(Ok(()));
+                });
+
+                Ok(rx)
+            }
+        }
+
+        let qos_service_arc = Arc::new(Mutex::new(None::<blueprint_qos::QoSService<C>>));
+
+        let builder_task_qos_arc = qos_service_arc.clone();
+        tokio::spawn(async move {
+            blueprint_core::debug!(target: "blueprint-runner", "QoS Builder Task (Task 1): Initializing QoS Service...");
+            let mut builder = blueprint_qos::QoSServiceBuilder::<C>::new()
+                .with_config(config)
+                .manage_servers(true);
+
+            if let Some(consumer) = heartbeat_consumer {
+                builder = builder.with_heartbeat_consumer(consumer);
+            }
+
+            match builder.build().await {
+                Ok(service) => {
+                    let mut guard = builder_task_qos_arc.lock().await;
+                    *guard = Some(service);
+                    blueprint_core::info!(target: "blueprint-runner", "QoS Builder Task (Task 1): QoS Service built and stored.");
+                }
+                Err(e) => {
+                    blueprint_core::error!(target: "blueprint-runner", "QoS Builder Task (Task 1): Failed to build QoS service: {:?}", e);
+                }
+            }
+        });
+
+        let adapter = QoSServiceAdapter::<C> {
+            qos_service: qos_service_arc,
+        };
+        self.background_services
+            .push(DynBackgroundService::boxed(adapter));
         self
     }
 
@@ -446,14 +736,14 @@ where
 ///
 /// [Consumers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/consumers/index.html
 /// [Producers]: https://docs.rs/blueprint_sdk/latest/blueprint_sdk/producers/index.html
-pub struct BlueprintRunner;
+pub struct BlueprintRunner {}
 
 impl BlueprintRunner {
     /// Create a new [`BlueprintRunnerBuilder`]
     ///
     /// See the usage section of [`BlueprintRunner`]
-    pub fn builder<C: BlueprintConfig + 'static>(
-        config: C,
+    pub fn builder<Conf: BlueprintConfig + 'static>(
+        config: Conf,
         env: BlueprintEnvironment,
     ) -> BlueprintRunnerBuilder<impl Future<Output = ()> + Send + 'static> {
         BlueprintRunnerBuilder {
@@ -505,16 +795,15 @@ where
         let mut router = router.as_service();
 
         let has_background_services = !background_services.is_empty();
-        let mut background_receivers = Vec::with_capacity(background_services.len());
-        for service in background_services {
-            let receiver = service.start().await?;
-            background_receivers.push(receiver);
-        }
-
-        let mut background_futures = Vec::with_capacity(background_receivers.len());
+        let mut background_futures = Vec::with_capacity(background_services.len());
 
         // Startup background services
-        for receiver in background_receivers {
+        // Iterate by reference (&service_box) over `background_services` (the Vec of Boxes)
+        // This ensures that the `Box<dyn BackgroundService>` instances themselves remain owned by
+        // the `background_services` vector and are not dropped after `start()` is called.
+        for service_box in &background_services {
+            // service_box is &Box<dyn BackgroundService>
+            let receiver = service_box.start().await?;
             background_futures.push(Box::pin(async move {
                 receiver
                     .await
@@ -523,6 +812,8 @@ where
             })
                 as Pin<Box<dyn Future<Output = Result<(), Error>> + Send>>);
         }
+        // The `background_services` Vec (containing the Boxed service instances) is still alive here
+        // and will be dropped only when `FinalizedBlueprintRunner::run` exits.
 
         let (mut shutdown_tx, shutdown_rx) = oneshot::channel();
         tokio::spawn(async move {

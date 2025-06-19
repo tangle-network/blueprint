@@ -4,8 +4,9 @@ use blueprint_runner::BlueprintConfig;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::error::RunnerError as Error;
 use blueprint_runner::{BackgroundService, BlueprintRunner, BlueprintRunnerBuilder};
-use std::future;
-use std::future::Pending;
+use std::future::{self, Pending};
+use std::sync::Arc;
+use tokio::sync::oneshot;
 
 pub struct TestRunner<Ctx> {
     router: Option<Router<Ctx>>,
@@ -24,7 +25,7 @@ where
         C: BlueprintConfig + 'static,
     {
         let builder =
-            BlueprintRunner::builder(config, env).with_shutdown_handler(future::pending());
+            BlueprintRunner::builder(config, env).with_shutdown_handler(future::pending::<()>());
         TestRunner {
             router: Some(Router::<Ctx>::new()),
             job_index: 0,
@@ -59,6 +60,99 @@ where
                 .take()
                 .expect("router should always exist")
                 .background_service(service),
+        );
+        self
+    }
+
+    /// Integrate the unified `QoS` service (heartbeat, metrics, logging, dashboards) as an always-on background service.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the builder is not initialized.
+    pub fn qos_service<C>(
+        &mut self,
+        qos_service: Arc<blueprint_qos::unified_service::QoSService<C>>,
+    ) -> &mut Self
+    where
+        C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
+    {
+        struct QoSServiceAdapter<
+            C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
+        > {
+            qos_service: Arc<blueprint_qos::unified_service::QoSService<C>>,
+        }
+
+        impl<C> BackgroundService for QoSServiceAdapter<C>
+        where
+            C: blueprint_qos::heartbeat::HeartbeatConsumer + Send + Sync + 'static,
+        {
+            async fn start(
+                &self,
+            ) -> Result<tokio::sync::oneshot::Receiver<Result<(), Error>>, Error> {
+                blueprint_core::info!(
+                    "QoSServiceAdapter: Starting... Will integrate with QoSService lifecycle."
+                );
+                let (runner_tx, runner_rx) = oneshot::channel();
+
+                let (qos_completion_tx, qos_completion_rx) =
+                    tokio::sync::oneshot::channel::<Result<(), blueprint_qos::error::Error>>();
+
+                self.qos_service
+                    .set_completion_sender(qos_completion_tx)
+                    .await;
+
+                tokio::spawn(async move {
+                    match qos_completion_rx.await {
+                        Ok(Ok(())) => {
+                            if runner_tx.send(Ok(())).is_err() {
+                                blueprint_core::warn!(
+                                    "QoSServiceAdapter: runner_rx dropped before successful QoS completion signal."
+                                );
+                            }
+                        }
+                        Ok(Err(qos_internal_err)) => {
+                            blueprint_core::error!(
+                                "QoSServiceAdapter: QoSService completed with an internal error: {}. Signaling runner.",
+                                qos_internal_err
+                            );
+                            if runner_tx
+                                .send(Err(Error::BackgroundService(format!(
+                                    "QoS service internal error: {}",
+                                    qos_internal_err
+                                ))))
+                                .is_err()
+                            {
+                                blueprint_core::warn!(
+                                    "QoSServiceAdapter: runner_rx dropped before QoS internal error signal."
+                                );
+                            }
+                        }
+                        Err(_recv_err) => {
+                            blueprint_core::error!(
+                                "QoSServiceAdapter: QoSService completion sender (qos_completion_tx) was dropped. This typically means QoSService panicked or did not complete cleanly. Signaling runner."
+                            );
+                            if runner_tx.send(Err(Error::BackgroundService(
+                                "QoS service did not signal completion cleanly (sender dropped, possibly due to panic).".to_string(),
+                            ))).is_err() {
+                                blueprint_core::warn!(
+                                    "QoSServiceAdapter: runner_rx dropped after qos_completion_tx was dropped."
+                                );
+                            }
+                        }
+                    }
+                });
+
+                Ok(runner_rx)
+            }
+        }
+
+        let adapter = QoSServiceAdapter { qos_service };
+
+        self.builder = Some(
+            self.builder
+                .take()
+                .expect("BlueprintRunnerBuilder should always exist")
+                .background_service(adapter),
         );
         self
     }

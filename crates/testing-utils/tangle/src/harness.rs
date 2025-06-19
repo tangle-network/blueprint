@@ -1,3 +1,4 @@
+use crate::runner::MockHeartbeatConsumer;
 use crate::Error;
 use crate::multi_node::{find_open_tcp_bind_port, MultiNodeTestEnv};
 use crate::{InputValue, OutputValue, keys::inject_tangle_key};
@@ -446,7 +447,7 @@ where
             registration_args,
             request_args,
         }: SetupServicesOpts<N>,
-    ) -> Result<(MultiNodeTestEnv<Ctx>, u64, u64), Error> {
+    ) -> Result<(MultiNodeTestEnv<Ctx, MockHeartbeatConsumer>, u64, u64), Error> {
         const { assert!(N > 0, "Must have at least 1 initial node") };
 
         // Deploy blueprint
@@ -510,7 +511,7 @@ where
     pub async fn setup_services<const N: usize>(
         &self,
         exit_after_registration: bool,
-    ) -> Result<(MultiNodeTestEnv<Ctx>, u64, u64), Error> {
+    ) -> Result<(MultiNodeTestEnv<Ctx, MockHeartbeatConsumer>, u64, u64), Error> {
         const { assert!(N > 0, "Must have at least 1 initial node") };
 
         self.setup_services_with_options::<N>(SetupServicesOpts {

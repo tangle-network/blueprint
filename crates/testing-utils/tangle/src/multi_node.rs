@@ -11,6 +11,8 @@ use blueprint_core_testing_utils::runner::TestEnv;
 use blueprint_crypto_tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::crypto::sp_core::SpSr25519;
+use blueprint_qos::heartbeat::HeartbeatConsumer;
+use blueprint_qos::{QoSConfig, QoSService};
 use blueprint_runner::BackgroundService;
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::Multiaddr;
@@ -25,18 +27,36 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tangle_subxt::subxt::tx::Signer;
 use tokio::sync::{RwLock, broadcast, mpsc, oneshot};
 
-#[derive(Clone, Debug)]
-pub enum NodeSlot<Ctx> {
-    Occupied(Arc<NodeHandle<Ctx>>),
+#[derive(Clone)]
+pub enum NodeSlot<Ctx, C>
+where
+    Ctx: Clone,
+    C: HeartbeatConsumer + Clone + Send + Sync + 'static,
+{
+    Occupied(Arc<NodeHandle<Ctx, C>>),
     Empty,
 }
 
+impl<Ctx, C> Debug for NodeSlot<Ctx, C>
+where
+    Ctx: Clone,
+    C: HeartbeatConsumer + Clone + Send + Sync + 'static,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NodeSlot::Occupied(_node) => f.debug_struct("Occupied").finish(),
+            NodeSlot::Empty => f.debug_struct("Empty").finish(),
+        }
+    }
+}
+
 /// Improved multi-node test environment with better control and observability
-pub struct MultiNodeTestEnv<Ctx>
+pub struct MultiNodeTestEnv<Ctx, C>
 where
     Ctx: Clone + Send + Sync + 'static,
+    C: HeartbeatConsumer + Clone + Send + Sync + 'static,
 {
-    pub nodes: Arc<RwLock<Vec<NodeSlot<Ctx>>>>,
+    pub nodes: Arc<RwLock<Vec<NodeSlot<Ctx, C>>>>,
     pub command_tx: mpsc::Sender<EnvironmentCommand<Ctx>>,
     pub event_tx: broadcast::Sender<TestEvent>,
     pub config: Arc<TangleTestConfig>,
@@ -72,9 +92,10 @@ pub enum TestEvent {
     Error(String),
 }
 
-impl<Ctx> MultiNodeTestEnv<Ctx>
+impl<Ctx, C> MultiNodeTestEnv<Ctx, C>
 where
     Ctx: Clone + Send + Sync + 'static,
+    C: HeartbeatConsumer + Clone + Send + Sync + 'static,
 {
     /// Creates a new multi-node test environment
     #[must_use]
@@ -344,7 +365,7 @@ where
     }
 
     fn spawn_command_handler(
-        nodes: Arc<RwLock<Vec<NodeSlot<Ctx>>>>,
+        nodes: Arc<RwLock<Vec<NodeSlot<Ctx, C>>>>,
         config: Arc<TangleTestConfig>,
         running_nodes: Arc<AtomicUsize>,
         mut command_rx: mpsc::Receiver<EnvironmentCommand<Ctx>>,
@@ -391,7 +412,7 @@ where
         });
     }
 
-    pub async fn node_handles(&self) -> Vec<Arc<NodeHandle<Ctx>>> {
+    pub async fn node_handles(&self) -> Vec<Arc<NodeHandle<Ctx, C>>> {
         self.nodes
             .read()
             .await
@@ -404,7 +425,7 @@ where
     }
 
     async fn handle_add_node(
-        nodes: Arc<RwLock<Vec<NodeSlot<Ctx>>>>,
+        nodes: Arc<RwLock<Vec<NodeSlot<Ctx, C>>>>,
         node_id: usize,
         config: Arc<TangleTestConfig>,
         event_tx: &broadcast::Sender<TestEvent>,
@@ -416,7 +437,7 @@ where
     }
 
     async fn handle_remove_node(
-        nodes: Arc<RwLock<Vec<NodeSlot<Ctx>>>>,
+        nodes: Arc<RwLock<Vec<NodeSlot<Ctx, C>>>>,
         node_id: usize,
         event_tx: &broadcast::Sender<TestEvent>,
     ) -> Result<(), Error> {
@@ -438,7 +459,7 @@ where
     }
 
     async fn handle_start(
-        nodes: Arc<RwLock<Vec<NodeSlot<Ctx>>>>,
+        nodes: Arc<RwLock<Vec<NodeSlot<Ctx, C>>>>,
         event_tx: &broadcast::Sender<TestEvent>,
         running_nodes: Arc<AtomicUsize>,
         contexts: Vec<Ctx>,
@@ -482,7 +503,7 @@ where
     }
 
     async fn handle_shutdown(
-        nodes: Arc<RwLock<Vec<NodeSlot<Ctx>>>>,
+        nodes: Arc<RwLock<Vec<NodeSlot<Ctx, C>>>>,
         event_tx: &broadcast::Sender<TestEvent>,
     ) {
         let nodes = nodes.read().await;
@@ -526,7 +547,10 @@ impl Debug for NodeCommand {
 }
 
 /// Represents a single node in the multi-node test environment
-pub struct NodeHandle<Ctx> {
+pub struct NodeHandle<Ctx, C>
+where
+    C: HeartbeatConsumer + Send + Sync + 'static,
+{
     pub node_id: usize,
     pub addr: Multiaddr,
     pub port: u16,
@@ -534,12 +558,13 @@ pub struct NodeHandle<Ctx> {
     pub signer: TanglePairSigner<sp_core::sr25519::Pair>,
     state: Arc<RwLock<NodeState>>,
     command_tx: mpsc::Sender<NodeCommand>,
-    pub test_env: Arc<RwLock<TangleTestEnv<Ctx>>>,
+    pub test_env: Arc<RwLock<TangleTestEnv<Ctx, C>>>,
 }
 
-impl<Ctx> NodeHandle<Ctx>
+impl<Ctx, C> NodeHandle<Ctx, C>
 where
     Ctx: Clone + Send + Sync + 'static,
+    C: HeartbeatConsumer + Send + Sync + 'static,
 {
     /// Adds a job to the node to be executed when the test is run.
     ///
@@ -562,7 +587,11 @@ where
     }
 }
 
-impl<Ctx> Debug for NodeHandle<Ctx> {
+impl<Ctx, C> Debug for NodeHandle<Ctx, C>
+where
+    Ctx: Clone + Send + Sync + 'static,
+    C: HeartbeatConsumer + Send + Sync + 'static,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("NodeHandle")
             .field("node_id", &self.node_id)
@@ -573,9 +602,10 @@ impl<Ctx> Debug for NodeHandle<Ctx> {
 }
 
 // Implementation for NodeHandle
-impl<Ctx> NodeHandle<Ctx>
+impl<Ctx, C> NodeHandle<Ctx, C>
 where
     Ctx: Clone + Send + Sync + 'static,
+    C: HeartbeatConsumer + Send + Sync + 'static,
 {
     async fn new(node_id: usize, config: &TangleTestConfig) -> Result<Arc<Self>, Error> {
         let (command_tx, command_rx) = mpsc::channel(32);
@@ -623,6 +653,15 @@ where
 
         Self::spawn_command_handler(&node, command_rx);
         Ok(node)
+    }
+
+    /// Set the `QoS` config for this node
+    pub async fn set_qos_config(&self, config: QoSConfig) {
+        self.test_env.write().await.set_qos_config(config);
+    }
+
+    pub async fn set_qos_service(&self, service: Arc<QoSService<C>>) {
+        self.test_env.write().await.set_qos_service(service);
     }
 
     /// Shuts down the node

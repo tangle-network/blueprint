@@ -18,6 +18,7 @@ blueprint-router.workspace = true
 blueprint-std.workspace = true
 blueprint-keystore = { workspace = true }
 blueprint-crypto = { workspace = true }
+blueprint-qos = { workspace = true }
 blueprint-manager-bridge = { workspace = true, features = ["client"] }
 
 futures-core.workspace = true
@@ -31,7 +32,7 @@ futures.workspace = true
 thiserror.workspace = true
 url = { workspace = true, features = ["serde"] }
 dynosaur = { workspace = true }
-document-features = { workspace = true }
+document-features = { workspace = true, features = ["default"] }
 
 # Networking
 crossbeam-channel = { workspace = true, optional = true }
@@ -68,7 +69,7 @@ default = ["std", "networking"]
 #! ### Core
 
 ## Enable standard library support
-std = ["blueprint-tangle-extra?/std", "blueprint-evm-extra?/std", "blueprint-keystore/std", "blueprint-std/std"]
+std = ["blueprint-tangle-extra?/std", "blueprint-evm-extra?/std", "blueprint-keystore/std", "blueprint-std/std", "blueprint-qos/std"]
 
 ## Enable networking support for [`BlueprintEnvironment`](crate::config::BlueprintEnvironment)
 networking = ["dep:blueprint-networking", "dep:crossbeam-channel", "dep:libp2p", "blueprint-keystore/zebra"]

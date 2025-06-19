@@ -18,6 +18,7 @@ blueprint-core = { workspace = true }
 blueprint-router = { workspace = true }
 blueprint-runner = { workspace = true }
 blueprint-producers-extra = { workspace = true }
+blueprint-qos = { workspace = true }
 blueprint-keystore = { workspace = true }
 blueprint-clients = { workspace = true }
 blueprint-crypto = { workspace = true }
@@ -27,7 +28,7 @@ blueprint-auth = { workspace = true }
 
 # The keystore context is the only one that doesn't bring in extra dependencies, so we can always include it
 blueprint-contexts = { workspace = true, features = ["keystore"] }
-document-features = { workspace = true }
+document-features = { workspace = true, features = ["default"] }
 blueprint-chain-setup = { workspace = true, optional = true }
 
 # Macros

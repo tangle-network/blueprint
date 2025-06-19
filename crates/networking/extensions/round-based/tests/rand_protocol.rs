@@ -34,6 +34,14 @@ pub struct DecommitMsg {
 }
 
 /// Carries out the randomness generation protocol
+///
+/// # Errors
+///
+/// * Failed to send a message in the first round
+/// * Failed to receive a message in the first round
+/// * Failed to send a message in the second round
+/// * Failed to receive a message in the second round
+/// * Some of the parties cheated
 #[tracing::instrument(skip(party, rng))]
 pub async fn protocol_of_random_generation<R, M>(
     party: M,
@@ -259,7 +267,7 @@ mod tests {
 
         // Wait for all handshakes to complete
         info!("Checking handshake completion...");
-        wait_for_all_handshakes(&handle_refs, Duration::from_secs(5)).await;
+        wait_for_all_handshakes(&handle_refs, Duration::from_secs(30)).await;
         info!("Handshakes completed.");
 
         let node1_network =

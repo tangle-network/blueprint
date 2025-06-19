@@ -102,7 +102,11 @@ async fn setup_tangle_node(
 /// * [`register()`]
 /// * [`Service::new()`]
 /// * [`Service::start()`]
-#[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::missing_panics_doc,
+    clippy::large_futures
+)]
 pub async fn execute(
     http_rpc_url: Option<Url>,
     ws_rpc_url: Option<Url>,

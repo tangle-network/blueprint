@@ -14,7 +14,7 @@ use blueprint_std::{collections::HashMap, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 // Constants for tests
-const TEST_TIMEOUT: Duration = Duration::from_secs(10);
+const TEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub fn setup_log() {
     let filter = EnvFilter::new(

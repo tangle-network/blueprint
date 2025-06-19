@@ -1,5 +1,5 @@
 use blueprint_std::io;
-use blueprint_std::string::String;
+use blueprint_std::string::{String, ToString};
 use tangle_subxt::subxt;
 use tangle_subxt::subxt_core::utils::AccountId32;
 use thiserror::Error;

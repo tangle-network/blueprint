@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 blueprint-core = { workspace = true }
-document-features = { workspace = true }
+document-features = { workspace = true, features = ["default"] }
 futures = { workspace = true }
 
 # Cron

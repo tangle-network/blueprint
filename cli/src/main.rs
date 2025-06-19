@@ -666,11 +666,11 @@ async fn main() -> color_eyre::Result<()> {
                 }
             }
             BlueprintCommands::ListRequests { ws_rpc_url } => {
-                let requests = list_requests(ws_rpc_url).await?;
+                let requests = list_requests(ws_rpc_url.to_string()).await?;
                 print_requests(requests);
             }
             BlueprintCommands::ListBlueprints { ws_rpc_url } => {
-                let blueprints = list_blueprints(ws_rpc_url).await?;
+                let blueprints = list_blueprints(ws_rpc_url.to_string()).await?;
                 print_blueprints(blueprints);
             }
             BlueprintCommands::Register {

@@ -22,6 +22,7 @@ blueprint-core-testing-utils = { workspace = true }
 blueprint-chain-setup = { workspace = true, features = ["std", "tangle"] }
 blueprint-keystore = { workspace = true, features = ["std", "tangle-full"] }
 blueprint-pricing-engine = { workspace = true, features = ["std", "tangle-listener"] }
+blueprint-qos = { workspace = true }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["server"] }
 tnt-core-bytecode = { workspace = true }
@@ -38,6 +39,8 @@ tempfile = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 blueprint-client-tangle = { workspace = true }
 url = { workspace = true }
+serde_json = { workspace = true }
+dirs = "5.0.1"
 
 [features]
 default = ["tracing"]

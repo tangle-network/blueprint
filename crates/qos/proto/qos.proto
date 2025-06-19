@@ -1,0 +1,183 @@
+syntax = "proto3";
+
+package qos;
+
+// QoS service for blueprint monitoring
+service QosMetrics {
+  // Get the current status of a blueprint
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+  
+  // Get resource usage metrics for a blueprint
+  rpc GetResourceUsage(GetResourceUsageRequest) returns (GetResourceUsageResponse);
+  
+  // Get blueprint-specific metrics
+  rpc GetBlueprintMetrics(GetBlueprintMetricsRequest) returns (GetBlueprintMetricsResponse);
+  
+  // Get historical metrics for a blueprint
+  rpc GetHistoricalMetrics(GetHistoricalMetricsRequest) returns (GetHistoricalMetricsResponse);
+}
+
+// Request to get the status of a blueprint
+message GetStatusRequest {
+  // Blueprint ID to get status for
+  uint64 blueprint_id = 1;
+  
+  // Service ID to get status for
+  uint64 service_id = 2;
+}
+
+// Response with blueprint status
+message GetStatusResponse {
+  // Status code (0 = healthy, other values indicate specific issues)
+  uint32 status_code = 1;
+  
+  // Status message
+  optional string status_message = 2;
+  
+  // Uptime in seconds
+  uint64 uptime = 3;
+  
+  // Start time as Unix timestamp
+  uint64 start_time = 4;
+  
+  // Last heartbeat time as Unix timestamp
+  optional uint64 last_heartbeat = 5;
+  
+  // Timestamp when status was collected
+  uint64 timestamp = 6;
+  
+  // Service ID
+  uint64 service_id = 7;
+  
+  // Blueprint ID
+  uint64 blueprint_id = 8;
+}
+
+// Request to get resource usage for a blueprint
+message GetResourceUsageRequest {
+  // Blueprint ID to get resource usage for
+  uint64 blueprint_id = 1;
+  
+  // Service ID to get resource usage for
+  uint64 service_id = 2;
+}
+
+// Response with resource usage metrics
+message GetResourceUsageResponse {
+  // CPU usage percentage (0-100)
+  float cpu_usage = 1;
+  
+  // Memory usage in bytes
+  uint64 memory_usage = 2;
+  
+  // Total memory available in bytes
+  uint64 total_memory = 3;
+  
+  // Disk usage in bytes
+  uint64 disk_usage = 4;
+  
+  // Total disk space in bytes
+  uint64 total_disk = 5;
+  
+  // Network received bytes
+  uint64 network_rx_bytes = 6;
+  
+  // Network transmitted bytes
+  uint64 network_tx_bytes = 7;
+  
+  // Timestamp when metrics were collected
+  uint64 timestamp = 8;
+}
+
+// Request to get blueprint-specific metrics
+message GetBlueprintMetricsRequest {
+  // Blueprint ID to get metrics for
+  uint64 blueprint_id = 1;
+  
+  // Service ID to get metrics for
+  uint64 service_id = 2;
+}
+
+// Response with blueprint-specific metrics
+message GetBlueprintMetricsResponse {
+  // Custom metrics as key-value pairs
+  map<string, string> custom_metrics = 1;
+  
+  // Timestamp when metrics were collected
+  uint64 timestamp = 2;
+}
+
+// Request to get historical metrics
+message GetHistoricalMetricsRequest {
+  // Blueprint ID to get metrics for
+  uint64 blueprint_id = 1;
+  
+  // Service ID to get metrics for
+  uint64 service_id = 2;
+  
+  // Maximum number of data points to return
+  uint32 max_data_points = 3;
+  
+  // Start time for historical data (Unix timestamp)
+  optional uint64 start_time = 4;
+  
+  // End time for historical data (Unix timestamp)
+  optional uint64 end_time = 5;
+  
+  // Type of metrics to get
+  MetricsType metrics_type = 6;
+}
+
+// Type of metrics to get
+enum MetricsType {
+  // System metrics (CPU, memory, etc.)
+  SYSTEM = 0;
+  
+  // Blueprint-specific metrics
+  BLUEPRINT = 1;
+}
+
+// Response with historical metrics
+message GetHistoricalMetricsResponse {
+  // System metrics history
+  repeated SystemMetrics system_metrics = 1;
+  
+  // Blueprint metrics history
+  repeated BlueprintMetrics blueprint_metrics = 2;
+}
+
+// System metrics for a single data point
+message SystemMetrics {
+  // CPU usage percentage (0-100)
+  float cpu_usage = 1;
+  
+  // Memory usage in bytes
+  uint64 memory_usage = 2;
+  
+  // Total memory available in bytes
+  uint64 total_memory = 3;
+  
+  // Disk usage in bytes
+  uint64 disk_usage = 4;
+  
+  // Total disk space in bytes
+  uint64 total_disk = 5;
+  
+  // Network received bytes
+  uint64 network_rx_bytes = 6;
+  
+  // Network transmitted bytes
+  uint64 network_tx_bytes = 7;
+  
+  // Timestamp when metrics were collected
+  uint64 timestamp = 8;
+}
+
+// Blueprint metrics for a single data point
+message BlueprintMetrics {
+  // Custom metrics as key-value pairs
+  map<string, string> custom_metrics = 1;
+  
+  // Timestamp when metrics were collected
+  uint64 timestamp = 2;
+}

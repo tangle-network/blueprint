@@ -22,6 +22,10 @@ pub enum RunnerError {
     #[error(transparent)]
     AddrParse(#[from] std::net::AddrParseError),
 
+    /// `QoS` service error
+    #[error("QoS error: {0}")]
+    QoS(#[from] blueprint_qos::error::Error),
+
     /// Unable to read/use the provided configuration values
     #[error("Configuration error: {0}")]
     Config(#[from] ConfigError),
@@ -86,6 +90,8 @@ pub enum RunnerError {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ConfigError {
+    #[error("Invalid argument: {0}")]
+    InvalidArgument(String),
     /// Missing `RPC_URL` environment variable.
     #[error("Missing Tangle RPC endpoint")]
     MissingTangleRpcEndpoint,

@@ -15,7 +15,7 @@ workspace = true
 [dependencies]
 blueprint-core.workspace = true
 bytes.workspace = true
-document-features = { workspace = true }
+document-features = { workspace = true, features = ["default"] }
 futures-core.workspace = true
 futures-util.workspace = true
 tower = { workspace = true, features = ["filter"] }

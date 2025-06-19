@@ -29,9 +29,7 @@ pub trait ProtocolSettingsT: Sized + 'static {
 
     /// Get the protocol name as a `str`
     ///
-    /// For example, [`TangleProtocolSettings`] will return `"tangle"`.
-    ///
-    /// [`TangleProtocolSettings`]: crate::tangle::config::TangleProtocolSettings
+    /// For example, [`TangleProtocolSettings`](crate::tangle::config::TangleProtocolSettings) will return `"tangle"`.
     fn protocol_name(&self) -> &'static str;
 
     fn protocol(&self) -> Protocol;
@@ -174,13 +172,11 @@ impl ProtocolSettingsT for ProtocolSettings {
 }
 
 impl ProtocolSettings {
-    /// Attempt to extract the [`TangleProtocolSettings`]
+    /// Attempt to extract the [`TangleProtocolSettings`](crate::tangle::config::TangleProtocolSettings)
     ///
     /// # Errors
     ///
     /// `self` is not [`ProtocolSettings::Tangle`]
-    ///
-    /// [`TangleProtocolSettings`]: crate::tangle::config::TangleProtocolSettings
     #[cfg(feature = "tangle")]
     #[allow(clippy::match_wildcard_for_single_variants)]
     pub fn tangle(&self) -> Result<&crate::tangle::config::TangleProtocolSettings, ConfigError> {
@@ -190,13 +186,11 @@ impl ProtocolSettings {
         }
     }
 
-    /// Attempt to extract the [`EigenlayerProtocolSettings`]
+    /// Attempt to extract the [`EigenlayerProtocolSettings`](crate::eigenlayer::config::EigenlayerProtocolSettings)
     ///
     /// # Errors
     ///
     /// `self` is not [`ProtocolSettings::Eigenlayer`]
-    ///
-    /// [`EigenlayerProtocolSettings`]: crate::eigenlayer::config::EigenlayerProtocolSettings
     #[cfg(feature = "eigenlayer")]
     #[allow(clippy::match_wildcard_for_single_variants)]
     pub fn eigenlayer(
@@ -649,6 +643,7 @@ impl ContextConfig {
     #[cfg(feature = "eigenlayer")]
     #[must_use]
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub fn create_eigenlayer_config(
         http_rpc_url: Url,
         ws_rpc_url: Url,
@@ -675,6 +670,7 @@ impl ContextConfig {
     /// Creates a new context config with defaults for Tangle
     #[cfg(feature = "tangle")]
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     #[allow(clippy::too_many_arguments)]
     pub fn create_tangle_config(
         http_rpc_url: Url,
