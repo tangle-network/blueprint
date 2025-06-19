@@ -151,6 +151,7 @@ impl VerifiedBlueprint {
 }
 
 #[cfg(feature = "vm-sandbox")]
+#[allow(clippy::too_many_arguments)]
 async fn new_service(
     manager_config: &BlueprintManagerConfig,
     network_manager: NetworkManager,
@@ -175,7 +176,7 @@ async fn new_service(
             },
             network_manager,
             manager_config.network_interface.clone().unwrap(),
-            db.clone(),
+            db,
             &blueprint_config.data_dir,
             &blueprint_config.keystore_uri,
             cache_dir,
@@ -198,9 +199,9 @@ fn new_service_native(
     runtime_dir: &Path,
 ) -> Result<Service> {
     Service::new_native(
-        db.clone(),
+        db,
         runtime_dir,
-        &sub_service_str,
+        sub_service_str,
         binary_path,
         env,
         args,

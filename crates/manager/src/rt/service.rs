@@ -174,7 +174,7 @@ impl Service {
     ///
     /// # Errors
     ///
-    /// * See [`HypervisorInstance::statuc()`]
+    /// * See [`HypervisorInstance::status()`]
     /// * See [`ProcessHandle::status()`]
     pub async fn status(&mut self) -> Result<Status> {
         match &mut self.runtime {
