@@ -83,8 +83,25 @@ pub async fn register(
         .await?;
 
     // Wait for finalization instead of just in-block
-    let events = join_res.wait_for_finalized_success().await?;
-    info!("Successfully joined operators with events: {:?}", events);
+    match join_res.wait_for_finalized_success().await {
+        Ok(events) => {
+            info!("Successfully joined operators with events: {:?}", events);
+        }
+        Err(e) => {
+            // Check if the error is due to already being an operator
+            if e.to_string().contains("AlreadyOperator") {
+                println!(
+                    "{}",
+                    style("Account is already an operator, skipping join step...")
+                        .yellow()
+                );
+                info!("Account {} is already an operator, continuing with registration", account_id);
+            } else {
+                // Re-throw any other error
+                return Err(e.into());
+            }
+        }
+    }
 
     println!(
         "{}",
