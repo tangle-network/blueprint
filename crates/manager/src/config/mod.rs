@@ -9,7 +9,6 @@ use hyper::body::Bytes;
 use hyper::header::HeaderValue;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
-use ipnet::Ipv4Net;
 use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
@@ -19,7 +18,8 @@ use url::Url;
 pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =
     LazyLock::new(|| Url::parse("unix:///var/run/docker.sock").unwrap());
 
-pub static DEFAULT_ADDRESS_POOL: LazyLock<Ipv4Net> =
+#[cfg(feature = "vm-sandbox")]
+pub static DEFAULT_ADDRESS_POOL: LazyLock<ipnet::Ipv4Net> =
     LazyLock::new(|| "172.30.0.0/16".parse().unwrap());
 
 #[derive(Debug, Parser)]
@@ -65,6 +65,7 @@ pub struct BlueprintManagerConfig {
     ///
     /// This should only be used for testing and never for production setups.
     #[arg(long)]
+    #[cfg(feature = "vm-sandbox")]
     pub no_vm: bool,
     /// Whether to allow invalid GitHub attestations (binary integrity checks)
     ///
@@ -82,9 +83,11 @@ pub struct BlueprintManagerConfig {
     pub podman_host: Url,
     /// The default address pool for VM TAP interfaces
     #[arg(long, default_value_t = *DEFAULT_ADDRESS_POOL)]
-    pub default_address_pool: Ipv4Net,
+    #[cfg(feature = "vm-sandbox")]
+    pub default_address_pool: ipnet::Ipv4Net,
     /// The network interface to funnel blueprint VM traffic through
     #[arg(long)]
+    #[cfg(feature = "vm-sandbox")]
     pub network_interface: Option<String>,
 
     /// Authentication proxy options
@@ -140,6 +143,7 @@ impl BlueprintManagerConfig {
     /// # Errors
     ///
     /// This will error if it is unable to determine the default network interface
+    #[cfg(feature = "vm-sandbox")]
     pub fn verify_network_interface(&mut self) -> Result<()> {
         if self.network_interface.is_some() {
             return Ok(());
@@ -185,11 +189,14 @@ impl Default for BlueprintManagerConfig {
             pretty: false,
             instance_id: None,
             test_mode: false,
+            #[cfg(feature = "vm-sandbox")]
             no_vm: false,
             allow_unchecked_attestations: false,
             preferred_source: SourceType::default(),
             podman_host: DEFAULT_DOCKER_HOST.clone(),
+            #[cfg(feature = "vm-sandbox")]
             default_address_pool: *DEFAULT_ADDRESS_POOL,
+            #[cfg(feature = "vm-sandbox")]
             network_interface: None,
             auth_proxy_opts: AuthProxyOpts::default(),
         }
