@@ -198,14 +198,7 @@ fn new_service_native(
     sub_service_str: &str,
     runtime_dir: &Path,
 ) -> Result<Service> {
-    Service::new_native(
-        db,
-        runtime_dir,
-        sub_service_str,
-        binary_path,
-        env,
-        args,
-    )
+    Service::new_native(db, runtime_dir, sub_service_str, binary_path, env, args)
 }
 
 impl Debug for VerifiedBlueprint {
