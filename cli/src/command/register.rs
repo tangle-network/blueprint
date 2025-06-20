@@ -8,8 +8,11 @@ use blueprint_runner::tangle::config::decompress_pubkey;
 use blueprint_tangle_extra::serde::new_bounded_string;
 use color_eyre::Result;
 use dialoguer::console::style;
+use tangle_subxt::subxt;
+use tangle_subxt::subxt::error::DispatchError;
 use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::tangle_testnet_runtime::api;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::pallet_multi_asset_delegation as mad;
 use tracing::debug;
 
 /// Registers a blueprint.
@@ -88,19 +91,29 @@ pub async fn register(
             info!("Successfully joined operators with events: {:?}", events);
         }
         Err(e) => {
-            // Check if the error is due to already being an operator
-            if e.to_string().contains("AlreadyOperator") {
-                println!(
-                    "{}",
-                    style("Account is already an operator, skipping join step...").yellow()
-                );
-                info!(
-                    "Account {} is already an operator, continuing with registration",
-                    account_id
-                );
-            } else {
-                // Re-throw any other error
-                return Err(e.into());
+            match e {
+                subxt::Error::Runtime(DispatchError::Module(module))
+                    if module.as_root_error::<api::Error>().is_ok_and(|e| {
+                        matches!(
+                            e,
+                            api::Error::MultiAssetDelegation(mad::pallet::Error::AlreadyDelegator)
+                        )
+                    }) =>
+                {
+                    println!(
+                        "{}",
+                        style("Account is already an operator, skipping join step...").yellow()
+                    );
+                    info!(
+                        "Account {} is already an operator, continuing with registration",
+                        account_id
+                    );
+                }
+
+                _ => {
+                    // Re-throw any other error
+                    return Err(e.into());
+                }
             }
         }
     }
