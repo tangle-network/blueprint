@@ -449,9 +449,11 @@ pub enum DebugCommands {
         protocol: Protocol,
         /// Disables the VM sandbox
         #[arg(long)]
+        #[cfg(feature = "vm-debug")]
         no_vm: bool,
         /// Verify network connection before starting the service
         #[arg(long, default_value_t = true)]
+        #[cfg(feature = "vm-debug")]
         verify_network_connection: bool,
     },
 }
@@ -832,7 +834,9 @@ async fn main() -> color_eyre::Result<()> {
                 service_name,
                 binary,
                 protocol,
+                #[cfg(feature = "vm-debug")]
                 no_vm,
+                #[cfg(feature = "vm-debug")]
                 verify_network_connection,
             } => {
                 match (&mut http_rpc_url, &mut ws_rpc_url) {
@@ -879,7 +883,9 @@ async fn main() -> color_eyre::Result<()> {
                     service_name,
                     binary,
                     protocol,
+                    #[cfg(feature = "vm-debug")]
                     verify_network_connection,
+                    #[cfg(feature = "vm-debug")]
                     no_vm,
                 ))
                 .await?;

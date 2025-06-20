@@ -1,5 +1,5 @@
-use super::hypervisor::net::NetworkManager;
-use super::hypervisor::{HypervisorInstance, ServiceVmConfig};
+#[cfg(feature = "vm-sandbox")]
+use super::hypervisor::{HypervisorInstance, ServiceVmConfig, net::NetworkManager};
 use super::native::ProcessHandle;
 use crate::error::{Error, Result};
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
@@ -33,6 +33,7 @@ enum NativeProcess {
 }
 
 enum Runtime {
+    #[cfg(feature = "vm-sandbox")]
     Hypervisor(HypervisorInstance),
     Native(NativeProcess),
 }
@@ -80,6 +81,7 @@ impl Service {
     /// * [`HypervisorInstance::new()`]
     /// * [`HypervisorInstance::prepare()`]
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "vm-sandbox")]
     pub async fn new(
         vm_config: ServiceVmConfig,
         network_manager: NetworkManager,
@@ -172,10 +174,11 @@ impl Service {
     ///
     /// # Errors
     ///
-    /// * See [`HypervisorInstance::statuc()`]
+    /// * See [`HypervisorInstance::status()`]
     /// * See [`ProcessHandle::status()`]
     pub async fn status(&mut self) -> Result<Status> {
         match &mut self.runtime {
+            #[cfg(feature = "vm-sandbox")]
             Runtime::Hypervisor(hypervisor) => hypervisor.status().await,
             Runtime::Native(NativeProcess::Started(instance)) => Ok(instance.status()),
             Runtime::Native(NativeProcess::NotStarted(_)) => Ok(Status::NotStarted),
@@ -199,6 +202,7 @@ impl Service {
         };
 
         match &mut self.runtime {
+            #[cfg(feature = "vm-sandbox")]
             Runtime::Hypervisor(hypervisor) => {
                 hypervisor.start().await.map_err(|e| {
                     error!("Failed to start hypervisor: {e}");
@@ -249,6 +253,7 @@ impl Service {
     /// * [`BridgeHandle::shutdown()`]
     pub async fn shutdown(self) -> Result<()> {
         match self.runtime {
+            #[cfg(feature = "vm-sandbox")]
             Runtime::Hypervisor(hypervisor) => {
                 hypervisor.shutdown().await.map_err(|e| {
                     error!("Failed to shut down hypervisor: {e}");
@@ -269,6 +274,7 @@ impl Service {
     }
 
     #[must_use]
+    #[cfg(feature = "vm-sandbox")]
     pub fn hypervisor(&self) -> Option<&HypervisorInstance> {
         match &self.runtime {
             Runtime::Hypervisor(hypervisor) => Some(hypervisor),

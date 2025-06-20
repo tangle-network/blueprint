@@ -1,3 +1,6 @@
+#[cfg(feature = "vm-debug")]
+mod vm;
+
 use crate::command::deploy::mbsm::deploy_mbsm_if_needed;
 use crate::command::deploy::tangle::deploy_tangle;
 use crate::command::register::register;
@@ -10,19 +13,13 @@ use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_manager::blueprint_auth::db::RocksDb;
 use blueprint_manager::config::{AuthProxyOpts, BlueprintManagerConfig};
 use blueprint_manager::executor::run_auth_proxy;
-use blueprint_manager::rt::hypervisor::net::NetworkManager;
-use blueprint_manager::rt::hypervisor::net::nftables::check_net_admin_capability;
-use blueprint_manager::rt::hypervisor::{ServiceVmConfig, net};
 use blueprint_manager::rt::service::Service;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
-use nix::sys::termios;
-use nix::sys::termios::{InputFlags, LocalFlags, SetArg};
+use std::future;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::{fs, future};
-use tokio::io::AsyncWriteExt;
 use tokio::task::{JoinError, JoinHandle};
 use tracing::{error, info};
 use url::Url;
@@ -92,6 +89,11 @@ async fn setup_tangle_node(
     Ok((node, http, ws))
 }
 
+pub struct PtyIo {
+    pub stdin_to_pty: JoinHandle<io::Result<()>>,
+    pub pty_to_stdout: JoinHandle<io::Result<()>>,
+}
+
 /// Spawns a Tangle testnet and virtual machine for the given blueprint
 ///
 /// # Errors
@@ -116,15 +118,20 @@ pub async fn execute(
     ws_rpc_url: Option<Url>,
     manifest_path: PathBuf,
     package: Option<String>,
-    id: u32,
+    #[allow(unused_variables)] id: u32,
     service_name: String,
     binary: PathBuf,
     protocol: Protocol,
-    _verify_network_connection: bool,
-    no_vm: bool,
+    #[cfg(feature = "vm-debug")] _verify_network_connection: bool,
+    #[cfg(feature = "vm-debug")] no_vm: bool,
 ) -> color_eyre::Result<()> {
+    #[cfg(not(feature = "vm-debug"))]
+    #[allow(unused)]
+    let no_vm = true;
+
     let mut manager_config = BlueprintManagerConfig::default();
 
+    #[cfg(feature = "vm-debug")]
     check_net_admin_capability()?;
 
     let tmp = tempfile::tempdir()?;
@@ -171,18 +178,32 @@ pub async fn execute(
         bridge_socket_path: None,
     };
 
-    let mut network_interface = None;
+    #[allow(unused_mut, unused_variables)]
+    let mut network_interface: Option<String> = None;
     let (mut service, pty_io) = if no_vm {
         let service = setup_without_vm(manager_config, &service_name, binary, db, env, args)?;
         (service, None)
     } else {
-        manager_config.verify_network_interface()?;
-        network_interface = manager_config.network_interface.clone();
+        #[cfg(not(feature = "vm-debug"))]
+        unreachable!();
 
-        let (service, pty) =
-            setup_with_vm(manager_config, &service_name, id, binary, db, env, args).await?;
+        #[cfg(feature = "vm-debug")]
+        {
+            let (service, pty) = vm::setup_with_vm(
+                &mut manager_config,
+                &service_name,
+                id,
+                binary,
+                db,
+                env,
+                args,
+            )
+            .await?;
 
-        (service, Some(pty))
+            network_interface = manager_config.network_interface.clone();
+
+            (service, Some(pty))
+        }
     };
 
     // TODO: Check is_alive
@@ -190,7 +211,7 @@ pub async fn execute(
 
     let stdin_task: Pin<Box<dyn Future<Output = Result<io::Result<()>, JoinError>>>>;
     let stdout_task: Pin<Box<dyn Future<Output = Result<io::Result<()>, JoinError>>>>;
-    if let Some(VmPtyIo {
+    if let Some(PtyIo {
         stdin_to_pty,
         pty_to_stdout,
     }) = pty_io
@@ -216,10 +237,10 @@ pub async fn execute(
     }
 
     let shutdown_res = service.shutdown().await;
+
+    #[cfg(feature = "vm-debug")]
     if !no_vm {
-        if let Err(e) = net::nftables::cleanup_firewall(network_interface.as_deref().unwrap()) {
-            error!("Failed to cleanup nftables rules: {e}");
-        }
+        vm::vm_shutdown(network_interface.as_deref().unwrap()).await?;
     }
 
     shutdown_res.map_err(Into::into)
@@ -242,98 +263,4 @@ fn setup_without_vm(
         args,
     )?;
     Ok(service)
-}
-
-pub struct VmPtyIo {
-    pub stdin_to_pty: JoinHandle<io::Result<()>>,
-    pub pty_to_stdout: JoinHandle<io::Result<()>>,
-}
-
-async fn setup_with_vm(
-    manager_config: BlueprintManagerConfig,
-    service_name: &str,
-    id: u32,
-    binary: PathBuf,
-    db: RocksDb,
-    env: BlueprintEnvVars,
-    args: BlueprintArgs,
-) -> color_eyre::Result<(Service, VmPtyIo)> {
-    let network_candidates = manager_config
-        .default_address_pool
-        .hosts()
-        .filter(|ip| ip.octets()[3] != 0 && ip.octets()[3] != 255)
-        .collect();
-    let network_manager = NetworkManager::new(network_candidates).await.map_err(|e| {
-        error!("Failed to create network manager: {e}");
-        e
-    })?;
-
-    let service = Service::new(
-        ServiceVmConfig {
-            id,
-            pty: true,
-            ..Default::default()
-        },
-        network_manager,
-        manager_config.network_interface.unwrap(),
-        db,
-        manager_config.data_dir,
-        manager_config.keystore_uri,
-        manager_config.cache_dir,
-        &manager_config.runtime_dir,
-        service_name,
-        binary,
-        env,
-        args,
-    )
-    .await?;
-
-    let pty = service
-        .hypervisor()
-        .expect("is hypervisor service")
-        .pty()
-        .await?
-        .unwrap();
-    info!("VM serial output to: {}", pty.display());
-
-    let pty = fs::OpenOptions::new().read(true).write(true).open(pty)?;
-
-    set_raw_mode(&pty)?;
-
-    let pty_reader = tokio::fs::File::from_std(pty.try_clone()?);
-    let pty_writer = tokio::fs::File::from_std(pty);
-
-    let stdin_to_pty = tokio::spawn(async move {
-        let mut stdin = tokio::io::stdin();
-        let mut writer = pty_writer;
-        tokio::io::copy(&mut stdin, &mut writer).await?;
-        writer.flush().await?;
-        Ok(())
-    });
-
-    let pty_to_stdout = tokio::spawn(async move {
-        let mut reader = pty_reader;
-        let mut stdout = tokio::io::stdout();
-        tokio::io::copy(&mut reader, &mut stdout).await?;
-        stdout.flush().await?;
-        Ok(())
-    });
-
-    let io_handles = VmPtyIo {
-        stdin_to_pty,
-        pty_to_stdout,
-    };
-
-    Ok((service, io_handles))
-}
-
-fn set_raw_mode(fd: &fs::File) -> io::Result<()> {
-    let mut termios = termios::tcgetattr(fd)?;
-
-    termios.input_flags &= !(InputFlags::ICRNL | InputFlags::IXON);
-    termios.local_flags &= !(LocalFlags::ICANON | LocalFlags::ECHO | LocalFlags::ISIG);
-
-    termios::tcsetattr(fd, SetArg::TCSANOW, &termios)?;
-
-    Ok(())
 }
