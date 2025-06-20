@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use crate::config::BlueprintManagerConfig;
 use crate::error::{Error, Result};
 use crate::blueprint::native::FilteredBlueprint;
@@ -19,8 +20,8 @@ use tangle_subxt::tangle_testnet_runtime::api::services::events::{
     JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
 };
 use blueprint_auth::db::RocksDb;
-use crate::rt::hypervisor::net::NetworkManager;
-use crate::rt::hypervisor::ServiceVmConfig;
+#[cfg(feature = "vm-sandbox")]
+use crate::rt::hypervisor::{ServiceVmConfig, net::NetworkManager};
 use crate::rt::service::{Service, Status};
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
@@ -34,11 +35,11 @@ impl VerifiedBlueprint {
     #[allow(clippy::cast_possible_truncation)]
     pub async fn start_services_if_needed(
         &mut self,
-        network_manager: NetworkManager,
         db: RocksDb,
         blueprint_config: &BlueprintEnvironment,
         manager_config: &BlueprintManagerConfig,
         active_blueprints: &mut ActiveBlueprints,
+        #[cfg(feature = "vm-sandbox")] network_manager: NetworkManager,
     ) -> Result<()> {
         let cache_dir = manager_config.cache_dir.join(format!(
             "{}-{}",
@@ -99,36 +100,30 @@ impl VerifiedBlueprint {
                 let runtime_dir = manager_config.runtime_dir.join(id.to_string());
                 fs::create_dir_all(&runtime_dir)?;
 
-                let mut service = if manager_config.no_vm {
-                    Service::new_native(
-                        db.clone(),
-                        runtime_dir,
-                        &sub_service_str,
-                        &binary_path,
-                        env,
-                        args,
-                    )?
-                } else {
-                    Service::new(
-                        // TODO: !!! Actually configure the VM with resource limits
-                        ServiceVmConfig {
-                            id,
-                            ..Default::default()
-                        },
-                        network_manager.clone(),
-                        manager_config.network_interface.clone().unwrap(),
-                        db.clone(),
-                        &blueprint_config.data_dir,
-                        &blueprint_config.keystore_uri,
-                        &cache_dir,
-                        runtime_dir,
-                        &sub_service_str,
-                        &binary_path,
-                        env,
-                        args,
-                    )
-                    .await?
-                };
+                #[cfg(feature = "vm-sandbox")]
+                let mut service = new_service(
+                    manager_config,
+                    network_manager.clone(),
+                    db.clone(),
+                    blueprint_config,
+                    id,
+                    env,
+                    args,
+                    &binary_path,
+                    &sub_service_str,
+                    &cache_dir,
+                    &runtime_dir,
+                )
+                .await?;
+                #[cfg(not(feature = "vm-sandbox"))]
+                let mut service = new_service_native(
+                    db.clone(),
+                    env,
+                    args,
+                    &binary_path,
+                    &sub_service_str,
+                    &runtime_dir,
+                )?;
 
                 let service_start_res = service.start().await;
                 match service_start_res {
@@ -153,6 +148,57 @@ impl VerifiedBlueprint {
 
         Ok(())
     }
+}
+
+#[cfg(feature = "vm-sandbox")]
+#[allow(clippy::too_many_arguments)]
+async fn new_service(
+    manager_config: &BlueprintManagerConfig,
+    network_manager: NetworkManager,
+    db: RocksDb,
+    blueprint_config: &BlueprintEnvironment,
+    id: u32,
+    env: BlueprintEnvVars,
+    args: BlueprintArgs,
+    binary_path: &Path,
+    sub_service_str: &str,
+    cache_dir: &Path,
+    runtime_dir: &Path,
+) -> Result<Service> {
+    if manager_config.no_vm {
+        new_service_native(db, env, args, binary_path, sub_service_str, runtime_dir)
+    } else {
+        Service::new(
+            // TODO: !!! Actually configure the VM with resource limits
+            ServiceVmConfig {
+                id,
+                ..Default::default()
+            },
+            network_manager,
+            manager_config.network_interface.clone().unwrap(),
+            db,
+            &blueprint_config.data_dir,
+            &blueprint_config.keystore_uri,
+            cache_dir,
+            runtime_dir,
+            sub_service_str,
+            binary_path,
+            env,
+            args,
+        )
+        .await
+    }
+}
+
+fn new_service_native(
+    db: RocksDb,
+    env: BlueprintEnvVars,
+    args: BlueprintArgs,
+    binary_path: &Path,
+    sub_service_str: &str,
+    runtime_dir: &Path,
+) -> Result<Service> {
+    Service::new_native(db, runtime_dir, sub_service_str, binary_path, env, args)
 }
 
 impl Debug for VerifiedBlueprint {
@@ -277,12 +323,12 @@ pub(crate) async fn handle_tangle_event(
     event: &TangleEvent,
     blueprints: &[RpcServicesWithBlueprint],
     blueprint_config: &BlueprintEnvironment,
-    network_manager: NetworkManager,
     db: RocksDb,
     manager_config: &BlueprintManagerConfig,
     active_blueprints: &mut ActiveBlueprints,
     poll_result: EventPollResult,
     client: &TangleServicesClient<TangleConfig>,
+    #[cfg(feature = "vm-sandbox")] network_manager: NetworkManager,
 ) -> Result<()> {
     info!("Received notification {}", event.number);
 
@@ -347,11 +393,12 @@ pub(crate) async fn handle_tangle_event(
     for blueprint in &mut verified_blueprints {
         blueprint
             .start_services_if_needed(
-                network_manager.clone(),
                 db.clone(),
                 blueprint_config,
                 manager_config,
                 active_blueprints,
+                #[cfg(feature = "vm-sandbox")]
+                network_manager.clone(),
             )
             .await?;
     }

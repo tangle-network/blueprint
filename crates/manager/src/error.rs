@@ -25,12 +25,17 @@ pub enum Error {
     NoGithubCli,
     #[error("Bridge error: {0}")]
     Bridge(#[from] blueprint_manager_bridge::error::Error),
+
+    #[cfg(feature = "vm-sandbox")]
     #[error("Hypervisor error: {0}")]
     Hypervisor(String),
+    #[cfg(feature = "vm-sandbox")]
     #[error("Networking error: {0}")]
     Net(#[from] rtnetlink::Error),
+    #[cfg(feature = "vm-sandbox")]
     #[error("Capabilities error: {0}")]
     Caps(#[from] capctl::Error),
+    #[cfg(feature = "vm-sandbox")]
     #[error("nftables error: {0}")]
     Nftables(#[from] nftables::helper::NftablesError),
 
@@ -44,6 +49,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
+    #[cfg(feature = "vm-sandbox")]
     Errno(#[from] nix::errno::Errno),
     #[error(transparent)]
     WalkDir(#[from] walkdir::Error),

@@ -26,6 +26,7 @@ blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
 
+document-features.workspace = true
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
 docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
@@ -50,21 +51,33 @@ hyper-util.workspace = true
 http-body-util.workspace = true
 dirs.workspace = true
 walkdir.workspace = true
-cloud-hypervisor-client = { workspace = true }
-fatfs = { workspace = true, features = ["std"] }
-nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"] }
-capctl = { workspace = true, features = ["std"] }
-
-# Networking
-rtnetlink = { workspace = true, features = ["tokio_socket"] }
-ipnet.workspace = true
-netdev = { workspace = true, features = ["gateway"] }
-nftables.workspace = true
 
 # Binary extraction
 cargo-dist-schema.workspace = true
 tar.workspace = true
 xz.workspace = true
+
+# VM Sandbox
+cloud-hypervisor-client = { workspace = true, optional = true }
+fatfs = { workspace = true, features = ["std"], optional = true }
+nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"], optional = true }
+capctl = { workspace = true, features = ["std"], optional = true }
+
+## Networking
+rtnetlink = { workspace = true, features = ["tokio_socket"], optional = true }
+ipnet = { workspace = true, optional = true }
+netdev = { workspace = true, features = ["gateway"], optional = true }
+nftables = { workspace = true, optional = true }
+
+[features]
+default = ["vm-sandbox"]
+
+## Enable the VM sandbox
+##
+## **NOTE**: This is only supported on Linux
+##
+## Enabling this will also add additional CLI arguments: `--no-vm`, `--network-interface`, and `--default-address-pool`
+vm-sandbox = ["dep:cloud-hypervisor-client", "dep:fatfs", "dep:nix", "dep:capctl", "dep:rtnetlink", "dep:ipnet", "dep:netdev", "dep:nftables"]
 
 [package.metadata.dist]
 dist = false
