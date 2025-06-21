@@ -398,6 +398,7 @@ macro_rules! blueprint_inner {
 mod tests {
     use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
     use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
+    use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::PricingModel;
     use super::*;
     use crate::extract::{List, TangleArg, TangleArgs2, TangleResult, Optional};
     use crate::metadata::types::job::JobMetadata;
@@ -486,6 +487,7 @@ mod tests {
                     },
                     params: vec![],
                     result: vec![FieldType::Uint64],
+                    pricing_model: PricingModel::PayOnce { amount: 0 },
                 },
                 JobDefinition {
                     job_id: 1,
@@ -496,6 +498,7 @@ mod tests {
                     },
                     params: vec![FieldType::Uint64],
                     result: vec![FieldType::Uint64],
+                    pricing_model: PricingModel::PayOnce { amount: 0 },
                 }
             ]
         );

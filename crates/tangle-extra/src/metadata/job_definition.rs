@@ -29,11 +29,13 @@
 //!
 //! [`Job`]: blueprint_core::Job
 
-use crate::serde::{BoundedVec, new_bounded_string};
+use crate::serde::new_bounded_string;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::{
     JobDefinition, JobMetadata,
 };
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::PricingModel;
 
 /// Trait for types that can be converted into job metadata.
 ///
@@ -87,6 +89,8 @@ impl IntoTangleFieldTypes for blueprint_core::job::result::Void {
 }
 
 /// Implementation for functions with no arguments.
+///
+/// Default implementation uses `PayOnce` pricing model with amount 0.
 impl<F, Fut, Res> IntoJobDefinition<((),)> for F
 where
     F: FnOnce() -> Fut + Clone + Send + Sync + 'static,
@@ -98,6 +102,7 @@ where
             metadata: self.into_job_metadata(),
             params: BoundedVec(Vec::new()),
             result: BoundedVec(Res::into_tangle_fields()),
+            pricing_model: PricingModel::PayOnce { amount: 0 },
         }
     }
 }
@@ -108,6 +113,12 @@ where
 macro_rules! impl_into_job_definition {
     (
         [$($ty:ident),*], $last:ident
+    ) => {
+        impl_into_job_definition!([$($ty),*], $last, PricingModel::PayOnce { amount: 0 });
+    };
+
+    (
+        [$($ty:ident),*], $last:ident, $pricing_model:expr
     ) => {
         impl<F, Fut, Res, $($ty,)* $last> IntoJobDefinition<((), $($ty,)* $last,)> for F
         where
@@ -121,6 +132,7 @@ macro_rules! impl_into_job_definition {
                     metadata: self.into_job_metadata(),
                     params: BoundedVec($last::into_tangle_fields()),
                     result: BoundedVec(Res::into_tangle_fields()),
+                    pricing_model: $pricing_model,
                 }
             }
         }
