@@ -31,7 +31,7 @@ use tangle_subxt::tangle_testnet_runtime::api::{
     services::{
         calls::types::{
             call::{Args, Job},
-            create_blueprint::Blueprint,
+            create_blueprint::{Metadata, Typedef, MembershipModel as BlueprintMembershipModel, SecurityRequirements, PriceTargets},
             register::{Preferences, RegistrationArgs},
             request::RequestArgs,
         },
@@ -152,9 +152,19 @@ pub async fn deploy_new_mbsm_revision<T: Signer<TangleConfig>>(
 pub async fn create_blueprint<T: Signer<TangleConfig>>(
     client: &TestClient,
     account_id: &T,
-    blueprint: Blueprint,
+    metadata: Metadata,
+    typedef: Typedef,
+    membership_model: BlueprintMembershipModel,
+    security_requirements: SecurityRequirements,
+    price_targets: PriceTargets,
 ) -> Result<(), TransactionError> {
-    let call = api::tx().services().create_blueprint(blueprint);
+    let call = api::tx().services().create_blueprint(
+        metadata,
+        typedef,
+        membership_model,
+        security_requirements,
+        price_targets,
+    );
     let res = client
         .subxt_client()
         .tx()

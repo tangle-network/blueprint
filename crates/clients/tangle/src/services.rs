@@ -35,8 +35,7 @@ impl<C: Config> blueprint_std::ops::Deref for TangleServicesClient<C> {
 }
 
 /// A list of services provided by an operator, along with their blueprint
-pub type RpcServicesWithBlueprint =
-    services::service::RpcServicesWithBlueprint<AccountId32, u64, u128>;
+pub type RpcServicesWithBlueprint = services::service::RpcServicesWithBlueprint;
 
 impl<C: Config> TangleServicesClient<C>
 where
