@@ -131,11 +131,11 @@ pub async fn execute(
 
     let mut manager_config = BlueprintManagerConfig::default();
 
-   #[cfg(feature = "vm-debug")]
+    #[cfg(feature = "vm-debug")]
     if !no_vm {
         check_net_admin_capability()?;
     }
-    
+
     let tmp = tempfile::tempdir()?;
     manager_config.data_dir = tmp.path().join("data");
     manager_config.cache_dir = tmp.path().join("cache");
