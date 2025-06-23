@@ -4631,9 +4631,9 @@ checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
 name = "cloud-hypervisor-client"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaed0af519520f149d85d5e8898c7743459c059ace4243aedfdd239b3bb7cb33"
+checksum = "a135a9339a5ad2775b8843dfad19cd5057e9d8092a3c09b523c5030fcc1348ee"
 dependencies = [
  "base64 0.7.0",
  "futures",
@@ -4645,6 +4645,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
+ "thiserror 2.0.12",
  "url",
  "uuid 1.17.0",
 ]
@@ -6796,12 +6797,12 @@ dependencies = [
 
 [[package]]
 name = "errno"
-version = "0.3.12"
+version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cea14ef9355e3beab063703aa9dab15afd25f0667c341310c1e5274bb1d0da18"
+checksum = "778e2ac28f6c47af28e4907f13ffd1e1ddbd400980a9abd7c8df189bf578a5ad"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -11005,9 +11006,9 @@ dependencies = [
 
 [[package]]
 name = "metrics-util"
-version = "0.19.1"
+version = "0.19.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8496cc523d1f94c1385dd8f0f0c2c480b2b8aeccb5b7e4485ad6365523ae376"
+checksum = "39803e5c24a697c54492a76469034eee8247bd61825502e0410defc3e98eedf0"
 dependencies = [
  "aho-corasick",
  "crossbeam-epoch",
@@ -15684,9 +15685,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-udp"
-version = "0.5.12"
+version = "0.5.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee4e529991f949c5e25755532370b8af5d114acae52326361d68d47af64aa842"
+checksum = "fcebb1209ee276352ef14ff8732e24cc2b02bbac986cd74a4c81bcb2f9881970"
 dependencies = [
  "cfg_aliases",
  "libc",
@@ -19649,7 +19650,7 @@ checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 [[package]]
 name = "tangle-subxt"
 version = "0.17.0"
-source = "git+https://github.com/tangle-network/tangle.git#2220492b5cbca379431c6d27cca581a82a400fdb"
+source = "git+https://github.com/tangle-network/tangle.git#717582c49ce60df5d22873b121dfe7aa579da388"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -19961,8 +19962,8 @@ dependencies = [
 
 [[package]]
 name = "tnt-core-bytecode"
-version = "0.5.0"
-source = "git+https://github.com/tangle-network/tnt-core.git#2b937e0dd863dc3803ca601951f4aa63ed66aeff"
+version = "0.6.0"
+source = "git+https://github.com/tangle-network/tnt-core.git#a27aa6158f0c7436a68923fa1478668275d05c5c"
 dependencies = [
  "serde_json",
 ]
@@ -21348,14 +21349,14 @@ version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75c7f0ef91146ebfb530314f5f1d24528d7f0767efbfd31dce919275413e393e"
 dependencies = [
- "webpki-root-certs 1.0.0",
+ "webpki-root-certs 1.0.1",
 ]
 
 [[package]]
 name = "webpki-root-certs"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01a83f7e1a9f8712695c03eabe9ed3fbca0feff0152f33f12593e5a6303cb1a4"
+checksum = "86138b15b2b7d561bc4469e77027b8dd005a43dc502e9031d1f5afc8ce1f280e"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -21372,14 +21373,14 @@ version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
 dependencies = [
- "webpki-roots 1.0.0",
+ "webpki-roots 1.0.1",
 ]
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2853738d1cc4f2da3a225c18ec6c3721abb31961096e9dbf5ab35fa88b19cfdb"
+checksum = "8782dd5a41a24eed3a4f40b606249b3e236ca61adf1f25ea4d45c73de122b502"
 dependencies = [
  "rustls-pki-types",
 ]

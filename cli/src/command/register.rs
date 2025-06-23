@@ -8,8 +8,11 @@ use blueprint_runner::tangle::config::decompress_pubkey;
 use blueprint_tangle_extra::serde::new_bounded_string;
 use color_eyre::Result;
 use dialoguer::console::style;
+use tangle_subxt::subxt;
+use tangle_subxt::subxt::error::DispatchError;
 use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::tangle_testnet_runtime::api;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::pallet_multi_asset_delegation as mad;
 use tracing::debug;
 
 /// Registers a blueprint.
@@ -83,8 +86,37 @@ pub async fn register(
         .await?;
 
     // Wait for finalization instead of just in-block
-    let events = join_res.wait_for_finalized_success().await?;
-    info!("Successfully joined operators with events: {:?}", events);
+    match join_res.wait_for_finalized_success().await {
+        Ok(events) => {
+            info!("Successfully joined operators with events: {:?}", events);
+        }
+        Err(e) => {
+            match e {
+                subxt::Error::Runtime(DispatchError::Module(module))
+                    if module.as_root_error::<api::Error>().is_ok_and(|e| {
+                        matches!(
+                            e,
+                            api::Error::MultiAssetDelegation(mad::pallet::Error::AlreadyDelegator)
+                        )
+                    }) =>
+                {
+                    println!(
+                        "{}",
+                        style("Account is already an operator, skipping join step...").yellow()
+                    );
+                    info!(
+                        "Account {} is already an operator, continuing with registration",
+                        account_id
+                    );
+                }
+
+                _ => {
+                    // Re-throw any other error
+                    return Err(e.into());
+                }
+            }
+        }
+    }
 
     println!(
         "{}",
