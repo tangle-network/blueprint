@@ -4667,7 +4667,7 @@ checksum = "fe6d2e5af09e8c8ad56c969f2157a3d4238cebc7c55f0a517728c38f7b200f81"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.2.1",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -19649,8 +19649,8 @@ checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 
 [[package]]
 name = "tangle-subxt"
-version = "0.17.0"
-source = "git+https://github.com/tangle-network/tangle.git#717582c49ce60df5d22873b121dfe7aa579da388"
+version = "0.18.0"
+source = "git+https://github.com/tangle-network/tangle.git#8f8f8af1aa98757df7aeba3bb7e42a5cb487e9d5"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -20603,7 +20603,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 1.0.1",
+ "cfg-if 0.1.10",
  "digest 0.10.7",
  "rand 0.8.5",
  "static_assertions",
