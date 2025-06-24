@@ -14,6 +14,7 @@ blueprint-std = { workspace = true }
 
 thiserror = { workspace = true }
 tower = { workspace = true, features = ["util"] }
+tower-http = { workspace = true, features = ["cors", "request-id", "sensitive-headers", "trace"] }
 hashbrown = { workspace = true, default-features = false, features = ["default-hasher", "inline-more"] }
 tiny-keccak = { workspace = true, features = ["keccak"] }
 tracing = { workspace = true }
