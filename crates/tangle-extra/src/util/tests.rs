@@ -1,10 +1,12 @@
 use crate::util::TxProgressExt;
 use alloc::sync::Arc;
+use blueprint_testing_utils::setup_log;
 use blueprint_testing_utils::tangle::TangleTestHarness;
 use tangle_subxt::subxt::tx::Signer;
 
 #[tokio::test]
 async fn test_transaction_submission() -> color_eyre::Result<()> {
+    setup_log();
     // Setup test harness
     let test_dir = tempfile::TempDir::new()?;
     let harness = Box::pin(TangleTestHarness::<()>::setup(test_dir)).await?;
@@ -31,6 +33,7 @@ async fn test_transaction_submission() -> color_eyre::Result<()> {
 
 #[tokio::test]
 async fn test_transaction_progress_tracking() -> color_eyre::Result<()> {
+    setup_log();
     // Setup test harness
     let test_dir = tempfile::TempDir::new()?;
     let harness = Box::pin(TangleTestHarness::<()>::setup(test_dir)).await?;

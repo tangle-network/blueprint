@@ -114,6 +114,15 @@ evm_version = 'shanghai'",
     fs::create_dir_all(&binary_dir)?;
 
     // Create Cargo.toml for the binary
+    let repo_root = std::env::current_dir()?;
+    let repo_root = repo_root
+        .ancestors()
+        .find(|p| p.ends_with("blueprint"))
+        .expect("Could not find repository root");
+
+    let sdk_package_path = repo_root.join("crates").join("sdk");
+    let sdk_absolute_path = fs::canonicalize(&sdk_package_path)?;
+
     #[allow(clippy::useless_format)]
     let cargo_toml = format!(
         r#"[package]
@@ -122,7 +131,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-blueprint-sdk = {{ git = "https://github.com/tangle-network/blueprint.git", default-features = false, features = ["std", "eigenlayer", "evm", "macros", "build"] }}
+blueprint-sdk = {{ path = "{}", default-features = false, features = ["std", "eigenlayer", "evm", "macros", "build"] }}
 tokio = {{ version = "1.44", features = ["full"] }}
 color-eyre = "0.6"
 alloy-primitives = {{ version = "0.8" }}
@@ -138,7 +147,8 @@ alloy-contract = {{ version = "0.12" }}
 alloy-network = {{ version = "0.12" }}
 serde = {{ version = "1.0", features = ["derive"] }}
 serde_json = "1.0"
-"#
+"#,
+        sdk_absolute_path.to_string_lossy()
     );
     fs::write(binary_dir.join("Cargo.toml"), cargo_toml)?;
 
