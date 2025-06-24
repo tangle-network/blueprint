@@ -4,10 +4,11 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collection
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::JobDefinition as SubxtJobDefinition;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::jobs::JobMetadata as SubxtJobMetadata;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::PricingModel;
 
 /// A Job Definition is a definition of a job that can be called.
 /// It contains the input and output fields of the job with the permitted caller.
-#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct JobDefinition<'a> {
     pub job_id: u64,
     /// The metadata of the job.
@@ -18,6 +19,8 @@ pub struct JobDefinition<'a> {
     /// These are the result, the return values of this job.
     /// i.e. the output.
     pub result: Vec<FieldType>,
+    /// The pricing model for the job.
+    pub pricing_model: PricingModel<u32, u128>,
 }
 
 impl From<SubxtJobDefinition> for JobDefinition<'static> {
@@ -27,6 +30,7 @@ impl From<SubxtJobDefinition> for JobDefinition<'static> {
             metadata: value.metadata.into(),
             params: value.params.0,
             result: value.result.0,
+            pricing_model: value.pricing_model,
         }
     }
 }
@@ -37,6 +41,7 @@ impl From<JobDefinition<'_>> for SubxtJobDefinition {
             metadata: value.metadata.into(),
             params: BoundedVec(value.params),
             result: BoundedVec(value.result),
+            pricing_model: value.pricing_model,
         }
     }
 }
@@ -65,6 +70,18 @@ impl From<JobMetadata<'_>> for SubxtJobMetadata {
         Self {
             name: new_bounded_string(value.name),
             description: value.description.map(new_bounded_string),
+        }
+    }
+}
+
+impl Default for JobDefinition<'_> {
+    fn default() -> Self {
+        Self {
+            job_id: 0,
+            metadata: JobMetadata::default(),
+            params: Vec::new(),
+            result: Vec::new(),
+            pricing_model: PricingModel::PayOnce { amount: 0 },
         }
     }
 }

@@ -1,1 +1,1 @@
-tnt-core/=dependencies/tnt-core-0.4.0/src
+tnt-core/=dependencies/tnt-core-0.5.0/src
