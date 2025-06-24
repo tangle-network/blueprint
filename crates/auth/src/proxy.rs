@@ -18,7 +18,9 @@ use axum::{
 use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor, rt::TokioTimer};
 use tower_http::cors::CorsLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
-use tower_http::sensitive_headers::SetSensitiveHeadersLayer;
+use tower_http::sensitive_headers::{
+    SetSensitiveRequestHeadersLayer, SetSensitiveResponseHeadersLayer,
+};
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 
 use crate::api_tokens::{ApiToken, ApiTokenGenerator};
@@ -72,14 +74,18 @@ impl AuthenticatedProxy {
             .layer(PropagateRequestIdLayer::new(
                 header::HeaderName::from_static("x-request-id"),
             ))
-            .layer(SetSensitiveHeadersLayer::new(once(header::AUTHORIZATION)))
+            .layer(SetSensitiveRequestHeadersLayer::new(once(
+                header::AUTHORIZATION,
+            )))
             .layer(
                 TraceLayer::new_for_http()
                     .make_span_with(DefaultMakeSpan::new().include_headers(true))
                     .on_response(DefaultOnResponse::new().include_headers(true)),
             )
             .layer(CorsLayer::permissive())
-            .layer(SetSensitiveHeadersLayer::new(once(header::AUTHORIZATION)))
+            .layer(SetSensitiveResponseHeadersLayer::new(once(
+                header::AUTHORIZATION,
+            )))
             .with_state(state)
     }
 
