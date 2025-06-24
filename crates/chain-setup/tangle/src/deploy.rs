@@ -23,7 +23,12 @@ use std::sync::{
 use subxt::tx::Signer;
 use tangle_subxt::subxt;
 use tangle_subxt::tangle_testnet_runtime::api as TangleApi;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
+use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::MembershipModel as RuntimeMembershipModel;
 use tangle_subxt::tangle_testnet_runtime::api::services::calls::types;
+use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::create_blueprint::{
+    MembershipModel, Metadata, PriceTargets, SecurityRequirements,
+};
 
 #[derive(Clone)]
 pub struct Opts {
@@ -76,7 +81,13 @@ async fn generate_service_blueprint<P: Into<PathBuf>, T: AsRef<str>>(
     pkg_name: Option<&String>,
     rpc_url: T,
     signer_evm: Option<PrivateKeySigner>,
-) -> Result<types::create_blueprint::Blueprint> {
+) -> Result<(
+    types::create_blueprint::Metadata,
+    types::create_blueprint::Typedef,
+    types::create_blueprint::MembershipModel,
+    types::create_blueprint::SecurityRequirements,
+    types::create_blueprint::PriceTargets,
+)> {
     let manifest_path = manifest_metadata_path.into();
     let metadata = cargo_metadata::MetadataCommand::new()
         .manifest_path(manifest_path)
@@ -90,7 +101,25 @@ async fn generate_service_blueprint<P: Into<PathBuf>, T: AsRef<str>>(
     build_contracts_if_needed(&package, &blueprint).context("Building contracts")?;
     deploy_contracts_to_tangle(rpc_url.as_ref(), &package, &mut blueprint, signer_evm).await?;
 
-    blueprint.try_into().map_err(Into::into)
+    let metadata_json = serde_json::to_string(&blueprint.metadata).unwrap_or_default();
+    let bytes = metadata_json.into_bytes();
+    let bounded_vec = BoundedVec(bytes);
+    let metadata = Metadata::from(bounded_vec);
+
+    let typedef = blueprint.try_into()?;
+
+    let membership_model =
+        MembershipModel::from(RuntimeMembershipModel::Fixed { min_operators: 1 });
+    let security_requirements = SecurityRequirements::default();
+    let price_targets = PriceTargets::default();
+
+    Ok((
+        metadata,
+        typedef,
+        membership_model,
+        security_requirements,
+        price_targets,
+    ))
 }
 
 /// Deploy a blueprint to the Tangle Network
@@ -149,9 +178,15 @@ pub async fn deploy_to_tangle(
     });
 
     // Load the manifest file into cargo metadata
-    let blueprint =
-        generate_service_blueprint(&manifest_path, pkg_name.as_ref(), &ws_rpc_url, signer_evm)
-            .await?;
+    update_progress(60, "Generating blueprint");
+    let (metadata, typedef, membership_model, security_requirements, price_targets) =
+        generate_service_blueprint(
+            manifest_path,
+            pkg_name.as_ref(),
+            ws_rpc_url.clone(),
+            signer_evm,
+        )
+        .await?;
 
     // Signal the thread to stop
     should_stop.store(true, Ordering::Relaxed);
@@ -180,7 +215,13 @@ pub async fn deploy_to_tangle(
     let client = subxt::OnlineClient::from_url(ws_rpc_url.clone()).await?;
 
     update_progress(90, "Creating blueprint transaction");
-    let create_blueprint_tx = TangleApi::tx().services().create_blueprint(blueprint);
+    let create_blueprint_tx = TangleApi::tx().services().create_blueprint(
+        metadata,
+        typedef,
+        membership_model,
+        security_requirements,
+        price_targets,
+    );
 
     update_progress(93, "Signing and submitting transaction");
     let progress = client
