@@ -1,3 +1,4 @@
+use blueprint_core::info;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use blueprint_std::fs;
@@ -7,7 +8,6 @@ use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::process::{Child, Command};
 use toml::Value;
-use tracing::info;
 
 fn get_binary_name() -> Result<String> {
     let cargo_toml = fs::read_to_string("Cargo.toml")?;

@@ -37,7 +37,6 @@ use futures_util::{SinkExt, StreamExt, TryStreamExt, stream};
 use std::sync::Arc;
 use tokio::sync::{Mutex, oneshot};
 use tower::Service;
-use tracing::error;
 
 /// Configuration for the blueprint registration procedure
 #[dynosaur::dynosaur(DynBlueprintConfig)]
@@ -847,11 +846,15 @@ where
         let mut pending_jobs = FuturesUnordered::new();
 
         let bridge = env.bridge().await.map_err(|e| {
-            error!("[FATAL] Unable to establish bridge connection, aborting runner: {e}");
+            blueprint_core::error!(
+                "[FATAL] Unable to establish bridge connection, aborting runner: {e}"
+            );
             e
         })?;
         bridge.ping().await.map_err(|e| {
-            error!("[FATAL] Unable to establish bridge connection, aborting runner: {e}");
+            blueprint_core::error!(
+                "[FATAL] Unable to establish bridge connection, aborting runner: {e}"
+            );
             e
         })?;
 

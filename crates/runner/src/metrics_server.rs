@@ -1,11 +1,11 @@
 use crate::BackgroundService;
 use crate::error::RunnerError as Error;
+use blueprint_core::{error, info};
 use blueprint_qos::servers::ServerManager;
 use blueprint_qos::servers::prometheus::PrometheusServer;
 use std::future::Future;
 use std::sync::Arc;
 use tokio::sync::oneshot;
-use tracing::{error, info};
 
 /// Adapter for running a Prometheus metrics server as a background service
 pub struct MetricsServerAdapter {

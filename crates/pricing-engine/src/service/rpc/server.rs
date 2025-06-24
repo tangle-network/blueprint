@@ -15,7 +15,7 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, transport::Server};
-use tracing::{error, info, warn};
+use blueprint_core::{error, info, warn};
 
 use crate::pricing_engine::{
     AssetSecurityCommitment, GetPriceRequest, GetPriceResponse, QuoteDetails,

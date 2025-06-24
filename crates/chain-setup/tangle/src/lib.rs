@@ -54,7 +54,7 @@ pub async fn download_tangle_binary() -> Result<PathBuf, Box<dyn std::error::Err
     };
 
     if should_download {
-        tracing::info!("Downloading Tangle binary...");
+        blueprint_core::info!("Downloading Tangle binary...");
 
         let response = reqwest::get(download_url).await?;
         let bytes = response.bytes().await?;

@@ -193,9 +193,9 @@ pub async fn deploy_to_tangle(
         use blueprint_tangle_extra::util::TxProgressExt;
         progress.wait_for_in_block_success().await?
     } else {
-        tracing::debug!("Waiting for the transaction to be finalized...");
+        blueprint_core::debug!("Waiting for the transaction to be finalized...");
         let result = progress.wait_for_finalized_success().await?;
-        tracing::debug!("Transaction finalized...");
+        blueprint_core::debug!("Transaction finalized...");
         result
     };
 
@@ -215,7 +215,7 @@ pub async fn deploy_to_tangle(
     update_progress(100, "Deployment complete");
     progress_bar.finish_with_message("Blueprint deployed successfully!");
 
-    tracing::info!(
+    blueprint_core::info!(
         "Blueprint #{} created successfully by {} with extrinsic hash: {}",
         event.blueprint_id,
         event.owner,
@@ -247,16 +247,16 @@ fn find_workspace_root(package: &cargo_metadata::Package) -> PathBuf {
     // Walk up the directory tree looking for a workspace root
     while let Some(parent) = current_dir.parent() {
         let potential_cargo_toml = parent.join("Cargo.toml");
-        tracing::debug!(
+        blueprint_core::debug!(
             "Looking for Cargo.toml at: {}",
             potential_cargo_toml.display()
         );
         if potential_cargo_toml.exists() {
-            tracing::debug!("Found Cargo.toml");
+            blueprint_core::debug!("Found Cargo.toml");
             // Check if this Cargo.toml has a [workspace] section
             if let Ok(content) = std::fs::read_to_string(&potential_cargo_toml) {
                 if content.contains("[workspace]") {
-                    tracing::debug!(
+                    blueprint_core::debug!(
                         "Found [workspace] section, using this directory as workspace root"
                     );
                     workspace_root = parent.to_path_buf();
@@ -272,7 +272,7 @@ fn find_workspace_root(package: &cargo_metadata::Package) -> PathBuf {
         }
     }
 
-    tracing::debug!("Identified workspace root: {:?}", workspace_root);
+    blueprint_core::debug!("Identified workspace root: {:?}", workspace_root);
     workspace_root
 }
 
@@ -292,14 +292,14 @@ fn do_cargo_build(manifest_path: &Path) -> Result<()> {
     let stdout_thread = thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines().map_while(Result::ok) {
-            tracing::debug!(target: "build-output", "{}", line);
+            blueprint_core::debug!(target: "build-output", "{}", line);
         }
     });
 
     let stderr_thread = thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines().map_while(Result::ok) {
-            tracing::debug!(target: "build-output", "{}", line);
+            blueprint_core::debug!(target: "build-output", "{}", line);
         }
     });
 
@@ -309,8 +309,8 @@ fn do_cargo_build(manifest_path: &Path) -> Result<()> {
     stderr_thread.join().expect("Stderr thread panicked");
 
     if !status.success() {
-        tracing::error!("Cargo build failed");
-        tracing::error!("NOTE: Use `RUST_LOG=build-output=debug` to see more details");
+        blueprint_core::error!("Cargo build failed");
+        blueprint_core::error!("NOTE: Use `RUST_LOG=build-output=debug` to see more details");
         return Err(eyre!("Cargo build failed"));
     }
 
@@ -338,14 +338,14 @@ fn load_blueprint_metadata(
     }
 
     if !blueprint_json_path.exists() {
-        tracing::warn!(
+        blueprint_core::warn!(
             "Could not find blueprint.json in workspace root or binary directory; running `cargo build`..."
         );
-        tracing::debug!(
+        blueprint_core::debug!(
             "Looked for blueprint.json at workspace root: {:?}",
             workspace_root.join("blueprint.json")
         );
-        tracing::debug!(
+        blueprint_core::debug!(
             "Looked for blueprint.json at package dir: {:?}",
             package_dir.join("blueprint.json")
         );
@@ -363,7 +363,7 @@ fn load_blueprint_metadata(
         blueprint_json_path = package_dir.join("blueprint.json");
     }
 
-    tracing::debug!("Found blueprint.json at: {:?}", blueprint_json_path);
+    blueprint_core::debug!("Found blueprint.json at: {:?}", blueprint_json_path);
 
     // should have the blueprint.json
     let blueprint_json = std::fs::read_to_string(&blueprint_json_path).context(format!(
@@ -420,6 +420,7 @@ async fn deploy_contracts_to_tangle(
         contracts.push((kind, contract_name, contract));
     }
 
+    // ...
     if contracts.is_empty() {
         return Ok(());
     }
@@ -440,12 +441,12 @@ async fn deploy_contracts_to_tangle(
         .await?;
 
     let chain_id = provider.get_chain_id().await?;
-    tracing::debug!("Chain ID: {chain_id}");
+    blueprint_core::debug!("Chain ID: {chain_id}");
 
     for (kind, name, contract) in contracts {
-        tracing::info!("Deploying contract: {name} ...");
+        blueprint_core::info!("Deploying contract: {name} ...");
         let Some(bytecode) = contract.bytecode.clone() else {
-            tracing::warn!("Contract {name} does not have deployed bytecode! Skipping ...");
+            blueprint_core::warn!("Contract {name} does not have deployed bytecode! Skipping ...");
             continue;
         };
 
@@ -460,7 +461,7 @@ async fn deploy_contracts_to_tangle(
         if receipt.status() {
             let contract_address =
                 alloy_network::ReceiptResponse::contract_address(&receipt).unwrap();
-            tracing::info!("Contract {name} deployed at: {contract_address}");
+            blueprint_core::info!("Contract {name} deployed at: {contract_address}");
             println!(
                 "   {}",
                 style(format!("Contract {name} deployed at: {contract_address}")).yellow()
@@ -472,8 +473,8 @@ async fn deploy_contracts_to_tangle(
                 }
             }
         } else {
-            tracing::error!("Contract {name} deployment failed!");
-            tracing::debug!("Receipt: {receipt:#?}");
+            blueprint_core::error!("Contract {name} deployment failed!");
+            blueprint_core::debug!("Receipt: {receipt:#?}");
         }
     }
     Ok(())
@@ -489,22 +490,22 @@ fn build_contracts_if_needed(
         _ => return Err(Error::UnsupportedBlueprintManager.into()),
     };
 
-    tracing::debug!("Checking for contracts to build: {pathes_to_check:?}");
+    blueprint_core::debug!("Checking for contracts to build: {pathes_to_check:?}");
 
     let abs_pathes_to_check: Vec<_> = pathes_to_check
         .into_iter()
         .map(|path| resolve_path_relative_to_package(package, path))
         .collect();
 
-    tracing::debug!("Absolute paths to check: {abs_pathes_to_check:?}");
+    blueprint_core::debug!("Absolute paths to check: {abs_pathes_to_check:?}");
 
     let needs_build = abs_pathes_to_check.iter().any(|path| !path.exists());
     if !needs_build {
-        tracing::debug!("All contracts are already built");
+        blueprint_core::debug!("All contracts are already built");
         return Ok(());
     }
 
-    tracing::debug!("Contracts need to be built");
+    blueprint_core::debug!("Contracts need to be built");
 
     // Find the workspace root
     let workspace_root = find_workspace_root(package);
@@ -515,33 +516,35 @@ fn build_contracts_if_needed(
         .as_std_path()
         .to_path_buf();
 
-    tracing::debug!("Workspace root directory: {workspace_root:?}");
+    blueprint_core::debug!("Workspace root directory: {workspace_root:?}");
 
     // Look for contracts directory in the workspace root
     let mut contracts_dir = workspace_root.join("contracts");
     if !contracts_dir.exists() {
-        tracing::debug!("Contracts directory not found in workspace root: {contracts_dir:?}");
+        blueprint_core::debug!(
+            "Contracts directory not found in workspace root: {contracts_dir:?}"
+        );
 
         // Fall back to package directory if not found in workspace root
         let package_contracts_dir = package_dir.join("contracts");
         if !package_contracts_dir.exists() {
-            tracing::debug!(
+            blueprint_core::debug!(
                 "Contracts directory not found in package directory: {package_contracts_dir:?}"
             );
             return Err(Error::ContractNotFound(contracts_dir).into());
         }
 
-        tracing::debug!("Using contracts directory from package: {package_contracts_dir:?}");
+        blueprint_core::debug!("Using contracts directory from package: {package_contracts_dir:?}");
         contracts_dir = package_contracts_dir;
     }
 
-    tracing::debug!("Contracts directory: {contracts_dir:?}");
+    blueprint_core::debug!("Contracts directory: {contracts_dir:?}");
 
     let foundry = crate::foundry::FoundryToolchain::new();
     foundry.check_installed_or_exit();
 
     // Change to workspace root directory before building
-    tracing::debug!("Changing to workspace root directory: {workspace_root:?}");
+    blueprint_core::debug!("Changing to workspace root directory: {workspace_root:?}");
     std::env::set_current_dir(workspace_root)?;
     foundry.forge.install_dependencies()?;
     foundry.forge.build()?;
@@ -604,7 +607,7 @@ fn find_package<'m>(
                 }
                 1 => {
                     // If there's only one binary package, use it automatically
-                    tracing::info!(
+                    blueprint_core::info!(
                         "Automatically selecting the only binary package: {}",
                         bin_packages[0].name
                     );

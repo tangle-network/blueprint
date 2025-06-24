@@ -1,8 +1,3 @@
-//! Blockchain event definitions for the Tangle Cloud Pricing Engine
-//!
-//! This module defines the events that the pricing engine processes from the blockchain.
-//! For direct access to blockchain events, we should use tangle-subxt's event definitions.
-
 use blueprint_core::error;
 use tangle_subxt::{
     subxt::{Config, events::Events},

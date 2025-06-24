@@ -172,7 +172,7 @@ async fn register_bls_impl(
             operator_address
         );
     } else {
-        error!(
+        blueprint_core::error!(
             "Operator registration failed for operator {}",
             operator_address
         );
@@ -196,7 +196,7 @@ async fn register_bls_impl(
             strategy_address
         );
     } else {
-        error!("AVS deposit failed for strategy {}", strategy_address);
+        blueprint_core::error!("AVS deposit failed for strategy {}", strategy_address);
         return Err(EigenlayerError::Other("AVS deposit failed".into()).into());
     }
 
@@ -217,7 +217,7 @@ async fn register_bls_impl(
             allocation_delay, operator_address
         );
     } else {
-        error!(
+        blueprint_core::error!(
             "Failed to set allocation delay for operator {}",
             operator_address
         );
@@ -257,7 +257,7 @@ async fn register_bls_impl(
     if stake_receipt.status() {
         info!("Successfully staked tokens to quorums {:?}", operator_sets);
     } else {
-        error!("Failed to stake tokens to quorums");
+        blueprint_core::error!("Failed to stake tokens to quorums");
         return Err(EigenlayerError::Other("Quorum staking failed".into()).into());
     }
 
@@ -284,7 +284,7 @@ async fn register_bls_impl(
     if registration_receipt.status() {
         info!("Registered to operator sets for Eigenlayer");
     } else {
-        error!("Registration failed for operator sets");
+        blueprint_core::error!("Registration failed for operator sets");
         return Err(EigenlayerError::Registration("Registration failed".into()).into());
     }
 

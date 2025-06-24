@@ -155,8 +155,8 @@ use blueprint_sdk::tangle::producer::TangleProducer;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Receiver;
 use tower::filter::FilterLayer;
-use tracing::{error, info};
-use tracing::level_filters::LevelFilter;
+use blueprint_core::{error, info};
+use blueprint_core::level_filters::LevelFilter;
 
 // QoS imports
 use blueprint_qos::default_qos_config;

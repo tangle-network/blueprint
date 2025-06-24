@@ -1,4 +1,5 @@
 use crate::generic_task_aggregation::{SignedTaskResponse, TaskResponse};
+use blueprint_core::{debug, error, info};
 use reqwest::{Client, Url};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
@@ -7,7 +8,6 @@ use std::marker::PhantomData;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::time::sleep;
-use tracing::{debug, error, info};
 
 /// Error type for the Aggregator Client
 #[derive(Error, Debug)]

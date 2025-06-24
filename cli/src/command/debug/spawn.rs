@@ -6,6 +6,7 @@ use crate::command::deploy::tangle::deploy_tangle;
 use crate::command::register::register;
 use blueprint_chain_setup::tangle::testnet::SubstrateNode;
 use blueprint_clients::tangle::client::TangleClient;
+use blueprint_core::{error, info};
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
@@ -21,7 +22,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use tokio::task::{JoinError, JoinHandle};
-use tracing::{error, info};
 use url::Url;
 
 async fn setup_tangle_node(

@@ -9,6 +9,7 @@ use blueprint_chain_setup::tangle::transactions::setup_operators_with_service;
 use blueprint_client_tangle::client::TangleClient;
 use blueprint_contexts::tangle::TangleClientContext;
 use blueprint_core::debug;
+use blueprint_core_testing_utils::setup_log;
 use blueprint_crypto_tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::crypto::sp_core::{SpEcdsa, SpSr25519};
@@ -37,7 +38,7 @@ use tangle_subxt::tangle_testnet_runtime::api::services::{
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tracing::{error, info};
+use blueprint_core::{error, info};
 use url::Url;
 use blueprint_auth::db::RocksDb;
 use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
@@ -153,6 +154,7 @@ where
     /// # Ok(()) }
     /// ```
     pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
+        setup_log();
         // Start Local Tangle Node
         let node = blueprint_chain_setup::tangle::run(
             blueprint_chain_setup::tangle::NodeConfig::new(false).with_log_target("evm", "trace"),
@@ -330,7 +332,7 @@ where
                 )
                 .await
                 {
-                    tracing::error!("gRPC server error: {}", e);
+                    blueprint_core::error!("gRPC server error: {}", e);
                 }
             });
 
