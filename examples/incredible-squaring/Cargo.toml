@@ -16,4 +16,3 @@ tokio = { version = "^1", default-features = false }
 color-eyre = "0.6"
 tower = { version = "0.5.2", default-features = false }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing = "0.1"

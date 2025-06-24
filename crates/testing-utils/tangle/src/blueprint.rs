@@ -66,7 +66,6 @@ edition = "2024"
 blueprint-sdk = {{ path = "{}/crates/sdk", features = ["std", "tangle", "macros"] }}
 tokio = {{ version = "1.43.0", features = ["rt-multi-thread", "sync", "macros"] }}
 tracing-subscriber = {{ version = "0.3.19", features = ["env-filter"] }}
-tracing = "0.1.41"
 tower = {{ version = "0.5.2", default-features = false }}
 
 [package.metadata.blueprint]

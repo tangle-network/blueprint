@@ -11,7 +11,6 @@ rust-version.workspace = true
 
 [dependencies]
 blueprint-std = { workspace = true }
-tracing = { workspace = true }
 dirs = { workspace = true }
 reqwest = { workspace = true, features = ["json", "default-tls"] }
 serde_json = { workspace = true }

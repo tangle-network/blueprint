@@ -15,7 +15,6 @@ eigenlayer-contract-deployer = { workspace = true }
 futures = { workspace = true }
 
 eigensdk = { workspace = true, features = ["crypto-bls", "services-blsaggregation"] }
-tracing = { workspace = true }
 color-eyre = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["full"] }
 tokio-util = { workspace = true }

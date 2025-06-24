@@ -11,7 +11,7 @@ use super::error::EigenlayerError;
 use crate::BlueprintConfig;
 use crate::config::BlueprintEnvironment;
 use crate::error::RunnerError;
-use blueprint_core::{error, info};
+use blueprint_core::info;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::backends::bn254::Bn254Backend;
 use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
