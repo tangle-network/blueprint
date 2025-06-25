@@ -328,8 +328,6 @@ async fn run_eigenlayer_incredible_squaring_test(
     )
     .await;
 
-    info!("Responses found, shutting down...");
-
     // Start the shutdown/cleanup process
     aggregator_context_clone.shutdown().await;
 
