@@ -1,6 +1,6 @@
-//! Tangle Cloud Pricing Engine
+//! Tangle Pricing Engine
 //!
-//! A flexible pricing system for the Tangle Cloud service platform.
+//! A flexible pricing system for Tangle Blueprints.
 //! The pricing engine calculates costs for service deployments based on
 //! resource requirements and provider pricing models, supporting
 //! competitive bidding in a decentralized marketplace.
@@ -27,7 +27,7 @@ pub mod pricing_engine {
 pub mod tests;
 
 pub use app::{
-    cleanup, init_logging, init_operator_signer, load_operator_config, spawn_event_processor,
+    cleanup, init_operator_signer, load_operator_config, spawn_event_processor,
     start_blockchain_listener, wait_for_shutdown,
 };
 pub use benchmark::cpu::CpuBenchmarkResult;
@@ -44,12 +44,12 @@ pub use service::blockchain::listener::EventListener;
 pub use service::rpc::server::{PricingEngineService, run_rpc_server};
 pub use signer::{OperatorId, OperatorSigner, SignedQuote};
 
+use blueprint_core::info;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::info;
 
 pub const DEFAULT_CONFIG: &str = include_str!("../config/default_pricing.toml");
 

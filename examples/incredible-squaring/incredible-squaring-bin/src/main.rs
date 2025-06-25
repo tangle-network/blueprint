@@ -14,7 +14,6 @@ use blueprint_sdk::tangle::layers::TangleLayer;
 use blueprint_sdk::tangle::producer::TangleProducer;
 use incredible_squaring_blueprint_lib::{FooBackgroundService, XSQUARE_JOB_ID, square};
 use tower::filter::FilterLayer;
-use tracing::level_filters::LevelFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), blueprint_sdk::Error> {
@@ -74,19 +73,4 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     }
 
     Ok(())
-}
-
-pub fn setup_log() {
-    use tracing_subscriber::util::SubscriberInitExt;
-
-    let _ = tracing_subscriber::fmt::SubscriberBuilder::default()
-        .without_time()
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NONE)
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
-        .finish()
-        .try_init();
 }

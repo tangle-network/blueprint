@@ -2865,7 +2865,6 @@ dependencies = [
  "sp-core",
  "tangle-subxt",
  "thiserror 2.0.12",
- "tracing",
 ]
 
 [[package]]
@@ -3029,7 +3028,6 @@ dependencies = [
  "cargo_toml",
  "thiserror 2.0.12",
  "tokio",
- "tracing",
  "tracing-subscriber 0.3.19",
  "url",
 ]
@@ -3215,7 +3213,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.12",
  "tokio",
- "tracing",
  "url",
 ]
 
@@ -3466,7 +3463,6 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.12",
  "tokio",
- "tracing",
  "tracing-subscriber 0.3.19",
 ]
 
@@ -3794,7 +3790,6 @@ dependencies = [
  "tempfile",
  "tnt-core-bytecode",
  "tokio",
- "tracing",
  "url",
 ]
 
@@ -9317,7 +9312,6 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tokio-util 0.7.15",
- "tracing",
  "uuid 1.17.0",
 ]
 

@@ -139,7 +139,7 @@ impl SubstrateNodeBuilder {
         let stderr_handle = thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines().map_while(Result::ok) {
-                tracing::debug!(target: "tangle-node", "node-stderr: {}", line);
+                blueprint_core::debug!(target: "tangle-node", "node-stderr: {}", line);
                 let _ = init_tx_clone.send(line.clone());
                 let _ = log_tx_clone.send(line);
             }
@@ -153,7 +153,7 @@ impl SubstrateNodeBuilder {
         let stdout_handle = thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line in reader.lines().map_while(Result::ok) {
-                tracing::debug!(target: "tangle-node", "node-stdout: {}", line);
+                blueprint_core::debug!(target: "tangle-node", "node-stdout: {}", line);
                 let _ = log_tx_stdout.send(line);
             }
         });
@@ -280,7 +280,7 @@ impl SubstrateNode {
             let handle = thread::spawn(move || {
                 let reader = BufReader::new(stdout);
                 for line in reader.lines().map_while(Result::ok) {
-                    tracing::debug!(target: "tangle-node","node-stdout: {}", line);
+                    blueprint_core::debug!(target: "tangle-node","node-stdout: {}", line);
                     let _ = log_tx_clone.send(line);
                 }
             });
@@ -293,7 +293,7 @@ impl SubstrateNode {
             let handle = thread::spawn(move || {
                 let reader = BufReader::new(stderr);
                 for line in reader.lines().map_while(Result::ok) {
-                    tracing::debug!(target: "tangle-node","node-stderr: {}", line);
+                    blueprint_core::debug!(target: "tangle-node","node-stderr: {}", line);
                     let _ = log_tx_clone.send(line);
                 }
             });
@@ -336,7 +336,7 @@ impl SubstrateNode {
             let handle = thread::spawn(move || {
                 let reader = BufReader::new(stdout);
                 for line in reader.lines().map_while(Result::ok) {
-                    tracing::debug!(target: "tangle-node", "node-stdout: {}", line);
+                    blueprint_core::debug!(target: "tangle-node", "node-stdout: {}", line);
                     if let Some(tx) = &log_tx {
                         let _ = tx.send(line);
                     }
@@ -350,7 +350,7 @@ impl SubstrateNode {
             let handle = thread::spawn(move || {
                 let reader = BufReader::new(stderr);
                 for line in reader.lines().map_while(Result::ok) {
-                    tracing::debug!(target: "tangle-node", "node-stderr: {}", line);
+                    blueprint_core::debug!(target: "tangle-node", "node-stderr: {}", line);
                     if let Some(tx) = &log_tx {
                         let _ = tx.send(line);
                     }
@@ -405,7 +405,7 @@ fn try_find_substrate_port_from_output(rx: &mpsc::Receiver<String>) -> Substrate
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         };
 
-        tracing::debug!(target: "tangle-node", "{}", line);
+        blueprint_core::debug!(target: "tangle-node", "{}", line);
         log.push_str(&line);
         log.push('\n');
 

@@ -1,6 +1,7 @@
 use crate::generic_task_aggregation::{
     AggregationError, EigenTask, ResponseSender, SignedTaskResponse, TaskAggregator, TaskResponse,
 };
+use blueprint_core::{debug, error, info};
 use jsonrpc_core::{Error as RpcError, IoHandler, Params, Value};
 use jsonrpc_http_server::{AccessControlAllowOrigin, DomainsValidation, ServerBuilder};
 use serde::de::DeserializeOwned;
@@ -8,7 +9,6 @@ use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::oneshot;
-use tracing::{debug, error, info};
 
 /// Generic JSON-RPC server for handling task processing
 pub struct TaskAggregatorServer<T, R, S, E>

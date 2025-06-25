@@ -1,7 +1,3 @@
-//! Core types for the pricing engine
-//!
-//! This module defines the fundamental data types used throughout the pricing engine.
-
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 

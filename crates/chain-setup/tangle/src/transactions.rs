@@ -38,7 +38,7 @@ use tangle_subxt::tangle_testnet_runtime::api::{
         events::{JobCalled, JobResultSubmitted, MasterBlueprintServiceManagerRevised},
     },
 };
-use tracing::debug;
+use blueprint_core::debug;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionError {

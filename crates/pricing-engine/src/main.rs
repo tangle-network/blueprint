@@ -1,12 +1,12 @@
+use blueprint_core::info;
 use clap::Parser;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
-use tracing::info;
 
 // Import functions from the library
 use blueprint_pricing_engine_lib::{
-    cleanup, error::Result, init_benchmark_cache, init_logging, init_operator_signer,
-    init_pricing_config, load_operator_config, service::blockchain::event::BlockchainEvent,
+    cleanup, error::Result, init_benchmark_cache, init_operator_signer, init_pricing_config,
+    load_operator_config, service::blockchain::event::BlockchainEvent,
     service::rpc::server::run_rpc_server, spawn_event_processor, start_blockchain_listener,
     wait_for_shutdown,
 };
@@ -50,9 +50,6 @@ pub struct Cli {
 
 /// Run the pricing engine application
 pub async fn run_app(cli: Cli) -> Result<()> {
-    // Initialize logging
-    init_logging(&cli.log_level);
-
     info!("Starting Tangle Cloud Pricing Engine");
 
     // Create a channel for blockchain events
@@ -87,7 +84,7 @@ pub async fn run_app(cli: Cli) -> Result<()> {
         if let Err(e) =
             run_rpc_server(config, benchmark_cache, pricing_config, operator_signer).await
         {
-            tracing::error!("gRPC server error: {}", e);
+            blueprint_core::error!("gRPC server error: {}", e);
         }
     });
 

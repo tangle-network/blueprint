@@ -1,8 +1,4 @@
-//! Application-level functionality for the pricing engine
-//!
-//! This module contains the high-level application logic that ties together
-//! the various components of the pricing engine.
-
+use blueprint_core::{error, info};
 use blueprint_crypto::{
     sp_core::{SpEcdsa, SpSr25519},
     tangle_pair_signer::TanglePairSigner,
@@ -10,8 +6,6 @@ use blueprint_crypto::{
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
-use tracing::{error, info};
-use tracing_subscriber::EnvFilter;
 
 use crate::{
     OperatorSigner,
@@ -26,13 +20,6 @@ use tangle_subxt::subxt::tx::Signer;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 
 use blueprint_keystore::backends::Backend;
-
-/// Initialize the logging system with the specified log level
-pub fn init_logging(log_level: &str) {
-    let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
-    tracing_subscriber::fmt().with_env_filter(env_filter).init();
-}
 
 /// Start the blockchain event listener if the feature is enabled
 pub async fn start_blockchain_listener(

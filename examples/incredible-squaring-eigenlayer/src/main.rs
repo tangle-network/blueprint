@@ -80,7 +80,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
         .producer(task_producer)
         .background_service(aggregator_context)
         .with_shutdown_handler(async {
-            tracing::info!("Shutting down task manager service");
+            blueprint_sdk::info!("Shutting down task manager service");
         })
         .run()
         .await?;

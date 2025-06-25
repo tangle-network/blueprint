@@ -65,7 +65,6 @@ edition = "2024"
 blueprint-sdk = {{ path = "{}/crates/sdk", features = ["std", "tangle", "macros"] }}
 tokio = {{ version = "1.43.0", features = ["rt-multi-thread", "sync", "macros"] }}
 tracing-subscriber = {{ version = "0.3.19", features = ["env-filter"] }}
-tracing = "0.1.41"
 tower = {{ version = "0.5.2", default-features = false }}
 
 [package.metadata.blueprint]
@@ -159,8 +158,8 @@ use blueprint_sdk::tangle::producer::TangleProducer;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Receiver;
 use tower::filter::FilterLayer;
-use tracing::{error, info};
-use tracing::level_filters::LevelFilter;
+use blueprint_core::{error, info};
+use blueprint_core::level_filters::LevelFilter;
 
 // QoS imports
 use blueprint_qos::default_qos_config;

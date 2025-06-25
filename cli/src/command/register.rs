@@ -1,5 +1,5 @@
 use blueprint_clients::tangle::client::OnlineClient;
-use blueprint_core::info;
+use blueprint_core::{debug, info};
 use blueprint_crypto::sp_core::SpSr25519;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
@@ -13,7 +13,6 @@ use tangle_subxt::subxt::error::DispatchError;
 use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::tangle_testnet_runtime::api;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::pallet_multi_asset_delegation as mad;
-use tracing::debug;
 
 /// Registers a blueprint.
 ///
