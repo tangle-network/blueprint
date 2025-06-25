@@ -3222,10 +3222,13 @@ version = "0.1.0-alpha.14"
 dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-provider",
+ "axum 0.8.4",
+ "blueprint-auth",
  "blueprint-chain-setup",
  "blueprint-core",
  "blueprint-core-testing-utils",
  "blueprint-evm-extra",
+ "blueprint-manager-bridge",
  "blueprint-runner",
  "eigensdk",
  "futures",

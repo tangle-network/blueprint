@@ -16,10 +16,13 @@ workspace = true
 blueprint-runner = { workspace = true, features = ["eigenlayer"] }
 blueprint-evm-extra.workspace = true
 blueprint-core = { workspace = true }
-
-futures = { workspace = true }
+blueprint-auth = { workspace = true }
+blueprint-manager-bridge = { workspace = true, features = ["server"] }
 blueprint-core-testing-utils = { workspace = true }
 blueprint-chain-setup = { workspace = true, features = ["std", "anvil"] }
+
+axum = { workspace = true }
+futures = { workspace = true }
 tempfile = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-provider = { workspace = true }
