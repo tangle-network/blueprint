@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-manager-bridge"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 description = "Bridge for Blueprint manager to service communication"
 authors.workspace = true
 edition.workspace = true

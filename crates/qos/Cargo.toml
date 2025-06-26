@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-qos"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 description = "Quality of Service (QoS) module for Blueprint SDK"
 authors.workspace = true
 edition.workspace = true
@@ -19,7 +19,6 @@ blueprint-core = { workspace = true, default-features = false, features = ["trac
 blueprint-crypto = { workspace = true, features = ["hashing", "sp-core", "tangle-pair-signer"] }
 blueprint-keystore = { workspace = true }
 blueprint-std = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 tangle-subxt = { workspace = true, features = ["std"] }
 parity-scale-codec = { workspace = true, features = ["derive"] }
 sp-core = { workspace = true, features = ["std"] }
