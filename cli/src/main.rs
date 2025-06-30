@@ -463,6 +463,8 @@ pub enum DebugCommands {
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     init_tracing_subscriber();
+    // Install the default crypto provider for rustls
+    cargo_tangle::install_crypto_provider();
     let args: Vec<String> = if std::env::args().nth(1).is_some_and(|x| x.eq("tangle")) {
         // since this runs as a cargo subcommand, we need to skip the first argument
         // to get the actual arguments for the subcommand

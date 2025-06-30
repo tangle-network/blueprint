@@ -225,6 +225,7 @@ axum = { version = "0.8", default-features = false }
 openssl-sys = { version = "0.9.109", default-features = false }
 rtnetlink = { version = "0.16.0", default-features = false }
 ipnet = { version = "2.11.0", default-features = false }
+rustls = { version = "0.23", default-features = false }
 
 # System & OS
 parking_lot = { version = "0.12.4", default-features = false }
