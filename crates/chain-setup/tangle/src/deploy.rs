@@ -473,7 +473,7 @@ async fn deploy_contracts_to_tangle(
     };
 
     let wallet = alloy_provider::network::EthereumWallet::from(signer);
-    assert!(rpc_url.starts_with("ws:"));
+    assert!(rpc_url.starts_with("ws"));
 
     let provider = alloy_provider::ProviderBuilder::new()
         .network::<AnyNetwork>()
