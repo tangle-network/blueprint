@@ -50,6 +50,7 @@ thiserror = { workspace = true }
 bip39 = { workspace = true, features = ["rand_core", "rand"] }
 dotenv = { workspace = true }
 url = { workspace = true }
+rustls = { workspace = true }
 toml = { workspace = true }
 indicatif = { workspace = true }
 tnt-core-bytecode = { workspace = true }
