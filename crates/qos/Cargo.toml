@@ -13,12 +13,13 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-bollard = { workspace = true, features = ["ssl"] }
-tempfile = { workspace = true }
 blueprint-core = { workspace = true, default-features = false, features = ["tracing"] }
 blueprint-crypto = { workspace = true, features = ["hashing", "sp-core", "tangle-pair-signer"] }
 blueprint-keystore = { workspace = true }
 blueprint-std = { workspace = true }
+
+bollard = { workspace = true, features = ["ssl"] }
+tempfile = { workspace = true }
 tangle-subxt = { workspace = true, features = ["std"] }
 parity-scale-codec = { workspace = true, features = ["derive"] }
 sp-core = { workspace = true, features = ["std"] }
@@ -29,15 +30,12 @@ tonic = { workspace = true, features = ["transport", "codegen", "prost", "router
 prost = { workspace = true, features = ["prost-derive"] }
 sysinfo = { workspace = true, features = ["system", "disk", "network"] }
 rand = { workspace = true }
-chrono = { workspace = true }
 prometheus = { workspace = true, features = ["process"] }
 opentelemetry = { workspace = true, features = ["metrics"] }
 opentelemetry-prometheus = { workspace = true }
 opentelemetry-semantic-conventions = { workspace = true, features = ["semconv_experimental"] }
 opentelemetry_sdk = { workspace = true, features = ["metrics", "rt-tokio", "trace"] }
-opentelemetry_api = { workspace = true, features = ["metrics"] }
 axum = { workspace = true, features = ["tokio", "http1", "http2", "json"] }
-hyper = { workspace = true, features = ["http1", "server"] }
 futures = { workspace = true, features = ["executor"] }
 tracing-loki = { workspace = true, features = ["compat-0-2-1"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
@@ -46,24 +44,10 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 uuid = { workspace = true, features = ["v4"] }
-base64.workspace = true
-
-
 
 [dev-dependencies]
-env_logger = { workspace = true }
-anyhow = { workspace = true }
-urlencoding = { workspace = true }
-tempfile = { workspace = true }
-blueprint-testing-utils = { workspace = true, features = ["tangle"] }
-blueprint-chain-setup = { workspace = true }
-blueprint-contexts = { workspace = true }
-blueprint-sdk = { workspace = true }
-blueprint-tangle-extra = { workspace = true }
-blueprint-router = { workspace = true }
-serial_test = { workspace = true, features = ["async"] }
-reqwest = { workspace = true, features = ["json"] }
-tokio = { workspace = true, features = ["rt", "macros", "time"] }
+blueprint-testing-utils = { path = "../testing-utils", features = ["tangle"] }
+blueprint-tangle-extra = { path = "../tangle-extra" }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
