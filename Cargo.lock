@@ -4322,7 +4322,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-tangle"
-version = "0.4.0-alpha.18"
+version = "0.4.0-alpha.19"
 dependencies = [
  "alloy-contract",
  "alloy-dyn-abi",
