@@ -95,7 +95,7 @@ pub async fn register(
                     if module.as_root_error::<api::Error>().is_ok_and(|e| {
                         matches!(
                             e,
-                            api::Error::MultiAssetDelegation(mad::pallet::Error::AlreadyDelegator)
+                            api::Error::MultiAssetDelegation(mad::pallet::Error::AlreadyOperator)
                         )
                     }) =>
                 {
