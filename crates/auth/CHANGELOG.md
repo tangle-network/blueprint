@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5](https://github.com/tangle-network/blueprint/compare/blueprint-auth-v0.1.0-alpha.4...blueprint-auth-v0.1.0-alpha.5) - 2025-07-03
+
+### Added
+
+- *(blueprint-auth)* enhance request tracing, CORS and security headers (#1060)
+
 ## [0.1.0-alpha.4](https://github.com/tangle-network/blueprint/compare/blueprint-auth-v0.1.0-alpha.3...blueprint-auth-v0.1.0-alpha.4) - 2025-06-18
 
 ### Other

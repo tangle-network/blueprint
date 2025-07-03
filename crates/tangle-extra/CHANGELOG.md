@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-extra-v0.1.0-alpha.8...blueprint-tangle-extra-v0.1.0-alpha.9) - 2025-07-03
+
+### Added
+
+- quality of service (#968)
+
+### Fixed
+
+- remove git dependencies (#1056)
+
 ## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-extra-v0.1.0-alpha.7...blueprint-tangle-extra-v0.1.0-alpha.8) - 2025-06-16
 
 ### Added

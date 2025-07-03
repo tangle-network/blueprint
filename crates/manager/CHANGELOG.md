@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.16](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.15...blueprint-manager-v0.3.0-alpha.16) - 2025-07-03
+
+### Added
+
+- *(manager)* feature-gate vm sandbox (#1053)
+- automate nftables NAT setup for VMs (#1021)
+- quality of service (#968)
+
 ## [0.3.0-alpha.15](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.14...blueprint-manager-v0.3.0-alpha.15) - 2025-06-18
 
 ### Added
