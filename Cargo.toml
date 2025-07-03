@@ -83,8 +83,8 @@ blueprint-crypto-hashing = { version = "0.1.0-alpha.4", path = "./crates/crypto/
 blueprint-crypto-bls = { version = "0.1.0-alpha.7", path = "./crates/crypto/bls", default-features = false }
 blueprint-crypto-bn254 = { version = "0.1.0-alpha.7", path = "./crates/crypto/bn254", default-features = false }
 blueprint-crypto-sp-core = { version = "0.1.0-alpha.7", path = "./crates/crypto/sp-core", default-features = false }
-blueprint-crypto = { version = "0.1.0-alpha.10", path = "./crates/crypto", default-features = false }
-blueprint-crypto-tangle-pair-signer = { version = "0.1.0-alpha.10", path = "./crates/crypto/tangle-pair-signer", default-features = false }
+blueprint-crypto = { version = "0.1.0-alpha.11", path = "./crates/crypto", default-features = false }
+blueprint-crypto-tangle-pair-signer = { version = "0.1.0-alpha.11", path = "./crates/crypto/tangle-pair-signer", default-features = false }
 
 # Clients
 blueprint-clients = { version = "0.1.0-alpha.15", path = "./crates/clients", default-features = false }
@@ -110,11 +110,11 @@ blueprint-store-local-database = { version = "0.1.0-alpha.4", path = "./crates/s
 rocksdb = { version = "0.21.0", default-features = false }
 
 # SDK
-blueprint-keystore = { version = "0.1.0-alpha.11", path = "./crates/keystore", default-features = false }
+blueprint-keystore = { version = "0.1.0-alpha.12", path = "./crates/keystore", default-features = false }
 blueprint-std = { version = "0.1.0-alpha.3", path = "./crates/std", default-features = false }
 
 # P2P
-blueprint-networking = { version = "0.1.0-alpha.11", path = "./crates/networking", default-features = false }
+blueprint-networking = { version = "0.1.0-alpha.12", path = "./crates/networking", default-features = false }
 blueprint-networking-round-based-extension = { version = "0.1.0-alpha.11", path = "./crates/networking/extensions/round-based", default-features = false }
 blueprint-networking-agg-sig-gossip-extension = { version = "0.1.0-alpha.10", path = "./crates/networking/extensions/agg-sig-gossip", default-features = false }
 
