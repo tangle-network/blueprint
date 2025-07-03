@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-extra-v0.1.0-alpha.8...blueprint-eigenlayer-extra-v0.1.0-alpha.9) - 2025-07-03
+
+### Fixed
+
+- use blueprint-core logging macros (#1062)
+
 ## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-extra-v0.1.0-alpha.7...blueprint-eigenlayer-extra-v0.1.0-alpha.8) - 2025-06-18
 
 ### Other

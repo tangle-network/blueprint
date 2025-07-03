@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.18](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.17...cargo-tangle-v0.4.0-alpha.18) - 2025-07-03
+
+### Added
+
+- add rustls as default crypto provider (#1070)
+- *(manager)* feature-gate vm sandbox (#1053)
+- automate nftables NAT setup for VMs (#1021)
+- quality of service (#968)
+
+### Fixed
+
+- use blueprint-core logging macros (#1062)
+- remove git dependencies (#1056)
+- gracefully handle AlreadyOperator error in blueprint registration (#1055)
+
 ## [0.4.0-alpha.17](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.16...cargo-tangle-v0.4.0-alpha.17) - 2025-06-18
 
 ### Added
