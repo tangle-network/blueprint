@@ -2504,7 +2504,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-auth"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -2521,6 +2521,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tiny-keccak",
  "tower 0.5.2",
+ "tower-http",
  "tracing",
 ]
 
@@ -2533,7 +2534,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "blueprint-chain-setup-anvil",
  "blueprint-chain-setup-common",
@@ -2542,7 +2543,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup-anvil"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "alloy-contract",
  "alloy-provider",
@@ -2563,7 +2564,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup-common"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "alloy-signer-local",
  "blueprint-clients",
@@ -2582,7 +2583,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup-tangle"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "alloy-json-abi",
  "alloy-network",
@@ -2613,7 +2614,6 @@ dependencies = [
  "sp-core",
  "tangle-subxt",
  "thiserror 2.0.12",
- "tracing",
 ]
 
 [[package]]
@@ -2627,7 +2627,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-client-eigenlayer"
-version = "0.1.0-alpha.13"
+version = "0.1.0-alpha.14"
 dependencies = [
  "alloy-contract",
  "alloy-network",
@@ -2675,7 +2675,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-client-tangle"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "auto_impl",
  "blueprint-client-core",
@@ -2694,7 +2694,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-clients"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "blueprint-client-core",
  "blueprint-client-eigenlayer",
@@ -2706,7 +2706,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-context-derive"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2715,7 +2715,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-contexts"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "blueprint-clients",
  "blueprint-keystore",
@@ -2740,7 +2740,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-core-testing-utils"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "blueprint-auth",
  "blueprint-clients",
@@ -2753,14 +2753,13 @@ dependencies = [
  "cargo_toml",
  "thiserror 2.0.12",
  "tokio",
- "tracing",
  "tracing-subscriber 0.3.19",
  "url",
 ]
 
 [[package]]
 name = "blueprint-crypto"
-version = "0.1.0-alpha.9"
+version = "0.1.0-alpha.11"
 dependencies = [
  "blueprint-crypto-bls",
  "blueprint-crypto-bn254",
@@ -2890,7 +2889,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-crypto-tangle-pair-signer"
-version = "0.1.0-alpha.9"
+version = "0.1.0-alpha.11"
 dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer-local",
@@ -2907,7 +2906,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-eigenlayer-extra"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "alloy-contract",
  "alloy-network",
@@ -2928,13 +2927,12 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.12",
  "tokio",
- "tracing",
  "url",
 ]
 
 [[package]]
 name = "blueprint-evm-extra"
-version = "0.1.0-alpha.5"
+version = "0.1.0-alpha.6"
 dependencies = [
  "alloy-consensus",
  "alloy-network",
@@ -2964,7 +2962,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-keystore"
-version = "0.1.0-alpha.10"
+version = "0.1.0-alpha.12"
 dependencies = [
  "alloy-network",
  "alloy-primitives 0.8.25",
@@ -3005,7 +3003,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-macros"
-version = "0.1.0-alpha.5"
+version = "0.1.0-alpha.6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3014,7 +3012,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager-bridge"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "blueprint-auth",
  "blueprint-core",
@@ -3037,7 +3035,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-networking"
-version = "0.1.0-alpha.10"
+version = "0.1.0-alpha.12"
 dependencies = [
  "alloy-primitives 0.8.25",
  "bincode",
@@ -3061,7 +3059,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-pricing-engine"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3109,7 +3107,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-producers-extra"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "blueprint-core",
  "document-features",
@@ -3118,22 +3116,18 @@ dependencies = [
 
 [[package]]
 name = "blueprint-qos"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "axum",
- "base64 0.22.1",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-keystore",
  "blueprint-std",
  "bollard",
- "chrono",
  "futures",
- "hyper 1.6.0",
  "opentelemetry",
  "opentelemetry-prometheus",
  "opentelemetry-semantic-conventions",
- "opentelemetry_api",
  "opentelemetry_sdk",
  "parity-scale-codec",
  "prometheus",
@@ -3154,12 +3148,11 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber 0.3.19",
  "uuid 1.17.0",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-router"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "blueprint-core",
  "bytes",
@@ -3172,7 +3165,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-runner"
-version = "0.1.0-alpha.13"
+version = "0.1.0-alpha.14"
 dependencies = [
  "alloy-contract",
  "alloy-primitives 0.8.25",
@@ -3210,7 +3203,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-sdk"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "blueprint-auth",
  "blueprint-build-utils",
@@ -3254,7 +3247,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-tangle-extra"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "blueprint-core",
  "bytes",
@@ -3273,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-tangle-testing-utils"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer-local",
@@ -3300,13 +3293,12 @@ dependencies = [
  "tempfile",
  "tnt-core-bytecode",
  "tokio",
- "tracing",
  "url",
 ]
 
 [[package]]
 name = "blueprint-testing-utils"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "blueprint-core-testing-utils",
  "blueprint-tangle-testing-utils",
@@ -7807,8 +7799,6 @@ dependencies = [
  "incredible-squaring-blueprint-lib",
  "tokio",
  "tower 0.5.2",
- "tracing",
- "tracing-subscriber 0.3.19",
 ]
 
 [[package]]
@@ -9866,21 +9856,6 @@ name = "opentelemetry-semantic-conventions"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "84b29a9f89f1a954936d5aa92f19b2feec3c8f3971d3e96206640db7f9706ae3"
-
-[[package]]
-name = "opentelemetry_api"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a81f725323db1b1206ca3da8bb19874bbd3f57c3bcd59471bfb04525b265b9b"
-dependencies = [
- "futures-channel",
- "futures-util",
- "indexmap 1.9.3",
- "js-sys",
- "once_cell",
- "thiserror 1.0.69",
- "urlencoding",
-]
 
 [[package]]
 name = "opentelemetry_sdk"
@@ -16963,8 +16938,9 @@ checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 
 [[package]]
 name = "tangle-subxt"
-version = "0.18.0"
-source = "git+https://github.com/tangle-network/tangle.git?branch=metadata#3d019320f41534d1c198a789f5ce5d593c63b4bb"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "521ddb4c76d5b0bd8a92152839ae0ce8f4afd9dbb10239e91b7313fb164c7468"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -17522,6 +17498,8 @@ dependencies = [
  "tower 0.5.2",
  "tower-layer",
  "tower-service",
+ "tracing",
+ "uuid 1.17.0",
 ]
 
 [[package]]
@@ -17609,7 +17587,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba3beec919fbdf99d719de8eda6adae3281f8a5b71ae40431f44dc7423053d34"
 dependencies = [
  "loki-api",
- "reqwest 0.11.27",
+ "reqwest 0.12.20",
  "serde",
  "serde_json",
  "snap",
@@ -17901,12 +17879,6 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
-
-[[package]]
-name = "urlencoding"
-version = "2.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "utf-8"
@@ -19008,10 +18980,6 @@ checksum = "6f42320e61fe2cfd34354ecb597f86f413484a798ba44a8ca1165c58d42da6c1"
 dependencies = [
  "bitflags 2.9.0",
 ]
-
-[[package]]
-name = "workspace-hack"
-version = "0.1.0"
 
 [[package]]
 name = "write16"
