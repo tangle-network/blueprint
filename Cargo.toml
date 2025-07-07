@@ -214,7 +214,7 @@ libp2p = { version = "0.55.0", default-features = false }
 reqwest = { version = "0.12.22", default-features = false }
 http = { version = "1.0.0", default-features = false }
 url = { version = "2.5.2", default-features = false }
-serde_with = { version = "3.13.0", default-features = false }
+serde_with = { version = "3.14.0", default-features = false }
 hyper = { version = "1.6.0", default-features = false }
 hyperlocal = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.14", default-features = false }
