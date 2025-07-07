@@ -465,7 +465,7 @@ dependencies = [
  "lru 0.13.0",
  "parking_lot 0.12.4",
  "pin-project 1.1.10",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
@@ -532,7 +532,7 @@ dependencies = [
  "async-stream",
  "futures",
  "pin-project 1.1.10",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "tokio",
@@ -891,7 +891,7 @@ checksum = "a082c9473c6642cce8b02405a979496126a03b096997888e86229afad05db06c"
 dependencies = [
  "alloy-json-rpc",
  "alloy-transport",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
  "serde_json",
  "tower 0.5.2",
  "tracing",
@@ -2752,7 +2752,7 @@ dependencies = [
  "hyper-util",
  "k256",
  "prost",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
  "rocksdb",
  "schnorrkel",
  "serde",
@@ -2860,7 +2860,7 @@ dependencies = [
  "dialoguer",
  "dirs 6.0.0",
  "indicatif",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
  "serde_json",
  "sp-core",
  "tangle-subxt",
@@ -3208,7 +3208,7 @@ dependencies = [
  "jsonrpc-core",
  "jsonrpc-http-server",
  "num-bigint 0.4.6",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
@@ -3365,7 +3365,7 @@ dependencies = [
  "netdev",
  "nftables",
  "nix 0.30.1",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
  "rtnetlink 0.16.0",
  "sha2 0.10.9",
  "sp-core",
@@ -3580,7 +3580,7 @@ dependencies = [
  "prometheus",
  "prost",
  "rand 0.8.5",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "sp-core",
@@ -6040,7 +6040,7 @@ dependencies = [
  "ipnet",
  "log",
  "regex",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -6520,7 +6520,7 @@ checksum = "0813ece83d4e9c95eddad48bf6cbfe2e1c083ffbd9eac87a40d818225be31db0"
 dependencies = [
  "alloy",
  "regex",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
 ]
 
 [[package]]
@@ -7920,7 +7920,7 @@ dependencies = [
  "once_cell",
  "prost",
  "prost-types",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
  "secret-vault-value",
  "serde",
  "serde_json",
@@ -9292,7 +9292,7 @@ dependencies = [
  "libp2p",
  "num-bigint 0.4.6",
  "parking_lot 0.12.4",
- "reqwest 0.12.20",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "sp-core",
@@ -16038,9 +16038,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.20"
+version = "0.12.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eabf4c97d9130e2bf606614eb937e86edac8292eaa6f422f995d7e8de1eb1813"
+checksum = "cbc931937e6ca3a06e3b6c0aa7841849b160a90351d6ab467a8b9b9959767531"
 dependencies = [
  "async-compression",
  "base64 0.22.1",
@@ -20388,7 +20388,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba3beec919fbdf99d719de8eda6adae3281f8a5b71ae40431f44dc7423053d34"
 dependencies = [
  "loki-api",
- "reqwest 0.12.20",
+ "reqwest 0.11.27",
  "serde",
  "serde_json",
  "snap",
