@@ -68,7 +68,7 @@ fn create_bridge(
 }
 
 impl Service {
-    /// Create a new `Service` instance
+    /// Create a new `Service` instance, sandboxed via `cloud-hypervisor`
     ///
     /// This will:
     /// * Spawn a [`Bridge`]
@@ -131,6 +131,9 @@ impl Service {
     }
 
     /// Create a new `Service` instance
+    /// Create a new `Service` instance **with no sandbox**
+    ///
+    /// NOTE: This should only be used for local testing.
     ///
     /// This will:
     /// * Spawn a [`Bridge`]
