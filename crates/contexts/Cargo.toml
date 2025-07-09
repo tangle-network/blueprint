@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-contexts"
-version = "0.1.0-alpha.15"
+version = "0.1.0-alpha.16"
 description = "Context providers for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
