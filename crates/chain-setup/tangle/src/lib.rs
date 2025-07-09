@@ -16,8 +16,8 @@ pub use testnet::NodeConfig;
 pub type InputValue = tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::Field<AccountId32>;
 pub type OutputValue = tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::Field<AccountId32>;
 
-const TANGLE_RELEASE_MAC: &str = "https://github.com/tangle-network/tangle/releases/download/v1.3.8/tangle-testnet-manual-seal-testnet-darwin-amd64";
-const TANGLE_RELEASE_LINUX: &str = "https://github.com/tangle-network/tangle/releases/download/v1.3.8/tangle-testnet-manual-seal-testnet-linux-amd64";
+const TANGLE_RELEASE_MAC: &str = "https://github.com/tangle-network/tangle/releases/download/v1.3.9/tangle-testnet-manual-seal-testnet-darwin-amd64";
+const TANGLE_RELEASE_LINUX: &str = "https://github.com/tangle-network/tangle/releases/download/v1.3.9/tangle-testnet-manual-seal-testnet-linux-amd64";
 
 /// Downloads the appropriate Tangle binary for the current platform and returns the path
 ///
