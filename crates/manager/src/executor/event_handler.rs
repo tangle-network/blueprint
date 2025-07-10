@@ -175,7 +175,11 @@ async fn new_service(
                 ..Default::default()
             },
             network_manager,
-            manager_config.vm_sandbox_options.network_interface.clone().unwrap(),
+            manager_config
+                .vm_sandbox_options
+                .network_interface
+                .clone()
+                .unwrap(),
             db,
             &blueprint_config.data_dir,
             &blueprint_config.keystore_uri,

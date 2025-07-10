@@ -158,6 +158,17 @@ impl Default for VmSandboxOptions {
     }
 }
 
+#[cfg(feature = "vm-sandbox")]
+#[derive(Args, Debug, Clone)]
+pub struct TeeOptions {}
+
+#[cfg(feature = "vm-sandbox")]
+impl Default for TeeOptions {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
 /// The options for the auth proxy
 #[derive(Debug, Parser, Clone)]
 pub struct AuthProxyOpts {
@@ -243,6 +254,20 @@ impl BlueprintManagerConfig {
 
         self.vm_sandbox_options.network_interface = Some(interface);
         Ok(())
+    }
+
+    #[cfg(feature = "tee")]
+    pub async fn kube_client(&self) -> Result<kube::Client> {
+        static ONCE: tokio::sync::OnceCell<kube::Client> = tokio::sync::OnceCell::const_new();
+
+        match ONCE.get() {
+            None => {
+                let client = kube::Client::try_default().await?;
+                let _ = ONCE.set(client.clone());
+                Ok(client)
+            }
+            Some(client) => Ok(client.clone()),
+        }
     }
 }
 

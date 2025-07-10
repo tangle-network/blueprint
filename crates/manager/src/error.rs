@@ -39,6 +39,10 @@ pub enum Error {
     #[error("nftables error: {0}")]
     Nftables(#[from] nftables::helper::NftablesError),
 
+    #[cfg(feature = "tee")]
+    #[error("Kubernetes: {0}")]
+    Kube(#[from] kube::Error),
+
     #[error("Failed to get initial block hash")]
     InitialBlock,
     #[error("Finality Notification stream died")]

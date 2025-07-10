@@ -2,6 +2,9 @@
 use super::hypervisor::{HypervisorInstance, ServiceVmConfig, net::NetworkManager};
 use super::native::ProcessHandle;
 use crate::error::{Error, Result};
+use crate::rt::ResourceLimits;
+#[cfg(feature = "tee")]
+use crate::rt::tee::TeeInstance;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_auth::db::RocksDb;
 use blueprint_core::error;
@@ -35,6 +38,8 @@ enum NativeProcess {
 enum Runtime {
     #[cfg(feature = "vm-sandbox")]
     Hypervisor(HypervisorInstance),
+    #[cfg(feature = "tee")]
+    Tee(TeeInstance),
     Native(NativeProcess),
 }
 
@@ -131,9 +136,6 @@ impl Service {
     }
 
     /// Create a new `Service` instance
-    /// Create a new `Service` instance **with no sandbox**
-    ///
-    /// NOTE: This should only be used for local testing.
     ///
     /// This will:
     /// * Spawn a [`Bridge`]
@@ -145,6 +147,49 @@ impl Service {
     /// * [`Bridge::spawn()`]
     /// * [`HypervisorInstance::new()`]
     /// * [`HypervisorInstance::prepare()`]
+    #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "tee")]
+    pub fn new_tee(
+        kube_client: kube::Client,
+        limits: ResourceLimits,
+        db: RocksDb,
+        runtime_dir: impl AsRef<Path>,
+        service_name: &str,
+        image: String,
+        mut env_vars: BlueprintEnvVars,
+        arguments: BlueprintArgs,
+    ) -> Result<Service> {
+        let (bridge_base_socket, bridge_handle, alive_rx) =
+            create_bridge(runtime_dir.as_ref(), service_name, db, false)?;
+
+        env_vars.bridge_socket_path = Some(bridge_base_socket);
+
+        let tee = TeeInstance::new(
+            kube_client,
+            limits,
+            service_name,
+            image,
+            env_vars,
+            arguments,
+        );
+
+        Ok(Self {
+            runtime: Runtime::Tee(tee),
+            bridge: bridge_handle,
+            alive_rx: Some(alive_rx),
+        })
+    }
+
+    /// Create a new `Service` instance **with no sandbox**
+    ///
+    /// NOTE: This should only be used for local testing.
+    ///
+    /// This will spawn a [`Bridge`] in preparation for the service to be started.
+    ///
+    /// # Errors
+    ///
+    /// See:
+    /// * [`Bridge::spawn()`]
     #[allow(clippy::too_many_arguments)]
     pub fn new_native(
         db: RocksDb,
@@ -183,6 +228,8 @@ impl Service {
         match &mut self.runtime {
             #[cfg(feature = "vm-sandbox")]
             Runtime::Hypervisor(hypervisor) => hypervisor.status().await,
+            #[cfg(feature = "tee")]
+            Runtime::Tee(tee) => tee.status().await,
             Runtime::Native(NativeProcess::Started(instance)) => Ok(instance.status()),
             Runtime::Native(NativeProcess::NotStarted(_)) => Ok(Status::NotStarted),
         }
@@ -209,6 +256,13 @@ impl Service {
             Runtime::Hypervisor(hypervisor) => {
                 hypervisor.start().await.map_err(|e| {
                     error!("Failed to start hypervisor: {e}");
+                    e
+                })?;
+            }
+            #[cfg(feature = "tee")]
+            Runtime::Tee(tee) => {
+                tee.start().await.map_err(|e| {
+                    error!("Failed to start TEE container: {e}");
                     e
                 })?;
             }

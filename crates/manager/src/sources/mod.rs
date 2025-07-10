@@ -92,7 +92,9 @@ impl BlueprintEnvVars {
         blueprint: &FilteredBlueprint,
         sub_service_str: &str,
     ) -> BlueprintEnvVars {
-        let data_dir = manager_config.data_dir().join(format!("blueprint-{blueprint_id}-{sub_service_str}"));
+        let data_dir = manager_config
+            .data_dir()
+            .join(format!("blueprint-{blueprint_id}-{sub_service_str}"));
 
         let bootnodes = env
             .bootnodes
