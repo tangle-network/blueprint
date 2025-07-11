@@ -143,7 +143,7 @@ pub async fn execute(
     package: Option<String>,
     #[allow(unused_variables)] id: u32,
     service_name: String,
-    binary: PathBuf,
+    binary: Option<PathBuf>,
     image: Option<String>,
     protocol: Protocol,
     method: ServiceSpawnMethod,
@@ -210,7 +210,7 @@ pub async fn execute(
     let (mut service, pty_io) = match method {
         ServiceSpawnMethod::Native => {
             let service =
-                native::setup_native(manager_config, &service_name, binary, db, env, args)?;
+                native::setup_native(manager_config, &service_name, binary.unwrap(), db, env, args)?;
             (service, None)
         }
         #[cfg(feature = "vm-debug")]
@@ -219,7 +219,7 @@ pub async fn execute(
                 &mut manager_config,
                 &service_name,
                 id,
-                binary,
+                binary.unwrap(),
                 db,
                 env,
                 args,

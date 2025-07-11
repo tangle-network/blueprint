@@ -444,8 +444,8 @@ pub enum DebugCommands {
         id: u32,
         #[arg(default_value = "service")]
         service_name: String,
-        #[arg(long, required = true)]
-        binary: PathBuf,
+        #[arg(long, required_if_eq_any([("method", "native"), ("method", "vm")]))]
+        binary: Option<PathBuf>,
         #[arg(long, conflicts_with = "binary", required_if_eq("method", "tee"))]
         image: Option<String>,
         #[arg(long, default_value_t = Protocol::Tangle)]
