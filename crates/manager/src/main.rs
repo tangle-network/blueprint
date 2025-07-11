@@ -13,11 +13,11 @@ async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let BlueprintManagerCli { mut config } = BlueprintManagerCli::parse();
 
-    config.data_dir = std::path::absolute(&config.data_dir)?;
+    config.paths.data_dir = std::path::absolute(config.data_dir())?;
 
     entry::setup_blueprint_manager_logger(config.verbose, config.pretty, "blueprint")?;
 
-    let blueprint_config = match config.blueprint_config.as_deref() {
+    let blueprint_config = match config.blueprint_config_path() {
         Some(config_path) => {
             let blueprint_config_settings = std::fs::read_to_string(config_path)?;
             match toml::from_str(&blueprint_config_settings) {

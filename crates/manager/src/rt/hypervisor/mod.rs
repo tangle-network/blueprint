@@ -5,6 +5,7 @@ use net::NetworkManager;
 
 use super::service::Status;
 use crate::error::{Error, Result};
+use crate::rt::ResourceLimits;
 use crate::rt::hypervisor::images::CloudImage;
 use crate::rt::hypervisor::net::Lease;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
@@ -34,10 +35,7 @@ const VM_DATA_DIR: &str = "/mnt/data";
 pub struct ServiceVmConfig {
     pub id: u32,
     pub pty: bool,
-    /// Allocated storage space in bytes
-    pub storage_space: u64,
-    /// Allocated memory space in bytes
-    pub memory_size: u64,
+    pub limits: ResourceLimits,
 }
 
 impl Default for ServiceVmConfig {
@@ -45,10 +43,7 @@ impl Default for ServiceVmConfig {
         Self {
             id: 0,
             pty: false,
-            // 20GB
-            storage_space: 1024 * 1024 * 1024 * 20,
-            // 4GB
-            memory_size: 4_294_967_296,
+            limits: ResourceLimits::default(),
         }
     }
 }
@@ -261,7 +256,7 @@ impl HypervisorInstance {
         let out = Command::new("qemu-img")
             .args(["create", "-f", "qcow2"])
             .arg(&image_path)
-            .arg(self.config.storage_space.to_string())
+            .arg(self.config.limits.storage_space.to_string())
             .output()
             .await?;
 
@@ -344,7 +339,7 @@ impl HypervisorInstance {
         #[allow(clippy::cast_possible_wrap)]
         let vm_conf = VmConfig {
             memory: Some(MemoryConfig {
-                size: self.config.memory_size as i64,
+                size: self.config.limits.memory_size as i64,
                 shared: Some(true),
                 ..Default::default()
             }),

@@ -41,7 +41,7 @@ impl VerifiedBlueprint {
         active_blueprints: &mut ActiveBlueprints,
         #[cfg(feature = "vm-sandbox")] network_manager: NetworkManager,
     ) -> Result<()> {
-        let cache_dir = manager_config.cache_dir.join(format!(
+        let cache_dir = manager_config.cache_dir().join(format!(
             "{}-{}",
             self.blueprint.blueprint_id, self.blueprint.name
         ));
@@ -97,7 +97,7 @@ impl VerifiedBlueprint {
 
                 let id = active_blueprints.len() as u32;
 
-                let runtime_dir = manager_config.runtime_dir.join(id.to_string());
+                let runtime_dir = manager_config.runtime_dir().join(id.to_string());
                 fs::create_dir_all(&runtime_dir)?;
 
                 #[cfg(feature = "vm-sandbox")]
@@ -165,7 +165,7 @@ async fn new_service(
     cache_dir: &Path,
     runtime_dir: &Path,
 ) -> Result<Service> {
-    if manager_config.no_vm {
+    if manager_config.vm_sandbox_options.no_vm {
         new_service_native(db, env, args, binary_path, sub_service_str, runtime_dir)
     } else {
         Service::new(
@@ -175,7 +175,11 @@ async fn new_service(
                 ..Default::default()
             },
             network_manager,
-            manager_config.network_interface.clone().unwrap(),
+            manager_config
+                .vm_sandbox_options
+                .network_interface
+                .clone()
+                .unwrap(),
             db,
             &blueprint_config.data_dir,
             &blueprint_config.keystore_uri,

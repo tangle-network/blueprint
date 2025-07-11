@@ -141,11 +141,11 @@ impl Future for BlueprintManagerHandle {
 async fn vm_prep(manager_config: &mut BlueprintManagerConfig) -> Result<(NetworkManager, String)> {
     let ret = net::init_manager_config(manager_config).await?;
 
-    if manager_config.no_vm {
+    if manager_config.vm_sandbox_options.no_vm {
         info!("Skipping VM image check, running in no-vm mode");
     } else {
         info!("Checking for VM images");
-        hypervisor::images::download_image_if_needed(&manager_config.cache_dir).await?;
+        hypervisor::images::download_image_if_needed(manager_config.cache_dir()).await?;
     }
 
     Ok(ret)
@@ -196,7 +196,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
     // Create the auth proxy task
     let (db, auth_proxy_task) = run_auth_proxy(
-        blueprint_manager_config.data_dir.clone(),
+        blueprint_manager_config.data_dir().to_path_buf(),
         blueprint_manager_config.auth_proxy_opts.clone(),
     )
     .await?;

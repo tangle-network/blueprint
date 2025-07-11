@@ -1,3 +1,5 @@
+mod native;
+mod tee;
 #[cfg(feature = "vm-debug")]
 mod vm;
 
@@ -11,12 +13,11 @@ use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
-use blueprint_manager::blueprint_auth::db::RocksDb;
 use blueprint_manager::config::{AuthProxyOpts, BlueprintManagerConfig};
 use blueprint_manager::executor::run_auth_proxy;
-use blueprint_manager::rt::service::Service;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
+use clap::ValueEnum;
 use std::future;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -26,6 +27,9 @@ use url::Url;
 
 async fn setup_tangle_node(
     tmp_path: &Path,
+    package: Option<String>,
+    manifest_path: &Path,
+    keystore_uri: String,
     mut http_rpc_url: Option<Url>,
     mut ws_rpc_url: Option<Url>,
 ) -> color_eyre::Result<(Option<SubstrateNode>, Url, Url)> {
@@ -86,12 +90,31 @@ async fn setup_tangle_node(
     )
     .await?;
 
+    Box::pin(deploy_tangle(
+        http.to_string(),
+        ws.to_string(),
+        package,
+        false,
+        Some(PathBuf::from(keystore_uri.clone())),
+        manifest_path.to_path_buf(),
+    ))
+    .await?;
+    register(ws.to_string(), 0, keystore_uri, "").await?;
+
     Ok((node, http, ws))
 }
 
 pub struct PtyIo {
     pub stdin_to_pty: JoinHandle<io::Result<()>>,
     pub pty_to_stdout: JoinHandle<io::Result<()>>,
+}
+
+#[derive(ValueEnum, Debug, Copy, Clone)]
+pub enum ServiceSpawnMethod {
+    Native,
+    #[cfg(feature = "vm-debug")]
+    Vm,
+    Tee,
 }
 
 /// Spawns a Tangle testnet and virtual machine for the given blueprint
@@ -120,10 +143,11 @@ pub async fn execute(
     package: Option<String>,
     #[allow(unused_variables)] id: u32,
     service_name: String,
-    binary: PathBuf,
+    binary: Option<PathBuf>,
+    image: Option<String>,
     protocol: Protocol,
+    method: ServiceSpawnMethod,
     #[cfg(feature = "vm-debug")] _verify_network_connection: bool,
-    #[cfg(feature = "vm-debug")] no_vm: bool,
 ) -> color_eyre::Result<()> {
     #[cfg(not(feature = "vm-debug"))]
     #[allow(unused)]
@@ -137,39 +161,40 @@ pub async fn execute(
     }
 
     let tmp = tempfile::tempdir()?;
-    manager_config.data_dir = tmp.path().join("data");
-    manager_config.cache_dir = tmp.path().join("cache");
-    manager_config.runtime_dir = tmp.path().join("runtime");
-    manager_config.keystore_uri = tmp.path().join("keystore").to_string_lossy().into();
+    manager_config.paths.data_dir = tmp.path().join("data");
+    manager_config.paths.cache_dir = tmp.path().join("cache");
+    manager_config.paths.runtime_dir = tmp.path().join("runtime");
+    manager_config.paths.keystore_uri = tmp.path().join("keystore").to_string_lossy().into();
 
     manager_config.verify_directories_exist()?;
 
     blueprint_testing_utils::tangle::keys::inject_tangle_key(
-        &manager_config.keystore_uri,
+        manager_config.keystore_uri(),
         "//Alice",
     )?;
 
-    let (_node, http, ws) = setup_tangle_node(tmp.path(), http_rpc_url, ws_rpc_url).await?;
-    Box::pin(deploy_tangle(
-        http.to_string(),
-        ws.to_string(),
+    let (_node, http, ws) = setup_tangle_node(
+        tmp.path(),
         package,
-        false,
-        Some(PathBuf::from(&manager_config.keystore_uri)),
-        manifest_path,
-    ))
+        &manifest_path,
+        manager_config.keystore_uri().to_string(),
+        http_rpc_url,
+        ws_rpc_url,
+    )
     .await?;
-    register(ws.to_string(), 0, manager_config.keystore_uri.clone(), "").await?;
 
-    let (db, auth_proxy_task) =
-        run_auth_proxy(manager_config.data_dir.clone(), AuthProxyOpts::default()).await?;
+    let (db, auth_proxy_task) = run_auth_proxy(
+        manager_config.data_dir().to_path_buf(),
+        AuthProxyOpts::default(),
+    )
+    .await?;
 
     let args = BlueprintArgs::new(&manager_config);
     let env = BlueprintEnvVars {
         http_rpc_endpoint: http,
         ws_rpc_endpoint: ws,
-        keystore_uri: manager_config.keystore_uri.clone(),
-        data_dir: manager_config.data_dir.clone(),
+        keystore_uri: manager_config.keystore_uri().to_string(),
+        data_dir: manager_config.data_dir().to_path_buf(),
         blueprint_id: 0,
         service_id: 0,
         protocol,
@@ -182,20 +207,19 @@ pub async fn execute(
 
     #[allow(unused_mut, unused_variables)]
     let mut network_interface: Option<String> = None;
-    let (mut service, pty_io) = if no_vm {
-        let service = setup_without_vm(manager_config, &service_name, binary, db, env, args)?;
-        (service, None)
-    } else {
-        #[cfg(not(feature = "vm-debug"))]
-        unreachable!();
-
+    let (mut service, pty_io) = match method {
+        ServiceSpawnMethod::Native => {
+            let service =
+                native::setup_native(manager_config, &service_name, binary.unwrap(), db, env, args)?;
+            (service, None)
+        }
         #[cfg(feature = "vm-debug")]
-        {
+        ServiceSpawnMethod::Vm => {
             let (service, pty) = vm::setup_with_vm(
                 &mut manager_config,
                 &service_name,
                 id,
-                binary,
+                binary.unwrap(),
                 db,
                 env,
                 args,
@@ -205,6 +229,12 @@ pub async fn execute(
             network_interface = manager_config.network_interface.clone();
 
             (service, Some(pty))
+        }
+        ServiceSpawnMethod::Tee => {
+            let service =
+                tee::setup_with_tee(manager_config, &service_name, image.unwrap(), db, env, args)
+                    .await?;
+            (service, None)
         }
     };
 
@@ -241,28 +271,9 @@ pub async fn execute(
     let shutdown_res = service.shutdown().await;
 
     #[cfg(feature = "vm-debug")]
-    if !no_vm {
+    if method == ServiceSpawnMethod::Vm {
         vm::vm_shutdown(network_interface.as_deref().unwrap()).await?;
     }
 
     shutdown_res.map_err(Into::into)
-}
-
-fn setup_without_vm(
-    manager_config: BlueprintManagerConfig,
-    service_name: &str,
-    binary: PathBuf,
-    db: RocksDb,
-    env: BlueprintEnvVars,
-    args: BlueprintArgs,
-) -> color_eyre::Result<Service> {
-    let service = Service::new_native(
-        db,
-        manager_config.runtime_dir,
-        service_name,
-        binary,
-        env,
-        args,
-    )?;
-    Ok(service)
 }
