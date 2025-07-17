@@ -18,7 +18,7 @@ impl Default for ResourceLimits {
             // 20GB
             storage_space: 1024 * 1024 * 1024 * 20,
             // 4GB
-            memory_size: 4_294_967_296,
+            memory_size: 1024 * 1024 * 1024 * 4,
         }
     }
 }

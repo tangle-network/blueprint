@@ -178,19 +178,10 @@ impl Default for VmSandboxOptions {
 }
 
 #[cfg(feature = "tee")]
-#[derive(Args, Debug, Clone)]
+#[derive(Args, Debug, Clone, Default)]
 pub struct TeeOptions {
     #[arg(long, default_value_t = 0)]
     pub kube_service_port: u16,
-}
-
-#[cfg(feature = "tee")]
-impl Default for TeeOptions {
-    fn default() -> Self {
-        Self {
-            kube_service_port: 0,
-        }
-    }
 }
 
 /// The options for the auth proxy

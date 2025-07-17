@@ -7,12 +7,12 @@ use crate::rt::tee::TeeInstance;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_auth::db::RocksDb;
 use blueprint_core::error;
+use blueprint_core::{info, warn};
 use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time;
-use tracing::{info, warn};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Status {

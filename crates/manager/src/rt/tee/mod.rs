@@ -3,17 +3,17 @@ use crate::error::Result;
 use crate::rt::ResourceLimits;
 use crate::rt::service::Status;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
+use blueprint_core::{info, warn};
 use k8s_openapi::api::core::v1::{
     Container, EndpointAddress, EndpointPort, EndpointSubset, Endpoints, EnvVar,
     HostPathVolumeSource, Namespace, Pod, PodSpec, ResourceRequirements, Service, ServicePort,
     ServiceSpec, Volume, VolumeMount,
 };
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::{DeleteOptions, ObjectMeta};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::Client;
 use kube::api::{Api, DeleteParams, Patch, PatchParams, PostParams};
 use std::net::IpAddr;
-use tracing::{info, warn};
 use url::{Host, Url};
 
 const BLUEPRINT_NAMESPACE: &str = "blueprint-manager";
@@ -250,13 +250,12 @@ impl TeeInstance {
                     ..Default::default()
                 }]),
                 ports: Some(vec![EndpointPort {
-                    port: self.service_port as i32,
+                    port: i32::from(self.service_port),
                     protocol: Some("TCP".to_string()),
                     ..Default::default()
                 }]),
                 ..Default::default()
             }]),
-            ..Default::default()
         };
 
         let pp = PatchParams::apply("blueprint-mgr").force();
