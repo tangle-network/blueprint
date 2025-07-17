@@ -32,20 +32,11 @@ use url::{Host, Url};
 
 const VM_DATA_DIR: &str = "/mnt/data";
 
+#[derive(Default)]
 pub struct ServiceVmConfig {
     pub id: u32,
     pub pty: bool,
     pub limits: ResourceLimits,
-}
-
-impl Default for ServiceVmConfig {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            pty: false,
-            limits: ResourceLimits::default(),
-        }
-    }
 }
 
 pub struct HypervisorInstance {
@@ -141,7 +132,7 @@ impl HypervisorInstance {
             writeln!(&mut env_vars_str, "export {key}=\"{val}\"").unwrap();
         }
 
-        let args = arguments.encode().join(" ");
+        let args = arguments.encode(true).join(" ");
 
         let launcher_script = LAUNCHER_SCRIPT_TEMPLATE
             .replace("{{ENV_VARS}}", &env_vars_str)

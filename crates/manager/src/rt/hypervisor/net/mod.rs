@@ -169,7 +169,6 @@ pub(crate) async fn init_manager_config(
     manager_config: &mut BlueprintManagerConfig,
 ) -> Result<(NetworkManager, String)> {
     nftables::check_net_admin_capability()?;
-    manager_config.verify_network_interface()?;
 
     let network_interface = manager_config
         .vm_sandbox_options

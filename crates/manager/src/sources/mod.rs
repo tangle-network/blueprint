@@ -47,9 +47,11 @@ impl BlueprintArgs {
     }
 
     #[must_use]
-    pub fn encode(&self) -> Vec<String> {
+    pub fn encode(&self, run: bool) -> Vec<String> {
         let mut arguments = vec![];
-        arguments.push("run".to_string());
+        if run {
+            arguments.push("run".to_string());
+        }
 
         if self.test_mode {
             arguments.push("--test-mode".to_string());

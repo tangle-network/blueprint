@@ -15,6 +15,9 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use url::Url;
 
+mod ctx;
+pub use ctx::*;
+
 pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =
     LazyLock::new(|| Url::parse("unix:///var/run/docker.sock").unwrap());
 
@@ -67,6 +70,10 @@ pub struct BlueprintManagerConfig {
     #[command(flatten)]
     pub vm_sandbox_options: VmSandboxOptions,
 
+    #[cfg(feature = "tee")]
+    #[command(flatten)]
+    pub tee_options: TeeOptions,
+
     /// Authentication proxy options
     #[command(flatten)]
     pub auth_proxy_opts: AuthProxyOpts,
@@ -74,28 +81,40 @@ pub struct BlueprintManagerConfig {
 
 impl BlueprintManagerConfig {
     #[inline]
+    #[must_use]
     pub fn blueprint_config_path(&self) -> Option<&Path> {
         self.paths.blueprint_config.as_deref()
     }
 
     #[inline]
+    #[must_use]
     pub fn keystore_uri(&self) -> &str {
         &self.paths.keystore_uri
     }
 
     #[inline]
+    #[must_use]
     pub fn data_dir(&self) -> &Path {
         &self.paths.data_dir
     }
 
     #[inline]
+    #[must_use]
     pub fn cache_dir(&self) -> &Path {
         &self.paths.cache_dir
     }
 
     #[inline]
+    #[must_use]
     pub fn runtime_dir(&self) -> &Path {
         &self.paths.runtime_dir
+    }
+
+    #[inline]
+    #[must_use]
+    #[cfg(feature = "tee")]
+    pub fn kube_service_port(&self) -> u16 {
+        self.tee_options.kube_service_port
     }
 }
 
@@ -158,14 +177,19 @@ impl Default for VmSandboxOptions {
     }
 }
 
-#[cfg(feature = "vm-sandbox")]
+#[cfg(feature = "tee")]
 #[derive(Args, Debug, Clone)]
-pub struct TeeOptions {}
+pub struct TeeOptions {
+    #[arg(long, default_value_t = 0)]
+    pub kube_service_port: u16,
+}
 
-#[cfg(feature = "vm-sandbox")]
+#[cfg(feature = "tee")]
 impl Default for TeeOptions {
     fn default() -> Self {
-        Self {}
+        Self {
+            kube_service_port: 0,
+        }
     }
 }
 
@@ -195,7 +219,7 @@ impl BlueprintManagerConfig {
     /// # Errors
     ///
     /// This will error if it fails to create any of the directories.
-    pub fn verify_directories_exist(&self) -> Result<()> {
+    fn verify_directories_exist(&self) -> Result<()> {
         if !self.cache_dir().exists() {
             info!(
                 "Cache directory does not exist, creating it at `{}`",
@@ -238,7 +262,7 @@ impl BlueprintManagerConfig {
     ///
     /// This will error if it is unable to determine the default network interface
     #[cfg(feature = "vm-sandbox")]
-    pub fn verify_network_interface(&mut self) -> Result<()> {
+    fn verify_network_interface(&mut self) -> Result<()> {
         if self.vm_sandbox_options.network_interface.is_some() {
             return Ok(());
         }
@@ -254,20 +278,6 @@ impl BlueprintManagerConfig {
 
         self.vm_sandbox_options.network_interface = Some(interface);
         Ok(())
-    }
-
-    #[cfg(feature = "tee")]
-    pub async fn kube_client(&self) -> Result<kube::Client> {
-        static ONCE: tokio::sync::OnceCell<kube::Client> = tokio::sync::OnceCell::const_new();
-
-        match ONCE.get() {
-            None => {
-                let client = kube::Client::try_default().await?;
-                let _ = ONCE.set(client.clone());
-                Ok(client)
-            }
-            Some(client) => Ok(client.clone()),
-        }
     }
 }
 
@@ -298,6 +308,8 @@ impl Default for BlueprintManagerConfig {
             podman_host: DEFAULT_DOCKER_HOST.clone(),
             #[cfg(feature = "vm-sandbox")]
             vm_sandbox_options: VmSandboxOptions::default(),
+            #[cfg(feature = "tee")]
+            tee_options: TeeOptions::default(),
             auth_proxy_opts: AuthProxyOpts::default(),
         }
     }

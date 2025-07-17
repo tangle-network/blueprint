@@ -1,5 +1,5 @@
 use crate::blueprint::ActiveBlueprints;
-use crate::config::{AuthProxyOpts, BlueprintManagerConfig};
+use crate::config::{AuthProxyOpts, BlueprintManagerConfig, BlueprintManagerContext};
 use crate::error::Error;
 use crate::error::Result;
 #[cfg(feature = "vm-sandbox")]
@@ -173,12 +173,12 @@ async fn vm_prep(manager_config: &mut BlueprintManagerConfig) -> Result<(Network
 /// * If the SR25519 or ECDSA keypair cannot be found
 #[allow(clippy::used_underscore_binding)]
 pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
-    #[allow(unused_mut)] mut blueprint_manager_config: BlueprintManagerConfig,
+    #[allow(unused_mut)] mut ctx: BlueprintManagerContext,
     keystore: Keystore,
     env: BlueprintEnvironment,
     shutdown_cmd: F,
 ) -> color_eyre::Result<BlueprintManagerHandle> {
-    let logger_id = if let Some(custom_id) = &blueprint_manager_config.instance_id {
+    let logger_id = if let Some(custom_id) = &ctx.instance_id {
         custom_id.as_str()
     } else {
         "Local"
@@ -189,17 +189,12 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let _span = span.enter();
     info!("Starting blueprint manager ... waiting for start signal ...");
 
-    blueprint_manager_config.verify_directories_exist()?;
-
     #[cfg(feature = "vm-sandbox")]
-    let (network_manager, network_interface) = vm_prep(&mut blueprint_manager_config).await?;
+    let (network_manager, network_interface) = vm_prep(&mut ctx).await?;
 
     // Create the auth proxy task
-    let (db, auth_proxy_task) = run_auth_proxy(
-        blueprint_manager_config.data_dir().to_path_buf(),
-        blueprint_manager_config.auth_proxy_opts.clone(),
-    )
-    .await?;
+    let (db, auth_proxy_task) =
+        run_auth_proxy(ctx.data_dir().to_path_buf(), ctx.auth_proxy_opts.clone()).await?;
 
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
@@ -234,7 +229,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
             &sub_account_id,
             &mut active_blueprints,
             &env,
-            &blueprint_manager_config,
+            &ctx,
             db.clone(),
             #[cfg(feature = "vm-sandbox")]
             network_manager.clone(),
@@ -261,7 +256,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
                 &operator_subscribed_blueprints,
                 &env,
                 db.clone(),
-                &blueprint_manager_config,
+                &ctx,
                 &mut active_blueprints,
                 result,
                 services_client,
@@ -351,12 +346,12 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 /// * If the SR25519 or ECDSA keypair cannot be found
 #[allow(clippy::used_underscore_binding)]
 pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
-    blueprint_manager_config: BlueprintManagerConfig,
+    ctx: BlueprintManagerContext,
     env: BlueprintEnvironment,
     shutdown_cmd: F,
 ) -> color_eyre::Result<BlueprintManagerHandle> {
     run_blueprint_manager_with_keystore(
-        blueprint_manager_config,
+        ctx,
         Keystore::new(KeystoreConfig::new().fs_root(&env.keystore_uri))?,
         env,
         shutdown_cmd,
@@ -375,7 +370,7 @@ async fn handle_init(
     sub_account_id: &AccountId32,
     active_blueprints: &mut ActiveBlueprints,
     blueprint_env: &BlueprintEnvironment,
-    blueprint_manager_config: &BlueprintManagerConfig,
+    ctx: &BlueprintManagerContext,
     db: RocksDb,
     #[cfg(feature = "vm-sandbox")] network_manager: NetworkManager,
 ) -> Result<Vec<RpcServicesWithBlueprint>> {
@@ -412,7 +407,7 @@ async fn handle_init(
         &operator_subscribed_blueprints,
         blueprint_env,
         db.clone(),
-        blueprint_manager_config,
+        ctx,
         active_blueprints,
         poll_result,
         services_client,

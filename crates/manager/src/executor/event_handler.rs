@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::Path;
-use crate::config::BlueprintManagerConfig;
+use crate::config::{BlueprintManagerConfig, BlueprintManagerContext};
 use crate::error::{Error, Result};
 use crate::blueprint::native::FilteredBlueprint;
 use crate::blueprint::ActiveBlueprints;
@@ -37,11 +37,11 @@ impl VerifiedBlueprint {
         &mut self,
         db: RocksDb,
         blueprint_config: &BlueprintEnvironment,
-        manager_config: &BlueprintManagerConfig,
+        ctx: &BlueprintManagerContext,
         active_blueprints: &mut ActiveBlueprints,
         #[cfg(feature = "vm-sandbox")] network_manager: NetworkManager,
     ) -> Result<()> {
-        let cache_dir = manager_config.cache_dir().join(format!(
+        let cache_dir = ctx.cache_dir().join(format!(
             "{}-{}",
             self.blueprint.blueprint_id, self.blueprint.name
         ));
@@ -83,10 +83,10 @@ impl VerifiedBlueprint {
             for service_id in &blueprint.services {
                 let sub_service_str = format!("{service_str}-{service_id}");
 
-                let args = BlueprintArgs::new(manager_config);
+                let args = BlueprintArgs::new(ctx);
                 let env = BlueprintEnvVars::new(
                     blueprint_config,
-                    manager_config,
+                    ctx,
                     blueprint_id,
                     *service_id,
                     blueprint,
@@ -97,12 +97,12 @@ impl VerifiedBlueprint {
 
                 let id = active_blueprints.len() as u32;
 
-                let runtime_dir = manager_config.runtime_dir().join(id.to_string());
+                let runtime_dir = ctx.runtime_dir().join(id.to_string());
                 fs::create_dir_all(&runtime_dir)?;
 
                 #[cfg(feature = "vm-sandbox")]
                 let mut service = new_service(
-                    manager_config,
+                    ctx,
                     network_manager.clone(),
                     db.clone(),
                     blueprint_config,
@@ -328,7 +328,7 @@ pub(crate) async fn handle_tangle_event(
     blueprints: &[RpcServicesWithBlueprint],
     blueprint_config: &BlueprintEnvironment,
     db: RocksDb,
-    manager_config: &BlueprintManagerConfig,
+    ctx: &BlueprintManagerContext,
     active_blueprints: &mut ActiveBlueprints,
     poll_result: EventPollResult,
     client: &TangleServicesClient<TangleConfig>,
@@ -378,7 +378,7 @@ pub(crate) async fn handle_tangle_event(
         .chain(registration_blueprints)
     {
         let verified_blueprint = VerifiedBlueprint {
-            fetchers: get_fetcher_candidates(&blueprint, manager_config)?,
+            fetchers: get_fetcher_candidates(&blueprint, ctx)?,
             blueprint,
         };
 
@@ -399,7 +399,7 @@ pub(crate) async fn handle_tangle_event(
             .start_services_if_needed(
                 db.clone(),
                 blueprint_config,
-                manager_config,
+                ctx,
                 active_blueprints,
                 #[cfg(feature = "vm-sandbox")]
                 network_manager.clone(),

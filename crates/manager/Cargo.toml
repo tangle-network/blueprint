@@ -64,8 +64,9 @@ nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"
 capctl = { workspace = true, features = ["std"], optional = true }
 
 # TEE
-kube = { workspace = true, features = ["client"], optional = true }
+kube = { workspace = true, features = ["client", "rustls-tls"], optional = true }
 k8s-openapi = { workspace = true, features = ["latest"], optional = true }
+local-ip-address.workspace = true
 
 ## Networking
 rtnetlink = { workspace = true, features = ["tokio_socket"], optional = true }

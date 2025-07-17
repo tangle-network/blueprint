@@ -2,7 +2,6 @@
 use super::hypervisor::{HypervisorInstance, ServiceVmConfig, net::NetworkManager};
 use super::native::ProcessHandle;
 use crate::error::{Error, Result};
-use crate::rt::ResourceLimits;
 #[cfg(feature = "tee")]
 use crate::rt::tee::TeeInstance;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
@@ -18,9 +17,11 @@ use tracing::{info, warn};
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Status {
     NotStarted,
+    Pending,
     Running,
     Finished,
     Error,
+    Unknown,
 }
 
 struct NativeProcessInfo {
@@ -149,29 +150,24 @@ impl Service {
     /// * [`HypervisorInstance::prepare()`]
     #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "tee")]
-    pub fn new_tee(
-        kube_client: kube::Client,
-        limits: ResourceLimits,
+    pub async fn new_tee(
+        ctx: &crate::config::BlueprintManagerContext,
+        limits: crate::rt::ResourceLimits,
         db: RocksDb,
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
         image: String,
         mut env_vars: BlueprintEnvVars,
         arguments: BlueprintArgs,
+        debug: bool,
     ) -> Result<Service> {
         let (bridge_base_socket, bridge_handle, alive_rx) =
             create_bridge(runtime_dir.as_ref(), service_name, db, false)?;
 
         env_vars.bridge_socket_path = Some(bridge_base_socket);
 
-        let tee = TeeInstance::new(
-            kube_client,
-            limits,
-            service_name,
-            image,
-            env_vars,
-            arguments,
-        );
+        let tee =
+            TeeInstance::new(ctx, limits, service_name, image, env_vars, arguments, debug).await;
 
         Ok(Self {
             runtime: Runtime::Tee(tee),
@@ -273,7 +269,7 @@ impl Service {
                         .stdin(std::process::Stdio::null())
                         .current_dir(&std::env::current_dir()?)
                         .envs(info.env_vars.encode())
-                        .args(info.arguments.encode())
+                        .args(info.arguments.encode(true))
                         .spawn()?;
 
                     let handle =
@@ -314,6 +310,13 @@ impl Service {
             Runtime::Hypervisor(hypervisor) => {
                 hypervisor.shutdown().await.map_err(|e| {
                     error!("Failed to shut down hypervisor: {e}");
+                    e
+                })?;
+            }
+            #[cfg(feature = "tee")]
+            Runtime::Tee(tee) => {
+                tee.shutdown().await.map_err(|e| {
+                    error!("Failed to shut down TEE instance: {e}");
                     e
                 })?;
             }

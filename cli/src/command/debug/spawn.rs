@@ -13,7 +13,7 @@ use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
-use blueprint_manager::config::{AuthProxyOpts, BlueprintManagerConfig};
+use blueprint_manager::config::{AuthProxyOpts, BlueprintManagerConfig, BlueprintManagerContext};
 use blueprint_manager::executor::run_auth_proxy;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
@@ -166,35 +166,29 @@ pub async fn execute(
     manager_config.paths.runtime_dir = tmp.path().join("runtime");
     manager_config.paths.keystore_uri = tmp.path().join("keystore").to_string_lossy().into();
 
-    manager_config.verify_directories_exist()?;
+    let ctx = BlueprintManagerContext::new(manager_config).await?;
 
-    blueprint_testing_utils::tangle::keys::inject_tangle_key(
-        manager_config.keystore_uri(),
-        "//Alice",
-    )?;
+    blueprint_testing_utils::tangle::keys::inject_tangle_key(ctx.keystore_uri(), "//Alice")?;
 
     let (_node, http, ws) = setup_tangle_node(
         tmp.path(),
         package,
         &manifest_path,
-        manager_config.keystore_uri().to_string(),
+        ctx.keystore_uri().to_string(),
         http_rpc_url,
         ws_rpc_url,
     )
     .await?;
 
-    let (db, auth_proxy_task) = run_auth_proxy(
-        manager_config.data_dir().to_path_buf(),
-        AuthProxyOpts::default(),
-    )
-    .await?;
+    let (db, auth_proxy_task) =
+        run_auth_proxy(ctx.data_dir().to_path_buf(), AuthProxyOpts::default()).await?;
 
-    let args = BlueprintArgs::new(&manager_config);
+    let args = BlueprintArgs::new(&ctx);
     let env = BlueprintEnvVars {
         http_rpc_endpoint: http,
         ws_rpc_endpoint: ws,
-        keystore_uri: manager_config.keystore_uri().to_string(),
-        data_dir: manager_config.data_dir().to_path_buf(),
+        keystore_uri: ctx.keystore_uri().to_string(),
+        data_dir: ctx.data_dir().to_path_buf(),
         blueprint_id: 0,
         service_id: 0,
         protocol,
@@ -209,31 +203,22 @@ pub async fn execute(
     let mut network_interface: Option<String> = None;
     let (mut service, pty_io) = match method {
         ServiceSpawnMethod::Native => {
-            let service =
-                native::setup_native(manager_config, &service_name, binary.unwrap(), db, env, args)?;
+            let service = native::setup_native(ctx, &service_name, binary.unwrap(), db, env, args)?;
             (service, None)
         }
         #[cfg(feature = "vm-debug")]
         ServiceSpawnMethod::Vm => {
-            let (service, pty) = vm::setup_with_vm(
-                &mut manager_config,
-                &service_name,
-                id,
-                binary.unwrap(),
-                db,
-                env,
-                args,
-            )
-            .await?;
+            let (service, pty) =
+                vm::setup_with_vm(&mut ctx, &service_name, id, binary.unwrap(), db, env, args)
+                    .await?;
 
-            network_interface = manager_config.network_interface.clone();
+            network_interface = ctx.network_interface.clone();
 
             (service, Some(pty))
         }
         ServiceSpawnMethod::Tee => {
             let service =
-                tee::setup_with_tee(manager_config, &service_name, image.unwrap(), db, env, args)
-                    .await?;
+                tee::setup_with_tee(&ctx, &service_name, image.unwrap(), db, env, args).await?;
             (service, None)
         }
     };

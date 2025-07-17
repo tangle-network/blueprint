@@ -42,6 +42,9 @@ pub enum Error {
     #[cfg(feature = "tee")]
     #[error("Kubernetes: {0}")]
     Kube(#[from] kube::Error),
+    #[cfg(feature = "tee")]
+    #[error("Failed to determine the local IP: {0}")]
+    LocalIp(#[from] local_ip_address::Error),
 
     #[error("Failed to get initial block hash")]
     InitialBlock,
