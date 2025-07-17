@@ -1,6 +1,6 @@
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
-use blueprint_manager::config::{BlueprintManagerConfig, DEFAULT_DOCKER_HOST};
+use blueprint_manager::config::{BlueprintManagerConfig, DEFAULT_DOCKER_HOST, Paths};
 use blueprint_manager::executor::run_blueprint_manager;
 use blueprint_runner::config::BlueprintEnvironment;
 use color_eyre::eyre::{Result, eyre};
@@ -69,8 +69,11 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
     blueprint_config.data_dir = opts.data_dir.unwrap_or_else(|| PathBuf::from("./data"));
 
     let blueprint_manager_config = BlueprintManagerConfig {
-        keystore_uri: blueprint_config.keystore_uri.clone(),
-        data_dir: blueprint_config.data_dir.clone(),
+        paths: Paths {
+            keystore_uri: blueprint_config.keystore_uri.clone(),
+            data_dir: blueprint_config.data_dir.clone(),
+            ..Default::default()
+        },
         verbose: 2,
         pretty: true,
         instance_id: Some(format!("Blueprint-{}", blueprint_id)),

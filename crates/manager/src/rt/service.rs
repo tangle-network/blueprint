@@ -2,22 +2,26 @@
 use super::hypervisor::{HypervisorInstance, ServiceVmConfig, net::NetworkManager};
 use super::native::ProcessHandle;
 use crate::error::{Error, Result};
+#[cfg(feature = "tee")]
+use crate::rt::tee::TeeInstance;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_auth::db::RocksDb;
 use blueprint_core::error;
+use blueprint_core::{info, warn};
 use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time;
-use tracing::{info, warn};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Status {
     NotStarted,
+    Pending,
     Running,
     Finished,
     Error,
+    Unknown,
 }
 
 struct NativeProcessInfo {
@@ -35,6 +39,8 @@ enum NativeProcess {
 enum Runtime {
     #[cfg(feature = "vm-sandbox")]
     Hypervisor(HypervisorInstance),
+    #[cfg(feature = "tee")]
+    Tee(TeeInstance),
     Native(NativeProcess),
 }
 
@@ -68,7 +74,7 @@ fn create_bridge(
 }
 
 impl Service {
-    /// Create a new `Service` instance
+    /// Create a new `Service` instance, sandboxed via `cloud-hypervisor`
     ///
     /// This will:
     /// * Spawn a [`Bridge`]
@@ -143,6 +149,44 @@ impl Service {
     /// * [`HypervisorInstance::new()`]
     /// * [`HypervisorInstance::prepare()`]
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "tee")]
+    pub async fn new_tee(
+        ctx: &crate::config::BlueprintManagerContext,
+        limits: crate::rt::ResourceLimits,
+        db: RocksDb,
+        runtime_dir: impl AsRef<Path>,
+        service_name: &str,
+        image: String,
+        mut env_vars: BlueprintEnvVars,
+        arguments: BlueprintArgs,
+        debug: bool,
+    ) -> Result<Service> {
+        let (bridge_base_socket, bridge_handle, alive_rx) =
+            create_bridge(runtime_dir.as_ref(), service_name, db, false)?;
+
+        env_vars.bridge_socket_path = Some(bridge_base_socket);
+
+        let tee =
+            TeeInstance::new(ctx, limits, service_name, image, env_vars, arguments, debug).await;
+
+        Ok(Self {
+            runtime: Runtime::Tee(tee),
+            bridge: bridge_handle,
+            alive_rx: Some(alive_rx),
+        })
+    }
+
+    /// Create a new `Service` instance **with no sandbox**
+    ///
+    /// NOTE: This should only be used for local testing.
+    ///
+    /// This will spawn a [`Bridge`] in preparation for the service to be started.
+    ///
+    /// # Errors
+    ///
+    /// See:
+    /// * [`Bridge::spawn()`]
+    #[allow(clippy::too_many_arguments)]
     pub fn new_native(
         db: RocksDb,
         runtime_dir: impl AsRef<Path>,
@@ -180,6 +224,8 @@ impl Service {
         match &mut self.runtime {
             #[cfg(feature = "vm-sandbox")]
             Runtime::Hypervisor(hypervisor) => hypervisor.status().await,
+            #[cfg(feature = "tee")]
+            Runtime::Tee(tee) => tee.status().await,
             Runtime::Native(NativeProcess::Started(instance)) => Ok(instance.status()),
             Runtime::Native(NativeProcess::NotStarted(_)) => Ok(Status::NotStarted),
         }
@@ -209,6 +255,13 @@ impl Service {
                     e
                 })?;
             }
+            #[cfg(feature = "tee")]
+            Runtime::Tee(tee) => {
+                tee.start().await.map_err(|e| {
+                    error!("Failed to start TEE container: {e}");
+                    e
+                })?;
+            }
             Runtime::Native(instance) => match instance {
                 NativeProcess::NotStarted(info) => {
                     let process_handle = tokio::process::Command::new(&info.binary_path)
@@ -216,7 +269,7 @@ impl Service {
                         .stdin(std::process::Stdio::null())
                         .current_dir(&std::env::current_dir()?)
                         .envs(info.env_vars.encode())
-                        .args(info.arguments.encode())
+                        .args(info.arguments.encode(true))
                         .spawn()?;
 
                     let handle =
@@ -257,6 +310,13 @@ impl Service {
             Runtime::Hypervisor(hypervisor) => {
                 hypervisor.shutdown().await.map_err(|e| {
                     error!("Failed to shut down hypervisor: {e}");
+                    e
+                })?;
+            }
+            #[cfg(feature = "tee")]
+            Runtime::Tee(tee) => {
+                tee.shutdown().await.map_err(|e| {
+                    error!("Failed to shut down TEE instance: {e}");
                     e
                 })?;
             }

@@ -35,6 +35,7 @@ use blueprint_crypto_core::KeyType;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_keystore::backends::Backend;
 use blueprint_std::env;
+use cargo_tangle::command::debug::spawn::ServiceSpawnMethod;
 
 /// Tangle CLI tool
 #[derive(Parser, Debug)]
@@ -443,14 +444,15 @@ pub enum DebugCommands {
         id: u32,
         #[arg(default_value = "service")]
         service_name: String,
-        #[arg(long, required = true)]
-        binary: PathBuf,
+        #[arg(long, required_if_eq_any([("method", "native"), ("method", "vm")]))]
+        binary: Option<PathBuf>,
+        #[arg(long, conflicts_with = "binary", required_if_eq("method", "tee"))]
+        image: Option<String>,
         #[arg(long, default_value_t = Protocol::Tangle)]
         protocol: Protocol,
-        /// Disables the VM sandbox
-        #[arg(long)]
-        #[cfg(feature = "vm-debug")]
-        no_vm: bool,
+        /// How to run the service
+        #[arg(value_enum, long, default_value_t = ServiceSpawnMethod::Native)]
+        method: ServiceSpawnMethod,
         /// Verify network connection before starting the service
         #[arg(long, default_value_t = true)]
         #[cfg(feature = "vm-debug")]
@@ -835,9 +837,9 @@ async fn main() -> color_eyre::Result<()> {
                 id,
                 service_name,
                 binary,
+                image,
                 protocol,
-                #[cfg(feature = "vm-debug")]
-                no_vm,
+                method,
                 #[cfg(feature = "vm-debug")]
                 verify_network_connection,
             } => {
@@ -884,11 +886,11 @@ async fn main() -> color_eyre::Result<()> {
                     id,
                     service_name,
                     binary,
+                    image,
                     protocol,
+                    method,
                     #[cfg(feature = "vm-debug")]
                     verify_network_connection,
-                    #[cfg(feature = "vm-debug")]
-                    no_vm,
                 ))
                 .await?;
             }

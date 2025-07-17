@@ -15,6 +15,9 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use url::Url;
 
+mod ctx;
+pub use ctx::*;
+
 pub static DEFAULT_DOCKER_HOST: LazyLock<Url> =
     LazyLock::new(|| Url::parse("unix:///var/run/docker.sock").unwrap());
 
@@ -34,6 +37,89 @@ pub struct BlueprintManagerCli {
 
 #[derive(Debug, Args)]
 pub struct BlueprintManagerConfig {
+    #[command(flatten)]
+    pub paths: Paths,
+    /// The verbosity level, can be used multiple times to increase verbosity
+    #[arg(long, short = 'v', action = clap::ArgAction::Count)]
+    pub verbose: u8,
+    /// Whether to use pretty logging
+    #[arg(long)]
+    pub pretty: bool,
+    /// An optional unique string identifier for the blueprint manager to differentiate between multiple
+    /// running instances of a `BlueprintManager` (mostly for debugging purposes)
+    #[arg(long, alias = "id")]
+    pub instance_id: Option<String>,
+    #[arg(long, short = 't')]
+    pub test_mode: bool,
+    /// Whether to allow invalid GitHub attestations (binary integrity checks)
+    ///
+    /// This will also allow for running the manager without the GitHub CLI installed.
+    #[arg(long)]
+    pub allow_unchecked_attestations: bool,
+    /// The preferred way to run a blueprint.
+    ///
+    /// This is not a guarantee that the blueprint will use this method, as there may not be a source
+    /// available of this type.
+    #[arg(long, short = 's', default_value_t)]
+    pub preferred_source: SourceType,
+    /// The location of the Podman-Docker socket
+    #[arg(long, default_value_t = DEFAULT_DOCKER_HOST.clone())]
+    pub podman_host: Url,
+
+    #[cfg(feature = "vm-sandbox")]
+    #[command(flatten)]
+    pub vm_sandbox_options: VmSandboxOptions,
+
+    #[cfg(feature = "tee")]
+    #[command(flatten)]
+    pub tee_options: TeeOptions,
+
+    /// Authentication proxy options
+    #[command(flatten)]
+    pub auth_proxy_opts: AuthProxyOpts,
+}
+
+impl BlueprintManagerConfig {
+    #[inline]
+    #[must_use]
+    pub fn blueprint_config_path(&self) -> Option<&Path> {
+        self.paths.blueprint_config.as_deref()
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn keystore_uri(&self) -> &str {
+        &self.paths.keystore_uri
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn data_dir(&self) -> &Path {
+        &self.paths.data_dir
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn cache_dir(&self) -> &Path {
+        &self.paths.cache_dir
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn runtime_dir(&self) -> &Path {
+        &self.paths.runtime_dir
+    }
+
+    #[inline]
+    #[must_use]
+    #[cfg(feature = "tee")]
+    pub fn kube_service_port(&self) -> u16 {
+        self.tee_options.kube_service_port
+    }
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct Paths {
     /// The path to the blueprint configuration file
     #[arg(short = 'c', long)]
     pub blueprint_config: Option<PathBuf>,
@@ -49,50 +135,73 @@ pub struct BlueprintManagerConfig {
     /// The runtime directory for manager-to-blueprint sockets
     #[arg(long, short, default_value_os_t = default_runtime_dir())]
     pub runtime_dir: PathBuf,
-    /// The verbosity level, can be used multiple times to increase verbosity
-    #[arg(long, short = 'v', action = clap::ArgAction::Count)]
-    pub verbose: u8,
-    /// Whether to use pretty logging
-    #[arg(long)]
-    pub pretty: bool,
-    /// An optional unique string identifier for the blueprint manager to differentiate between multiple
-    /// running instances of a `BlueprintManager` (mostly for debugging purposes)
-    #[arg(long, alias = "id")]
-    pub instance_id: Option<String>,
-    #[arg(long, short = 't')]
-    pub test_mode: bool,
+}
+
+impl Default for Paths {
+    fn default() -> Self {
+        Self {
+            blueprint_config: None,
+            keystore_uri: "./keystore".into(),
+            data_dir: PathBuf::from("./data"),
+            cache_dir: default_cache_dir(),
+            runtime_dir: default_runtime_dir(),
+        }
+    }
+}
+
+/// Options for the VM sandbox
+#[cfg(feature = "vm-sandbox")]
+#[derive(Args, Debug, Clone)]
+pub struct VmSandboxOptions {
     /// Disables the VM sandbox for native blueprints
     ///
     /// This should only be used for testing and never for production setups.
     #[arg(long)]
-    #[cfg(feature = "vm-sandbox")]
     pub no_vm: bool,
-    /// Whether to allow invalid GitHub attestations (binary integrity checks)
-    ///
-    /// This will also allow for running the manager without the GitHub CLI installed.
-    #[arg(long)]
-    pub allow_unchecked_attestations: bool,
-    /// The preferred way to run a blueprint.
-    ///
-    /// This is not a guarantee that the blueprint will use this method, as there may not be a source
-    /// available of this type.
-    #[arg(long, short = 's', default_value_t)]
-    pub preferred_source: SourceType,
-    /// The location of the Podman-Docker socket
-    #[arg(long, default_value_t = DEFAULT_DOCKER_HOST.clone())]
-    pub podman_host: Url,
     /// The default address pool for VM TAP interfaces
     #[arg(long, default_value_t = *DEFAULT_ADDRESS_POOL)]
-    #[cfg(feature = "vm-sandbox")]
     pub default_address_pool: ipnet::Ipv4Net,
     /// The network interface to funnel blueprint VM traffic through
     #[arg(long)]
-    #[cfg(feature = "vm-sandbox")]
     pub network_interface: Option<String>,
+}
 
-    /// Authentication proxy options
-    #[command(flatten)]
-    pub auth_proxy_opts: AuthProxyOpts,
+#[cfg(feature = "vm-sandbox")]
+impl Default for VmSandboxOptions {
+    fn default() -> Self {
+        Self {
+            no_vm: false,
+            default_address_pool: *DEFAULT_ADDRESS_POOL,
+            network_interface: None,
+        }
+    }
+}
+
+#[cfg(feature = "tee")]
+#[derive(Args, Debug, Clone, Default)]
+pub struct TeeOptions {
+    #[arg(long, default_value_t = 0)]
+    pub kube_service_port: u16,
+}
+
+/// The options for the auth proxy
+#[derive(Debug, Parser, Clone)]
+pub struct AuthProxyOpts {
+    /// The host on which the auth proxy will listen
+    #[arg(long, default_value = "0.0.0.0")]
+    pub auth_proxy_host: IpAddr,
+    /// The port on which the auth proxy will listen
+    #[arg(long, default_value_t = DEFAULT_AUTH_PROXY_PORT)]
+    pub auth_proxy_port: u16,
+}
+
+impl Default for AuthProxyOpts {
+    fn default() -> Self {
+        Self {
+            auth_proxy_host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            auth_proxy_port: DEFAULT_AUTH_PROXY_PORT,
+        }
+    }
 }
 
 impl BlueprintManagerConfig {
@@ -101,32 +210,32 @@ impl BlueprintManagerConfig {
     /// # Errors
     ///
     /// This will error if it fails to create any of the directories.
-    pub fn verify_directories_exist(&self) -> Result<()> {
-        if !self.cache_dir.exists() {
+    fn verify_directories_exist(&self) -> Result<()> {
+        if !self.cache_dir().exists() {
             info!(
                 "Cache directory does not exist, creating it at `{}`",
-                self.cache_dir.display()
+                self.cache_dir().display()
             );
-            std::fs::create_dir_all(&self.cache_dir)?;
+            std::fs::create_dir_all(self.cache_dir())?;
         }
 
-        if !self.runtime_dir.exists() {
+        if !self.runtime_dir().exists() {
             info!(
                 "Runtime directory does not exist, creating it at `{}`",
-                self.runtime_dir.display()
+                self.runtime_dir().display()
             );
-            std::fs::create_dir_all(&self.runtime_dir)?;
+            std::fs::create_dir_all(self.runtime_dir())?;
         }
 
-        if !self.data_dir.exists() {
+        if !self.data_dir().exists() {
             info!(
                 "Data directory does not exist, creating it at `{}`",
-                self.data_dir.display()
+                self.data_dir().display()
             );
-            std::fs::create_dir_all(&self.data_dir)?;
+            std::fs::create_dir_all(self.data_dir())?;
         }
 
-        let keystore = Path::new(&self.keystore_uri);
+        let keystore = Path::new(self.keystore_uri());
         if !keystore.exists() {
             info!(
                 "Keystore directory does not exist, creating it at `{}`",
@@ -144,8 +253,8 @@ impl BlueprintManagerConfig {
     ///
     /// This will error if it is unable to determine the default network interface
     #[cfg(feature = "vm-sandbox")]
-    pub fn verify_network_interface(&mut self) -> Result<()> {
-        if self.network_interface.is_some() {
+    fn verify_network_interface(&mut self) -> Result<()> {
+        if self.vm_sandbox_options.network_interface.is_some() {
             return Ok(());
         }
 
@@ -158,7 +267,7 @@ impl BlueprintManagerConfig {
             )));
         };
 
-        self.network_interface = Some(interface);
+        self.vm_sandbox_options.network_interface = Some(interface);
         Ok(())
     }
 }
@@ -180,24 +289,18 @@ fn default_runtime_dir() -> PathBuf {
 impl Default for BlueprintManagerConfig {
     fn default() -> Self {
         Self {
-            blueprint_config: None,
-            keystore_uri: "./keystore".into(),
-            data_dir: PathBuf::from("./data"),
-            cache_dir: default_cache_dir(),
-            runtime_dir: default_runtime_dir(),
+            paths: Paths::default(),
             verbose: 0,
             pretty: false,
             instance_id: None,
             test_mode: false,
-            #[cfg(feature = "vm-sandbox")]
-            no_vm: false,
             allow_unchecked_attestations: false,
             preferred_source: SourceType::default(),
             podman_host: DEFAULT_DOCKER_HOST.clone(),
             #[cfg(feature = "vm-sandbox")]
-            default_address_pool: *DEFAULT_ADDRESS_POOL,
-            #[cfg(feature = "vm-sandbox")]
-            network_interface: None,
+            vm_sandbox_options: VmSandboxOptions::default(),
+            #[cfg(feature = "tee")]
+            tee_options: TeeOptions::default(),
             auth_proxy_opts: AuthProxyOpts::default(),
         }
     }
@@ -324,25 +427,5 @@ impl SourceCandidates {
     async fn determine_wasm(&mut self) -> Result<bool> {
         // TODO: Verify WASM runtime installations
         Ok(true)
-    }
-}
-
-/// The options for the auth proxy
-#[derive(Debug, Parser, Clone)]
-pub struct AuthProxyOpts {
-    /// The host on which the auth proxy will listen
-    #[arg(long, default_value = "0.0.0.0")]
-    pub auth_proxy_host: IpAddr,
-    /// The port on which the auth proxy will listen
-    #[arg(long, default_value_t = DEFAULT_AUTH_PROXY_PORT)]
-    pub auth_proxy_port: u16,
-}
-
-impl Default for AuthProxyOpts {
-    fn default() -> Self {
-        Self {
-            auth_proxy_host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            auth_proxy_port: DEFAULT_AUTH_PROXY_PORT,
-        }
     }
 }
