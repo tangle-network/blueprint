@@ -17,7 +17,7 @@ tower = { workspace = true, features = ["util"] }
 tower-http = { workspace = true, features = ["cors", "request-id", "sensitive-headers", "trace"] }
 hashbrown = { workspace = true, default-features = false, features = ["default-hasher", "inline-more"] }
 tiny-keccak = { workspace = true, features = ["keccak"] }
-tracing = { workspace = true }
+tracing = { workspace = true, features = ["attributes"] }
 serde = { workspace = true, features = ["derive", "alloc"] }
 hex = { workspace = true, features = ["serde", "alloc"] }
 base64 = { workspace = true, features = ["alloc"] }
@@ -32,6 +32,10 @@ hyper-util = { workspace = true, features = ["client", "client-legacy", "tokio",
 # Database
 rocksdb = { workspace = true, features = ["lz4"] }
 prost = { workspace = true, features = ["derive"] }
+
+# Standalone Binary
+tokio = { workspace = true, features = ["full"], optional = true }
+tempfile = { workspace = true, optional = true }
 
 
 [dev-dependencies]
@@ -50,4 +54,10 @@ tracing-subscriber = { workspace = true, features = ["fmt", "env-filter", "regis
 [features]
 default = ["std", "tracing"]
 std = ["blueprint-std/std", "crc32fast/std", "k256/std", "schnorrkel/std", "base64/std", "prost/std"]
+standalone = ["tokio", "tempfile", "axum/http1", "axum/http2", "axum/tokio"]
 tracing = []
+
+[[bin]]
+name = "auth-server"
+path = "src/main.rs"
+required-features = ["standalone"]
