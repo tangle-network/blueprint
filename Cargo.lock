@@ -4256,9 +4256,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-dist-schema"
-version = "0.28.0"
+version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86484274e2937b230685fd5bfcb01b1fef10827ecbc21fa26a9963b97dde09c6"
+checksum = "6a47b012c28589df83d391e531e743316ac6d2cd5f69063474692e7faba44e5b"
 dependencies = [
  "camino",
  "gazenot",
