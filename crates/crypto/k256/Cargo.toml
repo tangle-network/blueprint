@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-crypto-k256"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 description = "k256 crypto primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
