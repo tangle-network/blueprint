@@ -21,8 +21,6 @@ async fn setup_with_vm(
     env: BlueprintEnvVars,
     args: BlueprintArgs,
 ) -> color_eyre::Result<(Service, VmPtyIo)> {
-    manager_config.verify_network_interface()?;
-
     let network_candidates = manager_config
         .default_address_pool
         .hosts()

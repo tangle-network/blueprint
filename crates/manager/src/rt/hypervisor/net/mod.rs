@@ -169,14 +169,15 @@ pub(crate) async fn init_manager_config(
     manager_config: &mut BlueprintManagerConfig,
 ) -> Result<(NetworkManager, String)> {
     nftables::check_net_admin_capability()?;
-    manager_config.verify_network_interface()?;
 
     let network_interface = manager_config
+        .vm_sandbox_options
         .network_interface
         .clone()
         .expect("interface set by verify_network_interface");
 
     let network_candidates = manager_config
+        .vm_sandbox_options
         .default_address_pool
         .hosts()
         .filter(|ip| ip.octets()[3] != 0 && ip.octets()[3] != 255)
