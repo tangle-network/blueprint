@@ -217,7 +217,7 @@ url = { version = "2.5.2", default-features = false }
 serde_with = { version = "3.14.0", default-features = false }
 hyper = { version = "1.6.0", default-features = false }
 hyperlocal = { version = "0.9.1", default-features = false }
-hyper-util = { version = "0.1.15", default-features = false }
+hyper-util = { version = "0.1.16", default-features = false }
 http-body-util = { version = "0.1.3", default-features = false }
 dashmap = { version = "6.1.0", default-features = false }
 cloud-hypervisor-client = { version = "0.3.2", default-features = false }
