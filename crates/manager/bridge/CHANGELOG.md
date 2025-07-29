@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6](https://github.com/tangle-network/blueprint/compare/blueprint-manager-bridge-v0.1.0-alpha.5...blueprint-manager-bridge-v0.1.0-alpha.6) - 2025-07-29
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.0-alpha.5](https://github.com/tangle-network/blueprint/compare/blueprint-manager-bridge-v0.1.0-alpha.4...blueprint-manager-bridge-v0.1.0-alpha.5) - 2025-07-07
 
 ### Other
