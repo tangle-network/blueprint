@@ -4256,9 +4256,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-dist-schema"
-version = "0.28.1"
+version = "0.28.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a47b012c28589df83d391e531e743316ac6d2cd5f69063474692e7faba44e5b"
+checksum = "f6f46328749dbf0e5795ce79e85e892dacc01b8765567712ced3013079f002ae"
 dependencies = [
  "camino",
  "gazenot",
@@ -4266,7 +4266,7 @@ dependencies = [
  "semver 1.0.26",
  "serde",
  "serde_json",
- "target-lexicon",
+ "target-lexicon 0.13.2",
 ]
 
 [[package]]
@@ -5050,7 +5050,7 @@ dependencies = [
  "log",
  "regalloc2 0.6.1",
  "smallvec",
- "target-lexicon",
+ "target-lexicon 0.12.16",
 ]
 
 [[package]]
@@ -5086,7 +5086,7 @@ dependencies = [
  "cranelift-codegen",
  "log",
  "smallvec",
- "target-lexicon",
+ "target-lexicon 0.12.16",
 ]
 
 [[package]]
@@ -5103,7 +5103,7 @@ checksum = "bb6b03e0e03801c4b3fd8ce0758a94750c07a44e7944cc0ffbf0d3f2e7c79b00"
 dependencies = [
  "cranelift-codegen",
  "libc",
- "target-lexicon",
+ "target-lexicon 0.12.16",
 ]
 
 [[package]]
@@ -19631,6 +19631,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
+name = "target-lexicon"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e502f78cdbb8ba4718f566c418c52bc729126ffd16baee5baa718cf25dd5a69a"
+
+[[package]]
 name = "target-triple"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -21123,7 +21129,7 @@ dependencies = [
  "psm",
  "rayon",
  "serde",
- "target-lexicon",
+ "target-lexicon 0.12.16",
  "wasmparser",
  "wasmtime-cache",
  "wasmtime-cranelift",
@@ -21177,7 +21183,7 @@ dependencies = [
  "gimli 0.27.3",
  "log",
  "object 0.30.4",
- "target-lexicon",
+ "target-lexicon 0.12.16",
  "thiserror 1.0.69",
  "wasmparser",
  "wasmtime-cranelift-shared",
@@ -21195,7 +21201,7 @@ dependencies = [
  "cranelift-native",
  "gimli 0.27.3",
  "object 0.30.4",
- "target-lexicon",
+ "target-lexicon 0.12.16",
  "wasmtime-environ",
 ]
 
@@ -21212,7 +21218,7 @@ dependencies = [
  "log",
  "object 0.30.4",
  "serde",
- "target-lexicon",
+ "target-lexicon 0.12.16",
  "thiserror 1.0.69",
  "wasmparser",
  "wasmtime-types",
@@ -21234,7 +21240,7 @@ dependencies = [
  "object 0.30.4",
  "rustc-demangle",
  "serde",
- "target-lexicon",
+ "target-lexicon 0.12.16",
  "wasmtime-environ",
  "wasmtime-jit-debug",
  "wasmtime-jit-icache-coherence",
