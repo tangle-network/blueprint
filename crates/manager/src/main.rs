@@ -1,7 +1,7 @@
 #[cfg(not(unix))]
 compile_error!("The blueprint manager cannot be run on non-unix systems");
 
-use blueprint_manager::config::BlueprintManagerCli;
+use blueprint_manager::config::{BlueprintManagerCli, BlueprintManagerContext};
 use blueprint_manager::run_blueprint_manager;
 use blueprint_manager::sdk::entry;
 use blueprint_runner::config::BlueprintEnvironment;
@@ -11,13 +11,12 @@ use clap::Parser;
 #[allow(clippy::needless_return)]
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
-    let BlueprintManagerCli { mut config } = BlueprintManagerCli::parse();
+    let BlueprintManagerCli { config } = BlueprintManagerCli::parse();
+    let ctx = BlueprintManagerContext::new(config).await?;
 
-    config.data_dir = std::path::absolute(&config.data_dir)?;
+    entry::setup_blueprint_manager_logger(ctx.verbose, ctx.pretty, "blueprint")?;
 
-    entry::setup_blueprint_manager_logger(config.verbose, config.pretty, "blueprint")?;
-
-    let blueprint_config = match config.blueprint_config.as_deref() {
+    let blueprint_config = match ctx.blueprint_config_path() {
         Some(config_path) => {
             let blueprint_config_settings = std::fs::read_to_string(config_path)?;
             match toml::from_str(&blueprint_config_settings) {
@@ -42,7 +41,7 @@ async fn main() -> color_eyre::Result<()> {
         let _ = tokio::signal::ctrl_c().await;
     };
 
-    let handle = run_blueprint_manager(config, blueprint_config, shutdown_signal).await?;
+    let handle = run_blueprint_manager(ctx, blueprint_config, shutdown_signal).await?;
     handle.await?;
 
     Ok(())

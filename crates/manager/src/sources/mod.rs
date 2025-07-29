@@ -47,9 +47,11 @@ impl BlueprintArgs {
     }
 
     #[must_use]
-    pub fn encode(&self) -> Vec<String> {
+    pub fn encode(&self, run: bool) -> Vec<String> {
         let mut arguments = vec![];
-        arguments.push("run".to_string());
+        if run {
+            arguments.push("run".to_string());
+        }
 
         if self.test_mode {
             arguments.push("--test-mode".to_string());
@@ -92,8 +94,9 @@ impl BlueprintEnvVars {
         blueprint: &FilteredBlueprint,
         sub_service_str: &str,
     ) -> BlueprintEnvVars {
-        let base_data_dir = &manager_config.data_dir;
-        let data_dir = base_data_dir.join(format!("blueprint-{blueprint_id}-{sub_service_str}"));
+        let data_dir = manager_config
+            .data_dir()
+            .join(format!("blueprint-{blueprint_id}-{sub_service_str}"));
 
         let bootnodes = env
             .bootnodes

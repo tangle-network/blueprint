@@ -103,7 +103,7 @@ pub async fn run_eigenlayer_avs(
         verbose: 0,
     };
 
-    command.args(args.encode());
+    command.args(args.encode(true));
 
     // Optional arguments
     // TODO: Implement Keystore Password
