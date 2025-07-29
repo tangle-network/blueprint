@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.17](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-tangle-v0.1.0-alpha.16...blueprint-chain-setup-tangle-v0.1.0-alpha.17) - 2025-07-29
+
+### Other
+
+- update tangle-subxt to v0.20.0 (#1083)
+
 ## [0.1.0-alpha.16](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-tangle-v0.1.0-alpha.15...blueprint-chain-setup-tangle-v0.1.0-alpha.16) - 2025-07-07
 
 ### Other
