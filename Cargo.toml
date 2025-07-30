@@ -135,7 +135,7 @@ bollard = { version = "0.18.0", features = ["ssl"] }
 tnt-core-bytecode = { version = "0.6.0", default-features = false }
 
 # Tangle-related dependencies
-tangle-subxt = { version = "0.20.0", default-features = false }
+tangle-subxt = { version = "0.21.0", default-features = false }
 round-based = { version = "0.4.1", default-features = false }
 
 # Substrate dependencies
