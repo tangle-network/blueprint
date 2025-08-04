@@ -3373,7 +3373,7 @@ dependencies = [
  "tar",
  "thiserror 2.0.12",
  "tokio",
- "toml 0.9.2",
+ "toml 0.9.4",
  "tracing",
  "tracing-subscriber 0.3.19",
  "url",
@@ -3539,7 +3539,7 @@ dependencies = [
  "time",
  "tiny-keccak",
  "tokio",
- "toml 0.9.2",
+ "toml 0.9.4",
  "tonic 0.13.1",
  "tonic-build",
  "tracing",
@@ -4368,7 +4368,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tnt-core-bytecode",
  "tokio",
- "toml 0.9.2",
+ "toml 0.9.4",
  "tracing",
  "tracing-subscriber 0.3.19",
  "url",
@@ -4823,7 +4823,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8896,7 +8896,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.0",
  "system-configuration 0.6.1",
  "tokio",
  "tower-service",
@@ -20121,9 +20121,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.9.2"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed0aee96c12fa71097902e0bb061a5e1ebd766a6636bb605ba401c45c1650eac"
+checksum = "41ae868b5a0f67631c14589f7e250c1ea2c574ee5ba21c6c8dd4b1485705a5a1"
 dependencies = [
  "indexmap 2.9.0",
  "serde",
@@ -20540,7 +20540,7 @@ dependencies = [
  "serde_json",
  "target-triple",
  "termcolor",
- "toml 0.9.2",
+ "toml 0.9.4",
 ]
 
 [[package]]
@@ -20600,7 +20600,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.1",
  "digest 0.10.7",
  "rand 0.8.5",
  "static_assertions",
@@ -21449,7 +21449,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
