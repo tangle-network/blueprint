@@ -2,10 +2,10 @@
 
 use blueprint_std::rand::{CryptoRng, Rng};
 
-/// Generates API Tokens for the authentication process.
-pub mod api_tokens;
 /// Long-lived API key management
 pub mod api_keys;
+/// Generates API Tokens for the authentication process.
+pub mod api_tokens;
 /// Unified authentication token types
 pub mod auth_token;
 /// The database module for the authentication process.

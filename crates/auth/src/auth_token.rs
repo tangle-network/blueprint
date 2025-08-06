@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
+use std::collections::BTreeMap;
 
 use crate::{
     api_tokens::{ApiToken, ParseApiTokenError},
@@ -23,13 +23,13 @@ pub enum AuthToken {
 pub enum AuthTokenError {
     #[error("Invalid token format")]
     InvalidFormat,
-    
+
     #[error("Legacy token error: {0}")]
     LegacyToken(#[from] ParseApiTokenError),
-    
+
     #[error("Paseto token error: {0}")]
     PasetoToken(#[from] PasetoError),
-    
+
     #[error("Malformed API key")]
     MalformedApiKey,
 }
@@ -49,10 +49,10 @@ impl AuthToken {
             let legacy_token = ApiToken::from_str(token_str)?;
             return Ok(AuthToken::Legacy(legacy_token));
         }
-        
+
         Err(AuthTokenError::InvalidFormat)
     }
-    
+
     /// Get the service ID if available (only for validated tokens)
     pub fn service_id(&self) -> Option<ServiceId> {
         match self {
@@ -61,7 +61,7 @@ impl AuthToken {
             AuthToken::AccessToken(claims) => Some(claims.service_id),
         }
     }
-    
+
     /// Get additional headers if available (only for access tokens)
     pub fn additional_headers(&self) -> BTreeMap<String, String> {
         match self {
@@ -69,7 +69,7 @@ impl AuthToken {
             _ => BTreeMap::new(),
         }
     }
-    
+
     /// Check if token is expired (only applicable to access tokens)
     pub fn is_expired(&self) -> bool {
         match self {
@@ -105,7 +105,9 @@ where
         let header = match parts.headers.get(crate::types::headers::AUTHORIZATION) {
             Some(header) => header,
             None => {
-                return Err((StatusCode::UNAUTHORIZED, "Missing Authorization header").into_response());
+                return Err(
+                    (StatusCode::UNAUTHORIZED, "Missing Authorization header").into_response()
+                );
             }
         };
 
@@ -115,13 +117,15 @@ where
                 return Err((
                     StatusCode::BAD_REQUEST,
                     "Invalid Authorization header; expected Bearer token",
-                ).into_response());
+                )
+                    .into_response());
             }
             Err(_) => {
                 return Err((
                     StatusCode::BAD_REQUEST,
                     "Invalid Authorization header; not valid UTF-8",
-                ).into_response());
+                )
+                    .into_response());
             }
         };
 
@@ -132,7 +136,10 @@ where
                 if header_str.starts_with("v4.local.") {
                     // We'll handle Paseto validation in the proxy layer
                     // For now, store the raw string for later processing
-                    Err((StatusCode::BAD_REQUEST, "Paseto token validation required").into_response())
+                    Err(
+                        (StatusCode::BAD_REQUEST, "Paseto token validation required")
+                            .into_response(),
+                    )
                 } else {
                     Err((StatusCode::BAD_REQUEST, "Invalid token format").into_response())
                 }
@@ -174,7 +181,7 @@ impl TokenExchangeResponse {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        
+
         Self {
             access_token,
             token_type: "Bearer".to_string(),

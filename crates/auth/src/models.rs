@@ -334,18 +334,18 @@ mod tests {
     #[test]
     fn token_with_headers() {
         use std::collections::BTreeMap;
-        
+
         let mut rng = blueprint_std::BlueprintRng::new();
         let tmp_dir = tempfile::tempdir().unwrap();
         let db = RocksDb::open(tmp_dir.path(), &Default::default()).unwrap();
         let service_id = ServiceId::new(1);
         let generator = ApiTokenGenerator::new();
-        
+
         // Create headers
         let mut headers = BTreeMap::new();
         headers.insert("X-Tenant-Id".to_string(), "tenant123".to_string());
         headers.insert("X-User-Type".to_string(), "premium".to_string());
-        
+
         // Generate token with headers
         let token = generator.generate_token_with_expiration_and_headers(
             service_id,
@@ -360,7 +360,7 @@ mod tests {
 
         // Find the token by ID
         let found_token = ApiTokenModel::find_token_id(id, &db).unwrap().unwrap();
-        
+
         // Verify headers are preserved
         let found_headers = found_token.get_additional_headers();
         assert_eq!(found_headers, headers);
@@ -369,7 +369,7 @@ mod tests {
     #[test]
     fn test_additional_headers_methods() {
         use std::collections::BTreeMap;
-        
+
         let mut token_model = ApiTokenModel {
             id: 0,
             token: "test".to_string(),
@@ -379,15 +379,15 @@ mod tests {
             is_enabled: true,
             additional_headers: Vec::new(),
         };
-        
+
         // Test empty headers
         assert!(token_model.get_additional_headers().is_empty());
-        
+
         // Set headers
         let mut headers = BTreeMap::new();
         headers.insert("X-Test".to_string(), "value".to_string());
         token_model.set_additional_headers(&headers);
-        
+
         // Get headers back
         let retrieved = token_model.get_additional_headers();
         assert_eq!(retrieved, headers);

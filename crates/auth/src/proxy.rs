@@ -23,12 +23,12 @@ use tower_http::sensitive_headers::{
 };
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 
-use crate::api_tokens::{ApiToken, ApiTokenGenerator};
 use crate::api_keys::{ApiKeyGenerator, ApiKeyModel};
+use crate::api_tokens::{ApiToken, ApiTokenGenerator};
 use crate::auth_token::{TokenExchangeRequest, TokenExchangeResponse};
 use crate::db::RocksDb;
 use crate::models::{ApiTokenModel, ServiceModel};
-use crate::paseto_tokens::{PasetoTokenManager, AccessTokenClaims};
+use crate::paseto_tokens::{AccessTokenClaims, PasetoTokenManager};
 use crate::types::{ServiceId, VerifyChallengeResponse};
 use crate::validation;
 
@@ -61,13 +61,13 @@ impl AuthenticatedProxy {
             .build(HttpConnector::new());
         let db_config = crate::db::RocksDbConfig::default();
         let db = crate::db::RocksDb::open(db_path, &db_config)?;
-        
+
         // Initialize Paseto token manager with 15-minute TTL
         let paseto_manager = PasetoTokenManager::new(std::time::Duration::from_secs(15 * 60));
-        
-        Ok(AuthenticatedProxy { 
-            client, 
-            db, 
+
+        Ok(AuthenticatedProxy {
+            client,
+            db,
             paseto_manager,
         })
     }
@@ -189,7 +189,8 @@ async fn auth_verify(
     match result {
         Ok(true) => {
             // Validate additional headers before storing
-            let validated_headers = match validation::validate_headers(&payload.additional_headers) {
+            let validated_headers = match validation::validate_headers(&payload.additional_headers)
+            {
                 Ok(headers) => headers,
                 Err(e) => {
                     return (
@@ -200,16 +201,17 @@ async fn auth_verify(
                     );
                 }
             };
-            
+
             // Generate long-lived API key (90 days)
             let api_key_gen = ApiKeyGenerator::with_prefix(service.api_key_prefix());
             let expires_at = payload.expires_at.max(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs() + (90 * 24 * 60 * 60) // 90 days
+                    .as_secs()
+                    + (90 * 24 * 60 * 60), // 90 days
             );
-            
+
             let api_key = api_key_gen.generate_key(
                 service_id,
                 expires_at,
@@ -217,7 +219,7 @@ async fn auth_verify(
                 "Generated via challenge verification".to_string(),
                 &mut rng,
             );
-            
+
             let mut api_key_model = ApiKeyModel::from(&api_key);
             if let Err(e) = api_key_model.save(&s.db) {
                 return (
@@ -227,7 +229,7 @@ async fn auth_verify(
                     }),
                 );
             }
-            
+
             (
                 StatusCode::CREATED,
                 Json(VerifyChallengeResponse::Verified {
@@ -270,7 +272,7 @@ async fn auth_exchange(
                     );
                 }
             };
-            
+
             // Extract Bearer token
             if let Some(token) = header_str.strip_prefix("Bearer ") {
                 token
@@ -283,7 +285,7 @@ async fn auth_exchange(
                     })),
                 );
             }
-        },
+        }
         None => {
             return (
                 StatusCode::UNAUTHORIZED,
@@ -418,20 +420,32 @@ async fn auth_exchange(
     let expires_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs() + custom_ttl.unwrap_or(s.paseto_manager.default_ttl()).as_secs();
+        .as_secs()
+        + custom_ttl
+            .unwrap_or(s.paseto_manager.default_ttl())
+            .as_secs();
 
     let response = crate::auth_token::TokenExchangeResponse::new(access_token, expires_at);
-    
-    (StatusCode::OK, Json(serde_json::to_value(response).unwrap()))
+
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap()),
+    )
 }
 
 /// Handle legacy API token validation
 async fn handle_legacy_token(
     token: crate::api_tokens::ApiToken,
     db: &crate::db::RocksDb,
-) -> Result<(crate::types::ServiceId, std::collections::BTreeMap<String, String>), StatusCode> {
+) -> Result<
+    (
+        crate::types::ServiceId,
+        std::collections::BTreeMap<String, String>,
+    ),
+    StatusCode,
+> {
     let (token_id, token_str) = (token.0, token.1.as_str());
-    
+
     let api_token = match ApiTokenModel::find_token_id(token_id, db) {
         Ok(Some(token)) if token.is(&token_str) && !token.is_expired() && token.is_enabled => token,
         Ok(Some(_)) | Ok(None) => {
@@ -440,7 +454,7 @@ async fn handle_legacy_token(
         }
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
-    
+
     let additional_headers = api_token.get_additional_headers();
     Ok((api_token.service_id(), additional_headers))
 }
@@ -449,9 +463,16 @@ async fn handle_legacy_token(
 async fn handle_api_key(
     api_key: &str,
     db: &crate::db::RocksDb,
-) -> Result<(crate::types::ServiceId, std::collections::BTreeMap<String, String>), StatusCode> {
+) -> Result<
+    (
+        crate::types::ServiceId,
+        std::collections::BTreeMap<String, String>,
+    ),
+    StatusCode,
+> {
     // Parse key_id from "ak_xxxxx.yyyyy"
-    let key_id = api_key.split_once('.')
+    let key_id = api_key
+        .split_once('.')
         .map(|(key_id_part, _)| key_id_part)
         .ok_or(StatusCode::BAD_REQUEST)?;
 
@@ -498,7 +519,13 @@ async fn handle_api_key(
 async fn handle_paseto_token(
     token: &str,
     paseto_manager: &crate::paseto_tokens::PasetoTokenManager,
-) -> Result<(crate::types::ServiceId, std::collections::BTreeMap<String, String>), StatusCode> {
+) -> Result<
+    (
+        crate::types::ServiceId,
+        std::collections::BTreeMap<String, String>,
+    ),
+    StatusCode,
+> {
     let claims = match paseto_manager.validate_token(token) {
         Ok(claims) => claims,
         Err(e) => {
@@ -519,7 +546,8 @@ async fn reverse_proxy(
     mut req: Request,
 ) -> Result<Response, StatusCode> {
     // Extract and validate token from Authorization header
-    let auth_header = headers.get(crate::types::headers::AUTHORIZATION)
+    let auth_header = headers
+        .get(crate::types::headers::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
         .and_then(|h| h.strip_prefix("Bearer "))
         .ok_or(StatusCode::UNAUTHORIZED)?;
@@ -570,7 +598,7 @@ async fn reverse_proxy(
 
     // Set the target URI in the request
     *req.uri_mut() = target_uri;
-    
+
     // Inject additional headers into the request
     for (header_name, header_value) in additional_headers {
         if let Ok(name) = header::HeaderName::from_bytes(header_name.as_bytes()) {
@@ -727,7 +755,7 @@ mod tests {
     #[tokio::test]
     async fn auth_flow_with_additional_headers() {
         use std::collections::BTreeMap;
-        
+
         let _guard = tracing::subscriber::set_default(
             tracing_subscriber::fmt()
                 .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -747,11 +775,11 @@ mod tests {
             axum::routing::get(|headers: axum::http::HeaderMap| async move {
                 let mut response_headers = BTreeMap::new();
                 for (name, value) in headers.iter() {
-                    if name.as_str().starts_with("x-tenant-") || name.as_str().starts_with("X-Tenant-") {
-                        response_headers.insert(
-                            name.to_string(),
-                            value.to_str().unwrap_or("").to_string(),
-                        );
+                    if name.as_str().starts_with("x-tenant-")
+                        || name.as_str().starts_with("X-Tenant-")
+                    {
+                        response_headers
+                            .insert(name.to_string(), value.to_str().unwrap_or("").to_string());
                     }
                 }
                 axum::Json(response_headers)
@@ -842,12 +870,15 @@ mod tests {
             .get("/echo")
             .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
             .await;
-        
+
         assert!(res.status().is_success());
-        
+
         let response_headers: BTreeMap<String, String> = res.json().await;
         assert_eq!(response_headers.get("x-tenant-id"), Some(&tenant_id));
-        assert_eq!(response_headers.get("x-tenant-name"), Some(&"Acme Corp".to_string()));
+        assert_eq!(
+            response_headers.get("x-tenant-name"),
+            Some(&"Acme Corp".to_string())
+        );
 
         echo_server.abort();
     }
@@ -855,7 +886,7 @@ mod tests {
     #[tokio::test]
     async fn auth_flow_rejects_invalid_headers() {
         use std::collections::BTreeMap;
-        
+
         let mut rng = blueprint_std::BlueprintRng::new();
         let tmp = tempdir().unwrap();
         let proxy = AuthenticatedProxy::new(tmp.path()).unwrap();
@@ -911,10 +942,12 @@ mod tests {
             .header(headers::X_SERVICE_ID, service_id.to_string())
             .json(&req)
             .await;
-        
+
         let res: VerifyChallengeResponse = res.json().await;
-        
+
         // Should fail with an error about invalid headers
-        assert!(matches!(res, VerifyChallengeResponse::UnexpectedError { message } if message.contains("Invalid headers")));
+        assert!(
+            matches!(res, VerifyChallengeResponse::UnexpectedError { message } if message.contains("Invalid headers"))
+        );
     }
 }

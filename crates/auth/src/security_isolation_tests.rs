@@ -6,14 +6,14 @@ mod tests {
     use std::collections::BTreeMap;
     use std::net::Ipv4Addr;
     use tempfile::tempdir;
-    
+
     use crate::{
-        proxy::AuthenticatedProxy,
-        test_client::TestClient,
-        types::{ChallengeRequest, ChallengeResponse, KeyType, VerifyChallengeResponse, headers},
         auth_token::{TokenExchangeRequest, TokenExchangeResponse},
         models::ServiceModel,
+        proxy::AuthenticatedProxy,
+        test_client::TestClient,
         types::ServiceId,
+        types::{ChallengeRequest, ChallengeResponse, KeyType, VerifyChallengeResponse, headers},
     };
 
     /// Test that multiple users with API keys cannot access each other's resources
@@ -72,22 +72,21 @@ mod tests {
         for (email, tenant_hash, company) in users {
             let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
             let public_key = signing_key.verifying_key().to_sec1_bytes();
-            
+
             // Add this user as an owner (simulating different users with different keys)
             service.add_owner(KeyType::Ecdsa, public_key.clone().into());
             user_data.push((email, tenant_hash, company, signing_key, public_key));
         }
-        
+
         // Save service with all users before making any requests
         let db = proxy.db();
         service.save(service_id, &db).unwrap();
-        
+
         let router = proxy.router();
         let client = TestClient::new(router);
         let mut user_api_keys = Vec::new();
 
         for (email, tenant_hash, company, signing_key, public_key) in user_data {
-            
             // Get challenge
             let challenge_req = ChallengeRequest {
                 pub_key: public_key.into(),
@@ -99,7 +98,7 @@ mod tests {
                 .header(headers::X_SERVICE_ID, service_id.to_string())
                 .json(&challenge_req)
                 .await;
-                
+
             if !res.status().is_success() {
                 eprintln!("Challenge request failed with status: {}", res.status());
                 let body = res.text().await;
@@ -147,13 +146,17 @@ mod tests {
                 .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
                 .await;
 
-            assert!(res.status().is_success(), "User {} should be able to access their data", email);
-            
+            assert!(
+                res.status().is_success(),
+                "User {} should be able to access their data",
+                email
+            );
+
             let data: serde_json::Value = res.json().await;
             assert_eq!(
                 data["tenant_id"].as_str().unwrap(),
                 *expected_tenant_id,
-                "User {} should see their own tenant ID", 
+                "User {} should see their own tenant ID",
                 email
             );
         }
@@ -161,21 +164,25 @@ mod tests {
         // Test 2: Users cannot manipulate API keys to access other users' data
         let alice_key = &user_api_keys[0].2;
         let bob_key = &user_api_keys[1].2;
-        
+
         // Try to use Alice's key with Bob's identifier (this should fail or still return Alice's data)
         let alice_parts: Vec<&str> = alice_key.split('.').collect();
         let bob_parts: Vec<&str> = bob_key.split('.').collect();
-        
+
         // Attempt to create a hybrid key (should fail validation)
         let malicious_key = format!("{}.{}", alice_parts[0], bob_parts[1]);
-        
+
         let res = client
             .get("/api/secure")
             .header(headers::AUTHORIZATION, format!("Bearer {}", malicious_key))
             .await;
-        
+
         // Should get 401 because the key validation should fail
-        assert_eq!(res.status(), 401, "Malicious key manipulation should be rejected");
+        assert_eq!(
+            res.status(),
+            401,
+            "Malicious key manipulation should be rejected"
+        );
 
         test_server.abort();
     }
@@ -199,7 +206,7 @@ mod tests {
                     .get("x-tenant-role")
                     .and_then(|h| h.to_str().ok())
                     .unwrap_or("user");
-                    
+
                 axum::Json(serde_json::json!({
                     "tenant_id": tenant_id,
                     "role": role,
@@ -232,7 +239,7 @@ mod tests {
         // Create two users with different privileges
         let admin_user = ("admin@company.com", "admin_tenant", "admin");
         let regular_user = ("user@company.com", "user_tenant", "user");
-        
+
         // Pre-generate all users and add them to the service
         let mut user_data = Vec::new();
         for (email, tenant_id, role) in [admin_user, regular_user] {
@@ -241,17 +248,16 @@ mod tests {
             service.add_owner(KeyType::Ecdsa, public_key.clone().into());
             user_data.push((email, tenant_id, role, signing_key, public_key));
         }
-        
+
         // Save service with all users before making any requests
         let db = proxy.db();
         service.save(service_id, &db).unwrap();
-        
+
         let router = proxy.router();
         let client = TestClient::new(router);
         let mut user_paseto_tokens = Vec::new();
 
         for (email, tenant_id, role, signing_key, public_key) in user_data {
-
             // Get API key first
             let challenge_req = ChallengeRequest {
                 pub_key: public_key.into(),
@@ -305,7 +311,11 @@ mod tests {
                 .json(&exchange_req)
                 .await;
 
-            assert!(res.status().is_success(), "Token exchange should succeed for {}", email);
+            assert!(
+                res.status().is_success(),
+                "Token exchange should succeed for {}",
+                email
+            );
             let exchange_res: TokenExchangeResponse = res.json().await;
 
             user_paseto_tokens.push((email, tenant_id, role, exchange_res.access_token));
@@ -318,8 +328,12 @@ mod tests {
                 .header(headers::AUTHORIZATION, format!("Bearer {}", paseto_token))
                 .await;
 
-            assert!(res.status().is_success(), "User {} should access data with Paseto token", email);
-            
+            assert!(
+                res.status().is_success(),
+                "User {} should access data with Paseto token",
+                email
+            );
+
             let data: serde_json::Value = res.json().await;
             assert_eq!(data["tenant_id"].as_str().unwrap(), *expected_tenant_id);
             assert_eq!(data["role"].as_str().unwrap(), *expected_role);
@@ -332,7 +346,7 @@ mod tests {
         // Regular user tries to use admin token (should fail or return their own data)
         // Since Paseto tokens are cryptographically signed, this should fail validation
         // But if somehow it passes, the claims inside should still be for the admin user
-        
+
         // The key insight: Paseto tokens contain embedded claims, so even if someone
         // steals a token, they get the claims of the original user, not their own identity
 
@@ -341,7 +355,7 @@ mod tests {
         let mut modified_token = admin_token.clone();
         // Change one character in the token
         if let Some(pos) = modified_token.rfind('A') {
-            modified_token.replace_range(pos..pos+1, "B");
+            modified_token.replace_range(pos..pos + 1, "B");
         }
 
         let res = client
@@ -349,7 +363,11 @@ mod tests {
             .header(headers::AUTHORIZATION, format!("Bearer {}", modified_token))
             .await;
 
-        assert_eq!(res.status(), 401, "Modified Paseto token should be rejected");
+        assert_eq!(
+            res.status(),
+            401,
+            "Modified Paseto token should be rejected"
+        );
 
         test_server.abort();
     }
@@ -370,10 +388,10 @@ mod tests {
 
         let db = proxy.db();
         let router = proxy.router();
-        
+
         // Create multiple concurrent authentication tasks
         let num_users = 10;
-        
+
         // Pre-generate keys and add all users as owners first
         let mut user_keys = Vec::new();
         for _ in 0..num_users {
@@ -384,12 +402,12 @@ mod tests {
             user_keys.push(signing_key);
         }
         service.save(service_id, &db).unwrap();
-        
+
         let mut tasks = Vec::new();
         for (user_id, signing_key) in user_keys.into_iter().enumerate() {
             let client = TestClient::new(router.clone());
             let service_id = service_id;
-            
+
             let task = tokio::spawn(async move {
                 let public_key = signing_key.verifying_key().to_sec1_bytes();
 
@@ -406,7 +424,11 @@ mod tests {
                     .await;
 
                 if !res.status().is_success() {
-                    return Err(format!("User {} challenge failed: {}", user_id, res.status()));
+                    return Err(format!(
+                        "User {} challenge failed: {}",
+                        user_id,
+                        res.status()
+                    ));
                 }
 
                 let challenge_res: ChallengeResponse = res.json().await;
@@ -461,7 +483,11 @@ mod tests {
                     .await;
 
                 if !res.status().is_success() {
-                    return Err(format!("User {} token exchange failed: {}", user_id, res.status()));
+                    return Err(format!(
+                        "User {} token exchange failed: {}",
+                        user_id,
+                        res.status()
+                    ));
                 }
 
                 let exchange_res: TokenExchangeResponse = res.json().await;
@@ -482,18 +508,27 @@ mod tests {
 
         // Verify all users got unique tokens
         assert_eq!(results.len(), num_users);
-        
-        let api_keys: std::collections::HashSet<_> = results.iter().map(|(_, api_key, _)| api_key).collect();
-        let paseto_tokens: std::collections::HashSet<_> = results.iter().map(|(_, _, paseto)| paseto).collect();
-        
-        assert_eq!(api_keys.len(), num_users, "All API keys should be unique");
-        assert_eq!(paseto_tokens.len(), num_users, "All Paseto tokens should be unique");
 
-        println!("✅ All {} users successfully authenticated concurrently with unique tokens", num_users);
+        let api_keys: std::collections::HashSet<_> =
+            results.iter().map(|(_, api_key, _)| api_key).collect();
+        let paseto_tokens: std::collections::HashSet<_> =
+            results.iter().map(|(_, _, paseto)| paseto).collect();
+
+        assert_eq!(api_keys.len(), num_users, "All API keys should be unique");
+        assert_eq!(
+            paseto_tokens.len(),
+            num_users,
+            "All Paseto tokens should be unique"
+        );
+
+        println!(
+            "✅ All {} users successfully authenticated concurrently with unique tokens",
+            num_users
+        );
     }
 
     /// Test header injection attempts during token exchange
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_token_exchange_header_injection_security() {
         let mut rng = blueprint_std::BlueprintRng::new();
         let tmp = tempdir().unwrap();
@@ -591,11 +626,14 @@ mod tests {
                 .await;
 
             // Hop-by-hop headers should be rejected (according to validation.rs FORBIDDEN_HEADERS)
-            if matches!(header_name, "Connection" | "Upgrade" | "Host" | "Content-Length" | "Transfer-Encoding") {
+            if matches!(
+                header_name,
+                "Connection" | "Upgrade" | "Host" | "Content-Length" | "Transfer-Encoding"
+            ) {
                 assert_eq!(
-                    res.status(), 
+                    res.status(),
                     400,
-                    "Hop-by-hop header {} should be rejected", 
+                    "Hop-by-hop header {} should be rejected",
                     header_name
                 );
             } else {

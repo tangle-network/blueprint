@@ -5,14 +5,14 @@ mod tests {
     use std::collections::BTreeMap;
     use std::net::Ipv4Addr;
     use tempfile::tempdir;
-    
+
     use crate::{
-        proxy::AuthenticatedProxy,
-        test_client::TestClient,
-        types::{ChallengeRequest, ChallengeResponse, KeyType, VerifyChallengeResponse, headers},
         auth_token::{TokenExchangeRequest, TokenExchangeResponse},
         models::ServiceModel,
+        proxy::AuthenticatedProxy,
+        test_client::TestClient,
         types::ServiceId,
+        types::{ChallengeRequest, ChallengeResponse, KeyType, VerifyChallengeResponse, headers},
         validation,
     };
 
@@ -109,7 +109,11 @@ mod tests {
             .json(&exchange_req)
             .await;
 
-        assert!(res.status().is_success(), "Token exchange failed: {:?}", res);
+        assert!(
+            res.status().is_success(),
+            "Token exchange failed: {:?}",
+            res
+        );
         let exchange_res: TokenExchangeResponse = res.json().await;
 
         // Verify response structure
@@ -160,10 +164,7 @@ mod tests {
             ttl_seconds: None,
         };
 
-        let res = client
-            .post("/v1/auth/exchange")
-            .json(&exchange_req)
-            .await;
+        let res = client.post("/v1/auth/exchange").json(&exchange_req).await;
 
         assert_eq!(res.status(), 401);
         let error: serde_json::Value = res.json().await;
@@ -263,10 +264,8 @@ mod tests {
                 let mut response_headers = BTreeMap::new();
                 for (name, value) in headers.iter() {
                     if name.as_str().starts_with("x-tenant-") {
-                        response_headers.insert(
-                            name.to_string(),
-                            value.to_str().unwrap_or("").to_string(),
-                        );
+                        response_headers
+                            .insert(name.to_string(), value.to_str().unwrap_or("").to_string());
                     }
                 }
                 axum::Json(response_headers)
@@ -366,16 +365,32 @@ mod tests {
         // Use Paseto token with reverse proxy
         let res = client
             .get("/api/data")
-            .header(headers::AUTHORIZATION, format!("Bearer {}", exchange_res.access_token))
+            .header(
+                headers::AUTHORIZATION,
+                format!("Bearer {}", exchange_res.access_token),
+            )
             .await;
 
-        assert!(res.status().is_success(), "Paseto token request failed: {:?}", res);
+        assert!(
+            res.status().is_success(),
+            "Paseto token request failed: {:?}",
+            res
+        );
         let response_headers: BTreeMap<String, String> = res.json().await;
 
         // Verify headers were forwarded (should include both original + additional)
-        assert_eq!(response_headers.get("x-tenant-id"), Some(&"tenant123".to_string()));
-        assert_eq!(response_headers.get("x-tenant-name"), Some(&"Test Corp".to_string()));
-        assert_eq!(response_headers.get("x-tenant-role"), Some(&"admin".to_string()));
+        assert_eq!(
+            response_headers.get("x-tenant-id"),
+            Some(&"tenant123".to_string())
+        );
+        assert_eq!(
+            response_headers.get("x-tenant-name"),
+            Some(&"Test Corp".to_string())
+        );
+        assert_eq!(
+            response_headers.get("x-tenant-role"),
+            Some(&"admin".to_string())
+        );
 
         test_server.abort();
     }

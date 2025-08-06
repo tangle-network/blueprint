@@ -22,7 +22,9 @@ const FORBIDDEN_HEADERS: &[&str] = &[
 ];
 
 /// Validates and sanitizes additional headers
-pub fn validate_headers(headers: &BTreeMap<String, String>) -> Result<BTreeMap<String, String>, ValidationError> {
+pub fn validate_headers(
+    headers: &BTreeMap<String, String>,
+) -> Result<BTreeMap<String, String>, ValidationError> {
     if headers.len() > MAX_HEADERS {
         return Err(ValidationError::TooManyHeaders {
             max: MAX_HEADERS,
@@ -30,17 +32,15 @@ pub fn validate_headers(headers: &BTreeMap<String, String>) -> Result<BTreeMap<S
         });
     }
 
-    let forbidden_set: HashSet<String> = FORBIDDEN_HEADERS
-        .iter()
-        .map(|h| h.to_lowercase())
-        .collect();
+    let forbidden_set: HashSet<String> =
+        FORBIDDEN_HEADERS.iter().map(|h| h.to_lowercase()).collect();
 
     let mut validated = BTreeMap::new();
 
     for (name, value) in headers {
         // Validate header name
         let name_lower = name.to_lowercase();
-        
+
         if forbidden_set.contains(&name_lower) {
             return Err(ValidationError::ForbiddenHeader {
                 header: name.clone(),
@@ -85,9 +85,10 @@ pub fn validate_headers(headers: &BTreeMap<String, String>) -> Result<BTreeMap<S
 
 /// Check if a header name contains only valid characters
 fn is_valid_header_name(name: &str) -> bool {
-    !name.is_empty() && name.chars().all(|c| {
-        c.is_ascii_alphanumeric() || c == '-' || c == '_'
-    })
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// Check if a header value contains only valid characters
@@ -113,19 +114,19 @@ pub fn hash_user_id(user_id: &str) -> String {
 pub enum ValidationError {
     #[error("Too many headers provided: {provided} (max: {max})")]
     TooManyHeaders { max: usize, provided: usize },
-    
+
     #[error("Forbidden header: {header}")]
     ForbiddenHeader { header: String },
-    
+
     #[error("Header name too long: {header} (max: {max} bytes)")]
     HeaderNameTooLong { header: String, max: usize },
-    
+
     #[error("Header value too long for {header} (max: {max} bytes)")]
     HeaderValueTooLong { header: String, max: usize },
-    
+
     #[error("Invalid header name: {header}")]
     InvalidHeaderName { header: String },
-    
+
     #[error("Invalid header value for {header}: {value}")]
     InvalidHeaderValue { header: String, value: String },
 }
@@ -139,7 +140,7 @@ mod tests {
         let mut headers = BTreeMap::new();
         headers.insert("X-Tenant-Id".to_string(), "abc123".to_string());
         headers.insert("X-User-Type".to_string(), "premium".to_string());
-        
+
         let result = validate_headers(&headers);
         assert!(result.is_ok());
         let validated = result.unwrap();
@@ -152,27 +153,36 @@ mod tests {
         for i in 0..10 {
             headers.insert(format!("X-Header-{}", i), "value".to_string());
         }
-        
+
         let result = validate_headers(&headers);
-        assert!(matches!(result, Err(ValidationError::TooManyHeaders { .. })));
+        assert!(matches!(
+            result,
+            Err(ValidationError::TooManyHeaders { .. })
+        ));
     }
 
     #[test]
     fn test_validate_headers_forbidden() {
         let mut headers = BTreeMap::new();
         headers.insert("Connection".to_string(), "close".to_string());
-        
+
         let result = validate_headers(&headers);
-        assert!(matches!(result, Err(ValidationError::ForbiddenHeader { .. })));
+        assert!(matches!(
+            result,
+            Err(ValidationError::ForbiddenHeader { .. })
+        ));
     }
 
     #[test]
     fn test_validate_headers_invalid_name() {
         let mut headers = BTreeMap::new();
         headers.insert("X-Invalid Header".to_string(), "value".to_string());
-        
+
         let result = validate_headers(&headers);
-        assert!(matches!(result, Err(ValidationError::InvalidHeaderName { .. })));
+        assert!(matches!(
+            result,
+            Err(ValidationError::InvalidHeaderName { .. })
+        ));
     }
 
     #[test]
@@ -180,9 +190,12 @@ mod tests {
         let mut headers = BTreeMap::new();
         let long_name = "X-".to_string() + &"a".repeat(300);
         headers.insert(long_name, "value".to_string());
-        
+
         let result = validate_headers(&headers);
-        assert!(matches!(result, Err(ValidationError::HeaderNameTooLong { .. })));
+        assert!(matches!(
+            result,
+            Err(ValidationError::HeaderNameTooLong { .. })
+        ));
     }
 
     #[test]
@@ -190,9 +203,12 @@ mod tests {
         let mut headers = BTreeMap::new();
         let long_value = "a".repeat(600);
         headers.insert("X-Test".to_string(), long_value);
-        
+
         let result = validate_headers(&headers);
-        assert!(matches!(result, Err(ValidationError::HeaderValueTooLong { .. })));
+        assert!(matches!(
+            result,
+            Err(ValidationError::HeaderValueTooLong { .. })
+        ));
     }
 
     #[test]
@@ -200,13 +216,13 @@ mod tests {
         let user_id = "user123@example.com";
         let hash1 = hash_user_id(user_id);
         let hash2 = hash_user_id(user_id);
-        
+
         // Should be deterministic
         assert_eq!(hash1, hash2);
-        
+
         // Should be 32 characters (16 bytes hex encoded)
         assert_eq!(hash1.len(), 32);
-        
+
         // Different inputs should produce different hashes
         let hash3 = hash_user_id("different@example.com");
         assert_ne!(hash1, hash3);
@@ -217,7 +233,7 @@ mod tests {
         assert!(is_valid_header_name("X-Tenant-Id"));
         assert!(is_valid_header_name("X_User_Type"));
         assert!(is_valid_header_name("Authorization"));
-        
+
         assert!(!is_valid_header_name(""));
         assert!(!is_valid_header_name("X Tenant Id"));
         assert!(!is_valid_header_name("X-Tenant:Id"));
@@ -228,7 +244,7 @@ mod tests {
         assert!(is_valid_header_value("abc123"));
         assert!(is_valid_header_value("Bearer token123"));
         assert!(is_valid_header_value("value with spaces"));
-        
+
         assert!(!is_valid_header_value("value\nwith\nnewlines"));
         assert!(!is_valid_header_value("value\0with\0nulls"));
     }

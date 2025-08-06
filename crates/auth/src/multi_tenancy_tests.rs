@@ -1,15 +1,17 @@
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use serde::{Deserialize, Serialize};
 
 use crate::{
     api_tokens::ApiTokenGenerator,
     models::{ApiTokenModel, ServiceModel},
     proxy::AuthenticatedProxy,
     test_client::TestClient,
-    types::{ChallengeRequest, ChallengeResponse, KeyType, ServiceId, VerifyChallengeResponse, headers},
+    types::{
+        ChallengeRequest, ChallengeResponse, KeyType, ServiceId, VerifyChallengeResponse, headers,
+    },
     validation::hash_user_id,
 };
 
@@ -36,9 +38,11 @@ async fn multi_tenant_service_isolation() {
         .route(
             "/api/{user}/data",
             axum::routing::post(
-                |headers: axum::http::HeaderMap, 
-                 axum::extract::Path(user): axum::extract::Path<String>, 
-                 axum::extract::State(requests): axum::extract::State<Arc<Mutex<Vec<ServiceRequest>>>>| async move {
+                |headers: axum::http::HeaderMap,
+                 axum::extract::Path(user): axum::extract::Path<String>,
+                 axum::extract::State(requests): axum::extract::State<
+                    Arc<Mutex<Vec<ServiceRequest>>>,
+                >| async move {
                     let tenant_id = headers
                         .get("x-tenant-id")
                         .and_then(|v| v.to_str().ok())
@@ -64,7 +68,7 @@ async fn multi_tenant_service_isolation() {
 
                     requests.lock().await.push(request.clone());
                     axum::Json(request)
-                }
+                },
             ),
         )
         .with_state(requests_clone.clone());
@@ -165,23 +169,43 @@ async fn multi_tenant_service_isolation() {
             _ => panic!("Failed to verify tenant {}", email),
         };
 
-        tenant_tokens.push((email.clone(), tenant_id, company.to_string(), tier.to_string(), api_key));
+        tenant_tokens.push((
+            email.clone(),
+            tenant_id,
+            company.to_string(),
+            tier.to_string(),
+            api_key,
+        ));
     }
 
     // Now simulate each tenant making requests
     for (email, tenant_id, company, tier, token) in &tenant_tokens {
         let res = client
-            .post(&format!("/api/{}/data", email.replace('@', "_").replace('.', "_")))
+            .post(&format!(
+                "/api/{}/data",
+                email.replace('@', "_").replace('.', "_")
+            ))
             .header(headers::AUTHORIZATION, format!("Bearer {}", token))
             .await;
 
         if !res.status().is_success() {
-            eprintln!("Request failed for tenant {} with status {}", email, res.status());
+            eprintln!(
+                "Request failed for tenant {} with status {}",
+                email,
+                res.status()
+            );
             eprintln!("Token: {}", token);
-            eprintln!("Path: /api/{}/data", email.replace('@', "_").replace('.', "_"));
+            eprintln!(
+                "Path: /api/{}/data",
+                email.replace('@', "_").replace('.', "_")
+            );
         }
-        assert!(res.status().is_success(), "Request failed for tenant {}", email);
-        
+        assert!(
+            res.status().is_success(),
+            "Request failed for tenant {}",
+            email
+        );
+
         let response: ServiceRequest = res.json().await;
         assert_eq!(response.tenant_id, *tenant_id);
         assert_eq!(response.tenant_name, *company);
@@ -190,19 +214,28 @@ async fn multi_tenant_service_isolation() {
 
     // Verify isolation: check that all requests have correct tenant headers
     let all_requests = requests.lock().await;
-    assert_eq!(all_requests.len(), 4, "Should have 4 requests from 4 tenants");
+    assert_eq!(
+        all_requests.len(),
+        4,
+        "Should have 4 requests from 4 tenants"
+    );
 
     // Verify each request has unique tenant ID
-    let unique_tenants: std::collections::HashSet<_> = all_requests
-        .iter()
-        .map(|r| r.tenant_id.clone())
-        .collect();
+    let unique_tenants: std::collections::HashSet<_> =
+        all_requests.iter().map(|r| r.tenant_id.clone()).collect();
     assert_eq!(unique_tenants.len(), 4, "Should have 4 unique tenant IDs");
 
     // Verify tenant IDs are properly hashed (not raw emails)
     for req in all_requests.iter() {
-        assert!(!req.tenant_id.contains('@'), "Tenant ID should be hashed, not raw email");
-        assert_eq!(req.tenant_id.len(), 32, "Tenant ID should be 32 chars (16 bytes hex)");
+        assert!(
+            !req.tenant_id.contains('@'),
+            "Tenant ID should be hashed, not raw email"
+        );
+        assert_eq!(
+            req.tenant_id.len(),
+            32,
+            "Tenant ID should be 32 chars (16 bytes hex)"
+        );
     }
 
     service_handle.abort();
@@ -226,8 +259,14 @@ async fn tenant_token_cannot_impersonate_other_tenant() {
     let alice_key = k256::ecdsa::SigningKey::random(&mut rng);
     let bob_key = k256::ecdsa::SigningKey::random(&mut rng);
 
-    service.add_owner(KeyType::Ecdsa, alice_key.verifying_key().to_sec1_bytes().into());
-    service.add_owner(KeyType::Ecdsa, bob_key.verifying_key().to_sec1_bytes().into());
+    service.add_owner(
+        KeyType::Ecdsa,
+        alice_key.verifying_key().to_sec1_bytes().into(),
+    );
+    service.add_owner(
+        KeyType::Ecdsa,
+        bob_key.verifying_key().to_sec1_bytes().into(),
+    );
     service.save(service_id, &proxy.db()).unwrap();
 
     let router = proxy.router();
@@ -247,7 +286,9 @@ async fn tenant_token_cannot_impersonate_other_tenant() {
         .await;
 
     let challenge: ChallengeResponse = res.json().await;
-    let (alice_sig, _) = alice_key.sign_prehash_recoverable(&challenge.challenge).unwrap();
+    let (alice_sig, _) = alice_key
+        .sign_prehash_recoverable(&challenge.challenge)
+        .unwrap();
 
     let alice_tenant_id = hash_user_id("alice@example.com");
     let mut alice_headers = BTreeMap::new();
@@ -268,7 +309,10 @@ async fn tenant_token_cannot_impersonate_other_tenant() {
         .await;
 
     let verify_res: VerifyChallengeResponse = res.json().await;
-    assert!(matches!(verify_res, VerifyChallengeResponse::Verified { .. }));
+    assert!(matches!(
+        verify_res,
+        VerifyChallengeResponse::Verified { .. }
+    ));
 
     // Now Bob tries to get a token but claims to be Alice (impersonation attempt)
     let bob_public = bob_key.verifying_key().to_sec1_bytes();
@@ -284,7 +328,9 @@ async fn tenant_token_cannot_impersonate_other_tenant() {
         .await;
 
     let challenge: ChallengeResponse = res.json().await;
-    let (bob_sig, _) = bob_key.sign_prehash_recoverable(&challenge.challenge).unwrap();
+    let (bob_sig, _) = bob_key
+        .sign_prehash_recoverable(&challenge.challenge)
+        .unwrap();
 
     // Bob tries to claim Alice's tenant ID
     let mut bob_headers = BTreeMap::new();
@@ -307,9 +353,12 @@ async fn tenant_token_cannot_impersonate_other_tenant() {
     // This succeeds because Bob is a valid owner, but the token will have Bob's claimed headers
     // In a real system, you'd want to derive tenant ID from the public key itself
     let verify_res: VerifyChallengeResponse = res.json().await;
-    assert!(matches!(verify_res, VerifyChallengeResponse::Verified { .. }));
-    
-    // However, the security comes from the fact that the tenant ID should be 
+    assert!(matches!(
+        verify_res,
+        VerifyChallengeResponse::Verified { .. }
+    ));
+
+    // However, the security comes from the fact that the tenant ID should be
     // cryptographically derived from something only the real tenant controls
 }
 
@@ -324,49 +373,51 @@ async fn tenant_rate_limiting_by_tier() {
     let counts_clone = request_counts.clone();
 
     // Create a service that enforces rate limits based on tier
-    let rate_limit_router = axum::Router::new()
-        .route(
-            "/api/limited",
-            axum::routing::get({
-                let counts = counts_clone;
-                move |headers: axum::http::HeaderMap| {
-                    let counts = counts.clone();
-                    async move {
-                        let tier = headers
-                            .get("x-user-tier")
-                            .and_then(|v| v.to_str().ok())
-                            .unwrap_or("free");
-                        let tenant_id = headers
-                            .get("x-tenant-id")
-                            .and_then(|v| v.to_str().ok())
-                            .unwrap_or("unknown");
+    let rate_limit_router = axum::Router::new().route(
+        "/api/limited",
+        axum::routing::get({
+            let counts = counts_clone;
+            move |headers: axum::http::HeaderMap| {
+                let counts = counts.clone();
+                async move {
+                    let tier = headers
+                        .get("x-user-tier")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("free");
+                    let tenant_id = headers
+                        .get("x-tenant-id")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("unknown");
 
-                        let mut counts = counts.lock().await;
-                        let count = counts.entry(tenant_id.to_string()).or_insert(0);
-                        *count += 1;
+                    let mut counts = counts.lock().await;
+                    let count = counts.entry(tenant_id.to_string()).or_insert(0);
+                    *count += 1;
 
-                        let limit = match tier {
-                            "enterprise" => 1000,
-                            "startup" => 100,
-                            "free" => 10,
-                            _ => 5,
-                        };
+                    let limit = match tier {
+                        "enterprise" => 1000,
+                        "startup" => 100,
+                        "free" => 10,
+                        _ => 5,
+                    };
 
-                        if *count > limit {
-                            axum::response::Response::builder()
-                                .status(429)
-                                .body(axum::body::Body::from("Rate limit exceeded"))
-                                .unwrap()
-                        } else {
-                            axum::response::Response::builder()
-                                .status(200)
-                                .body(axum::body::Body::from(format!("Request {} of {}", count, limit)))
-                                .unwrap()
-                        }
+                    if *count > limit {
+                        axum::response::Response::builder()
+                            .status(429)
+                            .body(axum::body::Body::from("Rate limit exceeded"))
+                            .unwrap()
+                    } else {
+                        axum::response::Response::builder()
+                            .status(200)
+                            .body(axum::body::Body::from(format!(
+                                "Request {} of {}",
+                                count, limit
+                            )))
+                            .unwrap()
                     }
                 }
-            }),
-        );
+            }
+        }),
+    );
 
     // Start the service
     let (service_handle, service_addr) = {
@@ -393,7 +444,10 @@ async fn tenant_rate_limiting_by_tier() {
 
     // Create a free tier user
     let free_user_key = k256::ecdsa::SigningKey::random(&mut rng);
-    service.add_owner(KeyType::Ecdsa, free_user_key.verifying_key().to_sec1_bytes().into());
+    service.add_owner(
+        KeyType::Ecdsa,
+        free_user_key.verifying_key().to_sec1_bytes().into(),
+    );
     service.save(service_id, &proxy.db()).unwrap();
 
     let router = proxy.router();
@@ -413,7 +467,9 @@ async fn tenant_rate_limiting_by_tier() {
         .await;
 
     let challenge: ChallengeResponse = res.json().await;
-    let (signature, _) = free_user_key.sign_prehash_recoverable(&challenge.challenge).unwrap();
+    let (signature, _) = free_user_key
+        .sign_prehash_recoverable(&challenge.challenge)
+        .unwrap();
 
     let tenant_id = hash_user_id("freeuser@example.com");
     let mut headers = BTreeMap::new();
@@ -449,7 +505,10 @@ async fn tenant_rate_limiting_by_tier() {
         let status = res.status();
         if status != 200 {
             let body = res.text().await;
-            panic!("Request {} failed with status {} and body: {:?} (token: {})", i, status, body, token);
+            panic!(
+                "Request {} failed with status {} and body: {:?} (token: {})",
+                i, status, body, token
+            );
         }
     }
 
@@ -458,7 +517,11 @@ async fn tenant_rate_limiting_by_tier() {
         .get("/api/limited")
         .header(headers::AUTHORIZATION, format!("Bearer {}", token))
         .await;
-    assert_eq!(res.status(), 429, "Should be rate limited after 10 requests");
+    assert_eq!(
+        res.status(),
+        429,
+        "Should be rate limited after 10 requests"
+    );
 
     service_handle.abort();
 }
@@ -492,12 +555,12 @@ async fn tenant_data_isolation_verification() {
         service.add_owner(KeyType::Ecdsa, public_key.clone().into());
 
         let tenant_id = hash_user_id(email);
-        
+
         // Generate token with tenant headers
         let mut headers = BTreeMap::new();
         headers.insert("X-Tenant-Id".to_string(), tenant_id.clone());
         headers.insert("X-Company".to_string(), company.to_string());
-        
+
         let token_gen = ApiTokenGenerator::with_prefix(&service.api_key_prefix);
         let token = token_gen.generate_token_with_expiration_and_headers(
             service_id,
@@ -505,10 +568,10 @@ async fn tenant_data_isolation_verification() {
             headers.clone(),
             &mut rng,
         );
-        
+
         let mut token_model = ApiTokenModel::from(&token);
         let token_id = token_model.save(&db).unwrap();
-        
+
         tenant_data.push((company, email, tenant_id, token_id, headers));
     }
 
@@ -519,9 +582,9 @@ async fn tenant_data_isolation_verification() {
         let token_model = ApiTokenModel::find_token_id(token_id, &db)
             .unwrap()
             .expect("Token should exist");
-        
+
         let headers = token_model.get_additional_headers();
-        
+
         // Verify correct tenant ID
         assert_eq!(
             headers.get("X-Tenant-Id"),
@@ -529,7 +592,7 @@ async fn tenant_data_isolation_verification() {
             "Token for {} should have correct tenant ID",
             email
         );
-        
+
         // Verify correct company
         assert_eq!(
             headers.get("X-Company"),
@@ -537,10 +600,10 @@ async fn tenant_data_isolation_verification() {
             "Token for {} should have correct company",
             email
         );
-        
+
         // Verify headers match expected
         assert_eq!(headers, expected_headers);
-        
+
         // Verify tenant ID is properly hashed
         assert_ne!(expected_tenant_id, email, "Tenant ID should be hashed");
         assert_eq!(expected_tenant_id.len(), 32, "Tenant ID should be 32 chars");
