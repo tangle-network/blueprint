@@ -12,9 +12,14 @@ pub mod models;
 pub mod proxy;
 /// Holds the authentication-related types.
 pub mod types;
+/// Header validation utilities
+pub mod validation;
 
 #[cfg(test)]
 mod test_client;
+
+#[cfg(test)]
+mod multi_tenancy_tests;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

@@ -27,6 +27,7 @@ use crate::api_tokens::{ApiToken, ApiTokenGenerator};
 use crate::db::RocksDb;
 use crate::models::{ApiTokenModel, ServiceModel};
 use crate::types::{ServiceId, VerifyChallengeResponse};
+use crate::validation;
 
 type HTTPClient = hyper_util::client::legacy::Client<HttpConnector, Body>;
 
@@ -173,8 +174,25 @@ async fn auth_verify(
     let token_gen = ApiTokenGenerator::with_prefix(service.api_key_prefix());
     match result {
         Ok(true) => {
-            let token =
-                token_gen.generate_token_with_expiration(service_id, payload.expires_at, &mut rng);
+            // Validate additional headers before storing
+            let validated_headers = match validation::validate_headers(&payload.additional_headers) {
+                Ok(headers) => headers,
+                Err(e) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(VerifyChallengeResponse::UnexpectedError {
+                            message: format!("Invalid headers: {}", e),
+                        }),
+                    );
+                }
+            };
+            
+            let token = token_gen.generate_token_with_expiration_and_headers(
+                service_id,
+                payload.expires_at,
+                validated_headers,
+                &mut rng,
+            );
             let id = match ApiTokenModel::from(&token).save(&s.db) {
                 Ok(id) => id,
                 Err(e) => {
@@ -223,6 +241,10 @@ async fn reverse_proxy(
         }
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
+    
+    // Get additional headers from the token
+    let additional_headers = token.get_additional_headers();
+    
     let service = match ServiceModel::find_by_id(token.service_id(), &s.db) {
         Ok(Some(service)) => service,
         Ok(None) => return Err(StatusCode::NOT_FOUND),
@@ -252,6 +274,19 @@ async fn reverse_proxy(
 
     // Set the target URI in the request
     *req.uri_mut() = target_uri;
+    
+    // Inject additional headers into the request
+    for (header_name, header_value) in additional_headers {
+        if let Ok(name) = header::HeaderName::from_bytes(header_name.as_bytes()) {
+            if let Ok(value) = header::HeaderValue::from_str(&header_value) {
+                req.headers_mut().insert(name, value);
+            } else {
+                tracing::warn!("Invalid header value: {}", header_value);
+            }
+        } else {
+            tracing::warn!("Invalid header name: {}", header_name);
+        }
+    }
 
     // Forward the request to the target server
     let response = s
@@ -265,6 +300,7 @@ async fn reverse_proxy(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::net::Ipv4Addr;
 
     use tempfile::tempdir;
@@ -362,6 +398,7 @@ mod tests {
             signature: signature.to_bytes().into(),
             challenge_request: req,
             expires_at: 0,
+            additional_headers: BTreeMap::new(),
         };
 
         let res = client
@@ -390,5 +427,199 @@ mod tests {
         );
 
         hello_world_server.abort(); // Stop the hello world server
+    }
+
+    #[tokio::test]
+    async fn auth_flow_with_additional_headers() {
+        use std::collections::BTreeMap;
+        
+        let _guard = tracing::subscriber::set_default(
+            tracing_subscriber::fmt()
+                .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                .with_line_number(true)
+                .with_file(true)
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+                .with_test_writer()
+                .finish(),
+        );
+        let mut rng = blueprint_std::BlueprintRng::new();
+        let tmp = tempdir().unwrap();
+        let proxy = AuthenticatedProxy::new(tmp.path()).unwrap();
+
+        // Create a test server that echoes back headers
+        let echo_router = Router::new().route(
+            "/echo",
+            axum::routing::get(|headers: axum::http::HeaderMap| async move {
+                let mut response_headers = BTreeMap::new();
+                for (name, value) in headers.iter() {
+                    if name.as_str().starts_with("x-tenant-") || name.as_str().starts_with("X-Tenant-") {
+                        response_headers.insert(
+                            name.to_string(),
+                            value.to_str().unwrap_or("").to_string(),
+                        );
+                    }
+                }
+                axum::Json(response_headers)
+            }),
+        );
+
+        // Start the echo server
+        let (echo_server, local_addr) = {
+            let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+                .await
+                .expect("Failed to bind to address");
+            let server = axum::serve(listener, echo_router);
+            let local_address = server.local_addr().unwrap();
+            let handle = tokio::spawn(async move {
+                if let Err(e) = server.await {
+                    eprintln!("Echo server error: {}", e);
+                }
+            });
+            (handle, local_address)
+        };
+
+        // Create a service in the database
+        let service_id = ServiceId::new(1);
+        let mut service = crate::models::ServiceModel {
+            api_key_prefix: "test_".to_string(),
+            owners: Vec::new(),
+            upstream_url: format!("http://localhost:{}", local_addr.port()),
+        };
+
+        let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
+        let public_key = signing_key.verifying_key().to_sec1_bytes();
+
+        service.add_owner(KeyType::Ecdsa, public_key.clone().into());
+        service.save(service_id, &proxy.db).unwrap();
+
+        let router = proxy.router();
+        let client = TestClient::new(router);
+
+        // Step 1: Get challenge
+        let req = ChallengeRequest {
+            pub_key: public_key.clone().into(),
+            key_type: KeyType::Ecdsa,
+        };
+
+        let res = client
+            .post("/v1/auth/challenge")
+            .header(headers::X_SERVICE_ID, service_id.to_string())
+            .json(&req)
+            .await;
+
+        let res: ChallengeResponse = res.json().await;
+
+        // Sign the challenge
+        let (signature, _) = signing_key
+            .sign_prehash_recoverable(&res.challenge)
+            .unwrap();
+
+        // Step 2: Verify with additional headers
+        let mut additional_headers = BTreeMap::new();
+        let user_id = "user123@example.com";
+        let tenant_id = crate::validation::hash_user_id(user_id);
+        additional_headers.insert("X-Tenant-Id".to_string(), tenant_id.clone());
+        additional_headers.insert("X-Tenant-Name".to_string(), "Acme Corp".to_string());
+
+        let req = crate::types::VerifyChallengeRequest {
+            challenge: res.challenge,
+            signature: signature.to_bytes().into(),
+            challenge_request: req,
+            expires_at: 0,
+            additional_headers,
+        };
+
+        let res = client
+            .post("/v1/auth/verify")
+            .header(headers::X_SERVICE_ID, service_id.to_string())
+            .json(&req)
+            .await;
+        let res: VerifyChallengeResponse = res.json().await;
+
+        assert!(matches!(res, VerifyChallengeResponse::Verified { .. }));
+        let access_token = match res {
+            VerifyChallengeResponse::Verified { access_token, .. } => access_token,
+            _ => panic!("Expected a verified response"),
+        };
+
+        // Step 3: Make request with token and verify headers are forwarded
+        let res = client
+            .get("/echo")
+            .header(headers::AUTHORIZATION, format!("Bearer {}", access_token))
+            .await;
+        
+        assert!(res.status().is_success());
+        
+        let response_headers: BTreeMap<String, String> = res.json().await;
+        assert_eq!(response_headers.get("x-tenant-id"), Some(&tenant_id));
+        assert_eq!(response_headers.get("x-tenant-name"), Some(&"Acme Corp".to_string()));
+
+        echo_server.abort();
+    }
+
+    #[tokio::test]
+    async fn auth_flow_rejects_invalid_headers() {
+        use std::collections::BTreeMap;
+        
+        let mut rng = blueprint_std::BlueprintRng::new();
+        let tmp = tempdir().unwrap();
+        let proxy = AuthenticatedProxy::new(tmp.path()).unwrap();
+
+        let service_id = ServiceId::new(2);
+        let mut service = crate::models::ServiceModel {
+            api_key_prefix: "test_".to_string(),
+            owners: Vec::new(),
+            upstream_url: "http://localhost:9999".to_string(),
+        };
+
+        let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
+        let public_key = signing_key.verifying_key().to_sec1_bytes();
+
+        service.add_owner(KeyType::Ecdsa, public_key.clone().into());
+        service.save(service_id, &proxy.db).unwrap();
+
+        let router = proxy.router();
+        let client = TestClient::new(router);
+
+        // Get challenge
+        let req = ChallengeRequest {
+            pub_key: public_key.clone().into(),
+            key_type: KeyType::Ecdsa,
+        };
+
+        let res = client
+            .post("/v1/auth/challenge")
+            .header(headers::X_SERVICE_ID, service_id.to_string())
+            .json(&req)
+            .await;
+
+        let res: ChallengeResponse = res.json().await;
+
+        let (signature, _) = signing_key
+            .sign_prehash_recoverable(&res.challenge)
+            .unwrap();
+
+        // Try to verify with forbidden headers
+        let mut additional_headers = BTreeMap::new();
+        additional_headers.insert("Connection".to_string(), "close".to_string());
+
+        let req = crate::types::VerifyChallengeRequest {
+            challenge: res.challenge,
+            signature: signature.to_bytes().into(),
+            challenge_request: req,
+            expires_at: 0,
+            additional_headers,
+        };
+
+        let res = client
+            .post("/v1/auth/verify")
+            .header(headers::X_SERVICE_ID, service_id.to_string())
+            .json(&req)
+            .await;
+        
+        let res: VerifyChallengeResponse = res.json().await;
+        
+        // Should fail with an error about invalid headers
+        assert!(matches!(res, VerifyChallengeResponse::UnexpectedError { message } if message.contains("Invalid headers")));
     }
 }

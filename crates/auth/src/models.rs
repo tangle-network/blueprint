@@ -1,6 +1,7 @@
 use axum::http::uri;
 use base64::Engine;
 use prost::Message;
+use std::collections::BTreeMap;
 
 use crate::{
     Error,
@@ -31,6 +32,9 @@ pub struct ApiTokenModel {
     /// Whether the token is enabled.
     #[prost(bool)]
     pub is_enabled: bool,
+    /// Additional headers to be forwarded to the upstream service.
+    #[prost(bytes)]
+    pub additional_headers: Vec<u8>,
 }
 
 /// Represents a service model stored in the database.
@@ -195,18 +199,35 @@ impl ApiTokenModel {
     pub fn service_id(&self) -> ServiceId {
         ServiceId::new(self.service_id).with_subservice(self.sub_service_id)
     }
+
+    /// Get the additional headers as a BTreeMap
+    pub fn get_additional_headers(&self) -> BTreeMap<String, String> {
+        if self.additional_headers.is_empty() {
+            BTreeMap::new()
+        } else {
+            serde_json::from_slice(&self.additional_headers).unwrap_or_default()
+        }
+    }
+
+    /// Set the additional headers from a BTreeMap
+    pub fn set_additional_headers(&mut self, headers: &BTreeMap<String, String>) {
+        self.additional_headers = serde_json::to_vec(headers).unwrap_or_default();
+    }
 }
 
 impl From<&GeneratedApiToken> for ApiTokenModel {
     fn from(token: &GeneratedApiToken) -> Self {
-        Self {
+        let mut model = Self {
             id: 0,
             token: token.token.clone(),
             service_id: token.service_id.0,
             sub_service_id: token.service_id.1,
             expires_at: token.expires_at().unwrap_or(0),
             is_enabled: true,
-        }
+            additional_headers: Vec::new(),
+        };
+        model.set_additional_headers(token.additional_headers());
+        model
     }
 }
 
@@ -308,5 +329,67 @@ mod tests {
         assert_eq!(found_token.token, token.token);
         assert_eq!(found_token.expires_at, token.expires_at);
         assert_eq!(found_token.is_enabled, token.is_enabled);
+    }
+
+    #[test]
+    fn token_with_headers() {
+        use std::collections::BTreeMap;
+        
+        let mut rng = blueprint_std::BlueprintRng::new();
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let db = RocksDb::open(tmp_dir.path(), &Default::default()).unwrap();
+        let service_id = ServiceId::new(1);
+        let generator = ApiTokenGenerator::new();
+        
+        // Create headers
+        let mut headers = BTreeMap::new();
+        headers.insert("X-Tenant-Id".to_string(), "tenant123".to_string());
+        headers.insert("X-User-Type".to_string(), "premium".to_string());
+        
+        // Generate token with headers
+        let token = generator.generate_token_with_expiration_and_headers(
+            service_id,
+            0,
+            headers.clone(),
+            &mut rng,
+        );
+        let mut token_model = ApiTokenModel::from(&token);
+
+        // Save the token to the database
+        let id = token_model.save(&db).unwrap();
+
+        // Find the token by ID
+        let found_token = ApiTokenModel::find_token_id(id, &db).unwrap().unwrap();
+        
+        // Verify headers are preserved
+        let found_headers = found_token.get_additional_headers();
+        assert_eq!(found_headers, headers);
+    }
+
+    #[test]
+    fn test_additional_headers_methods() {
+        use std::collections::BTreeMap;
+        
+        let mut token_model = ApiTokenModel {
+            id: 0,
+            token: "test".to_string(),
+            service_id: 1,
+            sub_service_id: 0,
+            expires_at: 0,
+            is_enabled: true,
+            additional_headers: Vec::new(),
+        };
+        
+        // Test empty headers
+        assert!(token_model.get_additional_headers().is_empty());
+        
+        // Set headers
+        let mut headers = BTreeMap::new();
+        headers.insert("X-Test".to_string(), "value".to_string());
+        token_model.set_additional_headers(&headers);
+        
+        // Get headers back
+        let retrieved = token_model.get_additional_headers();
+        assert_eq!(retrieved, headers);
     }
 }
