@@ -330,26 +330,26 @@ where
     ///     let env = BlueprintEnvironment::default();
     ///     let context = Arc::new(MyContext);
     ///     let router = Router::new().with_context(context.clone());
-    ///     
+    ///
     ///     // Create metrics config and OpenTelemetry config
     ///     let metrics_config = MetricsConfig::default();
     ///     let otel_config = OpenTelemetryConfig::default();
-    ///     
+    ///
     ///     // Create a metrics provider for the Prometheus server
     ///     let metrics_provider = Arc::new(
     ///         EnhancedMetricsProvider::new(metrics_config.clone(), &otel_config)?
     ///     );
-    ///     
+    ///
     ///     // Get the shared registry from the metrics provider
     ///     let registry = metrics_provider.shared_registry();
-    ///     
+    ///
     ///     // Create a Prometheus server with proper configuration
     ///     let prometheus_config = PrometheusServerConfig {
     ///         port: 9090,
     ///         host: "0.0.0.0".to_string(),
     ///         ..Default::default()
     ///     };
-    ///     
+    ///
     ///     // Create a Prometheus server
     ///     let prometheus_server = Arc::new(
     ///         PrometheusServer::new(
@@ -358,14 +358,14 @@ where
     ///             metrics_provider.clone()
     ///         )?
     ///     );
-    ///     
+    ///
     ///     // Now we can use the BlueprintRunner with this Prometheus server
     ///     let blueprint_runner = BlueprintRunner::builder((), env)
     ///         .router(router)
     ///         .metrics_server(prometheus_server) // Add the metrics server
     ///         .run()
     ///         .await?;
-    ///     
+    ///
     ///     Ok(())
     /// }
     /// ```
@@ -424,7 +424,7 @@ where
                             let err_msg = "QoS Adapter Task (Task 2): QoS service did not initialize (build task may have failed or timed out).";
                             blueprint_core::error!(target: "blueprint-runner", "{}", err_msg);
                             let _ = tx.send(Err(crate::error::RunnerError::Other(Box::new(
-                                std::io::Error::new(std::io::ErrorKind::Other, err_msg),
+                                std::io::Error::other(err_msg),
                             ))));
                             return;
                         }
@@ -444,7 +444,7 @@ where
                             );
                             blueprint_core::error!(target: "blueprint-runner", "{}", err_msg);
                             let _ = tx.send(Err(crate::error::RunnerError::Other(Box::new(
-                                std::io::Error::new(std::io::ErrorKind::Other, err_msg),
+                                std::io::Error::other(err_msg),
                             ))));
                             return;
                         }
