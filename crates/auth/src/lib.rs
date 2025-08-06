@@ -4,10 +4,16 @@ use blueprint_std::rand::{CryptoRng, Rng};
 
 /// Generates API Tokens for the authentication process.
 pub mod api_tokens;
+/// Long-lived API key management
+pub mod api_keys;
+/// Unified authentication token types
+pub mod auth_token;
 /// The database module for the authentication process.
 pub mod db;
 /// Database models
 pub mod models;
+/// Paseto token generation and validation
+pub mod paseto_tokens;
 /// Authenticated Proxy Server built on top of Axum.
 pub mod proxy;
 /// Holds the authentication-related types.
@@ -20,6 +26,12 @@ mod test_client;
 
 #[cfg(test)]
 mod multi_tenancy_tests;
+
+#[cfg(test)]
+mod token_exchange_tests;
+
+#[cfg(test)]
+mod security_isolation_tests;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
