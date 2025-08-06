@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Common headers used in the authentication process.
 pub mod headers {
     pub const AUTHORIZATION: &str = "Authorization";
     pub const X_SERVICE_ID: &str = "X-Service-Id";
+    pub const X_TENANT_ID: &str = "X-Tenant-Id";
+    pub const X_TENANT_NAME: &str = "X-Tenant-Name";
 }
 
 /// Represents the ID a service in the authentication process.
@@ -220,6 +223,9 @@ pub struct VerifyChallengeRequest {
     pub signature: [u8; 64],
     /// The timestamp in seconds since epoch at which the token will expire
     pub expires_at: u64,
+    /// Additional headers to be forwarded to the upstream service
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub additional_headers: BTreeMap<String, String>,
 }
 
 /// Represents the response sent from the server to the client after verifying the challenge solution.
