@@ -15,7 +15,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 homepage = "https://tangle.tools"
 repository = "https://github.com/tangle-network/blueprint"
-rust-version = "1.86"
+rust-version = "1.88"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "deny", priority = -1 }
@@ -135,7 +135,7 @@ bollard = { version = "0.18.0", features = ["ssl"] }
 tnt-core-bytecode = { version = "0.6.0", default-features = false }
 
 # Tangle-related dependencies
-tangle-subxt = { version = "0.20.0", default-features = false }
+tangle-subxt = { version = "0.23.0", default-features = false }
 round-based = { version = "0.4.1", default-features = false }
 
 # Substrate dependencies
