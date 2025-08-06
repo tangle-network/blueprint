@@ -56,8 +56,8 @@ impl AuthToken {
     /// Get the service ID if available (only for validated tokens)
     pub fn service_id(&self) -> Option<ServiceId> {
         match self {
-            AuthToken::Legacy(token) => None, // Need to look up in database
-            AuthToken::ApiKey(_) => None,     // Need to look up in database
+            AuthToken::Legacy(_) => None, // Need to look up in database
+            AuthToken::ApiKey(_) => None, // Need to look up in database
             AuthToken::AccessToken(claims) => Some(claims.service_id),
         }
     }

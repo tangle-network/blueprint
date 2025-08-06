@@ -24,11 +24,9 @@ use tower_http::sensitive_headers::{
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 
 use crate::api_keys::{ApiKeyGenerator, ApiKeyModel};
-use crate::api_tokens::{ApiToken, ApiTokenGenerator};
-use crate::auth_token::{TokenExchangeRequest, TokenExchangeResponse};
 use crate::db::RocksDb;
 use crate::models::{ApiTokenModel, ServiceModel};
-use crate::paseto_tokens::{AccessTokenClaims, PasetoTokenManager};
+use crate::paseto_tokens::PasetoTokenManager;
 use crate::types::{ServiceId, VerifyChallengeResponse};
 use crate::validation;
 

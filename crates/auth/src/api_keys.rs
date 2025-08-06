@@ -2,7 +2,7 @@ use base64::Engine;
 use blueprint_std::rand::{CryptoRng, RngCore};
 use prost::Message;
 use std::collections::BTreeMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     Error,
@@ -96,7 +96,6 @@ impl ApiKeyGenerator {
         service_id: ServiceId,
         expires_at: u64,
         default_headers: BTreeMap<String, String>,
-        description: String,
         rng: &mut R,
     ) -> GeneratedApiKey {
         // Generate 32 bytes of randomness
@@ -179,7 +178,7 @@ impl ApiKeyModel {
     /// Validate if the given full key matches this stored key
     pub fn validates_key(&self, full_key: &str) -> bool {
         // Parse full key: "ak_xxxx.yyyy"
-        if let Some((key_id_part, secret_part)) = full_key.split_once('.') {
+        if let Some((key_id_part, _)) = full_key.split_once('.') {
             if key_id_part != self.key_id {
                 return false;
             }
@@ -376,13 +375,7 @@ mod tests {
         let mut headers = BTreeMap::new();
         headers.insert("X-Tenant-Id".to_string(), "tenant123".to_string());
 
-        let key = generator.generate_key(
-            service_id,
-            expires_at,
-            headers.clone(),
-            "Test key".to_string(),
-            &mut rng,
-        );
+        let key = generator.generate_key(service_id, expires_at, headers.clone(), &mut rng);
 
         assert!(key.key_id().starts_with("ak_"));
         assert!(key.full_key().contains('.'));
@@ -400,13 +393,7 @@ mod tests {
         let mut rng = blueprint_std::BlueprintRng::new();
         let generator = ApiKeyGenerator::new();
 
-        let key = generator.generate_key(
-            ServiceId::new(1),
-            1234567890,
-            BTreeMap::new(),
-            "Test".to_string(),
-            &mut rng,
-        );
+        let key = generator.generate_key(ServiceId::new(1), 1234567890, BTreeMap::new(), &mut rng);
 
         let model = ApiKeyModel::from(&key);
 
@@ -430,13 +417,7 @@ mod tests {
         let mut rng = blueprint_std::BlueprintRng::new();
         let generator = ApiKeyGenerator::new();
 
-        let key = generator.generate_key(
-            ServiceId::new(1),
-            1234567890,
-            BTreeMap::new(),
-            "Test key".to_string(),
-            &mut rng,
-        );
+        let key = generator.generate_key(ServiceId::new(1), 1234567890, BTreeMap::new(), &mut rng);
 
         let mut model = ApiKeyModel::from(&key);
 
