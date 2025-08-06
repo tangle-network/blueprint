@@ -25,13 +25,7 @@ pub mod validation;
 mod test_client;
 
 #[cfg(test)]
-mod multi_tenancy_tests;
-
-#[cfg(test)]
-mod token_exchange_tests;
-
-#[cfg(test)]
-mod security_isolation_tests;
+mod tests;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -115,7 +109,7 @@ fn verify_challenge_sr25519(
 }
 
 #[cfg(test)]
-mod tests {
+mod lib_tests {
     use super::*;
 
     use crate::types::{KeyType, VerifyChallengeRequest};

@@ -110,6 +110,39 @@ pub fn hash_user_id(user_id: &str) -> String {
     hex::encode(&output[..16])
 }
 
+/// Process headers with PII protection
+/// Hashes user IDs and emails in known PII headers
+pub fn process_headers_with_pii_protection(
+    headers: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut processed = BTreeMap::new();
+
+    for (name, value) in headers {
+        let processed_value = match name.to_lowercase().as_str() {
+            // Hash PII fields
+            "x-user-id" | "x-user-email" | "x-customer-email" => hash_user_id(value),
+            // For tenant ID, check if it looks like an email or raw ID
+            "x-tenant-id" => {
+                if value.contains('@') {
+                    // It's an email, hash it
+                    hash_user_id(value)
+                } else if value.len() == 32 && value.chars().all(|c| c.is_ascii_hexdigit()) {
+                    // Already looks like a hash, keep it
+                    value.clone()
+                } else {
+                    // Raw ID, hash it for privacy
+                    hash_user_id(value)
+                }
+            }
+            // Keep other headers as-is
+            _ => value.clone(),
+        };
+        processed.insert(name.clone(), processed_value);
+    }
+
+    processed
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ValidationError {
     #[error("Too many headers provided: {provided} (max: {max})")]

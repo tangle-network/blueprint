@@ -200,6 +200,10 @@ async fn auth_verify(
                 }
             };
 
+            // Apply PII protection by hashing sensitive fields
+            let protected_headers =
+                validation::process_headers_with_pii_protection(&validated_headers);
+
             // Generate long-lived API key (90 days)
             let api_key_gen = ApiKeyGenerator::with_prefix(service.api_key_prefix());
             let expires_at = payload.expires_at.max(
@@ -210,13 +214,8 @@ async fn auth_verify(
                     + (90 * 24 * 60 * 60), // 90 days
             );
 
-            let api_key = api_key_gen.generate_key(
-                service_id,
-                expires_at,
-                validated_headers,
-                "Generated via challenge verification".to_string(),
-                &mut rng,
-            );
+            let api_key =
+                api_key_gen.generate_key(service_id, expires_at, protected_headers, &mut rng);
 
             let mut api_key_model = ApiKeyModel::from(&api_key);
             if let Err(e) = api_key_model.save(&s.db) {
@@ -389,16 +388,20 @@ async fn auth_exchange(
         }
     };
 
+    // Apply PII protection
+    let protected_headers =
+        crate::validation::process_headers_with_pii_protection(&validated_headers);
+
     // Generate Paseto access token
     let service_id = api_key_model.service_id();
-    let tenant_id = validated_headers.get("X-Tenant-Id").cloned();
+    let tenant_id = protected_headers.get("X-Tenant-Id").cloned();
     let custom_ttl = payload.ttl_seconds.map(std::time::Duration::from_secs);
 
     let access_token = match s.paseto_manager.generate_token(
         service_id,
         api_key_model.key_id.clone(),
         tenant_id,
-        validated_headers,
+        protected_headers,
         custom_ttl,
     ) {
         Ok(token) => token,
