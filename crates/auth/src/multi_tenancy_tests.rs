@@ -170,7 +170,7 @@ async fn multi_tenant_service_isolation() {
         };
 
         tenant_tokens.push((
-            email.clone(),
+            email.to_string(),
             tenant_id,
             company.to_string(),
             tier.to_string(),
@@ -181,10 +181,7 @@ async fn multi_tenant_service_isolation() {
     // Now simulate each tenant making requests
     for (email, tenant_id, company, tier, token) in &tenant_tokens {
         let res = client
-            .post(&format!(
-                "/api/{}/data",
-                email.replace('@', "_").replace('.', "_")
-            ))
+            .post(&format!("/api/{}/data", email.replace(['@', '.'], "_")))
             .header(headers::AUTHORIZATION, format!("Bearer {}", token))
             .await;
 
@@ -195,10 +192,7 @@ async fn multi_tenant_service_isolation() {
                 res.status()
             );
             eprintln!("Token: {}", token);
-            eprintln!(
-                "Path: /api/{}/data",
-                email.replace('@', "_").replace('.', "_")
-            );
+            eprintln!("Path: /api/{}/data", email.replace(['@', '.'], "_"));
         }
         assert!(
             res.status().is_success(),
