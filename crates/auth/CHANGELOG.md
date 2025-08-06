@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-auth-v0.1.0-alpha.6...blueprint-auth-v0.1.0-alpha.7) - 2025-08-06
+
+### Added
+
+- standalone auth proxy (#1103)
+
 ## [0.1.0-alpha.6](https://github.com/tangle-network/blueprint/compare/blueprint-auth-v0.1.0-alpha.5...blueprint-auth-v0.1.0-alpha.6) - 2025-07-07
 
 ### Other
