@@ -175,7 +175,8 @@ async fn auth_verify(
     match result {
         Ok(true) => {
             // Validate additional headers before storing
-            let validated_headers = match validation::validate_headers(&payload.additional_headers) {
+            let validated_headers = match validation::validate_headers(&payload.additional_headers)
+            {
                 Ok(headers) => headers,
                 Err(e) => {
                     return (
@@ -186,7 +187,7 @@ async fn auth_verify(
                     );
                 }
             };
-            
+
             let token = token_gen.generate_token_with_expiration_and_headers(
                 service_id,
                 payload.expires_at,
@@ -241,10 +242,10 @@ async fn reverse_proxy(
         }
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
-    
+
     // Get additional headers from the token
     let additional_headers = token.get_additional_headers();
-    
+
     let service = match ServiceModel::find_by_id(token.service_id(), &s.db) {
         Ok(Some(service)) => service,
         Ok(None) => return Err(StatusCode::NOT_FOUND),
@@ -274,7 +275,7 @@ async fn reverse_proxy(
 
     // Set the target URI in the request
     *req.uri_mut() = target_uri;
-    
+
     // Inject additional headers into the request
     for (header_name, header_value) in additional_headers {
         if let Ok(name) = header::HeaderName::from_bytes(header_name.as_bytes()) {
@@ -432,7 +433,7 @@ mod tests {
     #[tokio::test]
     async fn auth_flow_with_additional_headers() {
         use std::collections::BTreeMap;
-        
+
         let _guard = tracing::subscriber::set_default(
             tracing_subscriber::fmt()
                 .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -452,11 +453,11 @@ mod tests {
             axum::routing::get(|headers: axum::http::HeaderMap| async move {
                 let mut response_headers = BTreeMap::new();
                 for (name, value) in headers.iter() {
-                    if name.as_str().starts_with("x-tenant-") || name.as_str().starts_with("X-Tenant-") {
-                        response_headers.insert(
-                            name.to_string(),
-                            value.to_str().unwrap_or("").to_string(),
-                        );
+                    if name.as_str().starts_with("x-tenant-")
+                        || name.as_str().starts_with("X-Tenant-")
+                    {
+                        response_headers
+                            .insert(name.to_string(), value.to_str().unwrap_or("").to_string());
                     }
                 }
                 axum::Json(response_headers)
@@ -547,12 +548,15 @@ mod tests {
             .get("/echo")
             .header(headers::AUTHORIZATION, format!("Bearer {}", access_token))
             .await;
-        
+
         assert!(res.status().is_success());
-        
+
         let response_headers: BTreeMap<String, String> = res.json().await;
         assert_eq!(response_headers.get("x-tenant-id"), Some(&tenant_id));
-        assert_eq!(response_headers.get("x-tenant-name"), Some(&"Acme Corp".to_string()));
+        assert_eq!(
+            response_headers.get("x-tenant-name"),
+            Some(&"Acme Corp".to_string())
+        );
 
         echo_server.abort();
     }
@@ -560,7 +564,7 @@ mod tests {
     #[tokio::test]
     async fn auth_flow_rejects_invalid_headers() {
         use std::collections::BTreeMap;
-        
+
         let mut rng = blueprint_std::BlueprintRng::new();
         let tmp = tempdir().unwrap();
         let proxy = AuthenticatedProxy::new(tmp.path()).unwrap();
@@ -616,10 +620,12 @@ mod tests {
             .header(headers::X_SERVICE_ID, service_id.to_string())
             .json(&req)
             .await;
-        
+
         let res: VerifyChallengeResponse = res.json().await;
-        
+
         // Should fail with an error about invalid headers
-        assert!(matches!(res, VerifyChallengeResponse::UnexpectedError { message } if message.contains("Invalid headers")));
+        assert!(
+            matches!(res, VerifyChallengeResponse::UnexpectedError { message } if message.contains("Invalid headers"))
+        );
     }
 }

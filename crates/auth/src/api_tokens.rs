@@ -81,7 +81,12 @@ impl ApiTokenGenerator {
         expires_at: u64,
         rng: &mut R,
     ) -> GeneratedApiToken {
-        self.generate_token_with_expiration_and_headers(service_id, expires_at, BTreeMap::new(), rng)
+        self.generate_token_with_expiration_and_headers(
+            service_id,
+            expires_at,
+            BTreeMap::new(),
+            rng,
+        )
     }
 
     /// Generates a new API token with the specified expiration time and additional headers.
@@ -139,7 +144,7 @@ impl GeneratedApiToken {
     pub fn expires_at(&self) -> Option<u64> {
         self.expires_at
     }
-    
+
     /// Get the additional headers for the token.
     pub fn additional_headers(&self) -> &BTreeMap<String, String> {
         &self.additional_headers
@@ -373,16 +378,16 @@ mod tests {
     #[test]
     fn test_token_generation_with_headers() {
         use std::collections::BTreeMap;
-        
+
         let generator = ApiTokenGenerator::new();
         let mut rng = blueprint_std::BlueprintRng::new();
         let service_id = ServiceId::new(1);
-        
+
         // Create headers
         let mut headers = BTreeMap::new();
         headers.insert("X-Tenant-Id".to_string(), "tenant123".to_string());
         headers.insert("X-User-Type".to_string(), "premium".to_string());
-        
+
         // Generate token with headers
         let token = generator.generate_token_with_expiration_and_headers(
             service_id,
@@ -390,7 +395,7 @@ mod tests {
             headers.clone(),
             &mut rng,
         );
-        
+
         // Verify headers are stored
         assert_eq!(token.additional_headers(), &headers);
         assert!(!token.token.is_empty());
@@ -401,10 +406,10 @@ mod tests {
         let generator = ApiTokenGenerator::new();
         let mut rng = blueprint_std::BlueprintRng::new();
         let service_id = ServiceId::new(1);
-        
+
         // Generate token without headers
         let token = generator.generate_token(service_id, &mut rng);
-        
+
         // Verify no headers are stored
         assert!(token.additional_headers().is_empty());
     }
