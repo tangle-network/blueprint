@@ -23,9 +23,10 @@ use tower_http::sensitive_headers::{
 };
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 
-use crate::api_tokens::{ApiToken, ApiTokenGenerator};
+use crate::api_keys::{ApiKeyGenerator, ApiKeyModel};
 use crate::db::RocksDb;
 use crate::models::{ApiTokenModel, ServiceModel};
+use crate::paseto_tokens::PasetoTokenManager;
 use crate::types::{ServiceId, VerifyChallengeResponse};
 use crate::validation;
 
@@ -38,12 +39,14 @@ pub const DEFAULT_AUTH_PROXY_PORT: u16 = 8276;
 pub struct AuthenticatedProxy {
     client: HTTPClient,
     db: crate::db::RocksDb,
+    paseto_manager: PasetoTokenManager,
 }
 
 #[derive(Clone, Debug)]
 pub struct AuthenticatedProxyState {
     client: HTTPClient,
     db: crate::db::RocksDb,
+    paseto_manager: PasetoTokenManager,
 }
 
 impl AuthenticatedProxy {
@@ -56,13 +59,22 @@ impl AuthenticatedProxy {
             .build(HttpConnector::new());
         let db_config = crate::db::RocksDbConfig::default();
         let db = crate::db::RocksDb::open(db_path, &db_config)?;
-        Ok(AuthenticatedProxy { client, db })
+
+        // Initialize Paseto token manager with 15-minute TTL
+        let paseto_manager = PasetoTokenManager::new(std::time::Duration::from_secs(15 * 60));
+
+        Ok(AuthenticatedProxy {
+            client,
+            db,
+            paseto_manager,
+        })
     }
 
     pub fn router(self) -> Router {
         let state = AuthenticatedProxyState {
             db: self.db,
             client: self.client,
+            paseto_manager: self.paseto_manager,
         };
         Router::new()
             .nest("/v1", Self::internal_api_router_v1())
@@ -99,6 +111,7 @@ impl AuthenticatedProxy {
         Router::new()
             .route("/auth/challenge", post(auth_challenge))
             .route("/auth/verify", post(auth_verify))
+            .route("/auth/exchange", post(auth_exchange))
     }
 }
 
@@ -171,7 +184,6 @@ async fn auth_verify(
         &public_key,
         payload.challenge_request.key_type,
     );
-    let token_gen = ApiTokenGenerator::with_prefix(service.api_key_prefix());
     match result {
         Ok(true) => {
             // Validate additional headers before storing
@@ -188,29 +200,38 @@ async fn auth_verify(
                 }
             };
 
-            let token = token_gen.generate_token_with_expiration_and_headers(
-                service_id,
-                payload.expires_at,
-                validated_headers,
-                &mut rng,
+            // Apply PII protection by hashing sensitive fields
+            let protected_headers =
+                validation::process_headers_with_pii_protection(&validated_headers);
+
+            // Generate long-lived API key (90 days)
+            let api_key_gen = ApiKeyGenerator::with_prefix(service.api_key_prefix());
+            let expires_at = payload.expires_at.max(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+                    + (90 * 24 * 60 * 60), // 90 days
             );
-            let id = match ApiTokenModel::from(&token).save(&s.db) {
-                Ok(id) => id,
-                Err(e) => {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(crate::types::VerifyChallengeResponse::UnexpectedError {
-                            message: format!("Internal server error: {}", e),
-                        }),
-                    );
-                }
-            };
-            let plaintext = token.plaintext(id);
+
+            let api_key =
+                api_key_gen.generate_key(service_id, expires_at, protected_headers, &mut rng);
+
+            let mut api_key_model = ApiKeyModel::from(&api_key);
+            if let Err(e) = api_key_model.save(&s.db) {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(VerifyChallengeResponse::UnexpectedError {
+                        message: format!("Internal server error: {}", e),
+                    }),
+                );
+            }
+
             (
                 StatusCode::CREATED,
-                Json(crate::types::VerifyChallengeResponse::Verified {
-                    access_token: plaintext,
-                    expires_at: payload.expires_at,
+                Json(VerifyChallengeResponse::Verified {
+                    api_key: api_key.full_key().to_string(),
+                    expires_at,
                 }),
             )
         }
@@ -227,26 +248,329 @@ async fn auth_verify(
     }
 }
 
-/// Reverse proxy handler that forwards requests to the target host based on the service ID
-#[tracing::instrument(skip_all, fields(token_id = %token_id))]
-async fn reverse_proxy(
-    ApiToken(token_id, token_str): ApiToken,
+/// Token exchange endpoint that converts API keys to Paseto access tokens
+async fn auth_exchange(
     State(s): State<AuthenticatedProxyState>,
-    mut req: Request,
-) -> Result<Response, StatusCode> {
-    let token = match ApiTokenModel::find_token_id(token_id, &s.db) {
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<crate::auth_token::TokenExchangeRequest>,
+) -> impl IntoResponse {
+    // Extract API key from Authorization header
+    let auth_header = match headers.get(crate::types::headers::AUTHORIZATION) {
+        Some(header_value) => {
+            let header_str = match header_value.to_str() {
+                Ok(s) => s,
+                Err(_) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(serde_json::json!({
+                            "error": "invalid_authorization_header",
+                            "message": "Authorization header is not valid UTF-8"
+                        })),
+                    );
+                }
+            };
+
+            // Extract Bearer token
+            if let Some(token) = header_str.strip_prefix("Bearer ") {
+                token
+            } else {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": "invalid_authorization_header",
+                        "message": "Authorization header must use Bearer scheme with API key"
+                    })),
+                );
+            }
+        }
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "missing_authorization_header",
+                    "message": "Authorization header with Bearer API key is required"
+                })),
+            );
+        }
+    };
+
+    // Parse API key format: "ak_xxxxx.yyyyy"
+    let key_id = if let Some((key_id_part, _)) = auth_header.split_once('.') {
+        key_id_part
+    } else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "invalid_api_key_format",
+                "message": "API key must have format ak_xxxxx.yyyyy"
+            })),
+        );
+    };
+
+    // Find API key in database
+    let mut api_key_model = match crate::api_keys::ApiKeyModel::find_by_key_id(key_id, &s.db) {
+        Ok(Some(model)) => model,
+        Ok(None) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "invalid_api_key",
+                    "message": "API key not found"
+                })),
+            );
+        }
+        Err(e) => {
+            tracing::error!("Database error looking up API key: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "internal_error",
+                    "message": "Failed to validate API key"
+                })),
+            );
+        }
+    };
+
+    // Validate the full key matches
+    if !api_key_model.validates_key(auth_header) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({
+                "error": "invalid_api_key",
+                "message": "API key validation failed"
+            })),
+        );
+    }
+
+    // Check if key is expired or disabled
+    if api_key_model.is_expired() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({
+                "error": "expired_api_key",
+                "message": "API key has expired"
+            })),
+        );
+    }
+
+    if !api_key_model.is_enabled {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({
+                "error": "disabled_api_key",
+                "message": "API key is disabled"
+            })),
+        );
+    }
+
+    // Update last used timestamp
+    if let Err(e) = api_key_model.update_last_used(&s.db) {
+        tracing::warn!("Failed to update API key last_used timestamp: {}", e);
+    }
+
+    // Merge default headers with request headers
+    let mut headers = api_key_model.get_default_headers();
+    for (key, value) in payload.additional_headers {
+        headers.insert(key, value);
+    }
+
+    // Validate merged headers
+    let validated_headers = match crate::validation::validate_headers(&headers) {
+        Ok(headers) => headers,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "invalid_headers",
+                    "message": format!("Header validation failed: {}", e)
+                })),
+            );
+        }
+    };
+
+    // Apply PII protection
+    let protected_headers =
+        crate::validation::process_headers_with_pii_protection(&validated_headers);
+
+    // Generate Paseto access token
+    let service_id = api_key_model.service_id();
+    let tenant_id = protected_headers.get("X-Tenant-Id").cloned();
+    let custom_ttl = payload.ttl_seconds.map(std::time::Duration::from_secs);
+
+    let access_token = match s.paseto_manager.generate_token(
+        service_id,
+        api_key_model.key_id.clone(),
+        tenant_id,
+        protected_headers,
+        custom_ttl,
+    ) {
+        Ok(token) => token,
+        Err(e) => {
+            tracing::error!("Failed to create Paseto token: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "token_generation_failed",
+                    "message": "Failed to generate access token"
+                })),
+            );
+        }
+    };
+
+    // Calculate expiration time
+    let expires_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        + custom_ttl
+            .unwrap_or(s.paseto_manager.default_ttl())
+            .as_secs();
+
+    let response = crate::auth_token::TokenExchangeResponse::new(access_token, expires_at);
+
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap()),
+    )
+}
+
+/// Handle legacy API token validation
+async fn handle_legacy_token(
+    token: crate::api_tokens::ApiToken,
+    db: &crate::db::RocksDb,
+) -> Result<
+    (
+        crate::types::ServiceId,
+        std::collections::BTreeMap<String, String>,
+    ),
+    StatusCode,
+> {
+    let (token_id, token_str) = (token.0, token.1.as_str());
+
+    let api_token = match ApiTokenModel::find_token_id(token_id, db) {
         Ok(Some(token)) if token.is(&token_str) && !token.is_expired() && token.is_enabled => token,
         Ok(Some(_)) | Ok(None) => {
-            tracing::warn!("Invalid or expired token");
+            tracing::warn!("Invalid or expired legacy token");
             return Err(StatusCode::UNAUTHORIZED);
         }
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
 
-    // Get additional headers from the token
-    let additional_headers = token.get_additional_headers();
+    let additional_headers = api_token.get_additional_headers();
+    Ok((api_token.service_id(), additional_headers))
+}
 
-    let service = match ServiceModel::find_by_id(token.service_id(), &s.db) {
+/// Handle API key validation
+async fn handle_api_key(
+    api_key: &str,
+    db: &crate::db::RocksDb,
+) -> Result<
+    (
+        crate::types::ServiceId,
+        std::collections::BTreeMap<String, String>,
+    ),
+    StatusCode,
+> {
+    // Parse key_id from "ak_xxxxx.yyyyy"
+    let key_id = api_key
+        .split_once('.')
+        .map(|(key_id_part, _)| key_id_part)
+        .ok_or(StatusCode::BAD_REQUEST)?;
+
+    // Find and validate API key
+    let mut api_key_model = match crate::api_keys::ApiKeyModel::find_by_key_id(key_id, db) {
+        Ok(Some(model)) => model,
+        Ok(None) => {
+            tracing::warn!("API key not found: {}", key_id);
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        Err(e) => {
+            tracing::error!("Database error looking up API key: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // Validate the full key
+    if !api_key_model.validates_key(api_key) {
+        tracing::warn!("API key validation failed: {}", key_id);
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    // Check expiration and enabled status
+    if api_key_model.is_expired() {
+        tracing::warn!("API key expired: {}", key_id);
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    if !api_key_model.is_enabled {
+        tracing::warn!("API key disabled: {}", key_id);
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    // Update last used timestamp
+    if let Err(e) = api_key_model.update_last_used(db) {
+        tracing::warn!("Failed to update API key last_used timestamp: {}", e);
+    }
+
+    let additional_headers = api_key_model.get_default_headers();
+    Ok((api_key_model.service_id(), additional_headers))
+}
+
+/// Handle Paseto access token validation
+async fn handle_paseto_token(
+    token: &str,
+    paseto_manager: &crate::paseto_tokens::PasetoTokenManager,
+) -> Result<
+    (
+        crate::types::ServiceId,
+        std::collections::BTreeMap<String, String>,
+    ),
+    StatusCode,
+> {
+    let claims = match paseto_manager.validate_token(token) {
+        Ok(claims) => claims,
+        Err(e) => {
+            tracing::warn!("Paseto token validation failed: {}", e);
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    };
+
+    // Token expiration is already checked in validate_token
+    Ok((claims.service_id, claims.additional_headers))
+}
+
+/// Reverse proxy handler that forwards requests to the target host based on the service ID
+#[tracing::instrument(skip_all)]
+async fn reverse_proxy(
+    headers: axum::http::HeaderMap,
+    State(s): State<AuthenticatedProxyState>,
+    mut req: Request,
+) -> Result<Response, StatusCode> {
+    // Extract and validate token from Authorization header
+    let auth_header = headers
+        .get(crate::types::headers::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    // Parse token type and validate
+    let (service_id, additional_headers) = if auth_header.contains('|') {
+        // Legacy API Token format: "id|token"
+        let legacy_token = crate::api_tokens::ApiToken::from_str(auth_header)
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        handle_legacy_token(legacy_token, &s.db).await?
+    } else if auth_header.contains('.') && !auth_header.starts_with("v4.local.") {
+        // API Key format: "ak_xxxxx.yyyyy"
+        handle_api_key(auth_header, &s.db).await?
+    } else if auth_header.starts_with("v4.local.") {
+        // Paseto access token format: "v4.local.xxxxx"
+        handle_paseto_token(auth_header, &s.paseto_manager).await?
+    } else {
+        tracing::warn!("Unrecognized token format: {}", auth_header);
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    let service = match ServiceModel::find_by_id(service_id, &s.db) {
         Ok(Some(service)) => service,
         Ok(None) => return Err(StatusCode::NOT_FOUND),
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
@@ -410,16 +734,15 @@ mod tests {
         let res: VerifyChallengeResponse = res.json().await;
 
         assert!(matches!(res, VerifyChallengeResponse::Verified { .. }));
-        let access_token = match res {
-            VerifyChallengeResponse::Verified { access_token, .. } => access_token,
+        let api_key = match res {
+            VerifyChallengeResponse::Verified { api_key, .. } => api_key,
             _ => panic!("Expected a verified response"),
         };
 
-        let access_token = ApiToken::from_str(&access_token).expect("Failed to parse access token");
         // Try to send a request to the reverse proxy with the token in the header
         let res = client
             .get("/hello")
-            .header(headers::AUTHORIZATION, format!("Bearer {}", access_token))
+            .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
             .await;
         assert!(
             res.status().is_success(),
@@ -538,15 +861,15 @@ mod tests {
         let res: VerifyChallengeResponse = res.json().await;
 
         assert!(matches!(res, VerifyChallengeResponse::Verified { .. }));
-        let access_token = match res {
-            VerifyChallengeResponse::Verified { access_token, .. } => access_token,
+        let api_key = match res {
+            VerifyChallengeResponse::Verified { api_key, .. } => api_key,
             _ => panic!("Expected a verified response"),
         };
 
         // Step 3: Make request with token and verify headers are forwarded
         let res = client
             .get("/echo")
-            .header(headers::AUTHORIZATION, format!("Bearer {}", access_token))
+            .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
             .await;
 
         assert!(res.status().is_success());

@@ -164,24 +164,27 @@ async fn multi_tenant_service_isolation() {
             .await;
 
         let verify_res: VerifyChallengeResponse = res.json().await;
-        let access_token = match verify_res {
-            VerifyChallengeResponse::Verified { access_token, .. } => access_token,
+        let api_key = match verify_res {
+            VerifyChallengeResponse::Verified { api_key, .. } => api_key,
             _ => panic!("Failed to verify tenant {}", email),
         };
 
         tenant_tokens.push((
-            email.to_string(),
+            email.clone(),
             tenant_id,
             company.to_string(),
             tier.to_string(),
-            access_token,
+            api_key,
         ));
     }
 
     // Now simulate each tenant making requests
     for (email, tenant_id, company, tier, token) in &tenant_tokens {
         let res = client
-            .post(&format!("/api/{}/data", email.replace(['@', '.'], "_")))
+            .post(&format!(
+                "/api/{}/data",
+                email.replace('@', "_").replace('.', "_")
+            ))
             .header(headers::AUTHORIZATION, format!("Bearer {}", token))
             .await;
 
@@ -192,7 +195,10 @@ async fn multi_tenant_service_isolation() {
                 res.status()
             );
             eprintln!("Token: {}", token);
-            eprintln!("Path: /api/{}/data", email.replace(['@', '.'], "_"));
+            eprintln!(
+                "Path: /api/{}/data",
+                email.replace('@', "_").replace('.', "_")
+            );
         }
         assert!(
             res.status().is_success(),
@@ -486,7 +492,7 @@ async fn tenant_rate_limiting_by_tier() {
 
     let verify_res: VerifyChallengeResponse = res.json().await;
     let token = match verify_res {
-        VerifyChallengeResponse::Verified { access_token, .. } => access_token,
+        VerifyChallengeResponse::Verified { api_key, .. } => api_key,
         _ => panic!("Failed to get token"),
     };
 

@@ -232,9 +232,17 @@ pub struct VerifyChallengeRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "status", content = "data")]
 pub enum VerifyChallengeResponse {
-    /// The challenge was verified successfully
+    /// The challenge was verified successfully - returns an API key
     Verified {
-        /// The access token to be used for authentication from now on
+        /// The long-lived API key to be used for token exchange
+        api_key: String,
+        /// A UNIX timestamp in seconds since epoch at which the API key will expire
+        expires_at: u64,
+    },
+    /// Legacy verified response for backward compatibility
+    #[deprecated(note = "Use Verified variant with api_key field instead")]
+    LegacyVerified {
+        /// The legacy access token
         access_token: String,
         /// A UNIX timestamp in milliseconds since epoch at which the access token will expire
         expires_at: u64,

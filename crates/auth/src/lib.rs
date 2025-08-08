@@ -2,12 +2,18 @@
 
 use blueprint_std::rand::{CryptoRng, Rng};
 
+/// Long-lived API key management
+pub mod api_keys;
 /// Generates API Tokens for the authentication process.
 pub mod api_tokens;
+/// Unified authentication token types
+pub mod auth_token;
 /// The database module for the authentication process.
 pub mod db;
 /// Database models
 pub mod models;
+/// Paseto token generation and validation
+pub mod paseto_tokens;
 /// Authenticated Proxy Server built on top of Axum.
 pub mod proxy;
 /// Holds the authentication-related types.
@@ -19,7 +25,7 @@ pub mod validation;
 mod test_client;
 
 #[cfg(test)]
-mod multi_tenancy_tests;
+mod tests;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -103,7 +109,7 @@ fn verify_challenge_sr25519(
 }
 
 #[cfg(test)]
-mod tests {
+mod lib_tests {
     use super::*;
 
     use crate::types::{KeyType, VerifyChallengeRequest};
