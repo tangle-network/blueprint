@@ -94,10 +94,10 @@ impl AuthenticatedProxy {
         // Try to load key from file in db directory
         let key_path = db_path.as_ref().join(".paseto_key");
         if key_path.exists() {
-            let mut file = fs::File::open(&key_path).map_err(|e| crate::Error::Io(e))?;
+            let mut file = fs::File::open(&key_path).map_err(crate::Error::Io)?;
             let mut key_bytes = vec![];
             file.read_to_end(&mut key_bytes)
-                .map_err(|e| crate::Error::Io(e))?;
+                .map_err(crate::Error::Io)?;
 
             if key_bytes.len() == 32 {
                 let mut key_array = [0u8; 32];
@@ -116,18 +116,18 @@ impl AuthenticatedProxy {
         let key = manager.get_key();
 
         // Save key to file
-        let mut file = fs::File::create(&key_path).map_err(|e| crate::Error::Io(e))?;
+        let mut file = fs::File::create(&key_path).map_err(crate::Error::Io)?;
         let key_bytes = key.as_bytes();
         file.write_all(&key_bytes)
-            .map_err(|e| crate::Error::Io(e))?;
-        file.sync_all().map_err(|e| crate::Error::Io(e))?;
+            .map_err(crate::Error::Io)?;
+        file.sync_all().map_err(crate::Error::Io)?;
 
         // Set restrictive permissions on the key file (Unix only)
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             let permissions = std::fs::Permissions::from_mode(0o600);
-            fs::set_permissions(&key_path, permissions).map_err(|e| crate::Error::Io(e))?;
+            fs::set_permissions(&key_path, permissions).map_err(crate::Error::Io)?;
         }
 
         tracing::info!("Generated and saved new Paseto signing key");
@@ -258,7 +258,7 @@ async fn auth_verify(
                     return (
                         StatusCode::BAD_REQUEST,
                         Json(VerifyChallengeResponse::UnexpectedError {
-                            message: format!("Invalid headers: {}", e),
+                            message: format!("Invalid headers: {e}"),
                         }),
                     );
                 }
@@ -286,7 +286,7 @@ async fn auth_verify(
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(VerifyChallengeResponse::UnexpectedError {
-                        message: format!("Internal server error: {}", e),
+                        message: format!("Internal server error: {e}"),
                     }),
                 );
             }
@@ -512,7 +512,7 @@ async fn handle_legacy_token(
     let (token_id, token_str) = (token.0, token.1.as_str());
 
     let api_token = match ApiTokenModel::find_token_id(token_id, db) {
-        Ok(Some(token)) if token.is(&token_str) && !token.is_expired() && token.is_enabled => token,
+        Ok(Some(token)) if token.is(token_str) && !token.is_expired() && token.is_enabled => token,
         Ok(Some(_)) | Ok(None) => {
             tracing::warn!("Invalid or expired legacy token");
             return Err(StatusCode::UNAUTHORIZED);

@@ -142,7 +142,7 @@ impl ApiKeyGenerator {
 
         // Full key is key_id + "." + remaining 24 bytes base64 encoded
         let secret_part = CUSTOM_ENGINE.encode(&secret_bytes[8..]);
-        let full_key = format!("{}.{}", key_id, secret_part);
+        let full_key = format!("{key_id}.{secret_part}");
 
         GeneratedApiKey {
             key_id,
