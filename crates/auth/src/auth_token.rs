@@ -40,13 +40,14 @@ impl AuthToken {
             // This is a Paseto access token - we'll validate it in the proxy handler
             // For now, we just store the string and validate later with the key
             return Err(AuthTokenError::InvalidFormat); // Will be handled by PasetoTokenManager
-        } else if token_str.starts_with("ak_") && token_str.contains('.') {
-            // This is an API key: "ak_xxxxx.yyyyy"
-            return Ok(AuthToken::ApiKey(token_str.to_string()));
         } else if token_str.contains('|') {
             // This is a legacy token: "id|token"
             let legacy_token = ApiToken::from_str(token_str)?;
             return Ok(AuthToken::Legacy(legacy_token));
+        } else if token_str.contains('.') {
+            // This is an API key: "prefix_xxxxx.yyyyy"
+            // We check for dot last to avoid confusion with Paseto tokens
+            return Ok(AuthToken::ApiKey(token_str.to_string()));
         }
 
         Err(AuthTokenError::InvalidFormat)

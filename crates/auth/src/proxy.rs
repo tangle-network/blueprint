@@ -58,16 +58,80 @@ impl AuthenticatedProxy {
             .pool_timer(timer)
             .build(HttpConnector::new());
         let db_config = crate::db::RocksDbConfig::default();
-        let db = crate::db::RocksDb::open(db_path, &db_config)?;
+        let db = crate::db::RocksDb::open(&db_path, &db_config)?;
 
-        // Initialize Paseto token manager with 15-minute TTL
-        let paseto_manager = PasetoTokenManager::new(std::time::Duration::from_secs(15 * 60));
+        // Initialize Paseto token manager with persistent key
+        let paseto_manager = Self::init_paseto_manager(&db_path)?;
 
         Ok(AuthenticatedProxy {
             client,
             db,
             paseto_manager,
         })
+    }
+
+    /// Initialize Paseto token manager with persistent key
+    fn init_paseto_manager<P: AsRef<Path>>(db_path: P) -> Result<PasetoTokenManager, crate::Error> {
+        use std::fs;
+        use std::io::{Read, Write};
+
+        // Try to load key from environment variable first
+        if let Ok(key_hex) = std::env::var("PASETO_SIGNING_KEY") {
+            if let Ok(key_bytes) = hex::decode(&key_hex) {
+                if key_bytes.len() == 32 {
+                    let mut key_array = [0u8; 32];
+                    key_array.copy_from_slice(&key_bytes);
+                    let key = crate::paseto_tokens::PasetoKey::from_bytes(key_array);
+                    return Ok(PasetoTokenManager::with_key(
+                        key,
+                        std::time::Duration::from_secs(15 * 60),
+                    ));
+                }
+            }
+            tracing::warn!("Invalid PASETO_SIGNING_KEY environment variable, generating new key");
+        }
+
+        // Try to load key from file in db directory
+        let key_path = db_path.as_ref().join(".paseto_key");
+        if key_path.exists() {
+            let mut file = fs::File::open(&key_path).map_err(|e| crate::Error::Io(e))?;
+            let mut key_bytes = vec![];
+            file.read_to_end(&mut key_bytes)
+                .map_err(|e| crate::Error::Io(e))?;
+
+            if key_bytes.len() == 32 {
+                let mut key_array = [0u8; 32];
+                key_array.copy_from_slice(&key_bytes);
+                let key = crate::paseto_tokens::PasetoKey::from_bytes(key_array);
+                tracing::info!("Loaded existing Paseto signing key from disk");
+                return Ok(PasetoTokenManager::with_key(
+                    key,
+                    std::time::Duration::from_secs(15 * 60),
+                ));
+            }
+        }
+
+        // Generate new key and save it
+        let manager = PasetoTokenManager::new(std::time::Duration::from_secs(15 * 60));
+        let key = manager.get_key();
+
+        // Save key to file
+        let mut file = fs::File::create(&key_path).map_err(|e| crate::Error::Io(e))?;
+        let key_bytes = key.as_bytes();
+        file.write_all(&key_bytes)
+            .map_err(|e| crate::Error::Io(e))?;
+        file.sync_all().map_err(|e| crate::Error::Io(e))?;
+
+        // Set restrictive permissions on the key file (Unix only)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = std::fs::Permissions::from_mode(0o600);
+            fs::set_permissions(&key_path, permissions).map_err(|e| crate::Error::Io(e))?;
+        }
+
+        tracing::info!("Generated and saved new Paseto signing key");
+        Ok(manager)
     }
 
     pub fn router(self) -> Router {
@@ -539,6 +603,29 @@ async fn handle_paseto_token(
     Ok((claims.service_id, claims.additional_headers))
 }
 
+/// Check if a header name is forbidden for security reasons
+fn is_forbidden_header(header_name: &str) -> bool {
+    // Normalized comparison (case-insensitive)
+    let lower = header_name.to_lowercase();
+    matches!(
+        lower.as_str(),
+        "host"
+            | "content-length"
+            | "transfer-encoding"
+            | "connection"
+            | "upgrade"
+            | "proxy-authorization"
+            | "proxy-authenticate"
+            | "te"
+            | "trailer"
+            | "x-forwarded-host"
+            | "x-real-ip"
+            | "x-forwarded-for"
+            | "x-forwarded-proto"
+            | "forwarded"
+    )
+}
+
 /// Reverse proxy handler that forwards requests to the target host based on the service ID
 #[tracing::instrument(skip_all)]
 async fn reverse_proxy(
@@ -551,23 +638,33 @@ async fn reverse_proxy(
         .get(crate::types::headers::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
         .and_then(|h| h.strip_prefix("Bearer "))
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or_else(|| {
+            tracing::warn!("Missing or invalid Authorization header");
+            StatusCode::UNAUTHORIZED
+        })?;
 
-    // Parse token type and validate
-    let (service_id, additional_headers) = if auth_header.contains('|') {
-        // Legacy API Token format: "id|token"
-        let legacy_token = crate::api_tokens::ApiToken::from_str(auth_header)
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
-        handle_legacy_token(legacy_token, &s.db).await?
-    } else if auth_header.contains('.') && !auth_header.starts_with("v4.local.") {
-        // API Key format: "ak_xxxxx.yyyyy"
-        handle_api_key(auth_header, &s.db).await?
-    } else if auth_header.starts_with("v4.local.") {
-        // Paseto access token format: "v4.local.xxxxx"
-        handle_paseto_token(auth_header, &s.paseto_manager).await?
-    } else {
-        tracing::warn!("Unrecognized token format: {}", auth_header);
-        return Err(StatusCode::UNAUTHORIZED);
+    tracing::debug!("Processing auth header: {}", auth_header);
+
+    // Use unified token parsing
+    let (service_id, additional_headers) = match crate::auth_token::AuthToken::parse(auth_header) {
+        Ok(crate::auth_token::AuthToken::Legacy(legacy_token)) => {
+            handle_legacy_token(legacy_token, &s.db).await?
+        }
+        Ok(crate::auth_token::AuthToken::ApiKey(api_key)) => {
+            handle_api_key(&api_key, &s.db).await?
+        }
+        Ok(crate::auth_token::AuthToken::AccessToken(_)) => {
+            // This shouldn't happen as parse() returns an error for Paseto tokens
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+        Err(_) if auth_header.starts_with("v4.local.") => {
+            // Special case for Paseto tokens which need the manager to validate
+            handle_paseto_token(auth_header, &s.paseto_manager).await?
+        }
+        Err(e) => {
+            tracing::warn!("Token parsing error for '{}': {:?}", auth_header, e);
+            return Err(StatusCode::UNAUTHORIZED);
+        }
     };
 
     let service = match ServiceModel::find_by_id(service_id, &s.db) {
@@ -600,13 +697,25 @@ async fn reverse_proxy(
     // Set the target URI in the request
     *req.uri_mut() = target_uri;
 
-    // Inject additional headers into the request
+    // Inject additional headers into the request with re-validation
     for (header_name, header_value) in additional_headers {
+        // Re-validate header names against security-sensitive headers
+        if is_forbidden_header(&header_name) {
+            tracing::warn!("Attempted to inject forbidden header: {}", header_name);
+            continue;
+        }
+
         if let Ok(name) = header::HeaderName::from_bytes(header_name.as_bytes()) {
+            // Additional validation for header values
             if let Ok(value) = header::HeaderValue::from_str(&header_value) {
+                // Prevent header value injection attacks
+                if header_value.contains('\r') || header_value.contains('\n') {
+                    tracing::warn!("Header value contains CRLF: {}", header_name);
+                    continue;
+                }
                 req.headers_mut().insert(name, value);
             } else {
-                tracing::warn!("Invalid header value: {}", header_value);
+                tracing::warn!("Invalid header value for {}: {}", header_name, header_value);
             }
         } else {
             tracing::warn!("Invalid header name: {}", header_name);

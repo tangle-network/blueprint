@@ -1,3 +1,21 @@
+//! Paseto token generation and validation for short-lived access tokens
+//!
+//! This module implements secure token generation using PASETO v4 local tokens.
+//! Tokens are encrypted with a symmetric key and contain embedded claims including:
+//!
+//! - Service ID for authorization
+//! - Tenant ID with cryptographic binding
+//! - Additional headers to inject in requests
+//! - Expiration and issuance timestamps
+//! - Unique token identifier for tracking
+//!
+//! # Security
+//!
+//! - Tokens are encrypted using XChaCha20-Poly1305
+//! - Tenant IDs are cryptographically bound to prevent impersonation
+//! - Keys are persisted securely with restrictive permissions
+//! - Automatic expiration validation
+
 use pasetors::claims::{Claims, ClaimsValidationRules};
 use pasetors::keys::SymmetricKey;
 use pasetors::token::UntrustedToken;
@@ -45,6 +63,9 @@ pub struct AccessTokenClaims {
     /// Optional tenant identifier (hashed user ID)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_id: Option<String>,
+    /// Cryptographic binding of tenant_id to key_id (hash of key_id + tenant_id)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tenant_binding: Option<String>,
     /// Additional headers to forward to upstream
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub additional_headers: BTreeMap<String, String>,
@@ -72,14 +93,47 @@ impl AccessTokenClaims {
             .unwrap_or_default()
             .as_secs();
 
+        // Create cryptographic binding between key_id and tenant_id
+        let tenant_binding = tenant_id.as_ref().map(|tid| {
+            use tiny_keccak::{Hasher, Keccak};
+            let mut hasher = Keccak::v256();
+            hasher.update(key_id.as_bytes());
+            hasher.update(b"::tenant::");
+            hasher.update(tid.as_bytes());
+            let mut output = [0u8; 32];
+            hasher.finalize(&mut output);
+            hex::encode(output)
+        });
+
         Self {
             service_id,
             tenant_id,
+            tenant_binding,
             additional_headers,
             expires_at: now + ttl.as_secs(),
             issued_at: now,
             key_id,
             jti: Uuid::new_v4().to_string(),
+        }
+    }
+
+    /// Verify tenant binding is valid
+    pub fn verify_tenant_binding(&self) -> bool {
+        match (&self.tenant_id, &self.tenant_binding) {
+            (None, None) => true, // No tenant, no binding required
+            (Some(tid), Some(binding)) => {
+                // Recompute binding and verify
+                use tiny_keccak::{Hasher, Keccak};
+                let mut hasher = Keccak::v256();
+                hasher.update(self.key_id.as_bytes());
+                hasher.update(b"::tenant::");
+                hasher.update(tid.as_bytes());
+                let mut output = [0u8; 32];
+                hasher.finalize(&mut output);
+                let expected = hex::encode(output);
+                expected == *binding
+            }
+            _ => false, // Mismatch between tenant_id and binding presence
         }
     }
 
@@ -193,6 +247,11 @@ impl PasetoTokenManager {
             return Err(PasetoError::TokenExpired);
         }
 
+        // Verify tenant binding to prevent impersonation
+        if !claims.verify_tenant_binding() {
+            return Err(PasetoError::InvalidTenantBinding);
+        }
+
         Ok(claims)
     }
 
@@ -211,6 +270,9 @@ impl PasetoTokenManager {
 pub enum PasetoError {
     #[error("Token is expired")]
     TokenExpired,
+
+    #[error("Invalid tenant binding - possible impersonation attempt")]
+    InvalidTenantBinding,
 
     #[error("Encryption error: {0}")]
     EncryptionError(String),
@@ -273,6 +335,7 @@ mod tests {
         let claims = AccessTokenClaims {
             service_id: ServiceId::new(1),
             tenant_id: None,
+            tenant_binding: None,
             additional_headers: BTreeMap::new(),
             expires_at: 1, // Very old timestamp
             issued_at: 1,

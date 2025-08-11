@@ -175,17 +175,34 @@ impl ApiToken {
 
     /// Parses a string into an `ApiToken`.
     pub(crate) fn from_str(s: &str) -> Result<ApiToken, ParseApiTokenError> {
-        let mut parts = s.splitn(3, '|');
+        // Validate token length (prevent DoS from extremely long tokens)
+        if s.len() > 512 {
+            return Err(ParseApiTokenError::MalformedToken);
+        }
+
+        // Ensure exactly one separator
+        let separator_count = s.matches('|').count();
+        if separator_count != 1 {
+            return Err(ParseApiTokenError::MalformedToken);
+        }
+
+        let mut parts = s.splitn(2, '|');
 
         let id_part = parts.next().ok_or(ParseApiTokenError::MalformedToken)?;
+
+        // Validate ID part is not empty and is numeric
+        if id_part.is_empty() {
+            return Err(ParseApiTokenError::InvalidTokenId);
+        }
+
         let id = id_part
             .parse::<u64>()
             .map_err(|_| ParseApiTokenError::InvalidTokenId)?;
 
         let token_part = parts.next().ok_or(ParseApiTokenError::MalformedToken)?;
 
-        // Check if there are more than 2 parts (meaning more than one separator)
-        if parts.next().is_some() {
+        // Validate token part is not empty and contains valid base64 characters
+        if token_part.is_empty() {
             return Err(ParseApiTokenError::MalformedToken);
         }
 

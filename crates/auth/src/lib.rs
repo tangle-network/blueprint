@@ -1,4 +1,40 @@
 //! Authentication module for the Blueprint SDK.
+//!
+//! This module provides a three-tier token authentication system:
+//!
+//! 1. **API Keys** (`ak_xxxxx.yyyyy`) - Long-lived credentials for service authentication
+//! 2. **Access Tokens** (`v4.local.xxxxx`) - Short-lived Paseto tokens for authorization
+//! 3. **Legacy Tokens** (`id|token`) - Deprecated format for backward compatibility
+//!
+//! # Architecture
+//!
+//! The authentication flow follows these steps:
+//! 1. Client authenticates with API key
+//! 2. API key is exchanged for a short-lived access token
+//! 3. Access token is used for subsequent requests
+//! 4. Token refresh happens automatically before expiration
+//!
+//! # Security Features
+//!
+//! - Cryptographic tenant binding prevents impersonation
+//! - Header re-validation prevents injection attacks  
+//! - Persistent key storage with secure permissions
+//! - Automatic token rotation and refresh
+//!
+//! # Example
+//!
+//! ```no_run
+//! use blueprint_auth::proxy::AuthenticatedProxy;
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Initialize proxy with persistent storage
+//!     let proxy = AuthenticatedProxy::new("/var/lib/auth/db")?;
+//!
+//!     // Start the proxy server
+//!     let router = proxy.router();
+//!     Ok(())
+//! }
+//! ```
 
 use blueprint_std::rand::{CryptoRng, Rng};
 
@@ -56,6 +92,9 @@ pub enum Error {
 
     #[error(transparent)]
     Uri(#[from] axum::http::uri::InvalidUri),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// Generates a random challenge string to be used in the authentication process.

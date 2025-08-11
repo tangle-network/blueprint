@@ -2750,7 +2750,7 @@ dependencies = [
  "hyper-util",
  "k256",
  "pasetors",
- "prost",
+ "prost 0.13.5",
  "reqwest 0.12.22",
  "rocksdb",
  "schnorrkel",

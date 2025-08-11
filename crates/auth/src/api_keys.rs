@@ -1,3 +1,34 @@
+//! Long-lived API key management
+//!
+//! API keys are the primary authentication mechanism for services.
+//! They follow the format `ak_<key_id>.<secret>` where:
+//!
+//! - `ak_` is a fixed prefix for identification
+//! - `key_id` is a unique identifier (5 chars, base64url)
+//! - `secret` is the secret part (32 bytes, base64url encoded)
+//!
+//! # Storage
+//!
+//! Keys are stored in RocksDB with:
+//! - The full key is never stored, only a hash
+//! - Key metadata includes service ID, creation time, etc.
+//! - Supports expiration and enabled/disabled states
+//!
+//! # Usage
+//!
+//! API keys are exchanged for short-lived access tokens:
+//!
+//! ```text
+//! // Client sends API key
+//! Authorization: Bearer ak_2n4f8.w9x7y6z5a4b3c2d1
+//!
+//! // Server validates and returns access token
+//! {
+//!   "access_token": "v4.local.xxxxx",
+//!   "expires_in": 900
+//! }
+//! ```
+
 use base64::Engine;
 use blueprint_std::rand::{CryptoRng, RngCore};
 use prost::Message;
