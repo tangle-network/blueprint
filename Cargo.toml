@@ -256,7 +256,7 @@ trybuild = { version = "1.0", default-features = false }
 dirs = { version = "6.0.0", default-features = false }
 indicatif = { version = "0.18.0", default-features = false }
 document-features = { version = "0.2.11", default-features = false }
-rustversion = { version = "1.0.21", default-features = false }
+rustversion = { version = "1.0.22", default-features = false }
 cargo-dist-schema = { version = "0.28.2", default-features = false }
 
 # Time & Date
