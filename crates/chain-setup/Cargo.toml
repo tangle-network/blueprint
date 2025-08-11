@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-chain-setup"
-version = "0.1.0-alpha.17"
+version = "0.1.0-alpha.18"
 description = "Chain setup utilities for use with Blueprint SDK"
 authors.workspace = true
 edition.workspace = true
