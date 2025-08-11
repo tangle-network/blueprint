@@ -39,6 +39,7 @@ transmute_ptr_to_ptr = "allow"
 items_after_statements = "allow"
 match_wildcard_for_single_variants = "allow"
 too_many_lines = "allow"
+ignore_without_reason = "allow"
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"

@@ -510,6 +510,10 @@ where
     /// # Errors
     ///
     /// * See [`Self::deploy_blueprint()`] and [`MultiNodeTestEnv::new()`]
+    ///
+    /// # Panics
+    ///
+    /// This will panic at compile time if `N` == 0
     pub async fn setup_services<const N: usize>(
         &self,
         exit_after_registration: bool,

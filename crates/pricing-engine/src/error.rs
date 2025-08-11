@@ -54,7 +54,7 @@ pub enum PricingError {
 
 impl From<blueprint_keystore::Error> for PricingError {
     fn from(error: blueprint_keystore::Error) -> Self {
-        PricingError::Signing(format!("Error signing quote: {:?}", error))
+        PricingError::Signing(format!("Error signing quote: {error:?}"))
     }
 }
 

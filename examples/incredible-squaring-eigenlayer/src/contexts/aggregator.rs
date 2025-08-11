@@ -141,8 +141,7 @@ impl AggregatorContext {
                     let signed_task_response: SignedTaskResponse =
                         serde_json::from_value(inner_params.clone()).map_err(|e| {
                             jsonrpc_core::Error::invalid_params(format!(
-                                "Invalid SignedTaskResponse: {}",
-                                e
+                                "Invalid SignedTaskResponse: {e}",
                             ))
                         })?;
 

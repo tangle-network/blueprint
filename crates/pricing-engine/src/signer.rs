@@ -45,7 +45,7 @@ impl<K: KeyType> OperatorSigner<K> {
 
         // Sign the hash
         let signature = K::sign_with_secret(&mut self.keypair, &hash)
-            .map_err(|e| PricingError::Signing(format!("Error {:?} signing quote hash", e)))?;
+            .map_err(|e| PricingError::Signing(format!("Error {e:?} signing quote hash")))?;
 
         Ok(SignedQuote {
             quote_details,

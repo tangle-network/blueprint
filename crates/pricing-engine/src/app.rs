@@ -32,11 +32,11 @@ pub async fn start_blockchain_listener(
             match EventListener::new(node_url, event_tx).await {
                 Ok(listener) => {
                     if let Err(e) = listener.run().await {
-                        error!("Blockchain listener error: {}", e);
+                        error!("Blockchain listener error: {e}");
                     }
                 }
                 Err(e) => {
-                    error!("Failed to create blockchain listener: {}", e);
+                    error!("Failed to create blockchain listener: {e}");
                 }
             }
         }))
@@ -49,7 +49,7 @@ pub async fn start_blockchain_listener(
 /// Load the operator configuration from the specified path
 pub async fn load_operator_config(config_path: &PathBuf) -> Result<Arc<OperatorConfig>> {
     let config = load_config_from_path(config_path)
-        .map_err(|e| PricingError::Config(format!("Failed to load config: {}", e)))?;
+        .map_err(|e| PricingError::Config(format!("Failed to load config: {e}")))?;
     let config = Arc::new(config);
     info!("Configuration loaded");
     Ok(config)
@@ -57,9 +57,10 @@ pub async fn load_operator_config(config_path: &PathBuf) -> Result<Arc<OperatorC
 
 /// Initialize the benchmark cache
 pub async fn init_benchmark_cache(config: &Arc<OperatorConfig>) -> Result<Arc<BenchmarkCache>> {
-    let benchmark_cache = Arc::new(BenchmarkCache::new(&config.database_path).map_err(|e| {
-        PricingError::Cache(format!("Failed to initialize benchmark cache: {}", e))
-    })?);
+    let benchmark_cache =
+        Arc::new(BenchmarkCache::new(&config.database_path).map_err(|e| {
+            PricingError::Cache(format!("Failed to initialize benchmark cache: {e}"))
+        })?);
     info!("Benchmark cache initialized");
     Ok(benchmark_cache)
 }

@@ -155,7 +155,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     let signer: PrivateKeySigner = AGGREGATOR_PRIVATE_KEY
         .parse()
         .expect("failed to generate wallet ");
-    warn!("Private key: {}", private_key);
+    warn!("Private key: {private_key}");
     warn!(
         "Aggregator private key: {}",
         AGGREGATOR_PRIVATE_KEY.as_str()
@@ -175,8 +175,8 @@ async fn run_eigenlayer_incredible_squaring_test(
     {
         Ok(_) => info!("Successfully set up AVS permissions"),
         Err(e) => {
-            error!("Failed to set up AVS permissions: {}", e);
-            panic!("Failed to set up AVS permissions: {}", e);
+            error!("Failed to set up AVS permissions: {e}");
+            panic!("Failed to set up AVS permissions: {e}");
         }
     }
 
@@ -196,10 +196,7 @@ async fn run_eigenlayer_incredible_squaring_test(
 
     let minimum_stake = U96::from(0);
 
-    info!(
-        "Attempting to create quorum with strategy: {}",
-        strategy_address
-    );
+    info!("Attempting to create quorum with strategy: {strategy_address}",);
 
     let create_quorum_call = registry_coordinator.createTotalDelegatedStakeQuorum(
         operator_set_param.clone(),
@@ -212,10 +209,10 @@ async fn run_eigenlayer_incredible_squaring_test(
     let create_quorum_receipt = get_receipt(create_quorum_call).await;
     match create_quorum_receipt {
         Ok(receipt) => {
-            info!("Quorum created with receipt: {:?}", receipt);
+            info!("Quorum created with receipt: {receipt:?}");
             if !receipt.status() {
-                error!("Failed to create quorum: {:?}", receipt);
-                panic!("Failed to create quorum: {:?}", receipt);
+                error!("Failed to create quorum: {receipt:?}");
+                panic!("Failed to create quorum: {receipt:?}");
             } else {
                 info!(
                     "Quorum created with transaction hash: {:?}",
@@ -224,8 +221,8 @@ async fn run_eigenlayer_incredible_squaring_test(
             }
         }
         Err(e) => {
-            error!("Failed to create quorum: {}", e);
-            panic!("Failed to create quorum: {}", e);
+            error!("Failed to create quorum: {e}");
+            panic!("Failed to create quorum: {e}");
         }
     }
 
@@ -408,8 +405,7 @@ pub fn setup_task_spawner(
             tokio::process::Command::new("sh")
                 .arg("-c")
                 .arg(format!(
-                    "cast rpc anvil_mine 1 --rpc-url {} > /dev/null",
-                    http_endpoint
+                    "cast rpc anvil_mine 1 --rpc-url {http_endpoint} > /dev/null",
                 ))
                 .output()
                 .await

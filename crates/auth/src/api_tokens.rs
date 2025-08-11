@@ -244,8 +244,7 @@ where
                 return Err((
                     StatusCode::BAD_REQUEST,
                     format!(
-                        "Invalid Authorization header; expected Bearer <api_token>, got {}",
-                        anything
+                        "Invalid Authorization header; expected Bearer <api_token>, got {anything}"
                     ),
                 )
                     .into_response());
@@ -334,7 +333,7 @@ mod tests {
         let plaintext = token.plaintext(id);
 
         // Plaintext should be formatted as "id|token"
-        assert!(plaintext.starts_with(&format!("{}|", id)));
+        assert!(plaintext.starts_with(&format!("{id}|")));
         assert!(plaintext.len() > 3); // At least "id|t"
     }
 

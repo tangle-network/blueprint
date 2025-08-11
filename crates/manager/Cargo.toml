@@ -32,7 +32,7 @@ docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace", "issue-url"] }
 tangle-subxt = { workspace = true }
-toml = { workspace = true, features = ["parse"] }
+toml = { workspace = true, features = ["parse", "serde"] }
 hex = { workspace = true }
 tokio = { workspace = true, features = ["process", "io-util", "signal", "macros"] }
 reqwest = { workspace = true }

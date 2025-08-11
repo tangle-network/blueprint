@@ -17,7 +17,7 @@ pub fn get_io_stats() -> Result<(u64, u64)> {
     // Use /proc/diskstats on Linux to get disk I/O stats
     // Format: https://www.kernel.org/doc/Documentation/ABI/testing/procfs-diskstats
     let diskstats = std::fs::read_to_string("/proc/diskstats")
-        .map_err(|e| PricingError::Benchmark(format!("Failed to read diskstats: {}", e)))?;
+        .map_err(|e| PricingError::Benchmark(format!("Failed to read diskstats: {e}")))?;
 
     // Sum up I/O stats from all physical disks (not partitions or virtual devices)
     let mut total_read_bytes = 0;
@@ -31,10 +31,10 @@ pub fn get_io_stats() -> Result<(u64, u64)> {
 
         let device_name = parts[2];
         // Check if this is a physical disk (not a partition, loop, or ram device)
-        if (device_name.starts_with("sd") || 
-            device_name.starts_with("nvme") || 
-            device_name.starts_with("vd") || 
-            device_name.starts_with("xvd")) && 
+        if (device_name.starts_with("sd") ||
+            device_name.starts_with("nvme") ||
+            device_name.starts_with("vd") ||
+            device_name.starts_with("xvd")) &&
             // Exclude partitions (devices with numbers at the end)
             !device_name.chars().last().unwrap_or('x').is_numeric()
         {
@@ -56,7 +56,7 @@ pub fn get_io_stats() -> Result<(u64, u64)> {
 pub fn get_network_stats() -> Result<(u64, u64)> {
     // Use /proc/net/dev on Linux to get network stats
     let netdev = std::fs::read_to_string("/proc/net/dev")
-        .map_err(|e| PricingError::Benchmark(format!("Failed to read network stats: {}", e)))?;
+        .map_err(|e| PricingError::Benchmark(format!("Failed to read network stats: {e}")))?;
 
     let mut total_rx_bytes = 0;
     let mut total_tx_bytes = 0;
@@ -103,7 +103,7 @@ pub fn run_and_monitor_command(config: &BenchmarkRunConfig) -> Result<BenchmarkP
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| PricingError::Benchmark(format!("Failed to start command: {}", e)))?;
+        .map_err(|e| PricingError::Benchmark(format!("Failed to start command: {e}")))?;
 
     // Initialize system info collector
     let mut system = System::new();
