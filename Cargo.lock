@@ -19622,9 +19622,9 @@ checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 
 [[package]]
 name = "tangle-subxt"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38a8ad20aa51f1f4d59e6af195a0c2fb5731d74b0fa766024e4fe7ae24e8c604"
+checksum = "2474df9402fda829697e654b31839b2db62d66217b057cb5a8a2e01c8b0f0719"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
