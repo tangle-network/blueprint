@@ -144,9 +144,7 @@ where
                     Err((StatusCode::BAD_REQUEST, "Invalid token format").into_response())
                 }
             }
-            Err(e) => {
-                Err((StatusCode::BAD_REQUEST, format!("Invalid token: {e}")).into_response())
-            }
+            Err(e) => Err((StatusCode::BAD_REQUEST, format!("Invalid token: {e}")).into_response()),
         }
     }
 }

@@ -96,8 +96,7 @@ impl AuthenticatedProxy {
         if key_path.exists() {
             let mut file = fs::File::open(&key_path).map_err(crate::Error::Io)?;
             let mut key_bytes = vec![];
-            file.read_to_end(&mut key_bytes)
-                .map_err(crate::Error::Io)?;
+            file.read_to_end(&mut key_bytes).map_err(crate::Error::Io)?;
 
             if key_bytes.len() == 32 {
                 let mut key_array = [0u8; 32];
@@ -118,8 +117,7 @@ impl AuthenticatedProxy {
         // Save key to file
         let mut file = fs::File::create(&key_path).map_err(crate::Error::Io)?;
         let key_bytes = key.as_bytes();
-        file.write_all(&key_bytes)
-            .map_err(crate::Error::Io)?;
+        file.write_all(&key_bytes).map_err(crate::Error::Io)?;
         file.sync_all().map_err(crate::Error::Io)?;
 
         // Set restrictive permissions on the key file (Unix only)
@@ -604,6 +602,7 @@ async fn handle_paseto_token(
 }
 
 /// Check if a header name is forbidden for security reasons
+/// Note: header_name may already be lowercase from validation, but we normalize again for safety
 fn is_forbidden_header(header_name: &str) -> bool {
     // Normalized comparison (case-insensitive)
     let lower = header_name.to_lowercase();

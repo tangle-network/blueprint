@@ -429,7 +429,7 @@ async fn test_pii_hashing_in_production() {
     let stored_headers = api_key_model.get_default_headers();
 
     // Verify PII fields are hashed
-    let tenant_id = stored_headers.get("X-Tenant-Id").unwrap();
+    let tenant_id = stored_headers.get("x-tenant-id").unwrap();
     assert_eq!(
         tenant_id.len(),
         32,
@@ -442,7 +442,7 @@ async fn test_pii_hashing_in_production() {
         "Should match expected hash"
     );
 
-    let user_id_hash = stored_headers.get("X-User-Id").unwrap();
+    let user_id_hash = stored_headers.get("x-user-id").unwrap();
     assert_eq!(
         user_id_hash.len(),
         32,
@@ -455,14 +455,14 @@ async fn test_pii_hashing_in_production() {
         "Should match expected hash"
     );
 
-    let user_email_hash = stored_headers.get("X-User-Email").unwrap();
+    let user_email_hash = stored_headers.get("x-user-email").unwrap();
     assert_eq!(
         user_email_hash,
         &validation::hash_user_id(email),
         "Email should be hashed"
     );
 
-    let customer_email_hash = stored_headers.get("X-Customer-Email").unwrap();
+    let customer_email_hash = stored_headers.get("x-customer-email").unwrap();
     assert_eq!(
         customer_email_hash,
         &validation::hash_user_id("bob@company.com"),
@@ -470,7 +470,7 @@ async fn test_pii_hashing_in_production() {
     );
 
     // Non-PII field should not be hashed
-    let custom_header = stored_headers.get("X-Custom-Header").unwrap();
+    let custom_header = stored_headers.get("x-custom-header").unwrap();
     assert_eq!(
         custom_header, "not-pii",
         "Non-PII headers should not be hashed"
@@ -549,7 +549,7 @@ async fn test_already_hashed_tenant_id_not_rehashed() {
         .unwrap();
 
     let stored_headers = api_key_model.get_default_headers();
-    let stored_tenant_id = stored_headers.get("X-Tenant-Id").unwrap();
+    let stored_tenant_id = stored_headers.get("x-tenant-id").unwrap();
 
     // Should be the same as what we sent (not re-hashed)
     assert_eq!(
