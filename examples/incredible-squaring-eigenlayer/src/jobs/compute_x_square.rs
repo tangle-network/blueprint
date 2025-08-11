@@ -68,8 +68,7 @@ pub async fn xsquare_eigen(
             },
             Err(e) => {
                 return Err(TaskError::Task(format!(
-                    "Failed to send signed task response: {:?}",
-                    e
+                    "Failed to send signed task response: {e:?}",
                 )));
             }
         };
@@ -77,8 +76,7 @@ pub async fn xsquare_eigen(
             Ok(pair) => pair,
             Err(e) => {
                 return Err(TaskError::Task(format!(
-                    "Failed to send signed task response: {:?}",
-                    e
+                    "Failed to send signed task response: {e:?}",
                 )));
             }
         };
@@ -97,10 +95,9 @@ pub async fn xsquare_eigen(
             signed_response
         );
         if let Err(e) = client.send_signed_task_response(signed_response).await {
-            error!("Failed to send signed task response: {:?}", e);
+            error!("Failed to send signed task response: {e:?}");
             return Err(TaskError::Task(format!(
-                "Failed to send signed task response: {:?}",
-                e
+                "Failed to send signed task response: {e:?}",
             )));
         }
     }

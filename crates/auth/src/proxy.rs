@@ -150,7 +150,7 @@ async fn auth_verify(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(crate::types::VerifyChallengeResponse::UnexpectedError {
-                    message: format!("Internal server error: {}", e),
+                    message: format!("Internal server error: {e}"),
                 }),
             );
         }
@@ -181,7 +181,7 @@ async fn auth_verify(
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(crate::types::VerifyChallengeResponse::UnexpectedError {
-                            message: format!("Internal server error: {}", e),
+                            message: format!("Internal server error: {e}"),
                         }),
                     );
                 }
@@ -202,7 +202,7 @@ async fn auth_verify(
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(crate::types::VerifyChallengeResponse::UnexpectedError {
-                message: format!("Internal server error: {}", e),
+                message: format!("Internal server error: {e}"),
             }),
         ),
     }
@@ -303,7 +303,7 @@ mod tests {
             let local_address = server.local_addr().unwrap();
             let handle = tokio::spawn(async move {
                 if let Err(e) = server.await {
-                    eprintln!("Hello world server error: {}", e);
+                    eprintln!("Hello world server error: {e}");
                 }
             });
             (handle, local_address)
@@ -381,12 +381,11 @@ mod tests {
         // Try to send a request to the reverse proxy with the token in the header
         let res = client
             .get("/hello")
-            .header(headers::AUTHORIZATION, format!("Bearer {}", access_token))
+            .header(headers::AUTHORIZATION, format!("Bearer {access_token}"))
             .await;
         assert!(
             res.status().is_success(),
-            "Request to reverse proxy failed: {:?}",
-            res
+            "Request to reverse proxy failed: {res:?}",
         );
 
         hello_world_server.abort(); // Stop the hello world server

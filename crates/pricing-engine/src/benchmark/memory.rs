@@ -228,8 +228,7 @@ pub fn run_memory_benchmark(config: &BenchmarkRunConfig) -> Result<MemoryBenchma
                 *benchmark_running.lock().unwrap() = false;
 
                 return Err(PricingError::Benchmark(format!(
-                    "Thread panicked during memory benchmark: {:?}",
-                    e
+                    "Thread panicked during memory benchmark: {e:?}",
                 )));
             }
         }
@@ -241,8 +240,7 @@ pub fn run_memory_benchmark(config: &BenchmarkRunConfig) -> Result<MemoryBenchma
     // Wait for memory monitoring thread to finish
     if let Err(e) = memory_monitor_handle.join() {
         return Err(PricingError::Benchmark(format!(
-            "Memory monitoring thread panicked: {:?}",
-            e
+            "Memory monitoring thread panicked: {e:?}",
         )));
     }
 

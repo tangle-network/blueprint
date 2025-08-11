@@ -179,7 +179,7 @@ mod tests {
     use k256::ecdsa::signature::Verifier;
 
     #[tokio::test]
-    #[ignore] // Requires AWS credentials
+    #[ignore = "Requires AWS credentials"]
     async fn test_aws_signer() {
         let config = AwsRemoteSignerConfig {
             keys: vec![AwsKeyConfig {

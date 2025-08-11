@@ -210,7 +210,7 @@ impl fmt::Debug for MetadataValue {
                     if b == b'"' {
                         f.write_str("\\\"")?;
                     } else {
-                        write!(f, "\\x{:x}", b)?;
+                        write!(f, "\\x{b:x}")?;
                     }
                     from = i + 1;
                 }

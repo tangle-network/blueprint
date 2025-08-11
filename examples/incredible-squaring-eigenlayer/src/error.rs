@@ -5,6 +5,7 @@ use eigensdk::{
     types::operator::OperatorTypesError,
 };
 
+#[expect(clippy::large_enum_variant, reason = "SDK error is large currently")]
 #[derive(Debug, thiserror::Error)]
 pub enum TaskError {
     #[error("Blueprint SDK: {0}")]
