@@ -362,7 +362,6 @@ impl EnhancedMetricsProvider {
 
 impl MetricsProvider for EnhancedMetricsProvider {
     /// Returns the latest collected `SystemMetrics`.
-    #[must_use]
     async fn get_system_metrics(&self) -> SystemMetrics {
         self.system_metrics
             .read()
@@ -373,7 +372,6 @@ impl MetricsProvider for EnhancedMetricsProvider {
     }
 
     /// Returns the latest collected `BlueprintMetrics`.
-    #[must_use]
     async fn get_blueprint_metrics(&self) -> BlueprintMetrics {
         self.blueprint_metrics
             .read()
@@ -384,19 +382,16 @@ impl MetricsProvider for EnhancedMetricsProvider {
     }
 
     /// Returns the current `BlueprintStatus`.
-    #[must_use]
     async fn get_blueprint_status(&self) -> BlueprintStatus {
         self.blueprint_status.read().await.clone()
     }
 
     /// Returns the historical `SystemMetrics` (up to `max_history`).
-    #[must_use]
     async fn get_system_metrics_history(&self) -> Vec<SystemMetrics> {
         self.system_metrics.read().await.clone()
     }
 
     /// Returns the historical `BlueprintMetrics` (up to `max_history`).
-    #[must_use]
     async fn get_blueprint_metrics_history(&self) -> Vec<BlueprintMetrics> {
         self.blueprint_metrics.read().await.clone()
     }

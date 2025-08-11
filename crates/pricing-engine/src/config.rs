@@ -59,12 +59,12 @@ pub fn load_config_from_path<P: AsRef<Path>>(path: P) -> Result<OperatorConfig> 
 
     // Read the file content
     let content = std::fs::read_to_string(path).map_err(|e| {
-        crate::error::PricingError::Config(format!("Failed to read config file: {}", e))
+        crate::error::PricingError::Config(format!("Failed to read config file: {e}"))
     })?;
 
     // Parse the TOML content
     let config: OperatorConfig = toml::from_str(&content).map_err(|e| {
-        crate::error::PricingError::Config(format!("Failed to parse config file: {}", e))
+        crate::error::PricingError::Config(format!("Failed to parse config file: {e}"))
     })?;
 
     Ok(config)

@@ -105,9 +105,9 @@ pub async fn start_anvil_container(state_json: Option<&str>, include_logs: bool)
         .unwrap();
 
     let http_endpoint = format!("http://localhost:{port}").parse().unwrap();
-    println!("Anvil HTTP endpoint: {}", http_endpoint);
+    println!("Anvil HTTP endpoint: {http_endpoint}");
     let ws_endpoint = format!("ws://localhost:{port}").parse().unwrap();
-    println!("Anvil WS endpoint: {}", ws_endpoint);
+    println!("Anvil WS endpoint: {ws_endpoint}");
 
     AnvilTestnet {
         container,

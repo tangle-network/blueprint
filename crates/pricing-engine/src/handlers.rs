@@ -17,7 +17,7 @@ pub async fn handle_blueprint_update(
     // or from a local configuration mapping IDs to benchmarkable artifacts (e.g., docker images, commands).
     // For now, we use the generic benchmark command from config.
 ) -> Result<()> {
-    info!("Handling update for blueprint ID: {}", blueprint_id);
+    info!("Handling update for blueprint ID: {blueprint_id}");
 
     // Configure Benchmark
     let benchmark_duration = config.benchmark_duration;
@@ -37,19 +37,13 @@ pub async fn handle_blueprint_update(
     )?;
 
     if !benchmark_result.success {
-        warn!(
-            "Benchmark command failed for blueprint {}. Skipping profile update.",
-            blueprint_id
-        );
+        warn!("Benchmark command failed for blueprint {blueprint_id}. Skipping profile update.",);
         return Ok(()); // Or return an error depending on desired behavior
     }
 
     // Store benchmark profile in cache
     cache.store_profile(blueprint_id, &benchmark_result)?;
 
-    info!(
-        "Successfully updated benchmark profile for blueprint ID: {}",
-        blueprint_id
-    );
+    info!("Successfully updated benchmark profile for blueprint ID: {blueprint_id}",);
     Ok(())
 }

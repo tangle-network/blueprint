@@ -144,7 +144,7 @@ pub async fn deploy_to_tangle(
             std::thread::sleep(sleep_duration);
             current += increment;
             progress_clone.set_position(current);
-            progress_clone.set_message(format!("Generating blueprint... ({}%)", current));
+            progress_clone.set_message(format!("Generating blueprint... ({current}%)"));
         }
     });
 
@@ -178,10 +178,7 @@ pub async fn deploy_to_tangle(
     };
 
     let my_account_id = signer.account_id();
-    update_progress(
-        85,
-        &format!("Connected to Tangle Network at: {}", ws_rpc_url),
-    );
+    update_progress(85, &format!("Connected to Tangle Network at: {ws_rpc_url}"));
     let client = subxt::OnlineClient::from_url(ws_rpc_url.clone()).await?;
 
     update_progress(90, "Creating blueprint transaction");
@@ -372,8 +369,7 @@ fn load_blueprint_metadata(
 
     // should have the blueprint.json
     let blueprint_json = std::fs::read_to_string(&blueprint_json_path).context(format!(
-        "Reading blueprint.json file at {:?}",
-        blueprint_json_path
+        "Reading blueprint.json file at {blueprint_json_path:?}",
     ))?;
     let blueprint = serde_json::from_str(&blueprint_json)?;
     Ok(blueprint)

@@ -97,7 +97,7 @@ fn test_benchmark_suite() {
     assert!(result.is_ok());
 
     let profile = result.unwrap();
-    println!("Profile: {:#?}", profile);
+    println!("Profile: {profile:#?}");
 
     assert!(profile.success)
 }
@@ -147,7 +147,7 @@ fn test_calculate_price_basic() {
     let price_model =
         calculate_price(profile.clone(), &pricing_config, None, ttl_blocks, None).unwrap();
 
-    println!("Price Model: {:#?}", price_model);
+    println!("Price Model: {price_model:#?}");
 
     // Verify the price model
     assert!(
@@ -251,7 +251,7 @@ fn test_calculate_price_high_cpu() {
     // Calculate the price with a scaling factor of 1.0
     let price_model = calculate_price(profile.clone(), &pricing_config, None, 600, None).unwrap();
 
-    println!("Price Model (High CPU): {:#?}", price_model);
+    println!("Price Model (High CPU): {price_model:#?}");
 
     // Verify that CPU pricing is based on the number of cores
     if let Some(cpu_resource) = price_model
@@ -310,14 +310,14 @@ fn test_calculate_price_different_scaling_factors() {
         let price_model =
             calculate_price(profile.clone(), &pricing_config, None, ttl, None).unwrap();
 
-        println!("Price Model (TTL = {} blocks): {:#?}", ttl, price_model);
+        println!("Price Model (TTL = {ttl} blocks): {price_model:#?}");
 
         // Verify that the price scales with TTL
         let base_price = price_model.total_cost;
         let expected_total_cost = base_price * (Decimal::from_u64(ttl).unwrap());
 
-        println!("Base price per block: ${:.6}", base_price);
-        println!("Total cost for {} blocks: ${:.6}", ttl, expected_total_cost);
+        println!("Base price per block: ${base_price:.6}");
+        println!("Total cost for {ttl} blocks: ${expected_total_cost:.6}");
 
         // Verify that CPU pricing is based on the number of cores
         if let Some(cpu_resource) = price_model
@@ -383,7 +383,7 @@ fn test_calculate_price_negative_scaling_factor() {
         }
         Err(e) => {
             // If it fails, that's also acceptable
-            println!("Price calculation failed as expected: {:?}", e);
+            println!("Price calculation failed as expected: {e:?}");
         }
     }
 }

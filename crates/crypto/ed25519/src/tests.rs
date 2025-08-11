@@ -165,7 +165,7 @@ fn test_concurrent_key_usage() {
     for i in 0..10 {
         let secret = Arc::clone(&secret);
         let handle = thread::spawn(move || {
-            let message = format!("message {}", i).into_bytes();
+            let message = format!("message {i}").into_bytes();
             let mut secret = (*secret).clone();
             let signature = Ed25519Zebra::sign_with_secret(&mut secret, &message).unwrap();
             (message, signature)

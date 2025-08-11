@@ -30,12 +30,9 @@ pub fn run_network_benchmark(_config: &BenchmarkRunConfig) -> Result<NetworkBenc
     // We'll use curl to download a file from a reliable server
     let download_start = Instant::now();
     let download_size_bytes = 100_000_000; // 100MB download
-    let download_url = format!(
-        "https://speed.cloudflare.com/__down?bytes={}",
-        download_size_bytes
-    );
+    let download_url = format!("https://speed.cloudflare.com/__down?bytes={download_size_bytes}",);
 
-    info!("Starting download test ({} bytes)...", download_size_bytes);
+    info!("Starting download test ({download_size_bytes} bytes)...");
 
     let network_command = "curl";
     let network_args = vec![
@@ -50,7 +47,7 @@ pub fn run_network_benchmark(_config: &BenchmarkRunConfig) -> Result<NetworkBenc
         .args(&network_args)
         .status()
         .map_err(|e| {
-            PricingError::Benchmark(format!("Failed to run network download benchmark: {}", e))
+            PricingError::Benchmark(format!("Failed to run network download benchmark: {e}"))
         })?;
 
     if !status.success() {
@@ -86,14 +83,12 @@ pub fn run_network_benchmark(_config: &BenchmarkRunConfig) -> Result<NetworkBenc
     let _ = Command::new("dd")
         .args([
             "if=/dev/urandom",
-            &format!("of={}", temp_file),
+            &format!("of={temp_file}"),
             "bs=1M",
             "count=10", // 10MB file
         ])
         .output()
-        .map_err(|e| {
-            PricingError::Benchmark(format!("Failed to create upload test file: {}", e))
-        })?;
+        .map_err(|e| PricingError::Benchmark(format!("Failed to create upload test file: {e}")))?;
 
     // Upload the file
     let upload_status = Command::new("curl")
@@ -102,12 +97,12 @@ pub fn run_network_benchmark(_config: &BenchmarkRunConfig) -> Result<NetworkBenc
             "-X",
             "POST",
             "-F",
-            &format!("file=@{}", temp_file),
+            &format!("file=@{temp_file}"),
             "https://httpbin.org/post", // This endpoint accepts file uploads
         ])
         .output()
         .map_err(|e| {
-            PricingError::Benchmark(format!("Failed to run network upload benchmark: {}", e))
+            PricingError::Benchmark(format!("Failed to run network upload benchmark: {e}"))
         })?;
 
     // Clean up the temporary file
@@ -175,7 +170,7 @@ fn measure_network_latency() -> Result<(f32, f32, f32)> {
     let ping_output = Command::new("ping")
         .args(["-c", "10", "-i", "0.2", "8.8.8.8"])
         .output()
-        .map_err(|e| PricingError::Benchmark(format!("Failed to run ping: {}", e)))?;
+        .map_err(|e| PricingError::Benchmark(format!("Failed to run ping: {e}")))?;
 
     let ping_output_str = String::from_utf8_lossy(&ping_output.stdout);
 

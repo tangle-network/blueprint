@@ -242,7 +242,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore] // Requires connected Ledger device
+    #[ignore = "Requires connected Ledger device"]
     async fn test_ledger_signer() {
         let config = LedgerRemoteSignerConfig {
             keys: vec![LedgerKeyConfig {
