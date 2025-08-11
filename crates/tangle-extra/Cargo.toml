@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-tangle-extra"
-version = "0.1.0-alpha.10"
+version = "0.1.0-alpha.11"
 description = "Tangle Network extra utilities for Blueprint framework"
 authors.workspace = true
 edition.workspace = true

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.19](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.18...blueprint-manager-v0.3.0-alpha.19) - 2025-08-11
+
+### Fixed
+
+- *(ci)* fix Clippy & build issues (#1125)
+
 ## [0.3.0-alpha.18](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.17...blueprint-manager-v0.3.0-alpha.18) - 2025-08-06
 
 ### Other
