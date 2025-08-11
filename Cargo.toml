@@ -230,7 +230,7 @@ rustls = { version = "0.23", default-features = false }
 # System & OS
 parking_lot = { version = "0.12.4", default-features = false }
 tempfile = { version = "3.13.0", default-features = false }
-uuid = { version = "1.17.0", default-features = false }
+uuid = { version = "1.18.0", default-features = false }
 blake3 = { version = "1.8.2", default-features = false }
 tar = { version = "0.4.44", default-features = false }
 xz = { version = "0.1.0", default-features = false }
