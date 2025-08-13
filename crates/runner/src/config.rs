@@ -237,6 +237,10 @@ pub struct BlueprintEnvironment {
     #[serde(skip)]
     bridge: Arc<Mutex<Option<Arc<Bridge>>>>,
 
+    /// KMS HTTP endpoint
+    #[cfg(feature = "tee")]
+    pub kms_url: Url,
+
     #[cfg(feature = "networking")]
     pub bootnodes: Vec<Multiaddr>,
     /// The port to bind the network to
@@ -263,6 +267,9 @@ impl Default for BlueprintEnvironment {
             test_mode: false,
             bridge_socket_path: None,
             bridge: Arc::new(Mutex::new(None)),
+
+            #[cfg(feature = "tee")]
+            kms_url: default_kms_url(),
 
             #[cfg(feature = "networking")]
             bootnodes: Vec::new(),
@@ -326,6 +333,9 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
     let keystore_uri = settings.keystore_uri.clone();
     let bridge_socket_path = settings.bridge_socket_path.clone();
 
+    #[cfg(feature = "tee")]
+    let kms_url = settings.kms_url.clone();
+
     #[cfg(feature = "networking")]
     let bootnodes = settings.bootnodes.clone().unwrap_or_default();
     #[cfg(feature = "networking")]
@@ -348,6 +358,9 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         protocol_settings,
         bridge_socket_path,
         bridge: Arc::new(Mutex::new(None)),
+
+        #[cfg(feature = "tee")]
+        kms_url,
 
         #[cfg(feature = "networking")]
         bootnodes,
@@ -567,6 +580,8 @@ impl ContextConfig {
                 enable_kademlia,
                 #[cfg(feature = "networking")]
                 target_peer_count: None,
+                #[cfg(feature = "tee")]
+                kms_url: default_kms_url(),
                 keystore_uri,
                 data_dir,
                 chain,
@@ -767,6 +782,17 @@ pub struct BlueprintSettings {
     #[serde(default)]
     pub target_peer_count: Option<u32>,
 
+    // ========
+    // TEE
+    // ========
+    /// URL of the Key Brokerage Service (KBS)
+    ///
+    /// This defaults to the central KBS hosted by Tangle
+    #[cfg(feature = "tee")]
+    #[arg(long, env, default_value_t = default_kms_url())]
+    #[serde(default = "default_kms_url")]
+    pub kms_url: Url,
+
     // =======
     // TANGLE
     // =======
@@ -920,6 +946,12 @@ impl Default for BlueprintSettings {
             #[cfg(feature = "networking")]
             target_peer_count: None,
 
+            // ========
+            // TEE
+            // ========
+            #[cfg(feature = "tee")]
+            kms_url: default_kms_url(),
+
             // =======
             // TANGLE
             // =======
@@ -963,6 +995,11 @@ fn default_http_rpc_url() -> Url {
 
 fn default_ws_rpc_url() -> Url {
     Url::from_str("ws://127.0.0.1:9944").unwrap()
+}
+
+#[cfg(feature = "tee")]
+fn default_kms_url() -> Url {
+    Url::from_str("https://kms.tangle.tools").unwrap()
 }
 
 #[derive(Copy, Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, clap::ValueEnum)]

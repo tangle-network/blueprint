@@ -1,26 +1,34 @@
 #[cfg(feature = "vm-sandbox")]
-use super::hypervisor::{HypervisorInstance, ServiceVmConfig, net::NetworkManager};
+use super::hypervisor::{HypervisorInstance, ServiceVmConfig};
 use super::native::ProcessHandle;
+use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
+use crate::rt::ResourceLimits;
+#[cfg(feature = "containers")]
+use crate::rt::container::ContainerInstance;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
-use blueprint_auth::db::RocksDb;
 use blueprint_core::error;
+use blueprint_core::{info, warn};
 use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
+use blueprint_runner::config::BlueprintEnvironment;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time;
-use tracing::{info, warn};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Status {
     NotStarted,
+    Pending,
     Running,
     Finished,
     Error,
+    Unknown,
 }
 
 struct NativeProcessInfo {
+    #[expect(unused, reason = "Host processes aren't resource constrained yet")]
+    limits: ResourceLimits,
     binary_path: PathBuf,
     service_name: String,
     env_vars: BlueprintEnvVars,
@@ -35,6 +43,8 @@ enum NativeProcess {
 enum Runtime {
     #[cfg(feature = "vm-sandbox")]
     Hypervisor(HypervisorInstance),
+    #[cfg(feature = "containers")]
+    Container(ContainerInstance),
     Native(NativeProcess),
 }
 
@@ -45,12 +55,17 @@ pub struct Service {
     alive_rx: Option<oneshot::Receiver<()>>,
 }
 
-fn create_bridge(
+async fn create_bridge(
+    ctx: &BlueprintManagerContext,
     runtime_dir: impl AsRef<Path>,
     service_name: &str,
-    db: RocksDb,
     no_vm: bool,
 ) -> Result<(PathBuf, BridgeHandle, oneshot::Receiver<()>)> {
+    let db = ctx
+        .db()
+        .await
+        .expect("not possible to get to this point without a db set");
+
     let bridge = Bridge::new(
         runtime_dir.as_ref().to_path_buf(),
         service_name.to_string(),
@@ -68,7 +83,64 @@ fn create_bridge(
 }
 
 impl Service {
-    /// Create a new `Service` instance
+    /// Create a new `Service` instance for the given binary at `binary_path`
+    ///
+    /// This is the same as calling [`Service::new_vm()`] or [`Service::new_native()`], with the runtime
+    /// being determined by the [`BlueprintManagerContext`] and enabled features.
+    ///
+    /// # Errors
+    ///
+    /// See:
+    /// * [`Service::new_vm()`]
+    /// * [`Service::new_native()`]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn from_binary(
+        ctx: &BlueprintManagerContext,
+        limits: ResourceLimits,
+        blueprint_config: &BlueprintEnvironment,
+        id: u32,
+        env: BlueprintEnvVars,
+        args: BlueprintArgs,
+        binary_path: &Path,
+        sub_service_str: &str,
+        cache_dir: &Path,
+        runtime_dir: &Path,
+    ) -> Result<Service> {
+        #[cfg(feature = "vm-sandbox")]
+        if !ctx.vm_sandbox_options.no_vm {
+            return Service::new_vm(
+                ctx,
+                limits,
+                // TODO: !!! Actually configure the VM with resource limits
+                ServiceVmConfig {
+                    id,
+                    ..Default::default()
+                },
+                &blueprint_config.data_dir,
+                &blueprint_config.keystore_uri,
+                cache_dir,
+                runtime_dir,
+                sub_service_str,
+                binary_path,
+                env,
+                args,
+            )
+            .await;
+        }
+
+        Service::new_native(
+            ctx,
+            limits,
+            runtime_dir,
+            sub_service_str,
+            binary_path,
+            env,
+            args,
+        )
+        .await
+    }
+
+    /// Create a new `Service` instance, sandboxed via `cloud-hypervisor`
     ///
     /// This will:
     /// * Spawn a [`Bridge`]
@@ -82,11 +154,10 @@ impl Service {
     /// * [`HypervisorInstance::prepare()`]
     #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "vm-sandbox")]
-    pub async fn new(
+    pub async fn new_vm(
+        ctx: &BlueprintManagerContext,
+        limits: ResourceLimits,
         vm_config: ServiceVmConfig,
-        network_manager: NetworkManager,
-        network_interface: String,
-        db: RocksDb,
         data_dir: impl AsRef<Path>,
         keystore: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
@@ -100,19 +171,20 @@ impl Service {
         env_vars.bridge_socket_path = None;
 
         let (bridge_base_socket, bridge_handle, alive_rx) =
-            create_bridge(runtime_dir.as_ref(), service_name, db, false)?;
+            create_bridge(ctx, runtime_dir.as_ref(), service_name, false).await?;
 
         let mut hypervisor = HypervisorInstance::new(
+            ctx,
+            limits,
             vm_config,
             cache_dir.as_ref(),
             runtime_dir.as_ref(),
             service_name,
-            network_interface,
         )?;
 
         hypervisor
             .prepare(
-                network_manager,
+                ctx,
                 keystore,
                 data_dir,
                 cache_dir,
@@ -130,7 +202,7 @@ impl Service {
         })
     }
 
-    /// Create a new `Service` instance
+    /// Create a new `Service` instance, sandboxed via `kata-containers`
     ///
     /// This will:
     /// * Spawn a [`Bridge`]
@@ -140,11 +212,50 @@ impl Service {
     ///
     /// See:
     /// * [`Bridge::spawn()`]
-    /// * [`HypervisorInstance::new()`]
-    /// * [`HypervisorInstance::prepare()`]
+    /// * [`ContainerInstance::new()`]
+    /// * [`ContainerInstance::prepare()`]
     #[allow(clippy::too_many_arguments)]
-    pub fn new_native(
-        db: RocksDb,
+    #[cfg(feature = "containers")]
+    pub async fn new_container(
+        ctx: &BlueprintManagerContext,
+        limits: ResourceLimits,
+        runtime_dir: impl AsRef<Path>,
+        service_name: &str,
+        image: String,
+        mut env_vars: BlueprintEnvVars,
+        arguments: BlueprintArgs,
+        debug: bool,
+    ) -> Result<Service> {
+        let (bridge_base_socket, bridge_handle, alive_rx) =
+            create_bridge(ctx, runtime_dir.as_ref(), service_name, false).await?;
+
+        env_vars.bridge_socket_path = Some(bridge_base_socket);
+
+        let instance =
+            ContainerInstance::new(ctx, limits, service_name, image, env_vars, arguments, debug)
+                .await;
+
+        Ok(Self {
+            runtime: Runtime::Container(instance),
+            bridge: bridge_handle,
+            alive_rx: Some(alive_rx),
+        })
+    }
+
+    /// Create a new `Service` instance **with no sandbox**
+    ///
+    /// NOTE: This should only be used for local testing.
+    ///
+    /// This will spawn a [`Bridge`] in preparation for the service to be started.
+    ///
+    /// # Errors
+    ///
+    /// See:
+    /// * [`Bridge::spawn()`]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn new_native(
+        ctx: &BlueprintManagerContext,
+        limits: ResourceLimits,
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
         binary_path: impl AsRef<Path>,
@@ -152,12 +263,13 @@ impl Service {
         arguments: BlueprintArgs,
     ) -> Result<Service> {
         let (bridge_base_socket, bridge_handle, alive_rx) =
-            create_bridge(runtime_dir.as_ref(), service_name, db, true)?;
+            create_bridge(ctx, runtime_dir.as_ref(), service_name, true).await?;
 
         env_vars.bridge_socket_path = Some(bridge_base_socket);
 
         Ok(Self {
             runtime: Runtime::Native(NativeProcess::NotStarted(NativeProcessInfo {
+                limits,
                 binary_path: binary_path.as_ref().to_path_buf(),
                 service_name: service_name.to_string(),
                 env_vars,
@@ -180,6 +292,8 @@ impl Service {
         match &mut self.runtime {
             #[cfg(feature = "vm-sandbox")]
             Runtime::Hypervisor(hypervisor) => hypervisor.status().await,
+            #[cfg(feature = "containers")]
+            Runtime::Container(container) => container.status().await,
             Runtime::Native(NativeProcess::Started(instance)) => Ok(instance.status()),
             Runtime::Native(NativeProcess::NotStarted(_)) => Ok(Status::NotStarted),
         }
@@ -209,14 +323,22 @@ impl Service {
                     e
                 })?;
             }
+            #[cfg(feature = "containers")]
+            Runtime::Container(container) => {
+                container.start().await.map_err(|e| {
+                    error!("Failed to start container: {e}");
+                    e
+                })?;
+            }
             Runtime::Native(instance) => match instance {
                 NativeProcess::NotStarted(info) => {
+                    // TODO: Resource limits
                     let process_handle = tokio::process::Command::new(&info.binary_path)
                         .kill_on_drop(true)
                         .stdin(std::process::Stdio::null())
                         .current_dir(&std::env::current_dir()?)
                         .envs(info.env_vars.encode())
-                        .args(info.arguments.encode())
+                        .args(info.arguments.encode(true))
                         .spawn()?;
 
                     let handle =
@@ -257,6 +379,13 @@ impl Service {
             Runtime::Hypervisor(hypervisor) => {
                 hypervisor.shutdown().await.map_err(|e| {
                     error!("Failed to shut down hypervisor: {e}");
+                    e
+                })?;
+            }
+            #[cfg(feature = "containers")]
+            Runtime::Container(container) => {
+                container.shutdown().await.map_err(|e| {
+                    error!("Failed to shut down container instance: {e}");
                     e
                 })?;
             }

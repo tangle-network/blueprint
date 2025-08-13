@@ -1,6 +1,7 @@
 use crate::error::{Error, Result};
 use blueprint_core::warn;
 use sha2::Digest;
+use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::BoundedString;
 
@@ -95,4 +96,35 @@ pub fn slice_32_to_sha_hex_string(hash: [u8; 32]) -> String {
         write!(&mut acc, "{:02x}", byte).expect("Should be able to write");
         acc
     })
+}
+
+/// A lock that binds to a specific port until it's ready to be used
+pub enum PortLock {
+    Locked(TcpListener),
+    Unlocked(u16),
+}
+
+impl PortLock {
+    /// Attempt to lock `port`
+    ///
+    /// # Errors
+    ///
+    /// Unable to bind to `port`
+    pub fn lock(port: u16) -> Result<Self> {
+        let addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port);
+        let listener = TcpListener::bind(addr)?;
+        Ok(Self::Locked(listener))
+    }
+
+    #[allow(clippy::missing_panics_doc)]
+    pub fn unlock(&mut self) -> u16 {
+        match self {
+            PortLock::Locked(listener) => {
+                let port = listener.local_addr().unwrap().port();
+                *self = Self::Unlocked(port);
+                port
+            }
+            PortLock::Unlocked(port) => *port,
+        }
+    }
 }

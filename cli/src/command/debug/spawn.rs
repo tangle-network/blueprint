@@ -1,3 +1,5 @@
+mod container;
+mod native;
 #[cfg(feature = "vm-debug")]
 mod vm;
 
@@ -11,12 +13,12 @@ use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
-use blueprint_manager::blueprint_auth::db::RocksDb;
-use blueprint_manager::config::{AuthProxyOpts, BlueprintManagerConfig};
+use blueprint_manager::config::{AuthProxyOpts, BlueprintManagerConfig, BlueprintManagerContext};
 use blueprint_manager::executor::run_auth_proxy;
-use blueprint_manager::rt::service::Service;
+use blueprint_manager::rt::ResourceLimits;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
+use clap::ValueEnum;
 use std::future;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -26,6 +28,9 @@ use url::Url;
 
 async fn setup_tangle_node(
     tmp_path: &Path,
+    package: Option<String>,
+    manifest_path: &Path,
+    keystore_uri: String,
     mut http_rpc_url: Option<Url>,
     mut ws_rpc_url: Option<Url>,
 ) -> color_eyre::Result<(Option<SubstrateNode>, Url, Url)> {
@@ -86,12 +91,31 @@ async fn setup_tangle_node(
     )
     .await?;
 
+    Box::pin(deploy_tangle(
+        http.to_string(),
+        ws.to_string(),
+        package,
+        false,
+        Some(PathBuf::from(keystore_uri.clone())),
+        manifest_path.to_path_buf(),
+    ))
+    .await?;
+    register(ws.to_string(), 0, keystore_uri, "").await?;
+
     Ok((node, http, ws))
 }
 
 pub struct PtyIo {
     pub stdin_to_pty: JoinHandle<io::Result<()>>,
     pub pty_to_stdout: JoinHandle<io::Result<()>>,
+}
+
+#[derive(ValueEnum, Debug, Copy, Clone)]
+pub enum ServiceSpawnMethod {
+    Native,
+    #[cfg(feature = "vm-debug")]
+    Vm,
+    Container,
 }
 
 /// Spawns a Tangle testnet and virtual machine for the given blueprint
@@ -120,56 +144,46 @@ pub async fn execute(
     package: Option<String>,
     #[allow(unused_variables)] id: u32,
     service_name: String,
-    binary: PathBuf,
+    binary: Option<PathBuf>,
+    image: Option<String>,
     protocol: Protocol,
+    method: ServiceSpawnMethod,
     #[cfg(feature = "vm-debug")] _verify_network_connection: bool,
-    #[cfg(feature = "vm-debug")] no_vm: bool,
 ) -> color_eyre::Result<()> {
-    #[cfg(not(feature = "vm-debug"))]
-    #[allow(unused)]
-    let no_vm = true;
-
     let mut manager_config = BlueprintManagerConfig::default();
 
-    #[cfg(feature = "vm-debug")]
-    if !no_vm {
-        check_net_admin_capability()?;
-    }
-
     let tmp = tempfile::tempdir()?;
-    manager_config.data_dir = tmp.path().join("data");
-    manager_config.cache_dir = tmp.path().join("cache");
-    manager_config.runtime_dir = tmp.path().join("runtime");
-    manager_config.keystore_uri = tmp.path().join("keystore").to_string_lossy().into();
+    manager_config.paths.data_dir = tmp.path().join("data");
+    manager_config.paths.cache_dir = tmp.path().join("cache");
+    manager_config.paths.runtime_dir = tmp.path().join("runtime");
+    manager_config.paths.keystore_uri = tmp.path().join("keystore").to_string_lossy().into();
 
-    manager_config.verify_directories_exist()?;
+    let ctx = BlueprintManagerContext::new(manager_config).await?;
 
-    blueprint_testing_utils::tangle::keys::inject_tangle_key(
-        &manager_config.keystore_uri,
-        "//Alice",
-    )?;
+    blueprint_testing_utils::tangle::keys::inject_tangle_key(ctx.keystore_uri(), "//Alice")?;
 
-    let (_node, http, ws) = setup_tangle_node(tmp.path(), http_rpc_url, ws_rpc_url).await?;
-    Box::pin(deploy_tangle(
-        http.to_string(),
-        ws.to_string(),
+    let (_node, http, ws) = setup_tangle_node(
+        tmp.path(),
         package,
-        false,
-        Some(PathBuf::from(&manager_config.keystore_uri)),
-        manifest_path,
-    ))
+        &manifest_path,
+        ctx.keystore_uri().to_string(),
+        http_rpc_url,
+        ws_rpc_url,
+    )
     .await?;
-    register(ws.to_string(), 0, manager_config.keystore_uri.clone(), "").await?;
 
     let (db, auth_proxy_task) =
-        run_auth_proxy(manager_config.data_dir.clone(), AuthProxyOpts::default()).await?;
+        run_auth_proxy(ctx.data_dir().to_path_buf(), AuthProxyOpts::default()).await?;
+    ctx.set_db(db).await;
 
-    let args = BlueprintArgs::new(&manager_config);
+    let args = BlueprintArgs::new(&ctx);
     let env = BlueprintEnvVars {
         http_rpc_endpoint: http,
         ws_rpc_endpoint: ws,
-        keystore_uri: manager_config.keystore_uri.clone(),
-        data_dir: manager_config.data_dir.clone(),
+        // TODO
+        kms_endpoint: "https://127.0.0.1:19821".parse().unwrap(),
+        keystore_uri: ctx.keystore_uri().to_string(),
+        data_dir: ctx.data_dir().to_path_buf(),
         blueprint_id: 0,
         service_id: 0,
         protocol,
@@ -180,31 +194,35 @@ pub async fn execute(
         bridge_socket_path: None,
     };
 
-    #[allow(unused_mut, unused_variables)]
-    let mut network_interface: Option<String> = None;
-    let (mut service, pty_io) = if no_vm {
-        let service = setup_without_vm(manager_config, &service_name, binary, db, env, args)?;
-        (service, None)
-    } else {
-        #[cfg(not(feature = "vm-debug"))]
-        unreachable!();
+    // TODO: Allow setting resource limits on the CLI?
+    let limits = ResourceLimits::default();
 
+    let (mut service, pty_io) = match method {
+        ServiceSpawnMethod::Native => {
+            let service =
+                native::setup_native(&ctx, limits, &service_name, binary.unwrap(), env, args)
+                    .await?;
+            (service, None)
+        }
         #[cfg(feature = "vm-debug")]
-        {
-            let (service, pty) = vm::setup_with_vm(
-                &mut manager_config,
+        ServiceSpawnMethod::Vm => {
+            let (service, pty) =
+                vm::setup_with_vm(&ctx, limits, &service_name, id, binary.unwrap(), env, args)
+                    .await?;
+
+            (service, Some(pty))
+        }
+        ServiceSpawnMethod::Container => {
+            let service = container::setup_with_container(
+                &ctx,
+                limits,
                 &service_name,
-                id,
-                binary,
-                db,
+                image.unwrap(),
                 env,
                 args,
             )
             .await?;
-
-            network_interface = manager_config.network_interface.clone();
-
-            (service, Some(pty))
+            (service, None)
         }
     };
 
@@ -241,28 +259,9 @@ pub async fn execute(
     let shutdown_res = service.shutdown().await;
 
     #[cfg(feature = "vm-debug")]
-    if !no_vm {
-        vm::vm_shutdown(network_interface.as_deref().unwrap()).await?;
+    if method == ServiceSpawnMethod::Vm {
+        vm::vm_shutdown(&ctx.vm.network_interface).await?;
     }
 
     shutdown_res.map_err(Into::into)
-}
-
-fn setup_without_vm(
-    manager_config: BlueprintManagerConfig,
-    service_name: &str,
-    binary: PathBuf,
-    db: RocksDb,
-    env: BlueprintEnvVars,
-    args: BlueprintArgs,
-) -> color_eyre::Result<Service> {
-    let service = Service::new_native(
-        db,
-        manager_config.runtime_dir,
-        service_name,
-        binary,
-        env,
-        args,
-    )?;
-    Ok(service)
 }

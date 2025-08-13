@@ -39,6 +39,13 @@ pub enum Error {
     #[error("nftables error: {0}")]
     Nftables(#[from] nftables::helper::NftablesError),
 
+    #[cfg(feature = "containers")]
+    #[error("Kubernetes: {0}")]
+    Kube(#[from] kube::Error),
+    #[cfg(feature = "containers")]
+    #[error("Failed to determine the local IP: {0}")]
+    LocalIp(#[from] local_ip_address::Error),
+
     #[error("Failed to get initial block hash")]
     InitialBlock,
     #[error("Finality Notification stream died")]

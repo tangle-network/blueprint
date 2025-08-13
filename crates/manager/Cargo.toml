@@ -63,6 +63,11 @@ fatfs = { workspace = true, features = ["std"], optional = true }
 nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"], optional = true }
 capctl = { workspace = true, features = ["std"], optional = true }
 
+# TEE
+kube = { workspace = true, features = ["client", "rustls-tls"], optional = true }
+k8s-openapi = { workspace = true, features = ["latest"], optional = true }
+local-ip-address.workspace = true
+
 ## Networking
 rtnetlink = { workspace = true, features = ["tokio_socket"], optional = true }
 ipnet = { workspace = true, optional = true }
@@ -76,8 +81,19 @@ default = ["vm-sandbox"]
 ##
 ## **NOTE**: This is only supported on Linux
 ##
-## Enabling this will also add additional CLI arguments: `--no-vm`, `--network-interface`, and `--default-address-pool`
+## Enabling this will also add additional CLI options: `--no-vm`, `--network-interface`, and `--default-address-pool`
 vm-sandbox = ["dep:cloud-hypervisor-client", "dep:fatfs", "dep:nix", "dep:capctl", "dep:rtnetlink", "dep:ipnet", "dep:netdev", "dep:nftables"]
+
+## Enable TEE (Trusted Execution Environment) support
+tee = ["blueprint-runner/tee"]
+
+## Enable containerized blueprints through [Kubernetes] and [kata-containers]
+##
+## Enabling this will also add additional CLI options:
+##
+## [kubernetes]: https://kubernetes.io/
+## [kata-containers]: https://katacontainers.io/
+containers = ["dep:kube", "dep:k8s-openapi"]
 
 [package.metadata.dist]
 dist = false

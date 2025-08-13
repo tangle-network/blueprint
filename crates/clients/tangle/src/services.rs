@@ -11,6 +11,7 @@ use tangle_subxt::tangle_testnet_runtime::api;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityCommitment;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::service::ServiceBlueprint;
+use tangle_subxt::tangle_testnet_runtime::api::services::calls::types::request::RequestArgs;
 
 /// A client for interacting with the services API
 #[derive(Debug, Clone)]
@@ -119,6 +120,23 @@ where
                 }
                 Ok(ret)
             }
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// Get the current service operators with their restake exposure
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn current_service_request_arguments(&self, service_id: u64) -> Result<RequestArgs> {
+        let call = api::storage().services().instances(service_id);
+        let ret = self
+            .rpc_client
+            .storage()
+            .at_latest()
+            .await?
+            .fetch(&call)
+            .await?;
+        match ret {
+            Some(instances) => Ok(instances.args.0),
             None => Ok(Vec::new()),
         }
     }
