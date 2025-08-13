@@ -1,6 +1,5 @@
 pub mod nftables;
 
-use crate::config::BlueprintManagerConfig;
 use crate::error::{Error, Result};
 use blueprint_core::debug;
 use futures::channel::mpsc::UnboundedReceiver;

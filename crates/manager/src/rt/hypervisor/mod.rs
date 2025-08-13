@@ -1,8 +1,6 @@
 pub mod images;
 pub mod net;
 
-use net::NetworkManager;
-
 use super::service::Status;
 use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};

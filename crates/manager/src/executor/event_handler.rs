@@ -18,8 +18,6 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use tangle_subxt::tangle_testnet_runtime::api::services::events::{
     JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
 };
-#[cfg(feature = "vm-sandbox")]
-use crate::rt::hypervisor::{ServiceVmConfig, net::NetworkManager};
 use crate::rt::ResourceLimits;
 use crate::rt::service::Status;
 
@@ -70,7 +68,7 @@ impl VerifiedBlueprint {
                     blueprint_id = blueprint.blueprint_id
                 );
                 continue;
-            };
+            }
 
             // TODO(serial): Check preferred sources first
             let service_str = source.name();

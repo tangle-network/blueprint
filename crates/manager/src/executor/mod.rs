@@ -3,10 +3,7 @@ use crate::config::{AuthProxyOpts, BlueprintManagerContext};
 use crate::error::Error;
 use crate::error::Result;
 #[cfg(feature = "vm-sandbox")]
-use crate::rt::hypervisor::{
-    self,
-    net::{self, NetworkManager},
-};
+use crate::rt::hypervisor::net;
 use crate::sdk::entry::SendFuture;
 use blueprint_auth::db::RocksDb;
 use blueprint_clients::tangle::EventsClient;
@@ -198,6 +195,8 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let mut active_blueprints = HashMap::new();
 
     let keystore_uri = env.keystore_uri.clone();
+    #[cfg(feature = "vm-sandbox")]
+    let network_interface = ctx.vm.network_interface.clone();
 
     let manager_task = async move {
         let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
@@ -278,7 +277,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
             () = shutdown_task => {
                 #[cfg(feature = "vm-sandbox")]
-                if let Err(e) = net::nftables::cleanup_firewall(&ctx.vm.network_interface) {
+                if let Err(e) = net::nftables::cleanup_firewall(&network_interface) {
                     error!("Failed to cleanup nftables rules: {e}");
                 }
 

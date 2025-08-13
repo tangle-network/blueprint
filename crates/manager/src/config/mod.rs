@@ -2,18 +2,10 @@ use crate::error::{Error, Result};
 use blueprint_auth::proxy::DEFAULT_AUTH_PROXY_PORT;
 use blueprint_core::{error, info};
 use clap::{Args, Parser};
-use docktopus::bollard::system::Version;
-use docktopus::bollard::{API_DEFAULT_VERSION, Docker};
-use http_body_util::Full;
-use hyper::body::Bytes;
-use hyper::header::HeaderValue;
-use hyper_util::client::legacy::Client;
-use hyper_util::rt::TokioExecutor;
 use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-use url::Url;
 
 mod ctx;
 pub use ctx::*;
@@ -32,7 +24,7 @@ pub struct BlueprintManagerCli {
     pub config: BlueprintManagerConfig,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Args, Default)]
 pub struct BlueprintManagerConfig {
     #[command(flatten)]
     pub paths: Paths,
@@ -277,25 +269,6 @@ fn default_runtime_dir() -> PathBuf {
     match dirs::runtime_dir() {
         Some(dir) => dir.join("blueprint-manager"),
         None => PathBuf::from("/run/blueprint-manager"),
-    }
-}
-
-impl Default for BlueprintManagerConfig {
-    fn default() -> Self {
-        Self {
-            paths: Paths::default(),
-            verbose: 0,
-            pretty: false,
-            instance_id: None,
-            test_mode: false,
-            allow_unchecked_attestations: false,
-            preferred_source: SourceType::default(),
-            #[cfg(feature = "vm-sandbox")]
-            vm_sandbox_options: VmSandboxOptions::default(),
-            #[cfg(feature = "containers")]
-            container_options: ContainerOptions::default(),
-            auth_proxy_opts: AuthProxyOpts::default(),
-        }
     }
 }
 

@@ -1,13 +1,13 @@
 use crate::config::BlueprintManagerContext;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::rt::ResourceLimits;
 use crate::rt::service::Status;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_core::{info, warn};
 use k8s_openapi::api::core::v1::{
     Container, EndpointAddress, EndpointPort, EndpointSubset, Endpoints, EnvVar,
-    HostPathVolumeSource, Namespace, Node, Pod, PodSpec, ResourceRequirements, Service,
-    ServicePort, ServiceSpec, Volume, VolumeMount,
+    HostPathVolumeSource, Namespace, Pod, PodSpec, ResourceRequirements, Service, ServicePort,
+    ServiceSpec, Volume, VolumeMount,
 };
 use k8s_openapi::api::node::v1::RuntimeClass;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
@@ -46,6 +46,13 @@ pub struct ContainerInstance {
     image: String,
     env: BlueprintEnvVars,
     args: BlueprintArgs,
+
+    // TODO: Debug logging for containers
+    /// Whether this instance should run in debug mode
+    ///
+    /// This is set by the CLI, and can indicate that extra logging (possibly, real-time process logs)
+    /// should occur.
+    #[expect(unused, reason = "The option is here for future use")]
     debug: bool,
 }
 
@@ -74,6 +81,14 @@ impl ContainerInstance {
         }
     }
 
+    /// Attempt to start the instance
+    ///
+    /// # Errors
+    ///
+    /// * Unable to create the `blueprint-manager` namespace
+    /// * Unable to create the `blueprint-service` service
+    /// * Unable to create the endpoint for the `blueprint-service` service
+    /// * Unable to create the pod, for any reason
     pub async fn start(&mut self) -> Result<()> {
         /// TODO: actually resolve the hosts to see if they're loopback
         // For local testnets, we need to translate IPs to the host
@@ -178,6 +193,11 @@ impl ContainerInstance {
     }
 
     /// Fetches the current status of the Pod from Kubernetes
+    ///
+    /// # Errors
+    ///
+    /// This will error if the pod no longer exists, which should never be the case for the lifetime
+    /// of the instance.
     pub async fn status(&self) -> Result<Status> {
         let pods: Api<Pod> = Api::namespaced(self.client.clone(), BLUEPRINT_NAMESPACE);
         let pod = pods.get(&self.service_name).await?;
@@ -197,6 +217,11 @@ impl ContainerInstance {
     }
 
     /// Deletes the Pod from the Kubernetes cluster
+    ///
+    /// # Errors
+    ///
+    /// This will error if the pod can't be removed for some reason. It is **not** an error to attempt
+    /// to remove a pod that either doesn't exist or has already been removed.
     pub async fn shutdown(self) -> Result<()> {
         let pods: Api<Pod> = Api::namespaced(self.client.clone(), BLUEPRINT_NAMESPACE);
         info!(target: "containers", service_name = self.service_name, "Shutting down pod...");

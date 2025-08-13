@@ -18,6 +18,7 @@ pub trait BlueprintSourceHandler: Send + Sync {
         &mut self,
         cache_dir: &Path,
     ) -> impl Future<Output = crate::error::Result<PathBuf>> + Send;
+    #[allow(clippy::too_many_arguments)]
     fn spawn(
         &mut self,
         ctx: &BlueprintManagerContext,

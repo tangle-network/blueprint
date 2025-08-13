@@ -229,7 +229,7 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
             &resolved_binary_path,
             sub_service_str,
             cache_dir,
-            &runtime_dir,
+            runtime_dir,
         )
         .await
     }

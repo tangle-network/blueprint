@@ -1,5 +1,5 @@
 #[cfg(feature = "vm-sandbox")]
-use super::hypervisor::{HypervisorInstance, ServiceVmConfig, net::NetworkManager};
+use super::hypervisor::{HypervisorInstance, ServiceVmConfig};
 use super::native::ProcessHandle;
 use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
@@ -27,6 +27,7 @@ pub enum Status {
 }
 
 struct NativeProcessInfo {
+    #[expect(unused, reason = "Host processes aren't resource constrained yet")]
     limits: ResourceLimits,
     binary_path: PathBuf,
     service_name: String,
@@ -92,6 +93,7 @@ impl Service {
     /// See:
     /// * [`Service::new_vm()`]
     /// * [`Service::new_native()`]
+    #[allow(clippy::too_many_arguments)]
     pub async fn from_binary(
         ctx: &BlueprintManagerContext,
         limits: ResourceLimits,

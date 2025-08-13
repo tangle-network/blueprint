@@ -997,6 +997,7 @@ fn default_ws_rpc_url() -> Url {
     Url::from_str("ws://127.0.0.1:9944").unwrap()
 }
 
+#[cfg(feature = "tee")]
 fn default_kms_url() -> Url {
     Url::from_str("https://kms.tangle.tools").unwrap()
 }
