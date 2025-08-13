@@ -1,17 +1,21 @@
-use std::collections::BTreeMap;
 use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
 use crate::rt::ResourceLimits;
 use crate::rt::service::Status;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_core::{info, warn};
-use k8s_openapi::api::core::v1::{Container, EndpointAddress, EndpointPort, EndpointSubset, Endpoints, EnvVar, HostPathVolumeSource, Namespace, Node, Pod, PodSpec, ResourceRequirements, Service, ServicePort, ServiceSpec, Volume, VolumeMount};
+use k8s_openapi::api::core::v1::{
+    Container, EndpointAddress, EndpointPort, EndpointSubset, Endpoints, EnvVar,
+    HostPathVolumeSource, Namespace, Node, Pod, PodSpec, ResourceRequirements, Service,
+    ServicePort, ServiceSpec, Volume, VolumeMount,
+};
+use k8s_openapi::api::node::v1::RuntimeClass;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::Client;
 use kube::api::{Api, DeleteParams, ListParams, Patch, PatchParams, PostParams};
+use std::collections::BTreeMap;
 use std::net::IpAddr;
-use k8s_openapi::api::node::v1::RuntimeClass;
 use url::{Host, Url};
 
 const BLUEPRINT_NAMESPACE: &str = "blueprint-manager";
@@ -120,7 +124,8 @@ impl ContainerInstance {
                 annotations: {
                     let mut annotations = BTreeMap::new();
                     if let Some(runtime) = runtime.clone() {
-                        annotations.insert(String::from("io.containerd.cri.runtime-handler"), runtime);
+                        annotations
+                            .insert(String::from("io.containerd.cri.runtime-handler"), runtime);
                     }
                     Some(annotations)
                 },

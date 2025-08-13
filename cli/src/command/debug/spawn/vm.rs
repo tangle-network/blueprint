@@ -2,6 +2,7 @@ use crate::command::debug::spawn::PtyIo;
 use blueprint_core::{error, info};
 use blueprint_manager::blueprint_auth::db::RocksDb;
 use blueprint_manager::config::BlueprintManagerContext;
+use blueprint_manager::rt::ResourceLimits;
 use blueprint_manager::rt::hypervisor::net::NetworkManager;
 use blueprint_manager::rt::hypervisor::{ServiceVmConfig, net};
 use blueprint_manager::rt::service::Service;
@@ -12,7 +13,6 @@ use std::path::PathBuf;
 use std::{fs, io};
 use tokio::io::AsyncWriteExt;
 use tokio::task::JoinHandle;
-use blueprint_manager::rt::ResourceLimits;
 
 pub(super) async fn setup_with_vm(
     ctx: &BlueprintManagerContext,

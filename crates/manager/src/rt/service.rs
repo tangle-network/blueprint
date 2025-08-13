@@ -3,6 +3,7 @@ use super::hypervisor::{HypervisorInstance, ServiceVmConfig, net::NetworkManager
 use super::native::ProcessHandle;
 use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
+use crate::rt::ResourceLimits;
 #[cfg(feature = "containers")]
 use crate::rt::container::ContainerInstance;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
@@ -14,7 +15,6 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time;
-use crate::rt::ResourceLimits;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Status {
@@ -126,7 +126,16 @@ impl Service {
             .await;
         }
 
-        Service::new_native(ctx, limits, runtime_dir, sub_service_str, binary_path, env, args).await
+        Service::new_native(
+            ctx,
+            limits,
+            runtime_dir,
+            sub_service_str,
+            binary_path,
+            env,
+            args,
+        )
+        .await
     }
 
     /// Create a new `Service` instance, sandboxed via `cloud-hypervisor`

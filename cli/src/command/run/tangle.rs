@@ -1,8 +1,6 @@
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
-use blueprint_manager::config::{
-    BlueprintManagerConfig, BlueprintManagerContext, Paths,
-};
+use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
 use blueprint_manager::executor::run_blueprint_manager;
 use blueprint_runner::config::BlueprintEnvironment;
 use color_eyre::eyre::{Result, eyre};

@@ -15,6 +15,7 @@ use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_manager::config::{AuthProxyOpts, BlueprintManagerConfig, BlueprintManagerContext};
 use blueprint_manager::executor::run_auth_proxy;
+use blueprint_manager::rt::ResourceLimits;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use clap::ValueEnum;
@@ -24,7 +25,6 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use tokio::task::{JoinError, JoinHandle};
 use url::Url;
-use blueprint_manager::rt::ResourceLimits;
 
 async fn setup_tangle_node(
     tmp_path: &Path,
@@ -200,20 +200,28 @@ pub async fn execute(
     let (mut service, pty_io) = match method {
         ServiceSpawnMethod::Native => {
             let service =
-                native::setup_native(&ctx, limits, &service_name, binary.unwrap(), env, args).await?;
+                native::setup_native(&ctx, limits, &service_name, binary.unwrap(), env, args)
+                    .await?;
             (service, None)
         }
         #[cfg(feature = "vm-debug")]
         ServiceSpawnMethod::Vm => {
             let (service, pty) =
-                vm::setup_with_vm(&ctx, limits, &service_name, id, binary.unwrap(), env, args).await?;
+                vm::setup_with_vm(&ctx, limits, &service_name, id, binary.unwrap(), env, args)
+                    .await?;
 
             (service, Some(pty))
         }
         ServiceSpawnMethod::Container => {
-            let service =
-                container::setup_with_container(&ctx, limits, &service_name, image.unwrap(), env, args)
-                    .await?;
+            let service = container::setup_with_container(
+                &ctx,
+                limits,
+                &service_name,
+                image.unwrap(),
+                env,
+                args,
+            )
+            .await?;
             (service, None)
         }
     };

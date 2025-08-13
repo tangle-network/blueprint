@@ -110,7 +110,17 @@ impl BlueprintSourceHandler for ContainerSource {
         runtime_dir: &Path,
     ) -> Result<Service> {
         let image = self.fetch(cache_dir).await?;
-        Service::new_container(ctx, limits, runtime_dir, sub_service_str, image.to_string_lossy().to_string(), env, args, false).await
+        Service::new_container(
+            ctx,
+            limits,
+            runtime_dir,
+            sub_service_str,
+            image.to_string_lossy().to_string(),
+            env,
+            args,
+            false,
+        )
+        .await
     }
 
     fn blueprint_id(&self) -> u64 {

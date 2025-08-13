@@ -1,15 +1,15 @@
 use crate::blueprint::native::FilteredBlueprint;
 use crate::config::{BlueprintManagerConfig, BlueprintManagerContext};
+use crate::rt::ResourceLimits;
 use crate::rt::service::Service;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use std::path::{Path, PathBuf};
 use url::Url;
-use crate::rt::ResourceLimits;
 
-pub mod github;
-pub mod testing;
 #[cfg(feature = "containers")]
 pub mod container;
+pub mod github;
+pub mod testing;
 
 #[auto_impl::auto_impl(Box)]
 #[dynosaur::dynosaur(pub(crate) DynBlueprintSource)]
