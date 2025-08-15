@@ -284,7 +284,7 @@ async fn test_concurrent_api_key_operations() {
         let db = db.clone();
         let handle = tokio::spawn(async move {
             let mut rng = blueprint_std::BlueprintRng::new();
-            let key_gen = ApiKeyGenerator::with_prefix(&format!("con{}_", i));
+            let key_gen = ApiKeyGenerator::with_prefix(&format!("con{i}_"));
 
             let expires = SystemTime::now()
                 .duration_since(UNIX_EPOCH)

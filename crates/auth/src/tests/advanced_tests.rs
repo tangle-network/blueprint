@@ -231,7 +231,7 @@ async fn test_max_header_validation_production() {
     // Create too many headers
     let mut too_many_headers = BTreeMap::new();
     for i in 0..10 {
-        too_many_headers.insert(format!("X-Header-{}", i), format!("value{}", i));
+        too_many_headers.insert(format!("X-Header-{i}"), format!("value{i}"));
     }
 
     let verify_req = crate::types::VerifyChallengeRequest {

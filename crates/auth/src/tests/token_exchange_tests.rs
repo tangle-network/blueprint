@@ -107,11 +107,7 @@ async fn test_token_exchange_flow() {
         .json(&exchange_req)
         .await;
 
-    assert!(
-        res.status().is_success(),
-        "Token exchange failed: {:?}",
-        res
-    );
+    assert!(res.status().is_success(), "Token exchange failed: {res:?}");
     let exchange_res: TokenExchangeResponse = res.json().await;
 
     // Verify response structure
@@ -278,7 +274,7 @@ async fn test_reverse_proxy_with_paseto_token() {
         let local_address = server.local_addr().unwrap();
         let handle = tokio::spawn(async move {
             if let Err(e) = server.await {
-                eprintln!("Test server error: {}", e);
+                eprintln!("Test server error: {e}");
             }
         });
         (handle, local_address)
@@ -373,8 +369,7 @@ async fn test_reverse_proxy_with_paseto_token() {
 
     assert!(
         res.status().is_success(),
-        "Paseto token request failed: {:?}",
-        res
+        "Paseto token request failed: {res:?}"
     );
     let response_headers: BTreeMap<String, String> = res.json().await;
 

@@ -44,7 +44,7 @@ async fn test_api_key_cross_user_isolation() {
         let local_address = server.local_addr().unwrap();
         let handle = tokio::spawn(async move {
             if let Err(e) = server.await {
-                eprintln!("Test server error: {}", e);
+                eprintln!("Test server error: {e}");
             }
         });
         (handle, local_address)
@@ -100,7 +100,7 @@ async fn test_api_key_cross_user_isolation() {
         if !res.status().is_success() {
             eprintln!("Challenge request failed with status: {}", res.status());
             let body = res.text().await;
-            eprintln!("Response body: {:?}", body);
+            eprintln!("Response body: {body:?}");
             panic!("Challenge request failed");
         }
         let challenge_res: ChallengeResponse = res.json().await;
@@ -132,7 +132,7 @@ async fn test_api_key_cross_user_isolation() {
 
         let api_key = match verify_res {
             VerifyChallengeResponse::Verified { api_key, .. } => api_key,
-            _ => panic!("Expected verified response for user {}", email),
+            _ => panic!("Expected verified response for user {email}"),
         };
 
         // Store the hashed version for comparison
@@ -149,16 +149,14 @@ async fn test_api_key_cross_user_isolation() {
 
         assert!(
             res.status().is_success(),
-            "User {} should be able to access their data",
-            email
+            "User {email} should be able to access their data"
         );
 
         let data: serde_json::Value = res.json().await;
         assert_eq!(
             data["tenant_id"].as_str().unwrap(),
             expected_tenant_id,
-            "User {} should see their own tenant ID",
-            email
+            "User {email} should see their own tenant ID"
         );
     }
 
@@ -224,7 +222,7 @@ async fn test_paseto_token_cross_user_isolation() {
         let local_address = server.local_addr().unwrap();
         let handle = tokio::spawn(async move {
             if let Err(e) = server.await {
-                eprintln!("Test server error: {}", e);
+                eprintln!("Test server error: {e}");
             }
         });
         (handle, local_address)
@@ -297,7 +295,7 @@ async fn test_paseto_token_cross_user_isolation() {
 
         let api_key = match verify_res {
             VerifyChallengeResponse::Verified { api_key, .. } => api_key,
-            _ => panic!("Expected verified response for user {}", email),
+            _ => panic!("Expected verified response for user {email}"),
         };
 
         // Exchange for Paseto token
@@ -314,8 +312,7 @@ async fn test_paseto_token_cross_user_isolation() {
 
         assert!(
             res.status().is_success(),
-            "Token exchange should succeed for {}",
-            email
+            "Token exchange should succeed for {email}"
         );
         let exchange_res: TokenExchangeResponse = res.json().await;
 
@@ -333,8 +330,7 @@ async fn test_paseto_token_cross_user_isolation() {
 
         assert!(
             res.status().is_success(),
-            "User {} should access data with Paseto token",
-            email
+            "User {email} should access data with Paseto token"
         );
 
         let data: serde_json::Value = res.json().await;
@@ -441,8 +437,8 @@ async fn test_concurrent_multi_user_authentication() {
                 .unwrap();
 
             let mut user_headers = BTreeMap::new();
-            user_headers.insert("X-Tenant-Id".to_string(), format!("tenant_{}", user_id));
-            user_headers.insert("X-User-Id".to_string(), format!("user_{}", user_id));
+            user_headers.insert("X-Tenant-Id".to_string(), format!("tenant_{user_id}"));
+            user_headers.insert("X-User-Id".to_string(), format!("user_{user_id}"));
 
             let verify_req = crate::types::VerifyChallengeRequest {
                 challenge: challenge_res.challenge,
@@ -465,14 +461,14 @@ async fn test_concurrent_multi_user_authentication() {
             let verify_res: VerifyChallengeResponse = res.json().await;
             let api_key = match verify_res {
                 VerifyChallengeResponse::Verified { api_key, .. } => api_key,
-                _ => return Err(format!("User {} got invalid verify response", user_id)),
+                _ => return Err(format!("User {user_id} got invalid verify response")),
             };
 
             // Exchange for Paseto token
             let exchange_req = TokenExchangeRequest {
                 additional_headers: {
                     let mut headers = BTreeMap::new();
-                    headers.insert("X-Session-Id".to_string(), format!("session_{}", user_id));
+                    headers.insert("X-Session-Id".to_string(), format!("session_{user_id}"));
                     headers
                 },
                 ttl_seconds: Some(30),
@@ -504,7 +500,7 @@ async fn test_concurrent_multi_user_authentication() {
     for task in tasks {
         match task.await.unwrap() {
             Ok(result) => results.push(result),
-            Err(e) => panic!("Concurrent authentication failed: {}", e),
+            Err(e) => panic!("Concurrent authentication failed: {e}"),
         }
     }
 
@@ -523,10 +519,7 @@ async fn test_concurrent_multi_user_authentication() {
         "All Paseto tokens should be unique"
     );
 
-    println!(
-        "✅ All {} users successfully authenticated concurrently with unique tokens",
-        num_users
-    );
+    println!("✅ All {num_users} users successfully authenticated concurrently with unique tokens");
 }
 
 /// Test header injection attempts during token exchange

@@ -309,8 +309,7 @@ mod tests {
         let value = result.get("x-tenant-id").unwrap();
         assert!(
             value == "first_value" || value == "second_value" || value == "third_value",
-            "Value should be one of the provided values, got: {}",
-            value
+            "Value should be one of the provided values, got: {value}"
         );
     }
 

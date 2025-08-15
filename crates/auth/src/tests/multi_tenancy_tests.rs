@@ -63,7 +63,7 @@ async fn multi_tenant_service_isolation() {
                         tenant_id,
                         tenant_name,
                         user_tier,
-                        request_path: format!("/api/{}/data", user),
+                        request_path: format!("/api/{user}/data"),
                     };
 
                     requests.lock().await.push(request.clone());
@@ -82,7 +82,7 @@ async fn multi_tenant_service_isolation() {
         let addr = server.local_addr().unwrap();
         let handle = tokio::spawn(async move {
             if let Err(e) = server.await {
-                eprintln!("Multi-tenant service error: {}", e);
+                eprintln!("Multi-tenant service error: {e}");
             }
         });
         (handle, addr)
@@ -166,7 +166,7 @@ async fn multi_tenant_service_isolation() {
         let verify_res: VerifyChallengeResponse = res.json().await;
         let api_key = match verify_res {
             VerifyChallengeResponse::Verified { api_key, .. } => api_key,
-            _ => panic!("Failed to verify tenant {}", email),
+            _ => panic!("Failed to verify tenant {email}"),
         };
 
         tenant_tokens.push((
@@ -181,10 +181,7 @@ async fn multi_tenant_service_isolation() {
     // Now simulate each tenant making requests
     for (email, tenant_id, company, tier, token) in &tenant_tokens {
         let res = client
-            .post(&format!(
-                "/api/{}/data",
-                email.replace('@', "_").replace('.', "_")
-            ))
+            .post(&format!("/api/{}/data", email.replace(['@', '.'], "_")))
             .header(headers::AUTHORIZATION, format!("Bearer {token}"))
             .await;
 
@@ -194,16 +191,12 @@ async fn multi_tenant_service_isolation() {
                 email,
                 res.status()
             );
-            eprintln!("Token: {}", token);
-            eprintln!(
-                "Path: /api/{}/data",
-                email.replace('@', "_").replace('.', "_")
-            );
+            eprintln!("Token: {token}");
+            eprintln!("Path: /api/{}/data", email.replace(['@', '.'], "_"));
         }
         assert!(
             res.status().is_success(),
-            "Request failed for tenant {}",
-            email
+            "Request failed for tenant {email}"
         );
 
         let response: ServiceRequest = res.json().await;
@@ -409,8 +402,7 @@ async fn tenant_rate_limiting_by_tier() {
                         axum::response::Response::builder()
                             .status(200)
                             .body(axum::body::Body::from(format!(
-                                "Request {} of {}",
-                                count, limit
+                                "Request {count} of {limit}"
                             )))
                             .unwrap()
                     }
@@ -428,7 +420,7 @@ async fn tenant_rate_limiting_by_tier() {
         let addr = server.local_addr().unwrap();
         let handle = tokio::spawn(async move {
             if let Err(e) = server.await {
-                eprintln!("Rate limit service error: {}", e);
+                eprintln!("Rate limit service error: {e}");
             }
         });
         (handle, addr)
@@ -505,10 +497,7 @@ async fn tenant_rate_limiting_by_tier() {
         let status = res.status();
         if status != 200 {
             let body = res.text().await;
-            panic!(
-                "Request {} failed with status {} and body: {:?} (token: {})",
-                i, status, body, token
-            );
+            panic!("Request {i} failed with status {status} and body: {body:?} (token: {token})");
         }
     }
 
@@ -589,16 +578,14 @@ async fn tenant_data_isolation_verification() {
         assert_eq!(
             headers.get("X-Tenant-Id"),
             Some(&expected_tenant_id),
-            "Token for {} should have correct tenant ID",
-            email
+            "Token for {email} should have correct tenant ID"
         );
 
         // Verify correct company
         assert_eq!(
             headers.get("X-Company"),
             Some(&company.to_string()),
-            "Token for {} should have correct company",
-            email
+            "Token for {email} should have correct company"
         );
 
         // Verify headers match expected
