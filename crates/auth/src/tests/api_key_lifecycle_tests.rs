@@ -199,7 +199,7 @@ async fn test_api_key_revocation() {
     // Test key works initially
     let res = client
         .get("/test")
-        .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
+        .header(headers::AUTHORIZATION, format!("Bearer {api_key}"))
         .await;
     // Will fail with 502 since no backend, but auth should pass
     assert_ne!(res.status(), 401, "Key should be valid initially");
@@ -215,7 +215,7 @@ async fn test_api_key_revocation() {
     // Test key no longer works
     let res = client
         .get("/test")
-        .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
+        .header(headers::AUTHORIZATION, format!("Bearer {api_key}"))
         .await;
     assert_eq!(res.status(), 401, "Revoked key should be rejected");
 }

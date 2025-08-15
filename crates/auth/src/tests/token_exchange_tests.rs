@@ -103,7 +103,7 @@ async fn test_token_exchange_flow() {
 
     let res = client
         .post("/v1/auth/exchange")
-        .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
+        .header(headers::AUTHORIZATION, format!("Bearer {api_key}"))
         .json(&exchange_req)
         .await;
 
@@ -240,7 +240,7 @@ async fn test_token_exchange_with_invalid_headers() {
 
     let res = client
         .post("/v1/auth/exchange")
-        .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
+        .header(headers::AUTHORIZATION, format!("Bearer {api_key}"))
         .json(&exchange_req)
         .await;
 
@@ -355,7 +355,7 @@ async fn test_reverse_proxy_with_paseto_token() {
 
     let res = client
         .post("/v1/auth/exchange")
-        .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
+        .header(headers::AUTHORIZATION, format!("Bearer {api_key}"))
         .json(&exchange_req)
         .await;
 

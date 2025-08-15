@@ -170,7 +170,7 @@ async fn multi_tenant_service_isolation() {
         };
 
         tenant_tokens.push((
-            email.clone(),
+            email,
             tenant_id,
             company.to_string(),
             tier.to_string(),
@@ -185,7 +185,7 @@ async fn multi_tenant_service_isolation() {
                 "/api/{}/data",
                 email.replace('@', "_").replace('.', "_")
             ))
-            .header(headers::AUTHORIZATION, format!("Bearer {}", token))
+            .header(headers::AUTHORIZATION, format!("Bearer {token}"))
             .await;
 
         if !res.status().is_success() {
@@ -500,7 +500,7 @@ async fn tenant_rate_limiting_by_tier() {
     for i in 1..=10 {
         let res = client
             .get("/api/limited")
-            .header(headers::AUTHORIZATION, format!("Bearer {}", token))
+            .header(headers::AUTHORIZATION, format!("Bearer {token}"))
             .await;
         let status = res.status();
         if status != 200 {
@@ -515,7 +515,7 @@ async fn tenant_rate_limiting_by_tier() {
     // 11th request should be rate limited
     let res = client
         .get("/api/limited")
-        .header(headers::AUTHORIZATION, format!("Bearer {}", token))
+        .header(headers::AUTHORIZATION, format!("Bearer {token}"))
         .await;
     assert_eq!(
         res.status(),

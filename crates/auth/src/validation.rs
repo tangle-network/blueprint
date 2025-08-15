@@ -189,7 +189,7 @@ mod tests {
     fn test_validate_headers_too_many() {
         let mut headers = BTreeMap::new();
         for i in 0..10 {
-            headers.insert(format!("X-Header-{}", i), "value".to_string());
+            headers.insert(format!("X-Header-{i}"), "value".to_string());
         }
 
         let result = validate_headers(&headers);

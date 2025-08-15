@@ -429,7 +429,7 @@ mod tests {
         let model = ApiKeyModel::from(&key);
 
         // Should validate correct key
-        assert!(model.validates_key(&key.full_key()));
+        assert!(model.validates_key(key.full_key()));
 
         // Should not validate incorrect key
         let wrong_key = key.full_key().replace('a', "b");
@@ -457,7 +457,7 @@ mod tests {
         assert_ne!(model.id, 0);
 
         // Should be able to find by key_id
-        let found = ApiKeyModel::find_by_key_id(&key.key_id(), &db)
+        let found = ApiKeyModel::find_by_key_id(key.key_id(), &db)
             .unwrap()
             .unwrap();
         assert_eq!(found.key_id, model.key_id);
@@ -468,12 +468,12 @@ mod tests {
         assert_eq!(found_by_id.key_id, model.key_id);
 
         // Should validate the key
-        assert!(found.validates_key(&key.full_key()));
+        assert!(found.validates_key(key.full_key()));
 
         // Delete should work
         model.delete(&db).unwrap();
         assert!(
-            ApiKeyModel::find_by_key_id(&key.key_id(), &db)
+            ApiKeyModel::find_by_key_id(key.key_id(), &db)
                 .unwrap()
                 .is_none()
         );

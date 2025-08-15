@@ -157,7 +157,7 @@ async fn test_service_deletion_impact() {
     // Verify service 1 key works
     let res = client
         .get("/test")
-        .header(headers::AUTHORIZATION, format!("Bearer {}", api_key1))
+        .header(headers::AUTHORIZATION, format!("Bearer {api_key1}"))
         .await;
     assert_ne!(res.status(), 401, "Service 1 key should work");
 
@@ -167,7 +167,7 @@ async fn test_service_deletion_impact() {
     // Service 1 key should no longer work
     let res = client
         .get("/test")
-        .header(headers::AUTHORIZATION, format!("Bearer {}", api_key1))
+        .header(headers::AUTHORIZATION, format!("Bearer {api_key1}"))
         .await;
     assert_eq!(
         res.status(),
@@ -409,7 +409,7 @@ async fn test_pii_hashing_in_production() {
 
     let res = client
         .post("/v1/auth/exchange")
-        .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
+        .header(headers::AUTHORIZATION, format!("Bearer {api_key}"))
         .json(&exchange_req)
         .await;
 

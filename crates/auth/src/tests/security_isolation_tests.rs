@@ -144,7 +144,7 @@ async fn test_api_key_cross_user_isolation() {
     for (email, expected_tenant_id, api_key) in &user_api_keys {
         let res = client
             .get("/api/secure")
-            .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
+            .header(headers::AUTHORIZATION, format!("Bearer {api_key}"))
             .await;
 
         assert!(
@@ -175,7 +175,7 @@ async fn test_api_key_cross_user_isolation() {
 
     let res = client
         .get("/api/secure")
-        .header(headers::AUTHORIZATION, format!("Bearer {}", malicious_key))
+        .header(headers::AUTHORIZATION, format!("Bearer {malicious_key}"))
         .await;
 
     // Should get 401 because the key validation should fail
@@ -308,7 +308,7 @@ async fn test_paseto_token_cross_user_isolation() {
 
         let res = client
             .post("/v1/auth/exchange")
-            .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
+            .header(headers::AUTHORIZATION, format!("Bearer {api_key}"))
             .json(&exchange_req)
             .await;
 
@@ -328,7 +328,7 @@ async fn test_paseto_token_cross_user_isolation() {
     for (email, expected_tenant_id, expected_role, paseto_token) in &user_paseto_tokens {
         let res = client
             .get("/api/user-data")
-            .header(headers::AUTHORIZATION, format!("Bearer {}", paseto_token))
+            .header(headers::AUTHORIZATION, format!("Bearer {paseto_token}"))
             .await;
 
         assert!(
@@ -363,7 +363,7 @@ async fn test_paseto_token_cross_user_isolation() {
 
     let res = client
         .get("/api/user-data")
-        .header(headers::AUTHORIZATION, format!("Bearer {}", modified_token))
+        .header(headers::AUTHORIZATION, format!("Bearer {modified_token}"))
         .await;
 
     assert_eq!(
@@ -409,7 +409,6 @@ async fn test_concurrent_multi_user_authentication() {
     let mut tasks = Vec::new();
     for (user_id, signing_key) in user_keys.into_iter().enumerate() {
         let client = TestClient::new(router.clone());
-        let service_id = service_id;
 
         let task = tokio::spawn(async move {
             let public_key = signing_key.verifying_key().to_sec1_bytes();
@@ -481,7 +480,7 @@ async fn test_concurrent_multi_user_authentication() {
 
             let res = client
                 .post("/v1/auth/exchange")
-                .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
+                .header(headers::AUTHORIZATION, format!("Bearer {api_key}"))
                 .json(&exchange_req)
                 .await;
 

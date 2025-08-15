@@ -850,7 +850,7 @@ mod tests {
         // Try to send a request to the reverse proxy with the token in the header
         let res = client
             .get("/hello")
-            .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
+            .header(headers::AUTHORIZATION, format!("Bearer {api_key}"))
             .await;
         assert!(
             res.status().is_success(),
@@ -903,7 +903,7 @@ mod tests {
             let local_address = server.local_addr().unwrap();
             let handle = tokio::spawn(async move {
                 if let Err(e) = server.await {
-                    eprintln!("Echo server error: {}", e);
+                    eprintln!("Echo server error: {e}");
                 }
             });
             (handle, local_address)
@@ -976,7 +976,7 @@ mod tests {
         // Step 3: Make request with token and verify headers are forwarded
         let res = client
             .get("/echo")
-            .header(headers::AUTHORIZATION, format!("Bearer {}", api_key))
+            .header(headers::AUTHORIZATION, format!("Bearer {api_key}"))
             .await;
 
         assert!(res.status().is_success());
