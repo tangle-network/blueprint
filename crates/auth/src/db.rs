@@ -62,6 +62,8 @@ impl RocksDb {
                 ColumnFamilyDescriptor::new(cf::USER_TOKENS_CF, db_opts.clone()),
                 ColumnFamilyDescriptor::new(cf::TOKENS_OPTS_CF, db_opts.clone()),
                 ColumnFamilyDescriptor::new(cf::SERVICES_USER_KEYS_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::API_KEYS_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::API_KEYS_BY_ID_CF, db_opts.clone()),
             ],
         )?;
         Ok(Self { db: Arc::new(db) })
@@ -78,6 +80,10 @@ pub mod cf {
     pub const USER_TOKENS_CF: &str = "usr_tkns";
     /// Services column family (used to store the services with their user keys)
     pub const SERVICES_USER_KEYS_CF: &str = "svs_usr_keys";
+    /// API keys column family (used to store long-lived API keys by key_id)
+    pub const API_KEYS_CF: &str = "api_keys";
+    /// API keys by ID column family (used to lookup API keys by database ID)
+    pub const API_KEYS_BY_ID_CF: &str = "api_keys_by_id";
 }
 
 /// RocksDbConfig is used to configure RocksDb.
