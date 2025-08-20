@@ -25,6 +25,9 @@ crc32fast = { workspace = true }
 
 k256 = { workspace = true, features = ["ecdsa", "alloc", "serde", "pem"] }
 schnorrkel = { workspace = true }
+serde_json = { workspace = true }
+pasetors = { version = "0.7.7", default-features = false, features = ["v4", "serde_json", "std"] }
+uuid = { workspace = true, features = ["v4", "serde"] }
 
 axum = { workspace = true, default-features = false, features = ["json"] }
 hyper-util = { workspace = true, features = ["client", "client-legacy", "tokio", "http2"] }

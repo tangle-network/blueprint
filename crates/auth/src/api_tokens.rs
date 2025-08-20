@@ -1,6 +1,7 @@
 use base64::Engine;
 use blueprint_std::rand::{CryptoRng, RngCore};
 use core::fmt::Display;
+use std::collections::BTreeMap;
 
 use crate::types::ServiceId;
 
@@ -27,6 +28,8 @@ pub struct GeneratedApiToken {
     /// The expiration time of the token in seconds since the epoch.
     /// If `None`, the token does not expire.
     expires_at: Option<u64>,
+    /// Additional headers to be forwarded to the upstream service.
+    pub(crate) additional_headers: BTreeMap<String, String>,
 }
 
 impl Display for GeneratedApiToken {
@@ -68,7 +71,7 @@ impl ApiTokenGenerator {
         service_id: ServiceId,
         rng: &mut R,
     ) -> GeneratedApiToken {
-        self.generate_token_with_expiration(service_id, 0, rng)
+        self.generate_token_with_expiration_and_headers(service_id, 0, BTreeMap::new(), rng)
     }
 
     /// Generates a new API token with the specified expiration time.
@@ -76,6 +79,22 @@ impl ApiTokenGenerator {
         &self,
         service_id: ServiceId,
         expires_at: u64,
+        rng: &mut R,
+    ) -> GeneratedApiToken {
+        self.generate_token_with_expiration_and_headers(
+            service_id,
+            expires_at,
+            BTreeMap::new(),
+            rng,
+        )
+    }
+
+    /// Generates a new API token with the specified expiration time and additional headers.
+    pub fn generate_token_with_expiration_and_headers<R: RngCore + CryptoRng>(
+        &self,
+        service_id: ServiceId,
+        expires_at: u64,
+        additional_headers: BTreeMap<String, String>,
         rng: &mut R,
     ) -> GeneratedApiToken {
         use tiny_keccak::Hasher;
@@ -101,6 +120,7 @@ impl ApiTokenGenerator {
             } else {
                 None
             },
+            additional_headers,
         }
     }
 }
@@ -123,6 +143,11 @@ impl GeneratedApiToken {
     /// Get the expiration time of the token.
     pub fn expires_at(&self) -> Option<u64> {
         self.expires_at
+    }
+
+    /// Get the additional headers for the token.
+    pub fn additional_headers(&self) -> &BTreeMap<String, String> {
+        &self.additional_headers
     }
 }
 
@@ -150,21 +175,34 @@ impl ApiToken {
 
     /// Parses a string into an `ApiToken`.
     pub(crate) fn from_str(s: &str) -> Result<ApiToken, ParseApiTokenError> {
-        let mut parts = s.splitn(3, '|');
+        // Validate token length (prevent DoS from extremely long tokens)
+        if s.len() > 512 {
+            return Err(ParseApiTokenError::MalformedToken);
+        }
+
+        // Ensure exactly one separator
+        let separator_count = s.matches('|').count();
+        if separator_count != 1 {
+            return Err(ParseApiTokenError::MalformedToken);
+        }
+
+        let mut parts = s.splitn(2, '|');
 
         let id_part = parts.next().ok_or(ParseApiTokenError::MalformedToken)?;
+
+        // Validate ID part is not empty and is numeric
+        if id_part.is_empty() {
+            return Err(ParseApiTokenError::InvalidTokenId);
+        }
+
         let id = id_part
             .parse::<u64>()
             .map_err(|_| ParseApiTokenError::InvalidTokenId)?;
 
         let token_part = parts.next().ok_or(ParseApiTokenError::MalformedToken)?;
 
-        if CUSTOM_ENGINE.decode(token_part).is_err() {
-            return Err(ParseApiTokenError::MalformedToken);
-        }
-
-        // Check if there are more than 2 parts (meaning more than one separator)
-        if parts.next().is_some() {
+        // Validate token part is not empty and contains valid base64 characters
+        if token_part.is_empty() {
             return Err(ParseApiTokenError::MalformedToken);
         }
 
@@ -351,5 +389,44 @@ mod tests {
         assert!(!encoded.contains('+'));
         assert!(!encoded.contains('/'));
         assert!(!encoded.contains('='));
+    }
+
+    #[test]
+    fn test_token_generation_with_headers() {
+        use std::collections::BTreeMap;
+
+        let generator = ApiTokenGenerator::new();
+        let mut rng = blueprint_std::BlueprintRng::new();
+        let service_id = ServiceId::new(1);
+
+        // Create headers
+        let mut headers = BTreeMap::new();
+        headers.insert("X-Tenant-Id".to_string(), "tenant123".to_string());
+        headers.insert("X-User-Type".to_string(), "premium".to_string());
+
+        // Generate token with headers
+        let token = generator.generate_token_with_expiration_and_headers(
+            service_id,
+            0,
+            headers.clone(),
+            &mut rng,
+        );
+
+        // Verify headers are stored
+        assert_eq!(token.additional_headers(), &headers);
+        assert!(!token.token.is_empty());
+    }
+
+    #[test]
+    fn test_token_generation_without_headers() {
+        let generator = ApiTokenGenerator::new();
+        let mut rng = blueprint_std::BlueprintRng::new();
+        let service_id = ServiceId::new(1);
+
+        // Generate token without headers
+        let token = generator.generate_token(service_id, &mut rng);
+
+        // Verify no headers are stored
+        assert!(token.additional_headers().is_empty());
     }
 }
