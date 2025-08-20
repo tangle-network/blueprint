@@ -52,10 +52,12 @@ pub struct BlueprintManagerConfig {
     #[arg(long, short = 's', default_value_t)]
     pub preferred_source: SourceType,
 
+    /// Options to configure the VM sandbox for native blueprints
     #[cfg(feature = "vm-sandbox")]
     #[command(flatten)]
     pub vm_sandbox_options: VmSandboxOptions,
 
+    /// Options to configure the container sandbox for containerized blueprints
     #[cfg(feature = "containers")]
     #[command(flatten)]
     pub container_options: ContainerOptions,
