@@ -1,6 +1,5 @@
 pub mod nftables;
 
-use crate::config::BlueprintManagerConfig;
 use crate::error::{Error, Result};
 use blueprint_core::debug;
 use futures::channel::mpsc::UnboundedReceiver;
@@ -163,26 +162,4 @@ pub(super) async fn wait_for_interface(iface_name: &str) -> Result<()> {
     };
 
     res
-}
-
-pub(crate) async fn init_manager_config(
-    manager_config: &mut BlueprintManagerConfig,
-) -> Result<(NetworkManager, String)> {
-    nftables::check_net_admin_capability()?;
-    manager_config.verify_network_interface()?;
-
-    let network_interface = manager_config
-        .network_interface
-        .clone()
-        .expect("interface set by verify_network_interface");
-
-    let network_candidates = manager_config
-        .default_address_pool
-        .hosts()
-        .filter(|ip| ip.octets()[3] != 0 && ip.octets()[3] != 255)
-        .collect();
-
-    let manager = NetworkManager::new(network_candidates).await?;
-
-    Ok((manager, network_interface))
 }

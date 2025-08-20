@@ -1,4 +1,3 @@
-use blueprint_manager::config::DEFAULT_DOCKER_HOST;
 use std::path::PathBuf;
 use cargo_tangle::command::{create, deploy, debug};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, ProtocolSettings, SupportedChains};
@@ -35,6 +34,7 @@ use blueprint_crypto_core::KeyType;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_keystore::backends::Backend;
 use blueprint_std::env;
+use cargo_tangle::command::debug::spawn::ServiceSpawnMethod;
 
 /// Tangle CLI tool
 #[derive(Parser, Debug)]
@@ -220,10 +220,6 @@ pub enum BlueprintCommands {
         /// Path to the protocol settings env file
         #[arg(short = 'f', long, default_value = "./settings.env")]
         settings_file: Option<PathBuf>,
-
-        /// The Podman host to use for containerized blueprints
-        #[arg(long, env = "PODMAN_HOST", default_value_t = DEFAULT_DOCKER_HOST.clone())]
-        podman_host: Url,
 
         /// Whether to allow invalid GitHub attestations (binary integrity checks)
         ///
@@ -443,14 +439,15 @@ pub enum DebugCommands {
         id: u32,
         #[arg(default_value = "service")]
         service_name: String,
-        #[arg(long, required = true)]
-        binary: PathBuf,
+        #[arg(long, required_if_eq_any([("method", "native"), ("method", "vm")]))]
+        binary: Option<PathBuf>,
+        #[arg(long, conflicts_with = "binary", required_if_eq("method", "container"))]
+        image: Option<String>,
         #[arg(long, default_value_t = Protocol::Tangle)]
         protocol: Protocol,
-        /// Disables the VM sandbox
-        #[arg(long)]
-        #[cfg(feature = "vm-debug")]
-        no_vm: bool,
+        /// How to run the service
+        #[arg(value_enum, long, default_value_t = ServiceSpawnMethod::Native)]
+        method: ServiceSpawnMethod,
         /// Verify network connection before starting the service
         #[arg(long, default_value_t = true)]
         #[cfg(feature = "vm-debug")]
@@ -545,7 +542,6 @@ async fn main() -> color_eyre::Result<()> {
                 data_dir,
                 bootnodes,
                 settings_file,
-                podman_host,
                 allow_unchecked_attestations,
             } => {
                 let settings_file =
@@ -658,7 +654,6 @@ async fn main() -> color_eyre::Result<()> {
                             keystore_path: Some(config.keystore_uri.clone()),
                             data_dir,
                             allow_unchecked_attestations,
-                            podman_host: Some(podman_host)
                         };
 
                         // Run the blueprint
@@ -835,9 +830,9 @@ async fn main() -> color_eyre::Result<()> {
                 id,
                 service_name,
                 binary,
+                image,
                 protocol,
-                #[cfg(feature = "vm-debug")]
-                no_vm,
+                method,
                 #[cfg(feature = "vm-debug")]
                 verify_network_connection,
             } => {
@@ -884,11 +879,11 @@ async fn main() -> color_eyre::Result<()> {
                     id,
                     service_name,
                     binary,
+                    image,
                     protocol,
+                    method,
                     #[cfg(feature = "vm-debug")]
                     verify_network_connection,
-                    #[cfg(feature = "vm-debug")]
-                    no_vm,
                 ))
                 .await?;
             }

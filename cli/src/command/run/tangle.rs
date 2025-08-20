@@ -1,6 +1,6 @@
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
-use blueprint_manager::config::{BlueprintManagerConfig, DEFAULT_DOCKER_HOST};
+use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
 use blueprint_manager::executor::run_blueprint_manager;
 use blueprint_runner::config::BlueprintEnvironment;
 use color_eyre::eyre::{Result, eyre};
@@ -32,8 +32,6 @@ pub struct RunOpts {
     ///
     /// This will also allow for running the manager without the GitHub CLI installed.
     pub allow_unchecked_attestations: bool,
-    /// The Podman host to use for containerized blueprints
-    pub podman_host: Option<Url>,
 }
 
 /// Runs a blueprint using the blueprint manager
@@ -69,15 +67,19 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
     blueprint_config.data_dir = opts.data_dir.unwrap_or_else(|| PathBuf::from("./data"));
 
     let blueprint_manager_config = BlueprintManagerConfig {
-        keystore_uri: blueprint_config.keystore_uri.clone(),
-        data_dir: blueprint_config.data_dir.clone(),
+        paths: Paths {
+            keystore_uri: blueprint_config.keystore_uri.clone(),
+            data_dir: blueprint_config.data_dir.clone(),
+            ..Default::default()
+        },
         verbose: 2,
         pretty: true,
         instance_id: Some(format!("Blueprint-{}", blueprint_id)),
         allow_unchecked_attestations: opts.allow_unchecked_attestations,
-        podman_host: opts.podman_host.unwrap_or(DEFAULT_DOCKER_HOST.clone()),
         ..Default::default()
     };
+
+    let ctx = BlueprintManagerContext::new(blueprint_manager_config).await?;
 
     println!(
         "{}",
@@ -114,8 +116,7 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
     pb.set_message("Initializing Blueprint");
     pb.enable_steady_tick(Duration::from_millis(100));
 
-    let mut handle =
-        run_blueprint_manager(blueprint_manager_config, blueprint_config, shutdown_signal).await?;
+    let mut handle = run_blueprint_manager(ctx, blueprint_config, shutdown_signal).await?;
 
     pb.finish_with_message("Blueprint initialized successfully!");
 

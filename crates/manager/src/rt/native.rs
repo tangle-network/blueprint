@@ -1,6 +1,7 @@
 use super::service::Status;
 use tokio::sync::mpsc::UnboundedReceiver;
 
+/// Handle for a natively (no sandbox) running service
 pub struct ProcessHandle {
     status: UnboundedReceiver<Status>,
     cached_status: Status,

@@ -1,6 +1,5 @@
 use std::fs;
-use std::path::Path;
-use crate::config::BlueprintManagerConfig;
+use crate::config::{BlueprintManagerConfig, BlueprintManagerContext};
 use crate::error::{Error, Result};
 use crate::blueprint::native::FilteredBlueprint;
 use crate::blueprint::ActiveBlueprints;
@@ -19,10 +18,8 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives:
 use tangle_subxt::tangle_testnet_runtime::api::services::events::{
     JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
 };
-use blueprint_auth::db::RocksDb;
-#[cfg(feature = "vm-sandbox")]
-use crate::rt::hypervisor::{ServiceVmConfig, net::NetworkManager};
-use crate::rt::service::{Service, Status};
+use crate::rt::ResourceLimits;
+use crate::rt::service::Status;
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
 
@@ -35,13 +32,11 @@ impl VerifiedBlueprint {
     #[allow(clippy::cast_possible_truncation)]
     pub async fn start_services_if_needed(
         &mut self,
-        db: RocksDb,
         blueprint_config: &BlueprintEnvironment,
-        manager_config: &BlueprintManagerConfig,
+        ctx: &BlueprintManagerContext,
         active_blueprints: &mut ActiveBlueprints,
-        #[cfg(feature = "vm-sandbox")] network_manager: NetworkManager,
     ) -> Result<()> {
-        let cache_dir = manager_config.cache_dir.join(format!(
+        let cache_dir = ctx.cache_dir().join(format!(
             "{}-{}",
             self.blueprint.blueprint_id, self.blueprint.name
         ));
@@ -63,30 +58,27 @@ impl VerifiedBlueprint {
                 return Ok(());
             }
 
-            let binary_path = match source.fetch(&cache_dir).await {
-                Ok(binary_path) => binary_path,
-                Err(e) => {
-                    error!(
-                        "Failed to fetch blueprint from source at index #{index}[{source_type}]: {e} (blueprint: {blueprint_name}, id: {blueprint_id}). attempting next source",
-                        index = index,
-                        source_type = core::any::type_name_of_val(source),
-                        e = e,
-                        blueprint_name = blueprint.name,
-                        blueprint_id = blueprint.blueprint_id
-                    );
-                    continue;
-                }
-            };
+            if let Err(e) = source.fetch(&cache_dir).await {
+                error!(
+                    "Failed to fetch blueprint from source at index #{index}[{source_type}]: {e} (blueprint: {blueprint_name}, id: {blueprint_id}). attempting next source",
+                    index = index,
+                    source_type = core::any::type_name_of_val(source),
+                    e = e,
+                    blueprint_name = blueprint.name,
+                    blueprint_id = blueprint.blueprint_id
+                );
+                continue;
+            }
 
             // TODO(serial): Check preferred sources first
             let service_str = source.name();
             for service_id in &blueprint.services {
                 let sub_service_str = format!("{service_str}-{service_id}");
 
-                let args = BlueprintArgs::new(manager_config);
+                let args = BlueprintArgs::new(ctx);
                 let env = BlueprintEnvVars::new(
                     blueprint_config,
-                    manager_config,
+                    ctx,
                     blueprint_id,
                     *service_id,
                     blueprint,
@@ -97,33 +89,25 @@ impl VerifiedBlueprint {
 
                 let id = active_blueprints.len() as u32;
 
-                let runtime_dir = manager_config.runtime_dir.join(id.to_string());
+                let runtime_dir = ctx.runtime_dir().join(id.to_string());
                 fs::create_dir_all(&runtime_dir)?;
 
-                #[cfg(feature = "vm-sandbox")]
-                let mut service = new_service(
-                    manager_config,
-                    network_manager.clone(),
-                    db.clone(),
-                    blueprint_config,
-                    id,
-                    env,
-                    args,
-                    &binary_path,
-                    &sub_service_str,
-                    &cache_dir,
-                    &runtime_dir,
-                )
-                .await?;
-                #[cfg(not(feature = "vm-sandbox"))]
-                let mut service = new_service_native(
-                    db.clone(),
-                    env,
-                    args,
-                    &binary_path,
-                    &sub_service_str,
-                    &runtime_dir,
-                )?;
+                // TODO: Actually configure resource limits
+                let limits = ResourceLimits::default();
+
+                let mut service = source
+                    .spawn(
+                        ctx,
+                        limits,
+                        blueprint_config,
+                        id,
+                        env,
+                        args,
+                        &sub_service_str,
+                        &cache_dir,
+                        &runtime_dir,
+                    )
+                    .await?;
 
                 let service_start_res = service.start().await;
                 match service_start_res {
@@ -148,57 +132,6 @@ impl VerifiedBlueprint {
 
         Ok(())
     }
-}
-
-#[cfg(feature = "vm-sandbox")]
-#[allow(clippy::too_many_arguments)]
-async fn new_service(
-    manager_config: &BlueprintManagerConfig,
-    network_manager: NetworkManager,
-    db: RocksDb,
-    blueprint_config: &BlueprintEnvironment,
-    id: u32,
-    env: BlueprintEnvVars,
-    args: BlueprintArgs,
-    binary_path: &Path,
-    sub_service_str: &str,
-    cache_dir: &Path,
-    runtime_dir: &Path,
-) -> Result<Service> {
-    if manager_config.no_vm {
-        new_service_native(db, env, args, binary_path, sub_service_str, runtime_dir)
-    } else {
-        Service::new(
-            // TODO: !!! Actually configure the VM with resource limits
-            ServiceVmConfig {
-                id,
-                ..Default::default()
-            },
-            network_manager,
-            manager_config.network_interface.clone().unwrap(),
-            db,
-            &blueprint_config.data_dir,
-            &blueprint_config.keystore_uri,
-            cache_dir,
-            runtime_dir,
-            sub_service_str,
-            binary_path,
-            env,
-            args,
-        )
-        .await
-    }
-}
-
-fn new_service_native(
-    db: RocksDb,
-    env: BlueprintEnvVars,
-    args: BlueprintArgs,
-    binary_path: &Path,
-    sub_service_str: &str,
-    runtime_dir: &Path,
-) -> Result<Service> {
-    Service::new_native(db, runtime_dir, sub_service_str, binary_path, env, args)
 }
 
 impl Debug for VerifiedBlueprint {
@@ -323,12 +256,10 @@ pub(crate) async fn handle_tangle_event(
     event: &TangleEvent,
     blueprints: &[RpcServicesWithBlueprint],
     blueprint_config: &BlueprintEnvironment,
-    db: RocksDb,
-    manager_config: &BlueprintManagerConfig,
+    ctx: &BlueprintManagerContext,
     active_blueprints: &mut ActiveBlueprints,
     poll_result: EventPollResult,
     client: &TangleServicesClient<TangleConfig>,
-    #[cfg(feature = "vm-sandbox")] network_manager: NetworkManager,
 ) -> Result<()> {
     info!("Received notification {}", event.number);
 
@@ -374,7 +305,7 @@ pub(crate) async fn handle_tangle_event(
         .chain(registration_blueprints)
     {
         let verified_blueprint = VerifiedBlueprint {
-            fetchers: get_fetcher_candidates(&blueprint, manager_config)?,
+            fetchers: get_fetcher_candidates(&blueprint, ctx)?,
             blueprint,
         };
 
@@ -392,14 +323,7 @@ pub(crate) async fn handle_tangle_event(
     // Step 3: Check to see if we need to start any new services
     for blueprint in &mut verified_blueprints {
         blueprint
-            .start_services_if_needed(
-                db.clone(),
-                blueprint_config,
-                manager_config,
-                active_blueprints,
-                #[cfg(feature = "vm-sandbox")]
-                network_manager.clone(),
-            )
+            .start_services_if_needed(blueprint_config, ctx, active_blueprints)
             .await?;
     }
 
@@ -491,8 +415,20 @@ fn get_fetcher_candidates(
                 }
             },
 
+            #[cfg(feature = "containers")]
+            BlueprintSource::Container(container) => {
+                let fetcher = crate::sources::container::ContainerSource::new(
+                    container.clone(),
+                    blueprint.blueprint_id,
+                    blueprint.name.clone(),
+                );
+
+                fetcher_candidates.push(DynBlueprintSource::boxed(fetcher));
+            }
+
+            #[cfg(not(feature = "containers"))]
             BlueprintSource::Container(_) => {
-                unimplemented!("Container sources")
+                return Err(Error::UnsupportedBlueprint);
             }
 
             BlueprintSource::Testing(test) => {

@@ -84,6 +84,7 @@ pub async fn run_eigenlayer_avs(
     let env = BlueprintEnvVars {
         http_rpc_endpoint: config.http_rpc_endpoint,
         ws_rpc_endpoint: config.ws_rpc_endpoint,
+        kms_endpoint: config.kms_url,
         keystore_uri: config.keystore_uri,
         data_dir: config.data_dir,
         blueprint_id: 0,
@@ -103,7 +104,7 @@ pub async fn run_eigenlayer_avs(
         verbose: 0,
     };
 
-    command.args(args.encode());
+    command.args(args.encode(true));
 
     // Optional arguments
     // TODO: Implement Keystore Password

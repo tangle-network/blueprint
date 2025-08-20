@@ -74,6 +74,9 @@ std = ["blueprint-tangle-extra?/std", "blueprint-evm-extra?/std", "blueprint-key
 ## Enable networking support for [`BlueprintEnvironment`](crate::config::BlueprintEnvironment)
 networking = ["dep:blueprint-networking", "dep:crossbeam-channel", "dep:libp2p", "blueprint-keystore/zebra"]
 
+## Enable Trusted Execution Environment (TEE) support for the runner
+tee = []
+
 #! ### Protocols
 
 ## Enable [Tangle] support

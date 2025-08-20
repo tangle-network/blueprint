@@ -1,5 +1,5 @@
 use std::fs::File;
-use super::BlueprintSourceHandler;
+use super::{BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler};
 use crate::error::{Error, Result};
 use crate::blueprint::native::get_blueprint_binary;
 use crate::sdk::utils::{make_executable, valid_file_exists};
@@ -13,6 +13,10 @@ use tar::Archive;
 use tokio::io::AsyncWriteExt;
 use blueprint_core::{error, warn};
 use xz::read::XzDecoder;
+use blueprint_runner::config::BlueprintEnvironment;
+use crate::config::BlueprintManagerContext;
+use crate::rt::ResourceLimits;
+use crate::rt::service::Service;
 
 pub struct GithubBinaryFetcher {
     pub fetcher: GithubFetcher,
@@ -143,7 +147,12 @@ impl GithubBinaryFetcher {
 impl BlueprintSourceHandler for GithubBinaryFetcher {
     async fn fetch(&mut self, cache_dir: &Path) -> Result<PathBuf> {
         if let Some(resolved_binary_path) = &self.resolved_binary_path {
-            return Ok(resolved_binary_path.clone());
+            if resolved_binary_path.exists() {
+                return Ok(resolved_binary_path.clone());
+            }
+
+            // Re-resolve
+            self.resolved_binary_path = None;
         }
 
         let archive_path = self.get_binary(cache_dir).await?;
@@ -195,6 +204,34 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
         binary_path = make_executable(&binary_path)?;
         self.resolved_binary_path = Some(binary_path.clone());
         Ok(binary_path)
+    }
+
+    async fn spawn(
+        &mut self,
+        ctx: &BlueprintManagerContext,
+        limits: ResourceLimits,
+        blueprint_config: &BlueprintEnvironment,
+        id: u32,
+        env: BlueprintEnvVars,
+        args: BlueprintArgs,
+        sub_service_str: &str,
+        cache_dir: &Path,
+        runtime_dir: &Path,
+    ) -> Result<Service> {
+        let resolved_binary_path = self.fetch(cache_dir).await?;
+        Service::from_binary(
+            ctx,
+            limits,
+            blueprint_config,
+            id,
+            env,
+            args,
+            &resolved_binary_path,
+            sub_service_str,
+            cache_dir,
+            runtime_dir,
+        )
+        .await
     }
 
     fn blueprint_id(&self) -> u64 {
