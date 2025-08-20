@@ -244,7 +244,7 @@ tokio-vsock = { version = "0.7.1", default-features = false }
 nix = { version = "0.30.1", default-features = false }
 capctl = { version = "0.2.4", default-features = false }
 netdev = { version = "0.35.3", default-features = false }
-nftables = { version = "0.6.2", default-features = false }
+nftables = { version = "0.6.3", default-features = false }
 
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }
