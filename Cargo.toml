@@ -199,7 +199,7 @@ base64 = { version = "0.22.0", default-features = false }
 rust_decimal = { version = "1.37", default-features = false }
 
 # Error Handling & Logging
-anyhow = { version = "1.0.98", default-features = false }
+anyhow = { version = "1.0.99", default-features = false }
 color-eyre = { version = "0.6", default-features = false }
 colored = { version = "3.0.0", default-features = false }
 log = { version = "0.4.22", default-features = false }
