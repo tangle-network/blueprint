@@ -49,6 +49,15 @@ pub struct AuthenticatedProxyState {
     paseto_manager: PasetoTokenManager,
 }
 
+impl AuthenticatedProxyState {
+    pub fn db_ref(&self) -> &crate::db::RocksDb {
+        &self.db
+    }
+    pub fn paseto_manager_ref(&self) -> &PasetoTokenManager {
+        &self.paseto_manager
+    }
+}
+
 impl AuthenticatedProxy {
     pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self, crate::Error> {
         let executer = TokioExecutor::new();
@@ -174,6 +183,8 @@ impl AuthenticatedProxy {
             .route("/auth/challenge", post(auth_challenge))
             .route("/auth/verify", post(auth_verify))
             .route("/auth/exchange", post(auth_exchange))
+            // OAuth 2.0 JWT Bearer Assertion token endpoint (RFC 7523)
+            .route("/oauth/token", post(crate::oauth::token::oauth_token))
     }
 }
 
@@ -465,6 +476,7 @@ async fn auth_exchange(
         tenant_id,
         protected_headers,
         custom_ttl,
+        None,
     ) {
         Ok(token) => token,
         Err(e) => {
@@ -697,6 +709,20 @@ async fn reverse_proxy(
     *req.uri_mut() = target_uri;
 
     // Inject additional headers into the request with re-validation
+    // Sanitize inbound headers: drop Authorization and any tenant/scope headers supplied by client
+    {
+        let mut to_remove: Vec<header::HeaderName> = Vec::new();
+        for (name, _value) in req.headers().iter() {
+            let lower = name.as_str().to_ascii_lowercase();
+            if lower == "authorization" || lower.starts_with("x-tenant-") || lower == "x-scope" {
+                to_remove.push(name.clone());
+            }
+        }
+        for name in to_remove {
+            req.headers_mut().remove(name);
+        }
+    }
+
     for (header_name, header_value) in additional_headers {
         // Re-validate header names against security-sensitive headers
         if is_forbidden_header(&header_name) {

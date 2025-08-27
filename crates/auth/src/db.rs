@@ -64,6 +64,9 @@ impl RocksDb {
                 ColumnFamilyDescriptor::new(cf::SERVICES_USER_KEYS_CF, db_opts.clone()),
                 ColumnFamilyDescriptor::new(cf::API_KEYS_CF, db_opts.clone()),
                 ColumnFamilyDescriptor::new(cf::API_KEYS_BY_ID_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::SERVICES_OAUTH_POLICY_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::OAUTH_JTI_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::OAUTH_RL_CF, db_opts.clone()),
             ],
         )?;
         Ok(Self { db: Arc::new(db) })
@@ -84,6 +87,12 @@ pub mod cf {
     pub const API_KEYS_CF: &str = "api_keys";
     /// API keys by ID column family (used to lookup API keys by database ID)
     pub const API_KEYS_BY_ID_CF: &str = "api_keys_by_id";
+    /// OAuth per-service policy configuration
+    pub const SERVICES_OAUTH_POLICY_CF: &str = "services_oauth_policy";
+    /// OAuth assertion replay cache (jti -> exp)
+    pub const OAUTH_JTI_CF: &str = "oauth_jti";
+    /// OAuth token endpoint rate limit buckets
+    pub const OAUTH_RL_CF: &str = "oauth_rl";
 }
 
 /// RocksDbConfig is used to configure RocksDb.

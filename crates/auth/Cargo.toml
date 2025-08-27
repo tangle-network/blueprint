@@ -28,8 +28,10 @@ schnorrkel = { workspace = true }
 serde_json = { workspace = true }
 pasetors = { version = "0.7.7", default-features = false, features = ["v4", "serde_json", "std"] }
 uuid = { workspace = true, features = ["v4", "serde"] }
+jsonwebtoken = { version = "9", default-features = false }
+pem = "1.1"
 
-axum = { workspace = true, default-features = false, features = ["json"] }
+axum = { workspace = true, default-features = false, features = ["json", "form"] }
 hyper-util = { workspace = true, features = ["client", "client-legacy", "tokio", "http2"] }
 
 # Database
@@ -53,6 +55,7 @@ futures-util = { workspace = true }
 http = { workspace = true }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["fmt", "env-filter", "registry"] }
+openssl = { version = "0.10", features = ["vendored"] }
 
 [features]
 default = ["std", "tracing"]
