@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "oauth-blueprint-lib",
+    "oauth-blueprint-bin",
+]
+

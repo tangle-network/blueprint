@@ -1,0 +1,85 @@
+use blueprint_sdk::Job;
+use blueprint_sdk::Router;
+use blueprint_sdk::{info, error};
+use blueprint_sdk::contexts::tangle::TangleClientContext;
+use std::sync::Arc;
+use blueprint_sdk::crypto::sp_core::SpSr25519;
+use blueprint_sdk::crypto::tangle_pair_signer::TanglePairSigner;
+use blueprint_sdk::keystore::backends::Backend;
+use blueprint_sdk::runner::BlueprintRunner;
+use blueprint_sdk::runner::config::BlueprintEnvironment;
+use blueprint_sdk::runner::tangle::config::TangleConfig;
+use blueprint_sdk::tangle::consumer::TangleConsumer;
+use blueprint_sdk::tangle::filters::MatchesServiceId;
+use blueprint_sdk::tangle::layers::TangleLayer;
+use blueprint_sdk::tangle::producer::TangleProducer;
+use apikey_blueprint_lib::{
+    ApiKeyBlueprintContext,
+    ApiUsageTracker,
+    WHOAMI_JOB_ID, whoami,
+    WRITE_RESOURCE_JOB_ID, write_resource,
+    PURCHASE_API_KEY_JOB_ID, purchase_api_key,
+    ECHO_JOB_ID, echo,
+};
+use tower::filter::FilterLayer;
+
+fn setup_log() {
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "debug".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+}
+
+#[tokio::main]
+async fn main() -> Result<(), blueprint_sdk::Error> {
+    setup_log();
+
+    info!("Starting the API Key Blueprint!");
+
+    let env = BlueprintEnvironment::load()?;
+    let keystore = env.keystore();
+    let sr25519_signer = keystore.first_local::<SpSr25519>()?;
+    let sr25519_pair = keystore.get_secret::<SpSr25519>(&sr25519_signer)?;
+    let st25519_signer = TanglePairSigner::new(sr25519_pair.0);
+
+    let tangle_client = env.tangle_client().await?;
+    let tangle_producer =
+        TangleProducer::finalized_blocks(tangle_client.rpc_client.clone()).await?;
+    let tangle_consumer = TangleConsumer::new(tangle_client.rpc_client.clone(), st25519_signer);
+
+    let tangle_config = TangleConfig::default();
+
+    let service_id = env.protocol_settings.tangle()?.service_id.unwrap();
+
+    // Create the context with tangle client
+    let context = ApiKeyBlueprintContext {
+        tangle_client: Arc::new(tangle_client.clone()),
+    };
+
+    let result = BlueprintRunner::builder(tangle_config, env)
+        .router(
+            Router::new()
+                .route(WHOAMI_JOB_ID, whoami.layer(TangleLayer))
+                .route(WRITE_RESOURCE_JOB_ID, write_resource.layer(TangleLayer))
+                .route(PURCHASE_API_KEY_JOB_ID, purchase_api_key.layer(TangleLayer))
+                .route(ECHO_JOB_ID, echo.layer(TangleLayer))
+                .layer(FilterLayer::new(MatchesServiceId(service_id)))
+                .with_context(context),
+        )
+        .background_service(ApiUsageTracker)
+        .producer(tangle_producer)
+        .consumer(tangle_consumer)
+        .with_shutdown_handler(async { println!("Shutting down API Key Blueprint!") })
+        .run()
+        .await;
+
+    if let Err(e) = result {
+        error!("Runner failed! {e:?}");
+    }
+
+    Ok(())
+}

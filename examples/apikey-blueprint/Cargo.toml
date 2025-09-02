@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "apikey-blueprint-lib",
+    "apikey-blueprint-bin",
+]
+

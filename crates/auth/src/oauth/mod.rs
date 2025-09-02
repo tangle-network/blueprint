@@ -169,19 +169,21 @@ impl<'a> AssertionVerifier<'a> {
         let mut last_err: Option<jsonwebtoken::errors::Error> = None;
         let mut decoded: Option<jsonwebtoken::TokenData<AssertionClaims>> = None;
         for pem in &policy.public_keys_pem {
-            // Accept PEM-formatted public keys. Convert to DER for jsonwebtoken.
             let pem_str = pem.trim();
-            let key_res = if alg == jsonwebtoken::Algorithm::RS256 {
-                pem::parse(pem_str)
-                    .ok()
-                    .filter(|p| p.tag == "PUBLIC KEY")
-                    .map(|p| jsonwebtoken::DecodingKey::from_rsa_der(&p.contents))
-            } else {
-                pem::parse(pem_str)
-                    .ok()
-                    .filter(|p| p.tag == "PUBLIC KEY")
-                    .map(|p| jsonwebtoken::DecodingKey::from_ec_der(&p.contents))
-            };
+            let key_res = pem::parse(pem_str)
+                .ok()
+                .and_then(|p| match (alg, p.tag.as_str()) {
+                    (jsonwebtoken::Algorithm::RS256, "PUBLIC KEY") => {
+                        Some(jsonwebtoken::DecodingKey::from_rsa_der(&p.contents))
+                    }
+                    (jsonwebtoken::Algorithm::RS256, "RSA PUBLIC KEY") => {
+                        Some(jsonwebtoken::DecodingKey::from_rsa_der(&p.contents))
+                    }
+                    (jsonwebtoken::Algorithm::ES256, "PUBLIC KEY") => {
+                        Some(jsonwebtoken::DecodingKey::from_ec_der(&p.contents))
+                    }
+                    _ => None,
+                });
 
             if let Some(k) = key_res {
                 match jsonwebtoken::decode::<AssertionClaims>(jwt, &k, &validation) {
@@ -225,7 +227,7 @@ impl<'a> AssertionVerifier<'a> {
                 "token used before issued (iat)".into(),
             ));
         }
-        if exp + skew < now {
+        if exp + skew <= now {
             return Err(VerificationError::InvalidGrant("token expired".into()));
         }
         if exp > iat && (exp - iat) > policy.max_assertion_ttl_secs {

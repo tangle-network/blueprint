@@ -106,19 +106,23 @@ pub async fn oauth_token(
     let verifier = crate::oauth::AssertionVerifier::new(s.db_ref());
     match verifier.verify(assertion, &policy) {
         Ok(verified) => {
-            // Intersect requested scopes with allowed scopes if present
+            // Intersect requested scopes with allowed scopes if present, case-insensitive
             let scopes = match (&verified.scopes, &policy.allowed_scopes) {
                 (Some(req), Some(allowed)) => {
-                    let allowed_set: std::collections::BTreeSet<_> = allowed.iter().collect();
-                    let filtered: Vec<String> = req
-                        .iter()
-                        .filter(|s| allowed_set.contains(s))
-                        .cloned()
-                        .collect();
-                    if filtered.is_empty() {
+                    let allowed_set: std::collections::BTreeSet<String> =
+                        allowed.iter().map(|s| s.to_ascii_lowercase()).collect();
+                    let mut filtered_set: std::collections::BTreeSet<String> =
+                        std::collections::BTreeSet::new();
+                    for s in req.iter() {
+                        let lc = s.to_ascii_lowercase();
+                        if allowed_set.contains(&lc) {
+                            filtered_set.insert(lc);
+                        }
+                    }
+                    if filtered_set.is_empty() {
                         None
                     } else {
-                        Some(filtered)
+                        Some(filtered_set.into_iter().collect())
                     }
                 }
                 (Some(_), None) => None, // scopes not allowed

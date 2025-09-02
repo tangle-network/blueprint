@@ -609,8 +609,23 @@ async fn handle_paseto_token(
         }
     };
 
+    // Build upstream headers starting from token's additional headers
+    let mut headers = claims.additional_headers.clone();
+
+    // Inject canonical X-Scopes from claims.scopes if present
+    if let Some(scopes_vec) = claims.scopes.clone() {
+        if !scopes_vec.is_empty() {
+            let mut set = std::collections::BTreeSet::new();
+            for s in scopes_vec {
+                set.insert(s.to_lowercase());
+            }
+            let scopes_str = set.into_iter().collect::<Vec<_>>().join(" ");
+            headers.insert("x-scopes".to_string(), scopes_str);
+        }
+    }
+
     // Token expiration is already checked in validate_token
-    Ok((claims.service_id, claims.additional_headers))
+    Ok((claims.service_id, headers))
 }
 
 /// Check if a header name is forbidden for security reasons
@@ -714,7 +729,11 @@ async fn reverse_proxy(
         let mut to_remove: Vec<header::HeaderName> = Vec::new();
         for (name, _value) in req.headers().iter() {
             let lower = name.as_str().to_ascii_lowercase();
-            if lower == "authorization" || lower.starts_with("x-tenant-") || lower == "x-scope" {
+            if lower == "authorization"
+                || lower.starts_with("x-tenant-")
+                || lower == "x-scope"
+                || lower == "x-scopes"
+            {
                 to_remove.push(name.clone());
             }
         }
