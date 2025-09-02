@@ -1,4 +1,4 @@
-use apikey_blueprint_lib::echo;
+use apikey_blueprint_lib::{write_resource, purchase_api_key};
 use blueprint_sdk::build;
 use blueprint_sdk::tangle::blueprint;
 
@@ -23,7 +23,7 @@ fn main() {
         name: "apikey-blueprint",
         master_manager_revision: "Latest",
         manager: { Evm = "ExperimentalBlueprint" },
-        jobs: [echo]
+        jobs: [write_resource, purchase_api_key]
     };
 
     if let Ok(blueprint) = blueprint {

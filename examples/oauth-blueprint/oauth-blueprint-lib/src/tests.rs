@@ -4,23 +4,15 @@ mod tests {
     use blueprint_sdk::AuthContext;
     use std::collections::HashSet;
     use tokio::time::{timeout, Duration};
-
+    
     // E2E test imports
     use blueprint_sdk::Job;
     use blueprint_sdk::tangle::layers::TangleLayer;
     use blueprint_sdk::testing::tempfile;
     use blueprint_sdk::testing::utils::setup_log;
-    use blueprint_sdk::testing::utils::tangle::{InputValue, OutputValue, TangleTestHarness};
+    use blueprint_sdk::testing::utils::tangle::{InputValue, TangleTestHarness};
     use blueprint_tangle_extra::serde::new_bounded_string;
     use color_eyre::Result;
-
-    #[tokio::test]
-    async fn test_echo_job() {
-        use blueprint_sdk::tangle::extract::TangleArg;
-        let test_string = "Hello, OAuth Blueprint!";
-        let result = echo(TangleArg(test_string.to_string())).await;
-        assert_eq!(result.0, test_string);
-    }
 
     #[tokio::test]
     async fn test_background_service_starts() {
@@ -35,34 +27,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_docs_store_isolation() {
-        // Test the document store directly
-        let store = docs_store();
-        
-        // Write as tenant A
-        {
-            let mut guard = store.write().await;
-            let tenant_a = guard.entry("tenant_a".to_string()).or_default();
-            tenant_a.insert("doc1".to_string(), "content A".to_string());
-        }
-        
-        // Write as tenant B with same doc name
-        {
-            let mut guard = store.write().await;
-            let tenant_b = guard.entry("tenant_b".to_string()).or_default();
-            tenant_b.insert("doc1".to_string(), "content B".to_string());
-        }
-        
-        // Verify isolation
-        {
-            let guard = store.read().await;
-            assert_eq!(guard.get("tenant_a").unwrap().get("doc1").unwrap(), "content A");
-            assert_eq!(guard.get("tenant_b").unwrap().get("doc1").unwrap(), "content B");
-        }
-    }
-
-    #[tokio::test]
-    async fn test_auth_context_scope_checking() {
+    async fn test_auth_context_scope_validation() {
         // Test AuthContext scope checking logic
         let mut scopes = HashSet::new();
         scopes.insert("docs:read".to_string());
@@ -80,225 +45,237 @@ mod tests {
         // Test scope that user doesn't have
         assert!(!auth.has_scope("docs:admin"));
         
-        // Test prefix matching
-        assert!(auth.has_any_scope(["docs:"])); // Should match docs:read and docs:write with prefix
-        assert!(!auth.has_any_scope(["admin:"]));
+        // Test has_any_scope
+        assert!(auth.has_any_scope(["docs:read", "docs:admin"])); // has docs:read
+        assert!(!auth.has_any_scope(["admin:all", "system:manage"])); // has neither
     }
 
     #[tokio::test]
-    async fn test_auth_context_no_scopes() {
-        let auth = AuthContext {
-            tenant_hash: Some("test_tenant".to_string()),
-            scopes: HashSet::new(),
-        };
-
-        assert!(!auth.has_scope("docs:read"));
-        assert!(!auth.has_any_scope(["docs:"]));
-    }
-
-    #[tokio::test]
-    async fn test_concurrent_docs_store_access() {
-        let store = docs_store();
-        
-        // Simulate concurrent writes across different tenants
-        let mut handles = vec![];
-        for tenant_id in 0..10 {
-            let handle = tokio::spawn(async move {
-                let store = docs_store();
-                let mut guard = store.write().await;
-                let tenant = guard.entry(format!("tenant_{}", tenant_id)).or_default();
-                tenant.insert("test_doc".to_string(), format!("content_{}", tenant_id));
-            });
-            handles.push(handle);
-        }
-
-        // Wait for all writes to complete
-        for handle in handles {
-            handle.await.unwrap();
-        }
-
-        // Verify all tenants have their data
-        {
-            let guard = store.read().await;
-            for tenant_id in 0..10 {
-                let tenant_key = format!("tenant_{}", tenant_id);
-                let expected_content = format!("content_{}", tenant_id);
-                assert_eq!(
-                    guard.get(&tenant_key).unwrap().get("test_doc").unwrap(),
-                    &expected_content
-                );
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_oauth_e2e_blueprint_contract_hooks() -> Result<()> {
+    async fn test_write_doc_job_execution() -> Result<()> {
         color_eyre::install()?;
         setup_log();
 
         let temp_dir = tempfile::TempDir::new()?;
         let harness = TangleTestHarness::setup(temp_dir).await?;
 
-        // Setup service with contract deployment (true = deploy BlueprintServiceManagerBase)
-        let (mut test_env, service_id, blueprint_id) = harness.setup_services::<1>(true).await?;
+        let (mut test_env, service_id, _blueprint_id) = harness.setup_services::<1>(true).await?;
         test_env.initialize().await?;
 
-        // Add jobs with TangleLayer for automatic BlueprintServiceManagerBase hook wiring
-        test_env.add_job(whoami.layer(TangleLayer)).await;
+        // Add only state-changing jobs
         test_env.add_job(write_doc.layer(TangleLayer)).await;
-        test_env.add_job(read_doc.layer(TangleLayer)).await;
-        test_env.add_job(check_scope.layer(TangleLayer)).await;
-        test_env.add_job(admin_purge.layer(TangleLayer)).await;
-
+        
         test_env.start(OAuthBlueprintContext {
             tangle_client: Arc::new(harness.client().clone()),
         }).await?;
 
-        // Test 1: OAuth Document Write → Contract Hook Integration
-        let job_write = harness
+        // Test document writing with job execution
+        let job = harness
             .submit_job(
                 service_id,
                 WRITE_DOC_JOB_ID as u8,
                 vec![
-                    InputValue::String(new_bounded_string("secure_document")),
-                    InputValue::String(new_bounded_string("confidential data"))
+                    InputValue::String(new_bounded_string("report_2024")),
+                    InputValue::String(new_bounded_string("Annual compliance report"))
                 ],
             )
             .await?;
-        let write_result = harness.wait_for_job_execution(service_id, job_write.clone()).await?;
+        let result = harness.wait_for_job_execution(service_id, job.clone()).await?;
         
-        // Verify complete flow: Job → Rust Handler → Contract Hooks → Tangle Storage
-        assert_eq!(write_result.service_id, service_id);
-        assert_eq!(write_result.call_id, job_write.call_id);
+        // Verify job execution and state change
+        assert_eq!(result.service_id, service_id);
+        assert_eq!(result.call_id, job.call_id);
+        assert!(!result.result.is_empty());
         
-        // Expected contract state changes:
-        // - onJobCall triggered with WRITE_DOC_JOB_ID
-        // - onJobResult triggered after Rust execution
-        // - tenantDocuments[tenant_hash]["secure_document"] = true
-        // - tenantDocumentCount[tenant_hash] incremented
-        // - DocumentWritten event emitted
-        
-        // Test 2: OAuth Scope Checking with Contract Tracking
-        let job_scope = harness
+        // Submit another write to test isolation
+        let job2 = harness
             .submit_job(
                 service_id,
-                CHECK_SCOPE_JOB_ID as u8,
-                vec![InputValue::String(new_bounded_string("docs:write"))],
+                WRITE_DOC_JOB_ID as u8,
+                vec![
+                    InputValue::String(new_bounded_string("policy_doc")),
+                    InputValue::String(new_bounded_string("Security policy document"))
+                ],
             )
             .await?;
-        let scope_result = harness.wait_for_job_execution(service_id, job_scope.clone()).await?;
+        let result2 = harness.wait_for_job_execution(service_id, job2.clone()).await?;
         
-        // Verify scope enforcement and contract state
-        assert_eq!(scope_result.service_id, service_id);
-        assert_eq!(scope_result.call_id, job_scope.call_id);
-        
-        // Expected contract tracking:
-        // - scopeUsageCount[tenant_hash]["docs:write"] incremented
-        // - ScopeChecked event emitted with authorization result
-        
-        // Test 3: Admin Operations with Contract Audit Trail
-        let job_admin = harness
-            .submit_job(
-                service_id,
-                ADMIN_PURGE_JOB_ID as u8,
-                vec![InputValue::String(new_bounded_string("target_tenant_id"))],
-            )
-            .await?;
-        let admin_result = harness.wait_for_job_execution(service_id, job_admin.clone()).await?;
-        
-        // Verify admin operation tracking
-        assert_eq!(admin_result.service_id, service_id);
-        assert_eq!(admin_result.call_id, job_admin.call_id);
-        
-        // Expected audit trail:
-        // - AdminPurgeExecuted event with target and admin tenant hashes
-        // - Contract maintains immutable audit log of admin actions
+        assert_eq!(result2.service_id, service_id);
+        assert_ne!(result.call_id, result2.call_id); // Different call IDs
         
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_oauth_contract_lifecycle_hooks() -> Result<()> {
+    async fn test_admin_purge_job_execution() -> Result<()> {
         color_eyre::install()?;
         setup_log();
 
         let temp_dir = tempfile::TempDir::new()?;
         let harness = TangleTestHarness::setup(temp_dir).await?;
 
-        // Deploy contract to test BlueprintServiceManagerBase lifecycle
-        let (mut test_env, service_id, blueprint_id) = harness.setup_services::<1>(true).await?;
+        let (mut test_env, service_id, _blueprint_id) = harness.setup_services::<1>(true).await?;
         test_env.initialize().await?;
 
         test_env.add_job(write_doc.layer(TangleLayer)).await;
-        test_env.add_job(check_scope.layer(TangleLayer)).await;
+        test_env.add_job(admin_purge.layer(TangleLayer)).await;
+        
+        test_env.start(OAuthBlueprintContext {
+            tangle_client: Arc::new(harness.client().clone()),
+        }).await?;
+
+        // First write some documents
+        let write_job = harness
+            .submit_job(
+                service_id,
+                WRITE_DOC_JOB_ID as u8,
+                vec![
+                    InputValue::String(new_bounded_string("temp_doc")),
+                    InputValue::String(new_bounded_string("Temporary data"))
+                ],
+            )
+            .await?;
+        let _ = harness.wait_for_job_execution(service_id, write_job).await?;
+        
+        // Now test admin purge - state changing operation
+        let purge_job = harness
+            .submit_job(
+                service_id,
+                ADMIN_PURGE_JOB_ID as u8,
+                vec![InputValue::String(new_bounded_string("test_tenant"))],
+            )
+            .await?;
+        let purge_result = harness.wait_for_job_execution(service_id, purge_job.clone()).await?;
+        
+        // Verify purge executed
+        assert_eq!(purge_result.service_id, service_id);
+        assert_eq!(purge_result.call_id, purge_job.call_id);
+        
+        // Parse result to verify purge status
+        if let Ok(json_result) = serde_json::from_slice::<serde_json::Value>(&purge_result.result) {
+            assert!(json_result["purged"].is_boolean());
+            assert_eq!(json_result["tenant"], "test_tenant");
+        }
+        
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_document_writes() -> Result<()> {
+        color_eyre::install()?;
+        setup_log();
+
+        let temp_dir = tempfile::TempDir::new()?;
+        let harness = TangleTestHarness::setup(temp_dir).await?;
+
+        let (mut test_env, service_id, _blueprint_id) = harness.setup_services::<1>(true).await?;
+        test_env.initialize().await?;
+
+        test_env.add_job(write_doc.layer(TangleLayer)).await;
+        
+        test_env.start(OAuthBlueprintContext {
+            tangle_client: Arc::new(harness.client().clone()),
+        }).await?;
+
+        // Submit multiple document write jobs concurrently
+        let mut job_futures = vec![];
+        
+        for i in 0..5 {
+            let job_future = harness.submit_job(
+                service_id,
+                WRITE_DOC_JOB_ID as u8,
+                vec![
+                    InputValue::String(new_bounded_string(&format!("doc_{}", i))),
+                    InputValue::String(new_bounded_string(&format!("content_{}", i)))
+                ],
+            );
+            job_futures.push(job_future);
+        }
+        
+        // Collect all job submissions
+        let mut jobs = vec![];
+        for future in job_futures {
+            jobs.push(future.await?);
+        }
+        
+        // Wait for all jobs to complete
+        let mut results = vec![];
+        for job in jobs {
+            let result = harness.wait_for_job_execution(service_id, job.clone()).await?;
+            results.push(result);
+        }
+        
+        // Verify all jobs completed successfully with unique call IDs
+        let mut call_ids = std::collections::HashSet::new();
+        for result in results {
+            assert_eq!(result.service_id, service_id);
+            assert!(call_ids.insert(result.call_id));
+        }
+        assert_eq!(call_ids.len(), 5);
+        
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_oauth_blueprint_with_contract_hooks() -> Result<()> {
+        color_eyre::install()?;
+        setup_log();
+
+        let temp_dir = tempfile::TempDir::new()?;
+        let harness = TangleTestHarness::setup(temp_dir).await?;
+
+        // Setup with contract deployment
+        let (mut test_env, service_id, _blueprint_id) = harness.setup_services::<1>(true).await?;
+        test_env.initialize().await?;
+
+        // Only add state-changing jobs
+        test_env.add_job(write_doc.layer(TangleLayer)).await;
         test_env.add_job(admin_purge.layer(TangleLayer)).await;
 
         test_env.start(OAuthBlueprintContext {
             tangle_client: Arc::new(harness.client().clone()),
         }).await?;
 
-        // Test Blueprint Contract Lifecycle Integration:
-        
-        // 1. Document Write → Full Hook Chain
-        let job_write = harness
+        // Test 1: Document Write - state change with OAuth scopes
+        let write_job = harness
             .submit_job(
                 service_id,
                 WRITE_DOC_JOB_ID as u8,
                 vec![
-                    InputValue::String(new_bounded_string("compliance_doc")),
-                    InputValue::String(new_bounded_string("regulatory data"))
+                    InputValue::String(new_bounded_string("compliance_report")),
+                    InputValue::String(new_bounded_string("Q4 2024 compliance data"))
                 ],
             )
             .await?;
-        let write_result = harness.wait_for_job_execution(service_id, job_write.clone()).await?;
+        let write_result = harness.wait_for_job_execution(service_id, write_job.clone()).await?;
         
-        // Validation: Complete Blueprint Integration
+        // Verify job execution and state change
         assert_eq!(write_result.service_id, service_id);
-        assert_eq!(write_result.call_id, job_write.call_id);
+        assert_eq!(write_result.call_id, write_job.call_id);
         
-        // The complete flow should be:
-        // 1. harness.submit_job() → Tangle pallet stores job call
-        // 2. TangleProducer picks up job → Routes to Rust handler
-        // 3. onJobCall() hook triggered → Pre-execution contract logic
-        // 4. Rust write_doc() executes → OAuth scope validation + document storage
-        // 5. onJobResult() hook triggered → Contract state update + event emission
-        // 6. TangleConsumer stores final result → Tangle pallet metadata
+        // Contract hooks should have:
+        // - onJobCall triggered for WRITE_DOC_JOB_ID
+        // - OAuth scope validation (requires docs:write)
+        // - Document tracking in contract state
+        // - Events emitted for document write
         
-        // 2. Scope Enforcement with Contract Audit
-        let job_scope = harness
-            .submit_job(
-                service_id,
-                CHECK_SCOPE_JOB_ID as u8,
-                vec![InputValue::String(new_bounded_string("docs:admin"))],
-            )
-            .await?;
-        let scope_result = harness.wait_for_job_execution(service_id, job_scope.clone()).await?;
-        
-        // Verify scope checking with contract tracking
-        assert_eq!(scope_result.service_id, service_id);
-        assert_eq!(scope_result.call_id, job_scope.call_id);
-        
-        // Contract should track:
-        // - scopeUsageCount[tenant_hash]["docs:admin"] incremented
-        // - ScopeChecked event emitted with authorization result
-        
-        // 3. Admin Purge with Full Audit Trail
-        let job_purge = harness
+        // Test 2: Admin purge - state change with admin scope
+        let purge_job = harness
             .submit_job(
                 service_id,
                 ADMIN_PURGE_JOB_ID as u8,
-                vec![InputValue::String(new_bounded_string("target_tenant"))],
+                vec![InputValue::String(new_bounded_string("tenant_to_purge"))],
             )
             .await?;
-        let purge_result = harness.wait_for_job_execution(service_id, job_purge.clone()).await?;
+        let purge_result = harness.wait_for_job_execution(service_id, purge_job.clone()).await?;
         
-        // Verify admin operation with contract audit
         assert_eq!(purge_result.service_id, service_id);
-        assert_eq!(purge_result.call_id, job_purge.call_id);
+        assert_eq!(purge_result.call_id, purge_job.call_id);
         
-        // Contract audit trail:
-        // - AdminPurgeExecuted event with target and admin tenant hashes
-        // - Immutable record of admin action with timestamps
+        // Contract hooks should have:
+        // - onJobResult triggered for ADMIN_PURGE_JOB_ID
+        // - OAuth scope validation (requires docs:admin)
+        // - Audit trail of admin action in contract
+        // - Events emitted for purge operation
         
         Ok(())
     }

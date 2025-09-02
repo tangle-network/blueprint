@@ -1,6 +1,6 @@
 use blueprint_sdk::build;
 use blueprint_sdk::tangle::blueprint;
-use oauth_blueprint_lib::echo;
+use oauth_blueprint_lib::{write_doc, admin_purge};
 
 fn main() {
     if std::env::var("BUILD_CONTRACTS").is_ok() {
@@ -23,7 +23,7 @@ fn main() {
         name: "oauth-blueprint",
         master_manager_revision: "Latest",
         manager: { Evm = "ExperimentalBlueprint" },
-        jobs: [echo]
+        jobs: [write_doc, admin_purge]
     };
 
     if let Ok(blueprint) = blueprint {

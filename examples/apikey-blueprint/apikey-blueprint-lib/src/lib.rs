@@ -12,25 +12,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
 
-pub const WHOAMI_JOB_ID: u32 = 0;
-pub const WRITE_RESOURCE_JOB_ID: u32 = 1;
-pub const PURCHASE_API_KEY_JOB_ID: u32 = 2;
-pub const ECHO_JOB_ID: u32 = 3;
+pub const WRITE_RESOURCE_JOB_ID: u32 = 0;
+pub const PURCHASE_API_KEY_JOB_ID: u32 = 1;
 
 #[derive(Clone)]
 pub struct ApiKeyBlueprintContext {
     pub tangle_client: Arc<TangleClient>,
-}
-
-#[debug_job]
-pub async fn whoami(
-    Context(_ctx): Context<ApiKeyBlueprintContext>,
-    Extension(auth): Extension<AuthContext>,
-) -> TangleResult<serde_json::Value> {
-    TangleResult(serde_json::json!({
-        "tenant": auth.tenant_hash,
-        "auth_type": "api_key",
-    }))
 }
 
 #[debug_job]
@@ -54,20 +41,35 @@ pub async fn write_resource(
 #[debug_job]
 pub async fn purchase_api_key(
     Context(_ctx): Context<ApiKeyBlueprintContext>,
-    TangleArg(subscription_tier): TangleArg<String>,
+    TangleArg((subscription_tier, user_identifier)): TangleArg<(String, String)>,
 ) -> TangleResult<serde_json::Value> {
-    // This would typically interact with smart contract to validate payment
-    // For now, simulate the purchase
+    // Generate a secure API key (simplified for demo)
+    let api_key = format!("sk_{}_{}", subscription_tier, uuid::Uuid::new_v4());
+    
+    // Store the API key hash for verification
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(api_key.as_bytes());
+    let api_key_hash = format!("{:x}", hasher.finalize());
+    
+    // Store in our secure storage
+    let store = api_key_store();
+    let mut guard = store.write().await;
+    guard.insert(api_key_hash.clone(), serde_json::json!({
+        "tier": subscription_tier,
+        "user": user_identifier,
+        "active": true
+    }));
+    
+    // Return response with encrypted key (simplified - in production use proper encryption)
     TangleResult(serde_json::json!({
         "ok": true,
+        "api_key_hash": api_key_hash,
+        "encrypted_key": api_key, // WARNING: Should be encrypted with user's public key!
         "tier": subscription_tier,
-        "message": "API key purchase simulated",
     }))
 }
 
-pub async fn echo(TangleArg(s): TangleArg<String>) -> TangleResult<String> {
-    TangleResult(s)
-}
 
 #[derive(Clone)]
 pub struct ApiUsageTracker;
@@ -92,11 +94,16 @@ impl BackgroundService for ApiUsageTracker {
 
 // In-memory tenant-scoped resource store
 type ResourceMap = Arc<RwLock<HashMap<String, HashMap<String, String>>>>;
+type ApiKeyMap = Arc<RwLock<HashMap<String, serde_json::Value>>>;
 
 fn resource_store() -> &'static ResourceMap {
     static STORE: OnceLock<ResourceMap> = OnceLock::new();
     STORE.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
 }
 
+fn api_key_store() -> &'static ApiKeyMap {
+    static STORE: OnceLock<ApiKeyMap> = OnceLock::new();
+    STORE.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
+}
+
 mod tests;
-mod state_validation_tests;

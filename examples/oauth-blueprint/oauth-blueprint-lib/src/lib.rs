@@ -17,35 +17,8 @@ pub struct OAuthBlueprintContext {
     pub tangle_client: Arc<TangleClient>,
 }
 
-pub const WHOAMI_JOB_ID: u32 = 0;
-pub const CHECK_SCOPE_JOB_ID: u32 = 1;
-pub const WRITE_DOC_JOB_ID: u32 = 2;
-pub const READ_DOC_JOB_ID: u32 = 3;
-pub const LIST_DOCS_JOB_ID: u32 = 4;
-pub const ADMIN_PURGE_JOB_ID: u32 = 5;
-pub const ECHO_JOB_ID: u32 = 6;
-
-#[debug_job]
-pub async fn whoami(
-    Context(_ctx): Context<OAuthBlueprintContext>,
-    Extension(auth): Extension<AuthContext>,
-) -> TangleResult<serde_json::Value> {
-    TangleResult(serde_json::json!({
-        "tenant": auth.tenant_hash,
-        "scopes": auth.scopes,
-        "context_present": true,
-    }))
-}
-
-#[debug_job]
-pub async fn check_scope(
-    Context(_ctx): Context<OAuthBlueprintContext>,
-    Extension(auth): Extension<AuthContext>,
-    TangleArg(scope): TangleArg<String>,
-) -> TangleResult<serde_json::Value> {
-    let ok = auth.has_scope(&scope);
-    TangleResult(serde_json::json!({ "required": scope, "authorized": ok }))
-}
+pub const WRITE_DOC_JOB_ID: u32 = 0;
+pub const ADMIN_PURGE_JOB_ID: u32 = 1;
 
 #[derive(Clone)]
 pub struct AuthEchoBackgroundService;
@@ -92,41 +65,6 @@ pub async fn write_doc(
     TangleResult(serde_json::json!({"ok":true,"tenant":tenant,"doc_id":doc_id}))
 }
 
-#[debug_job]
-pub async fn read_doc(
-    Context(_ctx): Context<OAuthBlueprintContext>,
-    Extension(auth): Extension<AuthContext>,
-    TangleArg(doc_id): TangleArg<String>,
-) -> TangleResult<serde_json::Value> {
-    if !auth.has_scope("docs:read") {
-        return TangleResult(serde_json::json!({"error":"missing_scopes","required":"docs:read"}));
-    }
-    let tenant = auth.tenant_hash.unwrap_or_default();
-    let store = docs_store();
-    let guard = store.read().await;
-    let content = guard
-        .get(&tenant)
-        .and_then(|m| m.get(&doc_id).cloned());
-    TangleResult(serde_json::json!({"tenant":tenant,"doc_id":doc_id,"content":content}))
-}
-
-#[debug_job]
-pub async fn list_docs(
-    Context(_ctx): Context<OAuthBlueprintContext>,
-    Extension(auth): Extension<AuthContext>,
-) -> TangleResult<serde_json::Value> {
-    if !auth.has_scope("docs:read") {
-        return TangleResult(serde_json::json!({"error":"missing_scopes","required":"docs:read"}));
-    }
-    let tenant = auth.tenant_hash.unwrap_or_default();
-    let store = docs_store();
-    let guard = store.read().await;
-    let ids: Vec<String> = guard
-        .get(&tenant)
-        .map(|m| m.keys().cloned().collect())
-        .unwrap_or_default();
-    TangleResult(serde_json::json!({"tenant":tenant,"doc_ids":ids}))
-}
 
 #[debug_job]
 pub async fn admin_purge(
@@ -143,9 +81,6 @@ pub async fn admin_purge(
     TangleResult(serde_json::json!({"purged":removed,"tenant":target_tenant}))
 }
 
-pub async fn echo(TangleArg(s): TangleArg<String>) -> TangleResult<String> {
-    TangleResult(s)
-}
 
 mod tests;
 mod state_validation_tests;
