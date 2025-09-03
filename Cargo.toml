@@ -6,10 +6,8 @@ members = [
     "crates/networking/extensions/*",
     "crates/manager/bridge",
     "examples/incredible-squaring-eigenlayer",
-    "examples/apikey-blueprint/apikey-blueprint-lib",
-    "examples/apikey-blueprint/apikey-blueprint-bin",
-    "examples/oauth-blueprint/oauth-blueprint-lib",
-    "examples/oauth-blueprint/oauth-blueprint-bin",
+    "examples/apikey-blueprint",
+    "examples/oauth-blueprint",
     "workspace-hack",
 ]
 
