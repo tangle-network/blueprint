@@ -37,7 +37,7 @@ pub use remote::{RemoteClusterManager, RemoteDeploymentConfig, CloudProvider};
 pub use cost::{CostEstimator, CostReport};
 pub use networking::{TunnelManager, NetworkingMode};
 pub use provisioning::{ResourceRequirements, InstanceTypeMapper, AutoScalingConfig};
-pub use resources::{UnifiedResourceSpec, ComputeResources, StorageResources, NetworkResources, AcceleratorResources};
+pub use resources::{ResourceSpec, ComputeResources, StorageResources, NetworkResources, AcceleratorResources};
 pub use pricing_integration::{PricingCalculator, DetailedCostReport, ResourceUsageMetrics};
 
 #[cfg(any(feature = "aws", feature = "api-clients"))]

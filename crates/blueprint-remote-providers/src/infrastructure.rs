@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
-/// Infrastructure provisioner for creating actual cloud resources
+/// Infrastructure provisioner for creating cloud resources
 /// 
-/// This handles the ACTUAL creation of cloud infrastructure:
+/// Handles creation of cloud infrastructure:
 /// - EC2 instances for AWS
 /// - Compute instances for GCP
 /// - VMs for Azure

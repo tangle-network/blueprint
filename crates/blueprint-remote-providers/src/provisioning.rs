@@ -1,5 +1,5 @@
 use crate::remote::CloudProvider;
-use crate::resources::UnifiedResourceSpec;
+use crate::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
 
 /// Universal resource requirements for any Blueprint deployment
@@ -47,13 +47,13 @@ pub enum NetworkTier {
     Ultra,    // 50+ Gbps
 }
 
-/// Maps resource requirements to actual cloud instance types
+/// Maps resource requirements to cloud instance types
 pub struct InstanceTypeMapper;
 
 impl InstanceTypeMapper {
-    /// Map unified resource spec to specific instance type
+    /// Map resource spec to specific instance type
     pub fn map_to_instance_type(
-        spec: &UnifiedResourceSpec,
+        spec: &ResourceSpec,
         provider: &CloudProvider,
     ) -> InstanceSelection {
         match provider {
@@ -75,7 +75,7 @@ impl InstanceTypeMapper {
         Self::map_to_instance_type(&spec, provider)
     }
     
-    fn map_aws_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
+    fn map_aws_instance(spec: &ResourceSpec) -> InstanceSelection {
         // AWS instance selection logic
         let gpu_count = spec.accelerators.as_ref().map(|a| a.count);
         let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb, gpu_count) {
@@ -105,7 +105,7 @@ impl InstanceTypeMapper {
         }
     }
     
-    fn map_gcp_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
+    fn map_gcp_instance(spec: &ResourceSpec) -> InstanceSelection {
         let gpu_count = spec.accelerators.as_ref().map(|a| a.count);
         let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb, gpu_count) {
             // GPU instances
@@ -129,7 +129,7 @@ impl InstanceTypeMapper {
         }
     }
     
-    fn map_azure_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
+    fn map_azure_instance(spec: &ResourceSpec) -> InstanceSelection {
         let gpu_count = spec.accelerators.as_ref().map(|a| a.count);
         let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb, gpu_count) {
             // GPU instances
@@ -150,7 +150,7 @@ impl InstanceTypeMapper {
         }
     }
     
-    fn map_do_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
+    fn map_do_instance(spec: &ResourceSpec) -> InstanceSelection {
         // DigitalOcean droplet types
         let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb) {
             (cpu, mem) if cpu <= 1.0 && mem <= 1.0 => "s-1vcpu-1gb",
@@ -168,7 +168,7 @@ impl InstanceTypeMapper {
         }
     }
     
-    fn map_vultr_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
+    fn map_vultr_instance(spec: &ResourceSpec) -> InstanceSelection {
         // Vultr instance types
         let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb) {
             (cpu, mem) if cpu <= 1.0 && mem <= 1.0 => "vc2-1c-1gb",
@@ -185,7 +185,7 @@ impl InstanceTypeMapper {
         }
     }
     
-    fn map_generic_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
+    fn map_generic_instance(spec: &ResourceSpec) -> InstanceSelection {
         InstanceSelection {
             instance_type: format!("{}cpu-{}gb", spec.compute.cpu_cores, spec.storage.memory_gb),
             spot_capable: false,
@@ -292,11 +292,11 @@ pub trait ResourceLimitsExt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::{UnifiedResourceSpec, ComputeResources, StorageResources};
+    use crate::resources::{ResourceSpec, ComputeResources, StorageResources};
     
     #[test]
     fn test_aws_instance_mapping() {
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 4.0,
                 ..Default::default()
@@ -317,7 +317,7 @@ mod tests {
     fn test_gpu_instance_selection() {
         use crate::resources::{AcceleratorResources, AcceleratorType, GpuSpec};
         
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 4.0,
                 ..Default::default()
@@ -344,7 +344,7 @@ mod tests {
     
     #[test]
     fn test_digital_ocean_mapping() {
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 2.0,
                 ..Default::default()
@@ -365,7 +365,7 @@ mod tests {
     fn test_cost_aware_selection() {
         use crate::resources::QosParameters;
         
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 0.5,
                 ..Default::default()

@@ -1,10 +1,10 @@
 //! GCP infrastructure provisioning support
 //! 
-//! Provides actual GCP resource provisioning capabilities including
+//! Provides GCP resource provisioning capabilities including
 //! Compute Engine instances and GKE clusters.
 
 use crate::error::{Error, Result};
-use crate::resources::UnifiedResourceSpec;
+use crate::resources::ResourceSpec;
 use crate::provisioning::InstanceSelection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -37,7 +37,7 @@ impl GcpInfrastructureProvisioner {
     pub async fn provision_gce_instance(
         &self,
         name: &str,
-        spec: &UnifiedResourceSpec,
+        spec: &ResourceSpec,
         network: Option<&str>,
     ) -> Result<GceInstance> {
         // Map resource spec to GCE machine type
@@ -84,7 +84,7 @@ impl GcpInfrastructureProvisioner {
     pub async fn provision_gke_cluster(
         &self,
         name: &str,
-        spec: &UnifiedResourceSpec,
+        spec: &ResourceSpec,
         node_count: u32,
     ) -> Result<GkeCluster> {
         // Select machine type for nodes
@@ -125,7 +125,7 @@ impl GcpInfrastructureProvisioner {
     }
     
     /// Select appropriate GCE machine type based on resource requirements
-    fn select_machine_type(&self, spec: &UnifiedResourceSpec) -> String {
+    fn select_machine_type(&self, spec: &ResourceSpec) -> String {
         // Check for GPU requirements
         if let Some(ref accel) = spec.accelerators {
             if let crate::resources::AcceleratorType::GPU(ref gpu_spec) = accel.accelerator_type {
@@ -244,7 +244,7 @@ pub struct GkeCluster {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::{UnifiedResourceSpec, ComputeResources, StorageResources};
+    use crate::resources::{ResourceSpec, ComputeResources, StorageResources};
     
     #[tokio::test]
     #[cfg(feature = "gcp")]
@@ -255,7 +255,7 @@ mod tests {
             "us-central1-a".to_string(),
         ).await.unwrap();
         
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 4.0,
                 ..Default::default()
@@ -268,7 +268,7 @@ mod tests {
             ..Default::default()
         };
         
-        // This would fail without actual GCP credentials
+        // This would fail without GCP credentials
         // Just testing the structure
         let result = provisioner.provision_gce_instance("test-instance", &spec, None).await;
         assert!(result.is_ok());
@@ -288,7 +288,7 @@ mod tests {
         };
         
         // Test small instance
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 1.0,
                 ..Default::default()
@@ -303,7 +303,7 @@ mod tests {
         assert_eq!(provisioner.select_machine_type(&spec), "e2-micro");
         
         // Test large instance
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 16.0,
                 ..Default::default()
@@ -319,7 +319,7 @@ mod tests {
         
         // Test GPU instance
         use crate::resources::{AcceleratorResources, AcceleratorType, GpuSpec};
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 4.0,
                 ..Default::default()

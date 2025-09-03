@@ -92,7 +92,7 @@ impl CostEstimator {
         }
     }
     
-    /// Track actual usage for cost reporting
+    /// Track usage for cost reporting
     pub fn track_usage(&self, 
         provider: &CloudProvider,
         cpu_hours: f64,

@@ -1,10 +1,10 @@
 //! Azure infrastructure provisioning support
 //! 
-//! Provides actual Azure resource provisioning capabilities including
+//! Provides Azure resource provisioning capabilities including
 //! Virtual Machines and AKS clusters.
 
 use crate::error::{Error, Result};
-use crate::resources::UnifiedResourceSpec;
+use crate::resources::ResourceSpec;
 use crate::provisioning::InstanceSelection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -42,7 +42,7 @@ impl AzureInfrastructureProvisioner {
     pub async fn provision_vm(
         &self,
         name: &str,
-        spec: &UnifiedResourceSpec,
+        spec: &ResourceSpec,
         vnet_name: Option<&str>,
         subnet_name: Option<&str>,
     ) -> Result<AzureVm> {
@@ -103,7 +103,7 @@ impl AzureInfrastructureProvisioner {
     pub async fn provision_aks_cluster(
         &self,
         name: &str,
-        spec: &UnifiedResourceSpec,
+        spec: &ResourceSpec,
         node_count: u32,
     ) -> Result<AksCluster> {
         // Select VM size for nodes
@@ -159,7 +159,7 @@ impl AzureInfrastructureProvisioner {
     }
     
     /// Select appropriate Azure VM size based on resource requirements
-    fn select_vm_size(&self, spec: &UnifiedResourceSpec) -> String {
+    fn select_vm_size(&self, spec: &ResourceSpec) -> String {
         // Check for GPU requirements
         if let Some(ref accel) = spec.accelerators {
             if let crate::resources::AcceleratorType::GPU(ref gpu_spec) = accel.accelerator_type {
@@ -311,7 +311,7 @@ pub struct AksCluster {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::{UnifiedResourceSpec, ComputeResources, StorageResources};
+    use crate::resources::{ResourceSpec, ComputeResources, StorageResources};
     
     #[tokio::test]
     #[cfg(feature = "azure")]
@@ -322,7 +322,7 @@ mod tests {
             "eastus".to_string(),
         ).await.unwrap();
         
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 4.0,
                 ..Default::default()
@@ -335,7 +335,7 @@ mod tests {
             ..Default::default()
         };
         
-        // This would fail without actual Azure credentials
+        // This would fail without Azure credentials
         // Just testing the structure
         let result = provisioner.provision_vm("test-vm", &spec, None, None).await;
         assert!(result.is_ok());
@@ -355,7 +355,7 @@ mod tests {
         };
         
         // Test small instance
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 1.0,
                 ..Default::default()
@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(provisioner.select_vm_size(&spec), "Standard_B1s");
         
         // Test large instance
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 16.0,
                 ..Default::default()
@@ -386,7 +386,7 @@ mod tests {
         
         // Test GPU instance
         use crate::resources::{AcceleratorResources, AcceleratorType, GpuSpec};
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 4.0,
                 ..Default::default()

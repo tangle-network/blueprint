@@ -6,15 +6,15 @@
 
 use crate::error::Result;
 use crate::remote::CloudProvider;
-use crate::resources::UnifiedResourceSpec;
+use crate::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
-/// Pricing calculator that integrates with the existing blueprint-pricing-engine
+/// Pricing calculator that integrates with the blueprint-pricing-engine
 /// 
-/// This provides cost calculations for both local and remote deployments using
-/// the unified resource model.
+/// Provides cost calculations for both local and remote deployments using
+/// the resource model.
 pub struct PricingCalculator {
     /// Pricing configuration loaded from TOML files
     pricing_config: PricingConfig,
@@ -59,10 +59,10 @@ impl PricingCalculator {
         })
     }
     
-    /// Calculate pricing for a unified resource specification
+    /// Calculate pricing for a resource specification
     pub fn calculate_cost(
         &self,
-        spec: &UnifiedResourceSpec,
+        spec: &ResourceSpec,
         provider: &CloudProvider,
         duration_hours: f64,
     ) -> DetailedCostReport {
@@ -117,7 +117,7 @@ impl PricingCalculator {
     /// Compare costs across multiple providers
     pub fn compare_providers(
         &self,
-        spec: &UnifiedResourceSpec,
+        spec: &ResourceSpec,
         duration_hours: f64,
     ) -> Vec<DetailedCostReport> {
         let providers = vec![
@@ -290,16 +290,16 @@ impl DetailedCostReport {
 pub mod pricing_engine_compat {
     use super::*;
     
-    /// Convert our unified spec to pricing engine ResourceUnit enum
-    /// This would integrate with the actual pricing engine crate
-    pub fn to_resource_units(spec: &UnifiedResourceSpec) -> Vec<(String, f64)> {
+    /// Convert resource spec to pricing engine ResourceUnit enum
+    /// Integrates with the pricing engine crate
+    pub fn to_resource_units(spec: &ResourceSpec) -> Vec<(String, f64)> {
         let units = crate::resources::to_pricing_units(spec);
         units.into_iter().collect()
     }
     
-    /// Create a benchmark profile from actual usage metrics
+    /// Create a benchmark profile from usage metrics
     pub fn create_benchmark_profile(
-        _spec: &UnifiedResourceSpec,
+        _spec: &ResourceSpec,
         actual_usage: &ResourceUsageMetrics,
     ) -> BenchmarkProfile {
         BenchmarkProfile {
@@ -322,7 +322,7 @@ pub struct ResourceUsageMetrics {
     pub duration_seconds: u64,
 }
 
-/// Benchmark profile for actual vs estimated comparison
+/// Benchmark profile for usage vs estimated comparison
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchmarkProfile {
     pub cpu_utilization: f64,
@@ -335,13 +335,13 @@ pub struct BenchmarkProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::{UnifiedResourceSpec, ComputeResources, StorageResources};
+    use crate::resources::{ResourceSpec, ComputeResources, StorageResources};
     
     #[test]
     fn test_pricing_calculation() {
         let calculator = PricingCalculator::new().unwrap();
         
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 4.0,
                 ..Default::default()
@@ -369,7 +369,7 @@ mod tests {
     fn test_provider_comparison() {
         let calculator = PricingCalculator::new().unwrap();
         
-        let spec = UnifiedResourceSpec::default();
+        let spec = ResourceSpec::default();
         
         let reports = calculator.compare_providers(&spec, 730.0);
         
@@ -391,7 +391,7 @@ mod tests {
     fn test_qos_pricing_adjustments() {
         let calculator = PricingCalculator::new().unwrap();
         
-        let mut spec = UnifiedResourceSpec::default();
+        let mut spec = ResourceSpec::default();
         
         // Regular instance
         let regular_cost = calculator.calculate_cost(&spec, &CloudProvider::AWS, 1.0);

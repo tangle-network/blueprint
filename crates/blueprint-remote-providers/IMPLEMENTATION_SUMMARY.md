@@ -12,7 +12,7 @@ This crate extends the existing Blueprint Manager to support remote deployments 
 ## Core Components
 
 ### 1. Unified Resource Model (`resources.rs`)
-- **UnifiedResourceSpec**: Comprehensive resource specification replacing manager's basic ResourceLimits
+- **ResourceSpec**: Comprehensive resource specification replacing manager's basic ResourceLimits
 - **Conversion Functions**: 
   - `to_pricing_units()`: Maps to pricing engine units for cost calculation
   - `to_k8s_resources()`: Converts to Kubernetes resource requirements
@@ -31,7 +31,7 @@ This crate extends the existing Blueprint Manager to support remote deployments 
 - **Multi-Provider Comparison**: Compare costs across all supported providers
 
 ### 4. Instance Type Mapping (`provisioning.rs`)
-- **InstanceTypeMapper**: Maps UnifiedResourceSpec to cloud-specific instance types
+- **InstanceTypeMapper**: Maps ResourceSpec to cloud-specific instance types
 - **Provider-Specific Logic**: Optimal instance selection for each cloud
 - **Auto-Scaling Configuration**: Consistent scaling across providers
 
@@ -40,7 +40,7 @@ This crate extends the existing Blueprint Manager to support remote deployments 
 - EC2 instance provisioning with full SDK integration
 - EKS cluster creation and management
 - Security group and networking configuration
-- Actual AWS SDK usage (not mocked)
+- AWS SDK integration
 
 #### GCP (`infrastructure_gcp.rs`)
 - GCE instance provisioning
@@ -61,7 +61,7 @@ This crate extends the existing Blueprint Manager to support remote deployments 
 
 ### 7. Cost Tracking (`cost.rs`)
 - **CostEstimator**: Provider-specific pricing models
-- **Usage Tracking**: Actual vs estimated cost comparison
+- **Usage Tracking**: Usage vs estimated cost comparison
 - **Cost Alerts**: Threshold-based notifications
 
 ## Key Design Decisions
@@ -76,7 +76,7 @@ This crate extends the existing Blueprint Manager to support remote deployments 
 - Leverages tested infrastructure
 
 ### 2. Unified Resource Model
-**Decision**: Create UnifiedResourceSpec that works for both local and remote
+**Decision**: Create ResourceSpec that works for both local and remote
 
 **Rationale**:
 - Single source of truth for resource requirements
@@ -105,7 +105,7 @@ This crate extends the existing Blueprint Manager to support remote deployments 
 ## Resource Flow
 
 1. **User Input**: Customer selects resources via sliders (CPU, GPU, RAM, Storage)
-2. **Unified Spec**: Creates UnifiedResourceSpec from user selections
+2. **Unified Spec**: Creates ResourceSpec from user selections
 3. **Local Deployment**:
    - Converts to K8s ResourceRequirements or Docker config
    - Applies limits via existing ContainerRuntime
@@ -142,7 +142,7 @@ This crate extends the existing Blueprint Manager to support remote deployments 
 ## Remaining Work
 
 1. **Resource Enforcement for Local**:
-   - Connect UnifiedResourceSpec to actual Kata/hypervisor limits
+   - Connect ResourceSpec to actual Kata/hypervisor limits
    - Implement cgroup enforcement for native runtime
    - Add resource monitoring and reporting
 
@@ -168,7 +168,7 @@ This crate extends the existing Blueprint Manager to support remote deployments 
 
 ### Local Deployment with Resource Limits
 ```rust
-let spec = UnifiedResourceSpec {
+let spec = ResourceSpec {
     compute: ComputeResources {
         cpu_cores: 2.0,
         ..Default::default()

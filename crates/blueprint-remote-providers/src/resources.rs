@@ -1,17 +1,17 @@
-//! Unified resource model that bridges pricing-engine, manager, and remote-providers
+//! Resource model for pricing-engine, manager, and remote-providers integration
 //! 
-//! This module provides the foundation for resource management across local and remote
-//! deployments, ensuring consistent resource definitions and pricing calculations.
+//! Provides resource management foundation for local and remote deployments
+//! with consistent resource definitions and pricing calculations.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Unified resource specification that works across all deployment targets
+/// Resource specification for deployment targets
 /// 
-/// This replaces manager's basic ResourceLimits and provides a consistent model
-/// for both local resource enforcement and remote instance selection.
+/// Provides comprehensive resource configuration for local resource 
+/// enforcement and remote instance selection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UnifiedResourceSpec {
+pub struct ResourceSpec {
     /// Core compute resources
     pub compute: ComputeResources,
     
@@ -28,7 +28,7 @@ pub struct UnifiedResourceSpec {
     pub qos: QosParameters,
 }
 
-impl Default for UnifiedResourceSpec {
+impl Default for ResourceSpec {
     fn default() -> Self {
         Self {
             compute: ComputeResources::default(),
@@ -183,8 +183,8 @@ impl Default for QosParameters {
     }
 }
 
-/// Converts unified spec to pricing engine resource units for cost calculation
-pub fn to_pricing_units(spec: &UnifiedResourceSpec) -> HashMap<String, f64> {
+/// Converts resource spec to pricing engine resource units for cost calculation
+pub fn to_pricing_units(spec: &ResourceSpec) -> HashMap<String, f64> {
     let mut units = HashMap::new();
     
     // Map to pricing engine ResourceUnit equivalents
@@ -212,9 +212,9 @@ pub fn to_pricing_units(spec: &UnifiedResourceSpec) -> HashMap<String, f64> {
     units
 }
 
-/// Converts unified spec to Kubernetes resource limits
+/// Converts resource spec to Kubernetes resource limits
 #[cfg(feature = "kubernetes")]
-pub fn to_k8s_resources(spec: &UnifiedResourceSpec) -> (k8s_openapi::api::core::v1::ResourceRequirements, Option<k8s_openapi::api::core::v1::PersistentVolumeClaimSpec>) {
+pub fn to_k8s_resources(spec: &ResourceSpec) -> (k8s_openapi::api::core::v1::ResourceRequirements, Option<k8s_openapi::api::core::v1::PersistentVolumeClaimSpec>) {
     use k8s_openapi::api::core::v1::{ResourceRequirements, PersistentVolumeClaimSpec};
     use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
     
@@ -282,8 +282,8 @@ pub fn to_k8s_resources(spec: &UnifiedResourceSpec) -> (k8s_openapi::api::core::
     (resource_req, pvc_spec)
 }
 
-/// Converts unified spec to Docker resource limits
-pub fn to_docker_resources(spec: &UnifiedResourceSpec) -> serde_json::Value {
+/// Converts resource spec to Docker resource limits
+pub fn to_docker_resources(spec: &ResourceSpec) -> serde_json::Value {
     let mut host_config = serde_json::json!({});
     
     // CPU limits (Docker uses nano CPUs)
@@ -318,8 +318,8 @@ pub fn to_docker_resources(spec: &UnifiedResourceSpec) -> serde_json::Value {
 }
 
 /// Converts from legacy manager ResourceLimits
-pub fn from_legacy_limits(memory_mb: Option<u64>, storage_mb: Option<u64>) -> UnifiedResourceSpec {
-    UnifiedResourceSpec {
+pub fn from_legacy_limits(memory_mb: Option<u64>, storage_mb: Option<u64>) -> ResourceSpec {
+    ResourceSpec {
         compute: ComputeResources::default(),
         storage: StorageResources {
             memory_gb: memory_mb.map(|mb| mb as f64 / 1024.0).unwrap_or(2.0),
@@ -331,10 +331,10 @@ pub fn from_legacy_limits(memory_mb: Option<u64>, storage_mb: Option<u64>) -> Un
 }
 
 /// Converts from remote-providers ResourceRequirements
-pub fn from_resource_requirements(req: &crate::provisioning::ResourceRequirements) -> UnifiedResourceSpec {
+pub fn from_resource_requirements(req: &crate::provisioning::ResourceRequirements) -> ResourceSpec {
     use crate::provisioning::NetworkTier;
     
-    UnifiedResourceSpec {
+    ResourceSpec {
         compute: ComputeResources {
             cpu_cores: req.cpu_cores,
             ..Default::default()
@@ -373,8 +373,8 @@ mod tests {
     use super::*;
     
     #[test]
-    fn test_unified_spec_to_pricing_units() {
-        let spec = UnifiedResourceSpec {
+    fn test_resource_spec_to_pricing_units() {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 4.0,
                 ..Default::default()
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     #[cfg(feature = "kubernetes")]
     fn test_k8s_resource_conversion() {
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 0.5,
                 ..Default::default()
@@ -422,7 +422,7 @@ mod tests {
     
     #[test]
     fn test_docker_resource_conversion() {
-        let spec = UnifiedResourceSpec {
+        let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 2.0,
                 ..Default::default()
