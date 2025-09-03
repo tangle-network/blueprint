@@ -45,13 +45,10 @@ tokio-test = "0.4"
 wiremock = "0.6"
 
 [features]
-default = ["kubernetes", "docker"]
+default = ["kubernetes"]
 kubernetes = ["dep:kube", "dep:k8s-openapi", "dep:blueprint-manager"]
 docker = ["dep:bollard"]
-ssh = ["dep:openssh"]
-tunnel = []
-testing = ["dep:mockall"]
-all = ["kubernetes", "docker", "ssh", "tunnel", "testing"]
+testing = []
 
 [package.metadata.docs.rs]
 all-features = true
