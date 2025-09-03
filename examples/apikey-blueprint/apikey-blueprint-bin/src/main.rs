@@ -15,11 +15,9 @@ use blueprint_sdk::tangle::layers::TangleLayer;
 use blueprint_sdk::tangle::producer::TangleProducer;
 use apikey_blueprint_lib::{
     ApiKeyBlueprintContext,
-    ApiUsageTracker,
-    WHOAMI_JOB_ID, whoami,
+    ApiKeyProtectedService,
     WRITE_RESOURCE_JOB_ID, write_resource,
     PURCHASE_API_KEY_JOB_ID, purchase_api_key,
-    ECHO_JOB_ID, echo,
 };
 use tower::filter::FilterLayer;
 
@@ -63,14 +61,14 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     let result = BlueprintRunner::builder(tangle_config, env)
         .router(
             Router::new()
-                .route(WHOAMI_JOB_ID, whoami.layer(TangleLayer))
+                // Only state-changing jobs
                 .route(WRITE_RESOURCE_JOB_ID, write_resource.layer(TangleLayer))
                 .route(PURCHASE_API_KEY_JOB_ID, purchase_api_key.layer(TangleLayer))
-                .route(ECHO_JOB_ID, echo.layer(TangleLayer))
                 .layer(FilterLayer::new(MatchesServiceId(service_id)))
                 .with_context(context),
         )
-        .background_service(ApiUsageTracker)
+        // API key protected service for off-chain operations
+        .background_service(ApiKeyProtectedService)
         .producer(tangle_producer)
         .consumer(tangle_consumer)
         .with_shutdown_handler(async { println!("Shutting down API Key Blueprint!") })

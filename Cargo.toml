@@ -6,8 +6,6 @@ members = [
     "crates/networking/extensions/*",
     "crates/manager/bridge",
     "examples/incredible-squaring-eigenlayer",
-    "examples/apikey-blueprint",
-    "examples/oauth-blueprint",
     "workspace-hack",
 ]
 

@@ -15,14 +15,9 @@ use blueprint_sdk::tangle::layers::TangleLayer;
 use blueprint_sdk::tangle::producer::TangleProducer;
 use oauth_blueprint_lib::{
     OAuthBlueprintContext,
-    AuthEchoBackgroundService,
-    WHOAMI_JOB_ID, whoami,
-    CHECK_SCOPE_JOB_ID, check_scope,
+    OAuthProtectedApiService,
     WRITE_DOC_JOB_ID, write_doc,
-    READ_DOC_JOB_ID, read_doc,
-    LIST_DOCS_JOB_ID, list_docs,
     ADMIN_PURGE_JOB_ID, admin_purge,
-    ECHO_JOB_ID, echo,
 };
 use tower::filter::FilterLayer;
 
@@ -66,17 +61,14 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     let result = BlueprintRunner::builder(tangle_config, env)
         .router(
             Router::new()
-                .route(WHOAMI_JOB_ID, whoami.layer(TangleLayer))
-                .route(CHECK_SCOPE_JOB_ID, check_scope.layer(TangleLayer))
+                // Only state-changing jobs
                 .route(WRITE_DOC_JOB_ID, write_doc.layer(TangleLayer))
-                .route(READ_DOC_JOB_ID, read_doc.layer(TangleLayer))
-                .route(LIST_DOCS_JOB_ID, list_docs.layer(TangleLayer))
                 .route(ADMIN_PURGE_JOB_ID, admin_purge.layer(TangleLayer))
-                .route(ECHO_JOB_ID, echo.layer(TangleLayer))
                 .layer(FilterLayer::new(MatchesServiceId(service_id)))
                 .with_context(context),
         )
-        .background_service(AuthEchoBackgroundService)
+        // OAuth protected API service for off-chain operations
+        .background_service(OAuthProtectedApiService)
         .producer(tangle_producer)
         .consumer(tangle_consumer)
         .with_shutdown_handler(async { println!("Shutting down OAuth Blueprint!") })

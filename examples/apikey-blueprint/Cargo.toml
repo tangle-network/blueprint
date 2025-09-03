@@ -5,3 +5,5 @@ members = [
     "apikey-blueprint-bin",
 ]
 
+[workspace.package]
+edition = "2024"

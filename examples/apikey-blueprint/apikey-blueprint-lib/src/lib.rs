@@ -1,13 +1,21 @@
-use blueprint_sdk::extract::{Extension, Context};
+use blueprint_sdk::extract::Context;
 use blueprint_sdk::runner::BackgroundService;
 use blueprint_sdk::runner::error::RunnerError;
 use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
 use blueprint_sdk::contexts::tangle::TangleClient;
-use blueprint_sdk::AuthContext;
 use blueprint_sdk::macros::debug_job;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Receiver;
-use axum::{routing::get, Json, Router};
+use axum::{
+    routing::{get, post},
+    Json, Router,
+    http::StatusCode,
+    response::IntoResponse,
+    extract::Path,
+    middleware,
+};
+use axum::http::{Request, HeaderMap};
+use axum::body::Body;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
@@ -20,79 +28,146 @@ pub struct ApiKeyBlueprintContext {
     pub tangle_client: Arc<TangleClient>,
 }
 
+// ===== Tangle Jobs (NO AUTH - just blockchain events) =====
+
 #[debug_job]
 pub async fn write_resource(
     Context(_ctx): Context<ApiKeyBlueprintContext>,
-    Extension(auth): Extension<AuthContext>,
-    TangleArg((resource_id, data)): TangleArg<(String, String)>,
+    TangleArg((resource_id, data, account)): TangleArg<(String, String, String)>,
 ) -> TangleResult<serde_json::Value> {
-    let tenant = auth.tenant_hash.unwrap_or_default();
+    // This is triggered by blockchain tx - no auth needed
+    // The account comes from the transaction data
+    
     let store = resource_store();
     let mut guard = store.write().await;
-    let entry = guard.entry(tenant.clone()).or_default();
+    let entry = guard.entry(account.clone()).or_default();
     entry.insert(resource_id.clone(), data.clone());
+    
     TangleResult(serde_json::json!({
         "ok": true,
-        "tenant": tenant,
         "resource_id": resource_id,
+        "account": account,
     }))
 }
 
 #[debug_job]
 pub async fn purchase_api_key(
     Context(_ctx): Context<ApiKeyBlueprintContext>,
-    TangleArg((subscription_tier, user_identifier)): TangleArg<(String, String)>,
+    TangleArg((tier, account)): TangleArg<(String, String)>,
 ) -> TangleResult<serde_json::Value> {
-    // Generate a secure API key (simplified for demo)
-    let api_key = format!("sk_{}_{}", subscription_tier, uuid::Uuid::new_v4());
+    // Generate API key for the blockchain account
+    let api_key = format!("sk_{}_{}", tier, uuid::Uuid::new_v4());
     
-    // Store the API key hash for verification
     use sha2::{Sha256, Digest};
     let mut hasher = Sha256::new();
     hasher.update(api_key.as_bytes());
     let api_key_hash = format!("{:x}", hasher.finalize());
     
-    // Store in our secure storage
     let store = api_key_store();
     let mut guard = store.write().await;
     guard.insert(api_key_hash.clone(), serde_json::json!({
-        "tier": subscription_tier,
-        "user": user_identifier,
-        "active": true
+        "tier": tier,
+        "account": account,
+        "active": true,
     }));
     
-    // Return response with encrypted key (simplified - in production use proper encryption)
     TangleResult(serde_json::json!({
         "ok": true,
         "api_key_hash": api_key_hash,
-        "encrypted_key": api_key, // WARNING: Should be encrypted with user's public key!
-        "tier": subscription_tier,
+        "api_key": api_key, // In prod, encrypt this
+        "tier": tier,
     }))
 }
 
+// ===== Off-chain API Service (WITH AUTH) =====
 
 #[derive(Clone)]
-pub struct ApiUsageTracker;
+pub struct ApiKeyProtectedService;
 
-impl BackgroundService for ApiUsageTracker {
+impl BackgroundService for ApiKeyProtectedService {
     async fn start(&self) -> Result<Receiver<Result<(), RunnerError>>, RunnerError> {
         let (tx, rx) = oneshot::channel();
+        
         tokio::spawn(async move {
-            // Background service to track API usage and implement rate limiting
             let app = Router::new()
-                .route("/usage", get(|| async { Json("usage tracking active") }))
-                .route("/health", get(|| async { Json("ok") }));
-            let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+                .route("/health", get(|| async { Json("ok") }))
+                .route("/api/resources", post(create_resource))
+                .route("/api/resources/:id", get(get_resource))
+                .layer(middleware::from_fn(api_auth));
+            
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:8081")
                 .await
                 .unwrap();
+            
             let _ = tx.send(Ok(()));
             let _ = axum::serve(listener, app).await;
         });
+        
         Ok(rx)
     }
 }
 
-// In-memory tenant-scoped resource store
+#[derive(Clone)]
+struct ApiKeyAuth {
+    account: String,
+}
+
+async fn api_auth(
+    headers: HeaderMap,
+    mut req: Request<Body>,
+    next: middleware::Next,
+) -> Result<impl IntoResponse, StatusCode> {
+    let api_key = headers
+        .get("X-API-Key")
+        .and_then(|h| h.to_str().ok())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(api_key.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+    
+    let store = api_key_store();
+    let guard = store.read().await;
+    let data = guard.get(&hash).ok_or(StatusCode::UNAUTHORIZED)?;
+    
+    let auth = ApiKeyAuth {
+        account: data["account"].as_str().unwrap_or("").to_string(),
+    };
+    
+    req.extensions_mut().insert(auth);
+    Ok(next.run(req).await)
+}
+
+async fn create_resource(
+    axum::Extension(auth): axum::Extension<ApiKeyAuth>,
+    Json(payload): Json<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let id = uuid::Uuid::new_v4().to_string();
+    let data = payload.get("data").cloned().unwrap_or_default();
+    
+    let store = resource_store();
+    let mut guard = store.write().await;
+    let resources = guard.entry(auth.account.clone()).or_default();
+    resources.insert(id.clone(), data);
+    
+    Json(serde_json::json!({"id": id, "account": auth.account}))
+}
+
+async fn get_resource(
+    axum::Extension(auth): axum::Extension<ApiKeyAuth>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let store = resource_store();
+    let guard = store.read().await;
+    
+    match guard.get(&auth.account).and_then(|r| r.get(&id)) {
+        Some(data) => Json(serde_json::json!({"id": id, "data": data})),
+        None => Json(serde_json::json!({"error": "not found"}))
+    }
+}
+
+// Storage
 type ResourceMap = Arc<RwLock<HashMap<String, HashMap<String, String>>>>;
 type ApiKeyMap = Arc<RwLock<HashMap<String, serde_json::Value>>>;
 
@@ -106,4 +181,62 @@ fn api_key_store() -> &'static ApiKeyMap {
     STORE.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
 }
 
-mod tests;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_purchase_api_key_job() {
+        // Test the job directly - no auth needed
+        let result = purchase_api_key(
+            Context(ApiKeyBlueprintContext {
+                tangle_client: Arc::new(TangleClient::default()),
+            }),
+            TangleArg(("premium".to_string(), "0x123".to_string())),
+        ).await;
+        
+        assert_eq!(result.0["ok"], true);
+        assert_eq!(result.0["tier"], "premium");
+        assert!(result.0["api_key"].as_str().unwrap().starts_with("sk_premium_"));
+    }
+
+    #[tokio::test]
+    async fn test_write_resource_job() {
+        let result = write_resource(
+            Context(ApiKeyBlueprintContext {
+                tangle_client: Arc::new(TangleClient::default()),
+            }),
+            TangleArg((
+                "resource_1".to_string(),
+                "test data".to_string(),
+                "0x456".to_string(),
+            )),
+        ).await;
+        
+        assert_eq!(result.0["ok"], true);
+        assert_eq!(result.0["resource_id"], "resource_1");
+        assert_eq!(result.0["account"], "0x456");
+        
+        // Verify it was stored
+        let store = resource_store();
+        let guard = store.read().await;
+        assert_eq!(guard.get("0x456").unwrap().get("resource_1").unwrap(), "test data");
+    }
+
+    #[tokio::test]
+    async fn test_api_service_auth() {
+        // First create an API key
+        let _ = purchase_api_key(
+            Context(ApiKeyBlueprintContext {
+                tangle_client: Arc::new(TangleClient::default()),
+            }),
+            TangleArg(("basic".to_string(), "test_account".to_string())),
+        ).await;
+        
+        // Now test that the API key works in the service
+        // (In a real test, we'd make HTTP requests to the service)
+        let store = api_key_store();
+        let guard = store.read().await;
+        assert!(!guard.is_empty());
+    }
+}

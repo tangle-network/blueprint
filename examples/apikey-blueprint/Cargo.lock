@@ -993,8 +993,10 @@ dependencies = [
  "color-eyre",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
  "tower 0.5.2",
+ "uuid 1.18.0",
 ]
 
 [[package]]

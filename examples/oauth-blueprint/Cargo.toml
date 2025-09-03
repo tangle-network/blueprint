@@ -5,3 +5,5 @@ members = [
     "oauth-blueprint-bin",
 ]
 
+[workspace.package]
+edition = "2024"
