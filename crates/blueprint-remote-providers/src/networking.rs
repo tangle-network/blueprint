@@ -1,8 +1,7 @@
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::remote::CloudProvider;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};

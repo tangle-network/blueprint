@@ -17,9 +17,17 @@ pub mod remote;
 pub mod cost;
 pub mod networking;
 pub mod provisioning;
+pub mod resources;
+pub mod pricing_integration;
 
 #[cfg(any(feature = "aws", feature = "api-clients"))]
 pub mod infrastructure;
+
+#[cfg(feature = "gcp")]
+pub mod infrastructure_gcp;
+
+#[cfg(feature = "azure")]
+pub mod infrastructure_azure;
 
 #[cfg(feature = "testing")]
 pub mod testing;
@@ -29,8 +37,16 @@ pub use remote::{RemoteClusterManager, RemoteDeploymentConfig, CloudProvider};
 pub use cost::{CostEstimator, CostReport};
 pub use networking::{TunnelManager, NetworkingMode};
 pub use provisioning::{ResourceRequirements, InstanceTypeMapper, AutoScalingConfig};
+pub use resources::{UnifiedResourceSpec, ComputeResources, StorageResources, NetworkResources, AcceleratorResources};
+pub use pricing_integration::{PricingCalculator, DetailedCostReport, ResourceUsageMetrics};
 
 #[cfg(any(feature = "aws", feature = "api-clients"))]
 pub use infrastructure::{InfrastructureProvisioner, ProvisionedInfrastructure, ProvisioningConfig};
+
+#[cfg(feature = "gcp")]
+pub use infrastructure_gcp::{GcpInfrastructureProvisioner, GceInstance, GkeCluster};
+
+#[cfg(feature = "azure")]
+pub use infrastructure_azure::{AzureInfrastructureProvisioner, AzureVm, AksCluster};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

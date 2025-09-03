@@ -1,18 +1,18 @@
-use crate::error::{Error, Result};
+#[cfg(feature = "kubernetes")]
 use blueprint_manager::rt::container::ContainerRuntime;
+#[cfg(feature = "kubernetes")]
 use k8s_openapi::api::core::v1::Service;
+#[cfg(feature = "kubernetes")]
 use kube::{Client, Config};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::fmt;
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::{debug, info};
 
 /// Manages remote Kubernetes clusters for Blueprint deployments
 /// 
 /// This extends the existing ContainerRuntime to work with multiple
 /// remote clusters while reusing all existing deployment logic.
+#[cfg(feature = "kubernetes")]
 pub struct RemoteClusterManager {
     /// Map of cluster name to configuration
     clusters: Arc<RwLock<HashMap<String, RemoteCluster>>>,
@@ -20,6 +20,12 @@ pub struct RemoteClusterManager {
     active_cluster: Arc<RwLock<Option<String>>>,
 }
 
+#[cfg(not(feature = "kubernetes"))]
+pub struct RemoteClusterManager {
+    _private: (),
+}
+
+#[cfg(feature = "kubernetes")]
 impl RemoteClusterManager {
     pub fn new() -> Self {
         Self {
@@ -129,6 +135,16 @@ impl Default for RemoteClusterManager {
     }
 }
 
+#[cfg(not(feature = "kubernetes"))]
+impl RemoteClusterManager {
+    pub fn new() -> Self {
+        Self {
+            _private: (),
+        }
+    }
+}
+
+#[cfg(feature = "kubernetes")]
 struct RemoteCluster {
     name: String,
     config: RemoteDeploymentConfig,
@@ -163,7 +179,7 @@ impl Default for RemoteDeploymentConfig {
 }
 
 /// Cloud provider types for cost tracking and networking configuration
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum CloudProvider {
     /// AWS EKS
     AWS,
@@ -208,7 +224,25 @@ impl CloudProvider {
     }
 }
 
+impl fmt::Display for CloudProvider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CloudProvider::AWS => write!(f, "AWS"),
+            CloudProvider::GCP => write!(f, "GCP"),
+            CloudProvider::Azure => write!(f, "Azure"),
+            CloudProvider::DigitalOcean => write!(f, "DigitalOcean"),
+            CloudProvider::Vultr => write!(f, "Vultr"),
+            CloudProvider::Linode => write!(f, "Linode"),
+            CloudProvider::Generic => write!(f, "Generic"),
+            CloudProvider::DockerLocal => write!(f, "Docker (Local)"),
+            CloudProvider::DockerRemote(host) => write!(f, "Docker (Remote: {})", host),
+            CloudProvider::BareMetal(hosts) => write!(f, "Bare Metal ({} hosts)", hosts.len()),
+        }
+    }
+}
+
 /// Extension trait for ContainerRuntime to add remote capabilities
+#[cfg(feature = "kubernetes")]
 pub trait RemoteContainerRuntimeExt {
     /// Create a ContainerRuntime for a specific remote cluster
     fn with_client(
@@ -218,6 +252,7 @@ pub trait RemoteContainerRuntimeExt {
     ) -> Result<ContainerRuntime>;
 }
 
+#[cfg(feature = "kubernetes")]
 impl RemoteContainerRuntimeExt for ContainerRuntime {
     fn with_client(
         client: Client,

@@ -20,6 +20,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
+toml = "0.8"
 tracing.workspace = true
 
 # Blueprint dependencies
@@ -31,7 +32,7 @@ blueprint-keystore = { path = "../keystore" }
 # Provider-specific dependencies
 bollard = { version = "0.18", optional = true }
 kube = { version = "0.90", optional = true }
-k8s-openapi = { version = "0.23", features = ["v1_31"], optional = true }
+k8s-openapi = { version = "0.21", features = ["v1_29"], optional = true }
 
 # AWS SDK
 aws-config = { version = "1.5", optional = true }

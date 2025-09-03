@@ -1,7 +1,6 @@
-use crate::error::{Error, Result};
 use crate::remote::CloudProvider;
+use crate::resources::UnifiedResourceSpec;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Universal resource requirements for any Blueprint deployment
 /// 
@@ -52,24 +51,34 @@ pub enum NetworkTier {
 pub struct InstanceTypeMapper;
 
 impl InstanceTypeMapper {
-    /// Map requirements to specific instance type
+    /// Map unified resource spec to specific instance type
     pub fn map_to_instance_type(
-        requirements: &ResourceRequirements,
+        spec: &UnifiedResourceSpec,
         provider: &CloudProvider,
     ) -> InstanceSelection {
         match provider {
-            CloudProvider::AWS => Self::map_aws_instance(requirements),
-            CloudProvider::GCP => Self::map_gcp_instance(requirements),
-            CloudProvider::Azure => Self::map_azure_instance(requirements),
-            CloudProvider::DigitalOcean => Self::map_do_instance(requirements),
-            CloudProvider::Vultr => Self::map_vultr_instance(requirements),
-            _ => Self::map_generic_instance(requirements),
+            CloudProvider::AWS => Self::map_aws_instance(spec),
+            CloudProvider::GCP => Self::map_gcp_instance(spec),
+            CloudProvider::Azure => Self::map_azure_instance(spec),
+            CloudProvider::DigitalOcean => Self::map_do_instance(spec),
+            CloudProvider::Vultr => Self::map_vultr_instance(spec),
+            _ => Self::map_generic_instance(spec),
         }
     }
     
-    fn map_aws_instance(req: &ResourceRequirements) -> InstanceSelection {
+    /// Map requirements to specific instance type (legacy compatibility)
+    pub fn map_from_requirements(
+        requirements: &ResourceRequirements,
+        provider: &CloudProvider,
+    ) -> InstanceSelection {
+        let spec = crate::resources::from_resource_requirements(requirements);
+        Self::map_to_instance_type(&spec, provider)
+    }
+    
+    fn map_aws_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
         // AWS instance selection logic
-        let instance_type = match (req.cpu_cores, req.memory_gb, req.gpu_count) {
+        let gpu_count = spec.accelerators.as_ref().map(|a| a.count);
+        let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb, gpu_count) {
             // GPU instances
             (_, _, Some(gpu_count)) if gpu_count >= 8 => "p4d.24xlarge",
             (_, _, Some(gpu_count)) if gpu_count >= 4 => "p3.8xlarge",
@@ -91,13 +100,14 @@ impl InstanceTypeMapper {
         
         InstanceSelection {
             instance_type: instance_type.to_string(),
-            spot_capable: req.allow_spot && !instance_type.starts_with('p'), // No spot for GPU
+            spot_capable: spec.qos.allow_spot && !instance_type.starts_with('p'), // No spot for GPU
             estimated_hourly_cost: Self::estimate_aws_cost(instance_type),
         }
     }
     
-    fn map_gcp_instance(req: &ResourceRequirements) -> InstanceSelection {
-        let instance_type = match (req.cpu_cores, req.memory_gb, req.gpu_count) {
+    fn map_gcp_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
+        let gpu_count = spec.accelerators.as_ref().map(|a| a.count);
+        let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb, gpu_count) {
             // GPU instances
             (_, _, Some(gpu_count)) if gpu_count >= 1 => "n1-standard-4-nvidia-t4",
             
@@ -114,13 +124,14 @@ impl InstanceTypeMapper {
         
         InstanceSelection {
             instance_type: instance_type.to_string(),
-            spot_capable: req.allow_spot,
+            spot_capable: spec.qos.allow_spot,
             estimated_hourly_cost: Self::estimate_gcp_cost(instance_type),
         }
     }
     
-    fn map_azure_instance(req: &ResourceRequirements) -> InstanceSelection {
-        let instance_type = match (req.cpu_cores, req.memory_gb, req.gpu_count) {
+    fn map_azure_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
+        let gpu_count = spec.accelerators.as_ref().map(|a| a.count);
+        let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb, gpu_count) {
             // GPU instances
             (_, _, Some(_)) => "Standard_NC6s_v3",
             
@@ -134,14 +145,14 @@ impl InstanceTypeMapper {
         
         InstanceSelection {
             instance_type: instance_type.to_string(),
-            spot_capable: req.allow_spot,
+            spot_capable: spec.qos.allow_spot,
             estimated_hourly_cost: Self::estimate_azure_cost(instance_type),
         }
     }
     
-    fn map_do_instance(req: &ResourceRequirements) -> InstanceSelection {
+    fn map_do_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
         // DigitalOcean droplet types
-        let instance_type = match (req.cpu_cores, req.memory_gb) {
+        let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb) {
             (cpu, mem) if cpu <= 1.0 && mem <= 1.0 => "s-1vcpu-1gb",
             (cpu, mem) if cpu <= 1.0 && mem <= 2.0 => "s-1vcpu-2gb",
             (cpu, mem) if cpu <= 2.0 && mem <= 4.0 => "s-2vcpu-4gb",
@@ -157,9 +168,9 @@ impl InstanceTypeMapper {
         }
     }
     
-    fn map_vultr_instance(req: &ResourceRequirements) -> InstanceSelection {
+    fn map_vultr_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
         // Vultr instance types
-        let instance_type = match (req.cpu_cores, req.memory_gb) {
+        let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb) {
             (cpu, mem) if cpu <= 1.0 && mem <= 1.0 => "vc2-1c-1gb",
             (cpu, mem) if cpu <= 2.0 && mem <= 4.0 => "vc2-2c-4gb",
             (cpu, mem) if cpu <= 4.0 && mem <= 8.0 => "vc2-4c-8gb",
@@ -174,11 +185,11 @@ impl InstanceTypeMapper {
         }
     }
     
-    fn map_generic_instance(req: &ResourceRequirements) -> InstanceSelection {
+    fn map_generic_instance(spec: &UnifiedResourceSpec) -> InstanceSelection {
         InstanceSelection {
-            instance_type: format!("{}cpu-{}gb", req.cpu_cores, req.memory_gb),
+            instance_type: format!("{}cpu-{}gb", spec.compute.cpu_cores, spec.storage.memory_gb),
             spot_capable: false,
-            estimated_hourly_cost: req.cpu_cores * 0.05 + req.memory_gb * 0.01,
+            estimated_hourly_cost: spec.compute.cpu_cores * 0.05 + spec.storage.memory_gb * 0.01,
         }
     }
     
@@ -281,58 +292,96 @@ pub trait ResourceLimitsExt {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resources::{UnifiedResourceSpec, ComputeResources, StorageResources};
     
     #[test]
     fn test_aws_instance_mapping() {
-        let req = ResourceRequirements {
-            cpu_cores: 4.0,
-            memory_gb: 16.0,
+        let spec = UnifiedResourceSpec {
+            compute: ComputeResources {
+                cpu_cores: 4.0,
+                ..Default::default()
+            },
+            storage: StorageResources {
+                memory_gb: 16.0,
+                ..Default::default()
+            },
             ..Default::default()
         };
         
-        let selection = InstanceTypeMapper::map_to_instance_type(&req, &CloudProvider::AWS);
+        let selection = InstanceTypeMapper::map_to_instance_type(&spec, &CloudProvider::AWS);
         assert_eq!(selection.instance_type, "m6i.xlarge");
         assert!(selection.estimated_hourly_cost > 0.0);
     }
     
     #[test]
     fn test_gpu_instance_selection() {
-        let req = ResourceRequirements {
-            cpu_cores: 4.0,
-            memory_gb: 16.0,
-            gpu_count: Some(1),
-            gpu_type: Some("nvidia-t4".to_string()),
+        use crate::resources::{AcceleratorResources, AcceleratorType, GpuSpec};
+        
+        let spec = UnifiedResourceSpec {
+            compute: ComputeResources {
+                cpu_cores: 4.0,
+                ..Default::default()
+            },
+            storage: StorageResources {
+                memory_gb: 16.0,
+                ..Default::default()
+            },
+            accelerators: Some(AcceleratorResources {
+                count: 1,
+                accelerator_type: AcceleratorType::GPU(GpuSpec {
+                    vendor: "nvidia".to_string(),
+                    model: "t4".to_string(),
+                    min_vram_gb: 16.0,
+                }),
+            }),
             ..Default::default()
         };
         
-        let selection = InstanceTypeMapper::map_to_instance_type(&req, &CloudProvider::AWS);
+        let selection = InstanceTypeMapper::map_to_instance_type(&spec, &CloudProvider::AWS);
         assert!(selection.instance_type.contains("g4dn"));
         assert!(!selection.spot_capable); // GPU instances shouldn't use spot by default
     }
     
     #[test]
     fn test_digital_ocean_mapping() {
-        let req = ResourceRequirements {
-            cpu_cores: 2.0,
-            memory_gb: 4.0,
+        let spec = UnifiedResourceSpec {
+            compute: ComputeResources {
+                cpu_cores: 2.0,
+                ..Default::default()
+            },
+            storage: StorageResources {
+                memory_gb: 4.0,
+                ..Default::default()
+            },
             ..Default::default()
         };
         
-        let selection = InstanceTypeMapper::map_to_instance_type(&req, &CloudProvider::DigitalOcean);
+        let selection = InstanceTypeMapper::map_to_instance_type(&spec, &CloudProvider::DigitalOcean);
         assert_eq!(selection.instance_type, "s-2vcpu-4gb");
         assert!(!selection.spot_capable); // DO doesn't have spot
     }
     
     #[test]
     fn test_cost_aware_selection() {
-        let req = ResourceRequirements {
-            cpu_cores: 0.5,
-            memory_gb: 1.0,
-            allow_spot: true,
+        use crate::resources::QosParameters;
+        
+        let spec = UnifiedResourceSpec {
+            compute: ComputeResources {
+                cpu_cores: 0.5,
+                ..Default::default()
+            },
+            storage: StorageResources {
+                memory_gb: 1.0,
+                ..Default::default()
+            },
+            qos: QosParameters {
+                allow_spot: true,
+                ..Default::default()
+            },
             ..Default::default()
         };
         
-        let selection = InstanceTypeMapper::map_to_instance_type(&req, &CloudProvider::AWS);
+        let selection = InstanceTypeMapper::map_to_instance_type(&spec, &CloudProvider::AWS);
         assert_eq!(selection.instance_type, "t3.micro");
         assert!(selection.spot_capable);
         assert!(selection.estimated_hourly_cost < 0.02); // Should be cheap
