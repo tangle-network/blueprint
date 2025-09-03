@@ -28,6 +28,7 @@ blueprint-manager = { path = "../manager", optional = true }
 blueprint-manager-bridge = { path = "../manager/bridge", optional = true }
 blueprint-auth = { path = "../auth" }
 blueprint-keystore = { path = "../keystore" }
+blueprint-pricing-engine = { path = "../pricing-engine", optional = true }
 
 # Provider-specific dependencies
 bollard = { version = "0.18", optional = true }
@@ -62,6 +63,7 @@ aws-eks = ["aws", "dep:aws-sdk-eks"]
 gcp = ["api-clients"]
 azure = ["api-clients"]
 api-clients = ["dep:reqwest"]
+pricing = ["dep:blueprint-pricing-engine"]
 testing = []
 
 [package.metadata.docs.rs]

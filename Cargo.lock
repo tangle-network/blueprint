@@ -3743,6 +3743,7 @@ dependencies = [
  "blueprint-keystore",
  "blueprint-manager",
  "blueprint-manager-bridge",
+ "blueprint-pricing-engine",
  "bollard",
  "chrono",
  "futures",

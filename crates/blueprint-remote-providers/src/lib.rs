@@ -19,6 +19,8 @@ pub mod networking;
 pub mod provisioning;
 pub mod resources;
 pub mod pricing_integration;
+#[cfg(feature = "pricing")]
+pub mod pricing_adapter;
 
 #[cfg(any(feature = "aws", feature = "api-clients"))]
 pub mod infrastructure;
@@ -39,6 +41,8 @@ pub use networking::{TunnelManager, NetworkingMode};
 pub use provisioning::{ResourceRequirements, InstanceTypeMapper, AutoScalingConfig};
 pub use resources::{ResourceSpec, ComputeResources, StorageResources, NetworkResources, AcceleratorResources};
 pub use pricing_integration::{PricingCalculator, DetailedCostReport, ResourceUsageMetrics};
+#[cfg(feature = "pricing")]
+pub use pricing_adapter::{PricingAdapter, CloudCostReport};
 
 #[cfg(any(feature = "aws", feature = "api-clients"))]
 pub use infrastructure::{InfrastructureProvisioner, ProvisionedInfrastructure, ProvisioningConfig};
