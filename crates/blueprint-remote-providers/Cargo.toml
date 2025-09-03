@@ -1,0 +1,58 @@
+[package]
+name = "blueprint-remote-providers"
+version = "0.1.0-alpha.1"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+documentation = "https://docs.rs/blueprint-remote-providers"
+
+[dependencies]
+# Core dependencies
+anyhow.workspace = true
+async-trait = "0.1"
+auto_impl = "1.2"
+chrono = { workspace = true, features = ["serde"] }
+futures.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+
+# Blueprint dependencies
+blueprint-manager = { path = "../manager", optional = true }
+blueprint-manager-bridge = { path = "../manager/bridge", optional = true }
+blueprint-auth = { path = "../auth" }
+blueprint-keystore = { path = "../keystore" }
+
+# Provider-specific dependencies
+bollard = { version = "0.18", optional = true }
+kube = { version = "0.90", optional = true }
+k8s-openapi = { version = "0.23", features = ["v1_31"], optional = true }
+openssh = { version = "0.11", optional = true }
+
+# Testing dependencies
+mockall = { version = "0.13", optional = true }
+
+[dev-dependencies]
+blueprint-core-testing-utils = { path = "../testing-utils/core" }
+mockall = "0.13"
+tempfile = "3.8"
+tokio-test = "0.4"
+wiremock = "0.6"
+
+[features]
+default = ["kubernetes", "docker"]
+kubernetes = ["dep:kube", "dep:k8s-openapi", "dep:blueprint-manager"]
+docker = ["dep:bollard"]
+ssh = ["dep:openssh"]
+tunnel = []
+testing = ["dep:mockall"]
+all = ["kubernetes", "docker", "ssh", "tunnel", "testing"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

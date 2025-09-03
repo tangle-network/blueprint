@@ -68,6 +68,7 @@ blueprint-manager = { version = "0.3.0-alpha.20", path = "./crates/manager", def
 blueprint-manager-bridge = { version = "0.1.0-alpha.8", path = "./crates/manager/bridge", default-features = false }
 blueprint-build-utils = { version = "0.1.0-alpha.3", path = "./crates/build-utils", default-features = false }
 blueprint-auth = { version = "0.1.0-alpha.9", path = "./crates/auth", default-features = false }
+blueprint-remote-providers = { version = "0.1.0-alpha.1", path = "./crates/blueprint-remote-providers", default-features = false }
 
 # Chain Setup
 blueprint-chain-setup = { version = "0.1.0-alpha.19", path = "./crates/chain-setup", default-features = false }
