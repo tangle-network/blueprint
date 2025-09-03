@@ -59,6 +59,8 @@ kubernetes = ["dep:kube", "dep:k8s-openapi", "dep:blueprint-manager"]
 docker = ["dep:bollard"]
 aws = ["dep:aws-config", "dep:aws-sdk-ec2"]
 aws-eks = ["aws", "dep:aws-sdk-eks"]
+gcp = ["api-clients"]
+azure = ["api-clients"]
 api-clients = ["dep:reqwest"]
 testing = []
 
