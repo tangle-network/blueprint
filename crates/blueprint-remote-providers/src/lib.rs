@@ -16,6 +16,10 @@ pub mod error;
 pub mod remote;
 pub mod cost;
 pub mod networking;
+pub mod provisioning;
+
+#[cfg(any(feature = "aws", feature = "api-clients"))]
+pub mod infrastructure;
 
 #[cfg(feature = "testing")]
 pub mod testing;
@@ -24,5 +28,9 @@ pub use error::{Error, Result};
 pub use remote::{RemoteClusterManager, RemoteDeploymentConfig, CloudProvider};
 pub use cost::{CostEstimator, CostReport};
 pub use networking::{TunnelManager, NetworkingMode};
+pub use provisioning::{ResourceRequirements, InstanceTypeMapper, AutoScalingConfig};
+
+#[cfg(any(feature = "aws", feature = "api-clients"))]
+pub use infrastructure::{InfrastructureProvisioner, ProvisionedInfrastructure, ProvisioningConfig};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

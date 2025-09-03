@@ -32,7 +32,15 @@ blueprint-keystore = { path = "../keystore" }
 bollard = { version = "0.18", optional = true }
 kube = { version = "0.90", optional = true }
 k8s-openapi = { version = "0.23", features = ["v1_31"], optional = true }
-openssh = { version = "0.11", optional = true }
+
+# AWS SDK
+aws-config = { version = "1.5", optional = true }
+aws-sdk-ec2 = { version = "1.47", optional = true }
+aws-sdk-eks = { version = "1.47", optional = true }
+aws-sdk-autoscaling = { version = "1.47", optional = true }
+
+# HTTP client for other cloud APIs
+reqwest = { version = "0.12", features = ["json"], optional = true }
 
 # Testing dependencies
 mockall = { version = "0.13", optional = true }
@@ -48,6 +56,9 @@ wiremock = "0.6"
 default = ["kubernetes"]
 kubernetes = ["dep:kube", "dep:k8s-openapi", "dep:blueprint-manager"]
 docker = ["dep:bollard"]
+aws = ["dep:aws-config", "dep:aws-sdk-ec2"]
+aws-eks = ["aws", "dep:aws-sdk-eks"]
+api-clients = ["dep:reqwest"]
 testing = []
 
 [package.metadata.docs.rs]
