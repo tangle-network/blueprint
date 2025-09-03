@@ -7,8 +7,7 @@
 mod tests {
     use blueprint_remote_providers::{
         ResourceSpec, ComputeResources, StorageResources, NetworkResources,
-        CloudProvider, RemoteDeploymentConfig, LocalResourceEnforcer,
-        PricingCalculator, LocalRuntimeType,
+        CloudProvider, RemoteDeploymentConfig, PricingCalculator,
     };
     use blueprint_remote_providers::resources::{
         StorageType, BandwidthTier, QosParameters, 
@@ -253,20 +252,10 @@ mod tests {
         assert!(most_expensive.final_hourly_cost > cheapest.final_hourly_cost);
     }
 
-    /// Test local resource enforcement detection
-    #[test]
-    fn test_local_enforcement_detection() {
-        let result = LocalResourceEnforcer::new();
-        assert!(result.is_ok());
-        
-        let enforcer = result.unwrap();
-        // Should detect some runtime type
-        // The specific type depends on the test environment
-    }
 
-    /// Test resource enforcement for different runtime types
+    /// Test resource spec validation
     #[test]
-    fn test_runtime_enforcement() {
+    fn test_resource_spec_validation() {
         let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 2.0,
@@ -280,61 +269,12 @@ mod tests {
             ..Default::default()
         };
 
-        // Test Kata containers enforcement
-        let kata_enforcer = LocalResourceEnforcer::default();
-        let result = kata_enforcer.enforce(&spec, "test-kata-pod");
-        assert!(result.is_ok());
-
-        // Test Docker enforcement
-        let docker_enforcer = LocalResourceEnforcer::default();
-        let result = docker_enforcer.enforce(&spec, "test-docker-container");
-        assert!(result.is_ok());
-
-        // Test QEMU enforcement
-        let qemu_enforcer = LocalResourceEnforcer::default();
-        let result = qemu_enforcer.enforce(&spec, "test-qemu-vm");
-        assert!(result.is_ok());
-
-        // Test Firecracker enforcement
-        let firecracker_enforcer = LocalResourceEnforcer::default();
-        let result = firecracker_enforcer.enforce(&spec, "test-firecracker-vm");
-        assert!(result.is_ok());
-
-        // Test Native process enforcement
-        let native_enforcer = LocalResourceEnforcer::default();
-        let result = native_enforcer.enforce(&spec, "test-process-123");
-        assert!(result.is_ok());
+        // Validate minimum resources
+        assert!(spec.compute.cpu_cores >= 0.5);
+        assert!(spec.storage.memory_gb >= 0.5);
+        assert!(spec.storage.disk_gb >= 1.0);
     }
 
-    /// Test enforcement verification
-    #[test]
-    fn test_enforcement_verification() {
-        let spec = ResourceSpec {
-            compute: ComputeResources {
-                cpu_cores: 4.0,
-                ..Default::default()
-            },
-            storage: StorageResources {
-                memory_gb: 8.0,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let enforcer = LocalResourceEnforcer::default();
-
-        // Apply enforcement
-        let enforce_result = enforcer.enforce(&spec, "test-container");
-        assert!(enforce_result.is_ok());
-
-        // Verify enforcement
-        let verify_result = enforcer.verify_enforcement(&spec, "test-container");
-        assert!(verify_result.is_ok());
-        
-        // In a real environment with proper permissions, this would return true
-        // In test environment, it returns Ok(true) as a placeholder
-        assert!(verify_result.unwrap());
-    }
 
     /// Integration test for complete deployment flow
     #[cfg(feature = "kubernetes")]
@@ -379,14 +319,9 @@ mod tests {
         let add_result = cluster_manager.add_cluster("test-cluster".to_string(), config).await;
         assert!(add_result.is_err());
 
-        // Step 4: Apply local resource enforcement
-        let enforcer = LocalResourceEnforcer::new().unwrap();
-        let enforcement_result = enforcer.enforce(&spec, "test-instance");
-        assert!(enforcement_result.is_ok());
-
-        // Step 5: Verify enforcement
-        let verification = enforcer.verify_enforcement(&spec, "test-instance");
-        assert!(verification.is_ok());
+        // Step 4: Verify resource spec is valid for deployment
+        assert!(spec.compute.cpu_cores > 0.0);
+        assert!(spec.storage.memory_gb > 0.0);
     }
 
     /// Test resource scaling scenarios

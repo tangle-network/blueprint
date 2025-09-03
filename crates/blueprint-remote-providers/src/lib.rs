@@ -19,7 +19,6 @@ pub mod networking;
 pub mod provisioning;
 pub mod resources;
 pub mod pricing_integration;
-pub mod local_enforcement;
 
 #[cfg(any(feature = "aws", feature = "api-clients"))]
 pub mod infrastructure;
@@ -40,7 +39,6 @@ pub use networking::{TunnelManager, NetworkingMode};
 pub use provisioning::{ResourceRequirements, InstanceTypeMapper, AutoScalingConfig};
 pub use resources::{ResourceSpec, ComputeResources, StorageResources, NetworkResources, AcceleratorResources};
 pub use pricing_integration::{PricingCalculator, DetailedCostReport, ResourceUsageMetrics};
-pub use local_enforcement::{LocalResourceEnforcer, LocalRuntimeType};
 
 #[cfg(any(feature = "aws", feature = "api-clients"))]
 pub use infrastructure::{InfrastructureProvisioner, ProvisionedInfrastructure, ProvisioningConfig};
