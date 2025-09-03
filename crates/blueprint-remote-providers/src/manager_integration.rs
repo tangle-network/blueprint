@@ -1,6 +1,3 @@
-// Integration module for Blueprint Manager
-// This shows how remote providers integrate with the existing manager infrastructure
-
 #[cfg(feature = "blueprint-manager")]
 pub mod integration {
     use crate::{
@@ -42,10 +39,22 @@ pub mod integration {
             Self { provider, instance }
         }
         
-        pub async fn to_service(&self) -> Result<Service> {
-            // Convert remote instance to manager service
-            // This would integrate with the existing Service struct
-            todo!("Implement service conversion")
+        pub async fn to_service_id(&self) -> ServiceId {
+            ServiceId::from(self.instance.id.as_str())
+        }
+        
+        pub async fn get_bridge_endpoint(&self) -> Result<String> {
+            if let Some(endpoint) = &self.instance.endpoint {
+                if endpoint.tunnel_required {
+                    Ok(format!("tunnel://{}:{}", endpoint.host, endpoint.port))
+                } else {
+                    Ok(format!("{}:{}", endpoint.host, endpoint.port))
+                }
+            } else {
+                Err(crate::Error::ConfigurationError(
+                    "No endpoint available for remote instance".to_string()
+                ))
+            }
         }
         
         pub fn instance_id(&self) -> &InstanceId {

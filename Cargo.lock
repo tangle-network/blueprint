@@ -3718,6 +3718,7 @@ dependencies = [
  "blueprint-networking-round-based-extension",
  "blueprint-producers-extra",
  "blueprint-qos",
+ "blueprint-remote-providers",
  "blueprint-router",
  "blueprint-runner",
  "blueprint-std",

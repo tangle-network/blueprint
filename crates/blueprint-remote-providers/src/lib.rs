@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+pub mod bridge;
 pub mod error;
 pub mod provider;
 pub mod types;
@@ -22,11 +23,14 @@ pub mod testing;
 #[cfg(feature = "blueprint-manager")]
 pub mod manager_integration;
 
+pub use bridge::{RemoteBridgeManager, BridgeConnection, ConnectionStatus, ConnectionType};
 pub use error::{Error, Result};
-pub use provider::{RemoteInfrastructureProvider, ProviderRegistry};
+pub use provider::{RemoteInfrastructureProvider, ProviderRegistry, ProviderType};
 pub use types::{
-    Cost, DeploymentSpec, InstanceId, InstanceStatus, RemoteInstance, 
-    Resources, ResourceLimits, TunnelConfig, TunnelHandle,
+    ContainerImage, Cost, DeploymentSpec, InstanceId, InstanceStatus, 
+    PortMapping, Protocol, PullPolicy, RemoteInstance, Resources, 
+    ResourceLimits, ServiceEndpoint, TunnelConfig, TunnelHandle, TunnelHub,
+    VolumeMount,
 };
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
