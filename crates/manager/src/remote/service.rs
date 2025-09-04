@@ -217,10 +217,16 @@ impl RemoteDeploymentService {
 
         {
             let mut deployments = self.deployments.write().await;
-            deployments.insert(instance_id.clone(), deployment_info);
+            deployments.insert(instance_id.clone(), deployment_info.clone());
         }
 
         info!("✓ Deployment registered with TTL tracking");
+        
+        // TODO: Integrate with QoS system for remote instance monitoring
+        // This requires extending the QoS service to support remote monitoring
+        // which will be done in Phase 3 when we have actual cloud SDK integration
+        info!("⚠️  Phase 2: QoS monitoring integration pending real cloud deployment");
+        
         info!("⚠️  Phase 2: Creating local service (remote bridge not yet implemented)");
 
         // Create local service for now (Phase 2 limitation)
@@ -311,6 +317,7 @@ impl RemoteDeploymentService {
                 }
             }
         }
+
 
         for instance_id in expired_instances {
             info!("Cleaning up expired deployment: {}", instance_id);
