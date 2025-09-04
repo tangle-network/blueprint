@@ -4,7 +4,7 @@
 
 use crate::deployment_tracker::{DeploymentRecord, DeploymentTracker};
 use crate::error::{Error, Result};
-use crate::infrastructure_unified::{InstanceStatus, UnifiedInfrastructureProvisioner};
+use crate::cloud_provisioner::{CloudProvisioner, InstanceStatus};
 use crate::remote::CloudProvider;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
@@ -34,7 +34,7 @@ pub struct HealthCheckResult {
 
 /// Health monitoring service
 pub struct HealthMonitor {
-    provisioner: Arc<UnifiedInfrastructureProvisioner>,
+    provisioner: Arc<CloudProvisioner>,
     tracker: Arc<DeploymentTracker>,
     check_interval: Duration,
     max_consecutive_failures: u32,
@@ -43,7 +43,7 @@ pub struct HealthMonitor {
 
 impl HealthMonitor {
     pub fn new(
-        provisioner: Arc<UnifiedInfrastructureProvisioner>,
+        provisioner: Arc<CloudProvisioner>,
         tracker: Arc<DeploymentTracker>,
     ) -> Self {
         Self {
@@ -324,7 +324,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_monitor_creation() {
         let temp_dir = TempDir::new().unwrap();
-        let provisioner = Arc::new(UnifiedInfrastructureProvisioner::new().await.unwrap());
+        let provisioner = Arc::new(CloudProvisioner::new().await.unwrap());
         let tracker = Arc::new(DeploymentTracker::new(temp_dir.path()).await.unwrap());
 
         let monitor =

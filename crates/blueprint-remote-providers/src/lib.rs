@@ -20,7 +20,7 @@ pub mod networking;
 #[cfg(feature = "pricing")]
 pub mod pricing_adapter;
 pub mod pricing_integration;
-pub mod pricing_unified;
+pub mod pricing_service;
 pub mod provisioning;
 pub mod remote;
 pub mod resources;
@@ -28,7 +28,7 @@ pub mod resources_simple;
 
 pub mod deployment_tracker;
 pub mod infrastructure;
-pub mod infrastructure_unified;
+pub mod cloud_provisioner;
 pub mod manager_integration;
 pub mod ssh_deployment;
 
@@ -39,11 +39,11 @@ pub mod testing;
 pub use deployment_tracker::DeploymentTracker;
 pub use error::{Error, Result};
 pub use health_monitor::{HealthCheckResult, HealthMonitor, HealthStatus};
-pub use infrastructure_unified::{
-    InstanceStatus, ProvisionedInstance, UnifiedInfrastructureProvisioner,
+pub use cloud_provisioner::{
+    CloudProvisioner, InstanceStatus, ProvisionedInstance,
 };
 pub use manager_integration::RemoteDeploymentExtensions;
-pub use pricing_unified::{CostReport, PricingService};
+pub use pricing_service::{CostReport, PricingService};
 pub use remote::{CloudProvider, RemoteClusterManager};
 pub use resources_simple::ResourceSpec;
 

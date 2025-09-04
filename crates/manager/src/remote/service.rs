@@ -9,6 +9,13 @@ use crate::rt::ResourceLimits;
 use crate::rt::service::Service;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 
+#[cfg(feature = "remote-deployer")]
+use blueprint_remote_providers::{
+    deployment_tracker::DeploymentTracker,
+    infrastructure_unified::UnifiedProvisioner,
+    ssh_deployment::SshDeploymentService,
+};
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -177,7 +184,7 @@ impl RemoteDeploymentService {
         blueprint_id: Option<u64>,
     ) -> Result<Service> {
         info!(
-            "🚀 Phase 2: Simulating deployment to cloud provider: {:?}",
+            "🚀 Deploying to cloud provider: {:?}",
             provider
         );
         info!("   Service: {}", service_name);
@@ -186,61 +193,83 @@ impl RemoteDeploymentService {
             resource_spec.cpu, resource_spec.memory_gb
         );
 
-        // 1. Simulate instance provisioning
-        let instance_id = format!(
-            "sim-{}-{}",
-            provider.to_string().to_lowercase().replace(' ', "-"),
-            uuid::Uuid::new_v4().to_string()[0..8].to_string()
-        );
-        let mock_ip = format!(
-            "10.{}.{}.{}",
-            rand::random::<u8>(),
-            rand::random::<u8>(),
-            rand::random::<u8>()
-        );
-
-        info!("✓ Simulated instance: {} at {}", instance_id, mock_ip);
-
-        // 2. Register simulated deployment
-        let deployment_info = RemoteDeploymentInfo {
-            instance_id: instance_id.clone(),
-            provider,
-            service_name: service_name.to_string(),
-            blueprint_id,
-            deployed_at: chrono::Utc::now(),
-            ttl_expires_at: self
-                .policy
-                .auto_terminate_hours
-                .map(|hours| chrono::Utc::now() + chrono::Duration::hours(hours as i64)),
-            public_ip: Some(mock_ip),
-        };
-
+        #[cfg(feature = "remote-deployer")]
         {
-            let mut deployments = self.deployments.write().await;
-            deployments.insert(instance_id.clone(), deployment_info.clone());
+            // Use real cloud provider SDK
+            use blueprint_remote_providers::cloud_provisioner::CloudProvisioner;
+            use blueprint_remote_providers::ssh_deployment::SshDeploymentService;
+            
+            let provisioner = CloudProvisioner::new().await
+                .map_err(|e| Error::Other(format!("Failed to create provisioner: {}", e)))?;
+            
+            // Convert resource spec to provider requirements
+            let requirements = convert_resource_spec(&resource_spec);
+            
+            // Provision the actual instance
+            let instance = provisioner.provision(
+                provider,
+                &requirements,
+                "us-west-2", // TODO: Get region from config
+            ).await
+                .map_err(|e| Error::Other(format!("Failed to provision instance: {}", e)))?;
+            
+            info!("✅ Instance provisioned: {} at {}", instance.instance_id, instance.public_ip);
+            
+            // Deploy the binary via SSH
+            let ssh_service = SshDeploymentService::new();
+            ssh_service.deploy(
+                &instance.public_ip,
+                binary_path,
+                service_name,
+                env_vars.clone(),
+                arguments.clone(),
+            ).await
+                .map_err(|e| Error::Other(format!("Failed to deploy via SSH: {}", e)))?;
+            
+            info!("✅ Blueprint binary deployed to remote instance");
+            
+            // Register deployment
+            let deployment_info = RemoteDeploymentInfo {
+                instance_id: instance.instance_id.clone(),
+                provider,
+                service_name: service_name.to_string(),
+                blueprint_id,
+                deployed_at: chrono::Utc::now(),
+                ttl_expires_at: self
+                    .policy
+                    .auto_terminate_hours
+                    .map(|hours| chrono::Utc::now() + chrono::Duration::hours(hours as i64)),
+                public_ip: Some(instance.public_ip.clone()),
+            };
+
+            {
+                let mut deployments = self.deployments.write().await;
+                deployments.insert(instance.instance_id.clone(), deployment_info.clone());
+            }
+
+            info!("✅ Deployment registered with TTL tracking");
+            
+            // For now, still create a local service handle
+            // In future, this should return a RemoteService handle
+            let runtime_dir = ctx.data_dir().join("runtime").join(service_name);
+            Service::new_native(
+                ctx,
+                ResourceLimits::default(),
+                runtime_dir,
+                service_name,
+                binary_path,
+                env_vars,
+                arguments,
+            )
+            .await
         }
-
-        info!("✓ Deployment registered with TTL tracking");
         
-        // TODO: Integrate with QoS system for remote instance monitoring
-        // This requires extending the QoS service to support remote monitoring
-        // which will be done in Phase 3 when we have actual cloud SDK integration
-        info!("⚠️  Phase 2: QoS monitoring integration pending real cloud deployment");
-        
-        info!("⚠️  Phase 2: Creating local service (remote bridge not yet implemented)");
-
-        // Create local service for now (Phase 2 limitation)
-        let runtime_dir = ctx.data_dir().join("runtime").join(service_name);
-        Service::new_native(
-            ctx,
-            ResourceLimits::default(),
-            runtime_dir,
-            service_name,
-            binary_path,
-            env_vars,
-            arguments,
-        )
-        .await
+        #[cfg(not(feature = "remote-deployer"))]
+        {
+            return Err(Error::Other(
+                "Remote cloud deployment requires the 'remote-deployer' feature to be enabled".into()
+            ));
+        }
     }
 
     async fn deploy_to_kubernetes(
@@ -389,5 +418,29 @@ impl ServiceRemoteExt for Service {
             )
             .await
         }
+    }
+}
+
+
+#[cfg(feature = "remote-deployer")]
+fn convert_resource_spec(spec: &ResourceSpec) -> blueprint_remote_providers::resources::ResourceSpec {
+    blueprint_remote_providers::resources::ResourceSpec {
+        compute: blueprint_remote_providers::resources::ComputeResources {
+            cpu_count: spec.cpu as u32,
+            memory_gb: spec.memory_gb as u32,
+            gpu_type: spec.gpu_count.map(|_| "nvidia-t4".to_string()), // Default GPU type
+            gpu_count: spec.gpu_count.unwrap_or(0),
+        },
+        storage: blueprint_remote_providers::resources::StorageResources {
+            disk_size_gb: spec.storage_gb as u32,
+            disk_type: "gp3".to_string(), // Default to gp3 for AWS
+            iops: None,
+            throughput_mbps: None,
+        },
+        network: blueprint_remote_providers::resources::NetworkResources {
+            bandwidth_gbps: 1.0,
+            public_ip_required: true,
+            ipv6_required: false,
+        },
     }
 }

@@ -25,6 +25,7 @@ blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
+blueprint-remote-providers = { path = "../blueprint-remote-providers", optional = true }
 
 document-features.workspace = true
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
@@ -80,6 +81,12 @@ nftables = { workspace = true, optional = true }
 
 [features]
 default = ["vm-sandbox"]
+
+## Enable remote cloud deployment functionality
+##
+## This feature enables deployment to cloud providers like AWS, GCP, Azure, DigitalOcean, and Vultr.
+## It includes real SDK integrations for provisioning instances and deploying Blueprint services.
+remote-deployer = ["dep:blueprint-remote-providers"]
 
 ## Enable the VM sandbox
 ##

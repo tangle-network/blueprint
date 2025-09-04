@@ -1,6 +1,6 @@
-//! Unified infrastructure provisioner that consolidates all cloud providers
+//! Multi-cloud infrastructure provisioner for Blueprint deployments
 //!
-//! This replaces the separate provider files with a single, maintainable implementation
+//! Provides a single interface for provisioning across AWS, GCP, Azure, DigitalOcean, and Vultr
 
 use crate::error::{Error, Result};
 use crate::provisioning::InstanceTypeMapper;
@@ -13,18 +13,19 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-/// Unified infrastructure provisioner that handles all cloud providers
-pub struct UnifiedInfrastructureProvisioner {
+/// Multi-cloud provisioner that handles deployments across all supported providers
+pub struct CloudProvisioner {
     providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
     instance_mapper: Arc<InstanceTypeMapper>,
     retry_policy: RetryPolicy,
 }
 
-impl UnifiedInfrastructureProvisioner {
+impl CloudProvisioner {
     pub async fn new() -> Result<Self> {
         let mut providers = HashMap::new();
 
         // Initialize provider adapters based on available credentials
+        #[cfg(feature = "aws")]
         if std::env::var("AWS_ACCESS_KEY_ID").is_ok() {
             providers.insert(
                 CloudProvider::AWS,
@@ -32,6 +33,7 @@ impl UnifiedInfrastructureProvisioner {
             );
         }
 
+        #[cfg(feature = "api-clients")]
         if std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok() {
             providers.insert(
                 CloudProvider::GCP,
@@ -39,6 +41,7 @@ impl UnifiedInfrastructureProvisioner {
             );
         }
 
+        #[cfg(feature = "api-clients")]
         if std::env::var("AZURE_CLIENT_ID").is_ok() {
             providers.insert(
                 CloudProvider::Azure,
@@ -46,6 +49,7 @@ impl UnifiedInfrastructureProvisioner {
             );
         }
 
+        #[cfg(feature = "api-clients")]
         if std::env::var("DIGITALOCEAN_TOKEN").is_ok() {
             providers.insert(
                 CloudProvider::DigitalOcean,
@@ -53,6 +57,7 @@ impl UnifiedInfrastructureProvisioner {
             );
         }
 
+        #[cfg(feature = "api-clients")]
         if std::env::var("VULTR_API_KEY").is_ok() {
             providers.insert(
                 CloudProvider::Vultr,
@@ -177,10 +182,12 @@ trait CloudProviderAdapter: Send + Sync {
 }
 
 /// AWS adapter implementation
+#[cfg(feature = "aws")]
 struct AwsAdapter {
     client: aws_sdk_ec2::Client,
 }
 
+#[cfg(feature = "aws")]
 impl AwsAdapter {
     async fn new() -> Result<Self> {
         let config = aws_config::load_from_env().await;
@@ -190,6 +197,7 @@ impl AwsAdapter {
     }
 }
 
+#[cfg(feature = "aws")]
 #[async_trait]
 impl CloudProviderAdapter for AwsAdapter {
     async fn provision_instance(
@@ -290,12 +298,14 @@ impl AwsAdapter {
 }
 
 /// GCP adapter implementation using REST API
+#[cfg(feature = "api-clients")]
 struct GcpAdapter {
     client: reqwest::Client,
     project_id: String,
     access_token: Arc<RwLock<String>>,
 }
 
+#[cfg(feature = "api-clients")]
 impl GcpAdapter {
     async fn new() -> Result<Self> {
         let project_id = std::env::var("GCP_PROJECT_ID")
@@ -328,6 +338,7 @@ impl GcpAdapter {
     }
 }
 
+#[cfg(feature = "api-clients")]
 #[async_trait]
 impl CloudProviderAdapter for GcpAdapter {
     async fn provision_instance(
@@ -469,6 +480,7 @@ impl AzureAdapter {
     }
 }
 
+#[cfg(feature = "api-clients")]
 #[async_trait]
 impl CloudProviderAdapter for AzureAdapter {
     async fn provision_instance(
@@ -491,11 +503,13 @@ impl CloudProviderAdapter for AzureAdapter {
 }
 
 /// Simplified DigitalOcean adapter
+#[cfg(feature = "api-clients")]
 struct DigitalOceanAdapter {
     client: reqwest::Client,
     token: String,
 }
 
+#[cfg(feature = "api-clients")]
 impl DigitalOceanAdapter {
     fn new() -> Result<Self> {
         let token = std::env::var("DIGITALOCEAN_TOKEN")
@@ -508,6 +522,7 @@ impl DigitalOceanAdapter {
     }
 }
 
+#[cfg(feature = "api-clients")]
 #[async_trait]
 impl CloudProviderAdapter for DigitalOceanAdapter {
     async fn provision_instance(
@@ -607,11 +622,13 @@ impl CloudProviderAdapter for DigitalOceanAdapter {
 }
 
 /// Simplified Vultr adapter
+#[cfg(feature = "api-clients")]
 struct VultrAdapter {
     client: reqwest::Client,
     api_key: String,
 }
 
+#[cfg(feature = "api-clients")]
 impl VultrAdapter {
     fn new() -> Result<Self> {
         let api_key = std::env::var("VULTR_API_KEY")
@@ -624,6 +641,7 @@ impl VultrAdapter {
     }
 }
 
+#[cfg(feature = "api-clients")]
 #[async_trait]
 impl CloudProviderAdapter for VultrAdapter {
     async fn provision_instance(
@@ -802,7 +820,7 @@ mod tests {
     async fn test_provider_initialization() {
         // This test verifies the provider can be created
         // It won't actually provision anything without credentials
-        let result = UnifiedInfrastructureProvisioner::new().await;
+        let result = CloudProvisioner::new().await;
         assert!(result.is_ok());
 
         let provisioner = result.unwrap();

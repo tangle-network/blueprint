@@ -246,13 +246,13 @@ pub async fn ttl_checking_task(ttl_manager: Arc<TtlManager>, check_interval: std
 /// Extension for Blueprint sources to support remote deployments
 pub struct RemoteSourceExtension {
     registry: Arc<RemoteDeploymentRegistry>,
-    provisioner: Arc<dyn crate::infrastructure::InfrastructureProvisioner>,
+    provisioner: Arc<crate::infrastructure::InfrastructureProvisioner>,
 }
 
 impl RemoteSourceExtension {
     pub fn new(
         registry: Arc<RemoteDeploymentRegistry>,
-        provisioner: Arc<dyn crate::infrastructure::InfrastructureProvisioner>,
+        provisioner: Arc<crate::infrastructure::InfrastructureProvisioner>,
     ) -> Self {
         Self {
             registry,
@@ -316,7 +316,7 @@ impl RemoteDeploymentExtensions {
     pub async fn initialize(
         state_dir: &std::path::Path,
         enable_ttl: bool,
-        provisioner: Arc<dyn crate::infrastructure::InfrastructureProvisioner>,
+        provisioner: Arc<crate::infrastructure::InfrastructureProvisioner>,
     ) -> Result<Self> {
         // Initialize deployment tracker
         let tracker = Arc::new(DeploymentTracker::new(state_dir).await?);

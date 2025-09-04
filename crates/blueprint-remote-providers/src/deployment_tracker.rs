@@ -716,21 +716,8 @@ struct DigitalOceanCleanup;
 #[async_trait::async_trait]
 impl CleanupHandler for DigitalOceanCleanup {
     async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
-        use crate::infrastructure_digitalocean::DigitalOceanProvisioner;
-
-        if let Some(api_token) = deployment.metadata.get("api_token") {
-            let region = deployment.region.as_ref().unwrap_or(&"nyc3".to_string());
-            let provisioner =
-                DigitalOceanProvisioner::new(api_token.clone(), region.clone()).await?;
-
-            if let Some(droplet_id) = deployment.resource_ids.get("droplet_id") {
-                if let Ok(id) = droplet_id.parse::<u64>() {
-                    info!("Deleting DigitalOcean droplet: {}", id);
-                    provisioner.delete_droplet(id).await?;
-                }
-            }
-        }
-
+        // TODO: Rewrite to use CloudProvisioner
+        warn!("DigitalOcean cleanup not yet implemented with CloudProvisioner");
         Ok(())
     }
 }
@@ -741,18 +728,8 @@ struct VultrCleanup;
 #[async_trait::async_trait]
 impl CleanupHandler for VultrCleanup {
     async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
-        use crate::infrastructure_vultr::VultrProvisioner;
-
-        if let Some(api_key) = deployment.metadata.get("api_key") {
-            let region = deployment.region.as_ref().unwrap_or(&"ewr".to_string());
-            let provisioner = VultrProvisioner::new(api_key.clone(), region.clone()).await?;
-
-            if let Some(instance_id) = deployment.resource_ids.get("instance_id") {
-                info!("Deleting Vultr instance: {}", instance_id);
-                provisioner.delete_instance(instance_id).await?;
-            }
-        }
-
+        // TODO: Rewrite to use CloudProvisioner
+        warn!("Vultr cleanup not yet implemented with CloudProvisioner");
         Ok(())
     }
 }

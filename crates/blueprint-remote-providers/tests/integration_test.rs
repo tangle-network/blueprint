@@ -6,8 +6,8 @@
 #[cfg(test)]
 mod tests {
     use blueprint_remote_providers::{
-        CloudProvider, DeploymentTracker, HealthMonitor, HealthStatus, PricingService,
-        RemoteDeploymentExtensions, ResourceSpec, UnifiedInfrastructureProvisioner,
+        CloudProvisioner, CloudProvider, DeploymentTracker, HealthMonitor, HealthStatus,
+        PricingService, RemoteDeploymentExtensions, ResourceSpec,
     };
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -139,7 +139,7 @@ mod tests {
     async fn test_infrastructure_provisioner() {
         // This test verifies the provisioner can be created
         // Without credentials, it won't have any providers configured
-        let provisioner = UnifiedInfrastructureProvisioner::new().await.unwrap();
+        let provisioner = CloudProvisioner::new().await.unwrap();
 
         // Test retry policy
         let spec = ResourceSpec::basic();
@@ -157,7 +157,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_monitor() {
         let temp_dir = TempDir::new().unwrap();
-        let provisioner = Arc::new(UnifiedInfrastructureProvisioner::new().await.unwrap());
+        let provisioner = Arc::new(CloudProvisioner::new().await.unwrap());
         let tracker = Arc::new(DeploymentTracker::new(temp_dir.path()).await.unwrap());
 
         let monitor = HealthMonitor::new(provisioner, tracker.clone()).with_config(
@@ -195,8 +195,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
 
         // Create mock provisioner
-        use blueprint_remote_providers::infrastructure_unified::UnifiedInfrastructureProvisioner;
-        let provisioner = Arc::new(UnifiedInfrastructureProvisioner::new().await.unwrap());
+        use blueprint_remote_providers::cloud_provisioner::CloudProvisioner;
+        let provisioner = Arc::new(CloudProvisioner::new().await.unwrap());
 
         // Initialize extensions
         let extensions = RemoteDeploymentExtensions::initialize(
@@ -329,7 +329,7 @@ mod tests {
     #[tokio::test]
     async fn test_provisioning_retry() {
         // The unified provisioner includes retry logic
-        let provisioner = UnifiedInfrastructureProvisioner::new().await.unwrap();
+        let provisioner = CloudProvisioner::new().await.unwrap();
 
         // Without credentials, this will fail but test the retry mechanism
         let spec = ResourceSpec::minimal();

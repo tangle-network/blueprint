@@ -29,12 +29,18 @@ impl InfrastructureProvisioner {
             CloudProvider::AWS => {
                 let config = aws_config::load_from_env().await;
                 let ec2_client = aws_sdk_ec2::Client::new(&config);
+                #[cfg(feature = "aws-eks")]
                 let eks_client = aws_sdk_eks::Client::new(&config);
+                #[cfg(not(feature = "aws-eks"))]
+                let eks_client = None;
 
                 Ok(Self {
                     provider,
                     aws_client: Some(ec2_client),
+                    #[cfg(feature = "aws-eks")]
                     eks_client: Some(eks_client),
+                    #[cfg(not(feature = "aws-eks"))]
+                    eks_client,
                 })
             }
             _ => {

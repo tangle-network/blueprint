@@ -23,9 +23,7 @@ tokio = { workspace = true, features = ["full"] }
 toml = "0.8"
 tracing.workspace = true
 
-# Blueprint dependencies
-blueprint-manager = { path = "../manager", optional = true }
-blueprint-manager-bridge = { path = "../manager/bridge", optional = true }
+# Blueprint dependencies (removed blueprint-manager to avoid cyclic dependency)
 blueprint-auth = { path = "../auth" }
 blueprint-keystore = { path = "../keystore" }
 blueprint-pricing-engine = { path = "../pricing-engine", optional = true }
@@ -60,7 +58,7 @@ wiremock = "0.6"
 
 [features]
 default = ["kubernetes"]
-kubernetes = ["dep:kube", "dep:k8s-openapi", "dep:blueprint-manager"]
+kubernetes = ["dep:kube", "dep:k8s-openapi"]
 docker = ["dep:bollard"]
 aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-autoscaling"]
 aws-eks = ["aws", "dep:aws-sdk-eks"]
@@ -69,7 +67,7 @@ azure = ["api-clients"]
 api-clients = ["dep:reqwest"]
 pricing = ["dep:blueprint-pricing-engine"]
 testing = ["dep:mockall"]
-full = ["kubernetes", "docker", "aws-eks", "gcp", "azure", "api-clients", "pricing", "dep:blueprint-manager-bridge"]
+full = ["kubernetes", "docker", "aws-eks", "gcp", "azure", "api-clients", "pricing"]
 
 [[example]]
 name = "manager_integration"

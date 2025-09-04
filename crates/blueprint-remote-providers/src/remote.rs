@@ -1,12 +1,18 @@
-#[cfg(feature = "kubernetes")]
-use blueprint_manager::rt::container::ContainerRuntime;
+// TODO: Re-add when blueprint-manager integration is fixed
+// #[cfg(feature = "kubernetes")]
+// use blueprint_manager::rt::container::ContainerRuntime;
+
+use crate::error::{Error, Result};
 #[cfg(feature = "kubernetes")]
 use k8s_openapi::api::core::v1::Service;
 #[cfg(feature = "kubernetes")]
 use kube::{Client, Config};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Manages remote Kubernetes clusters for Blueprint deployments
 ///
@@ -72,32 +78,33 @@ impl RemoteClusterManager {
         Ok(())
     }
 
-    /// Get a ContainerRuntime configured for the active remote cluster
-    ///
-    /// This returns the existing ContainerRuntime but configured to use
-    /// the remote cluster's client, allowing all existing deployment logic
-    /// to work unchanged.
-    pub async fn get_runtime_for_active_cluster(&self) -> Result<ContainerRuntime> {
-        let active = self.active_cluster.read().await;
-        let cluster_name = active
-            .as_ref()
-            .ok_or_else(|| Error::ConfigurationError("No active cluster".to_string()))?;
+    // TODO: Re-enable when ContainerRuntime is available
+    // /// Get a ContainerRuntime configured for the active remote cluster
+    // ///
+    // /// This returns the existing ContainerRuntime but configured to use
+    // /// the remote cluster's client, allowing all existing deployment logic
+    // /// to work unchanged.
+    // pub async fn get_runtime_for_active_cluster(&self) -> Result<ContainerRuntime> {
+    //     let active = self.active_cluster.read().await;
+    //     let cluster_name = active
+    //         .as_ref()
+    //         .ok_or_else(|| Error::ConfigurationError("No active cluster".to_string()))?;
 
-        let clusters = self.clusters.read().await;
-        let cluster = clusters.get(cluster_name).ok_or_else(|| {
-            Error::ConfigurationError(format!("Cluster {} not found", cluster_name))
-        })?;
+    //     let clusters = self.clusters.read().await;
+    //     let cluster = clusters.get(cluster_name).ok_or_else(|| {
+    //         Error::ConfigurationError(format!("Cluster {} not found", cluster_name))
+    //     })?;
 
-        // Create ContainerRuntime with the remote cluster's client
-        // This reuses ALL existing ContainerRuntime logic
-        let runtime = ContainerRuntime::with_client(
-            cluster.client.clone(),
-            cluster.config.namespace.clone(),
-            cluster.config.provider.to_service_type(),
-        )?;
+    //     // Create ContainerRuntime with the remote cluster's client
+    //     // This reuses ALL existing ContainerRuntime logic
+    //     let runtime = ContainerRuntime::with_client(
+    //         cluster.client.clone(),
+    //         cluster.config.namespace.clone(),
+    //         cluster.config.provider.to_service_type(),
+    //     )?;
 
-        Ok(runtime)
-    }
+    //     Ok(runtime)
+    // }
 
     /// Switch active cluster for deployments
     pub async fn set_active_cluster(&self, name: &str) -> Result<()> {
@@ -248,32 +255,33 @@ impl fmt::Display for CloudProvider {
     }
 }
 
-/// Extension trait for ContainerRuntime to add remote capabilities
-#[cfg(feature = "kubernetes")]
-pub trait RemoteContainerRuntimeExt {
-    /// Create a ContainerRuntime for a specific remote cluster
-    fn with_client(
-        client: Client,
-        namespace: String,
-        service_type: &str,
-    ) -> Result<ContainerRuntime>;
-}
+// TODO: Re-enable when ContainerRuntime is available
+// /// Extension trait for ContainerRuntime to add remote capabilities
+// #[cfg(feature = "kubernetes")]
+// pub trait RemoteContainerRuntimeExt {
+//     /// Create a ContainerRuntime for a specific remote cluster
+//     fn with_client(
+//         client: Client,
+//         namespace: String,
+//         service_type: &str,
+//     ) -> Result<ContainerRuntime>;
+// }
 
-#[cfg(feature = "kubernetes")]
-impl RemoteContainerRuntimeExt for ContainerRuntime {
-    fn with_client(
-        client: Client,
-        namespace: String,
-        service_type: &str,
-    ) -> Result<ContainerRuntime> {
-        // This would be implemented in the manager crate to allow
-        // creating ContainerRuntime with a specific client
-        // For now, we return an error indicating this needs manager support
-        Err(Error::ConfigurationError(
-            "ContainerRuntime remote extension requires manager crate support".to_string(),
-        ))
-    }
-}
+// #[cfg(feature = "kubernetes")]
+// impl RemoteContainerRuntimeExt for ContainerRuntime {
+//     fn with_client(
+//         client: Client,
+//         namespace: String,
+//         service_type: &str,
+//     ) -> Result<ContainerRuntime> {
+//         // This would be implemented in the manager crate to allow
+//         // creating ContainerRuntime with a specific client
+//         // For now, we return an error indicating this needs manager support
+//         Err(Error::ConfigurationError(
+//             "ContainerRuntime remote extension requires manager crate support".to_string(),
+//         ))
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
