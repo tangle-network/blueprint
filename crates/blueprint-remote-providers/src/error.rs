@@ -26,8 +26,11 @@ pub enum Error {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    #[error("Provider {0:?} not configured")]
+    ProviderNotConfigured(crate::remote::CloudProvider),
+    
+    #[error("Other error: {0}")]
+    Other(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

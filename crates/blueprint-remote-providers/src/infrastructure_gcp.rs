@@ -15,22 +15,48 @@ pub struct GcpInfrastructureProvisioner {
     project_id: String,
     region: String,
     zone: String,
-    // In a real implementation, we would use the GCP SDK client here
-    // client: google_compute::Client,
+    #[cfg(feature = "api-clients")]
+    client: reqwest::Client,
+    access_token: Option<String>,
 }
 
 #[cfg(feature = "gcp")]
 impl GcpInfrastructureProvisioner {
     /// Create a new GCP provisioner
     pub async fn new(project_id: String, region: String, zone: String) -> Result<Self> {
-        // Initialize GCP SDK client
-        // let client = google_compute::Client::new(&project_id).await?;
+        #[cfg(feature = "api-clients")]
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| Error::ConfigurationError(e.to_string()))?;
+        
+        // Get access token from environment or gcloud CLI
+        let access_token = Self::get_gcp_access_token().await.ok();
         
         Ok(Self {
             project_id,
             region,
             zone,
+            #[cfg(feature = "api-clients")]
+            client,
+            access_token,
         })
+    }
+    
+    #[cfg(feature = "api-clients")]
+    async fn get_gcp_access_token() -> Result<String> {
+        // Try to get token from gcloud CLI
+        let output = tokio::process::Command::new("gcloud")
+            .args(&["auth", "print-access-token"])
+            .output()
+            .await
+            .map_err(|e| Error::ConfigurationError(format!("Failed to get GCP token: {}", e)))?;
+        
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        } else {
+            Err(Error::ConfigurationError("Failed to get GCP access token".into()))
+        }
     }
     
     /// Provision a GCE instance
@@ -61,10 +87,70 @@ impl GcpInfrastructureProvisioner {
             service_account: None,
         };
         
-        // In a real implementation, we would create the instance using GCP SDK
-        // let instance = self.client.instances()
-        //     .insert(&self.project_id, &self.zone, instance_config)
-        //     .await?;
+        #[cfg(feature = "api-clients")]
+        {
+            // Create instance using GCP Compute Engine API
+            let url = format!(
+                "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances",
+                self.project_id, self.zone
+            );
+            
+            let instance_body = serde_json::json!({
+                "name": instance_config.name,
+                "machineType": format!("zones/{}/machineTypes/{}", self.zone, instance_config.machine_type),
+                "disks": [{
+                    "boot": true,
+                    "autoDelete": true,
+                    "initializeParams": {
+                        "diskSizeGb": instance_config.boot_disk_size_gb,
+                        "diskType": format!("zones/{}/diskTypes/{}", self.zone, instance_config.boot_disk_type),
+                        "sourceImage": "projects/debian-cloud/global/images/family/debian-11"
+                    }
+                }],
+                "networkInterfaces": [{
+                    "network": format!("global/networks/{}", instance_config.network),
+                    "accessConfigs": if spec.network.public_ip {
+                        vec![serde_json::json!({
+                            "type": "ONE_TO_ONE_NAT",
+                            "name": "External NAT"
+                        })]
+                    } else {
+                        vec![]
+                    }
+                }],
+                "scheduling": {
+                    "preemptible": instance_config.preemptible,
+                    "automaticRestart": !instance_config.preemptible,
+                    "onHostMaintenance": if instance_config.preemptible { "TERMINATE" } else { "MIGRATE" }
+                },
+                "labels": instance_config.labels,
+                "metadata": {
+                    "items": instance_config.metadata.into_iter().map(|(k, v)| {
+                        serde_json::json!({"key": k, "value": v})
+                    }).collect::<Vec<_>>()
+                }
+            });
+            
+            let response = self.client
+                .post(&url)
+                .bearer_auth(self.access_token.as_ref().ok_or_else(|| 
+                    Error::ConfigurationError("GCP access token not available".into()))?)
+                .json(&instance_body)
+                .send()
+                .await
+                .map_err(|e| Error::ConfigurationError(format!("Failed to create GCE instance: {}", e)))?;
+            
+            if !response.status().is_success() {
+                let error_text = response.text().await.unwrap_or_default();
+                return Err(Error::ConfigurationError(format!("GCE API error: {}", error_text)));
+            }
+            
+            // Wait for instance to be running
+            self.wait_for_instance_running(&instance_config.name).await?;
+            
+            // Get instance details
+            return self.get_instance_details(&instance_config.name).await;
+        }
         
         Ok(GceInstance {
             name: name.to_string(),
@@ -159,12 +245,90 @@ impl GcpInfrastructureProvisioner {
         }.to_string()
     }
     
+    /// Wait for instance to be in running state
+    #[cfg(feature = "api-clients")]
+    async fn wait_for_instance_running(&self, name: &str) -> Result<()> {
+        let mut attempts = 0;
+        loop {
+            if attempts > 60 {
+                return Err(Error::ConfigurationError("Timeout waiting for instance".into()));
+            }
+            
+            let instance = self.get_instance_details(name).await?;
+            if instance.status == "RUNNING" {
+                return Ok(());
+            }
+            
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            attempts += 1;
+        }
+    }
+    
+    /// Get instance details
+    #[cfg(feature = "api-clients")]
+    async fn get_instance_details(&self, name: &str) -> Result<GceInstance> {
+        let url = format!(
+            "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
+            self.project_id, self.zone, name
+        );
+        
+        let response = self.client
+            .get(&url)
+            .bearer_auth(self.access_token.as_ref().ok_or_else(|| 
+                Error::ConfigurationError("GCP access token not available".into()))?)
+            .send()
+            .await
+            .map_err(|e| Error::ConfigurationError(format!("Failed to get instance: {}", e)))?;
+        
+        if !response.status().is_success() {
+            return Err(Error::ConfigurationError("Failed to get instance details".into()));
+        }
+        
+        let json: serde_json::Value = response.json().await
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+        
+        let internal_ip = json["networkInterfaces"][0]["networkIP"]
+            .as_str()
+            .map(|s| s.to_string());
+        
+        let external_ip = json["networkInterfaces"][0]["accessConfigs"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|config| config["natIP"].as_str())
+            .map(|s| s.to_string());
+        
+        Ok(GceInstance {
+            name: name.to_string(),
+            machine_type: json["machineType"].as_str().unwrap_or("").split('/').last().unwrap_or("").to_string(),
+            zone: self.zone.clone(),
+            status: json["status"].as_str().unwrap_or("UNKNOWN").to_string(),
+            internal_ip,
+            external_ip,
+        })
+    }
+    
     /// Delete a GCE instance
     pub async fn delete_gce_instance(&self, name: &str) -> Result<()> {
-        // In a real implementation:
-        // self.client.instances()
-        //     .delete(&self.project_id, &self.zone, name)
-        //     .await?;
+        #[cfg(feature = "api-clients")]
+        {
+            let url = format!(
+                "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
+                self.project_id, self.zone, name
+            );
+            
+            let response = self.client
+                .delete(&url)
+                .bearer_auth(self.access_token.as_ref().ok_or_else(|| 
+                    Error::ConfigurationError("GCP access token not available".into()))?)
+                .send()
+                .await
+                .map_err(|e| Error::ConfigurationError(format!("Failed to delete instance: {}", e)))?;
+            
+            if !response.status().is_success() {
+                let error_text = response.text().await.unwrap_or_default();
+                return Err(Error::ConfigurationError(format!("Failed to delete GCE instance: {}", error_text)));
+            }
+        }
         
         Ok(())
     }

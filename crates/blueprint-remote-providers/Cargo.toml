@@ -47,6 +47,10 @@ reqwest = { version = "0.12", features = ["json"], optional = true }
 # Testing dependencies
 mockall = { version = "0.13", optional = true }
 
+# Utilities
+uuid = { version = "1.10", features = ["v4", "serde"] }
+libc = "0.2"
+
 [dev-dependencies]
 blueprint-core-testing-utils = { path = "../testing-utils/core" }
 mockall = "0.13"
@@ -58,13 +62,18 @@ wiremock = "0.6"
 default = ["kubernetes"]
 kubernetes = ["dep:kube", "dep:k8s-openapi", "dep:blueprint-manager"]
 docker = ["dep:bollard"]
-aws = ["dep:aws-config", "dep:aws-sdk-ec2"]
+aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-autoscaling"]
 aws-eks = ["aws", "dep:aws-sdk-eks"]
 gcp = ["api-clients"]
 azure = ["api-clients"]
 api-clients = ["dep:reqwest"]
 pricing = ["dep:blueprint-pricing-engine"]
-testing = []
+testing = ["dep:mockall"]
+full = ["kubernetes", "docker", "aws-eks", "gcp", "azure", "api-clients", "pricing", "dep:blueprint-manager-bridge"]
+
+[[example]]
+name = "manager_integration"
+required-features = ["full"]
 
 [package.metadata.docs.rs]
 all-features = true

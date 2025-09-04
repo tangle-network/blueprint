@@ -26,6 +26,12 @@ pub struct ResourceSpec {
     
     /// Quality of service parameters
     pub qos: QosParameters,
+    
+    /// Container runtime configuration
+    pub runtime: RuntimeConfiguration,
+    
+    /// Monitoring and observability settings
+    pub observability: ObservabilityConfiguration,
 }
 
 impl Default for ResourceSpec {
@@ -36,6 +42,8 @@ impl Default for ResourceSpec {
             network: NetworkResources::default(),
             accelerators: None,
             qos: QosParameters::default(),
+            runtime: RuntimeConfiguration::default(),
+            observability: ObservabilityConfiguration::default(),
         }
     }
 }
@@ -48,8 +56,17 @@ pub struct ComputeResources {
     /// CPU architecture preference (x86_64, arm64, etc)
     pub cpu_arch: Option<String>,
     
-    /// Minimum CPU frequency in GHz (optional)
+    /// Minimum CPU frequency in GHz
     pub min_cpu_frequency_ghz: Option<f64>,
+    
+    /// CPU model preference (e.g., "Intel Xeon", "AMD EPYC")
+    pub cpu_model: Option<String>,
+    
+    /// Required CPU features (AVX2, AVX512, AES-NI, etc)
+    pub cpu_features: Vec<String>,
+    
+    /// CPU performance tier (economy, standard, premium)
+    pub cpu_tier: Option<PerformanceTier>,
 }
 
 impl Default for ComputeResources {
@@ -58,6 +75,9 @@ impl Default for ComputeResources {
             cpu_cores: 1.0,
             cpu_arch: None,
             min_cpu_frequency_ghz: None,
+            cpu_model: None,
+            cpu_features: Vec::new(),
+            cpu_tier: None,
         }
     }
 }
@@ -73,8 +93,23 @@ pub struct StorageResources {
     /// Storage type (ssd, nvme, hdd)
     pub disk_type: StorageType,
     
-    /// IOPS requirement (optional)
+    /// Minimum IOPS requirement
     pub iops: Option<u32>,
+    
+    /// Throughput in MB/s
+    pub throughput_mbps: Option<u32>,
+    
+    /// Memory type (DDR4, DDR5, HBM)
+    pub memory_type: Option<MemoryType>,
+    
+    /// ECC memory required
+    pub ecc_required: bool,
+    
+    /// Ephemeral storage in GB (temporary, instance storage)
+    pub ephemeral_gb: Option<f64>,
+    
+    /// Object storage in GB (S3-compatible)
+    pub object_storage_gb: Option<f64>,
 }
 
 impl Default for StorageResources {
@@ -84,6 +119,11 @@ impl Default for StorageResources {
             disk_gb: 10.0,
             disk_type: StorageType::SSD,
             iops: None,
+            throughput_mbps: None,
+            memory_type: None,
+            ecc_required: false,
+            ephemeral_gb: None,
+            object_storage_gb: None,
         }
     }
 }
@@ -93,6 +133,111 @@ pub enum StorageType {
     HDD,
     SSD, 
     NVME,
+    EBS,           // Elastic Block Storage
+    LocalSSD,      // Local instance SSD
+    PersistentSSD, // Network-attached SSD
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PerformanceTier {
+    Economy,
+    Standard,
+    Premium,
+    Ultra,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MemoryType {
+    DDR4,
+    DDR5,
+    HBM,    // High Bandwidth Memory
+    LPDDR5, // Low Power DDR5
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LoadBalancerType {
+    None,
+    ApplicationLB,  // Layer 7
+    NetworkLB,      // Layer 4
+    GlobalLB,       // Multi-region
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DdosProtectionLevel {
+    Basic,
+    Standard,
+    Advanced,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupConfig {
+    /// Backup frequency in hours
+    pub frequency_hours: u32,
+    /// Retention period in days
+    pub retention_days: u32,
+    /// Geographic redundancy
+    pub geo_redundant: bool,
+    /// Point-in-time recovery
+    pub point_in_time_recovery: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisasterRecoveryConfig {
+    /// Recovery Time Objective in minutes
+    pub rto_minutes: u32,
+    /// Recovery Point Objective in minutes
+    pub rpo_minutes: u32,
+    /// Multi-region failover
+    pub multi_region: bool,
+    /// Automated failover
+    pub auto_failover: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ComplianceRequirement {
+    HIPAA,
+    PCIDSS,
+    SOC2,
+    ISO27001,
+    GDPR,
+    FedRAMP,
+    Custom(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeoRestrictions {
+    /// Allowed regions/countries
+    pub allowed_regions: Vec<String>,
+    /// Blocked regions/countries
+    pub blocked_regions: Vec<String>,
+    /// Prefer certain regions
+    pub preferred_regions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EncryptionRequirements {
+    /// Encryption at rest
+    pub at_rest: bool,
+    /// Encryption in transit
+    pub in_transit: bool,
+    /// Key management service
+    pub kms_required: bool,
+    /// Bring your own key
+    pub byok_enabled: bool,
+    /// Minimum TLS version
+    pub min_tls_version: Option<String>,
+}
+
+impl Default for EncryptionRequirements {
+    fn default() -> Self {
+        Self {
+            at_rest: true,
+            in_transit: true,
+            kms_required: false,
+            byok_enabled: false,
+            min_tls_version: Some("1.2".to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,7 +245,7 @@ pub struct NetworkResources {
     /// Bandwidth tier
     pub bandwidth_tier: BandwidthTier,
     
-    /// Guaranteed bandwidth in Mbps (optional)
+    /// Guaranteed bandwidth in Mbps
     pub guaranteed_bandwidth_mbps: Option<u32>,
     
     /// Static IP requirement
@@ -108,6 +253,33 @@ pub struct NetworkResources {
     
     /// Public IP requirement
     pub public_ip: bool,
+    
+    /// IPv6 support required
+    pub ipv6_required: bool,
+    
+    /// Number of public IPs needed
+    pub public_ip_count: u32,
+    
+    /// Network latency requirement in ms
+    pub max_latency_ms: Option<u32>,
+    
+    /// Required network protocols (TCP, UDP, SCTP, etc)
+    pub protocols: Vec<String>,
+    
+    /// Ingress bandwidth limit in Gbps
+    pub ingress_limit_gbps: Option<f64>,
+    
+    /// Egress bandwidth limit in Gbps
+    pub egress_limit_gbps: Option<f64>,
+    
+    /// Load balancer requirement
+    pub load_balancer: Option<LoadBalancerType>,
+    
+    /// CDN requirement
+    pub cdn_enabled: bool,
+    
+    /// DDoS protection level
+    pub ddos_protection: Option<DdosProtectionLevel>,
 }
 
 impl Default for NetworkResources {
@@ -117,6 +289,15 @@ impl Default for NetworkResources {
             guaranteed_bandwidth_mbps: None,
             static_ip: false,
             public_ip: false,
+            ipv6_required: false,
+            public_ip_count: 0,
+            max_latency_ms: None,
+            protocols: vec!["TCP".to_string(), "UDP".to_string()],
+            ingress_limit_gbps: None,
+            egress_limit_gbps: None,
+            load_balancer: None,
+            cdn_enabled: false,
+            ddos_protection: None,
         }
     }
 }
@@ -170,6 +351,27 @@ pub struct QosParameters {
     
     /// Minimum availability SLA (99.9, 99.99, etc)
     pub min_availability_sla: Option<f64>,
+    
+    /// Maximum acceptable downtime per month in minutes
+    pub max_downtime_minutes: Option<u32>,
+    
+    /// Backup requirements
+    pub backup_config: Option<BackupConfig>,
+    
+    /// Disaster recovery requirements
+    pub disaster_recovery: Option<DisasterRecoveryConfig>,
+    
+    /// Compliance requirements (HIPAA, PCI-DSS, SOC2, etc)
+    pub compliance: Vec<ComplianceRequirement>,
+    
+    /// Geographic restrictions
+    pub geo_restrictions: Option<GeoRestrictions>,
+    
+    /// Data residency requirements
+    pub data_residency: Vec<String>,
+    
+    /// Encryption requirements
+    pub encryption: EncryptionRequirements,
 }
 
 impl Default for QosParameters {
@@ -179,6 +381,13 @@ impl Default for QosParameters {
             allow_spot: false,
             allow_burstable: true,
             min_availability_sla: None,
+            max_downtime_minutes: None,
+            backup_config: None,
+            disaster_recovery: None,
+            compliance: Vec::new(),
+            geo_restrictions: None,
+            data_residency: Vec::new(),
+            encryption: EncryptionRequirements::default(),
         }
     }
 }
@@ -365,6 +574,277 @@ pub fn from_resource_requirements(req: &crate::provisioning::ResourceRequirement
             allow_spot: req.allow_spot,
             ..Default::default()
         },
+        runtime: RuntimeConfiguration::default(),
+        observability: ObservabilityConfiguration::default(),
+    }
+}
+
+/// Container runtime configuration options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeConfiguration {
+    /// Preferred container runtime (Docker, containerd, CRI-O)
+    pub runtime_type: RuntimeType,
+    
+    /// Security context requirements
+    pub security_context: SecurityContext,
+    
+    /// Resource limits enforcement
+    pub limits_enforcement: LimitsEnforcement,
+    
+    /// Init process configuration
+    pub init_process: bool,
+    
+    /// Privileged container access
+    pub privileged: bool,
+    
+    /// User namespace mapping
+    pub user_namespace: bool,
+    
+    /// Read-only root filesystem
+    pub read_only_root_fs: bool,
+    
+    /// Capabilities to add/drop
+    pub capabilities: CapabilityConfiguration,
+}
+
+impl Default for RuntimeConfiguration {
+    fn default() -> Self {
+        Self {
+            runtime_type: RuntimeType::Containerd,
+            security_context: SecurityContext::default(),
+            limits_enforcement: LimitsEnforcement::Strict,
+            init_process: true,
+            privileged: false,
+            user_namespace: true,
+            read_only_root_fs: true,
+            capabilities: CapabilityConfiguration::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RuntimeType {
+    Docker,
+    Containerd,
+    CRIO,
+    Podman,
+    Kata,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LimitsEnforcement {
+    Strict,
+    BestEffort,
+    Guaranteed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityContext {
+    /// Run as non-root user
+    pub run_as_non_root: bool,
+    
+    /// Specific user ID to run as
+    pub run_as_user: Option<u32>,
+    
+    /// Specific group ID to run as
+    pub run_as_group: Option<u32>,
+    
+    /// SELinux options
+    pub selinux_options: Option<SELinuxOptions>,
+    
+    /// AppArmor profile
+    pub apparmor_profile: Option<String>,
+    
+    /// Seccomp profile
+    pub seccomp_profile: Option<String>,
+}
+
+impl Default for SecurityContext {
+    fn default() -> Self {
+        Self {
+            run_as_non_root: true,
+            run_as_user: Some(1000),
+            run_as_group: Some(1000),
+            selinux_options: None,
+            apparmor_profile: Some("runtime/default".to_string()),
+            seccomp_profile: Some("runtime/default".to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SELinuxOptions {
+    pub user: Option<String>,
+    pub role: Option<String>,
+    pub type_: Option<String>,
+    pub level: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapabilityConfiguration {
+    /// Linux capabilities to add
+    pub add: Vec<String>,
+    
+    /// Linux capabilities to drop
+    pub drop: Vec<String>,
+}
+
+impl Default for CapabilityConfiguration {
+    fn default() -> Self {
+        Self {
+            add: vec![],
+            drop: vec!["ALL".to_string()],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObservabilityConfiguration {
+    /// Metrics collection settings
+    pub metrics: MetricsConfiguration,
+    
+    /// Logging configuration
+    pub logging: LoggingConfiguration,
+    
+    /// Tracing/APM settings
+    pub tracing: TracingConfiguration,
+    
+    /// Health check configuration
+    pub health_checks: HealthCheckConfiguration,
+}
+
+impl Default for ObservabilityConfiguration {
+    fn default() -> Self {
+        Self {
+            metrics: MetricsConfiguration::default(),
+            logging: LoggingConfiguration::default(),
+            tracing: TracingConfiguration::default(),
+            health_checks: HealthCheckConfiguration::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsConfiguration {
+    /// Enable metrics collection
+    pub enabled: bool,
+    
+    /// Metrics endpoint path
+    pub endpoint_path: String,
+    
+    /// Metrics port
+    pub port: u16,
+    
+    /// Scrape interval in seconds
+    pub scrape_interval: u32,
+    
+    /// Custom metrics labels
+    pub custom_labels: HashMap<String, String>,
+}
+
+impl Default for MetricsConfiguration {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            endpoint_path: "/metrics".to_string(),
+            port: 9090,
+            scrape_interval: 30,
+            custom_labels: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingConfiguration {
+    /// Log level (debug, info, warn, error)
+    pub level: String,
+    
+    /// Log format (json, text)
+    pub format: String,
+    
+    /// Log aggregation service
+    pub aggregation_service: Option<String>,
+    
+    /// Log retention period in days
+    pub retention_days: Option<u32>,
+    
+    /// Maximum log size in MB
+    pub max_size_mb: Option<u32>,
+}
+
+impl Default for LoggingConfiguration {
+    fn default() -> Self {
+        Self {
+            level: "info".to_string(),
+            format: "json".to_string(),
+            aggregation_service: None,
+            retention_days: Some(30),
+            max_size_mb: Some(100),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TracingConfiguration {
+    /// Enable distributed tracing
+    pub enabled: bool,
+    
+    /// Tracing service (Jaeger, Zipkin, OpenTelemetry)
+    pub service: Option<String>,
+    
+    /// Sampling rate (0.0 to 1.0)
+    pub sampling_rate: f64,
+    
+    /// Custom trace attributes
+    pub custom_attributes: HashMap<String, String>,
+}
+
+impl Default for TracingConfiguration {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            service: None,
+            sampling_rate: 0.1,
+            custom_attributes: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheckConfiguration {
+    /// Enable health checks
+    pub enabled: bool,
+    
+    /// HTTP health check path
+    pub http_path: Option<String>,
+    
+    /// Health check port
+    pub port: Option<u16>,
+    
+    /// Check interval in seconds
+    pub interval_seconds: u32,
+    
+    /// Timeout in seconds
+    pub timeout_seconds: u32,
+    
+    /// Failure threshold before marking unhealthy
+    pub failure_threshold: u32,
+    
+    /// Success threshold before marking healthy
+    pub success_threshold: u32,
+}
+
+impl Default for HealthCheckConfiguration {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            http_path: Some("/health".to_string()),
+            port: None, // Use main service port
+            interval_seconds: 30,
+            timeout_seconds: 5,
+            failure_threshold: 3,
+            success_threshold: 1,
+        }
     }
 }
 
