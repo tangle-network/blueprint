@@ -45,6 +45,10 @@ auto_impl = { workspace = true }
 dynosaur = { workspace = true }
 sp-core = { workspace = true }
 url.workspace = true
+serde = { workspace = true, features = ["derive"] }
+chrono = { workspace = true, features = ["serde", "clock"] }
+uuid = { workspace = true, features = ["v4"] }
+rand = { workspace = true }
 hyper.workspace = true
 hyperlocal.workspace = true
 hyper-util.workspace = true
