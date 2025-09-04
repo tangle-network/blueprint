@@ -81,12 +81,13 @@ cargo tangle cloud terminate --deployment-id dep-abc123
 cargo tangle cloud terminate --all
 ```
 
-## Blueprint.toml Configuration
+## Cargo.toml Configuration (Optional)
 
-The `Blueprint.toml` file defines resource requirements:
+You can optionally add cloud resource specifications to your existing `Cargo.toml`:
 
 ```toml
-[blueprint.resources]
+# This section is OPTIONAL - system works without it
+[package.metadata.blueprint.resources]
 # Minimum requirements
 min_cpu = 2.0
 min_memory_gb = 4.0
@@ -104,6 +105,8 @@ gpu_type = "nvidia-t4"
 # Cost optimization
 allow_spot = true  # 30% discount with spot instances
 ```
+
+**Note**: If you don't add this section, the system will use sensible defaults and you can still override resources via CLI arguments.
 
 ## Environment-Specific Settings
 

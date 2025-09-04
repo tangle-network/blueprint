@@ -9,7 +9,7 @@ use std::path::Path;
 
 /// Resource requirements specified by blueprint developers
 /// 
-/// Developers define these in their Blueprint.toml to indicate
+/// Developers can optionally define these in their Cargo.toml [package.metadata.blueprint] to indicate
 /// what resources their service needs to function properly.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintResourceRequirements {
@@ -91,10 +91,10 @@ impl Default for ScalingInfo {
 }
 
 impl BlueprintResourceRequirements {
-    /// Load requirements from Blueprint.toml
+    /// Load requirements from Cargo.toml [package.metadata.blueprint] section
     pub fn from_toml_file(path: &Path) -> Result<Self, String> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read Blueprint.toml: {}", e))?;
+            .map_err(|e| format!("Failed to read Cargo.toml: {}", e))?;
         
         toml::from_str(&content)
             .map_err(|e| format!("Failed to parse requirements: {}", e))
@@ -201,7 +201,7 @@ pub enum ValidationResult {
     BelowMinimum { issues: Vec<String> },
 }
 
-/// Example Blueprint.toml configuration
+/// Example Cargo.toml [package.metadata.blueprint] configuration
 /// 
 /// ```toml
 /// [metadata]

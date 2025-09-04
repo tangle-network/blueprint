@@ -63,11 +63,11 @@ pub enum CloudCommands {
         #[arg(short, long)]
         region: Option<String>,
         
-        /// CPU cores (overrides Blueprint.toml)
+        /// CPU cores (overrides Cargo.toml metadata)
         #[arg(long)]
         cpu: Option<f32>,
         
-        /// Memory in GB (overrides Blueprint.toml)
+        /// Memory in GB (overrides Cargo.toml metadata)
         #[arg(long)]
         memory: Option<f32>,
         

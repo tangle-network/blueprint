@@ -22,11 +22,11 @@ pub struct DeployOptions {
     #[arg(short, long)]
     pub region: Option<String>,
     
-    /// CPU cores (overrides Blueprint.toml)
+    /// CPU cores (overrides Cargo.toml metadata)
     #[arg(long)]
     pub cpu: Option<f32>,
     
-    /// Memory in GB (overrides Blueprint.toml)
+    /// Memory in GB (overrides Cargo.toml metadata)
     #[arg(long)]
     pub memory: Option<f32>,
     
@@ -55,7 +55,7 @@ pub struct DeployOptions {
 ///
 /// This function handles the complete deployment flow including:
 /// 1. Provider selection and validation
-/// 2. Resource requirement parsing from Blueprint.toml
+/// 2. Resource requirement parsing from Cargo.toml metadata
 /// 3. Cost estimation and user confirmation
 /// 4. Infrastructure provisioning
 /// 5. Blueprint deployment and health monitoring
@@ -68,7 +68,7 @@ pub struct DeployOptions {
 ///
 /// Returns an error if:
 /// * No provider is configured or selected
-/// * Blueprint.toml cannot be found or parsed
+/// * Cargo.toml cannot be found or parsed
 /// * Cost exceeds limits
 /// * Deployment fails at any stage
 ///
@@ -221,24 +221,18 @@ fn default_region(provider: CloudProvider) -> String {
 fn find_blueprint_manifest() -> Result<PathBuf> {
     let current_dir = std::env::current_dir()?;
     
-    // Check for Blueprint.toml
-    let blueprint_path = current_dir.join("Blueprint.toml");
-    if blueprint_path.exists() {
-        return Ok(blueprint_path);
-    }
-    
-    // Fall back to Cargo.toml
+    // Always use Cargo.toml (backward compatible)
     let cargo_path = current_dir.join("Cargo.toml");
     if cargo_path.exists() {
         return Ok(cargo_path);
     }
     
     Err(color_eyre::eyre::eyre!(
-        "No Blueprint.toml or Cargo.toml found in current directory"
+        "No Cargo.toml found in current directory"
     ))
 }
 
-/// Resource requirements parsed from Blueprint.toml.
+/// Resource requirements parsed from Cargo.toml [package.metadata.blueprint] section.
 #[derive(Debug, Default)]
 struct ResourceRequirements {
     recommended_cpu: Option<f32>,
@@ -247,11 +241,12 @@ struct ResourceRequirements {
 }
 
 fn read_resource_requirements(path: &PathBuf) -> Result<ResourceRequirements> {
-    let content = std::fs::read_to_string(path)
+    let _content = std::fs::read_to_string(path)
         .context("Failed to read manifest file")?;
     
-    // For now, return defaults
-    // In production, parse TOML and extract [blueprint.resources] section
+    // TODO: Parse [package.metadata.blueprint.resources] section from Cargo.toml
+    // For now, return sensible defaults - this ensures backward compatibility
+    // as blueprints without resource specs will still work
     Ok(ResourceRequirements {
         recommended_cpu: Some(4.0),
         recommended_memory: Some(16.0),

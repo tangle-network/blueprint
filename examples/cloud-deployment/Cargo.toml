@@ -4,12 +4,19 @@ version = "0.1.0"
 authors = ["Tangle Network"]
 edition = "2024"
 
-[blueprint]
-protocol = "tangle"
+[dependencies]
+blueprint-sdk = { workspace = true }
+tokio = { workspace = true }
+
+# Cloud deployment configuration (OPTIONAL)
+# This section is only needed if you want to specify resource requirements
+# for cloud deployments. The system works without this section.
+[package.metadata.blueprint]
 id = 123
+protocol = "tangle"
 
 # Resource requirements for cloud deployment
-[blueprint.resources]
+[package.metadata.blueprint.resources]
 # Minimum requirements (for development/testing)
 min_cpu = 2.0
 min_memory_gb = 4.0  
@@ -32,7 +39,7 @@ bandwidth_tier = "standard"  # standard, premium, or dedicated
 allow_spot = true  # Allow spot/preemptible instances for 30% cost savings
 
 # Auto-scaling configuration (optional)
-[blueprint.scaling]
+[package.metadata.blueprint.scaling]
 enabled = true
 min_instances = 1
 max_instances = 10
@@ -40,7 +47,7 @@ target_cpu_percent = 70
 scale_down_cooldown_seconds = 300
 
 # Health check configuration
-[blueprint.health]
+[package.metadata.blueprint.health]
 enabled = true
 http_endpoint = "/health"
 http_port = 8080
@@ -49,26 +56,24 @@ timeout_seconds = 5
 unhealthy_threshold = 3
 
 # Deployment regions (optional, can be overridden via CLI)
-[blueprint.deployment]
+[package.metadata.blueprint.deployment]
 preferred_regions = ["us-east-1", "us-west-2", "eu-west-1"]
 multi_region = false
 failover_enabled = true
 
 # Environment-specific settings
-[blueprint.environments]
-
-[blueprint.environments.development]
+[package.metadata.blueprint.environments.development]
 min_cpu = 1.0
 min_memory_gb = 2.0
 allow_spot = true
 ttl_hours = 24  # Auto-terminate after 24 hours
 
-[blueprint.environments.staging]
+[package.metadata.blueprint.environments.staging]
 recommended_cpu = 4.0
 recommended_memory_gb = 16.0
 allow_spot = true
 
-[blueprint.environments.production]
+[package.metadata.blueprint.environments.production]
 recommended_cpu = 16.0
 recommended_memory_gb = 64.0
 recommended_storage_gb = 1000.0
@@ -77,26 +82,26 @@ public_ip = true
 bandwidth_tier = "premium"
 
 # Blueprint-specific configuration
-[blueprint.config]
+[package.metadata.blueprint.config]
 docker_registry = "registry.tangle.network"
 cache_backend = "s3"  # s3, gcs, or azure
 max_concurrent_builds = 10
 layer_cache_size_gb = 100
 
 # Jobs exposed by this blueprint
-[[blueprint.jobs]]
+[[package.metadata.blueprint.jobs]]
 id = 1
 name = "docker_build"
 description = "Build Docker images with distributed caching"
 price = 0.001  # TNT per execution
 
-[[blueprint.jobs]]
+[[package.metadata.blueprint.jobs]]
 id = 2  
 name = "multi_platform_build"
 description = "Build for multiple architectures in parallel"
 price = 0.002
 
-[[blueprint.jobs]]
+[[package.metadata.blueprint.jobs]]
 id = 3
 name = "streaming_build"
 description = "Build with real-time log streaming"
