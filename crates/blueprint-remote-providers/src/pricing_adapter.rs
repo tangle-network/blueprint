@@ -27,12 +27,12 @@ impl PricingAdapter {
         provider_multipliers.insert(CloudProvider::DigitalOcean, 1.1);
         provider_multipliers.insert(CloudProvider::Vultr, 1.05);
         provider_multipliers.insert(CloudProvider::Generic, 1.0);
-        
+
         Ok(Self {
             provider_multipliers,
         })
     }
-    
+
     /// Calculate cost estimation for cloud deployments
     pub fn calculate_cost(
         &self,
@@ -43,16 +43,16 @@ impl PricingAdapter {
         // Simple cost estimation based on resource requirements
         // This would integrate with the full pricing engine in production
         let mut base_cost = 0.0;
-        
+
         // CPU cost (per core per hour)
         base_cost += spec.compute.cpu_cores * 0.05;
-        
+
         // Memory cost (per GB per hour)
         base_cost += spec.storage.memory_gb * 0.01;
-        
+
         // Storage cost (per GB per hour)
         base_cost += spec.storage.disk_gb * 0.001;
-        
+
         // Network cost based on tier
         let network_cost = match spec.network.bandwidth_tier {
             crate::resources::BandwidthTier::Low => 0.002,
@@ -61,25 +61,26 @@ impl PricingAdapter {
             crate::resources::BandwidthTier::Ultra => 0.02,
         };
         base_cost += network_cost;
-        
+
         // GPU cost if present (per GPU per hour)
         if let Some(ref accel) = spec.accelerators {
-            if matches!(accel.accelerator_type, crate::resources::AcceleratorType::GPU(_)) {
+            if matches!(
+                accel.accelerator_type,
+                crate::resources::AcceleratorType::GPU(_)
+            ) {
                 base_cost += accel.count as f64 * 1.5;
             }
         }
-        
+
         // Apply duration scaling
         let duration_hours = duration_seconds as f64 / 3600.0;
         base_cost *= duration_hours;
-        
+
         // Apply cloud provider markup
-        let multiplier = self.provider_multipliers
-            .get(provider)
-            .unwrap_or(&1.0);
-        
+        let multiplier = self.provider_multipliers.get(provider).unwrap_or(&1.0);
+
         let final_cost = base_cost * multiplier;
-        
+
         CloudCostReport {
             provider: provider.clone(),
             base_cost,
@@ -88,8 +89,7 @@ impl PricingAdapter {
             duration_seconds,
         }
     }
-    
-    
+
     /// Compare costs across providers using pricing engine
     pub fn compare_providers(
         &self,
@@ -125,7 +125,7 @@ impl CloudCostReport {
     pub fn hourly_rate(&self) -> f64 {
         self.final_cost / (self.duration_seconds as f64 / 3600.0)
     }
-    
+
     /// Get monthly estimate (730 hours)
     pub fn monthly_estimate(&self) -> f64 {
         self.hourly_rate() * 730.0
@@ -136,11 +136,11 @@ impl CloudCostReport {
 mod tests {
     use super::*;
     use crate::resources::{ComputeResources, StorageResources};
-    
+
     #[test]
     fn test_pricing_engine_integration() {
         use crate::resources::{ComputeResources, StorageResources};
-        
+
         let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 4.0,
@@ -153,7 +153,7 @@ mod tests {
             },
             ..Default::default()
         };
-        
+
         let adapter = PricingAdapter::new().unwrap();
         let report = adapter.calculate_cost(&spec, &CloudProvider::AWS, 3600);
         assert!(report.final_cost > 0.0);

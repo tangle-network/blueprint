@@ -5,13 +5,12 @@
 
 #[cfg(test)]
 mod tests {
-    use blueprint_remote_providers::{
-        ResourceSpec, ComputeResources, StorageResources, NetworkResources,
-        CloudProvider, RemoteDeploymentConfig, PricingCalculator,
-    };
     use blueprint_remote_providers::resources::{
-        StorageType, BandwidthTier, QosParameters, 
-        AcceleratorResources, AcceleratorType, GpuSpec,
+        AcceleratorResources, AcceleratorType, BandwidthTier, GpuSpec, QosParameters, StorageType,
+    };
+    use blueprint_remote_providers::{
+        CloudProvider, ComputeResources, NetworkResources, PricingCalculator,
+        RemoteDeploymentConfig, ResourceSpec, StorageResources,
     };
     use std::time::Duration;
     use tokio::time::sleep;
@@ -80,7 +79,7 @@ mod tests {
         assert!(spec.accelerators.is_some());
         let accel = spec.accelerators.unwrap();
         assert_eq!(accel.count, 2);
-        
+
         if let AcceleratorType::GPU(gpu) = accel.accelerator_type {
             assert_eq!(gpu.vendor, "nvidia");
             assert_eq!(gpu.model, "a100");
@@ -93,7 +92,7 @@ mod tests {
     #[test]
     fn test_k8s_resource_conversion() {
         use blueprint_remote_providers::resources::to_k8s_resources;
-        
+
         let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 2.5,
@@ -108,19 +107,19 @@ mod tests {
         };
 
         let (resources, pvc) = to_k8s_resources(&spec);
-        
+
         assert!(resources.limits.is_some());
         assert!(resources.requests.is_some());
         assert!(pvc.is_some());
-        
+
         let limits = resources.limits.unwrap();
         assert!(limits.contains_key("cpu"));
         assert!(limits.contains_key("memory"));
-        
+
         // Verify CPU is set correctly (2.5 cores = 2500m millicores)
         let cpu_limit = limits.get("cpu").unwrap();
         assert_eq!(cpu_limit.0, "2.5");
-        
+
         // Verify memory is set correctly (8GB)
         let memory_limit = limits.get("memory").unwrap();
         assert_eq!(memory_limit.0, "8Gi");
@@ -130,7 +129,7 @@ mod tests {
     #[test]
     fn test_docker_resource_conversion() {
         use blueprint_remote_providers::resources::to_docker_resources;
-        
+
         let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 1.5,
@@ -145,13 +144,13 @@ mod tests {
         };
 
         let docker_config = to_docker_resources(&spec);
-        
+
         // Verify CPU limit (1.5 cores = 1.5 billion nanocpus)
         assert_eq!(docker_config["NanoCPUs"], 1_500_000_000i64);
-        
+
         // Verify memory limit (4GB in bytes)
         assert_eq!(docker_config["Memory"], 4 * 1024 * 1024 * 1024i64);
-        
+
         // Verify storage configuration
         assert!(docker_config["StorageOpt"]["size"].is_string());
     }
@@ -160,7 +159,7 @@ mod tests {
     #[tokio::test]
     async fn test_pricing_calculation() {
         let calculator = PricingCalculator::new().unwrap();
-        
+
         let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 4.0,
@@ -197,18 +196,18 @@ mod tests {
     #[test]
     fn test_spot_instance_pricing() {
         let calculator = PricingCalculator::new().unwrap();
-        
+
         let mut spec = ResourceSpec::default();
         spec.qos.allow_spot = false;
-        
+
         let regular_cost = calculator.calculate_cost(&spec, &CloudProvider::AWS, 1.0);
-        
+
         spec.qos.allow_spot = true;
         let spot_cost = calculator.calculate_cost(&spec, &CloudProvider::AWS, 1.0);
-        
+
         // Spot instances should be cheaper
         assert!(spot_cost.final_hourly_cost < regular_cost.final_hourly_cost);
-        
+
         // Verify discount is approximately 30%
         let discount = 1.0 - (spot_cost.final_hourly_cost / regular_cost.final_hourly_cost);
         assert!(discount > 0.25 && discount < 0.35);
@@ -218,7 +217,7 @@ mod tests {
     #[test]
     fn test_provider_comparison() {
         let calculator = PricingCalculator::new().unwrap();
-        
+
         let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 8.0,
@@ -233,25 +232,34 @@ mod tests {
         };
 
         let reports = calculator.compare_providers(&spec, 730.0); // Monthly
-        
+
         assert_eq!(reports.len(), 6); // AWS, GCP, Azure, DigitalOcean, Vultr, Generic
-        
+
         // Find cheapest and most expensive providers
-        let cheapest = reports.iter()
-            .min_by(|a, b| a.final_hourly_cost.partial_cmp(&b.final_hourly_cost).unwrap())
+        let cheapest = reports
+            .iter()
+            .min_by(|a, b| {
+                a.final_hourly_cost
+                    .partial_cmp(&b.final_hourly_cost)
+                    .unwrap()
+            })
             .unwrap();
-        
-        let most_expensive = reports.iter()
-            .max_by(|a, b| a.final_hourly_cost.partial_cmp(&b.final_hourly_cost).unwrap())
+
+        let most_expensive = reports
+            .iter()
+            .max_by(|a, b| {
+                a.final_hourly_cost
+                    .partial_cmp(&b.final_hourly_cost)
+                    .unwrap()
+            })
             .unwrap();
-        
+
         // Generic (self-hosted) should be cheapest
         assert!(matches!(cheapest.provider, CloudProvider::Generic));
-        
+
         // Cloud providers should be more expensive than self-hosted
         assert!(most_expensive.final_hourly_cost > cheapest.final_hourly_cost);
     }
-
 
     /// Test resource spec validation
     #[test]
@@ -275,13 +283,12 @@ mod tests {
         assert!(spec.storage.disk_gb >= 1.0);
     }
 
-
     /// Integration test for complete deployment flow
     #[cfg(feature = "kubernetes")]
     #[tokio::test]
     async fn test_deployment_flow_integration() {
         use blueprint_remote_providers::RemoteClusterManager;
-        
+
         let spec = ResourceSpec {
             compute: ComputeResources {
                 cpu_cores: 2.0,
@@ -308,7 +315,7 @@ mod tests {
 
         // Step 3: Setup cluster manager (would fail without valid kubeconfig)
         let cluster_manager = RemoteClusterManager::new();
-        
+
         let config = RemoteDeploymentConfig {
             namespace: "blueprint-test".to_string(),
             provider: CloudProvider::AWS,
@@ -316,7 +323,9 @@ mod tests {
         };
 
         // This would fail without valid kubeconfig, which is expected in tests
-        let add_result = cluster_manager.add_cluster("test-cluster".to_string(), config).await;
+        let add_result = cluster_manager
+            .add_cluster("test-cluster".to_string(), config)
+            .await;
         assert!(add_result.is_err());
 
         // Step 4: Verify resource spec is valid for deployment
@@ -347,9 +356,9 @@ mod tests {
         for scale_factor in [2.0, 4.0, 8.0] {
             scaled_spec.compute.cpu_cores = base_spec.compute.cpu_cores * scale_factor;
             scaled_spec.storage.memory_gb = base_spec.storage.memory_gb * scale_factor;
-            
+
             let report = calculator.calculate_cost(&scaled_spec, &CloudProvider::AWS, 1.0);
-            
+
             // Cost should increase with resources
             let base_report = calculator.calculate_cost(&base_spec, &CloudProvider::AWS, 1.0);
             assert!(report.final_hourly_cost > base_report.final_hourly_cost);
@@ -360,21 +369,21 @@ mod tests {
     #[test]
     fn test_high_availability_pricing() {
         let calculator = PricingCalculator::new().unwrap();
-        
+
         let mut spec = ResourceSpec::default();
-        
+
         // Standard availability
         spec.qos.min_availability_sla = Some(99.0);
         let standard_cost = calculator.calculate_cost(&spec, &CloudProvider::AWS, 1.0);
-        
+
         // High availability (99.9%)
         spec.qos.min_availability_sla = Some(99.9);
         let high_availability_cost = calculator.calculate_cost(&spec, &CloudProvider::AWS, 1.0);
-        
+
         // Ultra high availability (99.99%)
         spec.qos.min_availability_sla = Some(99.99);
         let ultra_high_cost = calculator.calculate_cost(&spec, &CloudProvider::AWS, 1.0);
-        
+
         // Higher SLA should increase cost
         assert!(high_availability_cost.final_hourly_cost > standard_cost.final_hourly_cost);
         assert!(ultra_high_cost.final_hourly_cost > high_availability_cost.final_hourly_cost);

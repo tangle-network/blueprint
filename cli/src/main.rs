@@ -523,25 +523,29 @@ async fn main() -> color_eyre::Result<()> {
                         .manifest
                         .manifest_path
                         .unwrap_or_else(|| PathBuf::from("Cargo.toml"));
-                    
+
                     if remote {
                         // Load deployment policy and configure Blueprint Manager for remote deployment
                         let policy = cargo_tangle::command::cloud::RemoteDeploymentPolicy::load()?;
                         println!("🚀 Deploying to remote cloud using configured policy...");
-                        
+
                         if let Some(provider_override) = provider {
                             println!("   Provider override: {}", provider_override);
                         }
                         if let Some(region_override) = region {
                             println!("   Region override: {}", region_override);
                         }
-                        
+
                         // TODO: Pass remote deployment config to Blueprint Manager
                         // For now, fall back to local deployment with a notice
-                        println!("⚠️  Remote deployment configuration loaded but not yet integrated with Blueprint Manager.");
-                        println!("   Falling back to local deployment. Integration coming in Phase 2.");
+                        println!(
+                            "⚠️  Remote deployment configuration loaded but not yet integrated with Blueprint Manager."
+                        );
+                        println!(
+                            "   Falling back to local deployment. Integration coming in Phase 2."
+                        );
                     }
-                    
+
                     Box::pin(deploy_tangle(
                         http_rpc_url,
                         ws_rpc_url,
@@ -862,7 +866,7 @@ async fn main() -> color_eyre::Result<()> {
         },
         Commands::Cloud { command } => {
             cargo_tangle::command::cloud::execute(command).await?;
-        },
+        }
         Commands::Debug { command } => match command {
             DebugCommands::Spawn {
                 mut http_rpc_url,

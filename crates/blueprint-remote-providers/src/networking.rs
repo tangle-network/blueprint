@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 /// Networking extensions for remote deployments
-/// 
+///
 /// This works with the existing bridge/proxy system to add
 /// cloud-specific networking configurations and tunneling.
 pub struct TunnelManager {
@@ -22,9 +22,9 @@ impl TunnelManager {
             mode,
         }
     }
-    
+
     /// Establish tunnel to remote cluster if needed
-    /// 
+    ///
     /// This extends the existing bridge communication to work
     /// across cloud boundaries.
     pub async fn establish_if_needed(
@@ -37,9 +37,9 @@ impl TunnelManager {
             debug!("Provider {} doesn't require tunnel", cluster_name);
             return Ok(None);
         }
-        
+
         info!("Establishing tunnel to {} cluster", cluster_name);
-        
+
         // Check if tunnel already exists
         if let Some(existing) = self.tunnels.read().await.get(cluster_name) {
             if existing.is_healthy().await {
@@ -47,7 +47,7 @@ impl TunnelManager {
                 return Ok(Some(existing.clone()));
             }
         }
-        
+
         // Create new tunnel based on mode
         let tunnel = match self.mode {
             NetworkingMode::Direct => {
@@ -55,18 +55,23 @@ impl TunnelManager {
                 return Ok(None);
             }
             NetworkingMode::WireGuard { ref config } => {
-                self.create_wireguard_tunnel(cluster_name, endpoint, config).await?
+                self.create_wireguard_tunnel(cluster_name, endpoint, config)
+                    .await?
             }
             NetworkingMode::SSHTunnel { ref jump_host } => {
-                self.create_ssh_tunnel(cluster_name, endpoint, jump_host).await?
+                self.create_ssh_tunnel(cluster_name, endpoint, jump_host)
+                    .await?
             }
         };
-        
-        self.tunnels.write().await.insert(cluster_name.to_string(), tunnel.clone());
-        
+
+        self.tunnels
+            .write()
+            .await
+            .insert(cluster_name.to_string(), tunnel.clone());
+
         Ok(Some(tunnel))
     }
-    
+
     async fn create_wireguard_tunnel(
         &self,
         cluster_name: &str,
@@ -75,9 +80,9 @@ impl TunnelManager {
     ) -> Result<TunnelConnection> {
         // In production, this would shell out to wg-quick or use a WireGuard library
         // For now, we create a mock tunnel configuration
-        
+
         info!("Creating WireGuard tunnel to {}", endpoint);
-        
+
         Ok(TunnelConnection {
             name: format!("wg-{}", cluster_name),
             tunnel_type: TunnelType::WireGuard,
@@ -86,7 +91,7 @@ impl TunnelManager {
             interface: format!("wg-{}", cluster_name.chars().take(8).collect::<String>()),
         })
     }
-    
+
     async fn create_ssh_tunnel(
         &self,
         cluster_name: &str,
@@ -95,9 +100,9 @@ impl TunnelManager {
     ) -> Result<TunnelConnection> {
         // In production, this would create an SSH tunnel
         // For now, we create a mock tunnel configuration
-        
+
         info!("Creating SSH tunnel via {} to {}", jump_host, endpoint);
-        
+
         Ok(TunnelConnection {
             name: format!("ssh-{}", cluster_name),
             tunnel_type: TunnelType::SSH,
@@ -106,12 +111,12 @@ impl TunnelManager {
             interface: "ssh".to_string(),
         })
     }
-    
+
     /// Get existing tunnel for a cluster
     pub async fn get_tunnel(&self, cluster_name: &str) -> Option<TunnelConnection> {
         self.tunnels.read().await.get(cluster_name).cloned()
     }
-    
+
     /// Tear down tunnel
     pub async fn teardown(&self, cluster_name: &str) -> Result<()> {
         if let Some(tunnel) = self.tunnels.write().await.remove(cluster_name) {
@@ -167,7 +172,7 @@ impl TunnelConnection {
         // For now, always return true
         true
     }
-    
+
     /// Get the endpoint to use for connections through this tunnel
     pub fn get_connection_endpoint(&self) -> String {
         match self.tunnel_type {
@@ -192,9 +197,9 @@ impl RemoteBridgeExtension {
     pub fn new(tunnel_manager: Arc<TunnelManager>) -> Self {
         Self { tunnel_manager }
     }
-    
+
     /// Get the appropriate endpoint for a remote cluster
-    /// 
+    ///
     /// This determines whether to use direct connection or tunnel
     /// and returns the correct endpoint for the existing bridge to use.
     pub async fn get_remote_endpoint(
@@ -215,20 +220,19 @@ impl RemoteBridgeExtension {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_tunnel_not_required() {
         let manager = TunnelManager::new(NetworkingMode::Direct);
-        
-        let result = manager.establish_if_needed(
-            "aws-cluster",
-            &CloudProvider::AWS,
-            "eks.amazonaws.com",
-        ).await.unwrap();
-        
+
+        let result = manager
+            .establish_if_needed("aws-cluster", &CloudProvider::AWS, "eks.amazonaws.com")
+            .await
+            .unwrap();
+
         assert!(result.is_none(), "AWS shouldn't require tunnel");
     }
-    
+
     #[tokio::test]
     async fn test_tunnel_required() {
         let config = WireGuardConfig {
@@ -239,44 +243,49 @@ mod tests {
             peer_public_key: "peer-public-key".to_string(),
             allowed_ips: vec!["10.0.0.0/24".to_string()],
         };
-        
+
         let manager = TunnelManager::new(NetworkingMode::WireGuard { config });
-        
-        let result = manager.establish_if_needed(
-            "generic-cluster",
-            &CloudProvider::Generic,
-            "cluster.local",
-        ).await.unwrap();
-        
+
+        let result = manager
+            .establish_if_needed("generic-cluster", &CloudProvider::Generic, "cluster.local")
+            .await
+            .unwrap();
+
         assert!(result.is_some(), "Generic should require tunnel");
-        
+
         let tunnel = result.unwrap();
         assert_eq!(tunnel.tunnel_type as i32, TunnelType::WireGuard as i32);
         assert!(tunnel.name.contains("generic-cluster"));
     }
-    
+
     #[tokio::test]
     async fn test_tunnel_reuse() {
         let manager = TunnelManager::new(NetworkingMode::SSHTunnel {
             jump_host: "jump.example.com".to_string(),
         });
-        
+
         // First call creates tunnel
-        let tunnel1 = manager.establish_if_needed(
-            "bare-metal",
-            &CloudProvider::BareMetal(vec!["192.168.1.10".to_string()]),
-            "192.168.1.10",
-        ).await.unwrap();
-        
+        let tunnel1 = manager
+            .establish_if_needed(
+                "bare-metal",
+                &CloudProvider::BareMetal(vec!["192.168.1.10".to_string()]),
+                "192.168.1.10",
+            )
+            .await
+            .unwrap();
+
         assert!(tunnel1.is_some());
-        
+
         // Second call reuses tunnel
-        let tunnel2 = manager.establish_if_needed(
-            "bare-metal",
-            &CloudProvider::BareMetal(vec!["192.168.1.10".to_string()]),
-            "192.168.1.10",
-        ).await.unwrap();
-        
+        let tunnel2 = manager
+            .establish_if_needed(
+                "bare-metal",
+                &CloudProvider::BareMetal(vec!["192.168.1.10".to_string()]),
+                "192.168.1.10",
+            )
+            .await
+            .unwrap();
+
         assert!(tunnel2.is_some());
         assert_eq!(tunnel1.unwrap().name, tunnel2.unwrap().name);
     }

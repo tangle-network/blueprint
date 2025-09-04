@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
 /// Infrastructure provisioner for creating cloud resources
-/// 
+///
 /// Handles creation of cloud infrastructure:
 /// - EC2 instances for AWS
 /// - Compute instances for GCP
@@ -30,7 +30,7 @@ impl InfrastructureProvisioner {
                 let config = aws_config::load_from_env().await;
                 let ec2_client = aws_sdk_ec2::Client::new(&config);
                 let eks_client = aws_sdk_eks::Client::new(&config);
-                
+
                 Ok(Self {
                     provider,
                     aws_client: Some(ec2_client),
@@ -49,7 +49,7 @@ impl InfrastructureProvisioner {
             }
         }
     }
-    
+
     /// Provision infrastructure based on requirements
     pub async fn provision(
         &self,
@@ -57,46 +57,51 @@ impl InfrastructureProvisioner {
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         info!("Provisioning infrastructure for {:?}", self.provider);
-        
+
         match self.provider {
             #[cfg(feature = "aws")]
             CloudProvider::AWS => self.provision_aws(requirements, config).await,
             CloudProvider::DigitalOcean => self.provision_digitalocean(requirements, config).await,
             CloudProvider::Vultr => self.provision_vultr(requirements, config).await,
             _ => {
-                warn!("Provider {:?} requires manual infrastructure setup", self.provider);
-                Err(Error::ConfigurationError(
-                    format!("Automatic provisioning not yet supported for {:?}", self.provider)
-                ))
+                warn!(
+                    "Provider {:?} requires manual infrastructure setup",
+                    self.provider
+                );
+                Err(Error::ConfigurationError(format!(
+                    "Automatic provisioning not yet supported for {:?}",
+                    self.provider
+                )))
             }
         }
     }
-    
+
     #[cfg(feature = "aws")]
     async fn provision_aws(
         &self,
         requirements: &ResourceRequirements,
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
-        use aws_sdk_ec2::types::{
-            InstanceType, ResourceType, Tag, TagSpecification,
-        };
-        
-        let ec2 = self.aws_client.as_ref()
+        use aws_sdk_ec2::types::{InstanceType, ResourceType, Tag, TagSpecification};
+
+        let ec2 = self
+            .aws_client
+            .as_ref()
             .ok_or_else(|| Error::ConfigurationError("AWS client not initialized".into()))?;
-        
+
         // Map requirements to instance type
         let instance_selection = crate::provisioning::InstanceTypeMapper::map_to_instance_type(
             requirements,
             &CloudProvider::AWS,
         );
-        
+
         // Run EC2 instance
-        let result = ec2.run_instances()
+        let result = ec2
+            .run_instances()
             .image_id(config.ami_id.as_deref().unwrap_or("ami-0c55b159cbfafe1f0")) // Amazon Linux 2
             .instance_type(
                 InstanceType::from(instance_selection.instance_type.as_str())
-                    .unwrap_or(InstanceType::T3Medium)
+                    .unwrap_or(InstanceType::T3Medium),
             )
             .min_count(1)
             .max_count(1)
@@ -104,46 +109,54 @@ impl InfrastructureProvisioner {
             .tag_specifications(
                 TagSpecification::builder()
                     .resource_type(ResourceType::Instance)
-                    .tags(Tag::builder()
-                        .key("Name")
-                        .value(format!("blueprint-{}", config.name))
-                        .build())
-                    .tags(Tag::builder()
-                        .key("ManagedBy")
-                        .value("blueprint-remote")
-                        .build())
-                    .build()
+                    .tags(
+                        Tag::builder()
+                            .key("Name")
+                            .value(format!("blueprint-{}", config.name))
+                            .build(),
+                    )
+                    .tags(
+                        Tag::builder()
+                            .key("ManagedBy")
+                            .value("blueprint-remote")
+                            .build(),
+                    )
+                    .build(),
             )
             .send()
             .await?;
-        
-        let instance = result.instances()
+
+        let instance = result
+            .instances()
             .first()
             .ok_or_else(|| Error::ConfigurationError("No instance created".into()))?;
-        
-        let instance_id = instance.instance_id()
+
+        let instance_id = instance
+            .instance_id()
             .ok_or_else(|| Error::ConfigurationError("No instance ID".into()))?;
-        
+
         info!("Created AWS EC2 instance: {}", instance_id);
-        
+
         // Wait for instance to be running
         ec2.wait_until_instance_running()
             .instance_ids(instance_id)
             .send()
             .await?;
-        
+
         // Get public IP
-        let describe_result = ec2.describe_instances()
+        let describe_result = ec2
+            .describe_instances()
             .instance_ids(instance_id)
             .send()
             .await?;
-        
-        let public_ip = describe_result.reservations()
+
+        let public_ip = describe_result
+            .reservations()
             .first()
             .and_then(|r| r.instances().first())
             .and_then(|i| i.public_ip_address())
             .unwrap_or("pending");
-        
+
         Ok(ProvisionedInfrastructure {
             provider: CloudProvider::AWS,
             instance_id: instance_id.to_string(),
@@ -154,36 +167,38 @@ impl InfrastructureProvisioner {
             metadata: HashMap::new(),
         })
     }
-    
+
     #[cfg(feature = "aws-eks")]
     pub async fn provision_eks_cluster(
         &self,
         config: &EksClusterConfig,
     ) -> Result<RemoteDeploymentConfig> {
         use aws_sdk_eks::types::{ClusterStatus, NodegroupStatus};
-        
-        let eks = self.eks_client.as_ref()
+
+        let eks = self
+            .eks_client
+            .as_ref()
             .ok_or_else(|| Error::ConfigurationError("EKS client not initialized".into()))?;
-        
+
         info!("Creating EKS cluster: {}", config.cluster_name);
-        
+
         // Create EKS cluster
-        let cluster_result = eks.create_cluster()
+        let cluster_result = eks
+            .create_cluster()
             .name(&config.cluster_name)
             .role_arn(&config.cluster_role_arn)
-            .resources_vpc_config(|vpc| {
-                vpc.subnet_ids(config.subnet_ids.clone())
-            })
+            .resources_vpc_config(|vpc| vpc.subnet_ids(config.subnet_ids.clone()))
             .send()
             .await?;
-        
+
         // Wait for cluster to be active
         loop {
-            let describe = eks.describe_cluster()
+            let describe = eks
+                .describe_cluster()
                 .name(&config.cluster_name)
                 .send()
                 .await?;
-            
+
             if let Some(cluster) = describe.cluster() {
                 match cluster.status() {
                     Some(ClusterStatus::Active) => break,
@@ -197,11 +212,12 @@ impl InfrastructureProvisioner {
                 }
             }
         }
-        
+
         // Create node group
         info!("Creating EKS node group");
-        
-        let nodegroup_result = eks.create_nodegroup()
+
+        let nodegroup_result = eks
+            .create_nodegroup()
             .cluster_name(&config.cluster_name)
             .nodegroup_name(format!("{}-nodes", config.cluster_name))
             .node_role(&config.node_role_arn)
@@ -214,27 +230,31 @@ impl InfrastructureProvisioner {
             .instance_types(config.instance_types.clone())
             .send()
             .await?;
-        
+
         // Generate kubeconfig
-        let cluster_endpoint = describe.cluster()
+        let cluster_endpoint = describe
+            .cluster()
             .and_then(|c| c.endpoint())
             .ok_or_else(|| Error::ConfigurationError("No cluster endpoint".into()))?;
-        
-        let cluster_ca = describe.cluster()
+
+        let cluster_ca = describe
+            .cluster()
             .and_then(|c| c.certificate_authority())
             .and_then(|ca| ca.data())
             .ok_or_else(|| Error::ConfigurationError("No cluster CA".into()))?;
-        
+
         Ok(RemoteDeploymentConfig {
             kubeconfig_path: None, // Will be generated
-            context: Some(format!("arn:aws:eks:{}:{}:cluster/{}", 
-                config.region, config.account_id, config.cluster_name)),
+            context: Some(format!(
+                "arn:aws:eks:{}:{}:cluster/{}",
+                config.region, config.account_id, config.cluster_name
+            )),
             namespace: "blueprint".to_string(),
             provider: CloudProvider::AWS,
             region: Some(config.region.clone()),
         })
     }
-    
+
     async fn provision_digitalocean(
         &self,
         requirements: &ResourceRequirements,
@@ -242,14 +262,14 @@ impl InfrastructureProvisioner {
     ) -> Result<ProvisionedInfrastructure> {
         // DigitalOcean API implementation
         // Would use reqwest or a DO SDK when available
-        
+
         let instance_selection = crate::provisioning::InstanceTypeMapper::map_to_instance_type(
             requirements,
             &CloudProvider::DigitalOcean,
         );
-        
+
         warn!("DigitalOcean provisioning requires API token setup");
-        
+
         // Example API call structure:
         // POST https://api.digitalocean.com/v2/droplets
         // {
@@ -258,12 +278,12 @@ impl InfrastructureProvisioner {
         //   "size": instance_selection.instance_type,
         //   "image": "ubuntu-20-04-x64"
         // }
-        
+
         Err(Error::ConfigurationError(
-            "DigitalOcean provisioning requires manual API setup".to_string()
+            "DigitalOcean provisioning requires manual API setup".to_string(),
         ))
     }
-    
+
     async fn provision_vultr(
         &self,
         requirements: &ResourceRequirements,
@@ -274,11 +294,11 @@ impl InfrastructureProvisioner {
             requirements,
             &CloudProvider::Vultr,
         );
-        
+
         warn!("Vultr provisioning requires API key setup");
-        
+
         Err(Error::ConfigurationError(
-            "Vultr provisioning requires manual API setup".to_string()
+            "Vultr provisioning requires manual API setup".to_string(),
         ))
     }
 }
@@ -293,7 +313,7 @@ pub struct ProvisioningConfig {
     pub subnet_id: Option<String>,
     pub security_group_ids: Vec<String>,
     pub ssh_key_name: Option<String>,
-    pub ami_id: Option<String>, // For AWS
+    pub ami_id: Option<String>,   // For AWS
     pub image_id: Option<String>, // For other providers
     pub user_data: Option<String>,
     pub tags: HashMap<String, String>,
@@ -351,7 +371,7 @@ impl ProvisionedInfrastructure {
         // Could ping the instance or check cloud provider status
         self.public_ip.is_some() || self.private_ip.is_some()
     }
-    
+
     /// Get connection endpoint for this infrastructure
     pub fn get_endpoint(&self) -> Option<String> {
         self.public_ip.clone().or_else(|| self.private_ip.clone())
@@ -366,16 +386,16 @@ impl InfrastructureCleanup {
     pub async fn cleanup_aws_instance(instance_id: &str) -> Result<()> {
         let config = aws_config::load_from_env().await;
         let ec2 = aws_sdk_ec2::Client::new(&config);
-        
+
         ec2.terminate_instances()
             .instance_ids(instance_id)
             .send()
             .await?;
-        
+
         info!("Terminated AWS instance: {}", instance_id);
         Ok(())
     }
-    
+
     pub async fn cleanup(infra: &ProvisionedInfrastructure) -> Result<()> {
         match infra.provider {
             #[cfg(feature = "aws")]

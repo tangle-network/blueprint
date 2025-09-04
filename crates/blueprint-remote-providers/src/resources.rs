@@ -1,5 +1,5 @@
 //! Resource model for pricing-engine, manager, and remote-providers integration
-//! 
+//!
 //! Provides resource management foundation for local and remote deployments
 //! with consistent resource definitions and pricing calculations.
 
@@ -7,29 +7,29 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Resource specification for deployment targets
-/// 
-/// Provides comprehensive resource configuration for local resource 
+///
+/// Provides comprehensive resource configuration for local resource
 /// enforcement and remote instance selection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceSpec {
     /// Core compute resources
     pub compute: ComputeResources,
-    
+
     /// Memory and storage
     pub storage: StorageResources,
-    
+
     /// Network requirements
     pub network: NetworkResources,
-    
+
     /// Optional accelerators (GPUs, TPUs, etc)
     pub accelerators: Option<AcceleratorResources>,
-    
+
     /// Quality of service parameters
     pub qos: QosParameters,
-    
+
     /// Container runtime configuration
     pub runtime: RuntimeConfiguration,
-    
+
     /// Monitoring and observability settings
     pub observability: ObservabilityConfiguration,
 }
@@ -52,19 +52,19 @@ impl Default for ResourceSpec {
 pub struct ComputeResources {
     /// CPU cores (can be fractional, e.g., 0.5 for half a core)
     pub cpu_cores: f64,
-    
+
     /// CPU architecture preference (x86_64, arm64, etc)
     pub cpu_arch: Option<String>,
-    
+
     /// Minimum CPU frequency in GHz
     pub min_cpu_frequency_ghz: Option<f64>,
-    
+
     /// CPU model preference (e.g., "Intel Xeon", "AMD EPYC")
     pub cpu_model: Option<String>,
-    
+
     /// Required CPU features (AVX2, AVX512, AES-NI, etc)
     pub cpu_features: Vec<String>,
-    
+
     /// CPU performance tier (economy, standard, premium)
     pub cpu_tier: Option<PerformanceTier>,
 }
@@ -86,28 +86,28 @@ impl Default for ComputeResources {
 pub struct StorageResources {
     /// RAM in GB
     pub memory_gb: f64,
-    
+
     /// Persistent storage in GB
     pub disk_gb: f64,
-    
+
     /// Storage type (ssd, nvme, hdd)
     pub disk_type: StorageType,
-    
+
     /// Minimum IOPS requirement
     pub iops: Option<u32>,
-    
+
     /// Throughput in MB/s
     pub throughput_mbps: Option<u32>,
-    
+
     /// Memory type (DDR4, DDR5, HBM)
     pub memory_type: Option<MemoryType>,
-    
+
     /// ECC memory required
     pub ecc_required: bool,
-    
+
     /// Ephemeral storage in GB (temporary, instance storage)
     pub ephemeral_gb: Option<f64>,
-    
+
     /// Object storage in GB (S3-compatible)
     pub object_storage_gb: Option<f64>,
 }
@@ -131,7 +131,7 @@ impl Default for StorageResources {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StorageType {
     HDD,
-    SSD, 
+    SSD,
     NVME,
     EBS,           // Elastic Block Storage
     LocalSSD,      // Local instance SSD
@@ -157,9 +157,9 @@ pub enum MemoryType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LoadBalancerType {
     None,
-    ApplicationLB,  // Layer 7
-    NetworkLB,      // Layer 4
-    GlobalLB,       // Multi-region
+    ApplicationLB, // Layer 7
+    NetworkLB,     // Layer 4
+    GlobalLB,      // Multi-region
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -244,40 +244,40 @@ impl Default for EncryptionRequirements {
 pub struct NetworkResources {
     /// Bandwidth tier
     pub bandwidth_tier: BandwidthTier,
-    
+
     /// Guaranteed bandwidth in Mbps
     pub guaranteed_bandwidth_mbps: Option<u32>,
-    
+
     /// Static IP requirement
     pub static_ip: bool,
-    
+
     /// Public IP requirement
     pub public_ip: bool,
-    
+
     /// IPv6 support required
     pub ipv6_required: bool,
-    
+
     /// Number of public IPs needed
     pub public_ip_count: u32,
-    
+
     /// Network latency requirement in ms
     pub max_latency_ms: Option<u32>,
-    
+
     /// Required network protocols (TCP, UDP, SCTP, etc)
     pub protocols: Vec<String>,
-    
+
     /// Ingress bandwidth limit in Gbps
     pub ingress_limit_gbps: Option<f64>,
-    
+
     /// Egress bandwidth limit in Gbps
     pub egress_limit_gbps: Option<f64>,
-    
+
     /// Load balancer requirement
     pub load_balancer: Option<LoadBalancerType>,
-    
+
     /// CDN requirement
     pub cdn_enabled: bool,
-    
+
     /// DDoS protection level
     pub ddos_protection: Option<DdosProtectionLevel>,
 }
@@ -314,7 +314,7 @@ pub enum BandwidthTier {
 pub struct AcceleratorResources {
     /// Number of accelerators
     pub count: u32,
-    
+
     /// Type of accelerator
     pub accelerator_type: AcceleratorType,
 }
@@ -330,10 +330,10 @@ pub enum AcceleratorType {
 pub struct GpuSpec {
     /// GPU vendor (nvidia, amd, intel)
     pub vendor: String,
-    
+
     /// GPU model (a100, v100, t4, etc)
     pub model: String,
-    
+
     /// Minimum VRAM in GB
     pub min_vram_gb: f64,
 }
@@ -342,34 +342,34 @@ pub struct GpuSpec {
 pub struct QosParameters {
     /// Priority level (0-100, higher is more important)
     pub priority: u8,
-    
+
     /// Whether spot/preemptible instances are acceptable
     pub allow_spot: bool,
-    
+
     /// Whether burstable instances are acceptable
     pub allow_burstable: bool,
-    
+
     /// Minimum availability SLA (99.9, 99.99, etc)
     pub min_availability_sla: Option<f64>,
-    
+
     /// Maximum acceptable downtime per month in minutes
     pub max_downtime_minutes: Option<u32>,
-    
+
     /// Backup requirements
     pub backup_config: Option<BackupConfig>,
-    
+
     /// Disaster recovery requirements
     pub disaster_recovery: Option<DisasterRecoveryConfig>,
-    
+
     /// Compliance requirements (HIPAA, PCI-DSS, SOC2, etc)
     pub compliance: Vec<ComplianceRequirement>,
-    
+
     /// Geographic restrictions
     pub geo_restrictions: Option<GeoRestrictions>,
-    
+
     /// Data residency requirements
     pub data_residency: Vec<String>,
-    
+
     /// Encryption requirements
     pub encryption: EncryptionRequirements,
 }
@@ -395,12 +395,12 @@ impl Default for QosParameters {
 /// Converts resource spec to pricing engine resource units for cost calculation
 pub fn to_pricing_units(spec: &ResourceSpec) -> HashMap<String, f64> {
     let mut units = HashMap::new();
-    
+
     // Map to pricing engine ResourceUnit equivalents
     units.insert("CPU".to_string(), spec.compute.cpu_cores);
     units.insert("MemoryMB".to_string(), spec.storage.memory_gb * 1024.0);
     units.insert("StorageMB".to_string(), spec.storage.disk_gb * 1024.0);
-    
+
     // Network units based on tier
     let network_multiplier = match spec.network.bandwidth_tier {
         BandwidthTier::Low => 1.0,
@@ -410,26 +410,31 @@ pub fn to_pricing_units(spec: &ResourceSpec) -> HashMap<String, f64> {
     };
     units.insert("NetworkEgressMB".to_string(), 1024.0 * network_multiplier);
     units.insert("NetworkIngressMB".to_string(), 1024.0 * network_multiplier);
-    
+
     // GPU units if present
     if let Some(ref accel) = spec.accelerators {
         if let AcceleratorType::GPU(_) = accel.accelerator_type {
             units.insert("GPU".to_string(), accel.count as f64);
         }
     }
-    
+
     units
 }
 
 /// Converts resource spec to Kubernetes resource limits
 #[cfg(feature = "kubernetes")]
-pub fn to_k8s_resources(spec: &ResourceSpec) -> (k8s_openapi::api::core::v1::ResourceRequirements, Option<k8s_openapi::api::core::v1::PersistentVolumeClaimSpec>) {
-    use k8s_openapi::api::core::v1::{ResourceRequirements, PersistentVolumeClaimSpec};
+pub fn to_k8s_resources(
+    spec: &ResourceSpec,
+) -> (
+    k8s_openapi::api::core::v1::ResourceRequirements,
+    Option<k8s_openapi::api::core::v1::PersistentVolumeClaimSpec>,
+) {
+    use k8s_openapi::api::core::v1::{PersistentVolumeClaimSpec, ResourceRequirements};
     use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
-    
+
     let mut limits = std::collections::BTreeMap::new();
     let mut requests = std::collections::BTreeMap::new();
-    
+
     // CPU (in cores or millicores)
     let cpu_str = if spec.compute.cpu_cores < 1.0 {
         format!("{}m", (spec.compute.cpu_cores * 1000.0) as i32)
@@ -438,12 +443,12 @@ pub fn to_k8s_resources(spec: &ResourceSpec) -> (k8s_openapi::api::core::v1::Res
     };
     limits.insert("cpu".to_string(), Quantity(cpu_str.clone()));
     requests.insert("cpu".to_string(), Quantity(cpu_str));
-    
+
     // Memory
     let memory_str = format!("{}Gi", spec.storage.memory_gb);
     limits.insert("memory".to_string(), Quantity(memory_str.clone()));
     requests.insert("memory".to_string(), Quantity(memory_str));
-    
+
     // GPU if present
     if let Some(ref accel) = spec.accelerators {
         if let AcceleratorType::GPU(ref gpu_spec) = accel.accelerator_type {
@@ -456,24 +461,27 @@ pub fn to_k8s_resources(spec: &ResourceSpec) -> (k8s_openapi::api::core::v1::Res
             requests.insert(gpu_key.to_string(), Quantity(accel.count.to_string()));
         }
     }
-    
+
     let resource_req = ResourceRequirements {
         limits: Some(limits),
         requests: Some(requests),
         claims: None,
     };
-    
+
     // Storage as PVC if needed
     let pvc_spec = if spec.storage.disk_gb > 0.0 {
         let mut pvc_requests = std::collections::BTreeMap::new();
-        pvc_requests.insert("storage".to_string(), Quantity(format!("{}Gi", spec.storage.disk_gb)));
-        
+        pvc_requests.insert(
+            "storage".to_string(),
+            Quantity(format!("{}Gi", spec.storage.disk_gb)),
+        );
+
         let storage_class = match spec.storage.disk_type {
             StorageType::HDD => Some("standard".to_string()),
             StorageType::SSD => Some("ssd".to_string()),
             StorageType::NVME => Some("nvme".to_string()),
         };
-        
+
         Some(PersistentVolumeClaimSpec {
             access_modes: Some(vec!["ReadWriteOnce".to_string()]),
             resources: Some(ResourceRequirements {
@@ -487,29 +495,29 @@ pub fn to_k8s_resources(spec: &ResourceSpec) -> (k8s_openapi::api::core::v1::Res
     } else {
         None
     };
-    
+
     (resource_req, pvc_spec)
 }
 
 /// Converts resource spec to Docker resource limits
 pub fn to_docker_resources(spec: &ResourceSpec) -> serde_json::Value {
     let mut host_config = serde_json::json!({});
-    
+
     // CPU limits (Docker uses nano CPUs)
     let nano_cpus = (spec.compute.cpu_cores * 1_000_000_000.0) as i64;
     host_config["NanoCPUs"] = nano_cpus.into();
-    
+
     // Memory limits (in bytes)
     let memory_bytes = (spec.storage.memory_gb * 1024.0 * 1024.0 * 1024.0) as i64;
     host_config["Memory"] = memory_bytes.into();
-    
+
     // Storage limits if available
     if spec.storage.disk_gb > 0.0 {
         host_config["StorageOpt"] = serde_json::json!({
             "size": format!("{}G", spec.storage.disk_gb)
         });
     }
-    
+
     // GPU support via device requests
     if let Some(ref accel) = spec.accelerators {
         if let AcceleratorType::GPU(_) = accel.accelerator_type {
@@ -522,7 +530,7 @@ pub fn to_docker_resources(spec: &ResourceSpec) -> serde_json::Value {
             ]);
         }
     }
-    
+
     host_config
 }
 
@@ -542,7 +550,7 @@ pub fn from_legacy_limits(memory_mb: Option<u64>, storage_mb: Option<u64>) -> Re
 /// Converts from remote-providers ResourceRequirements
 pub fn from_resource_requirements(req: &crate::provisioning::ResourceRequirements) -> ResourceSpec {
     use crate::provisioning::NetworkTier;
-    
+
     ResourceSpec {
         compute: ComputeResources {
             cpu_cores: req.cpu_cores,
@@ -584,25 +592,25 @@ pub fn from_resource_requirements(req: &crate::provisioning::ResourceRequirement
 pub struct RuntimeConfiguration {
     /// Preferred container runtime (Docker, containerd, CRI-O)
     pub runtime_type: RuntimeType,
-    
+
     /// Security context requirements
     pub security_context: SecurityContext,
-    
+
     /// Resource limits enforcement
     pub limits_enforcement: LimitsEnforcement,
-    
+
     /// Init process configuration
     pub init_process: bool,
-    
+
     /// Privileged container access
     pub privileged: bool,
-    
+
     /// User namespace mapping
     pub user_namespace: bool,
-    
+
     /// Read-only root filesystem
     pub read_only_root_fs: bool,
-    
+
     /// Capabilities to add/drop
     pub capabilities: CapabilityConfiguration,
 }
@@ -642,19 +650,19 @@ pub enum LimitsEnforcement {
 pub struct SecurityContext {
     /// Run as non-root user
     pub run_as_non_root: bool,
-    
+
     /// Specific user ID to run as
     pub run_as_user: Option<u32>,
-    
+
     /// Specific group ID to run as
     pub run_as_group: Option<u32>,
-    
+
     /// SELinux options
     pub selinux_options: Option<SELinuxOptions>,
-    
+
     /// AppArmor profile
     pub apparmor_profile: Option<String>,
-    
+
     /// Seccomp profile
     pub seccomp_profile: Option<String>,
 }
@@ -684,7 +692,7 @@ pub struct SELinuxOptions {
 pub struct CapabilityConfiguration {
     /// Linux capabilities to add
     pub add: Vec<String>,
-    
+
     /// Linux capabilities to drop
     pub drop: Vec<String>,
 }
@@ -702,13 +710,13 @@ impl Default for CapabilityConfiguration {
 pub struct ObservabilityConfiguration {
     /// Metrics collection settings
     pub metrics: MetricsConfiguration,
-    
+
     /// Logging configuration
     pub logging: LoggingConfiguration,
-    
+
     /// Tracing/APM settings
     pub tracing: TracingConfiguration,
-    
+
     /// Health check configuration
     pub health_checks: HealthCheckConfiguration,
 }
@@ -728,16 +736,16 @@ impl Default for ObservabilityConfiguration {
 pub struct MetricsConfiguration {
     /// Enable metrics collection
     pub enabled: bool,
-    
+
     /// Metrics endpoint path
     pub endpoint_path: String,
-    
+
     /// Metrics port
     pub port: u16,
-    
+
     /// Scrape interval in seconds
     pub scrape_interval: u32,
-    
+
     /// Custom metrics labels
     pub custom_labels: HashMap<String, String>,
 }
@@ -758,16 +766,16 @@ impl Default for MetricsConfiguration {
 pub struct LoggingConfiguration {
     /// Log level (debug, info, warn, error)
     pub level: String,
-    
+
     /// Log format (json, text)
     pub format: String,
-    
+
     /// Log aggregation service
     pub aggregation_service: Option<String>,
-    
+
     /// Log retention period in days
     pub retention_days: Option<u32>,
-    
+
     /// Maximum log size in MB
     pub max_size_mb: Option<u32>,
 }
@@ -788,13 +796,13 @@ impl Default for LoggingConfiguration {
 pub struct TracingConfiguration {
     /// Enable distributed tracing
     pub enabled: bool,
-    
+
     /// Tracing service (Jaeger, Zipkin, OpenTelemetry)
     pub service: Option<String>,
-    
+
     /// Sampling rate (0.0 to 1.0)
     pub sampling_rate: f64,
-    
+
     /// Custom trace attributes
     pub custom_attributes: HashMap<String, String>,
 }
@@ -814,22 +822,22 @@ impl Default for TracingConfiguration {
 pub struct HealthCheckConfiguration {
     /// Enable health checks
     pub enabled: bool,
-    
+
     /// HTTP health check path
     pub http_path: Option<String>,
-    
+
     /// Health check port
     pub port: Option<u16>,
-    
+
     /// Check interval in seconds
     pub interval_seconds: u32,
-    
+
     /// Timeout in seconds
     pub timeout_seconds: u32,
-    
+
     /// Failure threshold before marking unhealthy
     pub failure_threshold: u32,
-    
+
     /// Success threshold before marking healthy
     pub success_threshold: u32,
 }
@@ -851,7 +859,7 @@ impl Default for HealthCheckConfiguration {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_resource_spec_to_pricing_units() {
         let spec = ResourceSpec {
@@ -866,14 +874,14 @@ mod tests {
             },
             ..Default::default()
         };
-        
+
         let units = to_pricing_units(&spec);
-        
+
         assert_eq!(units.get("CPU"), Some(&4.0));
         assert_eq!(units.get("MemoryMB"), Some(&(16.0 * 1024.0)));
         assert_eq!(units.get("StorageMB"), Some(&(100.0 * 1024.0)));
     }
-    
+
     #[test]
     #[cfg(feature = "kubernetes")]
     fn test_k8s_resource_conversion() {
@@ -889,17 +897,17 @@ mod tests {
             },
             ..Default::default()
         };
-        
+
         let (resources, pvc) = to_k8s_resources(&spec);
-        
+
         assert!(resources.limits.is_some());
         let limits = resources.limits.unwrap();
         assert!(limits.contains_key("cpu"));
         assert!(limits.contains_key("memory"));
-        
+
         assert!(pvc.is_some());
     }
-    
+
     #[test]
     fn test_docker_resource_conversion() {
         let spec = ResourceSpec {
@@ -913,9 +921,9 @@ mod tests {
             },
             ..Default::default()
         };
-        
+
         let docker_config = to_docker_resources(&spec);
-        
+
         assert_eq!(docker_config["NanoCPUs"], 2_000_000_000i64);
         assert_eq!(docker_config["Memory"], 4 * 1024 * 1024 * 1024i64);
     }

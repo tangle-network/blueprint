@@ -57,7 +57,7 @@ pub async fn show_status(deployment_id: Option<String>, watch: bool) -> Result<(
 
 async fn display_status(deployment_id: &Option<String>) -> Result<()> {
     println!("📊 Cloud Deployment Status\n");
-    
+
     if let Some(id) = deployment_id {
         // Show specific deployment
         show_deployment_details(id).await?;
@@ -65,7 +65,7 @@ async fn display_status(deployment_id: &Option<String>) -> Result<()> {
         // Show all deployments
         show_all_deployments().await?;
     }
-    
+
     Ok(())
 }
 
@@ -83,7 +83,7 @@ async fn show_deployment_details(id: &str) -> Result<()> {
     println!("Uptime:         2h 45m");
     println!("TTL:            21h 15m remaining");
     println!();
-    
+
     println!("Resources:");
     println!("  CPU:          4 cores (23% usage)");
     println!("  Memory:       16 GB (8.2 GB used)");
@@ -91,7 +91,7 @@ async fn show_deployment_details(id: &str) -> Result<()> {
     println!("  Network In:   1.2 GB");
     println!("  Network Out:  3.4 GB");
     println!();
-    
+
     println!("Blueprint:");
     println!("  ID:           123");
     println!("  Name:         my-blueprint");
@@ -99,20 +99,20 @@ async fn show_deployment_details(id: &str) -> Result<()> {
     println!("  Jobs Executed: 42");
     println!("  Last Job:     5 minutes ago");
     println!();
-    
+
     println!("Health Checks:");
     println!("  HTTP /health: ✅ 200 OK (32ms)");
     println!("  TCP port 8080: ✅ Open");
     println!("  Process:      ✅ Running (PID 1234)");
     println!();
-    
+
     println!("Logs (last 5 lines):");
     println!("  [10:45:23] INFO  Starting job execution");
     println!("  [10:45:24] INFO  Job 42 completed successfully");
     println!("  [10:45:25] DEBUG Metrics updated");
     println!("  [10:45:30] INFO  Health check passed");
     println!("  [10:45:35] INFO  Waiting for next job");
-    
+
     Ok(())
 }
 
@@ -156,37 +156,44 @@ async fn show_all_deployments() -> Result<()> {
             ttl: "Expired".to_string(),
         },
     ];
-    
+
     if deployments.is_empty() {
         println!("No active deployments.");
         println!("\nDeploy a blueprint with:");
         println!("  cargo tangle cloud deploy --provider aws");
     } else {
         // Display deployments in formatted table
-        println!("{:<15} {:<15} {:<12} {:<15} {:<15} {:<10} {:<10}",
-            "ID", "Provider", "Region", "Status", "IP", "Uptime", "TTL");
+        println!(
+            "{:<15} {:<15} {:<12} {:<15} {:<15} {:<10} {:<10}",
+            "ID", "Provider", "Region", "Status", "IP", "Uptime", "TTL"
+        );
         println!("{}", "-".repeat(92));
-        
+
         for dep in &deployments {
-            println!("{:<15} {:<15} {:<12} {:<15} {:<15} {:<10} {:<10}",
-                dep.id, dep.provider, dep.region, dep.status, dep.ip, dep.uptime, dep.ttl);
+            println!(
+                "{:<15} {:<15} {:<12} {:<15} {:<15} {:<10} {:<10}",
+                dep.id, dep.provider, dep.region, dep.status, dep.ip, dep.uptime, dep.ttl
+            );
         }
-        
+
         println!("\nSummary:");
-        let running = deployments.iter().filter(|d| d.status.contains("Running")).count();
+        let running = deployments
+            .iter()
+            .filter(|d| d.status.contains("Running"))
+            .count();
         let total = deployments.len();
         println!("  {} running, {} total deployments", running, total);
-        
+
         // Calculate total hourly cost (mock)
         let total_cost = running as f32 * 0.42;
         println!("  Estimated cost: ${:.2}/hour", total_cost);
-        
+
         println!("\nCommands:");
         println!("  View details:   cargo tangle cloud status --deployment-id <id>");
         println!("  Watch status:   cargo tangle cloud status --watch");
         println!("  Terminate:      cargo tangle cloud terminate --deployment-id <id>");
     }
-    
+
     Ok(())
 }
 
@@ -217,13 +224,9 @@ async fn show_all_deployments() -> Result<()> {
 /// # Terminate all with confirmation
 /// cargo tangle cloud terminate --all
 /// ```
-pub async fn terminate(
-    deployment_id: Option<String>,
-    all: bool,
-    yes: bool,
-) -> Result<()> {
+pub async fn terminate(deployment_id: Option<String>, all: bool, yes: bool) -> Result<()> {
     println!("🛑 Terminating Cloud Deployments\n");
-    
+
     if all {
         // Terminate all deployments
         if !yes {
@@ -231,27 +234,25 @@ pub async fn terminate(
             if !Confirm::new()
                 .with_prompt("Are you sure you want to terminate ALL deployments?")
                 .default(false)
-                .interact()? 
+                .interact()?
             {
                 println!("Termination cancelled.");
                 return Ok(());
             }
         }
-        
+
         println!("Terminating all deployments...");
         let pb = indicatif::ProgressBar::new(4);
         pb.set_style(
-            indicatif::ProgressStyle::default_bar()
-                .template("[{bar:40}] {pos}/{len} {msg}")?
+            indicatif::ProgressStyle::default_bar().template("[{bar:40}] {pos}/{len} {msg}")?,
         );
-        
+
         for i in 0..4 {
             pb.set_message(format!("Terminating dep-{}", i));
             tokio::time::sleep(Duration::from_millis(500)).await;
             pb.inc(1);
         }
         pb.finish_with_message("All deployments terminated");
-        
     } else if let Some(id) = deployment_id {
         // Terminate specific deployment
         if !yes {
@@ -259,37 +260,33 @@ pub async fn terminate(
             if !Confirm::new()
                 .with_prompt(format!("Terminate deployment {}?", id))
                 .default(true)
-                .interact()? 
+                .interact()?
             {
                 println!("Termination cancelled.");
                 return Ok(());
             }
         }
-        
+
         println!("Terminating {}...", id);
         let spinner = indicatif::ProgressBar::new_spinner();
-        spinner.set_style(
-            indicatif::ProgressStyle::default_spinner()
-                .template("{spinner} {msg}")?
-        );
-        
+        spinner.set_style(indicatif::ProgressStyle::default_spinner().template("{spinner} {msg}")?);
+
         spinner.set_message("Stopping services...");
         tokio::time::sleep(Duration::from_secs(1)).await;
-        
+
         spinner.set_message("Deallocating resources...");
         tokio::time::sleep(Duration::from_secs(1)).await;
-        
+
         spinner.set_message("Cleaning up...");
         tokio::time::sleep(Duration::from_millis(500)).await;
-        
+
         spinner.finish_with_message(format!("✅ {} terminated", id));
-        
     } else {
         println!("No deployment specified.");
         println!("\nUsage:");
         println!("  Terminate one:  cargo tangle cloud terminate --deployment-id <id>");
         println!("  Terminate all:  cargo tangle cloud terminate --all");
     }
-    
+
     Ok(())
 }

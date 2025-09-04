@@ -9,5 +9,5 @@ pub mod service;
 #[cfg(test)]
 mod integration_test;
 
-pub use provider_selector::{ProviderSelector, DeploymentTarget};
+pub use provider_selector::{DeploymentTarget, ProviderSelector};
 pub use service::RemoteDeploymentService;

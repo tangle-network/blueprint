@@ -1,5 +1,5 @@
 //! SSH-based deployment for bare metal servers and remote Docker hosts
-//! 
+//!
 //! Provides direct SSH deployment capabilities for Blueprint instances
 //! to bare metal servers or any SSH-accessible host with Docker/Podman.
 
@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
-use tokio::io::{AsyncWriteExt, AsyncReadExt};
-use tracing::{info, debug, warn};
+use tracing::{debug, info, warn};
 
 /// SSH deployment client for bare metal servers
 pub struct SshDeploymentClient {
@@ -35,16 +35,16 @@ impl SshDeploymentClient {
             runtime,
             deployment_config,
         };
-        
+
         // Test SSH connection
         client.test_connection().await?;
-        
+
         // Verify runtime is installed
         client.verify_runtime().await?;
-        
+
         Ok(client)
     }
-    
+
     /// Test SSH connection to the remote host
     async fn test_connection(&self) -> Result<()> {
         let output = self.run_remote_command("echo 'Connection test'").await?;
@@ -52,10 +52,12 @@ impl SshDeploymentClient {
             info!("SSH connection to {} successful", self.connection.host);
             Ok(())
         } else {
-            Err(Error::ConfigurationError("Failed to establish SSH connection".into()))
+            Err(Error::ConfigurationError(
+                "Failed to establish SSH connection".into(),
+            ))
         }
     }
-    
+
     /// Verify container runtime is installed on remote host
     async fn verify_runtime(&self) -> Result<()> {
         let cmd = match self.runtime {
@@ -63,10 +65,13 @@ impl SshDeploymentClient {
             ContainerRuntime::Podman => "podman --version",
             ContainerRuntime::Containerd => "ctr version",
         };
-        
+
         match self.run_remote_command(cmd).await {
             Ok(output) => {
-                info!("Container runtime verified: {}", output.lines().next().unwrap_or(""));
+                info!(
+                    "Container runtime verified: {}",
+                    output.lines().next().unwrap_or("")
+                );
                 Ok(())
             }
             Err(_) => {
@@ -75,7 +80,7 @@ impl SshDeploymentClient {
             }
         }
     }
-    
+
     /// Install container runtime on remote host
     async fn install_runtime(&self) -> Result<()> {
         let install_script = match self.runtime {
@@ -103,12 +108,12 @@ impl SshDeploymentClient {
                 "#
             }
         };
-        
+
         self.run_remote_command(install_script).await?;
         info!("Container runtime installed successfully");
         Ok(())
     }
-    
+
     /// Deploy Blueprint to remote host
     pub async fn deploy_blueprint(
         &self,
@@ -116,20 +121,25 @@ impl SshDeploymentClient {
         spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<RemoteDeployment> {
-        info!("Deploying Blueprint {} to {}", blueprint_image, self.connection.host);
-        
+        info!(
+            "Deploying Blueprint {} to {}",
+            blueprint_image, self.connection.host
+        );
+
         // Pull the Blueprint image
         self.pull_image(blueprint_image).await?;
-        
+
         // Create container with resource limits
-        let container_id = self.create_container(blueprint_image, spec, env_vars).await?;
-        
+        let container_id = self
+            .create_container(blueprint_image, spec, env_vars)
+            .await?;
+
         // Start the container
         self.start_container(&container_id).await?;
-        
+
         // Get container details
         let details = self.get_container_details(&container_id).await?;
-        
+
         Ok(RemoteDeployment {
             host: self.connection.host.clone(),
             container_id,
@@ -139,7 +149,7 @@ impl SshDeploymentClient {
             resource_limits: ResourceLimits::from_spec(spec),
         })
     }
-    
+
     /// Pull container image on remote host
     async fn pull_image(&self, image: &str) -> Result<()> {
         let cmd = match self.runtime {
@@ -147,12 +157,12 @@ impl SshDeploymentClient {
             ContainerRuntime::Podman => format!("podman pull {}", image),
             ContainerRuntime::Containerd => format!("ctr image pull {}", image),
         };
-        
+
         info!("Pulling image {} on remote host", image);
         self.run_remote_command(&cmd).await?;
         Ok(())
     }
-    
+
     /// Create container with resource limits
     async fn create_container(
         &self,
@@ -161,11 +171,11 @@ impl SshDeploymentClient {
         env_vars: HashMap<String, String>,
     ) -> Result<String> {
         let limits = ResourceLimits::from_spec(spec);
-        
+
         let mut cmd = match self.runtime {
             ContainerRuntime::Docker => {
                 let mut docker_cmd = format!("docker create");
-                
+
                 // Add resource limits
                 if let Some(cpu) = limits.cpu_cores {
                     docker_cmd.push_str(&format!(" --cpus={}", cpu));
@@ -176,52 +186,65 @@ impl SshDeploymentClient {
                 if let Some(disk) = limits.disk_gb {
                     docker_cmd.push_str(&format!(" --storage-opt size={}G", disk));
                 }
-                
+
                 // Add environment variables
                 for (key, value) in env_vars {
                     docker_cmd.push_str(&format!(" -e {}={}", key, value));
                 }
-                
+
                 // Add network configuration
                 if spec.network.public_ip {
                     docker_cmd.push_str(" -p 0.0.0.0:8080:8080");
                 }
-                
+
                 // Add container name and image
-                docker_cmd.push_str(&format!(" --name blueprint-{} {}", 
-                    chrono::Utc::now().timestamp(), image));
-                
+                docker_cmd.push_str(&format!(
+                    " --name blueprint-{} {}",
+                    chrono::Utc::now().timestamp(),
+                    image
+                ));
+
                 docker_cmd
             }
             ContainerRuntime::Podman => {
                 // Similar to Docker
-                format!("podman create --cpus={} --memory={}m {} {}", 
+                format!(
+                    "podman create --cpus={} --memory={}m {} {}",
                     limits.cpu_cores.unwrap_or(1.0),
                     limits.memory_mb.unwrap_or(2048),
-                    env_vars.iter().map(|(k, v)| format!("-e {}={}", k, v)).collect::<Vec<_>>().join(" "),
-                    image)
+                    env_vars
+                        .iter()
+                        .map(|(k, v)| format!("-e {}={}", k, v))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    image
+                )
             }
             ContainerRuntime::Containerd => {
                 // Containerd requires more complex setup
-                format!("ctr run --rm --memory-limit {} {} blueprint-{}", 
+                format!(
+                    "ctr run --rm --memory-limit {} {} blueprint-{}",
                     limits.memory_mb.unwrap_or(2048) * 1024 * 1024,
                     image,
-                    chrono::Utc::now().timestamp())
+                    chrono::Utc::now().timestamp()
+                )
             }
         };
-        
+
         let output = self.run_remote_command(&cmd).await?;
-        
+
         // Extract container ID from output
-        let container_id = output.lines().next()
+        let container_id = output
+            .lines()
+            .next()
             .ok_or_else(|| Error::ConfigurationError("Failed to get container ID".into()))?
             .trim()
             .to_string();
-        
+
         info!("Created container: {}", container_id);
         Ok(container_id)
     }
-    
+
     /// Start a container
     async fn start_container(&self, container_id: &str) -> Result<()> {
         let cmd = match self.runtime {
@@ -229,12 +252,12 @@ impl SshDeploymentClient {
             ContainerRuntime::Podman => format!("podman start {}", container_id),
             ContainerRuntime::Containerd => return Ok(()), // Containerd starts immediately with ctr run
         };
-        
+
         self.run_remote_command(&cmd).await?;
         info!("Started container: {}", container_id);
         Ok(())
     }
-    
+
     /// Get container details
     async fn get_container_details(&self, container_id: &str) -> Result<ContainerDetails> {
         let inspect_cmd = match self.runtime {
@@ -242,25 +265,31 @@ impl SshDeploymentClient {
             ContainerRuntime::Podman => format!("podman inspect {}", container_id),
             ContainerRuntime::Containerd => format!("ctr container info {}", container_id),
         };
-        
+
         let output = self.run_remote_command(&inspect_cmd).await?;
-        let json: serde_json::Value = serde_json::from_str(&output)
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse container info: {}", e)))?;
-        
+        let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| {
+            Error::ConfigurationError(format!("Failed to parse container info: {}", e))
+        })?;
+
         // Parse container details from JSON
         let status = if self.runtime == ContainerRuntime::Containerd {
             json["Status"].as_str().unwrap_or("unknown").to_string()
         } else {
-            json[0]["State"]["Status"].as_str().unwrap_or("unknown").to_string()
+            json[0]["State"]["Status"]
+                .as_str()
+                .unwrap_or("unknown")
+                .to_string()
         };
-        
+
         let ports = if self.runtime != ContainerRuntime::Containerd {
             json[0]["NetworkSettings"]["Ports"]
                 .as_object()
                 .map(|ports| {
-                    ports.iter()
+                    ports
+                        .iter()
                         .filter_map(|(internal, bindings)| {
-                            bindings[0]["HostPort"].as_str()
+                            bindings[0]["HostPort"]
+                                .as_str()
                                 .map(|host_port| (internal.clone(), host_port.to_string()))
                         })
                         .collect()
@@ -269,113 +298,121 @@ impl SshDeploymentClient {
         } else {
             HashMap::new()
         };
-        
-        Ok(ContainerDetails {
-            status,
-            ports,
-        })
+
+        Ok(ContainerDetails { status, ports })
     }
-    
+
     /// Run a command on the remote host via SSH
     async fn run_remote_command(&self, command: &str) -> Result<String> {
         let ssh_cmd = self.build_ssh_command(command);
-        
+
         debug!("Running remote command: {}", command);
-        
+
         let output = Command::new("sh")
             .arg("-c")
             .arg(&ssh_cmd)
             .output()
             .await
             .map_err(|e| Error::ConfigurationError(format!("SSH command failed: {}", e)))?;
-        
+
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::ConfigurationError(format!("Remote command failed: {}", stderr)));
+            return Err(Error::ConfigurationError(format!(
+                "Remote command failed: {}",
+                stderr
+            )));
         }
-        
+
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
-    
+
     /// Build SSH command with proper options
     fn build_ssh_command(&self, command: &str) -> String {
         let mut ssh_cmd = String::from("ssh");
-        
+
         // Add SSH options
         ssh_cmd.push_str(" -o StrictHostKeyChecking=no");
         ssh_cmd.push_str(" -o UserKnownHostsFile=/dev/null");
-        
+
         // Add port if not default
         if self.connection.port != 22 {
             ssh_cmd.push_str(&format!(" -p {}", self.connection.port));
         }
-        
+
         // Add identity file if provided
         if let Some(ref key_path) = self.connection.key_path {
             ssh_cmd.push_str(&format!(" -i {}", key_path.display()));
         }
-        
+
         // Add jump host if provided
         if let Some(ref jump_host) = self.connection.jump_host {
             ssh_cmd.push_str(&format!(" -J {}", jump_host));
         }
-        
+
         // Add user@host
-        ssh_cmd.push_str(&format!(" {}@{}", self.connection.user, self.connection.host));
-        
+        ssh_cmd.push_str(&format!(
+            " {}@{}",
+            self.connection.user, self.connection.host
+        ));
+
         // Add the command to execute
         ssh_cmd.push_str(&format!(" '{}'", command));
-        
+
         ssh_cmd
     }
-    
+
     /// Copy files to remote host via SCP
     pub async fn copy_files(&self, local_path: &Path, remote_path: &str) -> Result<()> {
         let mut scp_cmd = String::from("scp");
-        
+
         // Add SSH options
         scp_cmd.push_str(" -o StrictHostKeyChecking=no");
         scp_cmd.push_str(" -o UserKnownHostsFile=/dev/null");
-        
+
         if self.connection.port != 22 {
             scp_cmd.push_str(&format!(" -P {}", self.connection.port));
         }
-        
+
         if let Some(ref key_path) = self.connection.key_path {
             scp_cmd.push_str(&format!(" -i {}", key_path.display()));
         }
-        
+
         // Add source and destination
-        scp_cmd.push_str(&format!(" {} {}@{}:{}", 
+        scp_cmd.push_str(&format!(
+            " {} {}@{}:{}",
             local_path.display(),
             self.connection.user,
             self.connection.host,
             remote_path
         ));
-        
+
         let output = Command::new("sh")
             .arg("-c")
             .arg(&scp_cmd)
             .output()
             .await
             .map_err(|e| Error::ConfigurationError(format!("SCP failed: {}", e)))?;
-        
+
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::ConfigurationError(format!("File copy failed: {}", stderr)));
+            return Err(Error::ConfigurationError(format!(
+                "File copy failed: {}",
+                stderr
+            )));
         }
-        
+
         info!("Files copied to remote host");
         Ok(())
     }
-    
+
     /// Install Blueprint runtime on remote host
     pub async fn install_blueprint_runtime(&self) -> Result<()> {
         info!("Installing Blueprint runtime on remote host");
-        
+
         // Create Blueprint directory structure
-        self.run_remote_command("mkdir -p /opt/blueprint/{bin,config,data,logs}").await?;
-        
+        self.run_remote_command("mkdir -p /opt/blueprint/{bin,config,data,logs}")
+            .await?;
+
         // Download and install Blueprint runtime binary
         let install_script = r#"
         curl -L https://github.com/tangle-network/blueprint/releases/latest/download/blueprint-runtime -o /tmp/blueprint-runtime
@@ -409,19 +446,23 @@ impl SshDeploymentClient {
         sudo systemctl enable blueprint-runtime
         sudo systemctl start blueprint-runtime
         "#;
-        
+
         self.run_remote_command(install_script).await?;
-        
+
         // Verify installation
-        let status = self.run_remote_command("sudo systemctl status blueprint-runtime").await?;
+        let status = self
+            .run_remote_command("sudo systemctl status blueprint-runtime")
+            .await?;
         if status.contains("active (running)") {
             info!("Blueprint runtime installed and running");
             Ok(())
         } else {
-            Err(Error::ConfigurationError("Blueprint runtime installation failed".into()))
+            Err(Error::ConfigurationError(
+                "Blueprint runtime installation failed".into(),
+            ))
         }
     }
-    
+
     /// Deploy Blueprint as native process (without container)
     pub async fn deploy_native_blueprint(
         &self,
@@ -430,20 +471,21 @@ impl SshDeploymentClient {
         config: &HashMap<String, String>,
     ) -> Result<NativeDeployment> {
         info!("Deploying native Blueprint to {}", self.connection.host);
-        
+
         // Copy Blueprint binary to remote host
-        self.copy_files(blueprint_path, "/opt/blueprint/bin/").await?;
-        
+        self.copy_files(blueprint_path, "/opt/blueprint/bin/")
+            .await?;
+
         // Create configuration file
         let config_content = serde_json::to_string_pretty(config)
             .map_err(|e| Error::ConfigurationError(format!("Failed to serialize config: {}", e)))?;
-        
+
         let create_config = format!(
             "echo '{}' | sudo tee /opt/blueprint/config/blueprint.json",
             config_content
         );
         self.run_remote_command(&create_config).await?;
-        
+
         // Set resource limits using systemd
         let systemd_limits = format!(
             r#"
@@ -459,12 +501,15 @@ impl SshDeploymentClient {
             (spec.storage.memory_gb * 1024.0) as u32,
             1000
         );
-        
+
         self.run_remote_command(&systemd_limits).await?;
-        
+
         // Restart service with new limits
-        self.run_remote_command("sudo systemctl daemon-reload && sudo systemctl restart blueprint-runtime").await?;
-        
+        self.run_remote_command(
+            "sudo systemctl daemon-reload && sudo systemctl restart blueprint-runtime",
+        )
+        .await?;
+
         Ok(NativeDeployment {
             host: self.connection.host.clone(),
             service_name: "blueprint-runtime".to_string(),
@@ -472,33 +517,50 @@ impl SshDeploymentClient {
             status: "running".to_string(),
         })
     }
-    
+
     /// Monitor container logs
     pub async fn stream_logs(&self, container_id: &str, follow: bool) -> Result<String> {
         let cmd = match self.runtime {
             ContainerRuntime::Docker => {
-                format!("docker logs{} {}", if follow { " -f" } else { "" }, container_id)
+                format!(
+                    "docker logs{} {}",
+                    if follow { " -f" } else { "" },
+                    container_id
+                )
             }
             ContainerRuntime::Podman => {
-                format!("podman logs{} {}", if follow { " -f" } else { "" }, container_id)
+                format!(
+                    "podman logs{} {}",
+                    if follow { " -f" } else { "" },
+                    container_id
+                )
             }
             ContainerRuntime::Containerd => {
                 // Containerd doesn't have direct log streaming
-                return Err(Error::ConfigurationError("Log streaming not supported for containerd".into()));
+                return Err(Error::ConfigurationError(
+                    "Log streaming not supported for containerd".into(),
+                ));
             }
         };
-        
+
         self.run_remote_command(&cmd).await
     }
-    
+
     /// Stop and remove a deployed container
     pub async fn cleanup_deployment(&self, container_id: &str) -> Result<()> {
         let stop_cmd = match self.runtime {
-            ContainerRuntime::Docker => format!("docker stop {} && docker rm {}", container_id, container_id),
-            ContainerRuntime::Podman => format!("podman stop {} && podman rm {}", container_id, container_id),
-            ContainerRuntime::Containerd => format!("ctr task kill {} && ctr container rm {}", container_id, container_id),
+            ContainerRuntime::Docker => {
+                format!("docker stop {} && docker rm {}", container_id, container_id)
+            }
+            ContainerRuntime::Podman => {
+                format!("podman stop {} && podman rm {}", container_id, container_id)
+            }
+            ContainerRuntime::Containerd => format!(
+                "ctr task kill {} && ctr container rm {}",
+                container_id, container_id
+            ),
         };
-        
+
         self.run_remote_command(&stop_cmd).await?;
         info!("Cleaned up container: {}", container_id);
         Ok(())
@@ -638,7 +700,7 @@ impl BareMetalFleet {
             deployments: Vec::new(),
         }
     }
-    
+
     /// Deploy to all hosts in parallel
     pub async fn deploy_to_fleet(
         &mut self,
@@ -648,15 +710,17 @@ impl BareMetalFleet {
         runtime: ContainerRuntime,
     ) -> Result<Vec<RemoteDeployment>> {
         use futures::future::join_all;
-        
-        let deployment_futures: Vec<_> = self.hosts.iter()
+
+        let deployment_futures: Vec<_> = self
+            .hosts
+            .iter()
             .map(|host| {
                 let connection = host.clone();
                 let image = blueprint_image.to_string();
                 let spec = spec.clone();
                 let env = env_vars.clone();
                 let rt = runtime.clone();
-                
+
                 async move {
                     let client = SshDeploymentClient::new(
                         connection,
@@ -667,15 +731,16 @@ impl BareMetalFleet {
                             restart_policy: RestartPolicy::Always,
                             health_check: None,
                         },
-                    ).await?;
-                    
+                    )
+                    .await?;
+
                     client.deploy_blueprint(&image, &spec, env).await
                 }
             })
             .collect();
-        
+
         let results = join_all(deployment_futures).await;
-        
+
         for result in results {
             match result {
                 Ok(deployment) => {
@@ -687,13 +752,14 @@ impl BareMetalFleet {
                 }
             }
         }
-        
+
         Ok(self.deployments.clone())
     }
-    
+
     /// Get status of all deployments
     pub fn get_fleet_status(&self) -> HashMap<String, String> {
-        self.deployments.iter()
+        self.deployments
+            .iter()
             .map(|d| (d.host.clone(), d.status.clone()))
             .collect()
     }
@@ -702,7 +768,7 @@ impl BareMetalFleet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_ssh_command_building() {
         let connection = SshConnection {
@@ -713,7 +779,7 @@ mod tests {
             password: None,
             jump_host: Some("bastion.example.com".to_string()),
         };
-        
+
         let client = SshDeploymentClient {
             connection,
             runtime: ContainerRuntime::Docker,
@@ -724,14 +790,14 @@ mod tests {
                 health_check: None,
             },
         };
-        
+
         let cmd = client.build_ssh_command("ls -la");
         assert!(cmd.contains("-p 2222"));
         assert!(cmd.contains("-i /home/user/.ssh/id_rsa"));
         assert!(cmd.contains("-J bastion.example.com"));
         assert!(cmd.contains("deploy@example.com"));
     }
-    
+
     #[test]
     fn test_resource_limits_conversion() {
         let spec = ResourceSpec {
@@ -750,7 +816,7 @@ mod tests {
             },
             ..Default::default()
         };
-        
+
         let limits = ResourceLimits::from_spec(&spec);
         assert_eq!(limits.cpu_cores, Some(4.0));
         assert_eq!(limits.memory_mb, Some(8192));

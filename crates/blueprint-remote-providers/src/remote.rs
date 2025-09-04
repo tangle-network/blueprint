@@ -9,7 +9,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 /// Manages remote Kubernetes clusters for Blueprint deployments
-/// 
+///
 /// This extends the existing ContainerRuntime to work with multiple
 /// remote clusters while reusing all existing deployment logic.
 #[cfg(feature = "kubernetes")]
@@ -33,58 +33,61 @@ impl RemoteClusterManager {
             active_cluster: Arc::new(RwLock::new(None)),
         }
     }
-    
+
     /// Register a remote Kubernetes cluster
     pub async fn add_cluster(&self, name: String, config: RemoteDeploymentConfig) -> Result<()> {
         info!("Adding remote cluster: {}", name);
-        
+
         // Create Kubernetes client with remote context
         let kube_config = if let Some(ref path) = config.kubeconfig_path {
             Config::from_kubeconfig(&tokio::fs::read_to_string(path).await?).await?
         } else {
             Config::infer().await?
         };
-        
+
         let kube_config = if let Some(ref context) = config.context {
-            kube_config.with_context(context.clone())
-                .ok_or_else(|| Error::ConfigurationError(format!("Context {} not found", context)))?
+            kube_config.with_context(context.clone()).ok_or_else(|| {
+                Error::ConfigurationError(format!("Context {} not found", context))
+            })?
         } else {
             kube_config
         };
-        
+
         let client = Client::try_from(kube_config)?;
-        
+
         let cluster = RemoteCluster {
             name: name.clone(),
             config,
             client,
         };
-        
+
         self.clusters.write().await.insert(name.clone(), cluster);
-        
+
         // Set as active if it's the first cluster
         let mut active = self.active_cluster.write().await;
         if active.is_none() {
             *active = Some(name);
         }
-        
+
         Ok(())
     }
-    
+
     /// Get a ContainerRuntime configured for the active remote cluster
-    /// 
+    ///
     /// This returns the existing ContainerRuntime but configured to use
     /// the remote cluster's client, allowing all existing deployment logic
     /// to work unchanged.
     pub async fn get_runtime_for_active_cluster(&self) -> Result<ContainerRuntime> {
         let active = self.active_cluster.read().await;
-        let cluster_name = active.as_ref()
+        let cluster_name = active
+            .as_ref()
             .ok_or_else(|| Error::ConfigurationError("No active cluster".to_string()))?;
-        
+
         let clusters = self.clusters.read().await;
-        let cluster = clusters.get(cluster_name)
-            .ok_or_else(|| Error::ConfigurationError(format!("Cluster {} not found", cluster_name)))?;
-        
+        let cluster = clusters.get(cluster_name).ok_or_else(|| {
+            Error::ConfigurationError(format!("Cluster {} not found", cluster_name))
+        })?;
+
         // Create ContainerRuntime with the remote cluster's client
         // This reuses ALL existing ContainerRuntime logic
         let runtime = ContainerRuntime::with_client(
@@ -92,38 +95,43 @@ impl RemoteClusterManager {
             cluster.config.namespace.clone(),
             cluster.config.provider.to_service_type(),
         )?;
-        
+
         Ok(runtime)
     }
-    
+
     /// Switch active cluster for deployments
     pub async fn set_active_cluster(&self, name: &str) -> Result<()> {
         let clusters = self.clusters.read().await;
         if !clusters.contains_key(name) {
-            return Err(Error::ConfigurationError(format!("Cluster {} not found", name)));
+            return Err(Error::ConfigurationError(format!(
+                "Cluster {} not found",
+                name
+            )));
         }
-        
+
         let mut active = self.active_cluster.write().await;
         *active = Some(name.to_string());
         info!("Switched active cluster to: {}", name);
-        
+
         Ok(())
     }
-    
+
     /// List all registered clusters
     pub async fn list_clusters(&self) -> Vec<(String, CloudProvider)> {
         let clusters = self.clusters.read().await;
-        clusters.iter()
+        clusters
+            .iter()
             .map(|(name, cluster)| (name.clone(), cluster.config.provider.clone()))
             .collect()
     }
-    
+
     /// Get cluster endpoint for networking setup
     pub async fn get_cluster_endpoint(&self, name: &str) -> Result<String> {
         let clusters = self.clusters.read().await;
-        let cluster = clusters.get(name)
+        let cluster = clusters
+            .get(name)
             .ok_or_else(|| Error::ConfigurationError(format!("Cluster {} not found", name)))?;
-        
+
         // Get the cluster's API server endpoint
         Ok(cluster.client.default_namespace().to_string())
     }
@@ -138,9 +146,7 @@ impl Default for RemoteClusterManager {
 #[cfg(not(feature = "kubernetes"))]
 impl RemoteClusterManager {
     pub fn new() -> Self {
-        Self {
-            _private: (),
-        }
+        Self { _private: () }
     }
 }
 
@@ -209,17 +215,18 @@ impl CloudProvider {
         match self {
             CloudProvider::AWS | CloudProvider::Azure => "LoadBalancer",
             CloudProvider::GCP => "ClusterIP", // Use with Ingress
-            CloudProvider::DigitalOcean | CloudProvider::Vultr | CloudProvider::Linode => "LoadBalancer",
+            CloudProvider::DigitalOcean | CloudProvider::Vultr | CloudProvider::Linode => {
+                "LoadBalancer"
+            }
             _ => "ClusterIP",
         }
     }
-    
+
     /// Check if provider requires tunnel for private networking
     pub fn requires_tunnel(&self) -> bool {
-        matches!(self, 
-            CloudProvider::Generic | 
-            CloudProvider::BareMetal(_) |
-            CloudProvider::DockerLocal
+        matches!(
+            self,
+            CloudProvider::Generic | CloudProvider::BareMetal(_) | CloudProvider::DockerLocal
         )
     }
 }
@@ -263,7 +270,7 @@ impl RemoteContainerRuntimeExt for ContainerRuntime {
         // creating ContainerRuntime with a specific client
         // For now, we return an error indicating this needs manager support
         Err(Error::ConfigurationError(
-            "ContainerRuntime remote extension requires manager crate support".to_string()
+            "ContainerRuntime remote extension requires manager crate support".to_string(),
         ))
     }
 }
@@ -271,33 +278,33 @@ impl RemoteContainerRuntimeExt for ContainerRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_cluster_management() {
         let manager = RemoteClusterManager::new();
-        
+
         let config = RemoteDeploymentConfig {
             namespace: "test-namespace".to_string(),
             provider: CloudProvider::AWS,
             ..Default::default()
         };
-        
+
         // Note: This will fail without valid kubeconfig
         // Just testing the structure
         let result = manager.add_cluster("test-aws".to_string(), config).await;
         assert!(result.is_err()); // Expected without valid config
-        
+
         let clusters = manager.list_clusters().await;
         assert_eq!(clusters.len(), 0); // No clusters added due to error
     }
-    
+
     #[test]
     fn test_provider_service_type() {
         assert_eq!(CloudProvider::AWS.to_service_type(), "LoadBalancer");
         assert_eq!(CloudProvider::GCP.to_service_type(), "ClusterIP");
         assert_eq!(CloudProvider::Generic.to_service_type(), "ClusterIP");
     }
-    
+
     #[test]
     fn test_provider_tunnel_requirement() {
         assert!(!CloudProvider::AWS.requires_tunnel());

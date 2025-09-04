@@ -89,7 +89,11 @@ impl Default for RemoteDeploymentPolicy {
         Self {
             providers: ProviderPreferences {
                 gpu_providers: vec![CloudProvider::GCP, CloudProvider::AWS],
-                cpu_intensive: vec![CloudProvider::Vultr, CloudProvider::DigitalOcean, CloudProvider::AWS],
+                cpu_intensive: vec![
+                    CloudProvider::Vultr,
+                    CloudProvider::DigitalOcean,
+                    CloudProvider::AWS,
+                ],
                 memory_intensive: vec![CloudProvider::AWS, CloudProvider::GCP],
                 cost_optimized: vec![CloudProvider::Vultr, CloudProvider::DigitalOcean],
             },
@@ -118,7 +122,7 @@ impl RemoteDeploymentPolicy {
     /// Load policy from disk or create default.
     pub fn load() -> Result<Self> {
         let path = Self::config_path()?;
-        
+
         if path.exists() {
             let content = std::fs::read_to_string(&path)?;
             serde_json::from_str(&content)
@@ -128,21 +132,21 @@ impl RemoteDeploymentPolicy {
             Ok(Self::default())
         }
     }
-    
+
     /// Save policy to disk.
     pub fn save(&self) -> Result<()> {
         let path = Self::config_path()?;
-        
+
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         let content = serde_json::to_string_pretty(self)?;
         std::fs::write(&path, content)?;
-        
+
         Ok(())
     }
-    
+
     fn config_path() -> Result<PathBuf> {
         let config_dir = dirs::config_dir()
             .ok_or_else(|| color_eyre::eyre::eyre!("Could not find config directory"))?;
@@ -155,35 +159,35 @@ pub struct PolicyConfigureArgs {
     /// GPU providers (comma-separated, ordered by preference)
     #[arg(long)]
     pub gpu_providers: Option<String>,
-    
+
     /// CPU-intensive workload providers
-    #[arg(long)]  
+    #[arg(long)]
     pub cpu_providers: Option<String>,
-    
+
     /// Memory-intensive workload providers
     #[arg(long)]
     pub memory_providers: Option<String>,
-    
+
     /// Cost-optimized providers
     #[arg(long)]
     pub cost_providers: Option<String>,
-    
+
     /// Maximum hourly cost limit (USD)
     #[arg(long)]
     pub max_cost: Option<f32>,
-    
+
     /// Prefer spot instances
     #[arg(long)]
     pub prefer_spot: Option<bool>,
-    
+
     /// Auto-terminate after hours
     #[arg(long)]
     pub auto_terminate: Option<u32>,
-    
+
     /// Preferred regions (comma-separated)
     #[arg(long)]
     pub regions: Option<String>,
-    
+
     /// Cost optimization strategy
     #[arg(long, value_enum)]
     pub cost_strategy: Option<CostOptimization>,
@@ -192,71 +196,75 @@ pub struct PolicyConfigureArgs {
 /// Configure remote deployment policy.
 pub async fn configure_policy(args: PolicyConfigureArgs) -> Result<()> {
     println!("🔧 Configuring Remote Deployment Policy\n");
-    
+
     let mut policy = RemoteDeploymentPolicy::load()?;
     let mut changed = false;
-    
+
     // Update provider preferences
     if let Some(providers) = args.gpu_providers {
         policy.providers.gpu_providers = parse_providers(&providers)?;
         println!("✓ GPU providers: {:?}", policy.providers.gpu_providers);
         changed = true;
     }
-    
+
     if let Some(providers) = args.cpu_providers {
         policy.providers.cpu_intensive = parse_providers(&providers)?;
         println!("✓ CPU providers: {:?}", policy.providers.cpu_intensive);
         changed = true;
     }
-    
+
     if let Some(providers) = args.memory_providers {
         policy.providers.memory_intensive = parse_providers(&providers)?;
-        println!("✓ Memory providers: {:?}", policy.providers.memory_intensive);
+        println!(
+            "✓ Memory providers: {:?}",
+            policy.providers.memory_intensive
+        );
         changed = true;
     }
-    
+
     if let Some(providers) = args.cost_providers {
         policy.providers.cost_optimized = parse_providers(&providers)?;
         println!("✓ Cost providers: {:?}", policy.providers.cost_optimized);
         changed = true;
     }
-    
+
     // Update cost limits
     if let Some(max_cost) = args.max_cost {
         policy.cost_limits.max_hourly_cost = Some(max_cost);
         println!("✓ Max hourly cost: ${:.2}", max_cost);
         changed = true;
     }
-    
+
     if let Some(prefer_spot) = args.prefer_spot {
         policy.cost_limits.prefer_spot = prefer_spot;
         println!("✓ Prefer spot instances: {}", prefer_spot);
         changed = true;
     }
-    
+
     if let Some(auto_terminate) = args.auto_terminate {
         policy.cost_limits.auto_terminate_after_hours = Some(auto_terminate);
         println!("✓ Auto-terminate after: {}h", auto_terminate);
         changed = true;
     }
-    
+
     // Update regions
     if let Some(regions) = args.regions {
-        policy.regions.preferred_regions = regions
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .collect();
-        println!("✓ Preferred regions: {:?}", policy.regions.preferred_regions);
+        policy.regions.preferred_regions =
+            regions.split(',').map(|s| s.trim().to_string()).collect();
+        println!(
+            "✓ Preferred regions: {:?}",
+            policy.regions.preferred_regions
+        );
         changed = true;
     }
-    
+
     // Update cost strategy
     if let Some(strategy) = args.cost_strategy {
         println!("✓ Cost strategy: {:?}", strategy);
         policy.cost_limits.optimization_strategy = strategy;
         changed = true;
     }
-    
+
     if changed {
         policy.save()?;
         println!("\n✅ Deployment policy updated!");
@@ -265,14 +273,14 @@ pub async fn configure_policy(args: PolicyConfigureArgs) -> Result<()> {
         println!("No changes specified. Current policy:");
         show_current_policy(&policy).await?;
     }
-    
+
     Ok(())
 }
 
 /// Show current deployment policy.
 pub async fn show_policy() -> Result<()> {
     println!("📋 Current Remote Deployment Policy\n");
-    
+
     let policy = RemoteDeploymentPolicy::load()?;
     show_current_policy(&policy).await
 }
@@ -281,9 +289,15 @@ async fn show_current_policy(policy: &RemoteDeploymentPolicy) -> Result<()> {
     println!("Provider Preferences:");
     println!("  GPU workloads:      {:?}", policy.providers.gpu_providers);
     println!("  CPU intensive:      {:?}", policy.providers.cpu_intensive);
-    println!("  Memory intensive:   {:?}", policy.providers.memory_intensive);
-    println!("  Cost optimized:     {:?}", policy.providers.cost_optimized);
-    
+    println!(
+        "  Memory intensive:   {:?}",
+        policy.providers.memory_intensive
+    );
+    println!(
+        "  Cost optimized:     {:?}",
+        policy.providers.cost_optimized
+    );
+
     println!("\nCost Limits:");
     if let Some(max_cost) = policy.cost_limits.max_hourly_cost {
         println!("  Max hourly cost:    ${:.2}", max_cost);
@@ -294,16 +308,28 @@ async fn show_current_policy(policy: &RemoteDeploymentPolicy) -> Result<()> {
     if let Some(ttl) = policy.cost_limits.auto_terminate_after_hours {
         println!("  Auto-terminate:     {}h", ttl);
     }
-    println!("  Strategy:           {:?}", policy.cost_limits.optimization_strategy);
-    
+    println!(
+        "  Strategy:           {:?}",
+        policy.cost_limits.optimization_strategy
+    );
+
     println!("\nRegional Preferences:");
-    println!("  Preferred regions:  {:?}", policy.regions.preferred_regions);
-    println!("  Allow fallback:     {}", policy.regions.allow_fallback_regions);
-    
+    println!(
+        "  Preferred regions:  {:?}",
+        policy.regions.preferred_regions
+    );
+    println!(
+        "  Allow fallback:     {}",
+        policy.regions.allow_fallback_regions
+    );
+
     println!("\nFailover Settings:");
     println!("  Max retries:        {}", policy.failover.max_retries);
-    println!("  Retry delay:        {}s", policy.failover.retry_delay_seconds);
-    
+    println!(
+        "  Retry delay:        {}s",
+        policy.failover.retry_delay_seconds
+    );
+
     Ok(())
 }
 
