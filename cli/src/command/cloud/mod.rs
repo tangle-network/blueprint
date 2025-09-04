@@ -11,14 +11,14 @@
 //! cargo tangle cloud configure aws --region us-east-1 --set-default
 //! ```
 //!
-//! Deploy a blueprint to the cloud:
+//! Configure deployment policy:
 //! ```bash
-//! cargo tangle blueprint deploy tangle --remote aws --cpu 4 --memory 16
+//! cargo tangle cloud policy --gpu-providers gcp,aws --cost-providers vultr,do
 //! ```
 //!
-//! Estimate deployment costs:
+//! Deploy a blueprint (uses configured policy):
 //! ```bash
-//! cargo tangle cloud estimate --compare --cpu 8 --memory 32
+//! cargo tangle blueprint deploy tangle --remote
 //! ```
 
 use clap::Subcommand;
@@ -27,11 +27,12 @@ use std::path::PathBuf;
 use url::Url;
 
 mod config;
-mod deploy;
+mod policy;
 mod estimate;
 mod status;
 
 pub use config::CloudProvider;
+pub use policy::{RemoteDeploymentPolicy, CostOptimization};
 use config::CloudConfig;
 
 #[derive(Subcommand, Debug)]
@@ -52,45 +53,16 @@ pub enum CloudCommands {
         set_default: bool,
     },
     
-    /// Deploy a blueprint to the cloud
-    #[command(visible_alias = "d")]
-    Deploy {
-        /// Cloud provider (defaults to configured default)
-        #[arg(short, long, value_enum)]
-        provider: Option<CloudProvider>,
-        
-        /// Region to deploy to
-        #[arg(short, long)]
-        region: Option<String>,
-        
-        /// CPU cores (overrides Cargo.toml metadata)
-        #[arg(long)]
-        cpu: Option<f32>,
-        
-        /// Memory in GB (overrides Cargo.toml metadata)
-        #[arg(long)]
-        memory: Option<f32>,
-        
-        /// Number of GPUs
-        #[arg(long)]
-        gpu: Option<u32>,
-        
-        /// Use spot/preemptible instances (save ~30%)
-        #[arg(short, long)]
-        spot: bool,
-        
-        /// Auto-terminate after duration (e.g., 2h, 1d)
-        #[arg(short = 't', long)]
-        ttl: Option<String>,
-        
-        /// Skip confirmation prompts
-        #[arg(short, long)]
-        yes: bool,
-        
-        /// Package to deploy (for workspaces)
-        #[arg(short = 'p', long)]
-        package: Option<String>,
+    /// Configure remote deployment policy
+    #[command(visible_alias = "policy")]
+    ConfigurePolicy {
+        #[command(flatten)]
+        args: policy::PolicyConfigureArgs,
     },
+    
+    /// Show current deployment policy
+    #[command(visible_alias = "show-policy")]
+    ShowPolicy,
     
     /// Estimate deployment costs
     #[command(visible_alias = "cost")]
@@ -175,20 +147,12 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
             config::configure(provider, region, set_default).await
         }
         
-        CloudCommands::Deploy { 
-            provider, region, cpu, memory, gpu, spot, ttl, yes, package 
-        } => {
-            deploy::deploy(deploy::DeployOptions {
-                provider,
-                region,
-                cpu,
-                memory,
-                gpu,
-                spot,
-                ttl,
-                yes,
-                package,
-            }).await
+        CloudCommands::ConfigurePolicy { args } => {
+            policy::configure_policy(args).await
+        }
+        
+        CloudCommands::ShowPolicy => {
+            policy::show_policy().await
         }
         
         CloudCommands::Estimate { 

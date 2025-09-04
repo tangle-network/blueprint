@@ -2,6 +2,16 @@
 
 This example demonstrates how to deploy a Blueprint service to cloud providers using the Tangle CLI.
 
+## Architecture
+
+The Tangle CLI follows a **configuration-based approach** for cloud deployments:
+
+1. **CLI configures deployment policies** - Set provider preferences, cost limits, regions
+2. **Blueprint Manager orchestrates deployments** - Uses policies to make intelligent provider selection
+3. **Remote providers crate handles provisioning** - Actual cloud infrastructure management
+
+This ensures Blueprint Manager remains the single point of orchestration while enabling flexible cloud deployment strategies.
+
 ## Quick Start
 
 ### 1. Configure Cloud Provider
@@ -22,7 +32,24 @@ cargo tangle cloud configure digitalocean --region nyc3
 cargo tangle cloud list
 ```
 
-### 2. Estimate Costs
+### 2. Configure Deployment Policy
+
+Set up intelligent provider selection based on workload requirements:
+
+```bash
+# Configure provider preferences by workload type
+cargo tangle cloud policy \
+  --gpu-providers "gcp,aws" \
+  --cpu-providers "vultr,digitalocean" \
+  --cost-providers "vultr,digitalocean" \
+  --max-cost 5.00 \
+  --prefer-spot true
+
+# Show current policy
+cargo tangle cloud show-policy
+```
+
+### 3. Estimate Costs
 
 Before deploying, estimate costs:
 
@@ -32,29 +59,21 @@ cargo tangle cloud estimate --cpu 4 --memory 16 --duration 24h
 
 # Compare all providers
 cargo tangle cloud estimate --compare --cpu 8 --memory 32 --gpu 1
-
-# Include spot pricing
-cargo tangle cloud estimate --spot --cpu 4 --memory 16
 ```
 
-### 3. Deploy Blueprint
+### 4. Deploy Blueprint
 
-Deploy your blueprint to the cloud:
+Deploy your blueprint using the configured policy:
 
 ```bash
-# Deploy to default provider
+# Deploy using configured policy (Blueprint Manager selects best provider)
 cargo tangle blueprint deploy tangle --remote
 
-# Deploy to specific provider with custom resources
-cargo tangle blueprint deploy tangle --remote aws \
-  --cpu 8 --memory 32 --storage 500 \
-  --spot --ttl 24h
-
-# Deploy to cheapest provider automatically
-cargo tangle blueprint deploy tangle --remote auto --max-cost 0.50
+# Override provider/region if needed
+cargo tangle blueprint deploy tangle --remote --provider aws --region us-west-2
 ```
 
-### 4. Monitor Deployment
+### 5. Monitor Deployment
 
 Check deployment status:
 
@@ -69,7 +88,7 @@ cargo tangle cloud status --deployment-id dep-abc123
 cargo tangle cloud status --watch
 ```
 
-### 5. Terminate Deployment
+### 6. Terminate Deployment
 
 Clean up when done:
 
