@@ -80,13 +80,23 @@ netdev = { workspace = true, features = ["gateway"], optional = true }
 nftables = { workspace = true, optional = true }
 
 [features]
-default = ["vm-sandbox"]
+# Use platform-specific defaults
+default = ["default-linux"]
+
+# Linux default includes vm-sandbox
+default-linux = ["vm-sandbox"]
+
+# macOS/Windows default excludes vm-sandbox
+default-unix = []
 
 ## Enable remote cloud deployment functionality
 ##
 ## This feature enables deployment to cloud providers like AWS, GCP, Azure, DigitalOcean, and Vultr.
 ## It includes real SDK integrations for provisioning instances and deploying Blueprint services.
-remote-deployer = ["dep:blueprint-remote-providers"]
+remote-deployer = ["blueprint-remote-providers", "blueprint-remote-providers/aws", "blueprint-remote-providers/api-clients"]
+
+## macOS-friendly development feature (excludes Linux-only vm-sandbox)
+macos-dev = ["remote-deployer"]
 
 ## Enable the VM sandbox
 ##
