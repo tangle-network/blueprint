@@ -70,6 +70,10 @@ alloy-provider = { workspace = true }
 alloy-transport = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
 nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"] }
+uuid = { workspace = true, features = ["v4"] }
+rand = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }
 
 [dev-dependencies]
 blueprint-keystore = { workspace = true, features = ["bn254"] }

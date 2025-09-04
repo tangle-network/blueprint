@@ -63,6 +63,13 @@ enum Commands {
         command: BlueprintCommands,
     },
 
+    /// Cloud deployment
+    #[command(visible_alias = "c")]
+    Cloud {
+        #[command(subcommand)]
+        command: cargo_tangle::command::cloud::CloudCommands,
+    },
+
     /// Key management
     #[command(visible_alias = "k")]
     Key {
@@ -821,6 +828,9 @@ async fn main() -> color_eyre::Result<()> {
                     "\nWARNING: Store this mnemonic phrase securely. It can be used to recover your keys."
                 );
             }
+        },
+        Commands::Cloud { command } => {
+            cargo_tangle::command::cloud::execute(command).await?;
         },
         Commands::Debug { command } => match command {
             DebugCommands::Spawn {
