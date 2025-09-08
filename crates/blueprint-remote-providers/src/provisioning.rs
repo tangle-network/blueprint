@@ -48,7 +48,7 @@ impl InstanceTypeMapper {
 
         InstanceSelection {
             instance_type: instance_type.to_string(),
-            spot_capable: spec.qos.allow_spot && !instance_type.starts_with('p'), // No spot for GPU
+            spot_capable: spec.allow_spot && !instance_type.starts_with('p'), // No spot for GPU
             estimated_hourly_cost: Self::estimate_aws_cost(instance_type),
         }
     }
@@ -234,7 +234,7 @@ pub trait ResourceLimitsExt {
     /// Apply resource requirements to a deployment
     /// - For local: Sets Kubernetes resource limits
     /// - For remote: Ensures proper node selection
-    fn apply_resource_requirements(&mut self, requirements: &ResourceRequirements);
+    fn apply_resource_requirements(&mut self, spec: &ResourceSpec);
 }
 
 #[cfg(test)]

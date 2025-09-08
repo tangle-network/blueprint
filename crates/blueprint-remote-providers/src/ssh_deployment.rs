@@ -192,10 +192,8 @@ impl SshDeploymentClient {
                     docker_cmd.push_str(&format!(" -e {}={}", key, value));
                 }
 
-                // Add network configuration
-                if spec.network.public_ip {
-                    docker_cmd.push_str(" -p 0.0.0.0:8080:8080");
-                }
+                // Add network configuration - assume public IP needed
+                docker_cmd.push_str(" -p 0.0.0.0:8080:8080");
 
                 // Add container name and image
                 docker_cmd.push_str(&format!(
@@ -497,8 +495,8 @@ impl SshDeploymentClient {
             TasksMax={}
             EOF
             "#,
-            (spec.compute.cpu_cores * 100.0) as u32,
-            (spec.storage.memory_gb * 1024.0) as u32,
+            (spec.cpu * 100.0) as u32,
+            (spec.memory_gb * 1024.0) as u32,
             1000
         );
 
@@ -647,15 +645,10 @@ pub struct ResourceLimits {
 impl ResourceLimits {
     fn from_spec(spec: &ResourceSpec) -> Self {
         Self {
-            cpu_cores: Some(spec.compute.cpu_cores),
-            memory_mb: Some((spec.storage.memory_gb * 1024.0) as u64),
-            disk_gb: Some(spec.storage.disk_gb),
-            network_bandwidth_mbps: match spec.network.bandwidth_tier {
-                crate::resources::BandwidthTier::Low => Some(100),
-                crate::resources::BandwidthTier::Standard => Some(1000),
-                crate::resources::BandwidthTier::High => Some(10000),
-                crate::resources::BandwidthTier::Ultra => Some(40000),
-            },
+            cpu_cores: Some(spec.cpu as f64),
+            memory_mb: Some((spec.memory_gb * 1024.0) as u64),
+            disk_gb: Some(spec.storage_gb as u64),
+            network_bandwidth_mbps: Some(1000), // Default 1Gbps
         }
     }
 }

@@ -68,8 +68,8 @@ impl InfrastructureProvisioner {
         match self.provider {
             #[cfg(feature = "aws")]
             CloudProvider::AWS => self.provision_aws(spec, config).await,
-            CloudProvider::DigitalOcean => self.provision_digitalocean(requirements, config).await,
-            CloudProvider::Vultr => self.provision_vultr(requirements, config).await,
+            CloudProvider::DigitalOcean => self.provision_digitalocean(spec, config).await,
+            CloudProvider::Vultr => self.provision_vultr(spec, config).await,
             _ => {
                 warn!(
                     "Provider {:?} requires manual infrastructure setup",
