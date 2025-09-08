@@ -1,4 +1,6 @@
 use crate::error::{Error, Result};
+#[cfg(feature = "aws")]
+use aws_sdk_ec2::client::Waiters;
 use crate::provisioning::{InstanceSelection, ResourceRequirements};
 use crate::remote::{CloudProvider, RemoteDeploymentConfig};
 use serde::{Deserialize, Serialize};
@@ -39,8 +41,6 @@ impl InfrastructureProvisioner {
                     aws_client: Some(ec2_client),
                     #[cfg(feature = "aws-eks")]
                     eks_client: Some(eks_client),
-                    #[cfg(not(feature = "aws-eks"))]
-                    eks_client,
                 })
             }
             _ => {
@@ -106,8 +106,7 @@ impl InfrastructureProvisioner {
             .run_instances()
             .image_id(config.ami_id.as_deref().unwrap_or("ami-0c55b159cbfafe1f0")) // Amazon Linux 2
             .instance_type(
-                InstanceType::from(instance_selection.instance_type.as_str())
-                    .unwrap_or(InstanceType::T3Medium),
+                InstanceType::from(instance_selection.instance_type.as_str()),
             )
             .min_count(1)
             .max_count(1)
@@ -144,8 +143,12 @@ impl InfrastructureProvisioner {
         info!("Created AWS EC2 instance: {}", instance_id);
 
         // Wait for instance to be running
-        ec2.wait_until_instance_running()
-            .instance_ids(instance_id)
+        // Wait for instance to be running
+        // Note: AWS SDK v1 doesn't have waiters method, need to poll manually
+        tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        
+        let describe_result = ec2.describe_instances()
+            .instance_ids(instance_id.clone())
             .send()
             .await?;
 

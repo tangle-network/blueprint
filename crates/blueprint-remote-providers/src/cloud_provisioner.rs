@@ -16,7 +16,6 @@ use tracing::{error, info, warn};
 /// Multi-cloud provisioner that handles deployments across all supported providers
 pub struct CloudProvisioner {
     providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
-    instance_mapper: Arc<InstanceTypeMapper>,
     retry_policy: RetryPolicy,
 }
 
@@ -67,7 +66,6 @@ impl CloudProvisioner {
 
         Ok(Self {
             providers,
-            instance_mapper: Arc::new(InstanceTypeMapper::new()),
             retry_policy: RetryPolicy::default(),
         })
     }
@@ -85,9 +83,8 @@ impl CloudProvisioner {
             .ok_or_else(|| Error::ProviderNotConfigured(provider))?;
 
         // Map resources to appropriate instance type
-        let instance_type = self
-            .instance_mapper
-            .find_best_match(resource_spec, &provider)?;
+        // Map resource spec to instance type
+        let instance_type = InstanceTypeMapper::map_to_instance_type(resource_spec, &provider)?;
 
         // Retry with exponential backoff
         let mut attempt = 0;

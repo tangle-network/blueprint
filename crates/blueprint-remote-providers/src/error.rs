@@ -33,4 +33,27 @@ pub enum Error {
     Other(String),
 }
 
+impl<E> From<aws_sdk_ec2::error::SdkError<E>> for Error
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    fn from(err: aws_sdk_ec2::error::SdkError<E>) -> Self {
+        Error::Other(err.to_string())
+    }
+}
+
+#[cfg(feature = "kubernetes")]
+impl From<kube::config::InferConfigError> for Error {
+    fn from(err: kube::config::InferConfigError) -> Self {
+        Error::Other(err.to_string())
+    }
+}
+
+#[cfg(feature = "kubernetes")]
+impl From<kube::config::KubeconfigError> for Error {
+    fn from(err: kube::config::KubeconfigError) -> Self {
+        Error::Other(err.to_string())
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
