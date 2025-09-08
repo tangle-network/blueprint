@@ -2,50 +2,6 @@ use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
 
-/// Universal resource requirements for any Blueprint deployment
-///
-/// This works for LOCAL and REMOTE deployments:
-/// - Local: Sets resource limits in Kata/Docker/Hypervisor
-/// - Remote: Maps to appropriate cloud instance types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceRequirements {
-    /// CPU cores (can be fractional like 0.5)
-    pub cpu_cores: f64,
-    /// Memory in GB
-    pub memory_gb: f64,
-    /// Storage in GB
-    pub storage_gb: f64,
-    /// GPU count (optional)
-    pub gpu_count: Option<u32>,
-    /// GPU type (nvidia-a100, nvidia-v100, etc)
-    pub gpu_type: Option<String>,
-    /// Network performance tier
-    pub network_tier: NetworkTier,
-    /// Whether spot/preemptible instances are acceptable
-    pub allow_spot: bool,
-}
-
-impl Default for ResourceRequirements {
-    fn default() -> Self {
-        Self {
-            cpu_cores: 1.0,
-            memory_gb: 2.0,
-            storage_gb: 10.0,
-            gpu_count: None,
-            gpu_type: None,
-            network_tier: NetworkTier::Standard,
-            allow_spot: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum NetworkTier {
-    Low,      // Up to 1 Gbps
-    Standard, // Up to 10 Gbps
-    High,     // Up to 25 Gbps
-    Ultra,    // 50+ Gbps
-}
 
 /// Maps resource requirements to cloud instance types
 pub struct InstanceTypeMapper;
@@ -66,19 +22,11 @@ impl InstanceTypeMapper {
         }
     }
 
-    /// Map requirements to specific instance type (legacy compatibility)
-    pub fn map_from_requirements(
-        requirements: &ResourceRequirements,
-        provider: &CloudProvider,
-    ) -> InstanceSelection {
-        let spec = crate::resources::from_resource_requirements(requirements);
-        Self::map_to_instance_type(&spec, provider)
-    }
 
     fn map_aws_instance(spec: &ResourceSpec) -> InstanceSelection {
         // AWS instance selection logic
-        let gpu_count = spec.accelerators.as_ref().map(|a| a.count);
-        let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb, gpu_count) {
+        let gpu_count = spec.gpu_count;
+        let instance_type = match (spec.cpu, spec.memory_gb, gpu_count) {
             // GPU instances
             (_, _, Some(gpu_count)) if gpu_count >= 8 => "p4d.24xlarge",
             (_, _, Some(gpu_count)) if gpu_count >= 4 => "p3.8xlarge",
@@ -106,8 +54,8 @@ impl InstanceTypeMapper {
     }
 
     fn map_gcp_instance(spec: &ResourceSpec) -> InstanceSelection {
-        let gpu_count = spec.accelerators.as_ref().map(|a| a.count);
-        let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb, gpu_count) {
+        let gpu_count = spec.gpu_count;
+        let instance_type = match (spec.cpu, spec.memory_gb, gpu_count) {
             // GPU instances
             (_, _, Some(gpu_count)) if gpu_count >= 1 => "n1-standard-4-nvidia-t4",
 
@@ -130,8 +78,8 @@ impl InstanceTypeMapper {
     }
 
     fn map_azure_instance(spec: &ResourceSpec) -> InstanceSelection {
-        let gpu_count = spec.accelerators.as_ref().map(|a| a.count);
-        let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb, gpu_count) {
+        let gpu_count = spec.gpu_count;
+        let instance_type = match (spec.cpu, spec.memory_gb, gpu_count) {
             // GPU instances
             (_, _, Some(_)) => "Standard_NC6s_v3",
 
@@ -152,7 +100,7 @@ impl InstanceTypeMapper {
 
     fn map_do_instance(spec: &ResourceSpec) -> InstanceSelection {
         // DigitalOcean droplet types
-        let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb) {
+        let instance_type = match (spec.cpu, spec.memory_gb) {
             (cpu, mem) if cpu <= 1.0 && mem <= 1.0 => "s-1vcpu-1gb",
             (cpu, mem) if cpu <= 1.0 && mem <= 2.0 => "s-1vcpu-2gb",
             (cpu, mem) if cpu <= 2.0 && mem <= 4.0 => "s-2vcpu-4gb",
@@ -170,7 +118,7 @@ impl InstanceTypeMapper {
 
     fn map_vultr_instance(spec: &ResourceSpec) -> InstanceSelection {
         // Vultr instance types
-        let instance_type = match (spec.compute.cpu_cores, spec.storage.memory_gb) {
+        let instance_type = match (spec.cpu, spec.memory_gb) {
             (cpu, mem) if cpu <= 1.0 && mem <= 1.0 => "vc2-1c-1gb",
             (cpu, mem) if cpu <= 2.0 && mem <= 4.0 => "vc2-2c-4gb",
             (cpu, mem) if cpu <= 4.0 && mem <= 8.0 => "vc2-4c-8gb",
@@ -187,9 +135,9 @@ impl InstanceTypeMapper {
 
     fn map_generic_instance(spec: &ResourceSpec) -> InstanceSelection {
         InstanceSelection {
-            instance_type: format!("{}cpu-{}gb", spec.compute.cpu_cores, spec.storage.memory_gb),
+            instance_type: format!("{}cpu-{}gb", spec.cpu, spec.memory_gb),
             spot_capable: false,
-            estimated_hourly_cost: spec.compute.cpu_cores * 0.05 + spec.storage.memory_gb * 0.01,
+            estimated_hourly_cost: spec.cpu * 0.05 + spec.memory_gb * 0.01,
         }
     }
 

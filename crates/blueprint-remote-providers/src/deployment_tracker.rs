@@ -374,7 +374,7 @@ pub struct DeploymentRecord {
     /// Region/zone
     pub region: Option<String>,
     /// Resource specification
-    pub resource_spec: crate::resources_simple::ResourceSpec,
+    pub resource_spec: crate::resources::ResourceSpec,
     /// Resource identifiers (instance IDs, container IDs, etc.)
     pub resource_ids: HashMap<String, String>,
     /// Deployment timestamp
@@ -396,7 +396,7 @@ impl DeploymentRecord {
     pub fn new(
         blueprint_id: String,
         deployment_type: DeploymentType,
-        resource_spec: crate::resources_simple::ResourceSpec,
+        resource_spec: crate::resources::ResourceSpec,
         ttl_seconds: Option<u64>,
     ) -> Self {
         let expires_at = ttl_seconds.map(|ttl| Utc::now() + Duration::seconds(ttl as i64));

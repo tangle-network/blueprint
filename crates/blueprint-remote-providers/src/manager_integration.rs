@@ -6,7 +6,7 @@
 use crate::deployment_tracker::{DeploymentRecord, DeploymentTracker, DeploymentType};
 use crate::error::{Error, Result};
 use crate::remote::CloudProvider;
-use crate::resources_simple::ResourceSpec;
+use crate::resources::ResourceSpec;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::path::PathBuf;

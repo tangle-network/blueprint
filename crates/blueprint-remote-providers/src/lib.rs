@@ -12,19 +12,18 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-pub mod blueprint_requirements;
+// pub mod blueprint_requirements; // TODO: Fix or remove
 pub mod cost;
 pub mod error;
 pub mod health_monitor;
 pub mod networking;
 #[cfg(feature = "pricing")]
 pub mod pricing_adapter;
-pub mod pricing_integration;
+// pub mod pricing_integration; // TODO: Fix or remove
 pub mod pricing_service;
 pub mod provisioning;
 pub mod remote;
 pub mod resources;
-pub mod resources_simple;
 
 pub mod deployment_tracker;
 pub mod infrastructure;
@@ -45,24 +44,24 @@ pub use cloud_provisioner::{
 pub use manager_integration::RemoteDeploymentExtensions;
 pub use pricing_service::{CostReport, PricingService};
 pub use remote::{CloudProvider, RemoteClusterManager};
-pub use resources_simple::ResourceSpec;
+pub use resources::ResourceSpec;
 
 // Legacy compatibility exports
 #[cfg(feature = "pricing")]
 pub use pricing_adapter::{CloudCostReport, PricingAdapter};
-pub use pricing_integration::{DetailedCostReport, PricingCalculator, ResourceUsageMetrics};
+// pub use pricing_integration::{DetailedCostReport, PricingCalculator, ResourceUsageMetrics};
 pub use provisioning::InstanceTypeMapper;
-pub use resources::{ComputeResources, NetworkResources, StorageResources};
 
 #[cfg(any(feature = "aws", feature = "api-clients"))]
 pub use infrastructure::{
     InfrastructureProvisioner, ProvisionedInfrastructure, ProvisioningConfig,
 };
 
-#[cfg(feature = "gcp")]
-pub use infrastructure_gcp::{GceInstance, GcpInfrastructureProvisioner, GkeCluster};
+// TODO: Re-enable when GCP/Azure support is fixed
+// #[cfg(feature = "gcp")]
+// pub use infrastructure_gcp::{GceInstance, GcpInfrastructureProvisioner, GkeCluster};
 
-#[cfg(feature = "azure")]
-pub use infrastructure_azure::{AksCluster, AzureInfrastructureProvisioner, AzureVm};
+// #[cfg(feature = "azure")]
+// pub use infrastructure_azure::{AksCluster, AzureInfrastructureProvisioner, AzureVm};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

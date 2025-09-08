@@ -1,7 +1,8 @@
 use crate::error::{Error, Result};
 #[cfg(feature = "aws")]
 use aws_sdk_ec2::client::Waiters;
-use crate::provisioning::{InstanceSelection, ResourceRequirements};
+use crate::provisioning::InstanceSelection;
+use crate::resources::ResourceSpec;
 use crate::remote::{CloudProvider, RemoteDeploymentConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -59,14 +60,14 @@ impl InfrastructureProvisioner {
     /// Provision infrastructure based on requirements
     pub async fn provision(
         &self,
-        requirements: &ResourceRequirements,
+        spec: &ResourceSpec,
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         info!("Provisioning infrastructure for {:?}", self.provider);
 
         match self.provider {
             #[cfg(feature = "aws")]
-            CloudProvider::AWS => self.provision_aws(requirements, config).await,
+            CloudProvider::AWS => self.provision_aws(spec, config).await,
             CloudProvider::DigitalOcean => self.provision_digitalocean(requirements, config).await,
             CloudProvider::Vultr => self.provision_vultr(requirements, config).await,
             _ => {
@@ -85,7 +86,7 @@ impl InfrastructureProvisioner {
     #[cfg(feature = "aws")]
     async fn provision_aws(
         &self,
-        requirements: &ResourceRequirements,
+        spec: &ResourceSpec,
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         use aws_sdk_ec2::types::{InstanceType, ResourceType, Tag, TagSpecification};
@@ -97,7 +98,7 @@ impl InfrastructureProvisioner {
 
         // Map requirements to instance type
         let instance_selection = crate::provisioning::InstanceTypeMapper::map_to_instance_type(
-            requirements,
+            spec,
             &CloudProvider::AWS,
         );
 
@@ -266,14 +267,14 @@ impl InfrastructureProvisioner {
 
     async fn provision_digitalocean(
         &self,
-        requirements: &ResourceRequirements,
+        spec: &ResourceSpec,
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         // DigitalOcean API implementation
         // Would use reqwest or a DO SDK when available
 
         let instance_selection = crate::provisioning::InstanceTypeMapper::map_to_instance_type(
-            requirements,
+            spec,
             &CloudProvider::DigitalOcean,
         );
 
@@ -295,12 +296,12 @@ impl InfrastructureProvisioner {
 
     async fn provision_vultr(
         &self,
-        requirements: &ResourceRequirements,
+        spec: &ResourceSpec,
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         // Vultr API implementation
         let instance_selection = crate::provisioning::InstanceTypeMapper::map_to_instance_type(
-            requirements,
+            spec,
             &CloudProvider::Vultr,
         );
 

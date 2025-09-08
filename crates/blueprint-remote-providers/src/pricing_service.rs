@@ -4,7 +4,7 @@
 
 use crate::error::{Error, Result};
 use crate::remote::CloudProvider;
-use crate::resources_simple::ResourceSpec;
+use crate::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
