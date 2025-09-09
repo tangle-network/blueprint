@@ -7,9 +7,9 @@ use crate::provisioning::InstanceTypeMapper;
 use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use blueprint_std::collections::HashMap;
 use blueprint_std::sync::Arc;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -89,7 +89,10 @@ impl CloudProvisioner {
         // Retry with exponential backoff
         let mut attempt = 0;
         loop {
-            match adapter.provision_instance(&instance_selection.instance_type, region).await {
+            match adapter
+                .provision_instance(&instance_selection.instance_type, region)
+                .await
+            {
                 Ok(instance) => {
                     info!(
                         "Successfully provisioned {} instance: {}",

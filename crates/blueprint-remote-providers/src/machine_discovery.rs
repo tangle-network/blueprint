@@ -190,7 +190,7 @@ impl MachineTypeDiscovery {
                         gpu_count: 0,
                         gpu_type: None,
                         network_performance: "10 Gbps".to_string(),
-                        hourly_price: None, // Would need pricing API
+                        hourly_price: None, // TODO: Implement pricing API integration
                         spot_price: None,
                     });
                 }

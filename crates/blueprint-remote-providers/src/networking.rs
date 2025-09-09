@@ -1,8 +1,8 @@
 use crate::error::Result;
 use crate::remote::CloudProvider;
-use serde::{Deserialize, Serialize};
 use blueprint_std::collections::HashMap;
 use blueprint_std::sync::Arc;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
@@ -24,9 +24,6 @@ impl TunnelManager {
     }
 
     /// Establish tunnel to remote cluster if needed
-    ///
-    /// This extends the existing bridge communication to work
-    /// across cloud boundaries.
     pub async fn establish_if_needed(
         &self,
         cluster_name: &str,

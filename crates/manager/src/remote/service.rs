@@ -11,8 +11,7 @@ use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 
 #[cfg(feature = "remote-deployer")]
 use blueprint_remote_providers::{
-    deployment_tracker::DeploymentTracker,
-    infrastructure_unified::UnifiedProvisioner,
+    deployment_tracker::DeploymentTracker, infrastructure_unified::UnifiedProvisioner,
     ssh_deployment::SshDeploymentService,
 };
 
@@ -183,10 +182,7 @@ impl RemoteDeploymentService {
         resource_spec: ResourceSpec,
         blueprint_id: Option<u64>,
     ) -> Result<Service> {
-        info!(
-            "🚀 Deploying to cloud provider: {:?}",
-            provider
-        );
+        info!("🚀 Deploying to cloud provider: {:?}", provider);
         info!("   Service: {}", service_name);
         info!(
             "   Resources: {:.1} CPU, {:.0} GB RAM",
@@ -198,36 +194,44 @@ impl RemoteDeploymentService {
             // Use real cloud provider SDK
             use blueprint_remote_providers::cloud_provisioner::CloudProvisioner;
             use blueprint_remote_providers::ssh_deployment::SshDeploymentService;
-            
-            let provisioner = CloudProvisioner::new().await
+
+            let provisioner = CloudProvisioner::new()
+                .await
                 .map_err(|e| Error::Other(format!("Failed to create provisioner: {}", e)))?;
-            
+
             // Convert resource spec to provider requirements
             let requirements = convert_resource_spec(&resource_spec);
-            
+
             // Provision the actual instance
-            let instance = provisioner.provision(
-                provider,
-                &requirements,
-                "us-west-2", // TODO: Get region from config
-            ).await
+            let instance = provisioner
+                .provision(
+                    provider,
+                    &requirements,
+                    "us-west-2", // TODO: Get region from config
+                )
+                .await
                 .map_err(|e| Error::Other(format!("Failed to provision instance: {}", e)))?;
-            
-            info!("✅ Instance provisioned: {} at {}", instance.instance_id, instance.public_ip);
-            
+
+            info!(
+                "✅ Instance provisioned: {} at {}",
+                instance.instance_id, instance.public_ip
+            );
+
             // Deploy the binary via SSH
             let ssh_service = SshDeploymentService::new();
-            ssh_service.deploy(
-                &instance.public_ip,
-                binary_path,
-                service_name,
-                env_vars.clone(),
-                arguments.clone(),
-            ).await
+            ssh_service
+                .deploy(
+                    &instance.public_ip,
+                    binary_path,
+                    service_name,
+                    env_vars.clone(),
+                    arguments.clone(),
+                )
+                .await
                 .map_err(|e| Error::Other(format!("Failed to deploy via SSH: {}", e)))?;
-            
+
             info!("✅ Blueprint binary deployed to remote instance");
-            
+
             // Register deployment
             let deployment_info = RemoteDeploymentInfo {
                 instance_id: instance.instance_id.clone(),
@@ -248,7 +252,7 @@ impl RemoteDeploymentService {
             }
 
             info!("✅ Deployment registered with TTL tracking");
-            
+
             // For now, still create a local service handle
             // In future, this should return a RemoteService handle
             let runtime_dir = ctx.data_dir().join("runtime").join(service_name);
@@ -263,11 +267,12 @@ impl RemoteDeploymentService {
             )
             .await
         }
-        
+
         #[cfg(not(feature = "remote-deployer"))]
         {
             return Err(Error::Other(
-                "Remote cloud deployment requires the 'remote-deployer' feature to be enabled".into()
+                "Remote cloud deployment requires the 'remote-deployer' feature to be enabled"
+                    .into(),
             ));
         }
     }
@@ -347,7 +352,6 @@ impl RemoteDeploymentService {
             }
         }
 
-
         for instance_id in expired_instances {
             info!("Cleaning up expired deployment: {}", instance_id);
             if let Err(e) = self.terminate_deployment(&instance_id).await {
@@ -421,26 +425,16 @@ impl ServiceRemoteExt for Service {
     }
 }
 
-
 #[cfg(feature = "remote-deployer")]
-fn convert_resource_spec(spec: &ResourceSpec) -> blueprint_remote_providers::resources::ResourceSpec {
+fn convert_resource_spec(
+    spec: &ResourceSpec,
+) -> blueprint_remote_providers::resources::ResourceSpec {
+    // Direct conversion since both structs now have the same flat structure
     blueprint_remote_providers::resources::ResourceSpec {
-        compute: blueprint_remote_providers::resources::ComputeResources {
-            cpu_count: spec.cpu as u32,
-            memory_gb: spec.memory_gb as u32,
-            gpu_type: spec.gpu_count.map(|_| "nvidia-t4".to_string()), // Default GPU type
-            gpu_count: spec.gpu_count.unwrap_or(0),
-        },
-        storage: blueprint_remote_providers::resources::StorageResources {
-            disk_size_gb: spec.storage_gb as u32,
-            disk_type: "gp3".to_string(), // Default to gp3 for AWS
-            iops: None,
-            throughput_mbps: None,
-        },
-        network: blueprint_remote_providers::resources::NetworkResources {
-            bandwidth_gbps: 1.0,
-            public_ip_required: true,
-            ipv6_required: false,
-        },
+        cpu: spec.cpu,
+        memory_gb: spec.memory_gb,
+        storage_gb: spec.storage_gb,
+        gpu_count: spec.gpu_count,
+        allow_spot: spec.allow_spot,
     }
 }

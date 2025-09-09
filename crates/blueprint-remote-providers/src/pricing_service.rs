@@ -1,12 +1,12 @@
 //! Unified pricing service that consolidates all pricing logic
 //!
-//! Integrates with the existing blueprint-pricing-engine where available
+//! Integrates with the existing Pricing Engine where available
 
 use crate::error::{Error, Result};
 use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
-use serde::{Deserialize, Serialize};
 use blueprint_std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 /// Unified pricing service
 pub struct PricingService {

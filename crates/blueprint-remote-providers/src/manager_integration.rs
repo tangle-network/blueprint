@@ -1,16 +1,13 @@
 //! Integration hooks for remote deployments with Blueprint Manager
-//!
-//! This module provides extension points for the existing Blueprint Manager
-//! to handle remote cloud deployments without modifying core code.
 
 use crate::deployment_tracker::{DeploymentRecord, DeploymentTracker, DeploymentType};
 use crate::error::{Error, Result};
 use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
-use chrono::{DateTime, Utc};
 use blueprint_std::collections::HashMap;
 use blueprint_std::path::PathBuf;
 use blueprint_std::sync::Arc;
+use chrono::{DateTime, Utc};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -225,7 +222,10 @@ impl RemoteEventHandler {
 }
 
 /// TTL checking task that runs alongside the Blueprint Manager
-pub async fn ttl_checking_task(ttl_manager: Arc<TtlManager>, check_interval: blueprint_std::time::Duration) {
+pub async fn ttl_checking_task(
+    ttl_manager: Arc<TtlManager>,
+    check_interval: blueprint_std::time::Duration,
+) {
     let mut interval = tokio::time::interval(check_interval);
 
     loop {
@@ -276,7 +276,7 @@ impl RemoteSourceExtension {
             region: region.clone(),
             ..Default::default()
         };
-        
+
         // Provision the infrastructure
         let instance = self.provisioner.provision(&resource_spec, &config).await?;
 
@@ -339,7 +339,11 @@ impl RemoteDeploymentExtensions {
             // Start TTL checking task
             let ttl_manager_clone = ttl_manager.clone();
             tokio::spawn(async move {
-                ttl_checking_task(ttl_manager_clone, blueprint_std::time::Duration::from_secs(60)).await;
+                ttl_checking_task(
+                    ttl_manager_clone,
+                    blueprint_std::time::Duration::from_secs(60),
+                )
+                .await;
             });
 
             // Start TTL expiry handler task

@@ -1,11 +1,11 @@
 use crate::error::{Error, Result};
+use crate::provisioning::InstanceSelection;
+use crate::remote::{CloudProvider, RemoteDeploymentConfig};
+use crate::resources::ResourceSpec;
 #[cfg(feature = "aws")]
 use aws_sdk_ec2::client::Waiters;
-use crate::provisioning::InstanceSelection;
-use crate::resources::ResourceSpec;
-use crate::remote::{CloudProvider, RemoteDeploymentConfig};
-use serde::{Deserialize, Serialize};
 use blueprint_std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 /// Infrastructure provisioner for creating cloud resources
@@ -103,9 +103,9 @@ impl InfrastructureProvisioner {
         let result = ec2
             .run_instances()
             .image_id(config.ami_id.as_deref().unwrap_or("ami-0c55b159cbfafe1f0")) // Amazon Linux 2
-            .instance_type(
-                InstanceType::from(instance_selection.instance_type.as_str()),
-            )
+            .instance_type(InstanceType::from(
+                instance_selection.instance_type.as_str(),
+            ))
             .min_count(1)
             .max_count(1)
             .key_name(config.ssh_key_name.as_deref().unwrap_or("default"))
@@ -144,8 +144,9 @@ impl InfrastructureProvisioner {
         // Wait for instance to be running
         // Note: AWS SDK v1 doesn't have waiters method, need to poll manually
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-        
-        let describe_result = ec2.describe_instances()
+
+        let describe_result = ec2
+            .describe_instances()
             .instance_ids(instance_id.clone())
             .send()
             .await?;
@@ -267,8 +268,7 @@ impl InfrastructureProvisioner {
         spec: &ResourceSpec,
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
-        // DigitalOcean API implementation
-        // Would use reqwest or a DO SDK when available
+        // TODO: Implement DigitalOcean API client
 
         let instance_selection = crate::provisioning::InstanceTypeMapper::map_to_instance_type(
             spec,
@@ -375,7 +375,7 @@ pub struct ProvisionedInfrastructure {
 impl ProvisionedInfrastructure {
     /// Check if the infrastructure is ready for deployment
     pub async fn is_ready(&self) -> bool {
-        // Could ping the instance or check cloud provider status
+        // TODO: Add instance health checks
         self.public_ip.is_some() || self.private_ip.is_some()
     }
 

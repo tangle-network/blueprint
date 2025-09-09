@@ -2,7 +2,6 @@ use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
 
-
 /// Maps resource requirements to cloud instance types
 pub struct InstanceTypeMapper;
 
@@ -22,9 +21,8 @@ impl InstanceTypeMapper {
         }
     }
 
-
     fn map_aws_instance(spec: &ResourceSpec) -> InstanceSelection {
-        // AWS instance selection logic
+        // TODO: Fetch instance types dynamically from AWS API
         let gpu_count = spec.gpu_count;
         let instance_type = match (spec.cpu, spec.memory_gb, gpu_count) {
             // GPU instances

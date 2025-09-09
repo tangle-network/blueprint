@@ -1,10 +1,6 @@
 //! Remote deployment extensions for Blueprint Manager
 //!
-//! This crate extends the existing Blueprint Manager runtime to support
-//! remote deployments to arbitrary cloud Kubernetes clusters and Docker hosts
-//! that are separated from the host Blueprint Manager machine.
-//!
-//! It reuses the existing ContainerRuntime and adds:
+//! Features:
 //! - Multi-cloud context management
 //! - Remote cluster discovery and configuration
 //! - Cost tracking and estimation
@@ -25,9 +21,9 @@ pub mod provisioning;
 pub mod remote;
 pub mod resources;
 
+pub mod cloud_provisioner;
 pub mod deployment_tracker;
 pub mod infrastructure;
-pub mod cloud_provisioner;
 pub mod manager_integration;
 pub mod ssh_deployment;
 
@@ -38,12 +34,10 @@ pub mod test_utils;
 pub mod testing;
 
 // Simplified public API
+pub use cloud_provisioner::{CloudProvisioner, InstanceStatus, ProvisionedInstance};
 pub use deployment_tracker::DeploymentTracker;
 pub use error::{Error, Result};
 pub use health_monitor::{HealthCheckResult, HealthMonitor, HealthStatus};
-pub use cloud_provisioner::{
-    CloudProvisioner, InstanceStatus, ProvisionedInstance,
-};
 pub use manager_integration::RemoteDeploymentExtensions;
 pub use pricing_service::{CostReport, PricingService};
 pub use remote::{CloudProvider, RemoteClusterManager};

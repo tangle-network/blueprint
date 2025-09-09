@@ -1,11 +1,8 @@
 use crate::remote::CloudProvider;
-use serde::{Deserialize, Serialize};
 use blueprint_std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 /// Cost estimator for cloud deployments
-///
-/// Provides cost tracking on top of existing deployments without
-/// modifying the core runtime behavior.
 pub struct CostEstimator {
     providers: HashMap<CloudProvider, ProviderCost>,
 }
@@ -73,9 +70,6 @@ impl CostEstimator {
     }
 
     /// Estimate costs for a deployment
-    ///
-    /// This works alongside existing deployments to provide cost visibility
-    /// without modifying deployment behavior.
     pub fn estimate(
         &self,
         provider: &CloudProvider,

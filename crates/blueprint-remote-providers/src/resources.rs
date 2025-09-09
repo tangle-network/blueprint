@@ -92,8 +92,8 @@ impl ResourceSpec {
     /// Convert to Kubernetes resource requirements
     #[cfg(feature = "kubernetes")]
     pub fn to_k8s_resources(&self) -> k8s_openapi::api::core::v1::ResourceRequirements {
-        use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
         use blueprint_std::collections::BTreeMap;
+        use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 
         let mut limits = BTreeMap::new();
         let mut requests = BTreeMap::new();

@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use blueprint_remote_providers::{
-        CloudProvisioner, CloudProvider, ResourceSpec, PricingService,
+        CloudProvider, CloudProvisioner, PricingService, ResourceSpec,
         test_utils::mocks::{MockCloudProvider, fixtures},
     };
     use serial_test::serial;
@@ -13,7 +13,7 @@ mod tests {
     async fn test_end_to_end_provisioning_flow() {
         // This test simulates a complete provisioning flow with a mock provider
         let mock = MockCloudProvider::new();
-        
+
         // Set up expected responses
         mock.set_response(
             "provision_t3.micro_us-west-2",
@@ -25,22 +25,25 @@ mod tests {
                 "public_ip": "54.1.2.3",
                 "private_ip": "172.16.0.1",
                 "status": "Running"
-            })
+            }),
         );
 
         // Provision instance
-        let instance = mock.provision_instance("t3.micro", "us-west-2").await.unwrap();
+        let instance = mock
+            .provision_instance("t3.micro", "us-west-2")
+            .await
+            .unwrap();
         assert_eq!(instance.id, "i-test-12345");
         assert_eq!(instance.public_ip, Some("54.1.2.3".to_string()));
-        
+
         // Verify call history
         let history = mock.get_call_history();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0], "provision_t3.micro_us-west-2");
-        
+
         // Test termination
         mock.terminate_instance(&instance.id).await.unwrap();
-        
+
         let history = mock.get_call_history();
         assert_eq!(history.len(), 2);
         assert!(history[1].starts_with("terminate_"));
@@ -50,10 +53,10 @@ mod tests {
     async fn test_provider_selection_for_gpu_workload() {
         let spec = fixtures::gpu_spec();
         let pricing_service = PricingService::new();
-        
+
         // Find cheapest provider for GPU workload
         let (provider, report) = pricing_service.find_cheapest_provider(&spec, 24.0);
-        
+
         // GPU workloads should prefer certain providers
         assert!(matches!(provider, CloudProvider::AWS | CloudProvider::GCP));
         assert!(report.resource_spec.gpu_count.is_some());
@@ -64,21 +67,13 @@ mod tests {
     async fn test_spot_instance_cost_optimization() {
         let regular_spec = fixtures::basic_spec();
         let spot_spec = fixtures::spot_spec();
-        
+
         let pricing_service = PricingService::new();
-        
-        let regular_cost = pricing_service.calculate_cost(
-            &regular_spec,
-            CloudProvider::AWS,
-            24.0
-        );
-        
-        let spot_cost = pricing_service.calculate_cost(
-            &spot_spec,
-            CloudProvider::AWS,
-            24.0
-        );
-        
+
+        let regular_cost = pricing_service.calculate_cost(&regular_spec, CloudProvider::AWS, 24.0);
+
+        let spot_cost = pricing_service.calculate_cost(&spot_spec, CloudProvider::AWS, 24.0);
+
         // Spot instances should be cheaper
         assert!(spot_cost.total_cost < regular_cost.total_cost);
         assert_eq!(spot_cost.discount_percentage, 30.0);
@@ -89,20 +84,20 @@ mod tests {
     async fn test_retry_logic_on_failure() {
         let mock = MockCloudProvider::new();
         let mut attempt = 0;
-        
+
         // Simulate transient failures
         mock.set_response(
             "provision_t3.micro_us-west-2",
             serde_json::json!({
-                "error": if attempt < 2 { 
+                "error": if attempt < 2 {
                     attempt += 1;
                     "TransientError"
                 } else {
                     ""
                 }
-            })
+            }),
         );
-        
+
         // The provisioner should retry and eventually succeed
         // Note: This would require implementing retry logic in the actual CloudProvisioner
         // For now, we're testing the mock behavior
@@ -114,17 +109,17 @@ mod tests {
     async fn test_multi_provider_comparison() {
         let spec = ResourceSpec::recommended();
         let pricing_service = PricingService::new();
-        
+
         let reports = pricing_service.compare_providers(&spec, 730.0); // Monthly
-        
+
         // Should have reports for all providers
         assert!(reports.len() >= 5);
-        
+
         // Verify different providers have different costs
         let costs: Vec<f64> = reports.iter().map(|r| r.total_cost).collect();
-        let unique_costs: std::collections::HashSet<String> = 
+        let unique_costs: std::collections::HashSet<String> =
             costs.iter().map(|c| format!("{:.2}", c)).collect();
-        
+
         // At least some providers should have different costs
         assert!(unique_costs.len() > 1);
     }
@@ -134,7 +129,7 @@ mod tests {
         // Test invalid resource specs
         let invalid_specs = vec![
             ResourceSpec {
-                cpu: 0.05,  // Too low
+                cpu: 0.05, // Too low
                 memory_gb: 1.0,
                 storage_gb: 10.0,
                 gpu_count: None,
@@ -142,7 +137,7 @@ mod tests {
             },
             ResourceSpec {
                 cpu: 1.0,
-                memory_gb: 0.25,  // Too low
+                memory_gb: 0.25, // Too low
                 storage_gb: 10.0,
                 gpu_count: None,
                 allow_spot: false,
@@ -150,7 +145,7 @@ mod tests {
             ResourceSpec {
                 cpu: 1.0,
                 memory_gb: 1.0,
-                storage_gb: 0.5,  // Too low
+                storage_gb: 0.5, // Too low
                 gpu_count: None,
                 allow_spot: false,
             },
@@ -158,15 +153,15 @@ mod tests {
                 cpu: 1.0,
                 memory_gb: 1.0,
                 storage_gb: 10.0,
-                gpu_count: Some(0),  // Invalid GPU count
+                gpu_count: Some(0), // Invalid GPU count
                 allow_spot: false,
             },
         ];
-        
+
         for spec in invalid_specs {
             assert!(spec.validate().is_err());
         }
-        
+
         // Test valid specs
         let valid_specs = vec![
             fixtures::minimal_spec(),
@@ -174,7 +169,7 @@ mod tests {
             fixtures::gpu_spec(),
             fixtures::high_memory_spec(),
         ];
-        
+
         for spec in valid_specs {
             assert!(spec.validate().is_ok());
         }
@@ -184,24 +179,23 @@ mod tests {
     #[serial]
     async fn test_concurrent_provisioning() {
         use futures::future::join_all;
-        
+
         let mock = MockCloudProvider::new();
-        
+
         // Launch multiple provisions concurrently
         let tasks: Vec<_> = (0..5)
             .map(|i| {
                 let mock_clone = MockCloudProvider::new();
                 async move {
-                    mock_clone.provision_instance(
-                        &format!("t3.micro"),
-                        &format!("us-west-{}", i)
-                    ).await
+                    mock_clone
+                        .provision_instance(&format!("t3.micro"), &format!("us-west-{}", i))
+                        .await
                 }
             })
             .collect();
-        
+
         let results = join_all(tasks).await;
-        
+
         // All should succeed
         for result in results {
             assert!(result.is_ok());
@@ -213,16 +207,19 @@ mod tests {
         // This would test the TTL management system
         // For now, we're just testing the mock behavior
         let mock = MockCloudProvider::new();
-        
+
         // Provision
-        let instance = mock.provision_instance("t3.micro", "us-west-2").await.unwrap();
-        
+        let instance = mock
+            .provision_instance("t3.micro", "us-west-2")
+            .await
+            .unwrap();
+
         // Simulate TTL expiry (would be done by TtlManager in real scenario)
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
+
         // Cleanup
         mock.terminate_instance(&instance.id).await.unwrap();
-        
+
         // Verify cleanup was called
         let history = mock.get_call_history();
         assert_eq!(history.len(), 2);
@@ -250,7 +247,7 @@ mod property_tests {
                 gpu_count,
                 allow_spot: false,
             };
-            
+
             // All specs within these ranges should be valid
             assert!(spec.validate().is_ok());
         }
@@ -268,7 +265,7 @@ mod property_tests {
                 gpu_count: None,
                 allow_spot: false,
             };
-            
+
             let cost = spec.estimate_hourly_cost();
             assert!(cost > 0.0);
         }
@@ -286,15 +283,15 @@ mod property_tests {
                 gpu_count: None,
                 allow_spot: false,
             };
-            
+
             let spot_spec = ResourceSpec {
                 allow_spot: true,
                 ..regular_spec.clone()
             };
-            
+
             let regular_cost = regular_spec.estimate_hourly_cost();
             let spot_cost = spot_spec.estimate_hourly_cost();
-            
+
             // Spot should always be cheaper
             assert!(spot_cost < regular_cost);
             // Discount should be approximately 30%

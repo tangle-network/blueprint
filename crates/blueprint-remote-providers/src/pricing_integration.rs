@@ -1,4 +1,4 @@
-//! Integration with the blueprint-pricing-engine for cost calculations
+//! Integration with the Pricing Engine for cost calculations
 //!
 //! This module bridges the remote-providers resource model with the existing
 //! pricing engine to provide accurate cost calculations for both local and
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use blueprint_std::collections::HashMap;
 use blueprint_std::path::Path;
 
-/// Pricing calculator that integrates with the blueprint-pricing-engine
+/// Pricing calculator that integrates with the Pricing Engine
 ///
 /// Provides cost calculations for both local and remote deployments using
 /// the resource model.
@@ -327,7 +327,7 @@ impl DetailedCostReport {
     }
 }
 
-/// Integration with existing blueprint-pricing-engine types
+/// Integration with existing Pricing Engine types
 pub mod pricing_engine_compat {
     use super::*;
 

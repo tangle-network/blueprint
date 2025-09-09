@@ -2,13 +2,13 @@
 //!
 //! Provides continuous health checks and auto-recovery for deployed instances
 
+use crate::cloud_provisioner::{CloudProvisioner, InstanceStatus};
 use crate::deployment_tracker::{DeploymentRecord, DeploymentTracker};
 use crate::error::{Error, Result};
-use crate::cloud_provisioner::{CloudProvisioner, InstanceStatus};
 use crate::remote::CloudProvider;
-use chrono::{DateTime, Utc};
 use blueprint_std::sync::Arc;
 use blueprint_std::time::Duration;
+use chrono::{DateTime, Utc};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -42,10 +42,7 @@ pub struct HealthMonitor {
 }
 
 impl HealthMonitor {
-    pub fn new(
-        provisioner: Arc<CloudProvisioner>,
-        tracker: Arc<DeploymentTracker>,
-    ) -> Self {
+    pub fn new(provisioner: Arc<CloudProvisioner>, tracker: Arc<DeploymentTracker>) -> Self {
         Self {
             provisioner,
             tracker,
@@ -173,7 +170,11 @@ impl HealthMonitor {
         let provider = deployment.deployment_type.to_provider();
 
         // First, try to terminate the existing instance
-        if let Err(e) = self.provisioner.terminate(provider.clone(), &deployment.id).await {
+        if let Err(e) = self
+            .provisioner
+            .terminate(provider.clone(), &deployment.id)
+            .await
+        {
             warn!("Failed to terminate unhealthy instance: {}", e);
         }
 

@@ -6,7 +6,7 @@
 #[cfg(test)]
 mod tests {
     use blueprint_remote_providers::{
-        CloudProvisioner, CloudProvider, DeploymentTracker, HealthMonitor, HealthStatus,
+        CloudProvider, CloudProvisioner, DeploymentTracker, HealthMonitor, HealthStatus,
         PricingService, RemoteDeploymentExtensions, ResourceSpec,
     };
     use std::sync::Arc;

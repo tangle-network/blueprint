@@ -3,22 +3,19 @@
 // use blueprint_manager::rt::container::ContainerRuntime;
 
 use crate::error::{Error, Result};
+use blueprint_std::collections::HashMap;
+use blueprint_std::fmt;
+use blueprint_std::path::PathBuf;
+use blueprint_std::sync::Arc;
 #[cfg(feature = "kubernetes")]
 use k8s_openapi::api::core::v1::Service;
 #[cfg(feature = "kubernetes")]
 use kube::{Client, Config};
 use serde::{Deserialize, Serialize};
-use blueprint_std::collections::HashMap;
-use blueprint_std::fmt;
-use blueprint_std::path::PathBuf;
-use blueprint_std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
 /// Manages remote Kubernetes clusters for Blueprint deployments
-///
-/// This extends the existing ContainerRuntime to work with multiple
-/// remote clusters while reusing all existing deployment logic.
 #[cfg(feature = "kubernetes")]
 pub struct RemoteClusterManager {
     /// Map of cluster name to configuration
@@ -80,11 +77,6 @@ impl RemoteClusterManager {
     }
 
     // TODO: Re-enable when ContainerRuntime is available
-    // /// Get a ContainerRuntime configured for the active remote cluster
-    // ///
-    // /// This returns the existing ContainerRuntime but configured to use
-    // /// the remote cluster's client, allowing all existing deployment logic
-    // /// to work unchanged.
     // pub async fn get_runtime_for_active_cluster(&self) -> Result<ContainerRuntime> {
     //     let active = self.active_cluster.read().await;
     //     let cluster_name = active
@@ -96,8 +88,6 @@ impl RemoteClusterManager {
     //         Error::ConfigurationError(format!("Cluster {} not found", cluster_name))
     //     })?;
 
-    //     // Create ContainerRuntime with the remote cluster's client
-    //     // This reuses ALL existing ContainerRuntime logic
     //     let runtime = ContainerRuntime::with_client(
     //         cluster.client.clone(),
     //         cluster.config.namespace.clone(),

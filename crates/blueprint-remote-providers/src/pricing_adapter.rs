@@ -1,4 +1,4 @@
-//! Adapter to integrate ResourceSpec with blueprint-pricing-engine
+//! Adapter to integrate ResourceSpec with Pricing Engine
 #![cfg(feature = "pricing")]
 //!
 //! Provides seamless integration between remote-providers ResourceSpec
@@ -7,10 +7,10 @@
 use crate::error::Result;
 use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
-// Note: ResourceUnit would be imported from blueprint-pricing-engine in production
+// Note: ResourceUnit would be imported from Pricing Engine in production
 // For now we define a minimal interface for the adapter
-use serde::{Deserialize, Serialize};
 use blueprint_std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 /// Adapter for pricing engine integration
 pub struct PricingAdapter {
