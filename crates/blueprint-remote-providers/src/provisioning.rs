@@ -72,7 +72,7 @@ impl InstanceTypeMapper {
 
         InstanceSelection {
             instance_type: instance_type.to_string(),
-            spot_capable: spec.qos.allow_spot,
+            spot_capable: spec.allow_spot,
             estimated_hourly_cost: Self::estimate_gcp_cost(instance_type),
         }
     }
@@ -93,7 +93,7 @@ impl InstanceTypeMapper {
 
         InstanceSelection {
             instance_type: instance_type.to_string(),
-            spot_capable: spec.qos.allow_spot,
+            spot_capable: spec.allow_spot,
             estimated_hourly_cost: Self::estimate_azure_cost(instance_type),
         }
     }
@@ -137,7 +137,7 @@ impl InstanceTypeMapper {
         InstanceSelection {
             instance_type: format!("{}cpu-{}gb", spec.cpu, spec.memory_gb),
             spot_capable: false,
-            estimated_hourly_cost: spec.cpu * 0.05 + spec.memory_gb * 0.01,
+            estimated_hourly_cost: (spec.cpu * 0.05 + spec.memory_gb * 0.01) as f64,
         }
     }
 

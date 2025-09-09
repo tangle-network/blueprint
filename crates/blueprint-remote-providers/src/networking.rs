@@ -1,8 +1,8 @@
 use crate::error::Result;
 use crate::remote::CloudProvider;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
+use blueprint_std::collections::HashMap;
+use blueprint_std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 

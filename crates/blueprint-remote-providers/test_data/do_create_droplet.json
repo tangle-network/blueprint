@@ -1,0 +1,29 @@
+{
+  "droplet": {
+    "id": 3164494,
+    "name": "test-droplet",
+    "memory": 1024,
+    "vcpus": 1,
+    "disk": 25,
+    "locked": false,
+    "status": "new",
+    "created_at": "2024-01-01T00:00:00Z",
+    "features": ["ipv6"],
+    "backup_ids": [],
+    "networks": {
+      "v4": [{
+        "ip_address": "104.236.32.182",
+        "netmask": "255.255.240.0",
+        "gateway": "104.236.32.1",
+        "type": "public"
+      }],
+      "v6": []
+    },
+    "region": {
+      "name": "New York 3",
+      "slug": "nyc3",
+      "available": true
+    },
+    "size_slug": "s-1vcpu-1gb"
+  }
+}

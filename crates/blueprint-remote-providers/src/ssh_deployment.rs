@@ -6,9 +6,9 @@
 use crate::error::{Error, Result};
 use crate::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use blueprint_std::collections::HashMap;
+use blueprint_std::path::{Path, PathBuf};
+use blueprint_std::process::Stdio;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 use tracing::{debug, info, warn};
@@ -647,7 +647,7 @@ impl ResourceLimits {
         Self {
             cpu_cores: Some(spec.cpu as f64),
             memory_mb: Some((spec.memory_gb * 1024.0) as u64),
-            disk_gb: Some(spec.storage_gb as u64),
+            disk_gb: Some(spec.storage_gb as f64),
             network_bandwidth_mbps: Some(1000), // Default 1Gbps
         }
     }

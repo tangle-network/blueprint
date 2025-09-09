@@ -8,11 +8,12 @@ use k8s_openapi::api::core::v1::Service;
 #[cfg(feature = "kubernetes")]
 use kube::{Client, Config};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fmt;
-use std::path::PathBuf;
-use std::sync::Arc;
+use blueprint_std::collections::HashMap;
+use blueprint_std::fmt;
+use blueprint_std::path::PathBuf;
+use blueprint_std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::info;
 
 /// Manages remote Kubernetes clusters for Blueprint deployments
 ///
@@ -46,7 +47,10 @@ impl RemoteClusterManager {
 
         // Create Kubernetes client with remote context
         let kube_config = if let Some(ref path) = config.kubeconfig_path {
-            Config::from_kubeconfig(&tokio::fs::read_to_string(path).await?).await?
+            let kubeconfig_yaml = tokio::fs::read_to_string(path).await?;
+            let kubeconfig: kube::config::Kubeconfig = serde_yaml::from_str(&kubeconfig_yaml)
+                .map_err(|e| Error::ConfigurationError(format!("Invalid kubeconfig: {}", e)))?;
+            Config::from_custom_kubeconfig(kubeconfig, &Default::default()).await?
         } else {
             Config::infer().await?
         };

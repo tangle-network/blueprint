@@ -31,6 +31,9 @@ pub mod cloud_provisioner;
 pub mod manager_integration;
 pub mod ssh_deployment;
 
+#[cfg(test)]
+pub mod test_utils;
+
 #[cfg(feature = "testing")]
 pub mod testing;
 

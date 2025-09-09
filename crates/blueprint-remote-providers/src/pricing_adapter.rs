@@ -10,7 +10,7 @@ use crate::resources::ResourceSpec;
 // Note: ResourceUnit would be imported from blueprint-pricing-engine in production
 // For now we define a minimal interface for the adapter
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Adapter for pricing engine integration
 pub struct PricingAdapter {

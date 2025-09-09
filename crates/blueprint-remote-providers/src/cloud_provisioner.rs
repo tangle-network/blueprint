@@ -8,8 +8,8 @@ use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
+use blueprint_std::collections::HashMap;
+use blueprint_std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -25,7 +25,7 @@ impl CloudProvisioner {
 
         // Initialize provider adapters based on available credentials
         #[cfg(feature = "aws")]
-        if std::env::var("AWS_ACCESS_KEY_ID").is_ok() {
+        if blueprint_std::env::var("AWS_ACCESS_KEY_ID").is_ok() {
             providers.insert(
                 CloudProvider::AWS,
                 Box::new(AwsAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
@@ -33,7 +33,7 @@ impl CloudProvisioner {
         }
 
         #[cfg(feature = "api-clients")]
-        if std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok() {
+        if blueprint_std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok() {
             providers.insert(
                 CloudProvider::GCP,
                 Box::new(GcpAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
@@ -41,7 +41,7 @@ impl CloudProvisioner {
         }
 
         #[cfg(feature = "api-clients")]
-        if std::env::var("AZURE_CLIENT_ID").is_ok() {
+        if blueprint_std::env::var("AZURE_CLIENT_ID").is_ok() {
             providers.insert(
                 CloudProvider::Azure,
                 Box::new(AzureAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
@@ -49,7 +49,7 @@ impl CloudProvisioner {
         }
 
         #[cfg(feature = "api-clients")]
-        if std::env::var("DIGITALOCEAN_TOKEN").is_ok() {
+        if blueprint_std::env::var("DIGITALOCEAN_TOKEN").is_ok() {
             providers.insert(
                 CloudProvider::DigitalOcean,
                 Box::new(DigitalOceanAdapter::new()?) as Box<dyn CloudProviderAdapter>,
@@ -57,7 +57,7 @@ impl CloudProvisioner {
         }
 
         #[cfg(feature = "api-clients")]
-        if std::env::var("VULTR_API_KEY").is_ok() {
+        if blueprint_std::env::var("VULTR_API_KEY").is_ok() {
             providers.insert(
                 CloudProvider::Vultr,
                 Box::new(VultrAdapter::new()?) as Box<dyn CloudProviderAdapter>,
@@ -80,16 +80,16 @@ impl CloudProvisioner {
         let adapter = self
             .providers
             .get(&provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider))?;
+            .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
 
         // Map resources to appropriate instance type
         // Map resource spec to instance type
-        let instance_type = InstanceTypeMapper::map_to_instance_type(resource_spec, &provider)?;
+        let instance_selection = InstanceTypeMapper::map_to_instance_type(resource_spec, &provider);
 
         // Retry with exponential backoff
         let mut attempt = 0;
         loop {
-            match adapter.provision_instance(&instance_type, region).await {
+            match adapter.provision_instance(&instance_selection.instance_type, region).await {
                 Ok(instance) => {
                     info!(
                         "Successfully provisioned {} instance: {}",
@@ -136,7 +136,7 @@ impl CloudProvisioner {
                         "Instance {} still in status {:?}, waiting...",
                         instance_id, status
                     );
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    tokio::time::sleep(blueprint_std::time::Duration::from_secs(5)).await;
                     retries += 1;
                 }
                 Err(_) => {
@@ -305,7 +305,7 @@ struct GcpAdapter {
 #[cfg(feature = "api-clients")]
 impl GcpAdapter {
     async fn new() -> Result<Self> {
-        let project_id = std::env::var("GCP_PROJECT_ID")
+        let project_id = blueprint_std::env::var("GCP_PROJECT_ID")
             .map_err(|_| Error::Other("GCP_PROJECT_ID not set".into()))?;
 
         let client = reqwest::Client::new();
@@ -509,7 +509,7 @@ struct DigitalOceanAdapter {
 #[cfg(feature = "api-clients")]
 impl DigitalOceanAdapter {
     fn new() -> Result<Self> {
-        let token = std::env::var("DIGITALOCEAN_TOKEN")
+        let token = blueprint_std::env::var("DIGITALOCEAN_TOKEN")
             .map_err(|_| Error::Other("DIGITALOCEAN_TOKEN not set".into()))?;
 
         Ok(Self {
@@ -628,7 +628,7 @@ struct VultrAdapter {
 #[cfg(feature = "api-clients")]
 impl VultrAdapter {
     fn new() -> Result<Self> {
-        let api_key = std::env::var("VULTR_API_KEY")
+        let api_key = blueprint_std::env::var("VULTR_API_KEY")
             .map_err(|_| Error::Other("VULTR_API_KEY not set".into()))?;
 
         Ok(Self {
@@ -766,22 +766,22 @@ pub enum InstanceStatus {
 #[derive(Debug, Clone)]
 pub struct RetryPolicy {
     pub max_retries: usize,
-    pub base_delay: std::time::Duration,
-    pub max_delay: std::time::Duration,
+    pub base_delay: blueprint_std::time::Duration,
+    pub max_delay: blueprint_std::time::Duration,
 }
 
 impl Default for RetryPolicy {
     fn default() -> Self {
         Self {
             max_retries: 3,
-            base_delay: std::time::Duration::from_secs(1),
-            max_delay: std::time::Duration::from_secs(30),
+            base_delay: blueprint_std::time::Duration::from_secs(1),
+            max_delay: blueprint_std::time::Duration::from_secs(30),
         }
     }
 }
 
 impl RetryPolicy {
-    fn delay_for_attempt(&self, attempt: usize) -> std::time::Duration {
+    fn delay_for_attempt(&self, attempt: usize) -> blueprint_std::time::Duration {
         let delay = self.base_delay * 2u32.pow(attempt as u32);
         delay.min(self.max_delay)
     }
@@ -797,19 +797,19 @@ mod tests {
 
         assert_eq!(
             policy.delay_for_attempt(0),
-            std::time::Duration::from_secs(1)
+            blueprint_std::time::Duration::from_secs(1)
         );
         assert_eq!(
             policy.delay_for_attempt(1),
-            std::time::Duration::from_secs(2)
+            blueprint_std::time::Duration::from_secs(2)
         );
         assert_eq!(
             policy.delay_for_attempt(2),
-            std::time::Duration::from_secs(4)
+            blueprint_std::time::Duration::from_secs(4)
         );
         assert_eq!(
             policy.delay_for_attempt(5),
-            std::time::Duration::from_secs(30)
+            blueprint_std::time::Duration::from_secs(30)
         ); // Max delay
     }
 

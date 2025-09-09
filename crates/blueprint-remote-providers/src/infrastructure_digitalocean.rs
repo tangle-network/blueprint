@@ -7,7 +7,7 @@ use crate::error::{Error, Result};
 use crate::resources::ResourceSpec;
 use crate::provisioning::InstanceSelection;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 use tracing::{info, debug, warn};
 
 /// DigitalOcean infrastructure provisioner
@@ -23,7 +23,7 @@ impl DigitalOceanProvisioner {
     pub async fn new(api_token: String, default_region: String) -> Result<Self> {
         #[cfg(feature = "api-clients")]
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(blueprint_std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| Error::ConfigurationError(e.to_string()))?;
         

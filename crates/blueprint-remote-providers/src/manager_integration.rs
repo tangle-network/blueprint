@@ -8,9 +8,9 @@ use crate::error::{Error, Result};
 use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
 use chrono::{DateTime, Utc};
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
+use blueprint_std::collections::HashMap;
+use blueprint_std::path::PathBuf;
+use blueprint_std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -225,7 +225,7 @@ impl RemoteEventHandler {
 }
 
 /// TTL checking task that runs alongside the Blueprint Manager
-pub async fn ttl_checking_task(ttl_manager: Arc<TtlManager>, check_interval: std::time::Duration) {
+pub async fn ttl_checking_task(ttl_manager: Arc<TtlManager>, check_interval: blueprint_std::time::Duration) {
     let mut interval = tokio::time::interval(check_interval);
 
     loop {
@@ -270,14 +270,21 @@ impl RemoteSourceExtension {
         region: String,
         ttl_seconds: Option<u64>,
     ) -> Result<RemoteDeploymentConfig> {
+        // Create provisioning config
+        let config = crate::infrastructure::ProvisioningConfig {
+            name: format!("{}-{}", blueprint_id, service_id),
+            region: region.clone(),
+            ..Default::default()
+        };
+        
         // Provision the infrastructure
-        let instance_id = self.provisioner.provision(&resource_spec).await?;
+        let instance = self.provisioner.provision(&resource_spec, &config).await?;
 
         let config = RemoteDeploymentConfig {
             deployment_type: deployment_type_from_provider(&provider),
             provider: Some(provider),
             region: Some(region),
-            instance_id,
+            instance_id: instance.instance_id,
             resource_spec,
             ttl_seconds,
             deployed_at: Utc::now(),
@@ -314,7 +321,7 @@ pub struct RemoteDeploymentExtensions {
 impl RemoteDeploymentExtensions {
     /// Initialize all remote deployment extensions
     pub async fn initialize(
-        state_dir: &std::path::Path,
+        state_dir: &blueprint_std::path::Path,
         enable_ttl: bool,
         provisioner: Arc<crate::infrastructure::InfrastructureProvisioner>,
     ) -> Result<Self> {
@@ -325,14 +332,14 @@ impl RemoteDeploymentExtensions {
         let registry = Arc::new(RemoteDeploymentRegistry::new(tracker.clone()));
 
         // Initialize TTL management if enabled
-        let (ttl_manager, ttl_rx) = if enable_ttl {
+        let ttl_manager = if enable_ttl {
             let (ttl_tx, mut ttl_rx) = tokio::sync::mpsc::unbounded_channel();
             let ttl_manager = Arc::new(TtlManager::new(registry.clone(), ttl_tx));
 
             // Start TTL checking task
             let ttl_manager_clone = ttl_manager.clone();
             tokio::spawn(async move {
-                ttl_checking_task(ttl_manager_clone, std::time::Duration::from_secs(60)).await;
+                ttl_checking_task(ttl_manager_clone, blueprint_std::time::Duration::from_secs(60)).await;
             });
 
             // Start TTL expiry handler task
@@ -347,9 +354,9 @@ impl RemoteDeploymentExtensions {
                 }
             });
 
-            (Some(ttl_manager.clone()), Some(ttl_rx))
+            Some(ttl_manager)
         } else {
-            (None, None)
+            None
         };
 
         // Initialize event handler

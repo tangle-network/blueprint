@@ -24,7 +24,7 @@ pub enum Error {
     AwsEks(#[from] aws_sdk_eks::Error),
 
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(#[from] blueprint_std::io::Error),
 
     #[error("Provider {0:?} not configured")]
     ProviderNotConfigured(crate::remote::CloudProvider),
@@ -35,7 +35,7 @@ pub enum Error {
 
 impl<E> From<aws_sdk_ec2::error::SdkError<E>> for Error
 where
-    E: std::error::Error + Send + Sync + 'static,
+    E: blueprint_std::error::Error + Send + Sync + 'static,
 {
     fn from(err: aws_sdk_ec2::error::SdkError<E>) -> Self {
         Error::Other(err.to_string())
@@ -56,4 +56,4 @@ impl From<kube::config::KubeconfigError> for Error {
     }
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = blueprint_std::result::Result<T, Error>;

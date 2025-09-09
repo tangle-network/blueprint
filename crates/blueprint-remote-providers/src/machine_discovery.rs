@@ -6,7 +6,7 @@
 use crate::error::{Error, Result};
 use crate::remote::CloudProvider;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 use tracing::{info, debug};
 
 /// Machine type discovery service
@@ -22,7 +22,7 @@ impl MachineTypeDiscovery {
         Self {
             #[cfg(feature = "api-clients")]
             client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(blueprint_std::time::Duration::from_secs(30))
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new()),
             cache: HashMap::new(),
@@ -512,7 +512,7 @@ impl MachineTypeDiscovery {
                             (Some(a_price), Some(b_price)) => {
                                 a_price.partial_cmp(&b_price).unwrap()
                             }
-                            _ => std::cmp::Ordering::Equal,
+                            _ => blueprint_std::cmp::Ordering::Equal,
                         }
                     })
                     .cloned()

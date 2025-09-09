@@ -93,7 +93,7 @@ impl ResourceSpec {
     #[cfg(feature = "kubernetes")]
     pub fn to_k8s_resources(&self) -> k8s_openapi::api::core::v1::ResourceRequirements {
         use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
-        use std::collections::BTreeMap;
+        use blueprint_std::collections::BTreeMap;
 
         let mut limits = BTreeMap::new();
         let mut requests = BTreeMap::new();
@@ -144,15 +144,16 @@ impl ResourceSpec {
     pub fn estimate_hourly_cost(&self) -> f64 {
         let base_cost = self.cpu * 0.04 + self.memory_gb * 0.01;
         let storage_cost = self.storage_gb * 0.0001;
-        let gpu_cost = self.gpu_count.unwrap_or(0) as f64 * 0.90;
+        let gpu_cost = self.gpu_count.unwrap_or(0) as f32 * 0.90;
 
         let total = base_cost + storage_cost + gpu_cost;
 
-        if self.allow_spot {
+        let final_cost = if self.allow_spot {
             total * 0.7 // 30% discount for spot instances
         } else {
             total
-        }
+        };
+        final_cost as f64
     }
 }
 

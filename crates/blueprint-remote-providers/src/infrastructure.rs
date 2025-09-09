@@ -5,7 +5,7 @@ use crate::provisioning::InstanceSelection;
 use crate::resources::ResourceSpec;
 use crate::remote::{CloudProvider, RemoteDeploymentConfig};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 use tracing::{debug, info, warn};
 
 /// Infrastructure provisioner for creating cloud resources
@@ -34,9 +34,6 @@ impl InfrastructureProvisioner {
                 let ec2_client = aws_sdk_ec2::Client::new(&config);
                 #[cfg(feature = "aws-eks")]
                 let eks_client = aws_sdk_eks::Client::new(&config);
-                #[cfg(not(feature = "aws-eks"))]
-                let eks_client = None;
-
                 Ok(Self {
                     provider,
                     aws_client: Some(ec2_client),

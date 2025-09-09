@@ -7,8 +7,8 @@ use crate::error::{Error, Result};
 use crate::cloud_provisioner::{CloudProvisioner, InstanceStatus};
 use crate::remote::CloudProvider;
 use chrono::{DateTime, Utc};
-use std::sync::Arc;
-use std::time::Duration;
+use blueprint_std::sync::Arc;
+use blueprint_std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -71,8 +71,8 @@ impl HealthMonitor {
     /// Start monitoring all deployments
     pub async fn start_monitoring(self: Arc<Self>) {
         let mut interval = tokio::time::interval(self.check_interval);
-        let mut failure_counts: std::collections::HashMap<String, u32> =
-            std::collections::HashMap::new();
+        let mut failure_counts: blueprint_std::collections::HashMap<String, u32> =
+            blueprint_std::collections::HashMap::new();
 
         loop {
             interval.tick().await;
@@ -173,7 +173,7 @@ impl HealthMonitor {
         let provider = deployment.deployment_type.to_provider();
 
         // First, try to terminate the existing instance
-        if let Err(e) = self.provisioner.terminate(provider, &deployment.id).await {
+        if let Err(e) = self.provisioner.terminate(provider.clone(), &deployment.id).await {
             warn!("Failed to terminate unhealthy instance: {}", e);
         }
 

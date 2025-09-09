@@ -6,7 +6,7 @@ use crate::error::{Error, Result};
 use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Unified pricing service
 pub struct PricingService {
@@ -139,7 +139,7 @@ impl PricingService {
             })
             .expect("At least one provider should exist");
 
-        (cheapest.provider, cheapest)
+        (cheapest.provider.clone(), cheapest)
     }
 }
 
