@@ -137,7 +137,7 @@ impl MachineTypeDiscovery {
                 storage_gb: Some(125.0),
                 gpu_count: 1,
                 gpu_type: Some("NVIDIA T4".to_string()),
-                network_performance: "Up to 25 Gigabit".to_string()),
+                network_performance: "Up to 25 Gigabit".to_string(),
                 hourly_price: Some(0.526),
                 spot_price: Some(0.1578),
             },

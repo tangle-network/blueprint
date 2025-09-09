@@ -6,7 +6,7 @@
 use crate::error::{Error, Result};
 use crate::infrastructure::ProvisionedInfrastructure;
 use crate::remote::CloudProvider;
-use crate::ssh_deployment::RemoteDeployment;
+use crate::deployment::ssh::RemoteDeployment;
 use blueprint_std::collections::HashMap;
 use blueprint_std::path::{Path, PathBuf};
 use blueprint_std::sync::Arc;
@@ -854,7 +854,7 @@ struct SshCleanup;
 #[async_trait::async_trait]
 impl CleanupHandler for SshCleanup {
     async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
-        use crate::ssh_deployment::{
+        use crate::deployment::ssh::{
             ContainerRuntime, DeploymentConfig, RestartPolicy, SshConnection, SshDeploymentClient,
         };
 

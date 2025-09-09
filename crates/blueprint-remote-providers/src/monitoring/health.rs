@@ -3,7 +3,7 @@
 //! Provides continuous health checks and auto-recovery for deployed instances
 
 use crate::cloud_provisioner::{CloudProvisioner, InstanceStatus};
-use crate::deployment_tracker::{DeploymentRecord, DeploymentTracker};
+use crate::deployment::tracker::{DeploymentRecord, DeploymentTracker};
 use crate::error::{Error, Result};
 use crate::remote::CloudProvider;
 use blueprint_std::sync::Arc;
@@ -272,7 +272,7 @@ impl ApplicationHealthChecker {
 impl crate::deployment_tracker::DeploymentType {
     /// Convert deployment type to cloud provider
     fn to_provider(&self) -> CloudProvider {
-        use crate::deployment_tracker::DeploymentType;
+        use crate::deployment::tracker::DeploymentType;
 
         match self {
             DeploymentType::AwsEc2 | DeploymentType::AwsEks => CloudProvider::AWS,

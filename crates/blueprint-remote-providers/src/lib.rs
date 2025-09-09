@@ -8,24 +8,22 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-// pub mod blueprint_requirements; // TODO: Fix or remove
-pub mod cost;
+// Core modules
 pub mod error;
-pub mod health_monitor;
 pub mod networking;
-#[cfg(feature = "pricing")]
-pub mod pricing_adapter;
-// pub mod pricing_integration; // TODO: Fix or remove
-pub mod pricing_service;
-pub mod provisioning;
 pub mod remote;
 pub mod resources;
 
+// Organized feature modules
+pub mod providers;
+pub mod deployment;
+pub mod pricing;
+pub mod monitoring;
+
+// Legacy modules (keeping for now)
+pub mod provisioning;
 pub mod cloud_provisioner;
-pub mod deployment_tracker;
 pub mod infrastructure;
-pub mod manager_integration;
-pub mod ssh_deployment;
 
 #[cfg(test)]
 pub mod test_utils;
@@ -33,32 +31,24 @@ pub mod test_utils;
 #[cfg(feature = "testing")]
 pub mod testing;
 
-// Simplified public API
+// Primary API exports
 pub use cloud_provisioner::{CloudProvisioner, InstanceStatus, ProvisionedInstance};
-pub use deployment_tracker::DeploymentTracker;
+pub use deployment::{DeploymentTracker, RemoteDeploymentExtensions, SshDeploymentClient};
 pub use error::{Error, Result};
-pub use health_monitor::{HealthCheckResult, HealthMonitor, HealthStatus};
-pub use manager_integration::RemoteDeploymentExtensions;
-pub use pricing_service::{CostReport, PricingService};
+pub use monitoring::{HealthCheckResult, HealthMonitor, HealthStatus};
+pub use pricing::{CostReport, PricingService};
+#[cfg(feature = "pricing")]
+pub use pricing::{CloudCostReport, PricingAdapter};
+pub use providers::{ProvisionedInfrastructure, ProvisioningConfig};
+#[cfg(feature = "aws")]
+pub use providers::{AwsProvisioner, AwsInstanceMapper};
 pub use remote::{CloudProvider, RemoteClusterManager};
 pub use resources::ResourceSpec;
 
 // Legacy compatibility exports
-#[cfg(feature = "pricing")]
-pub use pricing_adapter::{CloudCostReport, PricingAdapter};
-// pub use pricing_integration::{DetailedCostReport, PricingCalculator, ResourceUsageMetrics};
 pub use provisioning::InstanceTypeMapper;
 
 #[cfg(any(feature = "aws", feature = "api-clients"))]
-pub use infrastructure::{
-    InfrastructureProvisioner, ProvisionedInfrastructure, ProvisioningConfig,
-};
-
-// TODO: Re-enable when GCP/Azure support is fixed
-// #[cfg(feature = "gcp")]
-// pub use infrastructure_gcp::{GceInstance, GcpInfrastructureProvisioner, GkeCluster};
-
-// #[cfg(feature = "azure")]
-// pub use infrastructure_azure::{AksCluster, AzureInfrastructureProvisioner, AzureVm};
+pub use infrastructure::InfrastructureProvisioner;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -1,6 +1,6 @@
 //! Integration hooks for remote deployments with Blueprint Manager
 
-use crate::deployment_tracker::{DeploymentRecord, DeploymentTracker, DeploymentType};
+use crate::deployment::tracker::{DeploymentRecord, DeploymentTracker, DeploymentType};
 use crate::error::{Error, Result};
 use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;

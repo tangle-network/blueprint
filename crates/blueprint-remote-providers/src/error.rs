@@ -33,6 +33,7 @@ pub enum Error {
     Other(String),
 }
 
+#[cfg(feature = "aws")]
 impl<E> From<aws_sdk_ec2::error::SdkError<E>> for Error
 where
     E: blueprint_std::error::Error + Send + Sync + 'static,
