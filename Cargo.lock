@@ -2739,6 +2739,7 @@ version = "0.1.0-alpha.9"
 dependencies = [
  "axum 0.8.4",
  "base64 0.22.1",
+ "blueprint-core",
  "blueprint-sdk",
  "blueprint-std",
  "bytes",
@@ -3545,7 +3546,6 @@ dependencies = [
  "toml 0.9.5",
  "tonic 0.13.1",
  "tonic-build",
- "tracing",
  "tracing-subscriber 0.3.19",
  "uuid 1.17.0",
 ]

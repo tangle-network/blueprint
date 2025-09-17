@@ -55,7 +55,6 @@ tokio = { workspace = true, features = ["full"] }
 # Networking
 rand = { workspace = true, features = ["std", "std_rng"] }
 bincode = { workspace = true }
-tracing = { workspace = true }
 crossbeam-channel = { workspace = true }
 
 # P2P networking for RFQ and gossip
