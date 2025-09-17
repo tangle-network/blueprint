@@ -7,9 +7,7 @@ use crate::error::{Error, Result};
 use crate::resources::ResourceSpec;
 use blueprint_std::collections::HashMap;
 use blueprint_std::path::{Path, PathBuf};
-use blueprint_std::process::Stdio;
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 use tracing::{debug, info, warn};
 
@@ -544,6 +542,34 @@ impl SshDeploymentClient {
         self.run_remote_command(&cmd).await
     }
 
+    /// Get container status
+    pub async fn get_container_status(&self, container_id: &str) -> Result<String> {
+        let cmd = match self.runtime {
+            ContainerRuntime::Docker => format!("docker ps -a --filter id={} --format '{{{{.Status}}}}'", container_id),
+            ContainerRuntime::Podman => format!("podman ps -a --filter id={} --format '{{{{.Status}}}}'", container_id),
+            ContainerRuntime::Containerd => format!("ctr container info {} | grep Status", container_id),
+        };
+
+        let output = self.run_remote_command(&cmd).await?;
+        if output.trim().is_empty() {
+            return Err(Error::ConfigurationError(format!("Container {} not found", container_id)));
+        }
+        Ok(output.trim().to_string())
+    }
+
+    /// Stop a container
+    pub async fn stop_container(&self, container_id: &str) -> Result<()> {
+        let cmd = match self.runtime {
+            ContainerRuntime::Docker => format!("docker stop {}", container_id),
+            ContainerRuntime::Podman => format!("podman stop {}", container_id),
+            ContainerRuntime::Containerd => format!("ctr task kill {}", container_id),
+        };
+
+        self.run_remote_command(&cmd).await?;
+        info!("Stopped container: {}", container_id);
+        Ok(())
+    }
+
     /// Stop and remove a deployed container
     pub async fn cleanup_deployment(&self, container_id: &str) -> Result<()> {
         let stop_cmd = match self.runtime {
@@ -622,6 +648,23 @@ pub enum RestartPolicy {
     Always,
     OnFailure,
     Never,
+}
+
+impl Default for RestartPolicy {
+    fn default() -> Self {
+        RestartPolicy::OnFailure
+    }
+}
+
+impl Default for DeploymentConfig {
+    fn default() -> Self {
+        Self {
+            name: "blueprint-deployment".to_string(),
+            namespace: "default".to_string(),
+            restart_policy: RestartPolicy::default(),
+            health_check: None,
+        }
+    }
 }
 
 /// Health check configuration
@@ -794,26 +837,18 @@ mod tests {
     #[test]
     fn test_resource_limits_conversion() {
         let spec = ResourceSpec {
-            compute: crate::resources::ComputeResources {
-                cpu_cores: 4.0,
-                ..Default::default()
-            },
-            storage: crate::resources::StorageResources {
-                memory_gb: 8.0,
-                disk_gb: 100.0,
-                ..Default::default()
-            },
-            network: crate::resources::NetworkResources {
-                bandwidth_tier: crate::resources::BandwidthTier::High,
-                ..Default::default()
-            },
-            ..Default::default()
+            cpu: 4.0,
+            memory_gb: 8.0,
+            storage_gb: 100.0,
+            gpu_count: None,
+            allow_spot: false,
+            qos: Default::default(),
         };
 
         let limits = ResourceLimits::from_spec(&spec);
         assert_eq!(limits.cpu_cores, Some(4.0));
         assert_eq!(limits.memory_mb, Some(8192));
         assert_eq!(limits.disk_gb, Some(100.0));
-        assert_eq!(limits.network_bandwidth_mbps, Some(10000));
+        assert_eq!(limits.network_bandwidth_mbps, Some(1000)); // Default 1Gbps
     }
 }

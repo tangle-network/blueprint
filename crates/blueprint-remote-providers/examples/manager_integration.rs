@@ -1,4 +1,4 @@
-//! Example showing how to integrate remote deployment extensions with Blueprint Manager
+//! Remote deployment integration with Blueprint Manager
 
 use blueprint_remote_providers::{
     deployment_tracker::DeploymentType,

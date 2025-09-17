@@ -4,9 +4,7 @@
 //! and handles cleanup when services are terminated or TTL expires.
 
 use crate::error::{Error, Result};
-use crate::infrastructure::ProvisionedInfrastructure;
 use crate::remote::CloudProvider;
-use crate::deployment::ssh::RemoteDeployment;
 use blueprint_std::collections::HashMap;
 use blueprint_std::path::{Path, PathBuf};
 use blueprint_std::sync::Arc;
@@ -569,11 +567,18 @@ impl CleanupHandler for LocalHypervisorCleanup {
 
             // Send shutdown signal to Cloud Hypervisor API
             if let Some(api_socket) = deployment.resource_ids.get("api_socket") {
-                let client = reqwest::Client::new();
-                let _ = client
-                    .put(&format!("http://localhost/{}/shutdown", api_socket))
-                    .send()
-                    .await;
+                #[cfg(feature = "api-clients")]
+                {
+                    let client = reqwest::Client::new();
+                    let _ = client
+                        .put(&format!("http://localhost/{}/shutdown", api_socket))
+                        .send()
+                        .await;
+                }
+                #[cfg(not(feature = "api-clients"))]
+                return Err(Error::ConfigurationError(
+                    "API clients feature not enabled".into(),
+                ));
             }
 
             // Kill the process if still running
@@ -646,10 +651,10 @@ struct GcpCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for GcpCleanup {
-    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
         #[cfg(feature = "gcp")]
         {
-            use crate::infrastructure_gcp::GcpInfrastructureProvisioner;
+            use crate::providers::gcp::GcpProvisioner;
 
             if let (Some(project), Some(zone)) = (
                 deployment.metadata.get("project_id"),
@@ -681,7 +686,7 @@ struct AzureCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for AzureCleanup {
-    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
         #[cfg(feature = "azure")]
         {
             use crate::infrastructure_azure::AzureInfrastructureProvisioner;
@@ -715,7 +720,7 @@ struct DigitalOceanCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for DigitalOceanCleanup {
-    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
         // TODO: Rewrite to use CloudProvisioner
         warn!("DigitalOcean cleanup not yet implemented with CloudProvisioner");
         Ok(())
@@ -727,7 +732,7 @@ struct VultrCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for VultrCleanup {
-    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
         // TODO: Rewrite to use CloudProvisioner
         warn!("Vultr cleanup not yet implemented with CloudProvisioner");
         Ok(())
@@ -739,7 +744,7 @@ struct EksCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for EksCleanup {
-    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
         #[cfg(feature = "aws-eks")]
         {
             let config = aws_config::load_from_env().await;
@@ -787,10 +792,10 @@ struct GkeCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for GkeCleanup {
-    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
         #[cfg(feature = "gcp")]
         {
-            use crate::infrastructure_gcp::GcpInfrastructureProvisioner;
+            use crate::providers::gcp::GcpProvisioner;
 
             if let (Some(project), Some(region)) = (
                 deployment.metadata.get("project_id"),
@@ -819,7 +824,7 @@ struct AksCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for AksCleanup {
-    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
         #[cfg(feature = "azure")]
         {
             use crate::infrastructure_azure::AzureInfrastructureProvisioner;
@@ -929,6 +934,7 @@ mod tests {
         let mut record = DeploymentRecord::new(
             "blueprint-123".to_string(),
             DeploymentType::LocalDocker,
+            crate::resources::ResourceSpec::default(),
             Some(3600),
         );
         record.add_resource("container_id".to_string(), "abc123".to_string());
@@ -950,6 +956,7 @@ mod tests {
         let mut record = DeploymentRecord::new(
             "blueprint-ttl".to_string(),
             DeploymentType::LocalDocker,
+            crate::resources::ResourceSpec::default(),
             Some(0), // Immediate expiry
         );
         record.expires_at = Some(Utc::now() - Duration::seconds(1));

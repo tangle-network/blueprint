@@ -8,9 +8,7 @@ use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
 use async_trait::async_trait;
 use blueprint_std::collections::HashMap;
-use blueprint_std::sync::Arc;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 /// Multi-cloud provisioner that handles deployments across all supported providers
@@ -289,6 +287,7 @@ impl CloudProviderAdapter for AwsAdapter {
     }
 }
 
+#[cfg(feature = "aws")]
 impl AwsAdapter {
     async fn get_latest_ami(&self, _region: &str) -> Result<String> {
         // For production, query for the latest Amazon Linux 2023 AMI

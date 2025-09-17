@@ -1,13 +1,15 @@
 //! Pricing and cost estimation
 
-pub mod cost;
-pub mod service;
 #[cfg(feature = "pricing")]
 pub mod adapter;
+pub mod cost;
+pub mod fetcher;
 pub mod integration;
+pub mod public;
+pub mod service;
 
-pub use cost::{CostEstimator, CostReport};
-pub use service::PricingService;
 #[cfg(feature = "pricing")]
-pub use adapter::{PricingAdapter, CloudCostReport};
+pub use adapter::{CloudCostReport, PricingAdapter};
+pub use cost::{CostEstimator, CostReport};
 pub use integration::PricingCalculator;
+pub use service::PricingService;

@@ -3,6 +3,8 @@ pub mod container;
 #[cfg(feature = "vm-sandbox")]
 pub mod hypervisor;
 pub mod native;
+#[cfg(feature = "remote-providers")]
+pub mod remote;
 pub mod service;
 
 pub struct ResourceLimits {

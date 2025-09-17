@@ -9,7 +9,6 @@ use crate::remote::CloudProvider;
 use blueprint_std::sync::Arc;
 use blueprint_std::time::Duration;
 use chrono::{DateTime, Utc};
-use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 /// Health status of a deployment
@@ -238,12 +237,14 @@ impl HealthMonitor {
 
 /// Application-level health checker
 pub struct ApplicationHealthChecker {
+    #[cfg(feature = "api-clients")]
     http_client: reqwest::Client,
 }
 
 impl ApplicationHealthChecker {
     pub fn new() -> Self {
         Self {
+            #[cfg(feature = "api-clients")]
             http_client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(5))
                 .build()
@@ -253,10 +254,20 @@ impl ApplicationHealthChecker {
 
     /// Check HTTP endpoint health
     pub async fn check_http(&self, url: &str) -> HealthStatus {
-        match self.http_client.get(url).send().await {
-            Ok(response) if response.status().is_success() => HealthStatus::Healthy,
-            Ok(response) if response.status().is_server_error() => HealthStatus::Degraded,
-            _ => HealthStatus::Unhealthy,
+        #[cfg(feature = "api-clients")]
+        {
+            match self.http_client.get(url).send().await {
+                Ok(response) if response.status().is_success() => return HealthStatus::Healthy,
+                Ok(response) if response.status().is_server_error() => {
+                    return HealthStatus::Degraded;
+                }
+                _ => return HealthStatus::Unhealthy,
+            }
+        }
+        #[cfg(not(feature = "api-clients"))]
+        {
+            // Without api-clients feature, we can't make HTTP requests
+            HealthStatus::Unhealthy
         }
     }
 
@@ -269,7 +280,7 @@ impl ApplicationHealthChecker {
     }
 }
 
-impl crate::deployment_tracker::DeploymentType {
+impl crate::deployment::tracker::DeploymentType {
     /// Convert deployment type to cloud provider
     fn to_provider(&self) -> CloudProvider {
         use crate::deployment::tracker::DeploymentType;

@@ -19,10 +19,10 @@ impl AzureProvisioner {
         _config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         let _instance_selection = Self::map_instance(spec);
-        
+
         // TODO: Implement Azure Resource Manager API calls
         Err(Error::ConfigurationError(
-            "Azure provisioning not yet implemented".into()
+            "Azure provisioning not yet implemented".into(),
         ))
     }
 

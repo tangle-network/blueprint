@@ -1,14 +1,12 @@
 //! DigitalOcean infrastructure provisioning support
-//! 
+//!
 //! Provides DigitalOcean resource provisioning capabilities including
 //! Droplets and Kubernetes clusters.
 
 use crate::error::{Error, Result};
 use crate::resources::ResourceSpec;
-use crate::provisioning::InstanceSelection;
 use serde::{Deserialize, Serialize};
-use blueprint_std::collections::HashMap;
-use tracing::{info, debug, warn};
+use tracing::{info, warn};
 
 /// DigitalOcean infrastructure provisioner
 pub struct DigitalOceanProvisioner {
@@ -26,7 +24,7 @@ impl DigitalOceanProvisioner {
             .timeout(blueprint_std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| Error::ConfigurationError(e.to_string()))?;
-        
+
         Ok(Self {
             #[cfg(feature = "api-clients")]
             client,
@@ -34,7 +32,7 @@ impl DigitalOceanProvisioner {
             default_region,
         })
     }
-    
+
     /// Create a Droplet
     pub async fn create_droplet(
         &self,
@@ -43,11 +41,11 @@ impl DigitalOceanProvisioner {
         ssh_keys: Vec<String>,
     ) -> Result<Droplet> {
         let droplet_size = self.select_droplet_size(spec);
-        
+
         #[cfg(feature = "api-clients")]
         {
             let url = "https://api.digitalocean.com/v2/droplets";
-            
+
             let droplet_request = serde_json::json!({
                 "name": name,
                 "region": self.default_region,
@@ -61,33 +59,41 @@ impl DigitalOceanProvisioner {
                 "user_data": self.generate_user_data(spec),
                 "with_droplet_agent": true,
             });
-            
-            let response = self.client
+
+            let response = self
+                .client
                 .post(url)
                 .bearer_auth(&self.api_token)
                 .json(&droplet_request)
                 .send()
                 .await
-                .map_err(|e| Error::ConfigurationError(format!("Failed to create droplet: {}", e)))?;
-            
+                .map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to create droplet: {}", e))
+                })?;
+
             if !response.status().is_success() {
                 let error_text = response.text().await.unwrap_or_default();
-                return Err(Error::ConfigurationError(format!("DO API error: {}", error_text)));
+                return Err(Error::ConfigurationError(format!(
+                    "DO API error: {}",
+                    error_text
+                )));
             }
-            
-            let json: serde_json::Value = response.json().await
-                .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
-            
-            let droplet_id = json["droplet"]["id"].as_u64()
+
+            let json: serde_json::Value = response.json().await.map_err(|e| {
+                Error::ConfigurationError(format!("Failed to parse response: {}", e))
+            })?;
+
+            let droplet_id = json["droplet"]["id"]
+                .as_u64()
                 .ok_or_else(|| Error::ConfigurationError("No droplet ID in response".into()))?;
-            
+
             // Wait for droplet to be active
             self.wait_for_droplet_active(droplet_id).await?;
-            
+
             // Get droplet details with IP addresses
             return self.get_droplet_details(droplet_id).await;
         }
-        
+
         #[cfg(not(feature = "api-clients"))]
         Ok(Droplet {
             id: 12345,
@@ -97,68 +103,75 @@ impl DigitalOceanProvisioner {
             status: "active".to_string(),
             public_ipv4: Some("167.99.1.2".to_string()),
             private_ipv4: Some("10.132.0.2".to_string()),
-            public_ipv6: spec.network.ipv6_enabled.then(|| "2604:a880:1:20::1".to_string()),
+            public_ipv6: None, // TODO: Support IPv6 configuration
         })
     }
-    
+
     /// Wait for droplet to be active
     #[cfg(feature = "api-clients")]
     async fn wait_for_droplet_active(&self, droplet_id: u64) -> Result<()> {
         let mut attempts = 0;
         loop {
             if attempts > 60 {
-                return Err(Error::ConfigurationError("Timeout waiting for droplet".into()));
+                return Err(Error::ConfigurationError(
+                    "Timeout waiting for droplet".into(),
+                ));
             }
-            
+
             let droplet = self.get_droplet_details(droplet_id).await?;
             if droplet.status == "active" {
                 return Ok(());
             }
-            
+
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             attempts += 1;
         }
     }
-    
+
     /// Get droplet details
     #[cfg(feature = "api-clients")]
     async fn get_droplet_details(&self, droplet_id: u64) -> Result<Droplet> {
         let url = format!("https://api.digitalocean.com/v2/droplets/{}", droplet_id);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .bearer_auth(&self.api_token)
             .send()
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to get droplet: {}", e)))?;
-        
+
         if !response.status().is_success() {
-            return Err(Error::ConfigurationError("Failed to get droplet details".into()));
+            return Err(Error::ConfigurationError(
+                "Failed to get droplet details".into(),
+            ));
         }
-        
-        let json: serde_json::Value = response.json().await
+
+        let json: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
-        
+
         let droplet = &json["droplet"];
-        
+
         let public_ipv4 = droplet["networks"]["v4"]
             .as_array()
             .and_then(|nets| nets.iter().find(|n| n["type"] == "public"))
             .and_then(|n| n["ip_address"].as_str())
             .map(|s| s.to_string());
-        
+
         let private_ipv4 = droplet["networks"]["v4"]
             .as_array()
             .and_then(|nets| nets.iter().find(|n| n["type"] == "private"))
             .and_then(|n| n["ip_address"].as_str())
             .map(|s| s.to_string());
-        
+
         let public_ipv6 = droplet["networks"]["v6"]
             .as_array()
             .and_then(|nets| nets.first())
             .and_then(|n| n["ip_address"].as_str())
             .map(|s| s.to_string());
-        
+
         Ok(Droplet {
             id: droplet_id,
             name: droplet["name"].as_str().unwrap_or("").to_string(),
@@ -170,7 +183,7 @@ impl DigitalOceanProvisioner {
             public_ipv6,
         })
     }
-    
+
     /// Create a Kubernetes cluster
     pub async fn create_kubernetes_cluster(
         &self,
@@ -178,15 +191,15 @@ impl DigitalOceanProvisioner {
         spec: &ResourceSpec,
         node_count: u32,
     ) -> Result<DOKSCluster> {
-        let node_size = self.select_droplet_size(spec);
-        
+        let _node_size = self.select_droplet_size(spec);
+
         #[cfg(feature = "api-clients")]
         {
             let url = "https://api.digitalocean.com/v2/kubernetes/clusters";
-            
+
             // Get latest Kubernetes version
             let version = self.get_latest_k8s_version().await?;
-            
+
             let cluster_request = serde_json::json!({
                 "name": name,
                 "region": self.default_region,
@@ -207,33 +220,41 @@ impl DigitalOceanProvisioner {
                 "auto_upgrade": false,
                 "surge_upgrade": true,
             });
-            
-            let response = self.client
+
+            let response = self
+                .client
                 .post(url)
                 .bearer_auth(&self.api_token)
                 .json(&cluster_request)
                 .send()
                 .await
-                .map_err(|e| Error::ConfigurationError(format!("Failed to create DOKS cluster: {}", e)))?;
-            
+                .map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to create DOKS cluster: {}", e))
+                })?;
+
             if !response.status().is_success() {
                 let error_text = response.text().await.unwrap_or_default();
-                return Err(Error::ConfigurationError(format!("DOKS API error: {}", error_text)));
+                return Err(Error::ConfigurationError(format!(
+                    "DOKS API error: {}",
+                    error_text
+                )));
             }
-            
-            let json: serde_json::Value = response.json().await
-                .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
-            
-            let cluster_id = json["kubernetes_cluster"]["id"].as_str()
+
+            let json: serde_json::Value = response.json().await.map_err(|e| {
+                Error::ConfigurationError(format!("Failed to parse response: {}", e))
+            })?;
+
+            let cluster_id = json["kubernetes_cluster"]["id"]
+                .as_str()
                 .ok_or_else(|| Error::ConfigurationError("No cluster ID in response".into()))?;
-            
+
             // Wait for cluster to be running
             self.wait_for_cluster_running(cluster_id).await?;
-            
+
             // Get cluster details
             return self.get_cluster_details(cluster_id).await;
         }
-        
+
         #[cfg(not(feature = "api-clients"))]
         Ok(DOKSCluster {
             id: "cluster-123".to_string(),
@@ -245,22 +266,25 @@ impl DigitalOceanProvisioner {
             node_count,
         })
     }
-    
+
     /// Get latest Kubernetes version
     #[cfg(feature = "api-clients")]
     async fn get_latest_k8s_version(&self) -> Result<String> {
         let url = format!("https://api.digitalocean.com/v2/kubernetes/options");
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .bearer_auth(&self.api_token)
             .send()
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to get K8s versions: {}", e)))?;
-        
-        let json: serde_json::Value = response.json().await
+
+        let json: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
-        
+
         json["options"]["versions"]
             .as_array()
             .and_then(|versions| versions.first())
@@ -268,92 +292,113 @@ impl DigitalOceanProvisioner {
             .map(|s| s.to_string())
             .ok_or_else(|| Error::ConfigurationError("No K8s versions available".into()))
     }
-    
+
     /// Wait for cluster to be running
     #[cfg(feature = "api-clients")]
     async fn wait_for_cluster_running(&self, cluster_id: &str) -> Result<()> {
         let mut attempts = 0;
         loop {
-            if attempts > 120 { // 10 minutes
-                return Err(Error::ConfigurationError("Timeout waiting for cluster".into()));
+            if attempts > 120 {
+                // 10 minutes
+                return Err(Error::ConfigurationError(
+                    "Timeout waiting for cluster".into(),
+                ));
             }
-            
+
             let cluster = self.get_cluster_details(cluster_id).await?;
             if cluster.status == "running" {
                 return Ok(());
             }
-            
+
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             attempts += 1;
         }
     }
-    
+
     /// Get cluster details
     #[cfg(feature = "api-clients")]
     async fn get_cluster_details(&self, cluster_id: &str) -> Result<DOKSCluster> {
-        let url = format!("https://api.digitalocean.com/v2/kubernetes/clusters/{}", cluster_id);
-        
-        let response = self.client
+        let url = format!(
+            "https://api.digitalocean.com/v2/kubernetes/clusters/{}",
+            cluster_id
+        );
+
+        let response = self
+            .client
             .get(&url)
             .bearer_auth(&self.api_token)
             .send()
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to get cluster: {}", e)))?;
-        
+
         if !response.status().is_success() {
-            return Err(Error::ConfigurationError("Failed to get cluster details".into()));
+            return Err(Error::ConfigurationError(
+                "Failed to get cluster details".into(),
+            ));
         }
-        
-        let json: serde_json::Value = response.json().await
+
+        let json: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
-        
+
         let cluster = &json["kubernetes_cluster"];
-        
+
         Ok(DOKSCluster {
             id: cluster_id.to_string(),
             name: cluster["name"].as_str().unwrap_or("").to_string(),
             region: cluster["region"].as_str().unwrap_or("").to_string(),
             version: cluster["version"].as_str().unwrap_or("").to_string(),
-            status: cluster["status"]["state"].as_str().unwrap_or("unknown").to_string(),
+            status: cluster["status"]["state"]
+                .as_str()
+                .unwrap_or("unknown")
+                .to_string(),
             endpoint: cluster["endpoint"].as_str().unwrap_or("").to_string(),
             node_count: cluster["node_pools"][0]["count"].as_u64().unwrap_or(0) as u32,
         })
     }
-    
+
     /// Get kubeconfig for a cluster
-    pub async fn get_kubeconfig(&self, cluster_id: &str) -> Result<String> {
+    pub async fn get_kubeconfig(&self, _cluster_id: &str) -> Result<String> {
         #[cfg(feature = "api-clients")]
         {
-            let url = format!("https://api.digitalocean.com/v2/kubernetes/clusters/{}/kubeconfig", cluster_id);
-            
-            let response = self.client
+            let url = format!(
+                "https://api.digitalocean.com/v2/kubernetes/clusters/{}/kubeconfig",
+                cluster_id
+            );
+
+            let response = self
+                .client
                 .get(&url)
                 .bearer_auth(&self.api_token)
                 .send()
                 .await
-                .map_err(|e| Error::ConfigurationError(format!("Failed to get kubeconfig: {}", e)))?;
-            
+                .map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to get kubeconfig: {}", e))
+                })?;
+
             if !response.status().is_success() {
                 return Err(Error::ConfigurationError("Failed to get kubeconfig".into()));
             }
-            
-            return response.text().await
-                .map_err(|e| Error::ConfigurationError(format!("Failed to read kubeconfig: {}", e)));
+
+            return response.text().await.map_err(|e| {
+                Error::ConfigurationError(format!("Failed to read kubeconfig: {}", e))
+            });
         }
-        
+
         #[cfg(not(feature = "api-clients"))]
         Ok("mock-kubeconfig".to_string())
     }
-    
+
     /// Select appropriate droplet size based on resource requirements
     fn select_droplet_size(&self, spec: &ResourceSpec) -> String {
         // Check for GPU (DO doesn't have GPU instances yet)
-        if spec.accelerators.is_some() {
+        if spec.gpu_count.is_some() {
             warn!("DigitalOcean doesn't support GPU instances, using CPU instance");
         }
-        
+
         // Map to droplet sizes
-        match (spec.compute.cpu_cores, spec.storage.memory_gb) {
+        match (spec.cpu, spec.memory_gb) {
             (cpu, mem) if cpu <= 1.0 && mem <= 0.5 => "s-1vcpu-512mb",
             (cpu, mem) if cpu <= 1.0 && mem <= 1.0 => "s-1vcpu-1gb",
             (cpu, mem) if cpu <= 1.0 && mem <= 2.0 => "s-1vcpu-2gb",
@@ -369,20 +414,21 @@ impl DigitalOceanProvisioner {
             // Memory optimized
             (_, mem) if mem > 64.0 => "m-32vcpu-256gb",
             _ => "s-2vcpu-4gb",
-        }.to_string()
+        }
+        .to_string()
     }
-    
+
     /// Generate cloud-init user data
     fn generate_user_data(&self, spec: &ResourceSpec) -> String {
         let mut user_data = String::from("#cloud-config\n");
-        
+
         // Install Docker
         user_data.push_str("packages:\n");
         user_data.push_str("  - docker.io\n");
         user_data.push_str("  - docker-compose\n\n");
-        
+
         // Configure resource limits via systemd
-        if spec.compute.cpu_cores > 0.0 || spec.storage.memory_gb > 0.0 {
+        if spec.cpu > 0.0 || spec.memory_gb > 0.0 {
             user_data.push_str("write_files:\n");
             user_data.push_str("  - path: /etc/systemd/system/blueprint.service\n");
             user_data.push_str("    content: |\n");
@@ -390,63 +436,81 @@ impl DigitalOceanProvisioner {
             user_data.push_str("      Description=Blueprint Service\n");
             user_data.push_str("      After=docker.service\n");
             user_data.push_str("      [Service]\n");
-            user_data.push_str(&format!("      CPUQuota={}%\n", (spec.compute.cpu_cores * 100.0) as u32));
-            user_data.push_str(&format!("      MemoryMax={}M\n", (spec.storage.memory_gb * 1024.0) as u32));
+            user_data.push_str(&format!("      CPUQuota={}%\n", (spec.cpu * 100.0) as u32));
+            user_data.push_str(&format!(
+                "      MemoryMax={}M\n",
+                (spec.memory_gb * 1024.0) as u32
+            ));
             user_data.push_str("      Restart=always\n");
             user_data.push_str("      [Install]\n");
             user_data.push_str("      WantedBy=multi-user.target\n");
         }
-        
+
         // Enable monitoring
         user_data.push_str("\nruncmd:\n");
         user_data.push_str("  - systemctl enable docker\n");
         user_data.push_str("  - systemctl start docker\n");
-        
+
         user_data
     }
-    
+
     /// Delete a droplet
     pub async fn delete_droplet(&self, droplet_id: u64) -> Result<()> {
         #[cfg(feature = "api-clients")]
         {
             let url = format!("https://api.digitalocean.com/v2/droplets/{}", droplet_id);
-            
-            let response = self.client
+
+            let response = self
+                .client
                 .delete(&url)
                 .bearer_auth(&self.api_token)
                 .send()
                 .await
-                .map_err(|e| Error::ConfigurationError(format!("Failed to delete droplet: {}", e)))?;
-            
+                .map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to delete droplet: {}", e))
+                })?;
+
             if !response.status().is_success() {
                 let error_text = response.text().await.unwrap_or_default();
-                return Err(Error::ConfigurationError(format!("Failed to delete droplet: {}", error_text)));
+                return Err(Error::ConfigurationError(format!(
+                    "Failed to delete droplet: {}",
+                    error_text
+                )));
             }
         }
-        
+
         info!("Deleted droplet: {}", droplet_id);
         Ok(())
     }
-    
+
     /// Delete a Kubernetes cluster
     pub async fn delete_kubernetes_cluster(&self, cluster_id: &str) -> Result<()> {
         #[cfg(feature = "api-clients")]
         {
-            let url = format!("https://api.digitalocean.com/v2/kubernetes/clusters/{}", cluster_id);
-            
-            let response = self.client
+            let url = format!(
+                "https://api.digitalocean.com/v2/kubernetes/clusters/{}",
+                cluster_id
+            );
+
+            let response = self
+                .client
                 .delete(&url)
                 .bearer_auth(&self.api_token)
                 .send()
                 .await
-                .map_err(|e| Error::ConfigurationError(format!("Failed to delete cluster: {}", e)))?;
-            
+                .map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to delete cluster: {}", e))
+                })?;
+
             if !response.status().is_success() {
                 let error_text = response.text().await.unwrap_or_default();
-                return Err(Error::ConfigurationError(format!("Failed to delete cluster: {}", error_text)));
+                return Err(Error::ConfigurationError(format!(
+                    "Failed to delete cluster: {}",
+                    error_text
+                )));
             }
         }
-        
+
         info!("Deleted Kubernetes cluster: {}", cluster_id);
         Ok(())
     }
@@ -480,8 +544,8 @@ pub struct DOKSCluster {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::{ResourceSpec, ComputeResources, StorageResources};
-    
+    use crate::resources::ResourceSpec;
+
     #[test]
     fn test_droplet_size_selection() {
         let provisioner = DigitalOceanProvisioner {
@@ -490,38 +554,32 @@ mod tests {
             api_token: "test".to_string(),
             default_region: "nyc3".to_string(),
         };
-        
+
         // Test small instance
         let spec = ResourceSpec {
-            compute: ComputeResources {
-                cpu_cores: 1.0,
-                ..Default::default()
-            },
-            storage: StorageResources {
-                memory_gb: 1.0,
-                ..Default::default()
-            },
-            ..Default::default()
+            cpu: 1.0,
+            memory_gb: 1.0,
+            storage_gb: 25.0,
+            gpu_count: None,
+            allow_spot: false,
+            qos: Default::default(),
         };
-        
+
         assert_eq!(provisioner.select_droplet_size(&spec), "s-1vcpu-1gb");
-        
+
         // Test large instance
         let spec = ResourceSpec {
-            compute: ComputeResources {
-                cpu_cores: 8.0,
-                ..Default::default()
-            },
-            storage: StorageResources {
-                memory_gb: 16.0,
-                ..Default::default()
-            },
-            ..Default::default()
+            cpu: 8.0,
+            memory_gb: 16.0,
+            storage_gb: 160.0,
+            gpu_count: None,
+            allow_spot: false,
+            qos: Default::default(),
         };
-        
+
         assert_eq!(provisioner.select_droplet_size(&spec), "s-8vcpu-16gb");
     }
-    
+
     #[test]
     fn test_user_data_generation() {
         let provisioner = DigitalOceanProvisioner {
@@ -530,19 +588,16 @@ mod tests {
             api_token: "test".to_string(),
             default_region: "nyc3".to_string(),
         };
-        
+
         let spec = ResourceSpec {
-            compute: ComputeResources {
-                cpu_cores: 2.0,
-                ..Default::default()
-            },
-            storage: StorageResources {
-                memory_gb: 4.0,
-                ..Default::default()
-            },
-            ..Default::default()
+            cpu: 2.0,
+            memory_gb: 4.0,
+            storage_gb: 80.0,
+            gpu_count: None,
+            allow_spot: false,
+            qos: Default::default(),
         };
-        
+
         let user_data = provisioner.generate_user_data(&spec);
         assert!(user_data.contains("#cloud-config"));
         assert!(user_data.contains("docker.io"));

@@ -8,8 +8,6 @@ use blueprint_std::fmt;
 use blueprint_std::path::PathBuf;
 use blueprint_std::sync::Arc;
 #[cfg(feature = "kubernetes")]
-use k8s_openapi::api::core::v1::Service;
-#[cfg(feature = "kubernetes")]
 use kube::{Client, Config};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -39,7 +37,7 @@ impl RemoteClusterManager {
     }
 
     /// Register a remote Kubernetes cluster
-    pub async fn add_cluster(&self, name: String, config: RemoteDeploymentConfig) -> Result<()> {
+    pub async fn add_cluster(&self, name: String, config: KubernetesClusterConfig) -> Result<()> {
         info!("Adding remote cluster: {}", name);
 
         // Create Kubernetes client with remote context
@@ -151,13 +149,13 @@ impl RemoteClusterManager {
 #[cfg(feature = "kubernetes")]
 struct RemoteCluster {
     name: String,
-    config: RemoteDeploymentConfig,
+    config: KubernetesClusterConfig,
     client: Client,
 }
 
-/// Configuration for remote deployments
+/// Configuration for a Kubernetes cluster (different from deployment config)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemoteDeploymentConfig {
+pub struct KubernetesClusterConfig {
     /// Path to kubeconfig file
     pub kubeconfig_path: Option<PathBuf>,
     /// Kubernetes context to use
@@ -170,7 +168,7 @@ pub struct RemoteDeploymentConfig {
     pub region: Option<String>,
 }
 
-impl Default for RemoteDeploymentConfig {
+impl Default for KubernetesClusterConfig {
     fn default() -> Self {
         Self {
             kubeconfig_path: None,
@@ -280,21 +278,39 @@ mod tests {
 
     #[tokio::test]
     async fn test_cluster_management() {
-        let manager = RemoteClusterManager::new();
+        #[cfg(feature = "kubernetes")]
+        {
+            // Initialize rustls crypto provider for kube-client
+            let _ = rustls::crypto::ring::default_provider().install_default();
+            
+            let manager = RemoteClusterManager::new();
 
-        let config = RemoteDeploymentConfig {
-            namespace: "test-namespace".to_string(),
-            provider: CloudProvider::AWS,
-            ..Default::default()
-        };
+            let config = KubernetesClusterConfig {
+                namespace: "test-namespace".to_string(),
+                provider: CloudProvider::AWS,
+                ..Default::default()
+            };
 
-        // Note: This will fail without valid kubeconfig
-        // Just testing the structure
-        let result = manager.add_cluster("test-aws".to_string(), config).await;
-        assert!(result.is_err()); // Expected without valid config
+            // Note: This may succeed or fail depending on kubeconfig availability
+            // Just testing the structure
+            let result = manager.add_cluster("test-aws".to_string(), config).await;
+            
+            // Either it succeeds (with valid config) or fails (without config)
+            // Both are acceptable for this test
+            let clusters = manager.list_clusters().await;
+            
+            if result.is_ok() {
+                assert_eq!(clusters.len(), 1);
+            } else {
+                assert_eq!(clusters.len(), 0);
+            }
+        }
 
-        let clusters = manager.list_clusters().await;
-        assert_eq!(clusters.len(), 0); // No clusters added due to error
+        #[cfg(not(feature = "kubernetes"))]
+        {
+            // Just test that the manager can be created
+            let _manager = RemoteClusterManager::new();
+        }
     }
 
     #[test]

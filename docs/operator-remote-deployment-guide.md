@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide explains how to deploy and manage Blueprint instances on remote cloud infrastructure, allowing operators to run the Blueprint Manager locally in lightweight mode while leveraging cloud resources for actual service execution.
+This guide explains how to deploy and manage Blueprint instances on remote cloud infrastructure using the `blueprint-remote-providers` crate. Operators can run the Blueprint Manager locally while leveraging cloud resources (AWS, GCP, Azure, DigitalOcean, Vultr) or Kubernetes clusters for actual service execution.
 
 ## Architecture
 

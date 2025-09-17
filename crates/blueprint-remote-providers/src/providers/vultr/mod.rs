@@ -19,10 +19,10 @@ impl VultrProvisioner {
         _config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         let _instance_selection = Self::map_instance(spec);
-        
+
         // TODO: Implement Vultr API calls
         Err(Error::ConfigurationError(
-            "Vultr provisioning not yet implemented".into()
+            "Vultr provisioning not yet implemented".into(),
         ))
     }
 

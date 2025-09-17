@@ -7,9 +7,9 @@
 use crate::error::Result;
 use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
-use serde::{Deserialize, Serialize};
 use blueprint_std::collections::HashMap;
 use blueprint_std::path::Path;
+use serde::{Deserialize, Serialize};
 
 /// Pricing calculator that integrates with the Pricing Engine
 ///
@@ -77,7 +77,7 @@ impl PricingCalculator {
             if let Some(rate) = self.get_resource_rate(resource_type) {
                 let hourly_cost = quantity * rate;
                 resource_costs.insert(
-                    resource_type.clone(),
+                    resource_type.to_string(),
                     ResourceCost {
                         quantity: *quantity,
                         rate_per_unit: rate,
@@ -93,9 +93,10 @@ impl PricingCalculator {
 
         let adjusted_hourly = total_hourly * cloud_multiplier;
 
-        // Apply QoS adjustments
-        let qos_multiplier = self.calculate_qos_multiplier(&spec.qos);
-        let final_hourly = adjusted_hourly * qos_multiplier;
+        // Apply spot instance discount (real provider feature)
+        let spot_multiplier = if spec.allow_spot { 0.7 } else { 1.0 };
+
+        let final_hourly = adjusted_hourly * spot_multiplier;
 
         // Calculate totals
         let total_cost = final_hourly * duration_hours;
@@ -106,7 +107,7 @@ impl PricingCalculator {
             resource_costs,
             base_hourly_cost: total_hourly,
             cloud_markup: cloud_multiplier - 1.0,
-            qos_adjustment: qos_multiplier - 1.0,
+            spot_discount: if spec.allow_spot { 0.3 } else { 0.0 },
             final_hourly_cost: final_hourly,
             total_cost,
             monthly_estimate,
@@ -144,39 +145,6 @@ impl PricingCalculator {
             .iter()
             .find(|r| r.kind == resource_type)
             .map(|r| r.price_per_unit_rate)
-    }
-
-    /// Calculate QoS multiplier based on quality of service parameters
-    fn calculate_qos_multiplier(&self, qos: &crate::resources::QosParameters) -> f64 {
-        let mut multiplier = 1.0;
-
-        // Spot instances get discount
-        if qos.allow_spot {
-            multiplier *= 0.7;
-        }
-
-        // Burstable instances get small discount
-        if qos.allow_burstable {
-            multiplier *= 0.95;
-        }
-
-        // High priority gets premium
-        if qos.priority > 80 {
-            multiplier *= 1.2;
-        } else if qos.priority < 20 {
-            multiplier *= 0.9;
-        }
-
-        // High SLA requirement gets premium
-        if let Some(sla) = qos.min_availability_sla {
-            if sla >= 99.99 {
-                multiplier *= 1.5;
-            } else if sla >= 99.9 {
-                multiplier *= 1.2;
-            }
-        }
-
-        multiplier
     }
 
     /// Load default pricing configuration
@@ -267,7 +235,7 @@ pub struct DetailedCostReport {
     pub resource_costs: HashMap<String, ResourceCost>,
     pub base_hourly_cost: f64,
     pub cloud_markup: f64,
-    pub qos_adjustment: f64,
+    pub spot_discount: f64,
     pub final_hourly_cost: f64,
     pub total_cost: f64,
     pub monthly_estimate: f64,
@@ -299,13 +267,11 @@ impl DetailedCostReport {
             ));
         }
 
-        if self.qos_adjustment != 0.0 {
-            let adjustment_str = if self.qos_adjustment > 0.0 {
-                format!("+{:.1}%", self.qos_adjustment * 100.0)
-            } else {
-                format!("{:.1}%", self.qos_adjustment * 100.0)
-            };
-            summary.push_str(&format!("QoS Adjustment: {}\n", adjustment_str));
+        if self.spot_discount > 0.0 {
+            summary.push_str(&format!(
+                "Spot Discount: -{:.1}%\n",
+                self.spot_discount * 100.0
+            ));
         }
 
         summary.push_str(&format!(
@@ -376,23 +342,19 @@ pub struct BenchmarkProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::{ComputeResources, ResourceSpec, StorageResources};
+    use crate::resources::ResourceSpec;
 
     #[test]
     fn test_pricing_calculation() {
         let calculator = PricingCalculator::new().unwrap();
 
         let spec = ResourceSpec {
-            compute: ComputeResources {
-                cpu_cores: 4.0,
-                ..Default::default()
-            },
-            storage: StorageResources {
-                memory_gb: 16.0,
-                disk_gb: 100.0,
-                ..Default::default()
-            },
-            ..Default::default()
+            cpu: 4.0,
+            memory_gb: 16.0,
+            storage_gb: 100.0,
+            gpu_count: None,
+            allow_spot: false,
+            qos: Default::default(),
         };
 
         let report = calculator.calculate_cost(
@@ -431,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn test_qos_pricing_adjustments() {
+    fn test_spot_pricing_discount() {
         let calculator = PricingCalculator::new().unwrap();
 
         let mut spec = ResourceSpec::default();
@@ -439,17 +401,15 @@ mod tests {
         // Regular instance
         let regular_cost = calculator.calculate_cost(&spec, &CloudProvider::AWS, 1.0);
 
-        // Spot instance (should be cheaper)
-        spec.qos.allow_spot = true;
+        // Spot instance (should be 30% cheaper)
+        spec.allow_spot = true;
         let spot_cost = calculator.calculate_cost(&spec, &CloudProvider::AWS, 1.0);
 
         assert!(spot_cost.final_hourly_cost < regular_cost.final_hourly_cost);
+        assert_eq!(spot_cost.spot_discount, 0.3); // 30% discount
 
-        // High priority (should be more expensive)
-        spec.qos.allow_spot = false;
-        spec.qos.priority = 90;
-        let high_priority_cost = calculator.calculate_cost(&spec, &CloudProvider::AWS, 1.0);
-
-        assert!(high_priority_cost.final_hourly_cost > regular_cost.final_hourly_cost);
+        // Verify actual discount calculation
+        let expected_spot_cost = regular_cost.final_hourly_cost * 0.7;
+        assert!((spot_cost.final_hourly_cost - expected_spot_cost).abs() < 0.001);
     }
 }

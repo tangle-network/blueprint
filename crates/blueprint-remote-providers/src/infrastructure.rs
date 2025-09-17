@@ -1,12 +1,11 @@
 use crate::error::{Error, Result};
-use crate::provisioning::InstanceSelection;
-use crate::remote::{CloudProvider, RemoteDeploymentConfig};
+use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
 #[cfg(feature = "aws")]
 use aws_sdk_ec2::client::Waiters;
 use blueprint_std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 /// Infrastructure provisioner for creating cloud resources
 ///

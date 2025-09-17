@@ -1,0 +1,101 @@
+name: Remote Providers Tests
+
+on:
+  push:
+    paths:
+      - 'crates/blueprint-remote-providers/**'
+      - '.github/workflows/remote-providers-tests.yml'
+  pull_request:
+    paths:
+      - 'crates/blueprint-remote-providers/**'
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Run unit tests
+        run: cargo test -p blueprint-remote-providers --lib
+      
+      - name: Run pricing tests
+        run: cargo test -p blueprint-remote-providers test_pricing
+
+  kubernetes-tests:
+    name: Kubernetes Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Setup Kind
+        uses: helm/kind-action@v1.8.0
+        with:
+          cluster_name: blueprint-test
+          wait: 120s
+      
+      - name: Verify cluster
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+      
+      - name: Run Kubernetes tests
+        run: cargo test -p blueprint-remote-providers --test kubernetes_real -- --ignored
+
+  docker-ssh-tests:
+    name: Docker SSH Tests
+    runs-on: ubuntu-latest
+    services:
+      ssh:
+        image: linuxserver/openssh-server:latest
+        env:
+          PUID: 1000
+          PGID: 1000
+          TZ: UTC
+          PASSWORD_ACCESS: true
+          USER_PASSWORD: testpass
+          USER_NAME: blueprint
+        ports:
+          - 2222:2222
+        options: >-
+          --health-cmd "nc -z localhost 2222"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+      
+      - name: Test SSH connection
+        run: |
+          sshpass -p testpass ssh -o StrictHostKeyChecking=no -p 2222 blueprint@localhost echo "SSH works"
+      
+      - name: Run SSH deployment tests
+        run: cargo test -p blueprint-remote-providers --test ssh_deployment
+
+  mock-integration-tests:
+    name: Mock Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Run mock cloud provider tests
+        run: cargo test -p blueprint-remote-providers --test deployment_integration
+      
+      - name: Run property tests
+        run: cargo test -p blueprint-remote-providers --test property_tests

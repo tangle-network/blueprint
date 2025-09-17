@@ -2,7 +2,6 @@
 //!
 //! Integrates with the existing Pricing Engine where available
 
-use crate::error::{Error, Result};
 use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
 use blueprint_std::collections::HashMap;
@@ -191,7 +190,7 @@ mod tests {
         let service = PricingService::new();
         let spec = ResourceSpec::basic();
 
-        let report = service.calculate_cost(spec, CloudProvider::AWS, 24.0);
+        let report = service.calculate_cost(&spec, CloudProvider::AWS, 24.0);
         assert!(report.final_hourly_cost > 0.0);
         assert_eq!(report.duration_hours, 24.0);
         assert!(report.total_cost > report.final_hourly_cost);
@@ -237,8 +236,8 @@ mod tests {
             ..regular.clone()
         };
 
-        let regular_cost = service.calculate_cost(regular, CloudProvider::AWS, 1.0);
-        let spot_cost = service.calculate_cost(spot, CloudProvider::AWS, 1.0);
+        let regular_cost = service.calculate_cost(&regular, CloudProvider::AWS, 1.0);
+        let spot_cost = service.calculate_cost(&spot, CloudProvider::AWS, 1.0);
 
         assert!(spot_cost.final_hourly_cost < regular_cost.final_hourly_cost);
         assert_eq!(spot_cost.discount_percentage, 30.0);
@@ -249,7 +248,7 @@ mod tests {
         let service = PricingService::new();
         let spec = ResourceSpec::minimal();
 
-        let report = service.calculate_cost(spec, CloudProvider::AWS, 1.0);
+        let report = service.calculate_cost(&spec, CloudProvider::AWS, 1.0);
         assert!(!report.exceeds_threshold(1.0)); // Minimal should be under $1/hr
         assert!(report.exceeds_threshold(0.01)); // But over 1 cent
     }

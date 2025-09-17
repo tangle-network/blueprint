@@ -5,12 +5,14 @@ pub mod common;
 #[cfg(feature = "aws")]
 pub mod aws;
 
-pub mod gcp;
 pub mod azure;
 pub mod digitalocean;
+pub mod gcp;
 pub mod vultr;
 
-pub use common::{CloudProvisioner, InstanceSelection, ProvisionedInfrastructure, ProvisioningConfig};
+pub use common::{
+    CloudProvisioner, InstanceSelection, ProvisionedInfrastructure, ProvisioningConfig,
+};
 
 #[cfg(feature = "aws")]
-pub use aws::{AwsProvisioner, AwsInstanceMapper};
+pub use aws::{AwsInstanceMapper, AwsProvisioner};

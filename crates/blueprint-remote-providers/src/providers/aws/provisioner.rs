@@ -1,9 +1,9 @@
 //! AWS EC2 instance provisioning
 
+use super::instance_mapper::AwsInstanceMapper;
 use crate::error::{Error, Result};
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 use crate::resources::ResourceSpec;
-use super::instance_mapper::AwsInstanceMapper;
 #[cfg(feature = "aws")]
 use aws_sdk_ec2::types::{InstanceType, ResourceType, Tag, TagSpecification};
 use tracing::{info, warn};
@@ -22,21 +22,21 @@ impl AwsProvisioner {
     pub async fn new() -> Result<Self> {
         let config = aws_config::load_from_env().await;
         let ec2_client = aws_sdk_ec2::Client::new(&config);
-        
+
         #[cfg(feature = "aws-eks")]
         let eks_client = Some(aws_sdk_eks::Client::new(&config));
-        
+
         Ok(Self {
             ec2_client,
             #[cfg(feature = "aws-eks")]
             eks_client,
         })
     }
-    
+
     #[cfg(not(feature = "aws"))]
     pub async fn new() -> Result<Self> {
         Err(Error::ConfigurationError(
-            "AWS support not enabled. Enable the 'aws' feature".into()
+            "AWS support not enabled. Enable the 'aws' feature".into(),
         ))
     }
 
@@ -51,7 +51,8 @@ impl AwsProvisioner {
         let instance_selection = AwsInstanceMapper::map(spec);
 
         // Run EC2 instance
-        let result = self.ec2_client
+        let result = self
+            .ec2_client
             .run_instances()
             .image_id(config.ami_id.as_deref().unwrap_or("ami-0c55b159cbfafe1f0")) // Amazon Linux 2
             .instance_type(InstanceType::from(
@@ -63,12 +64,7 @@ impl AwsProvisioner {
             .tag_specifications(
                 TagSpecification::builder()
                     .resource_type(ResourceType::Instance)
-                    .tags(
-                        Tag::builder()
-                            .key("Name")
-                            .value(&config.name)
-                            .build(),
-                    )
+                    .tags(Tag::builder().key("Name").value(&config.name).build())
                     .tags(
                         Tag::builder()
                             .key("BlueprintDeployment")
@@ -101,7 +97,8 @@ impl AwsProvisioner {
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
 
         // Get instance details
-        let describe_result = self.ec2_client
+        let describe_result = self
+            .ec2_client
             .describe_instances()
             .instance_ids(instance_id)
             .send()
@@ -130,7 +127,7 @@ impl AwsProvisioner {
             metadata: Default::default(),
         })
     }
-    
+
     #[cfg(not(feature = "aws"))]
     pub async fn provision_instance(
         &self,
@@ -138,7 +135,7 @@ impl AwsProvisioner {
         _config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         Err(Error::ConfigurationError(
-            "AWS support not enabled. Enable the 'aws' feature".into()
+            "AWS support not enabled. Enable the 'aws' feature".into(),
         ))
     }
 
@@ -150,15 +147,15 @@ impl AwsProvisioner {
             .instance_ids(instance_id)
             .send()
             .await?;
-        
+
         info!("Terminated AWS EC2 instance: {}", instance_id);
         Ok(())
     }
-    
+
     #[cfg(not(feature = "aws"))]
     pub async fn terminate_instance(&self, _instance_id: &str) -> Result<()> {
         Err(Error::ConfigurationError(
-            "AWS support not enabled. Enable the 'aws' feature".into()
+            "AWS support not enabled. Enable the 'aws' feature".into(),
         ))
     }
 }

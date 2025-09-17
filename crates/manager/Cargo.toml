@@ -25,10 +25,12 @@ blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
-blueprint-remote-providers = { path = "../blueprint-remote-providers", optional = true }
+blueprint-remote-providers = { workspace = true, optional = true }
+blueprint-qos = { workspace = true, optional = true }
 
 document-features.workspace = true
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
+prometheus = { workspace = true }
 docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace", "issue-url"] }
@@ -83,20 +85,23 @@ nftables = { workspace = true, optional = true }
 # Use platform-specific defaults
 default = ["default-linux"]
 
-# Linux default includes vm-sandbox
-default-linux = ["vm-sandbox"]
+# Linux default includes vm-sandbox and qos
+default-linux = ["vm-sandbox", "qos"]
 
-# macOS/Windows default excludes vm-sandbox
-default-unix = []
+# macOS/Windows default excludes vm-sandbox but includes qos
+default-unix = ["qos"]
 
 ## Enable remote cloud deployment functionality
 ##
 ## This feature enables deployment to cloud providers like AWS, GCP, Azure, DigitalOcean, and Vultr.
 ## It includes real SDK integrations for provisioning instances and deploying Blueprint services.
-remote-deployer = ["blueprint-remote-providers", "blueprint-remote-providers/aws", "blueprint-remote-providers/api-clients"]
+remote-providers = ["dep:blueprint-remote-providers", "blueprint-remote-providers/aws", "blueprint-qos?/remote"]
 
 ## macOS-friendly development feature (excludes Linux-only vm-sandbox)
-macos-dev = ["remote-deployer"]
+macos-dev = ["remote-providers", "qos"]
+
+## Enable QoS monitoring for local and remote instances
+qos = ["dep:blueprint-qos"]
 
 ## Enable the VM sandbox
 ##

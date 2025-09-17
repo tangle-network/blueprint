@@ -1,7 +1,7 @@
 //! Infrastructure monitoring and discovery
 
-pub mod health;
 pub mod discovery;
+pub mod health;
 
-pub use health::{HealthMonitor, HealthStatus, HealthCheckResult};
-pub use discovery::{MachineTypeDiscovery, MachineType};
+pub use discovery::{MachineType, MachineTypeDiscovery};
+pub use health::{HealthCheckResult, HealthMonitor, HealthStatus};

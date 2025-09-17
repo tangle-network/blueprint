@@ -248,6 +248,7 @@ netdev = { version = "0.35.3", default-features = false }
 nftables = { version = "0.6.2", default-features = false }
 
 # Development & Testing
+async-trait = { version = "0.1.81", default-features = false }
 auto_impl = { version = "1.2.1", default-features = false }
 eigenlayer-contract-deployer = { version = "0.2.0", default-features = false }
 cargo_toml = { version = "0.21.0", default-features = false }

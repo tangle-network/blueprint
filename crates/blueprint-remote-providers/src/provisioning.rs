@@ -238,20 +238,17 @@ pub trait ResourceLimitsExt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::{ComputeResources, ResourceSpec, StorageResources};
+    use crate::resources::ResourceSpec;
 
     #[test]
     fn test_aws_instance_mapping() {
         let spec = ResourceSpec {
-            compute: ComputeResources {
-                cpu_cores: 4.0,
-                ..Default::default()
-            },
-            storage: StorageResources {
-                memory_gb: 16.0,
-                ..Default::default()
-            },
-            ..Default::default()
+            cpu: 4.0,
+            memory_gb: 16.0,
+            storage_gb: 100.0,
+            gpu_count: Some(0),
+            allow_spot: false,
+            qos: Default::default(),
         };
 
         let selection = InstanceTypeMapper::map_to_instance_type(&spec, &CloudProvider::AWS);
@@ -261,26 +258,13 @@ mod tests {
 
     #[test]
     fn test_gpu_instance_selection() {
-        use crate::resources::{AcceleratorResources, AcceleratorType, GpuSpec};
-
         let spec = ResourceSpec {
-            compute: ComputeResources {
-                cpu_cores: 4.0,
-                ..Default::default()
-            },
-            storage: StorageResources {
-                memory_gb: 16.0,
-                ..Default::default()
-            },
-            accelerators: Some(AcceleratorResources {
-                count: 1,
-                accelerator_type: AcceleratorType::GPU(GpuSpec {
-                    vendor: "nvidia".to_string(),
-                    model: "t4".to_string(),
-                    min_vram_gb: 16.0,
-                }),
-            }),
-            ..Default::default()
+            cpu: 4.0,
+            memory_gb: 16.0,
+            storage_gb: 100.0,
+            gpu_count: Some(1),
+            allow_spot: false,
+            qos: Default::default(),
         };
 
         let selection = InstanceTypeMapper::map_to_instance_type(&spec, &CloudProvider::AWS);
@@ -291,15 +275,12 @@ mod tests {
     #[test]
     fn test_digital_ocean_mapping() {
         let spec = ResourceSpec {
-            compute: ComputeResources {
-                cpu_cores: 2.0,
-                ..Default::default()
-            },
-            storage: StorageResources {
-                memory_gb: 4.0,
-                ..Default::default()
-            },
-            ..Default::default()
+            cpu: 2.0,
+            memory_gb: 4.0,
+            storage_gb: 50.0,
+            gpu_count: Some(0),
+            allow_spot: false,
+            qos: Default::default(),
         };
 
         let selection =
@@ -313,19 +294,12 @@ mod tests {
         use crate::resources::QosParameters;
 
         let spec = ResourceSpec {
-            compute: ComputeResources {
-                cpu_cores: 0.5,
-                ..Default::default()
-            },
-            storage: StorageResources {
-                memory_gb: 1.0,
-                ..Default::default()
-            },
-            qos: QosParameters {
-                allow_spot: true,
-                ..Default::default()
-            },
-            ..Default::default()
+            cpu: 0.5,
+            memory_gb: 1.0,
+            storage_gb: 10.0,
+            gpu_count: Some(0),
+            allow_spot: true,
+            qos: Default::default(),
         };
 
         let selection = InstanceTypeMapper::map_to_instance_type(&spec, &CloudProvider::AWS);

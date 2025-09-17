@@ -1,7 +1,7 @@
 //! AWS provider implementation
 
-pub mod provisioner;
 pub mod instance_mapper;
+pub mod provisioner;
 
-pub use provisioner::AwsProvisioner;
 pub use instance_mapper::AwsInstanceMapper;
+pub use provisioner::AwsProvisioner;

@@ -2511,6 +2511,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "backoff"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b62ddb9cb1ec0a098ad4bbf9344d0713fa193ae1a80af55febcff2627b6a00c1"
+dependencies = [
+ "getrandom 0.2.16",
+ "instant",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3480,6 +3491,7 @@ dependencies = [
  "blueprint-crypto",
  "blueprint-keystore",
  "blueprint-manager-bridge",
+ "blueprint-qos",
  "blueprint-remote-providers",
  "blueprint-runner",
  "blueprint-std",
@@ -3507,6 +3519,7 @@ dependencies = [
  "netdev",
  "nftables",
  "nix 0.30.1",
+ "prometheus",
  "rand 0.8.5",
  "reqwest 0.12.22",
  "rtnetlink 0.16.0",
@@ -3708,10 +3721,12 @@ dependencies = [
 name = "blueprint-qos"
 version = "0.1.0-alpha.5"
 dependencies = [
+ "async-trait",
  "axum 0.8.4",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-keystore",
+ "blueprint-remote-providers",
  "blueprint-std",
  "blueprint-tangle-extra",
  "blueprint-testing-utils",
@@ -3736,6 +3751,7 @@ dependencies = [
  "tokio",
  "tonic 0.13.1",
  "tonic-build",
+ "tracing",
  "tracing-loki",
  "tracing-opentelemetry",
  "tracing-subscriber 0.3.19",
@@ -3760,6 +3776,7 @@ dependencies = [
  "blueprint-pricing-engine",
  "blueprint-std",
  "bollard",
+ "chacha20poly1305",
  "chrono",
  "futures",
  "k8s-openapi 0.21.1",
@@ -3767,17 +3784,21 @@ dependencies = [
  "libc",
  "mockall",
  "mockito",
+ "parity-scale-codec",
  "proptest",
  "rand 0.8.5",
  "regex",
  "reqwest 0.12.22",
+ "rustls 0.23.31",
  "serde",
  "serde_json",
  "serde_yaml",
  "serial_test",
  "tempfile",
+ "testcontainers",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-rustls 0.26.2",
  "tokio-test",
  "toml 0.8.23",
  "tracing",
@@ -9124,6 +9145,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.2",
  "tower-service",
+ "webpki-roots 1.0.2",
 ]
 
 [[package]]
@@ -9831,6 +9853,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "json-patch"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec9ad60d674508f3ca8f380a928cfe7b096bc729c4e2dbfe3852bc45da3ab30b"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "jsonpath-rust"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10209,6 +10242,8 @@ dependencies = [
  "k8s-openapi 0.21.1",
  "kube-client 0.90.0",
  "kube-core 0.90.0",
+ "kube-derive",
+ "kube-runtime",
 ]
 
 [[package]]
@@ -10305,7 +10340,9 @@ dependencies = [
  "chrono",
  "form_urlencoded",
  "http 1.3.1",
+ "json-patch",
  "k8s-openapi 0.21.1",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -10326,6 +10363,45 @@ dependencies = [
  "serde-value",
  "serde_json",
  "thiserror 2.0.12",
+]
+
+[[package]]
+name = "kube-derive"
+version = "0.90.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d0d2527a6ff7adf00b34d558c4c5de9404abe28808cb0a4c64b57e2c1b0716a"
+dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "serde_json",
+ "syn 2.0.104",
+]
+
+[[package]]
+name = "kube-runtime"
+version = "0.90.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4560e2c5c71366f6dceb6500ce33cf72299aede92381bb875dc2d4ba4f102c21"
+dependencies = [
+ "ahash 0.8.12",
+ "async-trait",
+ "backoff",
+ "derivative",
+ "futures",
+ "hashbrown 0.14.5",
+ "json-patch",
+ "k8s-openapi 0.21.1",
+ "kube-client 0.90.0",
+ "parking_lot 0.12.4",
+ "pin-project 1.1.10",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util 0.7.16",
+ "tracing",
 ]
 
 [[package]]
@@ -16686,6 +16762,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
+ "webpki-roots 1.0.2",
 ]
 
 [[package]]
@@ -20761,6 +20838,7 @@ dependencies = [
  "futures-io",
  "futures-sink",
  "pin-project-lite",
+ "slab",
  "tokio",
 ]
 

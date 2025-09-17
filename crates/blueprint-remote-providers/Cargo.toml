@@ -27,14 +27,15 @@ tokio = { workspace = true, features = ["full"] }
 toml = "0.8"
 tracing.workspace = true
 
-# Blueprint dependencies (removed blueprint-manager to avoid cyclic dependency)
+# Blueprint dependencies (removed blueprint-manager and blueprint-qos to avoid cyclic dependency)
 blueprint-auth = { path = "../auth" }
 blueprint-keystore = { path = "../keystore" }
 blueprint-pricing-engine = { path = "../pricing-engine", optional = true }
+parity-scale-codec = { workspace = true, features = ["derive"] }
 
 # Provider-specific dependencies
 bollard = { version = "0.18", optional = true }
-kube = { version = "0.90", optional = true }
+kube = { version = "0.90", features = ["rustls-tls"], optional = true }
 k8s-openapi = { version = "0.21", features = ["v1_29"], optional = true }
 
 # AWS SDK
@@ -43,11 +44,14 @@ aws-sdk-ec2 = { version = "1.47", optional = true }
 aws-sdk-eks = { version = "1.47", optional = true }
 aws-sdk-autoscaling = { version = "1.47", optional = true }
 
-# HTTP client for other cloud APIs
-reqwest = { version = "0.12", features = ["json"], optional = true }
+# HTTP client for cloud APIs and pricing
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+rustls = { version = "0.23", features = ["ring"] }
 
-# Testing dependencies
-mockall = { version = "0.13", optional = true }
+# TLS and secure communication
+tokio-rustls = "0.26"
+chacha20poly1305 = "0.10"
+
 
 # Utilities
 uuid = { version = "1.10", features = ["v4", "serde"] }
@@ -67,6 +71,11 @@ mockito = "1.0"
 aws-smithy-mocks-experimental = "0.2"
 # For regex in wiremock matchers
 regex = "1.10"
+# For container-based testing
+testcontainers = "0.23"
+# For K8s testing
+kube = { version = "0.90", features = ["runtime", "derive"] }
+k8s-openapi = { version = "0.21", features = ["v1_29"] }
 
 [features]
 default = ["kubernetes"]
@@ -74,12 +83,12 @@ kubernetes = ["dep:kube", "dep:k8s-openapi"]
 docker = ["dep:bollard"]
 aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-autoscaling"]
 aws-eks = ["aws", "dep:aws-sdk-eks"]
-gcp = ["api-clients"]
-azure = ["api-clients"]
-api-clients = ["dep:reqwest"]
+gcp = []  # GCP support via REST API
+azure = []  # Azure support via REST API
 pricing = ["dep:blueprint-pricing-engine"]
-testing = ["dep:mockall"]
-full = ["kubernetes", "docker", "aws-eks", "gcp", "azure", "api-clients", "pricing"]
+# qos-integration feature is added by consumers who have access to blueprint-qos
+qos-integration = []
+full = ["kubernetes", "docker", "aws-eks", "gcp", "azure", "pricing"]
 
 [[example]]
 name = "manager_integration"

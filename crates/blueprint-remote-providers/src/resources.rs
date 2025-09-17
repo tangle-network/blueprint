@@ -17,6 +17,9 @@ pub struct ResourceSpec {
     pub gpu_count: Option<u32>,
     /// Allow spot/preemptible instances
     pub allow_spot: bool,
+    /// QoS parameters
+    #[serde(default)]
+    pub qos: QosParameters,
 }
 
 impl ResourceSpec {
@@ -28,6 +31,7 @@ impl ResourceSpec {
             storage_gb: 10.0,
             gpu_count: None,
             allow_spot: true,
+            qos: QosParameters::default(),
         }
     }
 
@@ -39,6 +43,7 @@ impl ResourceSpec {
             storage_gb: 20.0,
             gpu_count: None,
             allow_spot: false,
+            qos: QosParameters::default(),
         }
     }
 
@@ -50,6 +55,7 @@ impl ResourceSpec {
             storage_gb: 100.0,
             gpu_count: None,
             allow_spot: false,
+            qos: QosParameters::default(),
         }
     }
 
@@ -61,6 +67,7 @@ impl ResourceSpec {
             storage_gb: 500.0,
             gpu_count: None,
             allow_spot: false,
+            qos: QosParameters::default(),
         }
     }
 
@@ -155,6 +162,31 @@ impl ResourceSpec {
         };
         final_cost as f64
     }
+
+    /// Convert to pricing units for pricing engine integration
+    pub fn to_pricing_units(&self) -> blueprint_std::collections::HashMap<String, f64> {
+        let mut units = blueprint_std::collections::HashMap::new();
+        units.insert("CPU".to_string(), self.cpu as f64);
+        units.insert("MemoryMB".to_string(), (self.memory_gb * 1024.0) as f64);
+        units.insert("StorageMB".to_string(), (self.storage_gb * 1024.0) as f64);
+        if let Some(gpu) = self.gpu_count {
+            units.insert("GPU".to_string(), gpu as f64);
+        }
+        units
+    }
+}
+
+/// Convert resource spec to pricing units
+pub fn to_pricing_units(spec: &ResourceSpec) -> blueprint_std::collections::HashMap<String, f64> {
+    spec.to_pricing_units()
+}
+
+/// QoS parameters for pricing calculations
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct QosParameters {
+    pub priority: f32,
+    pub sla_target: f32,
+    pub reliability_multiplier: f32,
 }
 
 impl Default for ResourceSpec {

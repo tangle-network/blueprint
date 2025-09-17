@@ -1,11 +1,10 @@
 //! Integration hooks for remote deployments with Blueprint Manager
 
-use crate::deployment::tracker::{DeploymentRecord, DeploymentTracker, DeploymentType};
-use crate::error::{Error, Result};
+use crate::deployment::tracker::{DeploymentTracker, DeploymentType};
+use crate::error::Result;
 use crate::remote::CloudProvider;
 use crate::resources::ResourceSpec;
 use blueprint_std::collections::HashMap;
-use blueprint_std::path::PathBuf;
 use blueprint_std::sync::Arc;
 use chrono::{DateTime, Utc};
 use tokio::sync::RwLock;
@@ -68,7 +67,10 @@ impl RemoteDeploymentRegistry {
                 "Cleaning up remote deployment {} for blueprint {} service {}",
                 config.instance_id, blueprint_id, service_id
             );
-            self.tracker.handle_termination(&config.instance_id).await?;
+            // Best effort cleanup - ignore if deployment not found in tracker
+            if let Err(e) = self.tracker.handle_termination(&config.instance_id).await {
+                warn!("Failed to cleanup deployment in tracker: {}", e);
+            }
         }
         Ok(())
     }

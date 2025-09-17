@@ -26,6 +26,8 @@ pub struct BlueprintManagerContext {
     pub vm: VmContext,
     pub(crate) db: Mutex<Option<RocksDb>>,
     config: BlueprintManagerConfig,
+    #[cfg(feature = "remote-providers")]
+    cloud_config: Option<crate::executor::remote_provider_integration::CloudConfig>,
 }
 
 impl BlueprintManagerContext {
@@ -86,6 +88,8 @@ impl BlueprintManagerContext {
             },
             // Set in `run_blueprint_manager_with_keystore`
             db: Mutex::new(None),
+            #[cfg(feature = "remote-providers")]
+            cloud_config: Self::load_cloud_config(&config),
             config,
         })
     }
@@ -102,6 +106,62 @@ impl BlueprintManagerContext {
     pub async fn kube_service_port(&self) -> u16 {
         let mut guard = self.containers.kube_service_port.lock().await;
         guard.unlock()
+    }
+
+    #[cfg(feature = "remote-providers")]
+    pub fn cloud_config(&self) -> &Option<crate::executor::remote_provider_integration::CloudConfig> {
+        &self.cloud_config
+    }
+
+    #[cfg(feature = "remote-providers")]
+    fn load_cloud_config(config: &BlueprintManagerConfig) -> Option<crate::executor::remote_provider_integration::CloudConfig> {
+        use std::env;
+        use crate::executor::remote_provider_integration::{CloudConfig, AwsConfig, DigitalOceanConfig, VultrConfig};
+        
+        // Check for cloud provider environment variables
+        let mut cloud_config = CloudConfig::default();
+        let mut any_enabled = false;
+
+        // AWS configuration
+        if let (Ok(key), Ok(secret)) = (env::var("AWS_ACCESS_KEY_ID"), env::var("AWS_SECRET_ACCESS_KEY")) {
+            cloud_config.aws = Some(AwsConfig {
+                enabled: true,
+                region: env::var("AWS_DEFAULT_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
+                access_key: key,
+                secret_key: secret,
+                priority: Some(10),
+            });
+            any_enabled = true;
+        }
+
+        // DigitalOcean configuration
+        if let Ok(token) = env::var("DO_API_TOKEN") {
+            cloud_config.digital_ocean = Some(DigitalOceanConfig {
+                enabled: true,
+                region: env::var("DO_DEFAULT_REGION").unwrap_or_else(|_| "nyc3".to_string()),
+                api_token: token,
+                priority: Some(5),
+            });
+            any_enabled = true;
+        }
+
+        // Vultr configuration
+        if let Ok(key) = env::var("VULTR_API_KEY") {
+            cloud_config.vultr = Some(VultrConfig {
+                enabled: true,
+                region: env::var("VULTR_DEFAULT_REGION").unwrap_or_else(|_| "ewr".to_string()),
+                api_key: key,
+                priority: Some(3),
+            });
+            any_enabled = true;
+        }
+
+        if any_enabled {
+            cloud_config.enabled = true;
+            Some(cloud_config)
+        } else {
+            None
+        }
     }
 }
 

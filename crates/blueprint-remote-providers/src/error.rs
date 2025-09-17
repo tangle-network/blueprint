@@ -29,8 +29,26 @@ pub enum Error {
     #[error("Provider {0:?} not configured")]
     ProviderNotConfigured(crate::remote::CloudProvider),
 
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+
+    #[error("HTTP error: {0}")]
+    HttpError(String),
+
     #[error("Other error: {0}")]
     Other(String),
+}
+
+impl From<toml::de::Error> for Error {
+    fn from(err: toml::de::Error) -> Self {
+        Error::SerializationError(err.to_string())
+    }
+}
+
+impl From<serde_yaml::Error> for Error {
+    fn from(err: serde_yaml::Error) -> Self {
+        Error::SerializationError(err.to_string())
+    }
 }
 
 #[cfg(feature = "aws")]

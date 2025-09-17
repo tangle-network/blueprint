@@ -28,6 +28,8 @@ use tangle_subxt::subxt::utils::AccountId32;
 use tokio::task::JoinHandle;
 
 pub(crate) mod event_handler;
+#[cfg(feature = "remote-providers")]
+pub(crate) mod remote_provider_integration;
 
 pub struct BlueprintManagerHandle {
     shutdown_call: Option<tokio::sync::oneshot::Sender<()>>,
@@ -177,6 +179,31 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         run_auth_proxy(ctx.data_dir().to_path_buf(), ctx.auth_proxy_opts.clone()).await?;
     ctx.set_db(db).await;
 
+    // Start observability server for operator dashboard
+    let observability_task = {
+        use crate::observability::ObservabilityServer;
+        
+        let server = ObservabilityServer::new(9090)
+            .map_err(|e| Error::Other(format!("Failed to create observability server: {}", e)))?;
+        
+        // If remote providers are enabled, connect to remote metrics
+        #[cfg(feature = "remote-providers")]
+        let server = {
+            use blueprint_remote_providers::observability::MetricsCollector;
+            let remote_collector = std::sync::Arc::new(MetricsCollector::new());
+            server.with_remote_metrics(remote_collector)
+        };
+        
+        info!("Starting observability server on http://0.0.0.0:9090");
+        
+        // Start the server in background
+        tokio::spawn(async move {
+            if let Err(e) = server.start().await {
+                error!("Observability server failed: {}", e);
+            }
+        })
+    };
+
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
         let sr_key_pub = keystore.first_local::<SpSr25519>()?;
@@ -201,6 +228,12 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let manager_task = async move {
         let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
         let services_client = tangle_client.services_client();
+
+        #[cfg(feature = "remote-providers")]
+        let remote_provider_mgr = {
+            use crate::executor::remote_provider_integration::RemoteProviderManager;
+            RemoteProviderManager::new(&ctx).await?
+        };
 
         // With the basics setup, we must now implement the main logic of the Blueprint Manager
         // Handle initialization logic
@@ -241,6 +274,20 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
                 services_client,
             )
             .await?;
+            
+            #[cfg(feature = "remote-providers")]
+            {
+                // Handle remote provider events
+                if let Some(ref mgr) = remote_provider_mgr {
+                    for evt in result.service_initiated {
+                        mgr.on_service_initiated(
+                            evt.blueprint_id,
+                            evt.service_id,
+                            None, // TODO: Extract resource requirements from event
+                        ).await?;
+                    }
+                }
+            }
         }
 
         Err::<(), _>(Error::ClientDied)
@@ -273,6 +320,9 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
             },
             res1 = auth_proxy_task => {
                 Err(Report::msg(format!("Auth Proxy Closed Unexpectedly: {res1:?}")))
+            },
+            res2 = observability_task => {
+                Err(Report::msg(format!("Observability Server Closed Unexpectedly: {res2:?}")))
             },
 
             () = shutdown_task => {
