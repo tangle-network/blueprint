@@ -11,6 +11,7 @@ rust-version.workspace = true
 
 [dependencies]
 blueprint-std = { workspace = true }
+blueprint-core = { workspace = true, features = ["tracing"] }
 
 thiserror = { workspace = true }
 tower = { workspace = true, features = ["util"] }

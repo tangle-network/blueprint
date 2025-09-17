@@ -3,7 +3,7 @@ use super::BlueprintSourceHandler;
 use crate::error::{Error, Result};
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::ImageRegistryFetcher;
 use tokio::process::Command;
-use tracing::log;
+use blueprint_core::info;
 use blueprint_runner::config::BlueprintEnvironment;
 use std::path::{Path, PathBuf};
 use crate::config::BlueprintManagerContext;
@@ -44,7 +44,7 @@ impl BlueprintSourceHandler for ContainerSource {
             .map_err(|e| Error::Other(e.to_string()))?;
 
         let full = format!("{registry}/{image}:{tag}");
-        log::info!("Pulling image {full}");
+        info!("Pulling image {full}");
 
         Command::new("docker")
             .arg("pull")

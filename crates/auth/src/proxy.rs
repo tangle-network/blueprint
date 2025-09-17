@@ -15,6 +15,7 @@ use axum::{
     routing::any,
     routing::post,
 };
+use blueprint_core::{debug, error, info, warn};
 use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor, rt::TokioTimer};
 use tower_http::cors::CorsLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
@@ -22,6 +23,7 @@ use tower_http::sensitive_headers::{
     SetSensitiveRequestHeadersLayer, SetSensitiveResponseHeadersLayer,
 };
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
+use tracing::instrument;
 
 use crate::api_keys::{ApiKeyGenerator, ApiKeyModel};
 use crate::db::RocksDb;
@@ -88,7 +90,7 @@ impl AuthenticatedProxy {
                     ));
                 }
             }
-            tracing::warn!("Invalid PASETO_SIGNING_KEY environment variable, generating new key");
+            warn!("Invalid PASETO_SIGNING_KEY environment variable, generating new key");
         }
 
         // Try to load key from file in db directory
@@ -102,7 +104,7 @@ impl AuthenticatedProxy {
                 let mut key_array = [0u8; 32];
                 key_array.copy_from_slice(&key_bytes);
                 let key = crate::paseto_tokens::PasetoKey::from_bytes(key_array);
-                tracing::info!("Loaded existing Paseto signing key from disk");
+                info!("Loaded existing Paseto signing key from disk");
                 return Ok(PasetoTokenManager::with_key(
                     key,
                     std::time::Duration::from_secs(15 * 60),
@@ -128,7 +130,7 @@ impl AuthenticatedProxy {
             fs::set_permissions(&key_path, permissions).map_err(crate::Error::Io)?;
         }
 
-        tracing::info!("Generated and saved new Paseto signing key");
+        info!("Generated and saved new Paseto signing key");
         Ok(manager)
     }
 
@@ -382,7 +384,7 @@ async fn auth_exchange(
             );
         }
         Err(e) => {
-            tracing::error!("Database error looking up API key: {}", e);
+            error!("Database error looking up API key: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
@@ -427,7 +429,7 @@ async fn auth_exchange(
 
     // Update last used timestamp
     if let Err(e) = api_key_model.update_last_used(&s.db) {
-        tracing::warn!("Failed to update API key last_used timestamp: {}", e);
+        warn!("Failed to update API key last_used timestamp: {}", e);
     }
 
     // Merge default headers with request headers
@@ -468,7 +470,7 @@ async fn auth_exchange(
     ) {
         Ok(token) => token,
         Err(e) => {
-            tracing::error!("Failed to create Paseto token: {}", e);
+            error!("Failed to create Paseto token: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
@@ -512,7 +514,7 @@ async fn handle_legacy_token(
     let api_token = match ApiTokenModel::find_token_id(token_id, db) {
         Ok(Some(token)) if token.is(token_str) && !token.is_expired() && token.is_enabled => token,
         Ok(Some(_)) | Ok(None) => {
-            tracing::warn!("Invalid or expired legacy token");
+            warn!("Invalid or expired legacy token");
             return Err(StatusCode::UNAUTHORIZED);
         }
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
@@ -543,35 +545,35 @@ async fn handle_api_key(
     let mut api_key_model = match crate::api_keys::ApiKeyModel::find_by_key_id(key_id, db) {
         Ok(Some(model)) => model,
         Ok(None) => {
-            tracing::warn!("API key not found: {}", key_id);
+            warn!("API key not found: {}", key_id);
             return Err(StatusCode::UNAUTHORIZED);
         }
         Err(e) => {
-            tracing::error!("Database error looking up API key: {}", e);
+            error!("Database error looking up API key: {}", e);
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
 
     // Validate the full key
     if !api_key_model.validates_key(api_key) {
-        tracing::warn!("API key validation failed: {}", key_id);
+        warn!("API key validation failed: {}", key_id);
         return Err(StatusCode::UNAUTHORIZED);
     }
 
     // Check expiration and enabled status
     if api_key_model.is_expired() {
-        tracing::warn!("API key expired: {}", key_id);
+        warn!("API key expired: {}", key_id);
         return Err(StatusCode::UNAUTHORIZED);
     }
 
     if !api_key_model.is_enabled {
-        tracing::warn!("API key disabled: {}", key_id);
+        warn!("API key disabled: {}", key_id);
         return Err(StatusCode::UNAUTHORIZED);
     }
 
     // Update last used timestamp
     if let Err(e) = api_key_model.update_last_used(db) {
-        tracing::warn!("Failed to update API key last_used timestamp: {}", e);
+        warn!("Failed to update API key last_used timestamp: {}", e);
     }
 
     let additional_headers = api_key_model.get_default_headers();
@@ -592,7 +594,7 @@ async fn handle_paseto_token(
     let claims = match paseto_manager.validate_token(token) {
         Ok(claims) => claims,
         Err(e) => {
-            tracing::warn!("Paseto token validation failed: {}", e);
+            warn!("Paseto token validation failed: {}", e);
             return Err(StatusCode::UNAUTHORIZED);
         }
     };
@@ -626,7 +628,7 @@ fn is_forbidden_header(header_name: &str) -> bool {
 }
 
 /// Reverse proxy handler that forwards requests to the target host based on the service ID
-#[tracing::instrument(skip_all)]
+#[instrument(skip_all)]
 async fn reverse_proxy(
     headers: axum::http::HeaderMap,
     State(s): State<AuthenticatedProxyState>,
@@ -638,11 +640,11 @@ async fn reverse_proxy(
         .and_then(|h| h.to_str().ok())
         .and_then(|h| h.strip_prefix("Bearer "))
         .ok_or_else(|| {
-            tracing::warn!("Missing or invalid Authorization header");
+            warn!("Missing or invalid Authorization header");
             StatusCode::UNAUTHORIZED
         })?;
 
-    tracing::debug!("Processing auth header: {}", auth_header);
+    debug!("Processing auth header: {}", auth_header);
 
     // Use unified token parsing
     let (service_id, additional_headers) = match crate::auth_token::AuthToken::parse(auth_header) {
@@ -661,7 +663,7 @@ async fn reverse_proxy(
             handle_paseto_token(auth_header, &s.paseto_manager).await?
         }
         Err(e) => {
-            tracing::warn!("Token parsing error for '{}': {:?}", auth_header, e);
+            warn!("Token parsing error for '{}': {:?}", auth_header, e);
             return Err(StatusCode::UNAUTHORIZED);
         }
     };
@@ -700,7 +702,7 @@ async fn reverse_proxy(
     for (header_name, header_value) in additional_headers {
         // Re-validate header names against security-sensitive headers
         if is_forbidden_header(&header_name) {
-            tracing::warn!("Attempted to inject forbidden header: {}", header_name);
+            warn!("Attempted to inject forbidden header: {}", header_name);
             continue;
         }
 
@@ -709,15 +711,15 @@ async fn reverse_proxy(
             if let Ok(value) = header::HeaderValue::from_str(&header_value) {
                 // Prevent header value injection attacks
                 if header_value.contains('\r') || header_value.contains('\n') {
-                    tracing::warn!("Header value contains CRLF: {}", header_name);
+                    warn!("Header value contains CRLF: {}", header_name);
                     continue;
                 }
                 req.headers_mut().insert(name, value);
             } else {
-                tracing::warn!("Invalid header value for {}: {}", header_name, header_value);
+                warn!("Invalid header value for {}: {}", header_name, header_value);
             }
         } else {
-            tracing::warn!("Invalid header name: {}", header_name);
+            warn!("Invalid header name: {}", header_name);
         }
     }
 
