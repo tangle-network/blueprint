@@ -3,15 +3,14 @@
 //! Discovers available instance types and their specifications from cloud providers
 //! to maintain an up-to-date catalog of available resources.
 
-use crate::error::Result;
-use crate::remote::CloudProvider;
+use crate::core::error::{Error, Result};
+use crate::core::remote::CloudProvider;
 use blueprint_std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 /// Machine type discovery service
 pub struct MachineTypeDiscovery {
-    #[cfg(feature = "api-clients")]
     client: reqwest::Client,
     cache: HashMap<CloudProvider, Vec<MachineType>>,
 }
@@ -20,7 +19,6 @@ impl MachineTypeDiscovery {
     /// Create a new discovery service
     pub fn new() -> Self {
         Self {
-            #[cfg(feature = "api-clients")]
             client: reqwest::Client::builder()
                 .timeout(blueprint_std::time::Duration::from_secs(30))
                 .build()
@@ -60,7 +58,6 @@ impl MachineTypeDiscovery {
     }
 
     /// Discover AWS EC2 instance types
-    #[cfg(feature = "api-clients")]
     async fn discover_aws_instances(
         &self,
         region: &str,
@@ -151,7 +148,6 @@ impl MachineTypeDiscovery {
     }
 
     /// Discover GCP machine types
-    #[cfg(feature = "api-clients")]
     async fn discover_gcp_machines(
         &self,
         zone: &str,
@@ -245,7 +241,6 @@ impl MachineTypeDiscovery {
     }
 
     /// Discover Azure VM sizes
-    #[cfg(feature = "api-clients")]
     async fn discover_azure_vms(
         &self,
         location: &str,
@@ -341,7 +336,6 @@ impl MachineTypeDiscovery {
     }
 
     /// Discover DigitalOcean droplet sizes
-    #[cfg(feature = "api-clients")]
     async fn discover_do_droplets(
         &self,
         credentials: &CloudCredentials,
@@ -432,7 +426,6 @@ impl MachineTypeDiscovery {
     }
 
     /// Discover Vultr plans
-    #[cfg(feature = "api-clients")]
     async fn discover_vultr_plans(
         &self,
         credentials: &CloudCredentials,

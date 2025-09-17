@@ -3,8 +3,8 @@
 //! Provides direct SSH deployment capabilities for Blueprint instances
 //! to bare metal servers or any SSH-accessible host with Docker/Podman.
 
-use crate::error::{Error, Result};
-use crate::resources::ResourceSpec;
+use crate::core::error::{Error, Result};
+use crate::core::resources::ResourceSpec;
 use blueprint_std::collections::HashMap;
 use blueprint_std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};

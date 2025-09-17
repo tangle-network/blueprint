@@ -4,11 +4,10 @@
 //! to the cheapest available cloud provider based on resource requirements.
 
 use crate::deployment::manager_integration::RemoteDeploymentConfig;
-use crate::error::{Error, Result};
-#[cfg(feature = "api-clients")]
+use crate::core::error::{Error, Result};
 use crate::pricing::fetcher::PricingFetcher;
-use crate::remote::CloudProvider;
-use crate::resources::ResourceSpec;
+use crate::core::remote::CloudProvider;
+use crate::core::resources::ResourceSpec;
 use blueprint_std::collections::HashMap;
 use blueprint_std::sync::Arc;
 use chrono::Utc;
@@ -31,7 +30,6 @@ pub struct AutoDeploymentManager {
     /// Enabled cloud providers from operator config
     enabled_providers: Arc<RwLock<Vec<EnabledProvider>>>,
     /// Real pricing data fetcher
-    #[cfg(feature = "api-clients")]
     pricing_fetcher: Arc<RwLock<PricingFetcher>>,
     /// Maximum hourly cost limit
     max_hourly_cost: f64,
@@ -41,7 +39,6 @@ impl AutoDeploymentManager {
     pub fn new() -> Self {
         Self {
             enabled_providers: Arc::new(RwLock::new(Vec::new())),
-            #[cfg(feature = "api-clients")]
             pricing_fetcher: Arc::new(RwLock::new(PricingFetcher::new())),
             max_hourly_cost: 1.0,
         }
@@ -81,7 +78,6 @@ impl AutoDeploymentManager {
         let mut best_option = None;
         let mut best_price = f64::MAX;
         
-        #[cfg(feature = "api-clients")]
         {
             let mut fetcher = self.pricing_fetcher.write().await;
 
@@ -104,22 +100,10 @@ impl AutoDeploymentManager {
                         ));
                     }
                     Err(e) => {
-                        debug!("No suitable instance for {:?}: {}", provider_config.provider, e);
+                        tracing::debug!("No suitable instance for {:?}: {}", provider_config.provider, e);
                     }
                     _ => {}
                 }
-            }
-        }
-        
-        #[cfg(not(feature = "api-clients"))]
-        {
-            // Without API clients, use first available provider with estimated pricing
-            if let Some(provider) = enabled_providers.first() {
-                best_option = Some((
-                    provider.provider.clone(),
-                    provider.region.clone(),
-                    0.10, // Default estimate
-                ));
             }
         }
 

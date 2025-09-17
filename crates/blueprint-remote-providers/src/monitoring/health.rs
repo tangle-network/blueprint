@@ -2,10 +2,11 @@
 //!
 //! Provides continuous health checks and auto-recovery for deployed instances
 
-use crate::cloud_provisioner::{CloudProvisioner, InstanceStatus};
+use crate::infra::provisioner::CloudProvisioner;
+use crate::infra::types::InstanceStatus;
 use crate::deployment::tracker::{DeploymentRecord, DeploymentTracker};
-use crate::error::{Error, Result};
-use crate::remote::CloudProvider;
+use crate::core::error::{Error, Result};
+use crate::core::remote::CloudProvider;
 use blueprint_std::sync::Arc;
 use blueprint_std::time::Duration;
 use chrono::{DateTime, Utc};
@@ -237,14 +238,12 @@ impl HealthMonitor {
 
 /// Application-level health checker
 pub struct ApplicationHealthChecker {
-    #[cfg(feature = "api-clients")]
     http_client: reqwest::Client,
 }
 
 impl ApplicationHealthChecker {
     pub fn new() -> Self {
         Self {
-            #[cfg(feature = "api-clients")]
             http_client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(5))
                 .build()
@@ -254,20 +253,12 @@ impl ApplicationHealthChecker {
 
     /// Check HTTP endpoint health
     pub async fn check_http(&self, url: &str) -> HealthStatus {
-        #[cfg(feature = "api-clients")]
-        {
-            match self.http_client.get(url).send().await {
-                Ok(response) if response.status().is_success() => return HealthStatus::Healthy,
-                Ok(response) if response.status().is_server_error() => {
-                    return HealthStatus::Degraded;
-                }
-                _ => return HealthStatus::Unhealthy,
+        match self.http_client.get(url).send().await {
+            Ok(response) if response.status().is_success() => HealthStatus::Healthy,
+            Ok(response) if response.status().is_server_error() => {
+                HealthStatus::Degraded
             }
-        }
-        #[cfg(not(feature = "api-clients"))]
-        {
-            // Without api-clients feature, we can't make HTTP requests
-            HealthStatus::Unhealthy
+            _ => HealthStatus::Unhealthy,
         }
     }
 

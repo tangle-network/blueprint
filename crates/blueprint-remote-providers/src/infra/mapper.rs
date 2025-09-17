@@ -1,5 +1,5 @@
-use crate::remote::CloudProvider;
-use crate::resources::ResourceSpec;
+use crate::core::remote::CloudProvider;
+use crate::core::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
 
 /// Maps resource requirements to cloud instance types
@@ -238,7 +238,7 @@ pub trait ResourceLimitsExt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::ResourceSpec;
+    use crate::core::resources::ResourceSpec;
 
     #[test]
     fn test_aws_instance_mapping() {
@@ -291,7 +291,7 @@ mod tests {
 
     #[test]
     fn test_cost_aware_selection() {
-        use crate::resources::QosParameters;
+        use crate::core::resources::QosParameters;
 
         let spec = ResourceSpec {
             cpu: 0.5,

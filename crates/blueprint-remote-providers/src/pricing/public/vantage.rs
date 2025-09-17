@@ -1,5 +1,6 @@
 //! Vantage.sh aggregated pricing data (best public source)
 
+use crate::core::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// Vantage.sh aggregates pricing from AWS and Azure in clean JSON format
@@ -11,17 +12,14 @@ impl VantageAggregator {
     pub const AZURE_URL: &'static str = "https://instances.vantage.sh/azure/instances.json";
     // GCP not available on Vantage - use GCP pricing calculator instead
 
-    #[cfg(feature = "api-clients")]
     pub async fn fetch_aws() -> Result<Vec<VantageInstance>> {
         Self::fetch_json(Self::AWS_URL).await
     }
 
-    #[cfg(feature = "api-clients")]
     pub async fn fetch_azure() -> Result<Vec<VantageInstance>> {
         Self::fetch_json(Self::AZURE_URL).await
     }
 
-    #[cfg(feature = "api-clients")]
     async fn fetch_json(url: &str) -> Result<Vec<VantageInstance>> {
         let client = reqwest::Client::new();
         let response = client

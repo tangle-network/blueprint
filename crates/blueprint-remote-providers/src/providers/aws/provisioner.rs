@@ -1,9 +1,9 @@
 //! AWS EC2 instance provisioning
 
 use super::instance_mapper::AwsInstanceMapper;
-use crate::error::{Error, Result};
+use crate::core::error::{Error, Result};
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
-use crate::resources::ResourceSpec;
+use crate::core::resources::ResourceSpec;
 #[cfg(feature = "aws")]
 use aws_sdk_ec2::types::{InstanceType, ResourceType, Tag, TagSpecification};
 use tracing::{info, warn};
@@ -118,7 +118,7 @@ impl AwsProvisioner {
         let private_ip = instance.private_ip_address().map(|s| s.to_string());
 
         Ok(ProvisionedInfrastructure {
-            provider: crate::remote::CloudProvider::AWS,
+            provider: crate::core::remote::CloudProvider::AWS,
             instance_id: instance_id.to_string(),
             public_ip,
             private_ip,

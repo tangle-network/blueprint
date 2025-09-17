@@ -78,21 +78,21 @@ kube = { version = "0.90", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.21", features = ["v1_29"] }
 
 [features]
-default = ["kubernetes"]
-kubernetes = ["dep:kube", "dep:k8s-openapi"]
-docker = ["dep:bollard"]
+default = ["aws"]
 aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-autoscaling"]
 aws-eks = ["aws", "dep:aws-sdk-eks"]
 gcp = []  # GCP support via REST API
 azure = []  # Azure support via REST API
+digitalocean = []  # DigitalOcean support via REST API
+vultr = []  # Vultr support via REST API
+kubernetes = ["dep:kube", "dep:k8s-openapi"]
+docker = ["dep:bollard"]
 pricing = ["dep:blueprint-pricing-engine"]
-# qos-integration feature is added by consumers who have access to blueprint-qos
-qos-integration = []
-full = ["kubernetes", "docker", "aws-eks", "gcp", "azure", "pricing"]
+testing = []
 
 [[example]]
 name = "manager_integration"
-required-features = ["full"]
+required-features = ["aws", "kubernetes"]
 
 [package.metadata.docs.rs]
 all-features = true

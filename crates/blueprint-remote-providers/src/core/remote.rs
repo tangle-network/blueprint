@@ -2,7 +2,7 @@
 // #[cfg(feature = "kubernetes")]
 // use blueprint_manager::rt::container::ContainerRuntime;
 
-use crate::error::{Error, Result};
+use crate::core::error::{Error, Result};
 use blueprint_std::collections::HashMap;
 use blueprint_std::fmt;
 use blueprint_std::path::PathBuf;

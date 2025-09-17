@@ -1,5 +1,5 @@
-use crate::error::Result;
-use crate::remote::CloudProvider;
+use crate::core::error::{Error, Result};
+use crate::core::remote::CloudProvider;
 use blueprint_std::collections::HashMap;
 use blueprint_std::sync::Arc;
 use serde::{Deserialize, Serialize};

@@ -3,14 +3,13 @@
 //! Provides DigitalOcean resource provisioning capabilities including
 //! Droplets and Kubernetes clusters.
 
-use crate::error::{Error, Result};
-use crate::resources::ResourceSpec;
+use crate::core::error::{Error, Result};
+use crate::core::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 /// DigitalOcean infrastructure provisioner
 pub struct DigitalOceanProvisioner {
-    #[cfg(feature = "api-clients")]
     client: reqwest::Client,
     api_token: String,
     default_region: String,
@@ -19,14 +18,12 @@ pub struct DigitalOceanProvisioner {
 impl DigitalOceanProvisioner {
     /// Create a new DigitalOcean provisioner
     pub async fn new(api_token: String, default_region: String) -> Result<Self> {
-        #[cfg(feature = "api-clients")]
         let client = reqwest::Client::builder()
             .timeout(blueprint_std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| Error::ConfigurationError(e.to_string()))?;
 
         Ok(Self {
-            #[cfg(feature = "api-clients")]
             client,
             api_token,
             default_region,
@@ -42,73 +39,57 @@ impl DigitalOceanProvisioner {
     ) -> Result<Droplet> {
         let droplet_size = self.select_droplet_size(spec);
 
-        #[cfg(feature = "api-clients")]
-        {
-            let url = "https://api.digitalocean.com/v2/droplets";
+        let url = "https://api.digitalocean.com/v2/droplets";
 
-            let droplet_request = serde_json::json!({
-                "name": name,
-                "region": self.default_region,
-                "size": droplet_size,
-                "image": "ubuntu-22-04-x64",
-                "ssh_keys": ssh_keys,
-                "backups": spec.qos.backup_config.enabled,
-                "ipv6": spec.network.ipv6_enabled,
-                "monitoring": true,
-                "tags": ["blueprint", "managed"],
-                "user_data": self.generate_user_data(spec),
-                "with_droplet_agent": true,
-            });
+        let droplet_request = serde_json::json!({
+            "name": name,
+            "region": self.default_region,
+            "size": droplet_size,
+            "image": "ubuntu-22-04-x64",
+            "ssh_keys": ssh_keys,
+            "backups": false,
+            "ipv6": false,
+            "monitoring": true,
+            "tags": ["blueprint", "managed"],
+            "user_data": self.generate_user_data(spec),
+            "with_droplet_agent": true,
+        });
 
-            let response = self
-                .client
-                .post(url)
-                .bearer_auth(&self.api_token)
-                .json(&droplet_request)
-                .send()
-                .await
-                .map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to create droplet: {}", e))
-                })?;
-
-            if !response.status().is_success() {
-                let error_text = response.text().await.unwrap_or_default();
-                return Err(Error::ConfigurationError(format!(
-                    "DO API error: {}",
-                    error_text
-                )));
-            }
-
-            let json: serde_json::Value = response.json().await.map_err(|e| {
-                Error::ConfigurationError(format!("Failed to parse response: {}", e))
+        let response = self
+            .client
+            .post(url)
+            .bearer_auth(&self.api_token)
+            .json(&droplet_request)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::ConfigurationError(format!("Failed to create droplet: {}", e))
             })?;
 
-            let droplet_id = json["droplet"]["id"]
-                .as_u64()
-                .ok_or_else(|| Error::ConfigurationError("No droplet ID in response".into()))?;
-
-            // Wait for droplet to be active
-            self.wait_for_droplet_active(droplet_id).await?;
-
-            // Get droplet details with IP addresses
-            return self.get_droplet_details(droplet_id).await;
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(Error::ConfigurationError(format!(
+                "DO API error: {}",
+                error_text
+            )));
         }
 
-        #[cfg(not(feature = "api-clients"))]
-        Ok(Droplet {
-            id: 12345,
-            name: name.to_string(),
-            size: droplet_size,
-            region: self.default_region.clone(),
-            status: "active".to_string(),
-            public_ipv4: Some("167.99.1.2".to_string()),
-            private_ipv4: Some("10.132.0.2".to_string()),
-            public_ipv6: None, // TODO: Support IPv6 configuration
-        })
+        let json: serde_json::Value = response.json().await.map_err(|e| {
+            Error::ConfigurationError(format!("Failed to parse response: {}", e))
+        })?;
+
+        let droplet_id = json["droplet"]["id"]
+            .as_u64()
+            .ok_or_else(|| Error::ConfigurationError("No droplet ID in response".into()))?;
+
+        // Wait for droplet to be active
+        self.wait_for_droplet_active(droplet_id).await?;
+
+        // Get droplet details with IP addresses
+        self.get_droplet_details(droplet_id).await
     }
 
     /// Wait for droplet to be active
-    #[cfg(feature = "api-clients")]
     async fn wait_for_droplet_active(&self, droplet_id: u64) -> Result<()> {
         let mut attempts = 0;
         loop {
@@ -129,7 +110,6 @@ impl DigitalOceanProvisioner {
     }
 
     /// Get droplet details
-    #[cfg(feature = "api-clients")]
     async fn get_droplet_details(&self, droplet_id: u64) -> Result<Droplet> {
         let url = format!("https://api.digitalocean.com/v2/droplets/{}", droplet_id);
 
@@ -193,82 +173,68 @@ impl DigitalOceanProvisioner {
     ) -> Result<DOKSCluster> {
         let _node_size = self.select_droplet_size(spec);
 
-        #[cfg(feature = "api-clients")]
-        {
-            let url = "https://api.digitalocean.com/v2/kubernetes/clusters";
+        let url = "https://api.digitalocean.com/v2/kubernetes/clusters";
 
-            // Get latest Kubernetes version
-            let version = self.get_latest_k8s_version().await?;
+        // Get latest Kubernetes version
+        let version = self.get_latest_k8s_version().await?;
+        let node_size = self.select_droplet_size(spec);
 
-            let cluster_request = serde_json::json!({
-                "name": name,
-                "region": self.default_region,
-                "version": version,
-                "node_pools": [{
-                    "size": node_size,
-                    "count": node_count,
-                    "name": format!("{}-pool", name),
-                    "auto_scale": node_count > 1,
-                    "min_nodes": 1,
-                    "max_nodes": node_count * 2,
-                    "tags": ["blueprint"],
-                }],
-                "maintenance_policy": {
-                    "start_time": "03:00",
-                    "day": "sunday",
-                },
-                "auto_upgrade": false,
-                "surge_upgrade": true,
-            });
+        let cluster_request = serde_json::json!({
+            "name": name,
+            "region": self.default_region,
+            "version": version,
+            "node_pools": [{
+                "size": node_size,
+                "count": node_count,
+                "name": format!("{}-pool", name),
+                "auto_scale": node_count > 1,
+                "min_nodes": 1,
+                "max_nodes": node_count * 2,
+                "tags": ["blueprint"],
+            }],
+            "maintenance_policy": {
+                "start_time": "03:00",
+                "day": "sunday",
+            },
+            "auto_upgrade": false,
+            "surge_upgrade": true,
+        });
 
-            let response = self
-                .client
-                .post(url)
-                .bearer_auth(&self.api_token)
-                .json(&cluster_request)
-                .send()
-                .await
-                .map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to create DOKS cluster: {}", e))
-                })?;
-
-            if !response.status().is_success() {
-                let error_text = response.text().await.unwrap_or_default();
-                return Err(Error::ConfigurationError(format!(
-                    "DOKS API error: {}",
-                    error_text
-                )));
-            }
-
-            let json: serde_json::Value = response.json().await.map_err(|e| {
-                Error::ConfigurationError(format!("Failed to parse response: {}", e))
+        let response = self
+            .client
+            .post(url)
+            .bearer_auth(&self.api_token)
+            .json(&cluster_request)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::ConfigurationError(format!("Failed to create DOKS cluster: {}", e))
             })?;
 
-            let cluster_id = json["kubernetes_cluster"]["id"]
-                .as_str()
-                .ok_or_else(|| Error::ConfigurationError("No cluster ID in response".into()))?;
-
-            // Wait for cluster to be running
-            self.wait_for_cluster_running(cluster_id).await?;
-
-            // Get cluster details
-            return self.get_cluster_details(cluster_id).await;
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(Error::ConfigurationError(format!(
+                "DOKS API error: {}",
+                error_text
+            )));
         }
 
-        #[cfg(not(feature = "api-clients"))]
-        Ok(DOKSCluster {
-            id: "cluster-123".to_string(),
-            name: name.to_string(),
-            region: self.default_region.clone(),
-            version: "1.28.2".to_string(),
-            status: "running".to_string(),
-            endpoint: format!("https://{}.k8s.digitalocean.com", name),
-            node_count,
-        })
+        let json: serde_json::Value = response.json().await.map_err(|e| {
+            Error::ConfigurationError(format!("Failed to parse response: {}", e))
+        })?;
+
+        let cluster_id = json["kubernetes_cluster"]["id"]
+            .as_str()
+            .ok_or_else(|| Error::ConfigurationError("No cluster ID in response".into()))?;
+
+        // Wait for cluster to be running
+        self.wait_for_cluster_running(cluster_id).await?;
+
+        // Get cluster details
+        self.get_cluster_details(cluster_id).await
     }
 
     /// Get latest Kubernetes version
-    #[cfg(feature = "api-clients")]
     async fn get_latest_k8s_version(&self) -> Result<String> {
         let url = format!("https://api.digitalocean.com/v2/kubernetes/options");
 
@@ -294,7 +260,6 @@ impl DigitalOceanProvisioner {
     }
 
     /// Wait for cluster to be running
-    #[cfg(feature = "api-clients")]
     async fn wait_for_cluster_running(&self, cluster_id: &str) -> Result<()> {
         let mut attempts = 0;
         loop {
@@ -316,7 +281,6 @@ impl DigitalOceanProvisioner {
     }
 
     /// Get cluster details
-    #[cfg(feature = "api-clients")]
     async fn get_cluster_details(&self, cluster_id: &str) -> Result<DOKSCluster> {
         let url = format!(
             "https://api.digitalocean.com/v2/kubernetes/clusters/{}",
@@ -359,35 +323,29 @@ impl DigitalOceanProvisioner {
     }
 
     /// Get kubeconfig for a cluster
-    pub async fn get_kubeconfig(&self, _cluster_id: &str) -> Result<String> {
-        #[cfg(feature = "api-clients")]
-        {
-            let url = format!(
-                "https://api.digitalocean.com/v2/kubernetes/clusters/{}/kubeconfig",
-                cluster_id
-            );
+    pub async fn get_kubeconfig(&self, cluster_id: &str) -> Result<String> {
+        let url = format!(
+            "https://api.digitalocean.com/v2/kubernetes/clusters/{}/kubeconfig",
+            cluster_id
+        );
 
-            let response = self
-                .client
-                .get(&url)
-                .bearer_auth(&self.api_token)
-                .send()
-                .await
-                .map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to get kubeconfig: {}", e))
-                })?;
+        let response = self
+            .client
+            .get(&url)
+            .bearer_auth(&self.api_token)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::ConfigurationError(format!("Failed to get kubeconfig: {}", e))
+            })?;
 
-            if !response.status().is_success() {
-                return Err(Error::ConfigurationError("Failed to get kubeconfig".into()));
-            }
-
-            return response.text().await.map_err(|e| {
-                Error::ConfigurationError(format!("Failed to read kubeconfig: {}", e))
-            });
+        if !response.status().is_success() {
+            return Err(Error::ConfigurationError("Failed to get kubeconfig".into()));
         }
 
-        #[cfg(not(feature = "api-clients"))]
-        Ok("mock-kubeconfig".to_string())
+        response.text().await.map_err(|e| {
+            Error::ConfigurationError(format!("Failed to read kubeconfig: {}", e))
+        })
     }
 
     /// Select appropriate droplet size based on resource requirements
@@ -456,27 +414,24 @@ impl DigitalOceanProvisioner {
 
     /// Delete a droplet
     pub async fn delete_droplet(&self, droplet_id: u64) -> Result<()> {
-        #[cfg(feature = "api-clients")]
-        {
-            let url = format!("https://api.digitalocean.com/v2/droplets/{}", droplet_id);
+        let url = format!("https://api.digitalocean.com/v2/droplets/{}", droplet_id);
 
-            let response = self
-                .client
-                .delete(&url)
-                .bearer_auth(&self.api_token)
-                .send()
-                .await
-                .map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to delete droplet: {}", e))
-                })?;
+        let response = self
+            .client
+            .delete(&url)
+            .bearer_auth(&self.api_token)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::ConfigurationError(format!("Failed to delete droplet: {}", e))
+            })?;
 
-            if !response.status().is_success() {
-                let error_text = response.text().await.unwrap_or_default();
-                return Err(Error::ConfigurationError(format!(
-                    "Failed to delete droplet: {}",
-                    error_text
-                )));
-            }
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(Error::ConfigurationError(format!(
+                "Failed to delete droplet: {}",
+                error_text
+            )));
         }
 
         info!("Deleted droplet: {}", droplet_id);
@@ -485,30 +440,27 @@ impl DigitalOceanProvisioner {
 
     /// Delete a Kubernetes cluster
     pub async fn delete_kubernetes_cluster(&self, cluster_id: &str) -> Result<()> {
-        #[cfg(feature = "api-clients")]
-        {
-            let url = format!(
-                "https://api.digitalocean.com/v2/kubernetes/clusters/{}",
-                cluster_id
-            );
+        let url = format!(
+            "https://api.digitalocean.com/v2/kubernetes/clusters/{}",
+            cluster_id
+        );
 
-            let response = self
-                .client
-                .delete(&url)
-                .bearer_auth(&self.api_token)
-                .send()
-                .await
-                .map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to delete cluster: {}", e))
-                })?;
+        let response = self
+            .client
+            .delete(&url)
+            .bearer_auth(&self.api_token)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::ConfigurationError(format!("Failed to delete cluster: {}", e))
+            })?;
 
-            if !response.status().is_success() {
-                let error_text = response.text().await.unwrap_or_default();
-                return Err(Error::ConfigurationError(format!(
-                    "Failed to delete cluster: {}",
-                    error_text
-                )));
-            }
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(Error::ConfigurationError(format!(
+                "Failed to delete cluster: {}",
+                error_text
+            )));
         }
 
         info!("Deleted Kubernetes cluster: {}", cluster_id);
@@ -544,12 +496,11 @@ pub struct DOKSCluster {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::ResourceSpec;
+    use crate::core::resources::ResourceSpec;
 
     #[test]
     fn test_droplet_size_selection() {
         let provisioner = DigitalOceanProvisioner {
-            #[cfg(feature = "api-clients")]
             client: reqwest::Client::new(),
             api_token: "test".to_string(),
             default_region: "nyc3".to_string(),
@@ -583,7 +534,6 @@ mod tests {
     #[test]
     fn test_user_data_generation() {
         let provisioner = DigitalOceanProvisioner {
-            #[cfg(feature = "api-clients")]
             client: reqwest::Client::new(),
             api_token: "test".to_string(),
             default_region: "nyc3".to_string(),

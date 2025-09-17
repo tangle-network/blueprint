@@ -1,7 +1,7 @@
 //! Real pricing data fetcher implementation
 
-use crate::error::{Error, Result};
-use crate::remote::CloudProvider;
+use crate::core::error::{Error, Result};
+use crate::core::remote::CloudProvider;
 use blueprint_std::collections::HashMap;
 use serde::Deserialize;
 use tracing::{debug, warn};

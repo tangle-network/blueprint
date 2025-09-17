@@ -1,6 +1,6 @@
 //! Integration with existing on-chain heartbeat/QoS reporting system
 
-use crate::error::Result;
+use crate::core::error::{Error, Result};
 use blueprint_qos::heartbeat::{HeartbeatConsumer, HeartbeatStatus};
 use blueprint_std::sync::Arc;
 use parity_scale_codec::{Decode, Encode};
@@ -113,7 +113,7 @@ pub async fn setup_remote_qos(
     heartbeat_service
         .start_heartbeat()
         .await
-        .map_err(|e| crate::error::Error::Other(format!("Failed to start heartbeat: {}", e)))?;
+        .map_err(|e| crate::core::error::Error::Other(format!("Failed to start heartbeat: {}", e)))?;
 
     Ok(heartbeat_service)
 }

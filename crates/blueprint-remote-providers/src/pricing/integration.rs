@@ -4,9 +4,9 @@
 //! pricing engine to provide accurate cost calculations for both local and
 //! remote deployments.
 
-use crate::error::Result;
-use crate::remote::CloudProvider;
-use crate::resources::ResourceSpec;
+use crate::core::error::{Error, Result};
+use crate::core::remote::CloudProvider;
+use crate::core::resources::ResourceSpec;
 use blueprint_std::collections::HashMap;
 use blueprint_std::path::Path;
 use serde::{Deserialize, Serialize};
@@ -46,10 +46,10 @@ impl PricingCalculator {
     /// Load pricing configuration from a specific file
     pub fn from_config_file(path: &Path) -> Result<Self> {
         let config_str = blueprint_std::fs::read_to_string(path)
-            .map_err(|e| crate::error::Error::ConfigurationError(e.to_string()))?;
+            .map_err(|e| crate::core::error::Error::ConfigurationError(e.to_string()))?;
 
         let pricing_config: PricingConfig = toml::from_str(&config_str)
-            .map_err(|e| crate::error::Error::ConfigurationError(e.to_string()))?;
+            .map_err(|e| crate::core::error::Error::ConfigurationError(e.to_string()))?;
 
         let cloud_multipliers = Self::default_multipliers();
 
@@ -67,7 +67,7 @@ impl PricingCalculator {
         duration_hours: f64,
     ) -> DetailedCostReport {
         // Convert to pricing units
-        let units = crate::resources::to_pricing_units(spec);
+        let units = crate::core::resources::to_pricing_units(spec);
 
         // Get base resource costs
         let mut resource_costs = HashMap::new();
@@ -300,7 +300,7 @@ pub mod pricing_engine_compat {
     /// Convert resource spec to pricing engine ResourceUnit enum
     /// Integrates with the pricing engine crate
     pub fn to_resource_units(spec: &ResourceSpec) -> Vec<(String, f64)> {
-        let units = crate::resources::to_pricing_units(spec);
+        let units = crate::core::resources::to_pricing_units(spec);
         units.into_iter().collect()
     }
 
@@ -342,7 +342,7 @@ pub struct BenchmarkProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::ResourceSpec;
+    use crate::core::resources::ResourceSpec;
 
     #[test]
     fn test_pricing_calculation() {

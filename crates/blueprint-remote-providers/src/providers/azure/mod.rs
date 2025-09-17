@@ -1,8 +1,8 @@
 //! Microsoft Azure provider implementation
 
-use crate::error::{Error, Result};
+use crate::core::error::{Error, Result};
 use crate::providers::common::{InstanceSelection, ProvisionedInfrastructure, ProvisioningConfig};
-use crate::resources::ResourceSpec;
+use crate::core::resources::ResourceSpec;
 
 /// Azure Virtual Machines provisioner
 pub struct AzureProvisioner;

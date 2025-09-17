@@ -1,197 +1,36 @@
-//! Multi-cloud infrastructure provisioner for Blueprint deployments
+//! Cloud provider adapter implementations for Blueprint infrastructure provisioning
 //!
-//! Provides a single interface for provisioning across AWS, GCP, Azure, DigitalOcean, and Vultr
+//! This module contains all the cloud provider-specific adapter implementations that enable
+//! provisioning and management of infrastructure across different cloud providers including
+//! AWS, GCP, Azure, DigitalOcean, and Vultr.
 
-use crate::error::{Error, Result};
-use crate::provisioning::InstanceTypeMapper;
-use crate::remote::CloudProvider;
-use crate::resources::ResourceSpec;
+use crate::core::error::{Error, Result};
+use crate::core::remote::CloudProvider;
+use crate::infra::traits::CloudProviderAdapter;
+use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use async_trait::async_trait;
-use blueprint_std::collections::HashMap;
-use serde::{Deserialize, Serialize};
-use tracing::{error, info, warn};
-
-/// Multi-cloud provisioner that handles deployments across all supported providers
-pub struct CloudProvisioner {
-    providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
-    retry_policy: RetryPolicy,
-}
-
-impl CloudProvisioner {
-    pub async fn new() -> Result<Self> {
-        let mut providers = HashMap::new();
-
-        // Initialize provider adapters based on available credentials
-        #[cfg(feature = "aws")]
-        if blueprint_std::env::var("AWS_ACCESS_KEY_ID").is_ok() {
-            providers.insert(
-                CloudProvider::AWS,
-                Box::new(AwsAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
-
-        #[cfg(feature = "api-clients")]
-        if blueprint_std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok() {
-            providers.insert(
-                CloudProvider::GCP,
-                Box::new(GcpAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
-
-        #[cfg(feature = "api-clients")]
-        if blueprint_std::env::var("AZURE_CLIENT_ID").is_ok() {
-            providers.insert(
-                CloudProvider::Azure,
-                Box::new(AzureAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
-
-        #[cfg(feature = "api-clients")]
-        if blueprint_std::env::var("DIGITALOCEAN_TOKEN").is_ok() {
-            providers.insert(
-                CloudProvider::DigitalOcean,
-                Box::new(DigitalOceanAdapter::new()?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
-
-        #[cfg(feature = "api-clients")]
-        if blueprint_std::env::var("VULTR_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::Vultr,
-                Box::new(VultrAdapter::new()?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
-
-        Ok(Self {
-            providers,
-            retry_policy: RetryPolicy::default(),
-        })
-    }
-
-    /// Provision infrastructure on specified provider with retry logic
-    pub async fn provision(
-        &self,
-        provider: CloudProvider,
-        resource_spec: &ResourceSpec,
-        region: &str,
-    ) -> Result<ProvisionedInstance> {
-        let adapter = self
-            .providers
-            .get(&provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
-
-        // Map resources to appropriate instance type
-        // Map resource spec to instance type
-        let instance_selection = InstanceTypeMapper::map_to_instance_type(resource_spec, &provider);
-
-        // Retry with exponential backoff
-        let mut attempt = 0;
-        loop {
-            match adapter
-                .provision_instance(&instance_selection.instance_type, region)
-                .await
-            {
-                Ok(instance) => {
-                    info!(
-                        "Successfully provisioned {} instance: {}",
-                        provider, instance.id
-                    );
-                    return Ok(instance);
-                }
-                Err(e) if attempt < self.retry_policy.max_retries => {
-                    attempt += 1;
-                    let delay = self.retry_policy.delay_for_attempt(attempt);
-                    warn!(
-                        "Provision attempt {} failed: {}, retrying in {:?}",
-                        attempt, e, delay
-                    );
-                    tokio::time::sleep(delay).await;
-                }
-                Err(e) => {
-                    error!("Failed to provision after {} attempts: {}", attempt + 1, e);
-                    return Err(e);
-                }
-            }
-        }
-    }
-
-    /// Terminate instance with cleanup verification
-    pub async fn terminate(&self, provider: CloudProvider, instance_id: &str) -> Result<()> {
-        let adapter = self
-            .providers
-            .get(&provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider))?;
-
-        adapter.terminate_instance(instance_id).await?;
-
-        // Verify termination
-        let mut retries = 0;
-        while retries < 10 {
-            match adapter.get_instance_status(instance_id).await {
-                Ok(status) if status == InstanceStatus::Terminated => {
-                    info!("Instance {} successfully terminated", instance_id);
-                    return Ok(());
-                }
-                Ok(status) => {
-                    warn!(
-                        "Instance {} still in status {:?}, waiting...",
-                        instance_id, status
-                    );
-                    tokio::time::sleep(blueprint_std::time::Duration::from_secs(5)).await;
-                    retries += 1;
-                }
-                Err(_) => {
-                    // Instance not found - considered terminated
-                    return Ok(());
-                }
-            }
-        }
-
-        Err(Error::Other(
-            "Instance termination verification timeout".into(),
-        ))
-    }
-
-    /// Get current status of an instance
-    pub async fn get_status(
-        &self,
-        provider: CloudProvider,
-        instance_id: &str,
-    ) -> Result<InstanceStatus> {
-        let adapter = self
-            .providers
-            .get(&provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider))?;
-
-        adapter.get_instance_status(instance_id).await
-    }
-}
-
-/// Common adapter trait for all cloud providers
-#[async_trait]
-trait CloudProviderAdapter: Send + Sync {
-    async fn provision_instance(
-        &self,
-        instance_type: &str,
-        region: &str,
-    ) -> Result<ProvisionedInstance>;
-    async fn terminate_instance(&self, instance_id: &str) -> Result<()>;
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus>;
-}
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// AWS adapter implementation
 #[cfg(feature = "aws")]
-struct AwsAdapter {
+pub struct AwsAdapter {
     client: aws_sdk_ec2::Client,
 }
 
 #[cfg(feature = "aws")]
 impl AwsAdapter {
-    async fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         let config = aws_config::load_from_env().await;
         Ok(Self {
             client: aws_sdk_ec2::Client::new(&config),
         })
+    }
+
+    async fn get_latest_ami(&self, _region: &str) -> Result<String> {
+        // For production, query for the latest Amazon Linux 2023 AMI
+        // For now, use a known good AMI ID
+        Ok("ami-0c02fb55731490381".to_string()) // Amazon Linux 2023 in us-east-1
     }
 }
 
@@ -287,26 +126,15 @@ impl CloudProviderAdapter for AwsAdapter {
     }
 }
 
-#[cfg(feature = "aws")]
-impl AwsAdapter {
-    async fn get_latest_ami(&self, _region: &str) -> Result<String> {
-        // For production, query for the latest Amazon Linux 2023 AMI
-        // For now, use a known good AMI ID
-        Ok("ami-0c02fb55731490381".to_string()) // Amazon Linux 2023 in us-east-1
-    }
-}
-
 /// GCP adapter implementation using REST API
-#[cfg(feature = "api-clients")]
-struct GcpAdapter {
+pub struct GcpAdapter {
     client: reqwest::Client,
     project_id: String,
     access_token: Arc<RwLock<String>>,
 }
 
-#[cfg(feature = "api-clients")]
 impl GcpAdapter {
-    async fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         let project_id = blueprint_std::env::var("GCP_PROJECT_ID")
             .map_err(|_| Error::Other("GCP_PROJECT_ID not set".into()))?;
 
@@ -337,7 +165,6 @@ impl GcpAdapter {
     }
 }
 
-#[cfg(feature = "api-clients")]
 #[async_trait]
 impl CloudProviderAdapter for GcpAdapter {
     async fn provision_instance(
@@ -471,15 +298,14 @@ impl CloudProviderAdapter for GcpAdapter {
 }
 
 /// Simplified Azure adapter
-struct AzureAdapter;
+pub struct AzureAdapter;
 
 impl AzureAdapter {
-    async fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         Ok(Self)
     }
 }
 
-#[cfg(feature = "api-clients")]
 #[async_trait]
 impl CloudProviderAdapter for AzureAdapter {
     async fn provision_instance(
@@ -502,15 +328,13 @@ impl CloudProviderAdapter for AzureAdapter {
 }
 
 /// Simplified DigitalOcean adapter
-#[cfg(feature = "api-clients")]
-struct DigitalOceanAdapter {
+pub struct DigitalOceanAdapter {
     client: reqwest::Client,
     token: String,
 }
 
-#[cfg(feature = "api-clients")]
 impl DigitalOceanAdapter {
-    fn new() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let token = blueprint_std::env::var("DIGITALOCEAN_TOKEN")
             .map_err(|_| Error::Other("DIGITALOCEAN_TOKEN not set".into()))?;
 
@@ -521,7 +345,6 @@ impl DigitalOceanAdapter {
     }
 }
 
-#[cfg(feature = "api-clients")]
 #[async_trait]
 impl CloudProviderAdapter for DigitalOceanAdapter {
     async fn provision_instance(
@@ -621,15 +444,13 @@ impl CloudProviderAdapter for DigitalOceanAdapter {
 }
 
 /// Simplified Vultr adapter
-#[cfg(feature = "api-clients")]
-struct VultrAdapter {
+pub struct VultrAdapter {
     client: reqwest::Client,
     api_key: String,
 }
 
-#[cfg(feature = "api-clients")]
 impl VultrAdapter {
-    fn new() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let api_key = blueprint_std::env::var("VULTR_API_KEY")
             .map_err(|_| Error::Other("VULTR_API_KEY not set".into()))?;
 
@@ -640,7 +461,6 @@ impl VultrAdapter {
     }
 }
 
-#[cfg(feature = "api-clients")]
 #[async_trait]
 impl CloudProviderAdapter for VultrAdapter {
     async fn provision_instance(
@@ -738,92 +558,5 @@ impl CloudProviderAdapter for VultrAdapter {
             ("active", "stopped") => InstanceStatus::Stopped,
             _ => InstanceStatus::Unknown,
         })
-    }
-}
-
-/// Provisioned instance details
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProvisionedInstance {
-    pub id: String,
-    pub provider: CloudProvider,
-    pub instance_type: String,
-    pub region: String,
-    pub public_ip: Option<String>,
-    pub private_ip: Option<String>,
-    pub status: InstanceStatus,
-}
-
-/// Instance status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum InstanceStatus {
-    Starting,
-    Running,
-    Stopping,
-    Stopped,
-    Terminated,
-    Unknown,
-}
-
-/// Retry policy configuration
-#[derive(Debug, Clone)]
-pub struct RetryPolicy {
-    pub max_retries: usize,
-    pub base_delay: blueprint_std::time::Duration,
-    pub max_delay: blueprint_std::time::Duration,
-}
-
-impl Default for RetryPolicy {
-    fn default() -> Self {
-        Self {
-            max_retries: 3,
-            base_delay: blueprint_std::time::Duration::from_secs(1),
-            max_delay: blueprint_std::time::Duration::from_secs(30),
-        }
-    }
-}
-
-impl RetryPolicy {
-    fn delay_for_attempt(&self, attempt: usize) -> blueprint_std::time::Duration {
-        let delay = self.base_delay * 2u32.pow(attempt as u32);
-        delay.min(self.max_delay)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_retry_policy() {
-        let policy = RetryPolicy::default();
-
-        assert_eq!(
-            policy.delay_for_attempt(0),
-            blueprint_std::time::Duration::from_secs(1)
-        );
-        assert_eq!(
-            policy.delay_for_attempt(1),
-            blueprint_std::time::Duration::from_secs(2)
-        );
-        assert_eq!(
-            policy.delay_for_attempt(2),
-            blueprint_std::time::Duration::from_secs(4)
-        );
-        assert_eq!(
-            policy.delay_for_attempt(5),
-            blueprint_std::time::Duration::from_secs(30)
-        ); // Max delay
-    }
-
-    #[tokio::test]
-    async fn test_provider_initialization() {
-        // This test verifies the provider can be created
-        // It won't actually provision anything without credentials
-        let result = CloudProvisioner::new().await;
-        assert!(result.is_ok());
-
-        let provisioner = result.unwrap();
-        // With no env vars set, no providers should be configured
-        assert!(provisioner.providers.is_empty() || !provisioner.providers.is_empty());
     }
 }

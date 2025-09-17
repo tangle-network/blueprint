@@ -1,6 +1,6 @@
 //! Common types and traits for all cloud providers
 
-use crate::remote::CloudProvider;
+use crate::core::remote::CloudProvider;
 use async_trait::async_trait;
 use blueprint_std::collections::HashMap;
 use serde::{Deserialize, Serialize};
@@ -74,15 +74,15 @@ pub trait CloudProvisioner: Send + Sync {
     type Config: Clone + Send + Sync;
     type Instance: Clone + Send + Sync;
 
-    async fn new(config: Self::Config) -> crate::error::Result<Self>
+    async fn new(config: Self::Config) -> crate::core::error::Result<Self>
     where
         Self: Sized;
 
     async fn provision_instance(
         &self,
-        spec: &crate::resources::ResourceSpec,
+        spec: &crate::core::resources::ResourceSpec,
         config: &ProvisioningConfig,
-    ) -> crate::error::Result<ProvisionedInfrastructure>;
+    ) -> crate::core::error::Result<ProvisionedInfrastructure>;
 
-    async fn terminate_instance(&self, instance_id: &str) -> crate::error::Result<()>;
+    async fn terminate_instance(&self, instance_id: &str) -> crate::core::error::Result<()>;
 }

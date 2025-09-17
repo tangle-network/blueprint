@@ -7,7 +7,7 @@
 mod tests {
     use super::*;
     use crate::monitoring::discovery::{CloudCredentials, MachineTypeDiscovery};
-    use crate::remote::CloudProvider;
+    use crate::core::remote::CloudProvider;
     use std::env;
 
     /// Test fetching actual DigitalOcean droplet sizes via API
@@ -28,47 +28,39 @@ mod tests {
             ..Default::default()
         };
 
-        #[cfg(feature = "api-clients")]
-        {
-            let machines = discovery
-                .discover_machine_types(&CloudProvider::DigitalOcean, "nyc3", &credentials)
-                .await
-                .expect("Failed to fetch DigitalOcean sizes");
+        let machines = discovery
+            .discover_machine_types(&CloudProvider::DigitalOcean, "nyc3", &credentials)
+            .await
+            .expect("Failed to fetch DigitalOcean sizes");
 
-            assert!(
-                !machines.is_empty(),
-                "Should discover at least one machine type"
-            );
+        assert!(
+            !machines.is_empty(),
+            "Should discover at least one machine type"
+        );
 
-            // Verify we got API data, not fallback
-            let has_real_data = machines.iter().any(|m| m.hourly_price.is_some());
-            assert!(has_real_data, "Should have pricing data from API");
+        // Verify we got API data, not fallback
+        let has_real_data = machines.iter().any(|m| m.hourly_price.is_some());
+        assert!(has_real_data, "Should have pricing data from API");
 
-            // Verify expected droplet sizes exist
-            let size_names: Vec<&str> = machines.iter().map(|m| m.name.as_str()).collect();
-            assert!(
-                size_names.contains(&"s-1vcpu-1gb"),
-                "Should include basic droplet size"
-            );
+        // Verify expected droplet sizes exist
+        let size_names: Vec<&str> = machines.iter().map(|m| m.name.as_str()).collect();
+        assert!(
+            size_names.contains(&"s-1vcpu-1gb"),
+            "Should include basic droplet size"
+        );
 
+        println!(
+            "✅ Fetched {} DigitalOcean droplet sizes from API",
+            machines.len()
+        );
+        for machine in machines.iter().take(5) {
             println!(
-                "✅ Fetched {} DigitalOcean droplet sizes from API",
-                machines.len()
+                "  - {}: {} vCPUs, {:.1}GB RAM, ${:.3}/hour",
+                machine.name,
+                machine.vcpus,
+                machine.memory_gb,
+                machine.hourly_price.unwrap_or(0.0)
             );
-            for machine in machines.iter().take(5) {
-                println!(
-                    "  - {}: {} vCPUs, {:.1}GB RAM, ${:.3}/hour",
-                    machine.name,
-                    machine.vcpus,
-                    machine.memory_gb,
-                    machine.hourly_price.unwrap_or(0.0)
-                );
-            }
-        }
-
-        #[cfg(not(feature = "api-clients"))]
-        {
-            println!("⚠️ Skipping API test - api-clients feature not enabled");
         }
     }
 
@@ -90,37 +82,29 @@ mod tests {
             ..Default::default()
         };
 
-        #[cfg(feature = "api-clients")]
-        {
-            let machines = discovery
-                .discover_machine_types(&CloudProvider::Vultr, "ewr", &credentials)
-                .await
-                .expect("Failed to fetch Vultr plans");
+        let machines = discovery
+            .discover_machine_types(&CloudProvider::Vultr, "ewr", &credentials)
+            .await
+            .expect("Failed to fetch Vultr plans");
 
-            assert!(
-                !machines.is_empty(),
-                "Should discover at least one machine type"
+        assert!(
+            !machines.is_empty(),
+            "Should discover at least one machine type"
+        );
+
+        // Verify we got API data, not fallback
+        let has_real_data = machines.iter().any(|m| m.hourly_price.is_some());
+        assert!(has_real_data, "Should have pricing data from API");
+
+        println!("✅ Fetched {} Vultr plans from API", machines.len());
+        for machine in machines.iter().take(5) {
+            println!(
+                "  - {}: {} vCPUs, {:.1}GB RAM, ${:.3}/hour",
+                machine.name,
+                machine.vcpus,
+                machine.memory_gb,
+                machine.hourly_price.unwrap_or(0.0)
             );
-
-            // Verify we got API data, not fallback
-            let has_real_data = machines.iter().any(|m| m.hourly_price.is_some());
-            assert!(has_real_data, "Should have pricing data from API");
-
-            println!("✅ Fetched {} Vultr plans from API", machines.len());
-            for machine in machines.iter().take(5) {
-                println!(
-                    "  - {}: {} vCPUs, {:.1}GB RAM, ${:.3}/hour",
-                    machine.name,
-                    machine.vcpus,
-                    machine.memory_gb,
-                    machine.hourly_price.unwrap_or(0.0)
-                );
-            }
-        }
-
-        #[cfg(not(feature = "api-clients"))]
-        {
-            println!("⚠️ Skipping API test - api-clients feature not enabled");
         }
     }
 
@@ -228,7 +212,7 @@ mod tests {
     #[tokio::test]
     async fn test_provider_cost_comparison() {
         use crate::pricing::integration::PricingCalculator;
-        use crate::resources::ResourceSpec;
+        use crate::core::resources::ResourceSpec;
 
         let calculator = PricingCalculator::new().expect("Should create pricing calculator");
 

@@ -1,9 +1,9 @@
 //! Integration hooks for remote deployments with Blueprint Manager
 
 use crate::deployment::tracker::{DeploymentTracker, DeploymentType};
-use crate::error::Result;
-use crate::remote::CloudProvider;
-use crate::resources::ResourceSpec;
+use crate::core::error::{Error, Result};
+use crate::core::remote::CloudProvider;
+use crate::core::resources::ResourceSpec;
 use blueprint_std::collections::HashMap;
 use blueprint_std::sync::Arc;
 use chrono::{DateTime, Utc};
@@ -248,13 +248,13 @@ pub async fn ttl_checking_task(
 /// Extension for Blueprint sources to support remote deployments
 pub struct RemoteSourceExtension {
     registry: Arc<RemoteDeploymentRegistry>,
-    provisioner: Arc<crate::infrastructure::InfrastructureProvisioner>,
+    provisioner: Arc<crate::infra::CloudProvisioner>,
 }
 
 impl RemoteSourceExtension {
     pub fn new(
         registry: Arc<RemoteDeploymentRegistry>,
-        provisioner: Arc<crate::infrastructure::InfrastructureProvisioner>,
+        provisioner: Arc<crate::infra::CloudProvisioner>,
     ) -> Self {
         Self {
             registry,
@@ -273,20 +273,20 @@ impl RemoteSourceExtension {
         ttl_seconds: Option<u64>,
     ) -> Result<RemoteDeploymentConfig> {
         // Create provisioning config
-        let config = crate::infrastructure::ProvisioningConfig {
+        let config = crate::providers::common::ProvisioningConfig {
             name: format!("{}-{}", blueprint_id, service_id),
             region: region.clone(),
             ..Default::default()
         };
 
         // Provision the infrastructure
-        let instance = self.provisioner.provision(&resource_spec, &config).await?;
+        let instance = self.provisioner.provision(CloudProvider::AWS, &resource_spec, "default").await?;
 
         let config = RemoteDeploymentConfig {
             deployment_type: deployment_type_from_provider(&provider),
             provider: Some(provider),
             region: Some(region),
-            instance_id: instance.instance_id,
+            instance_id: instance.id,
             resource_spec,
             ttl_seconds,
             deployed_at: Utc::now(),
@@ -325,7 +325,7 @@ impl RemoteDeploymentExtensions {
     pub async fn initialize(
         state_dir: &blueprint_std::path::Path,
         enable_ttl: bool,
-        provisioner: Arc<crate::infrastructure::InfrastructureProvisioner>,
+        provisioner: Arc<crate::infra::CloudProvisioner>,
     ) -> Result<Self> {
         // Initialize deployment tracker
         let tracker = Arc::new(DeploymentTracker::new(state_dir).await?);
@@ -433,7 +433,7 @@ mod tests {
             provider: Some(CloudProvider::AWS),
             region: Some("us-east-1".to_string()),
             instance_id: "i-1234567890".to_string(),
-            resource_spec: crate::resources::ResourceSpec::basic(),
+            resource_spec: crate::core::resources::ResourceSpec::basic(),
             ttl_seconds: Some(3600),
             deployed_at: Utc::now(),
         };
@@ -484,7 +484,7 @@ mod tests {
             provider: Some(CloudProvider::GCP),
             region: Some("us-central1".to_string()),
             instance_id: "instance-123".to_string(),
-            resource_spec: crate::resources::ResourceSpec::basic(),
+            resource_spec: crate::core::resources::ResourceSpec::basic(),
             ttl_seconds: None,
             deployed_at: Utc::now(),
         };

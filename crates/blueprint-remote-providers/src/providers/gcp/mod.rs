@@ -1,9 +1,9 @@
 //! Google Cloud Platform provider implementation
 
-use crate::error::{Error, Result};
+use crate::core::error::{Error, Result};
 use crate::providers::common::{InstanceSelection, ProvisionedInfrastructure, ProvisioningConfig};
-use crate::resources::ResourceSpec;
-use crate::remote::CloudProvider;
+use crate::core::resources::ResourceSpec;
+use crate::core::remote::CloudProvider;
 use blueprint_std::collections::HashMap;
 use tracing::{info, warn};
 
@@ -11,7 +11,6 @@ use tracing::{info, warn};
 pub struct GcpProvisioner {
     #[cfg(feature = "gcp")]
     project_id: String,
-    #[cfg(feature = "api-clients")]
     client: reqwest::Client,
     #[cfg(feature = "gcp")]
     access_token: Option<String>,
@@ -25,7 +24,6 @@ impl GcpProvisioner {
         // For now, use environment variable or metadata service
         let access_token = Self::get_access_token().await?;
         
-        #[cfg(feature = "api-clients")]
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
@@ -33,7 +31,6 @@ impl GcpProvisioner {
         
         Ok(Self {
             project_id,
-            #[cfg(feature = "api-clients")]
             client,
             access_token: Some(access_token),
         })
@@ -55,7 +52,6 @@ impl GcpProvisioner {
         }
         
         // Try metadata service (for GCE instances)
-        #[cfg(feature = "api-clients")]
         {
             let metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
             let client = reqwest::Client::new();
@@ -80,7 +76,7 @@ impl GcpProvisioner {
     }
 
     /// Provision a GCE instance
-    #[cfg(all(feature = "gcp", feature = "api-clients"))]
+    #[cfg(feature = "gcp")]
     pub async fn provision_instance(
         &self,
         spec: &ResourceSpec,
@@ -192,19 +188,19 @@ impl GcpProvisioner {
         })
     }
     
-    #[cfg(not(all(feature = "gcp", feature = "api-clients")))]
+    #[cfg(not(feature = "gcp"))]
     pub async fn provision_instance(
         &self,
         _spec: &ResourceSpec,
         _config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         Err(Error::ConfigurationError(
-            "GCP provisioning requires 'gcp' and 'api-clients' features".into(),
+            "GCP provisioning requires 'gcp' feature".into(),
         ))
     }
     
     /// Wait for GCP operation to complete
-    #[cfg(all(feature = "gcp", feature = "api-clients"))]
+    #[cfg(feature = "gcp")]
     async fn wait_for_operation(&self, operation_url: &str) -> Result<()> {
         let max_attempts = 60;
         let mut attempts = 0;
@@ -319,7 +315,7 @@ impl GcpProvisioner {
     }
     
     /// Terminate a GCE instance
-    #[cfg(all(feature = "gcp", feature = "api-clients"))]
+    #[cfg(feature = "gcp")]
     pub async fn terminate_instance(&self, instance_name: &str, zone: &str) -> Result<()> {
         let url = format!(
             "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
@@ -343,7 +339,7 @@ impl GcpProvisioner {
         Ok(())
     }
     
-    #[cfg(not(all(feature = "gcp", feature = "api-clients")))]
+    #[cfg(not(feature = "gcp"))]
     pub async fn terminate_instance(&self, _instance_name: &str, _zone: &str) -> Result<()> {
         Ok(())
     }

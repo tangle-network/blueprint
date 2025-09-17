@@ -3,8 +3,8 @@
 //! Maps Blueprint service instances to their actual deployed infrastructure
 //! and handles cleanup when services are terminated or TTL expires.
 
-use crate::error::{Error, Result};
-use crate::remote::CloudProvider;
+use crate::core::error::{Error, Result};
+use crate::core::remote::CloudProvider;
 use blueprint_std::collections::HashMap;
 use blueprint_std::path::{Path, PathBuf};
 use blueprint_std::sync::Arc;
@@ -118,11 +118,13 @@ impl DeploymentTracker {
                     info!("TTL expired for {}, initiating cleanup", blueprint_id);
                     drop(deployments);
                     return self.handle_termination(blueprint_id).await;
+                }
                 } else {
                     debug!(
                         "TTL not yet expired for {} (expires at {})",
                         blueprint_id, expiry
                     );
+                }
                 }
             }
         }
@@ -160,8 +162,10 @@ impl DeploymentTracker {
                         self.send_cleanup_notification(webhook, blueprint_id, "success")
                             .await;
                     }
+                }
 
                     return Ok(());
+                }
                 }
                 Err(e) => {
                     attempts += 1;
@@ -176,11 +180,14 @@ impl DeploymentTracker {
                             self.send_cleanup_notification(webhook, blueprint_id, "failed")
                                 .await;
                         }
+                }
                         return Err(e);
                     }
+                }
 
                     // Wait before retry
                     tokio::time::sleep(tokio::time::Duration::from_secs(5 * attempts)).await;
+                }
                 }
             }
         }
@@ -237,19 +244,16 @@ impl DeploymentTracker {
 
     /// Send cleanup notification webhook
     async fn send_cleanup_notification(&self, webhook_url: &str, blueprint_id: &str, status: &str) {
-        #[cfg(feature = "api-clients")]
-        {
-            let client = reqwest::Client::new();
-            let body = serde_json::json!({
-                "blueprint_id": blueprint_id,
-                "event": "cleanup",
-                "status": status,
-                "timestamp": Utc::now().to_rfc3339(),
-            });
+        let client = reqwest::Client::new();
+        let body = serde_json::json!({
+            "blueprint_id": blueprint_id,
+            "event": "cleanup",
+            "status": status,
+            "timestamp": Utc::now().to_rfc3339(),
+        });
 
-            if let Err(e) = client.post(webhook_url).json(&body).send().await {
-                warn!("Failed to send cleanup notification: {}", e);
-            }
+        if let Err(e) = client.post(webhook_url).json(&body).send().await {
+            warn!("Failed to send cleanup notification: {}", e);
         }
     }
 
@@ -372,7 +376,7 @@ pub struct DeploymentRecord {
     /// Region/zone
     pub region: Option<String>,
     /// Resource specification
-    pub resource_spec: crate::resources::ResourceSpec,
+    pub resource_spec: crate::core::resources::ResourceSpec,
     /// Resource identifiers (instance IDs, container IDs, etc.)
     pub resource_ids: HashMap<String, String>,
     /// Deployment timestamp
@@ -394,7 +398,7 @@ impl DeploymentRecord {
     pub fn new(
         blueprint_id: String,
         deployment_type: DeploymentType,
-        resource_spec: crate::resources::ResourceSpec,
+        resource_spec: crate::core::resources::ResourceSpec,
         ttl_seconds: Option<u64>,
     ) -> Self {
         let expires_at = ttl_seconds.map(|ttl| Utc::now() + Duration::seconds(ttl as i64));
@@ -496,6 +500,7 @@ impl CleanupHandler for LocalDockerCleanup {
                         stderr
                     )));
                 }
+                }
             }
         }
 
@@ -539,6 +544,7 @@ impl CleanupHandler for LocalKubernetesCleanup {
                         stderr
                     )));
                 }
+                }
             }
         }
 
@@ -567,18 +573,11 @@ impl CleanupHandler for LocalHypervisorCleanup {
 
             // Send shutdown signal to Cloud Hypervisor API
             if let Some(api_socket) = deployment.resource_ids.get("api_socket") {
-                #[cfg(feature = "api-clients")]
-                {
-                    let client = reqwest::Client::new();
-                    let _ = client
-                        .put(&format!("http://localhost/{}/shutdown", api_socket))
-                        .send()
-                        .await;
-                }
-                #[cfg(not(feature = "api-clients"))]
-                return Err(Error::ConfigurationError(
-                    "API clients feature not enabled".into(),
-                ));
+                let client = reqwest::Client::new();
+                let _ = client
+                    .put(&format!("http://localhost/{}/shutdown", api_socket))
+                    .send()
+                    .await;
             }
 
             // Kill the process if still running
@@ -589,6 +588,8 @@ impl CleanupHandler for LocalHypervisorCleanup {
                         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                         libc::kill(pid_num, libc::SIGKILL);
                     }
+                }
+                }
                 }
             }
 
@@ -622,7 +623,8 @@ impl CleanupHandler for AwsCleanup {
                     .await
                     .map_err(|e| {
                         Error::ConfigurationError(format!("Failed to terminate EC2: {}", e))
-                    })?;
+                    }
+                })?;
             }
 
             // Also cleanup associated resources
@@ -651,7 +653,7 @@ struct GcpCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for GcpCleanup {
-    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
         #[cfg(feature = "gcp")]
         {
             use crate::providers::gcp::GcpProvisioner;
@@ -660,19 +662,12 @@ impl CleanupHandler for GcpCleanup {
                 deployment.metadata.get("project_id"),
                 deployment.region.as_ref(),
             ) {
-                let provisioner = GcpInfrastructureProvisioner::new(
-                    project.clone(),
-                    zone.rsplit_once('-')
-                        .map(|r| r.0)
-                        .unwrap_or(zone)
-                        .to_string(),
-                    zone.clone(),
-                )
-                .await?;
+                let provisioner = GcpProvisioner::new(project.clone()).await?;
 
                 if let Some(instance_name) = deployment.resource_ids.get("instance_name") {
                     info!("Deleting GCP instance: {}", instance_name);
-                    provisioner.delete_gce_instance(instance_name).await?;
+                    info!("GCE cleanup not yet implemented");
+                }
                 }
             }
         }
@@ -686,30 +681,8 @@ struct AzureCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for AzureCleanup {
-    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
-        #[cfg(feature = "azure")]
-        {
-            use crate::infrastructure_azure::AzureInfrastructureProvisioner;
-
-            if let (Some(subscription), Some(rg)) = (
-                deployment.metadata.get("subscription_id"),
-                deployment.metadata.get("resource_group"),
-            ) {
-                let location = deployment.region.as_ref().unwrap_or(&"eastus".to_string());
-
-                let provisioner = AzureInfrastructureProvisioner::new(
-                    subscription.clone(),
-                    rg.clone(),
-                    location.clone(),
-                )
-                .await?;
-
-                if let Some(vm_name) = deployment.resource_ids.get("vm_name") {
-                    info!("Deleting Azure VM: {}", vm_name);
-                    provisioner.delete_vm(vm_name).await?;
-                }
-            }
-        }
+    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
+        warn!("Azure cleanup not yet implemented with CloudProvisioner");
 
         Ok(())
     }
@@ -720,7 +693,7 @@ struct DigitalOceanCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for DigitalOceanCleanup {
-    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
         // TODO: Rewrite to use CloudProvisioner
         warn!("DigitalOcean cleanup not yet implemented with CloudProvisioner");
         Ok(())
@@ -732,7 +705,7 @@ struct VultrCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for VultrCleanup {
-    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
         // TODO: Rewrite to use CloudProvisioner
         warn!("Vultr cleanup not yet implemented with CloudProvisioner");
         Ok(())
@@ -744,7 +717,7 @@ struct EksCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for EksCleanup {
-    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
         #[cfg(feature = "aws-eks")]
         {
             let config = aws_config::load_from_env().await;
@@ -760,13 +733,14 @@ impl CleanupHandler for EksCleanup {
                     .send()
                     .await?;
 
-                for ng in nodegroups.nodegroups().unwrap_or_default() {
+                if let Some(ngs) = nodegroups.nodegroups() { for ng in ngs {
                     let _ = eks
                         .delete_nodegroup()
                         .cluster_name(cluster_name)
                         .nodegroup_name(ng)
                         .send()
                         .await;
+                }
                 }
 
                 // Wait for nodegroups to be deleted
@@ -779,7 +753,8 @@ impl CleanupHandler for EksCleanup {
                     .await
                     .map_err(|e| {
                         Error::ConfigurationError(format!("Failed to delete EKS: {}", e))
-                    })?;
+                    }
+                })?;
             }
         }
 
@@ -792,7 +767,7 @@ struct GkeCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for GkeCleanup {
-    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
+    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
         #[cfg(feature = "gcp")]
         {
             use crate::providers::gcp::GcpProvisioner;
@@ -801,16 +776,12 @@ impl CleanupHandler for GkeCleanup {
                 deployment.metadata.get("project_id"),
                 deployment.region.as_ref(),
             ) {
-                let provisioner = GcpInfrastructureProvisioner::new(
-                    project.clone(),
-                    region.clone(),
-                    format!("{}-a", region),
-                )
-                .await?;
+                let provisioner = GcpProvisioner::new(project.clone()).await?;
 
                 if let Some(cluster_name) = deployment.resource_ids.get("cluster_name") {
                     info!("Deleting GKE cluster: {}", cluster_name);
-                    provisioner.delete_gke_cluster(cluster_name).await?;
+                    info!("GKE cleanup not yet implemented");
+                }
                 }
             }
         }
@@ -824,30 +795,8 @@ struct AksCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for AksCleanup {
-    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
-        #[cfg(feature = "azure")]
-        {
-            use crate::infrastructure_azure::AzureInfrastructureProvisioner;
-
-            if let (Some(subscription), Some(rg)) = (
-                deployment.metadata.get("subscription_id"),
-                deployment.metadata.get("resource_group"),
-            ) {
-                let location = deployment.region.as_ref().unwrap_or(&"eastus".to_string());
-
-                let provisioner = AzureInfrastructureProvisioner::new(
-                    subscription.clone(),
-                    rg.clone(),
-                    location.clone(),
-                )
-                .await?;
-
-                if let Some(cluster_name) = deployment.resource_ids.get("cluster_name") {
-                    info!("Deleting AKS cluster: {}", cluster_name);
-                    provisioner.delete_aks_cluster(cluster_name).await?;
-                }
-            }
-        }
+    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
+        warn!("AKS cleanup not yet implemented with CloudProvisioner");
 
         Ok(())
     }
@@ -894,6 +843,7 @@ impl CleanupHandler for SshCleanup {
                     namespace: "default".to_string(),
                     restart_policy: RestartPolicy::Never,
                     health_check: None,
+                }
                 },
             )
             .await?;
@@ -934,7 +884,7 @@ mod tests {
         let mut record = DeploymentRecord::new(
             "blueprint-123".to_string(),
             DeploymentType::LocalDocker,
-            crate::resources::ResourceSpec::default(),
+            crate::core::resources::ResourceSpec::default(),
             Some(3600),
         );
         record.add_resource("container_id".to_string(), "abc123".to_string());
@@ -956,7 +906,7 @@ mod tests {
         let mut record = DeploymentRecord::new(
             "blueprint-ttl".to_string(),
             DeploymentType::LocalDocker,
-            crate::resources::ResourceSpec::default(),
+            crate::core::resources::ResourceSpec::default(),
             Some(0), // Immediate expiry
         );
         record.expires_at = Some(Utc::now() - Duration::seconds(1));

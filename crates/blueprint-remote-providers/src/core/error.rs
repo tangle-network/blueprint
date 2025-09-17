@@ -27,7 +27,7 @@ pub enum Error {
     Io(#[from] blueprint_std::io::Error),
 
     #[error("Provider {0:?} not configured")]
-    ProviderNotConfigured(crate::remote::CloudProvider),
+    ProviderNotConfigured(crate::core::remote::CloudProvider),
 
     #[error("Serialization error: {0}")]
     SerializationError(String),

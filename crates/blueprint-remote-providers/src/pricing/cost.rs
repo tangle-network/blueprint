@@ -1,4 +1,4 @@
-use crate::remote::CloudProvider;
+use crate::core::remote::CloudProvider;
 use blueprint_std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
