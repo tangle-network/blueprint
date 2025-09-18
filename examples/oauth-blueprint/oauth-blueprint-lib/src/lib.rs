@@ -12,7 +12,7 @@ use blueprint_sdk::contexts::tangle::TangleClient;
 use blueprint_sdk::extract::Context;
 use blueprint_sdk::macros::debug_job;
 use blueprint_sdk::runner::BackgroundService;
-use blueprint_sdk::runner::config::BlueprintEnvironment;
+
 use blueprint_sdk::runner::error::RunnerError;
 use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
 use std::collections::{HashMap, HashSet};
@@ -236,7 +236,7 @@ mod tests {
             .expect("Failed to setup test harness");
 
         OAuthBlueprintContext {
-            tangle_client: Arc::new(harness.client),
+            tangle_client: Arc::new(harness.client().clone()),
         }
     }
 
