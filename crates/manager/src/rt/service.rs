@@ -6,6 +6,8 @@ use crate::error::{Error, Result};
 use crate::rt::ResourceLimits;
 #[cfg(feature = "containers")]
 use crate::rt::container::ContainerInstance;
+#[cfg(feature = "remote-providers")]
+use crate::rt::remote::RemoteServiceInstance;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_core::error;
 use blueprint_core::{info, warn};
@@ -45,6 +47,8 @@ enum Runtime {
     Hypervisor(HypervisorInstance),
     #[cfg(feature = "containers")]
     Container(ContainerInstance),
+    #[cfg(feature = "remote-providers")]
+    Remote(RemoteServiceInstance),
     Native(NativeProcess),
 }
 
@@ -280,6 +284,28 @@ impl Service {
         })
     }
 
+    /// Create a new `Service` instance for a remote deployment
+    ///
+    /// # Errors
+    ///
+    /// See [`create_bridge()`]
+    #[cfg(feature = "remote-providers")]
+    pub async fn new_remote(
+        ctx: &BlueprintManagerContext,
+        runtime_dir: impl AsRef<Path>,
+        service_name: &str,
+        remote_instance: RemoteServiceInstance,
+    ) -> Result<Service> {
+        let (_, bridge_handle, alive_rx) =
+            create_bridge(ctx, runtime_dir.as_ref(), service_name, true).await?;
+
+        Ok(Self {
+            runtime: Runtime::Remote(remote_instance),
+            bridge: bridge_handle,
+            alive_rx: Some(alive_rx),
+        })
+    }
+
     /// Check the status of the running service
     ///
     /// If this returns an error, the service may be dead.
@@ -294,6 +320,8 @@ impl Service {
             Runtime::Hypervisor(hypervisor) => hypervisor.status().await,
             #[cfg(feature = "containers")]
             Runtime::Container(container) => container.status().await,
+            #[cfg(feature = "remote-providers")]
+            Runtime::Remote(remote) => remote.status().await,
             Runtime::Native(NativeProcess::Started(instance)) => Ok(instance.status()),
             Runtime::Native(NativeProcess::NotStarted(_)) => Ok(Status::NotStarted),
         }
@@ -327,6 +355,13 @@ impl Service {
             Runtime::Container(container) => {
                 container.start().await.map_err(|e| {
                     error!("Failed to start container: {e}");
+                    e
+                })?;
+            }
+            #[cfg(feature = "remote-providers")]
+            Runtime::Remote(remote) => {
+                remote.start().await.map_err(|e| {
+                    error!("Failed to start remote service: {e}");
                     e
                 })?;
             }
@@ -373,7 +408,7 @@ impl Service {
     ///
     /// * [`HypervisorInstance::shutdown()`]
     /// * [`BridgeHandle::shutdown()`]
-    pub async fn shutdown(self) -> Result<()> {
+    pub async fn shutdown(mut self) -> Result<()> {
         match self.runtime {
             #[cfg(feature = "vm-sandbox")]
             Runtime::Hypervisor(hypervisor) => {
@@ -386,6 +421,13 @@ impl Service {
             Runtime::Container(container) => {
                 container.shutdown().await.map_err(|e| {
                     error!("Failed to shut down container instance: {e}");
+                    e
+                })?;
+            }
+            #[cfg(feature = "remote-providers")]
+            Runtime::Remote(mut remote) => {
+                remote.shutdown().await.map_err(|e| {
+                    error!("Failed to shut down remote service: {e}");
                     e
                 })?;
             }

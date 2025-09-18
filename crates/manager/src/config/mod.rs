@@ -65,6 +65,11 @@ pub struct BlueprintManagerConfig {
     /// Authentication proxy options
     #[command(flatten)]
     pub auth_proxy_opts: AuthProxyOpts,
+
+    /// Remote deployment options for cloud providers
+    #[cfg(feature = "remote-providers")]
+    #[command(flatten)]
+    pub remote_deployment_opts: RemoteDeploymentOptions,
 }
 
 impl BlueprintManagerConfig {
@@ -188,6 +193,49 @@ impl Default for AuthProxyOpts {
         Self {
             auth_proxy_host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             auth_proxy_port: DEFAULT_AUTH_PROXY_PORT,
+        }
+    }
+}
+
+/// Options for remote cloud deployments
+#[cfg(feature = "remote-providers")]
+#[derive(Debug, Parser, Clone)]
+pub struct RemoteDeploymentOptions {
+    /// Enable remote cloud deployments (AWS, GCP, Azure, etc.)
+    #[arg(long)]
+    pub enable_remote_deployments: bool,
+    
+    /// Automatically deploy to cheapest available provider
+    #[arg(long)]
+    pub auto_select_cheapest: bool,
+    
+    /// Preferred cloud provider (aws, gcp, azure, digitalocean, vultr)
+    #[arg(long)]
+    pub preferred_provider: Option<String>,
+    
+    /// Maximum hourly cost in USD for auto-deployments
+    #[arg(long, default_value_t = 1.0)]
+    pub max_hourly_cost: f64,
+    
+    /// Path to cloud credentials file
+    #[arg(long)]
+    pub cloud_credentials_path: Option<PathBuf>,
+    
+    /// Use Kubernetes for deployments when available
+    #[arg(long)]
+    pub prefer_kubernetes: bool,
+}
+
+#[cfg(feature = "remote-providers")]
+impl Default for RemoteDeploymentOptions {
+    fn default() -> Self {
+        Self {
+            enable_remote_deployments: false,
+            auto_select_cheapest: true,
+            preferred_provider: None,
+            max_hourly_cost: 1.0,
+            cloud_credentials_path: None,
+            prefer_kubernetes: false,
         }
     }
 }

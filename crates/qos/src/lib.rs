@@ -3,6 +3,7 @@ pub mod error;
 pub mod heartbeat;
 pub mod logging;
 pub mod metrics;
+pub mod remote;
 pub mod servers;
 pub mod service;
 pub mod service_builder;

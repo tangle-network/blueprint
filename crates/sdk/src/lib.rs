@@ -181,6 +181,13 @@ pub mod build {
     pub use blueprint_build_utils::*;
 }
 
+// Remote cloud deployment providers
+#[cfg(feature = "remote-providers")]
+/// Remote cloud deployment providers for Blueprint instances
+pub mod remote {
+    pub use blueprint_remote_providers::*;
+}
+
 #[cfg(feature = "networking")]
 /// Networking utilities for blueprints
 pub mod networking {
