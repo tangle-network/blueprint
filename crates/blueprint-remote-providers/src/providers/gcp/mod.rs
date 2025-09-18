@@ -1,9 +1,9 @@
 //! Google Cloud Platform provider implementation
 
 use crate::core::error::{Error, Result};
+use crate::core::remote::CloudProvider;
 use crate::providers::common::{InstanceSelection, ProvisionedInfrastructure, ProvisioningConfig};
 use crate::core::resources::ResourceSpec;
-use crate::core::remote::CloudProvider;
 use blueprint_std::collections::HashMap;
 use tracing::{info, warn};
 

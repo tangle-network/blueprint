@@ -4,7 +4,7 @@ use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use blueprint_std::collections::HashMap;
 use serde::Deserialize;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Instance information with specs and pricing
 #[derive(Clone, Debug)]

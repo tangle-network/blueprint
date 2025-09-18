@@ -3,12 +3,16 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 // Core architecture
+pub mod auth_integration;
 pub mod core;
 pub mod infra;
-pub mod deployment;
 pub mod monitoring;
 pub mod pricing;
 pub mod providers;
+pub mod secure_bridge;
+pub mod security;
+
+pub mod deployment;
 
 // Primary exports
 pub use core::{Error, Result, CloudProvider, ResourceSpec};

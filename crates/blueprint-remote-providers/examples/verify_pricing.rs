@@ -3,7 +3,7 @@
 
 use blueprint_remote_providers::{
     pricing::fetcher::PricingFetcher,
-    remote::CloudProvider,
+    core::remote::CloudProvider,
 };
 
 #[tokio::main]

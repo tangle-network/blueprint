@@ -170,7 +170,7 @@ impl SshDeploymentClient {
     ) -> Result<String> {
         let limits = ResourceLimits::from_spec(spec);
 
-        let mut cmd = match self.runtime {
+        let cmd = match self.runtime {
             ContainerRuntime::Docker => {
                 let mut docker_cmd = format!("docker create");
 

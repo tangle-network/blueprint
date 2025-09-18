@@ -28,9 +28,9 @@ toml = "0.8"
 tracing.workspace = true
 
 # Blueprint dependencies (removed blueprint-manager and blueprint-qos to avoid cyclic dependency)
-blueprint-auth = { path = "../auth" }
-blueprint-keystore = { path = "../keystore" }
-blueprint-pricing-engine = { path = "../pricing-engine", optional = true }
+blueprint-auth.workspace = true
+blueprint-keystore.workspace = true
+blueprint-pricing-engine = { workspace = true, optional = true }
 parity-scale-codec = { workspace = true, features = ["derive"] }
 
 # Provider-specific dependencies

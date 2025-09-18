@@ -1,6 +1,6 @@
 //! Traits for cloud provider adapters
 
-use crate::core::error::{Error, Result};
+use crate::core::error::Result;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use async_trait::async_trait;
 

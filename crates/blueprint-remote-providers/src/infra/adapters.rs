@@ -21,7 +21,7 @@ pub struct AwsAdapter {
 #[cfg(feature = "aws")]
 impl AwsAdapter {
     pub async fn new() -> Result<Self> {
-        let config = aws_config::load_from_env().await;
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
         Ok(Self {
             client: aws_sdk_ec2::Client::new(&config),
         })

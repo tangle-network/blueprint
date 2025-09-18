@@ -13,7 +13,7 @@ pub mod http_mock {
             .and(path("/v2/droplets"))
             .respond_with(
                 ResponseTemplate::new(201)
-                    .set_body_string(include_str!("../test_data/do_create_droplet.json")),
+                    .set_body_string(include_str!("../../test_data/do_create_droplet.json")),
             )
             .mount(&server)
             .await;

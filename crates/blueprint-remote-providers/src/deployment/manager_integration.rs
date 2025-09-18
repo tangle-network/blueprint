@@ -1,7 +1,7 @@
 //! Integration hooks for remote deployments with Blueprint Manager
 
 use crate::deployment::tracker::{DeploymentTracker, DeploymentType};
-use crate::core::error::{Error, Result};
+use crate::core::error::Result;
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use blueprint_std::collections::HashMap;

@@ -118,13 +118,11 @@ impl DeploymentTracker {
                     info!("TTL expired for {}, initiating cleanup", blueprint_id);
                     drop(deployments);
                     return self.handle_termination(blueprint_id).await;
-                }
                 } else {
                     debug!(
                         "TTL not yet expired for {} (expires at {})",
                         blueprint_id, expiry
                     );
-                }
                 }
             }
         }
@@ -162,10 +160,8 @@ impl DeploymentTracker {
                         self.send_cleanup_notification(webhook, blueprint_id, "success")
                             .await;
                     }
-                }
 
                     return Ok(());
-                }
                 }
                 Err(e) => {
                     attempts += 1;
@@ -180,14 +176,11 @@ impl DeploymentTracker {
                             self.send_cleanup_notification(webhook, blueprint_id, "failed")
                                 .await;
                         }
-                }
                         return Err(e);
                     }
-                }
 
                     // Wait before retry
                     tokio::time::sleep(tokio::time::Duration::from_secs(5 * attempts)).await;
-                }
                 }
             }
         }
@@ -500,7 +493,6 @@ impl CleanupHandler for LocalDockerCleanup {
                         stderr
                     )));
                 }
-                }
             }
         }
 
@@ -543,7 +535,6 @@ impl CleanupHandler for LocalKubernetesCleanup {
                         "kubectl delete failed: {}",
                         stderr
                     )));
-                }
                 }
             }
         }
@@ -589,8 +580,6 @@ impl CleanupHandler for LocalHypervisorCleanup {
                         libc::kill(pid_num, libc::SIGKILL);
                     }
                 }
-                }
-                }
             }
 
             // Clean up disk images and sockets
@@ -611,7 +600,7 @@ impl CleanupHandler for AwsCleanup {
     async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
         #[cfg(feature = "aws")]
         {
-            let config = aws_config::load_from_env().await;
+            let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
             let ec2 = aws_sdk_ec2::Client::new(&config);
 
             if let Some(instance_id) = deployment.resource_ids.get("instance_id") {
@@ -623,8 +612,7 @@ impl CleanupHandler for AwsCleanup {
                     .await
                     .map_err(|e| {
                         Error::ConfigurationError(format!("Failed to terminate EC2: {}", e))
-                    }
-                })?;
+                    })?;
             }
 
             // Also cleanup associated resources
@@ -667,7 +655,6 @@ impl CleanupHandler for GcpCleanup {
                 if let Some(instance_name) = deployment.resource_ids.get("instance_name") {
                     info!("Deleting GCP instance: {}", instance_name);
                     info!("GCE cleanup not yet implemented");
-                }
                 }
             }
         }
@@ -720,7 +707,7 @@ impl CleanupHandler for EksCleanup {
     async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
         #[cfg(feature = "aws-eks")]
         {
-            let config = aws_config::load_from_env().await;
+            let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
             let eks = aws_sdk_eks::Client::new(&config);
 
             if let Some(cluster_name) = deployment.resource_ids.get("cluster_name") {
@@ -733,14 +720,15 @@ impl CleanupHandler for EksCleanup {
                     .send()
                     .await?;
 
-                if let Some(ngs) = nodegroups.nodegroups() { for ng in ngs {
-                    let _ = eks
-                        .delete_nodegroup()
-                        .cluster_name(cluster_name)
-                        .nodegroup_name(ng)
-                        .send()
-                        .await;
-                }
+                if let Some(ngs) = nodegroups.nodegroups {
+                    for ng in ngs {
+                        let _ = eks
+                            .delete_nodegroup()
+                            .cluster_name(cluster_name)
+                            .nodegroup_name(ng)
+                            .send()
+                            .await;
+                    }
                 }
 
                 // Wait for nodegroups to be deleted
@@ -753,8 +741,7 @@ impl CleanupHandler for EksCleanup {
                     .await
                     .map_err(|e| {
                         Error::ConfigurationError(format!("Failed to delete EKS: {}", e))
-                    }
-                })?;
+                    })?;
             }
         }
 
@@ -781,7 +768,6 @@ impl CleanupHandler for GkeCleanup {
                 if let Some(cluster_name) = deployment.resource_ids.get("cluster_name") {
                     info!("Deleting GKE cluster: {}", cluster_name);
                     info!("GKE cleanup not yet implemented");
-                }
                 }
             }
         }
@@ -843,7 +829,6 @@ impl CleanupHandler for SshCleanup {
                     namespace: "default".to_string(),
                     restart_policy: RestartPolicy::Never,
                     health_check: None,
-                }
                 },
             )
             .await?;

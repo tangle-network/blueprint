@@ -1,10 +1,10 @@
 //! Remote deployment integration with Blueprint Manager
 
 use blueprint_remote_providers::{
-    deployment_tracker::DeploymentType,
-    manager_integration::{RemoteDeploymentConfig, RemoteDeploymentExtensions},
-    remote::CloudProvider,
-    resources::ResourceSpec,
+    deployment::tracker::DeploymentType,
+    deployment::manager_integration::{RemoteDeploymentConfig, RemoteDeploymentExtensions},
+    core::remote::CloudProvider,
+    core::resources::ResourceSpec,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -85,14 +85,14 @@ async fn initialize_enhanced_blueprint_manager(
         async fn provision(
             &self,
             _resource_spec: &ResourceSpec,
-        ) -> blueprint_remote_providers::error::Result<String> {
+        ) -> blueprint_remote_providers::core::error::Result<String> {
             Ok("mock-instance-id".to_string())
         }
 
         async fn terminate(
             &self,
             instance_id: &str,
-        ) -> blueprint_remote_providers::error::Result<()> {
+        ) -> blueprint_remote_providers::core::error::Result<()> {
             println!("Mock terminating instance: {}", instance_id);
             Ok(())
         }
@@ -100,10 +100,10 @@ async fn initialize_enhanced_blueprint_manager(
         async fn get_status(
             &self,
             _instance_id: &str,
-        ) -> blueprint_remote_providers::error::Result<
-            blueprint_remote_providers::infrastructure::InstanceStatus,
+        ) -> blueprint_remote_providers::core::error::Result<
+            blueprint_remote_providers::core::infrastructure::InstanceStatus,
         > {
-            Ok(blueprint_remote_providers::infrastructure::InstanceStatus::Running)
+            Ok(blueprint_remote_providers::core::infrastructure::InstanceStatus::Running)
         }
     }
 
@@ -155,7 +155,7 @@ fn check_deployment_requirements(_blueprint_id: &u64) -> bool {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
-    tracing_subscriber::fmt::init();
+    // tracing_subscriber::fmt::init(); // Optional: add tracing-subscriber to Cargo.toml
 
     let temp_dir = tempfile::TempDir::new()?;
     let state_dir = temp_dir.path().to_path_buf();

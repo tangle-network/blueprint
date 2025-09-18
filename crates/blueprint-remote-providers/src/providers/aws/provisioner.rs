@@ -6,7 +6,7 @@ use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 use crate::core::resources::ResourceSpec;
 #[cfg(feature = "aws")]
 use aws_sdk_ec2::types::{InstanceType, ResourceType, Tag, TagSpecification};
-use tracing::{info, warn};
+use tracing::info;
 
 /// AWS EC2 provisioner
 pub struct AwsProvisioner {
@@ -20,7 +20,7 @@ impl AwsProvisioner {
     /// Create a new AWS provisioner
     #[cfg(feature = "aws")]
     pub async fn new() -> Result<Self> {
-        let config = aws_config::load_from_env().await;
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
         let ec2_client = aws_sdk_ec2::Client::new(&config);
 
         #[cfg(feature = "aws-eks")]

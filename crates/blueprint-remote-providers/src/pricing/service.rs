@@ -1,6 +1,6 @@
 //! Unified pricing service
 
-use crate::core::error::{Error, Result};
+use crate::core::error::Result;
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use chrono::{DateTime, Utc};
