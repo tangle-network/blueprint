@@ -8,12 +8,12 @@ pub struct AuthContext {
 
 impl AuthContext {
     /// Create AuthContext from a generic header map to avoid axum dependency
-    pub fn from_headers<H>(headers: &H) -> Self 
+    pub fn from_headers<H>(headers: &H) -> Self
     where
         H: std::ops::Deref<Target = std::collections::HashMap<String, String>>,
     {
         let mut inner = HashMap::new();
-        
+
         // x-tenant-id is set by proxy after PII hashing
         if let Some(tenant_hash) = headers.get("x-tenant-id") {
             inner.insert("tenant_hash".to_string(), tenant_hash.clone());
@@ -30,20 +30,14 @@ impl AuthContext {
     /// Create AuthContext from axum HeaderMap for backward compatibility
     pub fn from_axum_headers(headers: &axum::http::HeaderMap) -> Self {
         let mut inner = HashMap::new();
-        
+
         // x-tenant-id is set by proxy after PII hashing
-        if let Some(tenant_hash) = headers
-            .get("x-tenant-id")
-            .and_then(|v| v.to_str().ok())
-        {
+        if let Some(tenant_hash) = headers.get("x-tenant-id").and_then(|v| v.to_str().ok()) {
             inner.insert("tenant_hash".to_string(), tenant_hash.to_string());
         }
 
         // x-scopes is a space-delimited list; normalize to lowercase
-        if let Some(scopes_str) = headers
-            .get("x-scopes")
-            .and_then(|v| v.to_str().ok())
-        {
+        if let Some(scopes_str) = headers.get("x-scopes").and_then(|v| v.to_str().ok()) {
             inner.insert("scopes".to_string(), scopes_str.to_string());
         }
 

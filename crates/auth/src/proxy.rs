@@ -657,7 +657,10 @@ fn is_forbidden_header(header_name: &str) -> bool {
 /// Check if a header name is auth-specific and should be sanitized from client requests
 fn is_auth_header(header_name: &str) -> bool {
     let lower = header_name.to_lowercase();
-    lower == "authorization" || lower.starts_with("x-tenant-") || lower == "x-scope" || lower == "x-scopes"
+    lower == "authorization"
+        || lower.starts_with("x-tenant-")
+        || lower == "x-scope"
+        || lower == "x-scopes"
 }
 
 /// Reverse proxy handler that forwards requests to the target host based on the service ID
