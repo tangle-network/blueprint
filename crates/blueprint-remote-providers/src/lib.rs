@@ -7,6 +7,7 @@ pub mod auth_integration;
 pub mod core;
 pub mod infra;
 pub mod monitoring;
+pub mod observability;
 pub mod pricing;
 pub mod providers;
 pub mod secure_bridge;
