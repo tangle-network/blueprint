@@ -1,24 +1,25 @@
+use axum::body::Body;
+use axum::http::{HeaderMap, Request};
+use axum::{
+    Json, Router,
+    extract::Path,
+    http::StatusCode,
+    middleware,
+    response::IntoResponse,
+    routing::{delete, get, post},
+};
+use blueprint_sdk::contexts::tangle::TangleClient;
 use blueprint_sdk::extract::Context;
+use blueprint_sdk::macros::debug_job;
 use blueprint_sdk::runner::BackgroundService;
+use blueprint_sdk::runner::config::BlueprintEnvironment;
 use blueprint_sdk::runner::error::RunnerError;
 use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
-use blueprint_sdk::contexts::tangle::TangleClient;
-use blueprint_sdk::macros::debug_job;
-use tokio::sync::oneshot;
-use tokio::sync::oneshot::Receiver;
-use axum::{
-    routing::{get, post, delete},
-    Json, Router,
-    http::StatusCode,
-    response::IntoResponse,
-    extract::Path,
-    middleware,
-};
-use axum::http::{Request, HeaderMap};
-use axum::body::Body;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
+use tokio::sync::oneshot;
+use tokio::sync::oneshot::Receiver;
 
 #[derive(Clone)]
 pub struct OAuthBlueprintContext {
@@ -40,7 +41,7 @@ pub async fn write_doc(
     let mut guard = store.write().await;
     let entry = guard.entry(account.clone()).or_default();
     entry.insert(doc_id.clone(), content);
-    
+
     TangleResult(serde_json::json!({
         "ok": true,
         "doc_id": doc_id,
@@ -57,7 +58,7 @@ pub async fn admin_purge(
     let store = docs_store();
     let mut guard = store.write().await;
     let removed = guard.remove(&target_account).is_some();
-    
+
     TangleResult(serde_json::json!({
         "purged": removed,
         "target": target_account,
@@ -72,7 +73,7 @@ pub struct OAuthProtectedApiService;
 impl BackgroundService for OAuthProtectedApiService {
     async fn start(&self) -> Result<Receiver<Result<(), RunnerError>>, RunnerError> {
         let (tx, rx) = oneshot::channel();
-        
+
         tokio::spawn(async move {
             let app = Router::new()
                 .route("/health", get(|| async { Json("ok") }))
@@ -81,15 +82,15 @@ impl BackgroundService for OAuthProtectedApiService {
                 .route("/docs/:id", delete(delete_doc))
                 .route("/docs", get(list_docs))
                 .layer(middleware::from_fn(oauth_auth));
-            
+
             let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
                 .await
                 .unwrap();
-            
+
             let _ = tx.send(Ok(()));
             let _ = axum::serve(listener, app).await;
         });
-        
+
         Ok(rx)
     }
 }
@@ -110,7 +111,7 @@ async fn oauth_auth(
         .and_then(|h| h.to_str().ok())
         .and_then(|h| h.strip_prefix("Bearer "))
         .ok_or(StatusCode::UNAUTHORIZED)?;
-    
+
     // In production: validate with OAuth provider
     // For demo: simple token parsing
     let ctx = if token.starts_with("admin_") {
@@ -130,7 +131,7 @@ async fn oauth_auth(
                 .collect(),
         }
     };
-    
+
     req.extensions_mut().insert(ctx);
     Ok(next.run(req).await)
 }
@@ -142,15 +143,15 @@ async fn create_doc(
     if !auth.scopes.contains("docs:write") {
         return Err(StatusCode::FORBIDDEN);
     }
-    
+
     let id = uuid::Uuid::new_v4().to_string();
     let content = payload.get("content").cloned().unwrap_or_default();
-    
+
     let store = docs_store();
     let mut guard = store.write().await;
     let docs = guard.entry(auth.tenant.clone()).or_default();
     docs.insert(id.clone(), content);
-    
+
     Ok(Json(serde_json::json!({"id": id, "tenant": auth.tenant})))
 }
 
@@ -161,10 +162,10 @@ async fn read_doc(
     if !auth.scopes.contains("docs:read") {
         return Err(StatusCode::FORBIDDEN);
     }
-    
+
     let store = docs_store();
     let guard = store.read().await;
-    
+
     match guard.get(&auth.tenant).and_then(|d| d.get(&id)) {
         Some(content) => Ok(Json(serde_json::json!({"id": id, "content": content}))),
         None => Err(StatusCode::NOT_FOUND),
@@ -178,14 +179,15 @@ async fn delete_doc(
     if !auth.scopes.contains("docs:write") {
         return Err(StatusCode::FORBIDDEN);
     }
-    
+
     let store = docs_store();
     let mut guard = store.write().await;
-    
-    let removed = guard.get_mut(&auth.tenant)
+
+    let removed = guard
+        .get_mut(&auth.tenant)
         .and_then(|d| d.remove(&id))
         .is_some();
-    
+
     if removed {
         Ok(Json(serde_json::json!({"deleted": true})))
     } else {
@@ -199,14 +201,15 @@ async fn list_docs(
     if !auth.scopes.contains("docs:read") {
         return Err(StatusCode::FORBIDDEN);
     }
-    
+
     let store = docs_store();
     let guard = store.read().await;
-    
-    let ids: Vec<String> = guard.get(&auth.tenant)
+
+    let ids: Vec<String> = guard
+        .get(&auth.tenant)
         .map(|d| d.keys().cloned().collect())
         .unwrap_or_default();
-    
+
     Ok(Json(serde_json::json!({"documents": ids})))
 }
 
@@ -222,52 +225,67 @@ fn docs_store() -> &'static DocMap {
 mod tests {
     use super::*;
 
+    async fn create_test_context() -> OAuthBlueprintContext {
+        use blueprint_testing_utils::tangle::TangleTestHarness;
+        use tempfile::TempDir;
+
+        // Set up test harness with proper TangleClient
+        let tmp_dir = TempDir::new().expect("Failed to create temp dir");
+        let harness = TangleTestHarness::setup(tmp_dir)
+            .await
+            .expect("Failed to setup test harness");
+
+        OAuthBlueprintContext {
+            tangle_client: Arc::new(harness.client),
+        }
+    }
+
     #[tokio::test]
     async fn test_write_doc_job() {
         let result = write_doc(
-            Context(OAuthBlueprintContext {
-                tangle_client: Arc::new(TangleClient::default()),
-            }),
+            Context(create_test_context().await),
             TangleArg((
                 "doc1".to_string(),
                 "content here".to_string(),
                 "account_123".to_string(),
             )),
-        ).await;
-        
+        )
+        .await;
+
         assert_eq!(result.0["ok"], true);
         assert_eq!(result.0["doc_id"], "doc1");
-        
+
         // Verify storage
         let store = docs_store();
         let guard = store.read().await;
-        assert_eq!(guard.get("account_123").unwrap().get("doc1").unwrap(), "content here");
+        assert_eq!(
+            guard.get("account_123").unwrap().get("doc1").unwrap(),
+            "content here"
+        );
     }
 
     #[tokio::test]
     async fn test_admin_purge_job() {
         // First create a doc
         write_doc(
-            Context(OAuthBlueprintContext {
-                tangle_client: Arc::new(TangleClient::default()),
-            }),
+            Context(create_test_context().await),
             TangleArg((
                 "doc2".to_string(),
                 "data".to_string(),
                 "target_account".to_string(),
             )),
-        ).await;
-        
+        )
+        .await;
+
         // Now purge it
         let result = admin_purge(
-            Context(OAuthBlueprintContext {
-                tangle_client: Arc::new(TangleClient::default()),
-            }),
+            Context(create_test_context().await),
             TangleArg("target_account".to_string()),
-        ).await;
-        
+        )
+        .await;
+
         assert_eq!(result.0["purged"], true);
-        
+
         // Verify it's gone
         let store = docs_store();
         let guard = store.read().await;

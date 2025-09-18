@@ -2,7 +2,10 @@ use blueprint_sdk::tangle::layers::TangleLayer;
 use blueprint_sdk::testing::tempfile;
 use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::testing::utils::tangle::{InputValue, TangleTestHarness};
-use oauth_blueprint_lib::{self as lib, CHECK_SCOPE_JOB_ID, LIST_DOCS_JOB_ID, READ_DOC_JOB_ID, WHOAMI_JOB_ID, WRITE_DOC_JOB_ID};
+use oauth_blueprint_lib::{
+    self as lib, CHECK_SCOPE_JOB_ID, LIST_DOCS_JOB_ID, READ_DOC_JOB_ID, WHOAMI_JOB_ID,
+    WRITE_DOC_JOB_ID,
+};
 
 #[tokio::test]
 async fn oauth_docs_flow_scoped_and_isolated() -> color_eyre::Result<()> {
@@ -30,16 +33,23 @@ async fn oauth_docs_flow_scoped_and_isolated() -> color_eyre::Result<()> {
         .submit_job(
             service_id,
             WRITE_DOC_JOB_ID,
-            vec![InputValue::String("doc1".into()), InputValue::String("hello".into())],
+            vec![
+                InputValue::String("doc1".into()),
+                InputValue::String("hello".into()),
+            ],
         )
         .await?;
-    let _res = harness.wait_for_job_execution(service_id, job_a_write).await?;
+    let _res = harness
+        .wait_for_job_execution(service_id, job_a_write)
+        .await?;
 
     // Tenant A lists docs
     let job_a_list = harness
         .submit_job(service_id, LIST_DOCS_JOB_ID, vec![])
         .await?;
-    let _ = harness.wait_for_job_execution(service_id, job_a_list).await?;
+    let _ = harness
+        .wait_for_job_execution(service_id, job_a_list)
+        .await?;
 
     // Tenant A reads doc
     let job_a_read = harness
@@ -49,7 +59,9 @@ async fn oauth_docs_flow_scoped_and_isolated() -> color_eyre::Result<()> {
             vec![InputValue::String("doc1".into())],
         )
         .await?;
-    let _ = harness.wait_for_job_execution(service_id, job_a_read).await?;
+    let _ = harness
+        .wait_for_job_execution(service_id, job_a_read)
+        .await?;
 
     // Scope check example
     let job_scope = harness
@@ -59,13 +71,15 @@ async fn oauth_docs_flow_scoped_and_isolated() -> color_eyre::Result<()> {
             vec![InputValue::String("docs:read".into())],
         )
         .await?;
-    let _ = harness.wait_for_job_execution(service_id, job_scope).await?;
+    let _ = harness
+        .wait_for_job_execution(service_id, job_scope)
+        .await?;
 
     // whoami works
-    let job_who = harness.submit_job(service_id, WHOAMI_JOB_ID, vec![]).await?;
+    let job_who = harness
+        .submit_job(service_id, WHOAMI_JOB_ID, vec![])
+        .await?;
     let _ = harness.wait_for_job_execution(service_id, job_who).await?;
 
     Ok(())
 }
-
-

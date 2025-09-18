@@ -15,5 +15,7 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 [dev-dependencies]
 blueprint-sdk = { path = "../../../crates/sdk", features = ["testing", "tangle"] }
 blueprint-tangle-extra = { path = "../../../crates/tangle-extra" }
+blueprint-testing-utils = { path = "../../../crates/testing-utils" }
+tempfile = "3.0"
 tokio = { version = "^1", features = ["macros"] }
 color-eyre = "0.6"

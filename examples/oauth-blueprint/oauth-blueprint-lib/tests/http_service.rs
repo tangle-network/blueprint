@@ -1,11 +1,13 @@
 use axum::{
-    body::Body,
-    extract::Path,
-    http::{Request, StatusCode},
-    routing::{get, post, delete},
     Json, Router,
+    body::Body,
+    extract::{Path, State},
+    http::{Request, StatusCode},
+    routing::{delete, get, post},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -25,8 +27,10 @@ async fn test_http_health_endpoint() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json, "ok");
 }
@@ -49,10 +53,12 @@ async fn test_http_create_doc_endpoint() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert!(json.get("id").is_some());
     assert_eq!(json.get("tenant"), Some(&json!("test_user")));
 }
@@ -96,8 +102,10 @@ async fn test_http_read_doc_endpoint() {
         .unwrap();
 
     assert_eq!(create_response.status(), StatusCode::OK);
-    
-    let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
+
+    let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let create_json: Value = serde_json::from_slice(&create_body).unwrap();
     let doc_id = create_json.get("id").unwrap().as_str().unwrap();
 
@@ -115,12 +123,17 @@ async fn test_http_read_doc_endpoint() {
         .unwrap();
 
     assert_eq!(read_response.status(), StatusCode::OK);
-    
-    let read_body = axum::body::to_bytes(read_response.into_body(), usize::MAX).await.unwrap();
+
+    let read_body = axum::body::to_bytes(read_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let read_json: Value = serde_json::from_slice(&read_body).unwrap();
-    
+
     assert_eq!(read_json.get("id"), Some(&json!(doc_id)));
-    assert_eq!(read_json.get("content"), Some(&json!("Test document content")));
+    assert_eq!(
+        read_json.get("content"),
+        Some(&json!("Test document content"))
+    );
 }
 
 #[tokio::test]
@@ -156,12 +169,15 @@ async fn test_http_list_docs_endpoint() {
                     .method("POST")
                     .header("Authorization", "Bearer test_user")
                     .header("Content-Type", "application/json")
-                    .body(Body::from(format!(r#"{{"content": "Document {} content"}}"#, i)))
+                    .body(Body::from(format!(
+                        r#"{{"content": "Document {} content"}}"#,
+                        i
+                    )))
                     .unwrap(),
             )
             .await
             .unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
     }
 
@@ -179,10 +195,12 @@ async fn test_http_list_docs_endpoint() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert!(json.get("docs").is_some());
     assert!(json.get("docs").unwrap().as_array().unwrap().len() >= 3);
 }
@@ -207,8 +225,10 @@ async fn test_http_delete_doc_endpoint() {
         .unwrap();
 
     assert_eq!(create_response.status(), StatusCode::OK);
-    
-    let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
+
+    let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let create_json: Value = serde_json::from_slice(&create_body).unwrap();
     let doc_id = create_json.get("id").unwrap().as_str().unwrap();
 
@@ -227,8 +247,10 @@ async fn test_http_delete_doc_endpoint() {
         .unwrap();
 
     assert_eq!(delete_response.status(), StatusCode::OK);
-    
-    let delete_body = axum::body::to_bytes(delete_response.into_body(), usize::MAX).await.unwrap();
+
+    let delete_body = axum::body::to_bytes(delete_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let delete_json: Value = serde_json::from_slice(&delete_body).unwrap();
     assert_eq!(delete_json.get("deleted"), Some(&json!(true)));
 
@@ -269,16 +291,24 @@ async fn test_admin_scope_access() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
+#[derive(Clone)]
+struct AppState {
+    docs: Arc<RwLock<HashMap<String, serde_json::Value>>>,
+}
+
+#[derive(Clone)]
+struct OAuthContext {
+    tenant: String,
+    scopes: std::collections::HashSet<String>,
+}
+
 fn create_test_app() -> Router {
-    
     use axum::middleware;
     use std::collections::HashSet;
-    
-    #[derive(Clone)]
-    struct OAuthContext {
-        tenant: String,
-        scopes: HashSet<String>,
-    }
+
+    let state = AppState {
+        docs: Arc::new(RwLock::new(HashMap::new())),
+    };
 
     async fn oauth_auth(
         headers: axum::http::HeaderMap,
@@ -290,7 +320,7 @@ fn create_test_app() -> Router {
             .and_then(|h| h.to_str().ok())
             .and_then(|h| h.strip_prefix("Bearer "))
             .ok_or(StatusCode::UNAUTHORIZED)?;
-        
+
         let ctx = if token.starts_with("admin_") {
             OAuthContext {
                 tenant: "admin".to_string(),
@@ -308,62 +338,91 @@ fn create_test_app() -> Router {
                     .collect(),
             }
         };
-        
+
         req.extensions_mut().insert(ctx);
         Ok(next.run(req).await)
     }
 
     async fn create_doc(
+        State(state): State<AppState>,
         axum::Extension(auth): axum::Extension<OAuthContext>,
         Json(payload): Json<serde_json::Value>,
     ) -> Result<impl axum::response::IntoResponse, StatusCode> {
         if !auth.scopes.contains("docs:write") {
             return Err(StatusCode::FORBIDDEN);
         }
-        
+
         let id = Uuid::new_v4().to_string();
-        let _content = payload.get("content").cloned().unwrap_or_default();
-        
-        Ok(Json(json!({"id": id, "tenant": auth.tenant})))
+        let content = payload.get("content").cloned().unwrap_or_default();
+
+        let mut doc = serde_json::Value::Object(serde_json::Map::new());
+        doc.as_object_mut()
+            .unwrap()
+            .insert("id".to_string(), json!(id));
+        doc.as_object_mut()
+            .unwrap()
+            .insert("tenant".to_string(), json!(auth.tenant));
+        doc.as_object_mut()
+            .unwrap()
+            .insert("content".to_string(), content);
+
+        state.docs.write().unwrap().insert(id.clone(), doc.clone());
+
+        Ok(Json(doc))
     }
 
     async fn read_doc(
+        State(state): State<AppState>,
         axum::Extension(auth): axum::Extension<OAuthContext>,
-        Path(_id): Path<String>,
+        Path(id): Path<String>,
     ) -> Result<impl axum::response::IntoResponse, StatusCode> {
         if !auth.scopes.contains("docs:read") {
             return Err(StatusCode::FORBIDDEN);
         }
-        
-        Ok(Json(json!({"id": _id, "content": "Test content"})))
+
+        let docs = state.docs.read().unwrap();
+        match docs.get(&id) {
+            Some(doc) => Ok(Json(doc.clone())),
+            None => Err(StatusCode::NOT_FOUND),
+        }
     }
 
     async fn delete_doc(
+        State(state): State<AppState>,
         axum::Extension(auth): axum::Extension<OAuthContext>,
-        Path(_id): Path<String>,
+        Path(id): Path<String>,
     ) -> Result<impl axum::response::IntoResponse, StatusCode> {
         if !auth.scopes.contains("docs:write") {
             return Err(StatusCode::FORBIDDEN);
         }
-        
-        Ok(Json(json!({"deleted": true})))
+
+        let mut docs = state.docs.write().unwrap();
+        match docs.remove(&id) {
+            Some(_) => Ok(Json(json!({"deleted": true}))),
+            None => Err(StatusCode::NOT_FOUND),
+        }
     }
 
     async fn list_docs(
+        State(state): State<AppState>,
         axum::Extension(auth): axum::Extension<OAuthContext>,
     ) -> Result<impl axum::response::IntoResponse, StatusCode> {
         if !auth.scopes.contains("docs:read") {
             return Err(StatusCode::FORBIDDEN);
         }
-        
-        Ok(Json(json!({"docs": [{"id": "doc1", "content": "content1"}]})))
+
+        let docs = state.docs.read().unwrap();
+        let docs_list: Vec<serde_json::Value> = docs.values().cloned().collect();
+
+        Ok(Json(json!({"docs": docs_list})))
     }
 
     Router::new()
         .route("/health", get(|| async { Json("ok") }))
         .route("/docs", post(create_doc))
-        .route("/docs/:id", get(read_doc))
-        .route("/docs/:id", delete(delete_doc))
+        .route("/docs/{id}", get(read_doc))
+        .route("/docs/{id}", delete(delete_doc))
         .route("/docs", get(list_docs))
         .layer(middleware::from_fn(oauth_auth))
+        .with_state(state)
 }
