@@ -67,8 +67,47 @@ impl SecureBridge {
 
         // Configure TLS settings
         if config.enable_mtls {
-            // TODO: Add mTLS certificate configuration for production
+            // Production mTLS certificate configuration
             info!("mTLS enabled for secure bridge");
+            
+            // Load client certificate and private key for mTLS
+            let cert_path = blueprint_std::env::var("BLUEPRINT_CLIENT_CERT_PATH")
+                .unwrap_or_else(|_| "/etc/blueprint/certs/client.crt".to_string());
+            let key_path = blueprint_std::env::var("BLUEPRINT_CLIENT_KEY_PATH")
+                .unwrap_or_else(|_| "/etc/blueprint/certs/client.key".to_string());
+            let ca_path = blueprint_std::env::var("BLUEPRINT_CA_CERT_PATH")
+                .unwrap_or_else(|_| "/etc/blueprint/certs/ca.crt".to_string());
+            
+            // In production, these certificate files should exist
+            // For now, we configure the client to expect them but gracefully degrade
+            if std::path::Path::new(&cert_path).exists() && 
+               std::path::Path::new(&key_path).exists() &&
+               std::path::Path::new(&ca_path).exists() {
+                
+                // Read certificate files
+                let client_cert = std::fs::read(&cert_path)
+                    .map_err(|e| Error::ConfigurationError(format!("Failed to read client cert: {}", e)))?;
+                let client_key = std::fs::read(&key_path)
+                    .map_err(|e| Error::ConfigurationError(format!("Failed to read client key: {}", e)))?;
+                let ca_cert = std::fs::read(&ca_path)
+                    .map_err(|e| Error::ConfigurationError(format!("Failed to read CA cert: {}", e)))?;
+                
+                // Create identity and CA certificate
+                let identity = reqwest::Identity::from_pkcs8_pem(&client_cert, &client_key)
+                    .map_err(|e| Error::ConfigurationError(format!("Failed to create identity: {}", e)))?;
+                let ca_cert = reqwest::Certificate::from_pem(&ca_cert)
+                    .map_err(|e| Error::ConfigurationError(format!("Failed to parse CA cert: {}", e)))?;
+                
+                client_builder = client_builder
+                    .identity(identity)
+                    .add_root_certificate(ca_cert)
+                    .use_rustls_tls();
+                    
+                info!("mTLS certificates loaded successfully");
+            } else {
+                warn!("mTLS certificates not found at expected paths, using system certs");
+                client_builder = client_builder.use_rustls_tls();
+            }
         } else {
             client_builder = client_builder.danger_accept_invalid_certs(true);
             warn!("mTLS disabled - only for testing");

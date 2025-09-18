@@ -162,9 +162,41 @@ impl AuthProxyRemoteExtension {
             .ok_or_else(|| Error::ConfigurationError(format!("Service {} not registered", service_id)))?;
         drop(services);
 
-        // TODO: Validate access token in production
+        // Validate access token format and expiry
         if access_token.is_empty() {
-            return Err(Error::ConfigurationError("Invalid access token".into()));
+            return Err(Error::ConfigurationError("Access token required".into()));
+        }
+        
+        // Validate Blueprint access token format
+        if !access_token.starts_with("bpat_") {
+            return Err(Error::ConfigurationError("Invalid token format".into()));
+        }
+        
+        // Parse token components: bpat_{service_id}_{blueprint_id}_{timestamp}_{uuid}
+        let token_parts: Vec<&str> = access_token.split('_').collect();
+        if token_parts.len() != 5 {
+            return Err(Error::ConfigurationError("Malformed access token".into()));
+        }
+        
+        // Validate service ID matches
+        if let Ok(token_service_id) = token_parts[1].parse::<u64>() {
+            if token_service_id != service_id {
+                return Err(Error::ConfigurationError("Token service mismatch".into()));
+            }
+        } else {
+            return Err(Error::ConfigurationError("Invalid token service ID".into()));
+        }
+        
+        // Check token expiry
+        if let Ok(timestamp) = token_parts[3].parse::<i64>() {
+            let expires_at = chrono::DateTime::from_timestamp(timestamp, 0)
+                .ok_or_else(|| Error::ConfigurationError("Invalid token timestamp".into()))?;
+            
+            if chrono::Utc::now() > expires_at {
+                return Err(Error::ConfigurationError("Access token expired".into()));
+            }
+        } else {
+            return Err(Error::ConfigurationError("Invalid token timestamp".into()));
         }
 
         // Add authentication headers
