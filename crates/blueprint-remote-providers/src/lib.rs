@@ -4,6 +4,7 @@
 
 // Core architecture
 pub mod auth_integration;
+pub mod config;
 pub mod core;
 pub mod infra;
 pub mod monitoring;
@@ -16,6 +17,7 @@ pub mod security;
 pub mod deployment;
 
 // Primary exports
+pub use config::{CloudConfig, AwsConfig, GcpConfig, AzureConfig, DigitalOceanConfig, VultrConfig};
 pub use core::{Error, Result, CloudProvider, ResourceSpec};
 pub use infra::{CloudProvisioner, InstanceStatus, ProvisionedInstance};
 pub use deployment::{DeploymentTracker, SshDeploymentClient};
