@@ -1,6 +1,6 @@
-use oauth_blueprint_lib::{AuthEchoBackgroundService, OAuthBlueprintContext};
 use axum::{
     body::Body,
+    extract::Path,
     http::{Request, StatusCode},
     routing::{get, post, delete},
     Json, Router,
@@ -26,7 +26,7 @@ async fn test_http_health_endpoint() {
 
     assert_eq!(response.status(), StatusCode::OK);
     
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json, "ok");
 }
@@ -50,7 +50,7 @@ async fn test_http_create_doc_endpoint() {
 
     assert_eq!(response.status(), StatusCode::OK);
     
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
     
     assert!(json.get("id").is_some());
@@ -97,7 +97,7 @@ async fn test_http_read_doc_endpoint() {
 
     assert_eq!(create_response.status(), StatusCode::OK);
     
-    let create_body = hyper::body::to_bytes(create_response.into_body()).await.unwrap();
+    let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
     let create_json: Value = serde_json::from_slice(&create_body).unwrap();
     let doc_id = create_json.get("id").unwrap().as_str().unwrap();
 
@@ -116,7 +116,7 @@ async fn test_http_read_doc_endpoint() {
 
     assert_eq!(read_response.status(), StatusCode::OK);
     
-    let read_body = hyper::body::to_bytes(read_response.into_body()).await.unwrap();
+    let read_body = axum::body::to_bytes(read_response.into_body(), usize::MAX).await.unwrap();
     let read_json: Value = serde_json::from_slice(&read_body).unwrap();
     
     assert_eq!(read_json.get("id"), Some(&json!(doc_id)));
@@ -156,7 +156,7 @@ async fn test_http_list_docs_endpoint() {
                     .method("POST")
                     .header("Authorization", "Bearer test_user")
                     .header("Content-Type", "application/json")
-                    .body(Body::from(&format!(r#"{{"content": "Document {} content"}}"#, i)))
+                    .body(Body::from(format!(r#"{{"content": "Document {} content"}}"#, i)))
                     .unwrap(),
             )
             .await
@@ -180,7 +180,7 @@ async fn test_http_list_docs_endpoint() {
 
     assert_eq!(response.status(), StatusCode::OK);
     
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
     
     assert!(json.get("docs").is_some());
@@ -208,7 +208,7 @@ async fn test_http_delete_doc_endpoint() {
 
     assert_eq!(create_response.status(), StatusCode::OK);
     
-    let create_body = hyper::body::to_bytes(create_response.into_body()).await.unwrap();
+    let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
     let create_json: Value = serde_json::from_slice(&create_body).unwrap();
     let doc_id = create_json.get("id").unwrap().as_str().unwrap();
 
@@ -228,7 +228,7 @@ async fn test_http_delete_doc_endpoint() {
 
     assert_eq!(delete_response.status(), StatusCode::OK);
     
-    let delete_body = hyper::body::to_bytes(delete_response.into_body()).await.unwrap();
+    let delete_body = axum::body::to_bytes(delete_response.into_body(), usize::MAX).await.unwrap();
     let delete_json: Value = serde_json::from_slice(&delete_body).unwrap();
     assert_eq!(delete_json.get("deleted"), Some(&json!(true)));
 
@@ -270,7 +270,7 @@ async fn test_admin_scope_access() {
 }
 
 fn create_test_app() -> Router {
-    use oauth_blueprint_lib::*;
+    
     use axum::middleware;
     use std::collections::HashSet;
     
@@ -322,7 +322,7 @@ fn create_test_app() -> Router {
         }
         
         let id = Uuid::new_v4().to_string();
-        let content = payload.get("content").cloned().unwrap_or_default();
+        let _content = payload.get("content").cloned().unwrap_or_default();
         
         Ok(Json(json!({"id": id, "tenant": auth.tenant})))
     }
