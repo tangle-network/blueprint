@@ -74,7 +74,6 @@ pub async fn purchase_api_key(
     TangleResult(serde_json::json!({
         "ok": true,
         "api_key_hash": api_key_hash,
-        "api_key": api_key, // In prod, encrypt this
         "tier": tier,
     }))
 }

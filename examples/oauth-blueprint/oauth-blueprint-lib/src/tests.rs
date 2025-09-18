@@ -2,7 +2,7 @@
 mod tests {
     use crate::*;
     use blueprint_sdk::AuthContext;
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
     use tokio::time::{timeout, Duration};
     
     // E2E test imports
@@ -29,14 +29,11 @@ mod tests {
     #[tokio::test]
     async fn test_auth_context_scope_validation() {
         // Test AuthContext scope checking logic
-        let mut scopes = HashSet::new();
-        scopes.insert("docs:read".to_string());
-        scopes.insert("docs:write".to_string());
+        let mut headers = HashMap::new();
+        headers.insert("tenant_hash".to_string(), "test_tenant".to_string());
+        headers.insert("scopes".to_string(), "docs:read docs:write".to_string());
         
-        let auth = AuthContext {
-            tenant_hash: Some("test_tenant".to_string()),
-            scopes,
-        };
+        let auth = AuthContext::from_headers(&headers);
 
         // Test scope that user has
         assert!(auth.has_scope("docs:read"));
@@ -48,6 +45,9 @@ mod tests {
         // Test has_any_scope
         assert!(auth.has_any_scope(["docs:read", "docs:admin"])); // has docs:read
         assert!(!auth.has_any_scope(["admin:all", "system:manage"])); // has neither
+        
+        // Test tenant hash access
+        assert_eq!(auth.tenant_hash(), Some("test_tenant"));
     }
 
     #[tokio::test]
