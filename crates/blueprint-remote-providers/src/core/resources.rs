@@ -1,6 +1,4 @@
-//! Simplified resource specification focusing on essential requirements
-//!
-//! This replaces the over-engineered resource model with just what's needed
+//! Resource specification for cloud provisioning
 
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +21,7 @@ pub struct ResourceSpec {
 }
 
 impl ResourceSpec {
-    /// Minimal resources for testing
+    /// Minimal resources
     pub fn minimal() -> Self {
         Self {
             cpu: 0.5,
@@ -35,7 +33,7 @@ impl ResourceSpec {
         }
     }
 
-    /// Basic resources for development
+    /// Basic resources
     pub fn basic() -> Self {
         Self {
             cpu: 2.0,
@@ -47,7 +45,7 @@ impl ResourceSpec {
         }
     }
 
-    /// Recommended production resources
+    /// Production resources
     pub fn recommended() -> Self {
         Self {
             cpu: 4.0,
@@ -59,7 +57,7 @@ impl ResourceSpec {
         }
     }
 
-    /// High performance resources
+    /// Performance resources
     pub fn performance() -> Self {
         Self {
             cpu: 8.0,
@@ -147,7 +145,7 @@ impl ResourceSpec {
         })
     }
 
-    /// Estimate hourly cost in USD (simplified model)
+    /// Estimate hourly cost in USD
     pub fn estimate_hourly_cost(&self) -> f64 {
         let base_cost = self.cpu * 0.04 + self.memory_gb * 0.01;
         let storage_cost = self.storage_gb * 0.0001;
