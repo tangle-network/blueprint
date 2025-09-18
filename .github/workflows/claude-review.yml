@@ -22,13 +22,13 @@ jobs:
         uses: anthropics/claude-code-action@beta
         with:
           direct_prompt: |
-            Please review this PR. Look at the changes and provide thoughtful feedback on:
-            - Code quality and best practices
+            Review this PR like an expert, critical L7 engineering lead. Optimize token usage, high signal to noise:
+            - Code quality and best practices match repo
             - Potential bugs or issues
-            - Performance considerations
-            - Security implications (for the substrate blockchain)
-            - Documentation updates if needed
+            - Performance
+            - Security implications
+            - Missing documentation
 
             Be constructive and specific in your feedback. Give inline comments where applicable.
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_tools: "mcp__github__add_pull_request_review_comment"
