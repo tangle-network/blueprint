@@ -652,6 +652,12 @@ fn is_forbidden_header(header_name: &str) -> bool {
     )
 }
 
+/// Check if a header name is auth-specific and should be sanitized from client requests
+fn is_auth_header(header_name: &str) -> bool {
+    let lower = header_name.to_lowercase();
+    lower == "authorization" || lower.starts_with("x-tenant-") || lower == "x-scope" || lower == "x-scopes"
+}
+
 /// Reverse proxy handler that forwards requests to the target host based on the service ID
 #[tracing::instrument(skip_all)]
 async fn reverse_proxy(
@@ -724,16 +730,11 @@ async fn reverse_proxy(
     *req.uri_mut() = target_uri;
 
     // Inject additional headers into the request with re-validation
-    // Sanitize inbound headers: drop Authorization and any tenant/scope headers supplied by client
+    // Sanitize inbound headers: drop auth-specific and forbidden headers supplied by client
     {
         let mut to_remove: Vec<header::HeaderName> = Vec::new();
         for (name, _value) in req.headers().iter() {
-            let lower = name.as_str().to_ascii_lowercase();
-            if lower == "authorization"
-                || lower.starts_with("x-tenant-")
-                || lower == "x-scope"
-                || lower == "x-scopes"
-            {
+            if is_auth_header(name.as_str()) || is_forbidden_header(name.as_str()) {
                 to_remove.push(name.clone());
             }
         }
