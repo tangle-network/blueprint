@@ -11,7 +11,8 @@ import "tnt-core/BlueprintServiceManagerBase.sol";
 contract ExperimentalBlueprint is BlueprintServiceManagerBase {
     // Events for job execution tracking
     event ApiKeyPurchased(
-        address indexed user,
+        bytes32 indexed accountHash,
+        string accountId,
         string tier,
         uint256 amount,
         uint256 timestamp,
@@ -20,7 +21,8 @@ contract ExperimentalBlueprint is BlueprintServiceManagerBase {
     );
 
     event ResourceWritten(
-        address indexed user,
+        bytes32 indexed accountHash,
+        string accountId,
         string resourceId,
         bytes32 indexed tenantHash,
         uint64 indexed serviceId,
@@ -35,11 +37,12 @@ contract ExperimentalBlueprint is BlueprintServiceManagerBase {
 
     // Subscription tier pricing (in wei)
     mapping(string => uint256) public tierPricing;
-    
-    // User subscription data
-    mapping(address => string) public userTiers;
-    mapping(address => uint256) public subscriptionExpiry;
-    
+
+    // User subscription data keyed by a stable hash of the off-chain account identifier
+    mapping(bytes32 => string) private userTiers;
+    mapping(bytes32 => uint256) private subscriptionExpiry;
+    mapping(bytes32 => string) private accountLabels;
+
     // Resource tracking per tenant
     mapping(bytes32 => mapping(string => bool)) public tenantResources;
     mapping(bytes32 => uint256) public tenantResourceCount;
@@ -50,7 +53,7 @@ contract ExperimentalBlueprint is BlueprintServiceManagerBase {
     constructor() {
         // Initialize tier pricing
         tierPricing["basic"] = 0.01 ether;
-        tierPricing["premium"] = 0.05 ether; 
+        tierPricing["premium"] = 0.05 ether;
         tierPricing["enterprise"] = 0.1 ether;
     }
 
@@ -68,32 +71,29 @@ contract ExperimentalBlueprint is BlueprintServiceManagerBase {
         processedJobCalls[serviceId][jobCallId] = true;
 
         if (job == PURCHASE_API_KEY_JOB_ID) {
-            // Decode subscription tier from inputs
-            // inputs[0] should be the tier string
-            require(inputs.length > 0, "Missing tier input");
-            string memory tier = abi.decode(inputs, (string));
-            
-            require(msg.value > 0, "Payment required for API key purchase");
+            // Decode subscription request: (tier, account identifier)
+            (string memory tier, string memory accountId) = abi.decode(inputs, (string, string));
+            require(bytes(tier).length != 0, "Missing tier input");
+            require(bytes(accountId).length != 0, "Missing account input");
             require(tierPricing[tier] > 0, "Invalid subscription tier");
-            require(msg.value >= tierPricing[tier], "Insufficient payment");
+            require(msg.value == tierPricing[tier], "Incorrect payment");
+
+            bytes32 accountHash = _accountKey(accountId);
 
             // Update user subscription immediately on job call
-            userTiers[tx.origin] = tier; // tx.origin is the original caller
-            subscriptionExpiry[tx.origin] = block.timestamp + 30 days;
+            userTiers[accountHash] = tier;
+            subscriptionExpiry[accountHash] = block.timestamp + 30 days;
+            accountLabels[accountHash] = accountId;
 
             emit ApiKeyPurchased(
-                tx.origin,
+                accountHash,
+                accountId,
                 tier,
                 msg.value,
                 block.timestamp,
                 serviceId,
                 jobCallId
             );
-
-            // Refund excess payment
-            if (msg.value > tierPricing[tier]) {
-                payable(tx.origin).transfer(msg.value - tierPricing[tier]);
-            }
         }
     }
 
@@ -107,30 +107,34 @@ contract ExperimentalBlueprint is BlueprintServiceManagerBase {
         uint64 jobCallId,
         ServiceOperators.OperatorPreferences calldata operator,
         bytes calldata inputs,
-        bytes calldata outputs
+        bytes calldata /* outputs */
     ) external payable override onlyFromMaster {
         if (job == WRITE_RESOURCE_JOB_ID) {
             // Decode resource data from inputs
-            // inputs should contain (resource_id, data) tuple
-            (string memory resourceId, string memory data) = abi.decode(inputs, (string, string));
-            
-            // Decode tenant hash from outputs (set by AuthContext)
-            // outputs should contain the job result with tenant info
-            bytes32 tenantHash = keccak256(abi.encodePacked("tenant_", operator.ecdsaKey));
+            (string memory resourceId, string memory data, string memory accountId) =
+                abi.decode(inputs, (string, string, string));
+            require(bytes(accountId).length != 0, "Missing account input");
 
-            // Track resource creation per tenant
+            bytes32 tenantHash = keccak256(abi.encodePacked("tenant_", operator.ecdsaKey));
+            bytes32 accountHash = _accountKey(accountId);
+
+            // Track resource creation per tenant and account
             if (!tenantResources[tenantHash][resourceId]) {
                 tenantResources[tenantHash][resourceId] = true;
                 tenantResourceCount[tenantHash]++;
             }
 
             emit ResourceWritten(
-                tx.origin,
+                accountHash,
+                accountId,
                 resourceId,
                 tenantHash,
                 serviceId,
                 jobCallId
             );
+
+            // Silence unused variable warning in example
+            data; // solhint-disable-line no-unused-vars
         }
         
         // For other jobs (WHOAMI, ECHO), we can log or track usage but no state changes needed
@@ -139,16 +143,23 @@ contract ExperimentalBlueprint is BlueprintServiceManagerBase {
     /**
      * @dev Check if user has active subscription
      */
-    function hasActiveSubscription(address user) external view returns (bool) {
-        return subscriptionExpiry[user] > block.timestamp;
+    function hasActiveSubscription(bytes32 accountHash) external view returns (bool) {
+        return subscriptionExpiry[accountHash] > block.timestamp;
     }
 
     /**
      * @dev Get user's current tier
      */
-    function getUserTier(address user) external view returns (string memory) {
-        require(this.hasActiveSubscription(user), "No active subscription");
-        return userTiers[user];
+    function getUserTier(bytes32 accountHash) external view returns (string memory) {
+        require(subscriptionExpiry[accountHash] > block.timestamp, "No active subscription");
+        return userTiers[accountHash];
+    }
+
+    /**
+     * @dev Return the canonical label stored for an account hash
+     */
+    function getAccountLabel(bytes32 accountHash) external view returns (string memory) {
+        return accountLabels[accountHash];
     }
 
     /**
@@ -185,5 +196,9 @@ contract ExperimentalBlueprint is BlueprintServiceManagerBase {
     function withdraw() external {
         require(msg.sender == blueprintOwner, "Only owner can withdraw");
         payable(msg.sender).transfer(address(this).balance);
+    }
+
+    function _accountKey(string memory accountId) private pure returns (bytes32) {
+        return keccak256(bytes(accountId));
     }
 }
