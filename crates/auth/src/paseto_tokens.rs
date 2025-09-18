@@ -77,6 +77,9 @@ pub struct AccessTokenClaims {
     pub key_id: String,
     /// Unique token identifier for logging/debugging
     pub jti: String,
+    /// Optional scopes granted to this token (blueprint-defined)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scopes: Option<Vec<String>>,
 }
 
 impl AccessTokenClaims {
@@ -87,6 +90,7 @@ impl AccessTokenClaims {
         ttl: Duration,
         tenant_id: Option<String>,
         additional_headers: BTreeMap<String, String>,
+        scopes: Option<Vec<String>>,
     ) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -114,6 +118,7 @@ impl AccessTokenClaims {
             issued_at: now,
             key_id,
             jti: Uuid::new_v4().to_string(),
+            scopes,
         }
     }
 
@@ -190,6 +195,7 @@ impl PasetoTokenManager {
         tenant_id: Option<String>,
         additional_headers: BTreeMap<String, String>,
         ttl: Option<Duration>,
+        scopes: Option<Vec<String>>,
     ) -> Result<String, PasetoError> {
         let claims = AccessTokenClaims::new(
             service_id,
@@ -197,6 +203,7 @@ impl PasetoTokenManager {
             ttl.unwrap_or(self.default_ttl),
             tenant_id,
             additional_headers,
+            scopes,
         );
 
         // Create proper PASETO claims with standard fields
@@ -319,6 +326,7 @@ mod tests {
             ttl,
             tenant_id.clone(),
             headers.clone(),
+            None,
         );
 
         assert_eq!(claims.service_id, service_id);
@@ -341,6 +349,7 @@ mod tests {
             issued_at: 1,
             key_id: "ak_test".to_string(),
             jti: Uuid::new_v4().to_string(),
+            scopes: None,
         };
 
         assert!(claims.is_expired());
@@ -363,6 +372,7 @@ mod tests {
                 key_id.clone(),
                 tenant_id.clone(),
                 headers.clone(),
+                None,
                 None,
             )
             .expect("Should generate token");
@@ -394,6 +404,7 @@ mod tests {
                 None,
                 BTreeMap::new(),
                 None,
+                None,
             )
             .expect("Should generate token");
 
@@ -413,6 +424,7 @@ mod tests {
                 "ak_test".to_string(),
                 None,
                 BTreeMap::new(),
+                None,
                 None,
             )
             .expect("Should generate token");

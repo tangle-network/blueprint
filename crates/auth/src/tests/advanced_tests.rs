@@ -44,6 +44,7 @@ async fn test_paseto_key_persistence() {
             Some("tenant123".to_string()),
             BTreeMap::new(),
             None,
+            None,
         )
         .unwrap();
 
@@ -66,6 +67,7 @@ async fn test_paseto_key_persistence() {
             "test_key_id2".to_string(),
             Some("tenant456".to_string()),
             BTreeMap::new(),
+            None,
             None,
         )
         .unwrap();

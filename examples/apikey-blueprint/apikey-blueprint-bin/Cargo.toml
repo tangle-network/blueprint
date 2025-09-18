@@ -1,0 +1,15 @@
+[package]
+name = "apikey-blueprint-bin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+apikey-blueprint-lib = { path = "../apikey-blueprint-lib" }
+blueprint-sdk = { path = "../../../crates/sdk", features = ["std", "tangle"] }
+tokio = { version = "^1", features = ["rt-multi-thread", "macros"] }
+tower = { version = "0.5.2" }
+tracing-subscriber = { version = "0.3" }
+
+[build-dependencies]
+apikey-blueprint-lib = { path = "../apikey-blueprint-lib" }
+blueprint-sdk = { path = "../../../crates/sdk", features = ["macros", "build", "testing"] }

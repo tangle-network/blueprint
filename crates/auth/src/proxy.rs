@@ -51,6 +51,15 @@ pub struct AuthenticatedProxyState {
     paseto_manager: PasetoTokenManager,
 }
 
+impl AuthenticatedProxyState {
+    pub fn db_ref(&self) -> &crate::db::RocksDb {
+        &self.db
+    }
+    pub fn paseto_manager_ref(&self) -> &PasetoTokenManager {
+        &self.paseto_manager
+    }
+}
+
 impl AuthenticatedProxy {
     pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self, crate::Error> {
         let executer = TokioExecutor::new();
@@ -176,6 +185,8 @@ impl AuthenticatedProxy {
             .route("/auth/challenge", post(auth_challenge))
             .route("/auth/verify", post(auth_verify))
             .route("/auth/exchange", post(auth_exchange))
+            // OAuth 2.0 JWT Bearer Assertion token endpoint (RFC 7523)
+            .route("/oauth/token", post(crate::oauth::token::oauth_token))
     }
 }
 
@@ -467,6 +478,7 @@ async fn auth_exchange(
         tenant_id,
         protected_headers,
         custom_ttl,
+        None,
     ) {
         Ok(token) => token,
         Err(e) => {
@@ -599,8 +611,23 @@ async fn handle_paseto_token(
         }
     };
 
+    // Build upstream headers starting from token's additional headers
+    let mut headers = claims.additional_headers.clone();
+
+    // Inject canonical X-Scopes from claims.scopes if present
+    if let Some(scopes_vec) = claims.scopes.clone() {
+        if !scopes_vec.is_empty() {
+            let mut set = std::collections::BTreeSet::new();
+            for s in scopes_vec {
+                set.insert(s.to_lowercase());
+            }
+            let scopes_str = set.into_iter().collect::<Vec<_>>().join(" ");
+            headers.insert("x-scopes".to_string(), scopes_str);
+        }
+    }
+
     // Token expiration is already checked in validate_token
-    Ok((claims.service_id, claims.additional_headers))
+    Ok((claims.service_id, headers))
 }
 
 /// Check if a header name is forbidden for security reasons
@@ -625,6 +652,15 @@ fn is_forbidden_header(header_name: &str) -> bool {
             | "x-forwarded-proto"
             | "forwarded"
     )
+}
+
+/// Check if a header name is auth-specific and should be sanitized from client requests
+fn is_auth_header(header_name: &str) -> bool {
+    let lower = header_name.to_lowercase();
+    lower == "authorization"
+        || lower.starts_with("x-tenant-")
+        || lower == "x-scope"
+        || lower == "x-scopes"
 }
 
 /// Reverse proxy handler that forwards requests to the target host based on the service ID
@@ -699,6 +735,19 @@ async fn reverse_proxy(
     *req.uri_mut() = target_uri;
 
     // Inject additional headers into the request with re-validation
+    // Sanitize inbound headers: drop auth-specific and forbidden headers supplied by client
+    {
+        let mut to_remove: Vec<header::HeaderName> = Vec::new();
+        for (name, _value) in req.headers().iter() {
+            if is_auth_header(name.as_str()) || is_forbidden_header(name.as_str()) {
+                to_remove.push(name.clone());
+            }
+        }
+        for name in to_remove {
+            req.headers_mut().remove(name);
+        }
+    }
+
     for (header_name, header_value) in additional_headers {
         // Re-validate header names against security-sensitive headers
         if is_forbidden_header(&header_name) {
