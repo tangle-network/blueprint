@@ -1,8 +1,10 @@
+use apikey_blueprint_lib::{
+    ApiKeyBlueprintContext, ApiKeyProtectedService, PURCHASE_API_KEY_JOB_ID, WRITE_RESOURCE_JOB_ID,
+    purchase_api_key, write_resource,
+};
 use blueprint_sdk::Job;
 use blueprint_sdk::Router;
-use blueprint_sdk::{info, error};
 use blueprint_sdk::contexts::tangle::TangleClientContext;
-use std::sync::Arc;
 use blueprint_sdk::crypto::sp_core::SpSr25519;
 use blueprint_sdk::crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_sdk::keystore::backends::Backend;
@@ -13,12 +15,8 @@ use blueprint_sdk::tangle::consumer::TangleConsumer;
 use blueprint_sdk::tangle::filters::MatchesServiceId;
 use blueprint_sdk::tangle::layers::TangleLayer;
 use blueprint_sdk::tangle::producer::TangleProducer;
-use apikey_blueprint_lib::{
-    ApiKeyBlueprintContext,
-    ApiKeyProtectedService,
-    WRITE_RESOURCE_JOB_ID, write_resource,
-    PURCHASE_API_KEY_JOB_ID, purchase_api_key,
-};
+use blueprint_sdk::{error, info};
+use std::sync::Arc;
 use tower::filter::FilterLayer;
 
 fn setup_log() {

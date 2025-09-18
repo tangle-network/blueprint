@@ -1,4 +1,4 @@
-use apikey_blueprint_lib::{write_resource, purchase_api_key};
+use apikey_blueprint_lib::{purchase_api_key, write_resource};
 use blueprint_sdk::build;
 use blueprint_sdk::tangle::blueprint;
 

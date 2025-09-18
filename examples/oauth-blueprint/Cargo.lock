@@ -2499,10 +2499,11 @@ dependencies = [
 
 [[package]]
 name = "blueprint-auth"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "blueprint-core",
  "blueprint-std",
  "crc32fast",
  "hashbrown 0.15.5",
@@ -2534,7 +2535,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup"
-version = "0.1.0-alpha.18"
+version = "0.1.0-alpha.19"
 dependencies = [
  "blueprint-chain-setup-anvil",
  "blueprint-chain-setup-common",
@@ -2543,7 +2544,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup-anvil"
-version = "0.1.0-alpha.18"
+version = "0.1.0-alpha.19"
 dependencies = [
  "alloy-contract",
  "alloy-provider",
@@ -2564,7 +2565,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup-common"
-version = "0.1.0-alpha.18"
+version = "0.1.0-alpha.19"
 dependencies = [
  "alloy-signer-local",
  "blueprint-clients",
@@ -2583,7 +2584,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup-tangle"
-version = "0.1.0-alpha.18"
+version = "0.1.0-alpha.19"
 dependencies = [
  "alloy-json-abi",
  "alloy-network",
@@ -2627,7 +2628,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-client-eigenlayer"
-version = "0.1.0-alpha.17"
+version = "0.1.0-alpha.18"
 dependencies = [
  "alloy-contract",
  "alloy-network",
@@ -2675,7 +2676,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-client-tangle"
-version = "0.1.0-alpha.18"
+version = "0.1.0-alpha.19"
 dependencies = [
  "auto_impl",
  "blueprint-client-core",
@@ -2694,7 +2695,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-clients"
-version = "0.1.0-alpha.18"
+version = "0.1.0-alpha.19"
 dependencies = [
  "blueprint-client-core",
  "blueprint-client-eigenlayer",
@@ -2715,7 +2716,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-contexts"
-version = "0.1.0-alpha.18"
+version = "0.1.0-alpha.19"
 dependencies = [
  "blueprint-clients",
  "blueprint-keystore",
@@ -2740,7 +2741,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-core-testing-utils"
-version = "0.1.0-alpha.18"
+version = "0.1.0-alpha.19"
 dependencies = [
  "blueprint-auth",
  "blueprint-clients",
@@ -3012,7 +3013,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager-bridge"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 dependencies = [
  "blueprint-auth",
  "blueprint-core",
@@ -3100,7 +3101,6 @@ dependencies = [
  "toml 0.9.5",
  "tonic",
  "tonic-build",
- "tracing",
  "tracing-subscriber 0.3.19",
  "uuid 1.18.0",
 ]
@@ -3165,7 +3165,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-runner"
-version = "0.1.0-alpha.17"
+version = "0.1.0-alpha.18"
 dependencies = [
  "alloy-contract",
  "alloy-primitives 0.8.25",
@@ -3203,7 +3203,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-sdk"
-version = "0.1.0-alpha.18"
+version = "0.1.0-alpha.19"
 dependencies = [
  "blueprint-auth",
  "blueprint-build-utils",
@@ -3266,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-tangle-testing-utils"
-version = "0.1.0-alpha.18"
+version = "0.1.0-alpha.19"
 dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer-local",
@@ -3298,7 +3298,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-testing-utils"
-version = "0.1.0-alpha.18"
+version = "0.1.0-alpha.19"
 dependencies = [
  "blueprint-core-testing-utils",
  "blueprint-tangle-testing-utils",

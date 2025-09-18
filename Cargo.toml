@@ -197,6 +197,9 @@ bytes = { version = "1.10.1", default-features = false }
 hashbrown = { version = "0.15.4", default-features = false }
 base64 = { version = "0.22.0", default-features = false }
 rust_decimal = { version = "1.37", default-features = false }
+jsonwebtoken = { version = "9", default-features = false }
+pasetors = { version = "0.7.7", default-features = false }
+pem = { version = "1.1", default-features = false }
 
 # Error Handling & Logging
 anyhow = { version = "1.0.99", default-features = false }

@@ -1,4 +1,5 @@
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use blueprint_core::debug;
 
 /// OAuth 2.0 JWT Bearer Assertion token endpoint (RFC 7523)
 /// Accepts application/x-www-form-urlencoded with:
@@ -99,10 +100,10 @@ pub async fn oauth_token(
     if let Some(limit_err) =
         crate::oauth::rate_limit_check(s.db_ref(), &headers, service_id, 60, 120).err()
     {
-        tracing::debug!("rate_limit_check error: {}", limit_err);
+        debug!("rate_limit_check error: {}", limit_err);
     }
 
-    // Verify assertion (placeholder implementation returns NotConfigured until wired)
+    // Verify assertion
     let verifier = crate::oauth::AssertionVerifier::new(s.db_ref());
     match verifier.verify(assertion, &policy) {
         Ok(verified) => {
