@@ -34,7 +34,7 @@ blueprint-pricing-engine = { workspace = true, optional = true }
 parity-scale-codec = { workspace = true, features = ["derive"] }
 
 # Provider-specific dependencies
-bollard = { version = "0.18", optional = true }
+bollard = { workspace = true, optional = true }
 kube = { version = "0.90", features = ["rustls-tls"], optional = true }
 k8s-openapi = { version = "0.21", features = ["v1_29"], optional = true }
 
@@ -45,7 +45,7 @@ aws-sdk-eks = { version = "1.47", optional = true }
 aws-sdk-autoscaling = { version = "1.47", optional = true }
 
 # HTTP client for cloud APIs and pricing
-reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 rustls = { version = "0.23", features = ["ring"] }
 
 # TLS and secure communication
@@ -59,12 +59,12 @@ libc = "0.2"
 rand = "0.8"
 
 [dev-dependencies]
-blueprint-core-testing-utils = { path = "../testing-utils/core" }
+blueprint-core-testing-utils.workspace = true
 mockall = "0.13"
-tempfile = "3.8"
+tempfile.workspace = true
 tokio-test = "0.4"
 wiremock = "0.6"
-serial_test = "3.0"
+serial_test.workspace = true
 proptest = "1.0"
 mockito = "1.0"
 # Official AWS mocking library
