@@ -48,20 +48,23 @@ use crate::types::{ServiceId, VerifyChallengeResponse};
 use crate::validation;
 
 type HTTPClient = hyper_util::client::legacy::Client<HttpConnector, Body>;
+type HTTP2Client = hyper_util::client::legacy::Client<HttpConnector, Body>;
 
 /// The default port for the authenticated proxy server
 // T9 Mapping of TBPM (Tangle Blueprint Manager)
 pub const DEFAULT_AUTH_PROXY_PORT: u16 = 8276;
 
 pub struct AuthenticatedProxy {
-    client: HTTPClient,
+    http_client: HTTPClient,
+    http2_client: HTTP2Client,
     db: crate::db::RocksDb,
     paseto_manager: PasetoTokenManager,
 }
 
 #[derive(Clone, Debug)]
 pub struct AuthenticatedProxyState {
-    client: HTTPClient,
+    http_client: HTTPClient,
+    http2_client: HTTP2Client,
     db: crate::db::RocksDb,
     paseto_manager: PasetoTokenManager,
 }
@@ -79,14 +82,26 @@ impl AuthenticatedProxy {
     pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self, crate::Error> {
         let executer = TokioExecutor::new();
 
-        // Configure HTTP connector for HTTP/2 support with prior knowledge
+        // Configure HTTP connector for HTTP/1.1 support
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false); // Allow both HTTP and HTTPS
+        http_connector.set_nodelay(true); // Improve performance
 
-        // Build client with HTTP/2 support
-        let client: HTTPClient = hyper_util::client::legacy::Builder::new(executer)
-            .http2_only(true) // Force HTTP/2 for gRPC
-            .build(http_connector);
+        // Build HTTP/1.1 client for REST requests
+        let http_client: HTTPClient = hyper_util::client::legacy::Builder::new(executer.clone())
+            .http2_only(false) // Allow HTTP/1.1 only
+            .build(http_connector.clone());
+
+        // Configure HTTP connector for HTTP/2 support
+        let mut http2_connector = HttpConnector::new();
+        http2_connector.enforce_http(false); // Allow both HTTP and HTTPS
+        http2_connector.set_nodelay(true); // Improve performance for gRPC
+
+        // Build HTTP/2 client for gRPC requests
+        let http2_client: HTTP2Client = hyper_util::client::legacy::Builder::new(executer)
+            .http2_only(true) // Use HTTP/2 only for gRPC compatibility
+            .http2_adaptive_window(true) // Enable adaptive flow control for better gRPC performance
+            .build(http2_connector);
 
         let db_config = crate::db::RocksDbConfig::default();
         let db = crate::db::RocksDb::open(&db_path, &db_config)?;
@@ -95,7 +110,8 @@ impl AuthenticatedProxy {
         let paseto_manager = Self::init_paseto_manager(&db_path)?;
 
         Ok(AuthenticatedProxy {
-            client,
+            http_client,
+            http2_client,
             db,
             paseto_manager,
         })
@@ -165,8 +181,9 @@ impl AuthenticatedProxy {
 
     pub fn router(self) -> Router {
         let state = AuthenticatedProxyState {
+            http_client: self.http_client,
+            http2_client: self.http2_client,
             db: self.db,
-            client: self.client,
             paseto_manager: self.paseto_manager,
         };
         Router::new()
@@ -704,7 +721,6 @@ fn is_proxy_injected_header_allowed(header_name: &str) -> bool {
         || lower == "user-agent"
         // Allow gRPC-specific headers that are safe to forward
         || lower.starts_with("grpc-")
-        || lower.starts_with("grpc-")
 }
 
 /// Validate binary metadata header according to gRPC specification
@@ -816,12 +832,14 @@ fn apply_additional_headers(
             header_name.to_lowercase() == "x-scope" || header_name.to_lowercase() == "x-scopes";
         let is_allowed_proxy_header = is_proxy_injected_header_allowed(&header_name);
 
-        if !(!is_auth_header(&header_name)
+        // Skip (continue) if header is not allowed
+        let is_allowed = !is_auth_header(&header_name)
             || (is_grpc && is_grpc_required_header(&header_name))
             || is_tenant_header
             || is_scope_header
-            || (is_grpc && is_allowed_proxy_header))
-        {
+            || (is_grpc && is_allowed_proxy_header);
+        
+        if !is_allowed {
             continue;
         }
 
@@ -982,8 +1000,8 @@ async fn grpc_proxy(
 
     debug!("Forwarding gRPC request with headers: {:?}", req.headers());
 
-    // Forward the request to the target server
-    let response = s.client.request(req).await.map_err(|e| {
+    // Forward the request to the target server using HTTP/2 client for gRPC
+    let response = s.http2_client.request(req).await.map_err(|e| {
         error!("Failed to forward gRPC request: {:?}", e);
         StatusCode::BAD_GATEWAY
     })?;
@@ -1038,9 +1056,9 @@ async fn reverse_proxy(
     sanitize_request_headers(&mut req, false);
     apply_additional_headers(&mut req, additional_headers, false);
 
-    // Forward the request to the target server
+    // Forward the request to the target server using HTTP/1.1 client for REST
     let response = s
-        .client
+        .http_client
         .request(req)
         .await
         .map_err(|_| StatusCode::BAD_GATEWAY)?;
