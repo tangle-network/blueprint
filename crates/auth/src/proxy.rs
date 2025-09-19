@@ -16,7 +16,7 @@ use axum::{
     routing::post,
 };
 use blueprint_core::{debug, error, info, warn};
-use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor, rt::TokioTimer};
+use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor};
 use tower_http::cors::CorsLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::sensitive_headers::{
@@ -63,11 +63,16 @@ impl AuthenticatedProxyState {
 impl AuthenticatedProxy {
     pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self, crate::Error> {
         let executer = TokioExecutor::new();
-        let timer = TokioTimer::new();
+
+        // Configure HTTP connector for HTTP/2 support with prior knowledge
+        let mut http_connector = HttpConnector::new();
+        http_connector.enforce_http(false); // Allow both HTTP and HTTPS
+
+        // Build client with HTTP/2 support
         let client: HTTPClient = hyper_util::client::legacy::Builder::new(executer)
-            .pool_idle_timeout(std::time::Duration::from_secs(60))
-            .pool_timer(timer)
-            .build(HttpConnector::new());
+            .http2_only(true) // Force HTTP/2 for gRPC
+            .build(http_connector);
+
         let db_config = crate::db::RocksDbConfig::default();
         let db = crate::db::RocksDb::open(&db_path, &db_config)?;
 
@@ -151,7 +156,7 @@ impl AuthenticatedProxy {
         };
         Router::new()
             .nest("/v1", Self::internal_api_router_v1())
-            .fallback(any(reverse_proxy))
+            .fallback(any(unified_proxy))
             .layer(SetRequestIdLayer::new(
                 header::HeaderName::from_static("x-request-id"),
                 MakeRequestUuid,
@@ -644,8 +649,6 @@ fn is_forbidden_header(header_name: &str) -> bool {
             | "upgrade"
             | "proxy-authorization"
             | "proxy-authenticate"
-            | "te"
-            | "trailer"
             | "x-forwarded-host"
             | "x-real-ip"
             | "x-forwarded-for"
@@ -663,14 +666,28 @@ fn is_auth_header(header_name: &str) -> bool {
         || lower == "x-scopes"
 }
 
-/// Reverse proxy handler that forwards requests to the target host based on the service ID
-#[instrument(skip_all)]
-async fn reverse_proxy(
-    headers: axum::http::HeaderMap,
-    State(s): State<AuthenticatedProxyState>,
-    mut req: Request,
-) -> Result<Response, StatusCode> {
-    // Extract and validate token from Authorization header
+/// Check if a header is required for gRPC functionality
+fn is_grpc_required_header(header_name: &str) -> bool {
+    let lower = header_name.to_lowercase();
+    matches!(
+        lower.as_str(),
+        "content-type" | "te" | "grpc-encoding" | "grpc-accept-encoding"
+    )
+}
+
+/// Extract and validate authentication token from headers
+/// Returns (service_id, additional_headers) on success
+async fn extract_and_validate_auth(
+    headers: &axum::http::HeaderMap,
+    db: &crate::db::RocksDb,
+    paseto_manager: &crate::paseto_tokens::PasetoTokenManager,
+) -> Result<
+    (
+        crate::types::ServiceId,
+        std::collections::BTreeMap<String, String>,
+    ),
+    StatusCode,
+> {
     let auth_header = headers
         .get(crate::types::headers::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
@@ -683,26 +700,214 @@ async fn reverse_proxy(
     debug!("Processing auth header: {}", auth_header);
 
     // Use unified token parsing
-    let (service_id, additional_headers) = match crate::auth_token::AuthToken::parse(auth_header) {
+    match crate::auth_token::AuthToken::parse(auth_header) {
         Ok(crate::auth_token::AuthToken::Legacy(legacy_token)) => {
-            handle_legacy_token(legacy_token, &s.db).await?
+            handle_legacy_token(legacy_token, db).await
         }
-        Ok(crate::auth_token::AuthToken::ApiKey(api_key)) => {
-            handle_api_key(&api_key, &s.db).await?
-        }
+        Ok(crate::auth_token::AuthToken::ApiKey(api_key)) => handle_api_key(&api_key, db).await,
         Ok(crate::auth_token::AuthToken::AccessToken(_)) => {
             // This shouldn't happen as parse() returns an error for Paseto tokens
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
         Err(_) if auth_header.starts_with("v4.local.") => {
             // Special case for Paseto tokens which need the manager to validate
-            handle_paseto_token(auth_header, &s.paseto_manager).await?
+            handle_paseto_token(auth_header, paseto_manager).await
         }
         Err(e) => {
             warn!("Token parsing error for '{}': {:?}", auth_header, e);
-            return Err(StatusCode::UNAUTHORIZED);
+            Err(StatusCode::UNAUTHORIZED)
         }
+    }
+}
+
+/// Apply additional headers to request with security validation
+fn apply_additional_headers(
+    req: &mut Request,
+    additional_headers: std::collections::BTreeMap<String, String>,
+    is_grpc: bool,
+) {
+    for (header_name, header_value) in additional_headers {
+        // Re-validate header names against security-sensitive headers
+        if is_forbidden_header(&header_name) {
+            warn!("Attempted to inject forbidden header: {}", header_name);
+            continue;
+        }
+
+        // For gRPC, allow gRPC-required headers even if they might be auth-related
+        // Also allow tenant headers (x-tenant-*) and scope headers (x-scope, x-scopes) as they are meant to be forwarded
+        let is_tenant_header = header_name.to_lowercase().starts_with("x-tenant-");
+        let is_scope_header =
+            header_name.to_lowercase() == "x-scope" || header_name.to_lowercase() == "x-scopes";
+        if is_auth_header(&header_name)
+            && !(is_grpc && is_grpc_required_header(&header_name))
+            && !is_tenant_header
+            && !is_scope_header
+        {
+            continue;
+        }
+
+        if let Ok(name) = header::HeaderName::from_bytes(header_name.as_bytes()) {
+            // Additional validation for header values
+            if let Ok(value) = header::HeaderValue::from_str(&header_value) {
+                // Prevent header value injection attacks
+                if header_value.contains('\r') || header_value.contains('\n') {
+                    warn!("Header value contains CRLF: {}", header_name);
+                    continue;
+                }
+                req.headers_mut().insert(name, value);
+            } else {
+                warn!("Invalid header value for {}: {}", header_name, header_value);
+            }
+        } else {
+            warn!("Invalid header name: {}", header_name);
+        }
+    }
+}
+
+/// Sanitize request headers by removing auth-specific and forbidden headers
+fn sanitize_request_headers(req: &mut Request, is_grpc: bool) {
+    let mut to_remove: Vec<header::HeaderName> = Vec::new();
+    for (name, _value) in req.headers().iter() {
+        let name_str = name.as_str();
+        if is_auth_header(name_str) || is_forbidden_header(name_str) {
+            // For gRPC, don't remove gRPC-required headers
+            if !(is_grpc && is_grpc_required_header(name_str)) {
+                to_remove.push(name.clone());
+            }
+        }
+    }
+    for name in to_remove {
+        req.headers_mut().remove(name);
+    }
+}
+
+/// Detect if a request is a gRPC request based on headers
+fn is_grpc_request(headers: &axum::http::HeaderMap) -> bool {
+    // Check for content-type: application/grpc (case-insensitive)
+    let content_type = headers.get("content-type");
+    let is_grpc_content_type = content_type
+        .and_then(|ct| ct.to_str().ok())
+        .map(|ct| {
+            debug!("Content-Type header: {}", ct);
+            ct.to_lowercase().starts_with("application/grpc")
+        })
+        .unwrap_or(false);
+
+    // Check for te: trailers header (required for gRPC)
+    let te_header = headers.get("te");
+    let has_te_trailers = te_header
+        .and_then(|te| te.to_str().ok())
+        .map(|te| {
+            debug!("TE header: {}", te);
+            te.to_lowercase() == "trailers"
+        })
+        .unwrap_or(false);
+
+    debug!(
+        "gRPC detection - content-type: {:?}, is_grpc: {}, te: {:?}, has_trailers: {}",
+        content_type, is_grpc_content_type, te_header, has_te_trailers
+    );
+
+    let result = is_grpc_content_type && has_te_trailers;
+    debug!("gRPC request detected: {}", result);
+    result
+}
+
+/// gRPC-aware proxy handler that can handle both HTTP and gRPC requests
+#[instrument(skip_all)]
+async fn unified_proxy(
+    headers: axum::http::HeaderMap,
+    State(s): State<AuthenticatedProxyState>,
+    req: Request,
+) -> Result<Response, StatusCode> {
+    info!("Unified proxy called with headers: {:?}", headers);
+    info!("Request method: {}, URI: {}", req.method(), req.uri());
+
+    let is_grpc = is_grpc_request(&headers);
+
+    if is_grpc {
+        info!("Detected gRPC request, using gRPC proxy path");
+        grpc_proxy(headers, State(s), req).await
+    } else {
+        info!("Detected HTTP request, using HTTP proxy path");
+        reverse_proxy(headers, State(s), req).await
+    }
+}
+
+/// gRPC proxy handler that forwards gRPC requests while preserving gRPC-specific headers and trailers
+#[instrument(skip_all)]
+async fn grpc_proxy(
+    headers: axum::http::HeaderMap,
+    State(s): State<AuthenticatedProxyState>,
+    mut req: Request,
+) -> Result<Response, StatusCode> {
+    debug!("gRPC proxy called with headers: {:?}", headers);
+
+    // Extract and validate authentication
+    let (service_id, additional_headers) =
+        extract_and_validate_auth(&headers, &s.db, &s.paseto_manager).await?;
+
+    let service = match ServiceModel::find_by_id(service_id, &s.db) {
+        Ok(Some(service)) => service,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
+    let target_host = service
+        .upstream_url()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    debug!("Target host: {:?}", target_host);
+
+    let path = req.uri().path();
+    let path_query = req
+        .uri()
+        .path_and_query()
+        .map(|v| v.as_str())
+        .unwrap_or(path);
+    let target_uri = Uri::builder()
+        .scheme(target_host.scheme().cloned().unwrap_or(uri::Scheme::HTTP))
+        .authority(
+            target_host
+                .authority()
+                .cloned()
+                .unwrap_or(uri::Authority::from_static("localhost")),
+        )
+        .path_and_query(path_query)
+        .build()
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    debug!("Target URI: {:?}", target_uri);
+
+    // Set the target URI in the request
+    *req.uri_mut() = target_uri;
+
+    // Sanitize inbound headers and apply additional headers (gRPC-aware)
+    sanitize_request_headers(&mut req, true);
+    apply_additional_headers(&mut req, additional_headers, true);
+
+    debug!("Forwarding gRPC request with headers: {:?}", req.headers());
+
+    // Forward the request to the target server
+    let response = s.client.request(req).await.map_err(|e| {
+        error!("Failed to forward gRPC request: {:?}", e);
+        StatusCode::BAD_GATEWAY
+    })?;
+
+    debug!("gRPC response received: {:?}", response);
+
+    Ok(response.into_response())
+}
+
+/// Reverse proxy handler that forwards requests to the target host based on the service ID
+#[instrument(skip_all)]
+async fn reverse_proxy(
+    headers: axum::http::HeaderMap,
+    State(s): State<AuthenticatedProxyState>,
+    mut req: Request,
+) -> Result<Response, StatusCode> {
+    // Extract and validate authentication
+    let (service_id, additional_headers) =
+        extract_and_validate_auth(&headers, &s.db, &s.paseto_manager).await?;
 
     let service = match ServiceModel::find_by_id(service_id, &s.db) {
         Ok(Some(service)) => service,
@@ -734,43 +939,9 @@ async fn reverse_proxy(
     // Set the target URI in the request
     *req.uri_mut() = target_uri;
 
-    // Inject additional headers into the request with re-validation
-    // Sanitize inbound headers: drop auth-specific and forbidden headers supplied by client
-    {
-        let mut to_remove: Vec<header::HeaderName> = Vec::new();
-        for (name, _value) in req.headers().iter() {
-            if is_auth_header(name.as_str()) || is_forbidden_header(name.as_str()) {
-                to_remove.push(name.clone());
-            }
-        }
-        for name in to_remove {
-            req.headers_mut().remove(name);
-        }
-    }
-
-    for (header_name, header_value) in additional_headers {
-        // Re-validate header names against security-sensitive headers
-        if is_forbidden_header(&header_name) {
-            warn!("Attempted to inject forbidden header: {}", header_name);
-            continue;
-        }
-
-        if let Ok(name) = header::HeaderName::from_bytes(header_name.as_bytes()) {
-            // Additional validation for header values
-            if let Ok(value) = header::HeaderValue::from_str(&header_value) {
-                // Prevent header value injection attacks
-                if header_value.contains('\r') || header_value.contains('\n') {
-                    warn!("Header value contains CRLF: {}", header_name);
-                    continue;
-                }
-                req.headers_mut().insert(name, value);
-            } else {
-                warn!("Invalid header value for {}: {}", header_name, header_value);
-            }
-        } else {
-            warn!("Invalid header name: {}", header_name);
-        }
-    }
+    // Sanitize inbound headers and apply additional headers
+    sanitize_request_headers(&mut req, false);
+    apply_additional_headers(&mut req, additional_headers, false);
 
     // Forward the request to the target server
     let response = s
