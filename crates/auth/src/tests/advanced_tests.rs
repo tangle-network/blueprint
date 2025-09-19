@@ -32,6 +32,7 @@ async fn test_paseto_key_persistence() {
         api_key_prefix: "pst_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
+            tls_profile: None,
     };
     service.save(service_id, &db1).unwrap();
 
@@ -97,12 +98,14 @@ async fn test_service_deletion_impact() {
         api_key_prefix: "svc1_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8081".to_string(),
+            tls_profile: None,
     };
 
     let mut service2 = ServiceModel {
         api_key_prefix: "svc2_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8082".to_string(),
+            tls_profile: None,
     };
 
     // Add owners to both services
@@ -203,6 +206,7 @@ async fn test_max_header_validation_production() {
         api_key_prefix: "hdr_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
+            tls_profile: None,
     };
 
     let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -342,6 +346,7 @@ async fn test_pii_hashing_in_production() {
         api_key_prefix: "pii_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
+            tls_profile: None,
     };
 
     let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -492,6 +497,7 @@ async fn test_already_hashed_tenant_id_not_rehashed() {
         api_key_prefix: "hash_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
+            tls_profile: None,
     };
 
     let signing_key = k256::ecdsa::SigningKey::random(&mut rng);

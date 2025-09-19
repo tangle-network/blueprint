@@ -29,6 +29,11 @@ use crate::api_keys::{ApiKeyGenerator, ApiKeyModel};
 use crate::db::RocksDb;
 use crate::models::{ApiTokenModel, ServiceModel};
 use crate::paseto_tokens::PasetoTokenManager;
+use crate::tls_assets::TlsAssetManager;
+use crate::tls_client::TlsClientManager;
+use crate::tls_envelope::{TlsEnvelope, init_tls_envelope_key};
+use crate::tls_listener::{TlsListener, TlsListenerConfig};
+use crate::request_extensions::{extract_client_cert_from_request, AuthMethod};
 
 /// Maximum size for binary metadata headers in bytes
 /// Configurable via build-time environment variable GRPC_BINARY_METADATA_MAX_SIZE
@@ -47,8 +52,8 @@ fn get_max_binary_metadata_size() -> usize {
 use crate::types::{ServiceId, VerifyChallengeResponse};
 use crate::validation;
 
-type HTTPClient = hyper_util::client::legacy::Client<HttpConnector, Body>;
-type HTTP2Client = hyper_util::client::legacy::Client<HttpConnector, Body>;
+type HTTPClient = hyper_util::client::legacy::Client<hyper_util::client::legacy::connect::HttpConnector, Body>;
+type HTTP2Client = hyper_util::client::legacy::Client<hyper_util::client::legacy::connect::HttpConnector, Body>;
 
 /// The default port for the authenticated proxy server
 // T9 Mapping of TBPM (Tangle Blueprint Manager)
@@ -57,16 +62,20 @@ pub const DEFAULT_AUTH_PROXY_PORT: u16 = 8276;
 pub struct AuthenticatedProxy {
     http_client: HTTPClient,
     http2_client: HTTP2Client,
+    tls_client_manager: TlsClientManager,
     db: crate::db::RocksDb,
     paseto_manager: PasetoTokenManager,
+    tls_envelope: TlsEnvelope,
 }
 
 #[derive(Clone, Debug)]
 pub struct AuthenticatedProxyState {
     http_client: HTTPClient,
     http2_client: HTTP2Client,
+    tls_client_manager: TlsClientManager,
     db: crate::db::RocksDb,
     paseto_manager: PasetoTokenManager,
+    tls_envelope: TlsEnvelope,
 }
 
 impl AuthenticatedProxyState {
@@ -76,28 +85,34 @@ impl AuthenticatedProxyState {
     pub fn paseto_manager_ref(&self) -> &PasetoTokenManager {
         &self.paseto_manager
     }
+    pub fn tls_envelope_ref(&self) -> &TlsEnvelope {
+        &self.tls_envelope
+    }
+    pub fn tls_client_manager_ref(&self) -> &TlsClientManager {
+        &self.tls_client_manager
+    }
 }
 
 impl AuthenticatedProxy {
     pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self, crate::Error> {
         let executer = TokioExecutor::new();
 
-        // Configure HTTP connector for HTTP/1.1 support
+        // Configure HTTP connector for HTTP/1.1 support (fallback for non-TLS)
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false); // Allow both HTTP and HTTPS
         http_connector.set_nodelay(true); // Improve performance
 
-        // Build HTTP/1.1 client for REST requests
+        // Build HTTP/1.1 client for REST requests (fallback for non-TLS)
         let http_client: HTTPClient = hyper_util::client::legacy::Builder::new(executer.clone())
             .http2_only(false) // Allow HTTP/1.1 only
             .build(http_connector.clone());
 
-        // Configure HTTP connector for HTTP/2 support
+        // Configure HTTP connector for HTTP/2 support (fallback for non-TLS)
         let mut http2_connector = HttpConnector::new();
         http2_connector.enforce_http(false); // Allow both HTTP and HTTPS
         http2_connector.set_nodelay(true); // Improve performance for gRPC
 
-        // Build HTTP/2 client for gRPC requests
+        // Build HTTP/2 client for gRPC requests (fallback for non-TLS)
         let http2_client: HTTP2Client = hyper_util::client::legacy::Builder::new(executer)
             .http2_only(true) // Use HTTP/2 only for gRPC compatibility
             .http2_adaptive_window(true) // Enable adaptive flow control for better gRPC performance
@@ -106,14 +121,25 @@ impl AuthenticatedProxy {
         let db_config = crate::db::RocksDbConfig::default();
         let db = crate::db::RocksDb::open(&db_path, &db_config)?;
 
+        // Initialize TLS envelope with persistent key
+        let tls_envelope = Self::init_tls_envelope(&db_path)?;
+
+        // Initialize TLS asset manager
+        let tls_assets = TlsAssetManager::new(db.clone(), tls_envelope.clone());
+
+        // Initialize TLS client manager
+        let tls_client_manager = TlsClientManager::new(db.clone(), tls_assets);
+
         // Initialize Paseto token manager with persistent key
         let paseto_manager = Self::init_paseto_manager(&db_path)?;
 
         Ok(AuthenticatedProxy {
             http_client,
             http2_client,
+            tls_client_manager,
             db,
             paseto_manager,
+            tls_envelope,
         })
     }
 
@@ -179,12 +205,32 @@ impl AuthenticatedProxy {
         Ok(manager)
     }
 
+    /// Initialize TLS envelope with persistent key
+    fn init_tls_envelope<P: AsRef<Path>>(db_path: P) -> Result<TlsEnvelope, crate::Error> {
+        let envelope_key = init_tls_envelope_key(&db_path)
+            .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+        
+        Ok(TlsEnvelope::with_key(envelope_key))
+    }
+
+    /// Create and start TLS listener with dual socket support
+    pub async fn start_tls_listener<P: AsRef<Path>>(
+        db_path: P,
+        config: Option<TlsListenerConfig>,
+    ) -> Result<(), crate::Error> {
+        let config = config.unwrap_or_default();
+        let listener = TlsListener::new(db_path, config).await?;
+        listener.serve().await
+    }
+
     pub fn router(self) -> Router {
         let state = AuthenticatedProxyState {
             http_client: self.http_client,
             http2_client: self.http2_client,
+            tls_client_manager: self.tls_client_manager,
             db: self.db,
             paseto_manager: self.paseto_manager,
+            tls_envelope: self.tls_envelope,
         };
         Router::new()
             .nest("/v1", Self::internal_api_router_v1())
@@ -936,14 +982,28 @@ async fn unified_proxy(
     info!("Unified proxy called with headers: {:?}", headers);
     info!("Request method: {}, URI: {}", req.method(), req.uri());
 
+    // Extract client certificate information from request extensions
+    let client_cert = extract_client_cert_from_request(&req);
+    
+    // Determine authentication method based on available information
+    let auth_method = if client_cert.is_some() {
+        AuthMethod::Mtls
+    } else if headers.get("authorization").is_some() {
+        AuthMethod::AccessToken
+    } else if headers.get("x-api-key").is_some() {
+        AuthMethod::ApiKey
+    } else {
+        AuthMethod::OAuth
+    };
+
     let is_grpc = is_grpc_request(&headers, &req);
 
     if is_grpc {
         info!("Detected gRPC request, using gRPC proxy path");
-        grpc_proxy(headers, State(s), req).await
+        grpc_proxy_with_mtls(headers, State(s), req, client_cert, auth_method).await
     } else {
         info!("Detected HTTP request, using HTTP proxy path");
-        reverse_proxy(headers, State(s), req).await
+        reverse_proxy_with_mtls(headers, State(s), req, client_cert, auth_method).await
     }
 }
 
@@ -1066,6 +1126,186 @@ async fn reverse_proxy(
     Ok(response.into_response())
 }
 
+/// gRPC proxy handler with mTLS support
+#[instrument(skip_all)]
+async fn grpc_proxy_with_mtls(
+    headers: axum::http::HeaderMap,
+    State(s): State<AuthenticatedProxyState>,
+    mut req: Request,
+    client_cert: Option<crate::tls_listener::ClientCertInfo>,
+    _auth_method: AuthMethod,
+) -> Result<Response, StatusCode> {
+    debug!("gRPC proxy with mTLS called with headers: {:?}", headers);
+
+    // Extract and validate authentication
+    let (service_id, mut additional_headers) =
+        extract_and_validate_auth(&headers, &s.db, &s.paseto_manager).await?;
+
+    // Add client certificate information to headers if available
+    if let Some(cert) = &client_cert {
+        additional_headers.insert("x-client-cert-subject".to_string(), cert.subject.clone());
+        additional_headers.insert("x-client-cert-issuer".to_string(), cert.issuer.clone());
+        additional_headers.insert("x-client-cert-serial".to_string(), cert.serial.clone());
+        additional_headers.insert("x-auth-method".to_string(), "mtls".to_string());
+    }
+
+    let service = match ServiceModel::find_by_id(service_id, &s.db) {
+        Ok(Some(service)) => service,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+    let target_host = service
+        .upstream_url()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    debug!("Target host: {:?}", target_host);
+
+    let path = req.uri().path();
+    let path_query = req
+        .uri()
+        .path_and_query()
+        .map(|v| v.as_str())
+        .unwrap_or(path);
+    let target_uri = Uri::builder()
+        .scheme(target_host.scheme().cloned().unwrap_or(uri::Scheme::HTTP))
+        .authority(
+            target_host
+                .authority()
+                .cloned()
+                .unwrap_or(uri::Authority::from_static("localhost")),
+        )
+        .path_and_query(path_query)
+        .build()
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    debug!("Target URI: {:?}", target_uri);
+
+    // Set the target URI in the request
+    *req.uri_mut() = target_uri;
+
+    // Sanitize inbound headers and apply additional headers (gRPC-aware)
+    sanitize_request_headers(&mut req, true);
+    apply_additional_headers(&mut req, additional_headers, true);
+
+    debug!("Forwarding gRPC request with headers: {:?}", req.headers());
+
+    // Determine if we need TLS for the upstream connection
+    let use_tls = target_host.scheme() == Some(&uri::Scheme::HTTPS);
+    
+    // Forward the request using appropriate client
+    let response = if use_tls {
+        // Use TLS client for HTTPS upstreams
+        let tls_client = s.tls_client_manager.get_client_for_service(service_id).await
+            .map_err(|e| {
+                error!("Failed to get TLS client for service {}: {:?}", service_id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        
+        // Convert request body to Incoming type
+        let (parts, body) = req.into_parts();
+        let req_with_incoming = Request::from_parts(parts, body);
+        tls_client.http2_client.request(req_with_incoming).await.map_err(|e| {
+            error!("Failed to forward gRPC request with TLS: {:?}", e);
+            StatusCode::BAD_GATEWAY
+        })?
+    } else {
+        // Use fallback HTTP/2 client for HTTP upstreams
+        s.http2_client.request(req).await.map_err(|e| {
+            error!("Failed to forward gRPC request: {:?}", e);
+            StatusCode::BAD_GATEWAY
+        })?
+    };
+
+    debug!("gRPC response received: {:?}", response);
+
+    Ok(response.into_response())
+}
+
+/// Reverse proxy handler with mTLS support
+#[instrument(skip_all)]
+async fn reverse_proxy_with_mtls(
+    headers: axum::http::HeaderMap,
+    State(s): State<AuthenticatedProxyState>,
+    mut req: Request,
+    client_cert: Option<crate::tls_listener::ClientCertInfo>,
+    _auth_method: AuthMethod,
+) -> Result<Response, StatusCode> {
+    // Extract and validate authentication
+    let (service_id, mut additional_headers) =
+        extract_and_validate_auth(&headers, &s.db, &s.paseto_manager).await?;
+
+    // Add client certificate information to headers if available
+    if let Some(cert) = &client_cert {
+        additional_headers.insert("x-client-cert-subject".to_string(), cert.subject.clone());
+        additional_headers.insert("x-client-cert-issuer".to_string(), cert.issuer.clone());
+        additional_headers.insert("x-client-cert-serial".to_string(), cert.serial.clone());
+        additional_headers.insert("x-auth-method".to_string(), "mtls".to_string());
+    }
+
+    let service = match ServiceModel::find_by_id(service_id, &s.db) {
+        Ok(Some(service)) => service,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+    let target_host = service
+        .upstream_url()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let path = req.uri().path();
+    let path_query = req
+        .uri()
+        .path_and_query()
+        .map(|v| v.as_str())
+        .unwrap_or(path);
+    let target_uri = Uri::builder()
+        .scheme(target_host.scheme().cloned().unwrap_or(uri::Scheme::HTTP))
+        .authority(
+            target_host
+                .authority()
+                .cloned()
+                .unwrap_or(uri::Authority::from_static("localhost")),
+        )
+        .path_and_query(path_query)
+        .build()
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Set the target URI in the request
+    *req.uri_mut() = target_uri;
+
+    // Sanitize inbound headers and apply additional headers
+    sanitize_request_headers(&mut req, false);
+    apply_additional_headers(&mut req, additional_headers, false);
+
+    // Determine if we need TLS for the upstream connection
+    let use_tls = target_host.scheme() == Some(&uri::Scheme::HTTPS);
+    
+    // Forward the request using appropriate client
+    let response = if use_tls {
+        // Use TLS client for HTTPS upstreams
+        let tls_client = s.tls_client_manager.get_client_for_service(service_id).await
+            .map_err(|e| {
+                error!("Failed to get TLS client for service {}: {:?}", service_id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        
+        // Convert request body to Incoming type
+        let (parts, body) = req.into_parts();
+        let req_with_incoming = Request::from_parts(parts, body);
+        tls_client.http_client.request(req_with_incoming).await.map_err(|e| {
+            error!("Failed to forward HTTP request with TLS: {:?}", e);
+            StatusCode::BAD_GATEWAY
+        })?
+    } else {
+        // Use fallback HTTP/1.1 client for HTTP upstreams
+        s.http_client
+            .request(req)
+            .await
+            .map_err(|_| StatusCode::BAD_GATEWAY)?
+    };
+
+    Ok(response.into_response())
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -1119,6 +1359,7 @@ mod tests {
             api_key_prefix: "test_".to_string(),
             owners: Vec::new(),
             upstream_url: format!("http://localhost:{}", local_addr.port()),
+            tls_profile: None,
         };
 
         let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -1250,6 +1491,7 @@ mod tests {
             api_key_prefix: "test_".to_string(),
             owners: Vec::new(),
             upstream_url: format!("http://localhost:{}", local_addr.port()),
+            tls_profile: None,
         };
 
         let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -1339,6 +1581,7 @@ mod tests {
             api_key_prefix: "test_".to_string(),
             owners: Vec::new(),
             upstream_url: "http://localhost:9999".to_string(),
+            tls_profile: None,
         };
 
         let signing_key = k256::ecdsa::SigningKey::random(&mut rng);

@@ -36,6 +36,7 @@ async fn test_token_exchange_flow() {
         api_key_prefix: "test_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
+            tls_profile: None,
     };
 
     let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -177,6 +178,7 @@ async fn test_token_exchange_with_invalid_headers() {
         api_key_prefix: "test_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
+            tls_profile: None,
     };
 
     let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -286,6 +288,7 @@ async fn test_reverse_proxy_with_paseto_token() {
         api_key_prefix: "test_".to_string(),
         owners: Vec::new(),
         upstream_url: format!("http://localhost:{}", test_addr.port()),
+        tls_profile: None,
     };
 
     let signing_key = k256::ecdsa::SigningKey::random(&mut rng);

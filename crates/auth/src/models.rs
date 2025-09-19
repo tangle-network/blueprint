@@ -39,6 +39,41 @@ pub struct ApiTokenModel {
     pub additional_headers: Vec<u8>,
 }
 
+/// TLS profile configuration for a service
+#[derive(prost::Message, Clone)]
+pub struct TlsProfile {
+    /// Whether TLS is enabled for this service
+    #[prost(bool)]
+    pub tls_enabled: bool,
+    /// Whether client mTLS is required
+    #[prost(bool)]
+    pub require_client_mtls: bool,
+    /// Encrypted server certificate PEM
+    #[prost(bytes)]
+    pub encrypted_server_cert: Vec<u8>,
+    /// Encrypted server private key PEM
+    #[prost(bytes)]
+    pub encrypted_server_key: Vec<u8>,
+    /// Encrypted client CA bundle PEM
+    #[prost(bytes)]
+    pub encrypted_client_ca_bundle: Vec<u8>,
+    /// Encrypted upstream CA bundle PEM
+    #[prost(bytes)]
+    pub encrypted_upstream_ca_bundle: Vec<u8>,
+    /// Encrypted upstream client certificate PEM
+    #[prost(bytes)]
+    pub encrypted_upstream_client_cert: Vec<u8>,
+    /// Encrypted upstream client private key PEM
+    #[prost(bytes)]
+    pub encrypted_upstream_client_key: Vec<u8>,
+    /// Maximum client certificate TTL in hours
+    #[prost(uint32)]
+    pub client_cert_ttl_hours: u32,
+    /// Optional SNI hostname for this service
+    #[prost(string, optional)]
+    pub sni: Option<String>,
+}
+
 /// Represents a service model stored in the database.
 #[derive(prost::Message, Clone)]
 pub struct ServiceModel {
@@ -53,6 +88,9 @@ pub struct ServiceModel {
     /// This what the proxy will use to forward requests to the service.
     #[prost(string)]
     pub upstream_url: String,
+    /// TLS profile configuration for this service
+    #[prost(message, optional)]
+    pub tls_profile: Option<TlsProfile>,
 }
 
 /// A service owner model stored in the database.
@@ -66,6 +104,47 @@ pub struct ServiceOwnerModel {
     /// The public key bytes.
     #[prost(bytes)]
     pub key_bytes: Vec<u8>,
+}
+
+/// TLS certificate metadata for issued certificates
+#[derive(prost::Message, Clone, PartialEq, Eq)]
+pub struct TlsCertMetadata {
+    /// The service ID this certificate belongs to
+    #[prost(uint64)]
+    pub service_id: u64,
+    /// The certificate ID (unique within service)
+    #[prost(string)]
+    pub cert_id: String,
+    /// Certificate PEM encoded
+    #[prost(string)]
+    pub certificate_pem: String,
+    /// Certificate serial number
+    #[prost(string)]
+    pub serial: String,
+    /// Certificate expiration timestamp (seconds since epoch)
+    #[prost(uint64)]
+    pub expires_at: u64,
+    /// Whether the certificate is revoked
+    #[prost(bool)]
+    pub is_revoked: bool,
+    /// Certificate usage (client, server, both)
+    #[prost(string)]
+    pub usage: String,
+    /// Subject common name
+    #[prost(string)]
+    pub common_name: String,
+    /// Subject alternative names
+    #[prost(string, repeated)]
+    pub subject_alt_names: Vec<String>,
+    /// Issuance timestamp (seconds since epoch)
+    #[prost(uint64)]
+    pub issued_at: u64,
+    /// Issuing API key ID (for auditing)
+    #[prost(uint64)]
+    pub issued_by_api_key_id: u64,
+    /// Tenant ID associated with this certificate
+    #[prost(string, optional)]
+    pub tenant_id: Option<String>,
 }
 
 impl ApiTokenModel {
@@ -300,6 +379,233 @@ impl ServiceModel {
     /// Returns the upstream URL.
     pub fn upstream_url(&self) -> Result<uri::Uri, Error> {
         self.upstream_url.parse::<uri::Uri>().map_err(Into::into)
+    }
+
+    /// Get the TLS profile for this service
+    pub fn tls_profile(&self) -> Option<&TlsProfile> {
+        self.tls_profile.as_ref()
+    }
+
+    /// Set the TLS profile for this service
+    pub fn set_tls_profile(&mut self, tls_profile: TlsProfile) {
+        self.tls_profile = Some(tls_profile);
+    }
+
+    /// Check if TLS is enabled for this service
+    pub fn is_tls_enabled(&self) -> bool {
+        self.tls_profile.as_ref().map(|p| p.tls_enabled).unwrap_or(false)
+    }
+
+    /// Check if client mTLS is required for this service
+    pub fn requires_client_mtls(&self) -> bool {
+        self.tls_profile.as_ref().map(|p| p.require_client_mtls).unwrap_or(false)
+    }
+}
+
+impl TlsCertMetadata {
+    /// Create a new certificate metadata entry
+    pub fn new(
+        service_id: u64,
+        cert_id: String,
+        certificate_pem: String,
+        serial: String,
+        expires_at: u64,
+        usage: String,
+        common_name: String,
+        issued_by_api_key_id: u64,
+    ) -> Self {
+        Self {
+            service_id,
+            cert_id,
+            certificate_pem,
+            serial,
+            expires_at,
+            is_revoked: false,
+            usage,
+            common_name,
+            subject_alt_names: Vec::new(),
+            issued_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            issued_by_api_key_id,
+            tenant_id: None,
+        }
+    }
+
+    /// Generate the database key for this certificate metadata
+    pub fn db_key(&self) -> Vec<u8> {
+        let mut key = Vec::with_capacity(16 + self.cert_id.len());
+        key.extend_from_slice(&self.service_id.to_be_bytes());
+        key.extend_from_slice(self.cert_id.as_bytes());
+        key
+    }
+
+    /// Save the certificate metadata to the database
+    pub fn save(&self, db: &RocksDb) -> Result<(), crate::Error> {
+        let cf = db
+            .cf_handle(crate::db::cf::TLS_CERT_METADATA_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(crate::db::cf::TLS_CERT_METADATA_CF))?;
+        
+        let key = self.db_key();
+        let metadata_bytes = self.encode_to_vec();
+        db.put_cf(&cf, key, metadata_bytes)?;
+        Ok(())
+    }
+
+    /// Find certificate metadata by service ID and certificate ID
+    pub fn find_by_service_and_cert_id(
+        service_id: u64,
+        cert_id: &str,
+        db: &RocksDb,
+    ) -> Result<Option<Self>, crate::Error> {
+        let cf = db
+            .cf_handle(crate::db::cf::TLS_CERT_METADATA_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(crate::db::cf::TLS_CERT_METADATA_CF))?;
+        
+        let mut key = Vec::with_capacity(16 + cert_id.len());
+        key.extend_from_slice(&service_id.to_be_bytes());
+        key.extend_from_slice(cert_id.as_bytes());
+        
+        let metadata_bytes = db.get_pinned_cf(&cf, key)?;
+        
+        metadata_bytes
+            .map(|bytes| TlsCertMetadata::decode(bytes.as_ref()))
+            .transpose()
+            .map_err(Into::into)
+    }
+
+    /// Check if the certificate is expired
+    pub fn is_expired(&self) -> bool {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.expires_at < now
+    }
+
+    /// Revoke the certificate
+    pub fn revoke(&mut self) {
+        self.is_revoked = true;
+    }
+
+    /// Add a subject alternative name
+    pub fn add_subject_alt_name(&mut self, san: String) {
+        self.subject_alt_names.push(san);
+    }
+
+    /// Set the tenant ID
+    pub fn set_tenant_id(&mut self, tenant_id: String) {
+        self.tenant_id = Some(tenant_id);
+    }
+}
+
+/// Helper functions for TLS asset management
+pub mod tls_assets {
+    use super::*;
+    use crate::db::cf;
+
+    /// Store encrypted TLS asset in the database
+    pub fn store_tls_asset(
+        db: &RocksDb,
+        service_id: u64,
+        asset_type: &str,
+        encrypted_data: &[u8],
+    ) -> Result<(), crate::Error> {
+        let cf = db
+            .cf_handle(cf::TLS_ASSETS_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_ASSETS_CF))?;
+        
+        let key = format!("{}:{}", service_id, asset_type);
+        db.put_cf(&cf, key.as_bytes(), encrypted_data)?;
+        Ok(())
+    }
+
+    /// Retrieve encrypted TLS asset from the database
+    pub fn get_tls_asset(
+        db: &RocksDb,
+        service_id: u64,
+        asset_type: &str,
+    ) -> Result<Option<Vec<u8>>, crate::Error> {
+        let cf = db
+            .cf_handle(cf::TLS_ASSETS_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_ASSETS_CF))?;
+        
+        let key = format!("{}:{}", service_id, asset_type);
+        let asset_bytes = db.get_pinned_cf(&cf, key.as_bytes())?;
+        Ok(asset_bytes.map(|bytes| bytes.to_vec()))
+    }
+
+    /// Delete TLS asset from the database
+    pub fn delete_tls_asset(
+        db: &RocksDb,
+        service_id: u64,
+        asset_type: &str,
+    ) -> Result<(), crate::Error> {
+        let cf = db
+            .cf_handle(cf::TLS_ASSETS_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_ASSETS_CF))?;
+        
+        let key = format!("{}:{}", service_id, asset_type);
+        db.delete_cf(&cf, key.as_bytes())?;
+        Ok(())
+    }
+
+    /// Log certificate issuance for auditing
+    pub fn log_certificate_issuance(
+        db: &RocksDb,
+        service_id: u64,
+        cert_id: &str,
+        api_key_id: u64,
+        tenant_id: Option<&str>,
+    ) -> Result<(), crate::Error> {
+        let cf = db
+            .cf_handle(cf::TLS_ISSUANCE_LOG_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_ISSUANCE_LOG_CF))?;
+        
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        let mut log_entry = Vec::new();
+        log_entry.extend_from_slice(&timestamp.to_be_bytes());
+        log_entry.extend_from_slice(&service_id.to_be_bytes());
+        log_entry.extend_from_slice(cert_id.as_bytes());
+        log_entry.push(0u8); // separator
+        log_entry.extend_from_slice(&api_key_id.to_be_bytes());
+        if let Some(tenant_id) = tenant_id {
+            log_entry.extend_from_slice(tenant_id.as_bytes());
+        }
+        
+        let log_key = format!("{}:{}", timestamp, cert_id);
+        db.put_cf(&cf, log_key.as_bytes(), log_entry)?;
+        Ok(())
+    }
+
+    /// Get certificate issuance log for a service
+    pub fn get_certificate_issuance_log(
+        db: &RocksDb,
+        service_id: u64,
+    ) -> Result<Vec<TlsCertMetadata>, crate::Error> {
+        let cf = db
+            .cf_handle(cf::TLS_CERT_METADATA_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_CERT_METADATA_CF))?;
+        
+        let mut certificates = Vec::new();
+        let prefix = service_id.to_be_bytes();
+        
+        // Iterate through all certificates for this service
+        let iter = db.prefix_iterator_cf(&cf, &prefix);
+        for item in iter {
+            let (_key, value) = item?;
+            let metadata = TlsCertMetadata::decode(&*value)?;
+            if metadata.service_id == service_id {
+                certificates.push(metadata);
+            }
+        }
+        
+        Ok(certificates)
     }
 }
 

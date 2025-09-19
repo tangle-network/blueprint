@@ -94,6 +94,7 @@ async fn multi_tenant_service_isolation() {
         api_key_prefix: "mt_".to_string(),
         owners: Vec::new(),
         upstream_url: format!("http://localhost:{}", service_addr.port()),
+        tls_profile: None,
     };
 
     // Add multiple owners (simulating different tenant admins)
@@ -246,6 +247,7 @@ async fn tenant_token_cannot_impersonate_other_tenant() {
         api_key_prefix: "sec_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:9999".to_string(),
+            tls_profile: None,
     };
 
     // Create two different tenant keys
@@ -432,6 +434,7 @@ async fn tenant_rate_limiting_by_tier() {
         api_key_prefix: "rl_".to_string(),
         owners: Vec::new(),
         upstream_url: format!("http://localhost:{}", service_addr.port()),
+        tls_profile: None,
     };
 
     // Create a free tier user
@@ -534,6 +537,7 @@ async fn tenant_data_isolation_verification() {
         api_key_prefix: "iso_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
+            tls_profile: None,
     };
 
     let mut tenant_data = Vec::new();

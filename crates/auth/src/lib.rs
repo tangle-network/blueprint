@@ -56,10 +56,20 @@ pub mod paseto_tokens;
 pub mod proxy;
 /// Request-level auth context parsing and extractors
 pub mod request_auth;
+/// Request extension plumbing for client certificate identity
+pub mod request_extensions;
 /// Holds the authentication-related types.
 pub mod types;
 /// Header validation utilities
 pub mod validation;
+/// TLS envelope encryption for certificate material
+pub mod tls_envelope;
+/// TLS client management for outbound connections
+pub mod tls_client;
+/// TLS listener for dual socket support (HTTP + HTTPS)
+pub mod tls_listener;
+/// TLS assets management
+pub mod tls_assets;
 
 #[cfg(test)]
 mod test_client;
@@ -99,6 +109,15 @@ pub enum Error {
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("TLS envelope error: {0}")]
+    TlsEnvelope(#[from] crate::tls_envelope::TlsEnvelopeError),
+
+    #[error("TLS error: {0}")]
+    Tls(String),
+
+    #[error("Service not found: {0}")]
+    ServiceNotFound(crate::types::ServiceId),
 }
 
 /// Generates a random challenge string to be used in the authentication process.

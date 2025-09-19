@@ -56,6 +56,7 @@ async fn test_api_key_cross_user_isolation() {
         api_key_prefix: "sec_".to_string(),
         owners: Vec::new(),
         upstream_url: format!("http://localhost:{}", test_addr.port()),
+        tls_profile: None,
     };
 
     // Create three different users with different signing keys
@@ -233,6 +234,7 @@ async fn test_paseto_token_cross_user_isolation() {
         api_key_prefix: "pst_".to_string(),
         owners: Vec::new(),
         upstream_url: format!("http://localhost:{}", test_addr.port()),
+        tls_profile: None,
     };
 
     // Create two users with different privileges
@@ -383,6 +385,7 @@ async fn test_concurrent_multi_user_authentication() {
         api_key_prefix: "conc_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
+            tls_profile: None,
     };
 
     let db = proxy.db();
@@ -534,6 +537,7 @@ async fn test_token_exchange_header_injection_security() {
         api_key_prefix: "inj_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
+            tls_profile: None,
     };
 
     let signing_key = k256::ecdsa::SigningKey::random(&mut rng);

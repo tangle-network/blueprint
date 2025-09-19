@@ -217,6 +217,7 @@ impl BlueprintManagerBridge for BridgeService {
             api_key_prefix,
             owners: service_owners,
             upstream_url,
+            tls_profile: None,
         };
 
         // Save to database

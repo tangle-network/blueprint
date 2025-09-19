@@ -55,6 +55,7 @@ fn start_proxy_with_policy(policy: ServiceOAuthPolicy) -> (SocketAddr, ServiceId
         api_key_prefix: "test_".to_string(),
         owners: vec![],
         upstream_url: "http://127.0.0.1:9".to_string(),
+            tls_profile: None,
     };
     service.save(service_id, &db).unwrap();
     policy.save(service_id, &db).unwrap();
@@ -338,6 +339,7 @@ async fn oauth_scopes_are_forwarded_and_normalized_and_client_scopes_stripped() 
         api_key_prefix: "test_".to_string(),
         owners: vec![],
         upstream_url: format!("http://{}", echo_addr),
+        tls_profile: None,
     };
     service.save(service_id, &db).unwrap();
     let policy = ServiceOAuthPolicy {
@@ -450,6 +452,7 @@ async fn oauth_scopes_absent_when_not_allowed_and_client_header_stripped() {
         api_key_prefix: "test_".to_string(),
         owners: vec![],
         upstream_url: format!("http://{}", echo_addr),
+        tls_profile: None,
     };
     service.save(service_id, &db).unwrap();
     let policy = ServiceOAuthPolicy {
