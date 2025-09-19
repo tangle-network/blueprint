@@ -29,6 +29,21 @@ use crate::api_keys::{ApiKeyGenerator, ApiKeyModel};
 use crate::db::RocksDb;
 use crate::models::{ApiTokenModel, ServiceModel};
 use crate::paseto_tokens::PasetoTokenManager;
+
+/// Maximum size for binary metadata headers in bytes
+/// Configurable via build-time environment variable GRPC_BINARY_METADATA_MAX_SIZE
+/// Default value is 16384 bytes (16KB) if not specified
+/// Note: This uses a static variable instead of const to allow runtime configuration
+static GRPC_BINARY_METADATA_MAX_SIZE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+
+fn get_max_binary_metadata_size() -> usize {
+    *GRPC_BINARY_METADATA_MAX_SIZE.get_or_init(|| {
+        std::env::var("GRPC_BINARY_METADATA_MAX_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(16384) // 16KB default
+    })
+}
 use crate::types::{ServiceId, VerifyChallengeResponse};
 use crate::validation;
 
@@ -675,6 +690,67 @@ fn is_grpc_required_header(header_name: &str) -> bool {
     )
 }
 
+/// Check if a header is allowed to be injected as upstream metadata
+/// Dedicated allowlist to prevent sensitive internal headers from leaking
+fn is_proxy_injected_header_allowed(header_name: &str) -> bool {
+    let lower = header_name.to_lowercase();
+    // Allow tenant and scope headers as they are meant to be forwarded
+    lower.starts_with("x-tenant-") 
+        || lower == "x-scope" 
+        || lower == "x-scopes"
+        // Allow specific safe headers that are commonly forwarded
+        || lower == "x-request-id"
+        || lower == "x-trace-id"
+        || lower == "user-agent"
+        // Allow gRPC-specific headers that are safe to forward
+        || lower.starts_with("grpc-")
+        || lower.starts_with("grpc-")
+}
+
+/// Validate binary metadata header according to gRPC specification
+/// Binary metadata keys must end with -bin, be base64 encoded, and have size limits
+fn validate_binary_metadata(header_name: &str, header_value: &str) -> bool {
+    let lower = header_name.to_lowercase();
+
+    // Check if header ends with -bin suffix
+    if !lower.ends_with("-bin") {
+        return false;
+    }
+
+    // Check size limit (configurable max size for binary metadata to prevent large payloads)
+    if header_value.len() > get_max_binary_metadata_size() {
+        warn!(
+            "Binary metadata header {} exceeds size limit: {} bytes (max: {})",
+            header_name,
+            header_value.len(),
+            get_max_binary_metadata_size()
+        );
+        return false;
+    }
+
+    // Validate base64 encoding
+    if header_value.contains('\r') || header_value.contains('\n') {
+        warn!(
+            "Binary metadata header {} contains CRLF characters",
+            header_name
+        );
+        return false;
+    }
+
+    // Check if it's valid base64 (allowing padding and standard/base64url variants)
+    if !header_value.chars().all(|c| {
+        c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=' || c == '-' || c == '_'
+    }) {
+        warn!(
+            "Binary metadata header {} contains invalid base64 characters",
+            header_name
+        );
+        return false;
+    }
+
+    true
+}
+
 /// Extract and validate authentication token from headers
 /// Returns (service_id, additional_headers) on success
 async fn extract_and_validate_auth(
@@ -734,14 +810,17 @@ fn apply_additional_headers(
         }
 
         // For gRPC, allow gRPC-required headers even if they might be auth-related
-        // Also allow tenant headers (x-tenant-*) and scope headers (x-scope, x-scopes) as they are meant to be forwarded
+        // For gRPC, also enforce dedicated allowlist for proxy-injected headers to prevent sensitive internal headers from leaking
         let is_tenant_header = header_name.to_lowercase().starts_with("x-tenant-");
         let is_scope_header =
             header_name.to_lowercase() == "x-scope" || header_name.to_lowercase() == "x-scopes";
-        if is_auth_header(&header_name)
-            && !(is_grpc && is_grpc_required_header(&header_name))
-            && !is_tenant_header
-            && !is_scope_header
+        let is_allowed_proxy_header = is_proxy_injected_header_allowed(&header_name);
+
+        if !(!is_auth_header(&header_name)
+            || (is_grpc && is_grpc_required_header(&header_name))
+            || is_tenant_header
+            || is_scope_header
+            || (is_grpc && is_allowed_proxy_header))
         {
             continue;
         }
@@ -749,6 +828,18 @@ fn apply_additional_headers(
         if let Ok(name) = header::HeaderName::from_bytes(header_name.as_bytes()) {
             // Additional validation for header values
             if let Ok(value) = header::HeaderValue::from_str(&header_value) {
+                // For gRPC binary metadata, apply additional validation
+                if is_grpc
+                    && header_name.to_lowercase().ends_with("-bin")
+                    && !validate_binary_metadata(&header_name, &header_value)
+                {
+                    warn!(
+                        "Invalid binary metadata header {}: {}",
+                        header_name, header_value
+                    );
+                    continue;
+                }
+
                 // Prevent header value injection attacks
                 if header_value.contains('\r') || header_value.contains('\n') {
                     warn!("Header value contains CRLF: {}", header_name);
@@ -781,8 +872,8 @@ fn sanitize_request_headers(req: &mut Request, is_grpc: bool) {
     }
 }
 
-/// Detect if a request is a gRPC request based on headers
-fn is_grpc_request(headers: &axum::http::HeaderMap) -> bool {
+/// Detect if a request is a gRPC request based on headers and HTTP version
+fn is_grpc_request(headers: &axum::http::HeaderMap, req: &Request) -> bool {
     // Check for content-type: application/grpc (case-insensitive)
     let content_type = headers.get("content-type");
     let is_grpc_content_type = content_type
@@ -808,7 +899,11 @@ fn is_grpc_request(headers: &axum::http::HeaderMap) -> bool {
         content_type, is_grpc_content_type, te_header, has_te_trailers
     );
 
-    let result = is_grpc_content_type && has_te_trailers;
+    // Check HTTP version - gRPC requires HTTP/2 to prevent HTTP/1.1 downgrade attempts
+    let is_http2 = req.version() == axum::http::Version::HTTP_2;
+    debug!("HTTP version: {:?}, is_http2: {}", req.version(), is_http2);
+
+    let result = is_grpc_content_type && has_te_trailers && is_http2;
     debug!("gRPC request detected: {}", result);
     result
 }
@@ -823,7 +918,7 @@ async fn unified_proxy(
     info!("Unified proxy called with headers: {:?}", headers);
     info!("Request method: {}, URI: {}", req.method(), req.uri());
 
-    let is_grpc = is_grpc_request(&headers);
+    let is_grpc = is_grpc_request(&headers, &req);
 
     if is_grpc {
         info!("Detected gRPC request, using gRPC proxy path");
