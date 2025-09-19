@@ -8,7 +8,9 @@ pub mod traits;
 pub mod types;
 
 // Re-export main provisioning interfaces
-pub use adapters::{AwsAdapter, GcpAdapter, AzureAdapter, DigitalOceanAdapter, VultrAdapter};
+#[cfg(feature = "aws")]
+pub use adapters::AwsAdapter;
+pub use adapters::{GcpAdapter, AzureAdapter, DigitalOceanAdapter, VultrAdapter};
 pub use auto::AutoDeploymentManager;
 pub use mapper::InstanceTypeMapper;
 pub use provisioner::CloudProvisioner;

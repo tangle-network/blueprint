@@ -19,6 +19,8 @@ use blueprint_remote_providers::observability::MetricsCollector as RemoteMetrics
 pub struct RemoteMetricsProvider {
     #[cfg(feature = "remote")]
     remote_collector: Arc<RemoteMetricsCollector>,
+    /// Remote endpoints for connecting to QoS gRPC services
+    remote_endpoints: Arc<RwLock<HashMap<String, String>>>, // instance_id -> grpc_endpoint
     metrics_cache: Arc<RwLock<HashMap<u64, SystemMetrics>>>,
     blueprint_metrics: Arc<RwLock<BlueprintMetrics>>,
     status: Arc<RwLock<BlueprintStatus>>,
@@ -32,6 +34,7 @@ impl RemoteMetricsProvider {
         Self {
             #[cfg(feature = "remote")]
             remote_collector: Arc::new(RemoteMetricsCollector::new()),
+            remote_endpoints: Arc::new(RwLock::new(HashMap::new())),
             metrics_cache: Arc::new(RwLock::new(HashMap::new())),
             blueprint_metrics: Arc::new(RwLock::new(BlueprintMetrics::default())),
             status: Arc::new(RwLock::new(BlueprintStatus::default())),
@@ -40,43 +43,97 @@ impl RemoteMetricsProvider {
             max_history,
         }
     }
+    
+    /// Register a remote Blueprint instance for metrics collection
+    pub async fn register_remote_instance(&self, instance_id: String, host: String, port: u16) {
+        let endpoint = format!("http://{}:{}", host, port);
+        self.remote_endpoints.write().await.insert(instance_id, endpoint);
+    }
+    
+    /// Register a remote Blueprint deployment result for metrics collection
+    #[cfg(feature = "remote")]
+    pub async fn register_blueprint_deployment(&self, result: &blueprint_remote_providers::infra::traits::BlueprintDeploymentResult) {
+        if let Some(qos_endpoint) = result.qos_grpc_endpoint() {
+            self.remote_endpoints.write().await.insert(
+                result.blueprint_id.clone(),
+                qos_endpoint,
+            );
+            tracing::info!(
+                "Registered QoS endpoint for Blueprint deployment {}: {}",
+                result.blueprint_id,
+                qos_endpoint
+            );
+        } else {
+            tracing::warn!(
+                "Blueprint deployment {} does not expose QoS metrics port (9615)",
+                result.blueprint_id
+            );
+        }
+    }
+    
+    /// Unregister a remote Blueprint instance
+    pub async fn unregister_remote_instance(&self, instance_id: &str) {
+        self.remote_endpoints.write().await.remove(instance_id);
+    }
 
     #[cfg(feature = "remote")]
     async fn collect_remote_metrics(&self) -> Result<(), Error> {
-        let all_metrics = self.remote_collector.get_all_metrics().await;
+        use crate::proto::qos_metrics_client::QosMetricsClient;
+        use crate::proto::{GetResourceUsageRequest, GetBlueprintMetricsRequest};
+        
+        let endpoints = self.remote_endpoints.read().await.clone();
         let mut cache = self.metrics_cache.write().await;
         
-        for (service_id, metrics) in all_metrics {
-            let system_metrics = SystemMetrics {
-                cpu_usage: 0.0, // Remote metrics don't include CPU yet
-                memory_usage: 0, // Could be extended
-                total_memory: 0,
-                disk_usage: 0,
-                total_disk: 0,
-                network_rx_bytes: metrics.request_count * 1024, // Estimate
-                network_tx_bytes: metrics.request_count * 2048, // Estimate
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-            };
-            
-            cache.insert(service_id, system_metrics);
-            
-            // Update blueprint metrics
-            let mut bp_metrics = self.blueprint_metrics.write().await;
-            bp_metrics.custom_metrics.insert(
-                format!("remote_service_{}_requests", service_id),
-                metrics.request_count.to_string(),
-            );
-            bp_metrics.custom_metrics.insert(
-                format!("remote_service_{}_failures", service_id),
-                metrics.failure_count.to_string(),
-            );
-            bp_metrics.custom_metrics.insert(
-                format!("remote_service_{}_latency_ms", service_id),
-                metrics.avg_response_time_ms.to_string(),
-            );
+        for (instance_id, endpoint) in endpoints {
+            // Connect to remote QoS gRPC service
+            match QosMetricsClient::connect(endpoint.clone()).await {
+                Ok(mut client) => {
+                    // Extract service/blueprint IDs from instance_id or use defaults
+                    let service_id = 1u64; // TODO: Extract from deployment config
+                    let blueprint_id = 1u64; // TODO: Extract from deployment config
+                    
+                    // Get resource usage metrics
+                    if let Ok(response) = client.get_resource_usage(GetResourceUsageRequest {
+                        blueprint_id,
+                        service_id,
+                    }).await {
+                        let usage = response.into_inner();
+                        let system_metrics = SystemMetrics {
+                            cpu_usage: usage.cpu_usage,
+                            memory_usage: usage.memory_usage,
+                            total_memory: usage.total_memory,
+                            disk_usage: usage.disk_usage,
+                            total_disk: usage.total_disk,
+                            network_rx_bytes: usage.network_rx_bytes,
+                            network_tx_bytes: usage.network_tx_bytes,
+                            timestamp: usage.timestamp,
+                        };
+                        
+                        cache.insert(service_id, system_metrics);
+                    }
+                    
+                    // Get blueprint-specific metrics
+                    if let Ok(response) = client.get_blueprint_metrics(GetBlueprintMetricsRequest {
+                        blueprint_id,
+                        service_id,
+                    }).await {
+                        let metrics = response.into_inner();
+                        let mut bp_metrics = self.blueprint_metrics.write().await;
+                        
+                        for (key, value) in metrics.custom_metrics {
+                            bp_metrics.custom_metrics.insert(
+                                format!("remote_{}_{}", instance_id, key),
+                                value,
+                            );
+                        }
+                        bp_metrics.timestamp = metrics.timestamp;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to connect to remote QoS service at {}: {}", endpoint, e);
+                    // TODO: Consider removing dead endpoints after multiple failures
+                }
+            }
         }
         
         Ok(())
@@ -202,6 +259,7 @@ impl Clone for RemoteMetricsProvider {
         Self {
             #[cfg(feature = "remote")]
             remote_collector: self.remote_collector.clone(),
+            remote_endpoints: self.remote_endpoints.clone(),
             metrics_cache: self.metrics_cache.clone(),
             blueprint_metrics: self.blueprint_metrics.clone(),
             status: self.status.clone(),

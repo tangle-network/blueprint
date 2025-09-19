@@ -124,6 +124,91 @@ impl CloudProviderAdapter for AwsAdapter {
             _ => InstanceStatus::Unknown,
         })
     }
+
+    async fn deploy_blueprint(
+        &self,
+        instance: &ProvisionedInstance,
+        blueprint_image: &str,
+        resource_spec: &crate::core::resources::ResourceSpec,
+        env_vars: blueprint_std::collections::HashMap<String, String>,
+    ) -> Result<crate::infra::traits::BlueprintDeploymentResult> {
+        use crate::deployment::ssh::{SshDeploymentClient, SshConnection, ContainerRuntime, DeploymentConfig};
+
+        // Create SSH connection to the instance
+        let connection = SshConnection {
+            host: instance.public_ip
+                .as_ref()
+                .ok_or_else(|| Error::Other("Instance has no public IP".into()))?
+                .clone(),
+            username: "ec2-user".to_string(), // Default for Amazon Linux
+            ssh_key_path: None, // Use SSH agent or default key
+            port: 22,
+        };
+
+        let deployment_config = DeploymentConfig {
+            auto_cleanup: true,
+            max_containers: 10,
+        };
+
+        let ssh_client = SshDeploymentClient::new(
+            connection,
+            ContainerRuntime::Docker,
+            deployment_config,
+        ).await?;
+
+        // Deploy Blueprint via SSH with QoS port exposure
+        let deployment = ssh_client
+            .deploy_blueprint(blueprint_image, resource_spec, env_vars)
+            .await?;
+
+        // Extract port mappings
+        let mut port_mappings = blueprint_std::collections::HashMap::new();
+        for (internal_port_str, external_port_str) in &deployment.ports {
+            if let (Ok(internal), Ok(external)) = (
+                internal_port_str.trim_end_matches("/tcp").parse::<u16>(),
+                external_port_str.parse::<u16>(),
+            ) {
+                port_mappings.insert(internal, external);
+            }
+        }
+
+        let mut metadata = blueprint_std::collections::HashMap::new();
+        metadata.insert("container_runtime".to_string(), format!("{:?}", deployment.runtime));
+        metadata.insert("container_id".to_string(), deployment.container_id.clone());
+        metadata.insert("ssh_host".to_string(), deployment.host.clone());
+
+        Ok(crate::infra::traits::BlueprintDeploymentResult {
+            instance: instance.clone(),
+            blueprint_id: deployment.container_id,
+            port_mappings,
+            metadata,
+        })
+    }
+
+    async fn health_check_blueprint(&self, deployment: &crate::infra::traits::BlueprintDeploymentResult) -> Result<bool> {
+        // Check if QoS endpoint is responsive
+        if let Some(qos_endpoint) = deployment.qos_grpc_endpoint() {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .map_err(|e| Error::Other(format!("Failed to create HTTP client: {}", e)))?;
+            
+            // Try to connect to the QoS metrics endpoint
+            match client.get(&format!("{}/health", qos_endpoint)).send().await {
+                Ok(response) => Ok(response.status().is_success()),
+                Err(_) => Ok(false), // Endpoint not responsive
+            }
+        } else {
+            Ok(false) // No QoS endpoint available
+        }
+    }
+
+    async fn cleanup_blueprint(&self, deployment: &crate::infra::traits::BlueprintDeploymentResult) -> Result<()> {
+        // TODO: Implement Blueprint container cleanup via SSH
+        // This would connect to the instance and stop/remove the container
+        tracing::info!("Blueprint cleanup not yet implemented for deployment: {}", deployment.blueprint_id);
+        Ok(())
+    }
 }
 
 /// GCP adapter implementation using REST API

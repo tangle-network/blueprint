@@ -28,6 +28,11 @@ impl MetricsCollector {
         let metrics = self.metrics.read().await;
         metrics.clone()
     }
+    
+    /// Alias for compatibility with QoS module
+    pub async fn get_all_metrics(&self) -> HashMap<String, f64> {
+        self.get_metrics().await
+    }
 }
 
 impl Default for MetricsCollector {

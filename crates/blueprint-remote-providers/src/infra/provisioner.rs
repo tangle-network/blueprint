@@ -5,7 +5,9 @@
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
-use crate::infra::adapters::{AwsAdapter, GcpAdapter, AzureAdapter, DigitalOceanAdapter, VultrAdapter};
+#[cfg(feature = "aws")]
+use crate::infra::adapters::AwsAdapter;
+use crate::infra::adapters::{GcpAdapter, AzureAdapter, DigitalOceanAdapter, VultrAdapter};
 use crate::infra::mapper::InstanceTypeMapper;
 use crate::infra::traits::CloudProviderAdapter;
 use crate::infra::types::{RetryPolicy, InstanceStatus, ProvisionedInstance};
@@ -161,6 +163,34 @@ impl CloudProvisioner {
             .ok_or_else(|| Error::ProviderNotConfigured(provider))?;
 
         adapter.get_instance_status(instance_id).await
+    }
+
+    /// Deploy a Blueprint to a provisioned instance using the appropriate adapter
+    pub async fn deploy_blueprint_to_instance(
+        &self,
+        provider: &CloudProvider,
+        instance: &ProvisionedInstance,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: blueprint_std::collections::HashMap<String, String>,
+    ) -> Result<crate::infra::traits::BlueprintDeploymentResult> {
+        let adapter = self
+            .providers
+            .get(provider)
+            .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
+
+        adapter
+            .deploy_blueprint(instance, blueprint_image, resource_spec, env_vars)
+            .await
+    }
+
+    /// Get the status of an instance using the appropriate adapter (alias for compatibility)
+    pub async fn get_instance_status(
+        &self,
+        provider: &CloudProvider,
+        instance_id: &str,
+    ) -> Result<crate::infra::types::InstanceStatus> {
+        self.get_status(provider.clone(), instance_id).await
     }
 }
 

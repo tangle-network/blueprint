@@ -138,14 +138,24 @@ impl SshDeploymentClient {
         // Get container details
         let details = self.get_container_details(&container_id).await?;
 
-        Ok(RemoteDeployment {
+        let deployment = RemoteDeployment {
             host: self.connection.host.clone(),
-            container_id,
+            container_id: container_id.clone(),
             runtime: self.runtime.clone(),
             status: details.status,
-            ports: details.ports,
+            ports: details.ports.clone(),
             resource_limits: ResourceLimits::from_spec(spec),
-        })
+        };
+
+        // Log QoS endpoint for integration
+        if let Some(qos_port) = details.ports.get("9615/tcp") {
+            info!(
+                "Remote Blueprint QoS endpoint available at {}:{}",
+                self.connection.host, qos_port
+            );
+        }
+
+        Ok(deployment)
     }
 
     /// Pull container image on remote host
@@ -190,8 +200,10 @@ impl SshDeploymentClient {
                     docker_cmd.push_str(&format!(" -e {}={}", key, value));
                 }
 
-                // Add network configuration - assume public IP needed
-                docker_cmd.push_str(" -p 0.0.0.0:8080:8080");
+                // Add network configuration - expose QoS metrics port and RPC endpoint
+                docker_cmd.push_str(" -p 0.0.0.0:8080:8080");  // Blueprint endpoint
+                docker_cmd.push_str(" -p 0.0.0.0:9615:9615");  // QoS gRPC metrics port
+                docker_cmd.push_str(" -p 0.0.0.0:9944:9944");  // RPC endpoint for heartbeat
 
                 // Add container name and image
                 docker_cmd.push_str(&format!(
@@ -203,18 +215,34 @@ impl SshDeploymentClient {
                 docker_cmd
             }
             ContainerRuntime::Podman => {
-                // Similar to Docker
-                format!(
-                    "podman create --cpus={} --memory={}m {} {}",
-                    limits.cpu_cores.unwrap_or(1.0),
-                    limits.memory_mb.unwrap_or(2048),
-                    env_vars
-                        .iter()
-                        .map(|(k, v)| format!("-e {}={}", k, v))
-                        .collect::<Vec<_>>()
-                        .join(" "),
+                let mut podman_cmd = format!("podman create");
+                
+                // Add resource limits
+                if let Some(cpu) = limits.cpu_cores {
+                    podman_cmd.push_str(&format!(" --cpus={}", cpu));
+                }
+                if let Some(mem) = limits.memory_mb {
+                    podman_cmd.push_str(&format!(" --memory={}m", mem));
+                }
+                
+                // Add environment variables
+                for (key, value) in env_vars {
+                    podman_cmd.push_str(&format!(" -e {}={}", key, value));
+                }
+                
+                // Add network configuration - expose QoS metrics port and RPC endpoint
+                podman_cmd.push_str(" -p 0.0.0.0:8080:8080");  // Blueprint endpoint
+                podman_cmd.push_str(" -p 0.0.0.0:9615:9615");  // QoS gRPC metrics port
+                podman_cmd.push_str(" -p 0.0.0.0:9944:9944");  // RPC endpoint for heartbeat
+                
+                // Add container name and image
+                podman_cmd.push_str(&format!(
+                    " --name blueprint-{} {}",
+                    chrono::Utc::now().timestamp(),
                     image
-                )
+                ));
+                
+                podman_cmd
             }
             ContainerRuntime::Containerd => {
                 // Containerd requires more complex setup
