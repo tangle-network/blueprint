@@ -27,7 +27,7 @@ pub struct BlueprintManagerContext {
     pub(crate) db: Mutex<Option<RocksDb>>,
     config: BlueprintManagerConfig,
     #[cfg(feature = "remote-providers")]
-    cloud_config: Option<crate::executor::remote_provider_integration::CloudConfig>,
+    cloud_config: Option<blueprint_remote_providers::CloudConfig>,
 }
 
 impl BlueprintManagerContext {
@@ -109,59 +109,14 @@ impl BlueprintManagerContext {
     }
 
     #[cfg(feature = "remote-providers")]
-    pub fn cloud_config(&self) -> &Option<crate::executor::remote_provider_integration::CloudConfig> {
+    pub fn cloud_config(&self) -> &Option<blueprint_remote_providers::CloudConfig> {
         &self.cloud_config
     }
 
     #[cfg(feature = "remote-providers")]
-    fn load_cloud_config(config: &BlueprintManagerConfig) -> Option<crate::executor::remote_provider_integration::CloudConfig> {
-        use std::env;
-        use crate::executor::remote_provider_integration::{CloudConfig, AwsConfig, DigitalOceanConfig, VultrConfig};
-        
-        // Check for cloud provider environment variables
-        let mut cloud_config = CloudConfig::default();
-        let mut any_enabled = false;
-
-        // AWS configuration
-        if let (Ok(key), Ok(secret)) = (env::var("AWS_ACCESS_KEY_ID"), env::var("AWS_SECRET_ACCESS_KEY")) {
-            cloud_config.aws = Some(AwsConfig {
-                enabled: true,
-                region: env::var("AWS_DEFAULT_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
-                access_key: key,
-                secret_key: secret,
-                priority: Some(10),
-            });
-            any_enabled = true;
-        }
-
-        // DigitalOcean configuration
-        if let Ok(token) = env::var("DO_API_TOKEN") {
-            cloud_config.digital_ocean = Some(DigitalOceanConfig {
-                enabled: true,
-                region: env::var("DO_DEFAULT_REGION").unwrap_or_else(|_| "nyc3".to_string()),
-                api_token: token,
-                priority: Some(5),
-            });
-            any_enabled = true;
-        }
-
-        // Vultr configuration
-        if let Ok(key) = env::var("VULTR_API_KEY") {
-            cloud_config.vultr = Some(VultrConfig {
-                enabled: true,
-                region: env::var("VULTR_DEFAULT_REGION").unwrap_or_else(|_| "ewr".to_string()),
-                api_key: key,
-                priority: Some(3),
-            });
-            any_enabled = true;
-        }
-
-        if any_enabled {
-            cloud_config.enabled = true;
-            Some(cloud_config)
-        } else {
-            None
-        }
+    fn load_cloud_config(_config: &BlueprintManagerConfig) -> Option<blueprint_remote_providers::CloudConfig> {
+        // Use the centralized config loading from remote providers crate
+        blueprint_remote_providers::CloudConfig::from_env()
     }
 }
 

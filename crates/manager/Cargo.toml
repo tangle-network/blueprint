@@ -82,8 +82,8 @@ netdev = { workspace = true, features = ["gateway"], optional = true }
 nftables = { workspace = true, optional = true }
 
 [features]
-# Use platform-specific defaults
-default = ["default-linux"]
+# Use platform-specific defaults - changed to macOS friendly
+default = ["default-unix"]
 
 # Linux default includes vm-sandbox and qos
 default-linux = ["vm-sandbox", "qos"]

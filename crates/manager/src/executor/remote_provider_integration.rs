@@ -4,14 +4,16 @@
 
 use crate::config::BlueprintManagerContext;
 use crate::error::Result;
+use blueprint_remote_providers::{
+    CloudConfig, AwsConfig, GcpConfig, AzureConfig, DigitalOceanConfig, VultrConfig,
+    CloudProvider, ResourceSpec
+};
 use blueprint_remote_providers::auto_deployment::{AutoDeploymentManager, EnabledProvider};
 use blueprint_remote_providers::deployment::manager_integration::{
     RemoteDeploymentRegistry, RemoteEventHandler,
 };
 use blueprint_remote_providers::deployment::tracker::DeploymentTracker;
 use blueprint_remote_providers::infrastructure::InfrastructureProvisioner;
-use blueprint_remote_providers::remote::CloudProvider;
-use blueprint_remote_providers::resources::ResourceSpec;
 use blueprint_std::collections::HashMap;
 use blueprint_std::sync::Arc;
 use blueprint_core::{error, info};
@@ -155,6 +157,33 @@ impl RemoteProviderManager {
             });
         }
 
+        if let Some(gcp) = &config.gcp {
+            providers.push(EnabledProvider {
+                provider: CloudProvider::GCP,
+                region: gcp.region.clone(),
+                credentials_env: HashMap::from([
+                    ("GCP_PROJECT_ID".to_string(), gcp.project_id.clone()),
+                    ("GOOGLE_APPLICATION_CREDENTIALS".to_string(), gcp.service_account_path.clone()),
+                ]),
+                enabled: gcp.enabled,
+                priority: gcp.priority.unwrap_or(8),
+            });
+        }
+
+        if let Some(azure) = &config.azure {
+            providers.push(EnabledProvider {
+                provider: CloudProvider::Azure,
+                region: azure.region.clone(),
+                credentials_env: HashMap::from([
+                    ("AZURE_CLIENT_ID".to_string(), azure.client_id.clone()),
+                    ("AZURE_CLIENT_SECRET".to_string(), azure.client_secret.clone()),
+                    ("AZURE_TENANT_ID".to_string(), azure.tenant_id.clone()),
+                ]),
+                enabled: azure.enabled,
+                priority: azure.priority.unwrap_or(7),
+            });
+        }
+
         if let Some(vultr) = &config.vultr {
             providers.push(EnabledProvider {
                 provider: CloudProvider::Vultr,
@@ -171,36 +200,4 @@ impl RemoteProviderManager {
     }
 }
 
-/// Cloud provider configuration
-#[derive(Debug, Clone, Default)]
-pub struct CloudConfig {
-    pub enabled: bool,
-    pub aws: Option<AwsConfig>,
-    pub digital_ocean: Option<DigitalOceanConfig>,
-    pub vultr: Option<VultrConfig>,
-}
-
-#[derive(Debug, Clone)]
-pub struct AwsConfig {
-    pub enabled: bool,
-    pub region: String,
-    pub access_key: String,
-    pub secret_key: String,
-    pub priority: Option<u8>,
-}
-
-#[derive(Debug, Clone)]
-pub struct DigitalOceanConfig {
-    pub enabled: bool,
-    pub region: String,
-    pub api_token: String,
-    pub priority: Option<u8>,
-}
-
-#[derive(Debug, Clone)]
-pub struct VultrConfig {
-    pub enabled: bool,
-    pub region: String,
-    pub api_key: String,
-    pub priority: Option<u8>,
-}
+// Cloud configuration types are now imported from blueprint_remote_providers

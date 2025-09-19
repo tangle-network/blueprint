@@ -273,6 +273,8 @@ pub(crate) fn check_blueprint_events(
         match evt {
             Ok(evt) => {
                 info!("Service initiated event: {evt:?}");
+                info!("Available event fields - blueprint_id: {}, service_id: {}, request_id: {}, operator: {:?}", 
+                    evt.blueprint_id, evt.service_id, evt.request_id, evt.operator);
                 result.needs_update = true;
                 
                 #[cfg(feature = "remote-providers")]
@@ -551,13 +553,13 @@ async fn try_remote_deployment(
 
     info!("Attempting remote deployment for service: {}", service_name);
 
-    // Convert ResourceLimits to ResourceSpec
+    // Convert ResourceLimits to ResourceSpec - use actual CPU count from limits
     let resource_spec = ResourceSpec {
-        cpu: 2.0, // Default to 2 vCPUs
-        memory_gb: (limits.memory_size / (1024 * 1024 * 1024)) as f32,
-        storage_gb: (limits.storage_space / (1024 * 1024 * 1024)) as f32,
-        gpu_count: None,
-        network_bandwidth_mbps: None,
+        cpu: limits.cpu_count.map(|c| c as f64).unwrap_or(2.0), // Use actual CPU count or default to 2
+        memory_gb: (limits.memory_size / (1024 * 1024 * 1024)) as f64,
+        storage_gb: (limits.storage_space / (1024 * 1024 * 1024)) as f64,
+        gpu_count: limits.gpu_count.map(|c| c as u32),
+        network_bandwidth_mbps: limits.network_bandwidth.map(|b| b as f64),
     };
 
     // Load credentials if provided
@@ -582,9 +584,10 @@ async fn try_remote_deployment(
         deployment_config.provider, deployment_config.region, deployment_config.instance_id
     );
 
-    // Create DeploymentTracker to monitor the deployment
+    // Create DeploymentTracker with proper path configuration
+    let tracker_path = ctx.data_dir().join("remote_deployments");
     let tracker = std::sync::Arc::new(
-        blueprint_remote_providers::deployment::tracker::DeploymentTracker::new()
+        blueprint_remote_providers::deployment::tracker::DeploymentTracker::new(&tracker_path).await?
     );
     
     // Create the remote service instance

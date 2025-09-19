@@ -92,8 +92,13 @@ impl SecureBridge {
                 let ca_cert = std::fs::read(&ca_path)
                     .map_err(|e| Error::ConfigurationError(format!("Failed to read CA cert: {}", e)))?;
                 
-                // Create identity and CA certificate
-                let identity = reqwest::Identity::from_pkcs8_pem(&client_cert, &client_key)
+                // Create identity by combining cert and key into single PEM buffer
+                let mut combined_pem = Vec::new();
+                combined_pem.extend_from_slice(&client_cert);
+                combined_pem.extend_from_slice(b"\n");
+                combined_pem.extend_from_slice(&client_key);
+                
+                let identity = reqwest::Identity::from_pem(&combined_pem)
                     .map_err(|e| Error::ConfigurationError(format!("Failed to create identity: {}", e)))?;
                 let ca_cert = reqwest::Certificate::from_pem(&ca_cert)
                     .map_err(|e| Error::ConfigurationError(format!("Failed to parse CA cert: {}", e)))?;
