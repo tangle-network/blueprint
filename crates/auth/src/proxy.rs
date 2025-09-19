@@ -838,7 +838,7 @@ fn apply_additional_headers(
             || is_tenant_header
             || is_scope_header
             || (is_grpc && is_allowed_proxy_header);
-        
+
         if !is_allowed {
             continue;
         }
