@@ -27,9 +27,9 @@
    - Introduce detection based on `content-type: application/grpc` (case-insensitive) and presence of `te: trailers`.
    - Route matching requests through a new proxy handler that bypasses HTTP-specific sanitization.
 3. **Header & Metadata Handling**
-   - Build a metadata adapter: read `authorization` and other required auth headers from gRPC metadata, normalize casing, then feed into existing validators.
-   - Update sanitization to allow gRPC-required headers (`content-type`, `te`, `grpc-encoding`, `grpc-accept-encoding`, binary metadata). Keep security-sensitive filtering for forbidden hop-by-hop headers.
-   - Ensure additional headers injected by the proxy propagate as gRPC metadata on the upstream request.
+   - Build a metadata adapter: read `authorization` and other required auth headers from gRPC metadata, normalize casing, then feed into existing validators. The gRPC metadata adapter must reuse the same header allowlist/denylist as HTTP to prevent callers from injecting hop-by-hop or internal headers through metadata.
+   - Update sanitization to allow gRPC-required headers (`content-type`, `te`, `grpc-encoding`, `grpc-accept-encoding`, binary metadata). Binary metadata keys must end with `-bin`, be enforced as base64 encoded, and have configurable size limits (default 16KB, build-time env var `GRPC_BINARY_METADATA_MAX_SIZE`) enforced to reject large opaque payloads or mixed encodings. Keep security-sensitive filtering for forbidden hop-by-hop headers.
+   - Ensure additional headers injected by the proxy propagate as gRPC metadata on the upstream request. Any proxy-injected headers promoted to upstream metadata must go through a dedicated allowlist so sensitive internal headers (auth decisions, trace ids) never leak.
 4. **Streaming-safe Forwarding**
    - Confirm the proxy forwards request bodies/trailers without buffering. Avoid touching the body `Body` where streaming is necessary.
    - Propagate upstream response trailers (`grpc-status`, `grpc-message`, custom metadata) back to the client.
