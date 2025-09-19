@@ -83,7 +83,7 @@ async fn spawn_echo_backend() -> (SocketAddr, oneshot::Sender<()>, JoinHandle<()
     let incoming = TcpListenerStream::new(listener);
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
-    let service = EchoServiceServer::new(TestEchoService::default());
+    let service = EchoServiceServer::new(TestEchoService);
     let handle = tokio::spawn(async move {
         let shutdown = async {
             let _ = shutdown_rx.await;
@@ -117,7 +117,7 @@ async fn setup_grpc_proxy_context() -> GrpcProxyTestContext {
     let mut service = ServiceModel {
         api_key_prefix: "grpc_".to_string(),
         owners: vec![],
-        upstream_url: format!("http://{}", backend_addr),
+        upstream_url: format!("http://{backend_addr}"),
     };
     service.add_owner(KeyType::Ecdsa, public_key.to_vec());
     service.save(service_id, &db).expect("save service");
@@ -381,14 +381,11 @@ async fn grpc_rejects_forbidden_headers() {
                 // If we can insert it, see if the request fails
                 let _response = client.echo(request).await;
                 // It might fail at tonic level or our proxy level
-                println!(
-                    "Header {} was not rejected by tonic, may be handled by proxy",
-                    header_name
-                );
+                println!("Header {header_name} was not rejected by tonic, may be handled by proxy");
             }
             None => {
                 // Tonic rejected the header, which is good
-                println!("Header {} rejected by tonic (good)", header_name);
+                println!("Header {header_name} rejected by tonic (good)");
             }
         }
     }
@@ -431,12 +428,9 @@ async fn grpc_prevents_sensitive_header_injection() {
         // The real security check happens in our proxy header processing
         // For now, just log the result
         if response.is_err() {
-            println!("Header {} correctly rejected", header_name);
+            println!("Header {header_name} correctly rejected");
         } else {
-            println!(
-                "Header {} was not rejected at gRPC level, proxy should handle it",
-                header_name
-            );
+            println!("Header {header_name} was not rejected at gRPC level, proxy should handle it");
         }
     }
 
@@ -511,11 +505,10 @@ async fn grpc_only_allows_proxy_injected_headers() {
         // Note: These headers should be allowed at the gRPC level
         // The real security check happens in our proxy header processing
         if response.is_ok() {
-            println!("Header {} was allowed at gRPC level", header_name);
+            println!("Header {header_name} was allowed at gRPC level");
         } else {
             println!(
-                "Header {} was rejected at gRPC level: {:?}",
-                header_name,
+                "Header {header_name} was rejected at gRPC level: {:?}",
                 response.unwrap_err()
             );
         }
@@ -559,10 +552,7 @@ async fn grpc_rejects_missing_required_headers() {
             panic!("Should reject gRPC requests without authorization");
         }
         Err(status) => {
-            println!(
-                "Request without authorization correctly rejected with status: {}",
-                status
-            );
+            println!("Request without authorization correctly rejected with status: {status}");
         }
     }
 
@@ -588,8 +578,7 @@ async fn grpc_rejects_missing_required_headers() {
         }
         Err(status) => {
             println!(
-                "Request with only authorization failed with status: {} - this may indicate an issue",
-                status
+                "Request with only authorization failed with status: {status} - this may indicate an issue"
             );
         }
     }
