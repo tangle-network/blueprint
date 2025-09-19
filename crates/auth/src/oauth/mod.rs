@@ -21,13 +21,13 @@ pub fn rate_limit_check(
         .get(axum::http::header::FORWARDED)
         .and_then(|h| h.to_str().ok())
         .unwrap_or("unknown");
-    let key = format!("rl:{}:{}", service_id.to_string(), ip);
+    let key = format!("rl:{service_id}:{ip}");
 
     let cf = db
         .cf_handle(cf::OAUTH_RL_CF)
         .ok_or_else(|| "rl store unavailable".to_string())?;
 
-    let bucket_key = format!("{}:{}", key, window);
+    let bucket_key = format!("{key}:{window}");
 
     let current = db
         .get_cf(&cf, bucket_key.as_bytes())
@@ -143,7 +143,7 @@ impl<'a> AssertionVerifier<'a> {
 
         // Decode header to inspect alg/kid
         let header = jsonwebtoken::decode_header(jwt)
-            .map_err(|e| VerificationError::InvalidRequest(format!("invalid jwt header: {}", e)))?;
+            .map_err(|e| VerificationError::InvalidRequest(format!("invalid jwt header: {e}")))?;
         let alg = header.alg;
         if !matches!(
             alg,

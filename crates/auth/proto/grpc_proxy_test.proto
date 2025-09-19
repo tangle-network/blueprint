@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package blueprint.auth.grpcproxytest;
+
+service EchoService {
+  rpc Echo(EchoRequest) returns (EchoResponse);
+  rpc EchoStream(stream EchoRequest) returns (stream EchoResponse);
+}
+
+message EchoRequest {
+  string message = 1;
+}
+
+message EchoResponse {
+  string message = 1;
+}

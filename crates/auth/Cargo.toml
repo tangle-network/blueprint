@@ -50,13 +50,18 @@ serde_json = { workspace = true, features = ["alloc"] }
 bytes = { workspace = true }
 tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter", "make"] }
 tokio = { workspace = true, features = ["full"] }
-axum = { workspace = true, features = ["json", "multipart", "http1", "tokio"] }
+axum = { workspace = true, features = ["json", "multipart", "http1", "http2", "tokio"] }
 reqwest = { workspace = true, features = ["json", "multipart"] }
 futures-util = { workspace = true }
 http = { workspace = true }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["fmt", "env-filter", "registry"] }
 openssl = { version = "0.10", features = ["vendored"] }
+tokio-stream = { workspace = true }
+tonic = { workspace = true, features = ["codegen", "prost", "transport"] }
+
+[build-dependencies]
+tonic-build = { workspace = true, features = ["prost"] }
 
 [features]
 default = ["std", "tracing"]
