@@ -174,6 +174,7 @@ dotenv = { version = "0.15", default-features = false }
 
 # Cryptography & Blockchain
 bip39 = { version = "2.2.0", default-features = false }
+chacha20poly1305 = { version = "0.10.1", default-features = false }
 ed25519-zebra = { version = "4", default-features = false }
 hex = { version = "0.4.3", default-features = false }
 k256 = { version = "0.13.3", default-features = false }
@@ -232,7 +233,11 @@ axum = { version = "0.8", default-features = false }
 openssl-sys = { version = "0.9.109", default-features = false }
 rtnetlink = { version = "0.16.0", default-features = false }
 ipnet = { version = "2.11.0", default-features = false }
-rustls = { version = "0.23", default-features = false }
+rustls = { version = "0.23.31", default-features = false, features = ["std"] }
+tokio-rustls = { version = "0.26.2", default-features = false, features = ["tls12"] }
+rustls-pemfile = { version = "2.2.0", default-features = false }
+rcgen = { version = "0.14.3", default-features = false, features = ["pem"] }
+hyper-rustls = { version = "0.27.7", default-features = false, features = ["http2", "ring"] }
 local-ip-address = "0.6.5"
 
 # System & OS

@@ -31,16 +31,22 @@ pasetors = { workspace = true, default-features = false, features = ["v4", "serd
 uuid = { workspace = true, features = ["v4", "serde"] }
 jsonwebtoken = { workspace = true, default-features = false }
 pem = { workspace = true, default-features = false }
+chacha20poly1305 = { workspace = true, features = ["alloc", "getrandom"] }
 
 axum = { workspace = true, default-features = false, features = ["json", "form"] }
 hyper-util = { workspace = true, features = ["client", "client-legacy", "tokio", "http2"] }
+hyper = { workspace = true, features = ["full"] }
+hyper-rustls = { workspace = true }
+tokio = { workspace = true, features = ["full"], optional = true }
+tokio-rustls = { workspace = true, features = ["default"] }
+rustls = { workspace = true, features = ["default"] }
+rustls-pemfile = { workspace = true, features = ["std"] }
 
 # Database
 rocksdb = { workspace = true, features = ["lz4"] }
 prost = { workspace = true, features = ["derive"] }
 
 # Standalone Binary
-tokio = { workspace = true, features = ["full"], optional = true }
 tempfile = { workspace = true, optional = true }
 
 
@@ -59,6 +65,11 @@ tracing-subscriber = { workspace = true, features = ["fmt", "env-filter", "regis
 openssl = { version = "0.10", features = ["vendored"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true, features = ["codegen", "prost", "transport"] }
+tokio-rustls = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+rcgen = { workspace = true }
+hyper-rustls = { workspace = true }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
