@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tracing::info;
 
 #[cfg(feature = "standalone")]
-use tokio::{net::TcpListener, spawn, select, signal};
+use tokio::{net::TcpListener, select, signal, spawn};
 use tokio_rustls::TlsAcceptor;
 
 use rustls::pki_types::CertificateDer;
@@ -60,32 +60,41 @@ impl TlsListener {
         config: TlsListenerConfig,
     ) -> Result<Self, crate::Error> {
         let proxy = AuthenticatedProxy::new(db_path)?;
-        
+
         #[cfg(feature = "standalone")]
         {
             // Create HTTP listener
             let http_addr = SocketAddr::from(([0, 0, 0, 0], crate::proxy::DEFAULT_AUTH_PROXY_PORT));
-            let http_listener = TcpListener::bind(http_addr).await
-                .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
-            
+            let http_listener = TcpListener::bind(http_addr).await.map_err(|e| {
+                crate::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.to_string(),
+                ))
+            })?;
+
             info!("HTTP listener bound to {}", http_addr);
-            
+
             // Create mTLS listener if configured
-            let (mtls_listener, tls_acceptor) = if config.require_client_cert || !config.cert_path.is_empty() {
-                let mtls_addr = SocketAddr::from(([0, 0, 0, 0], config.mtls_port));
-                let mtls_listener = TcpListener::bind(mtls_addr).await
-                    .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
-                
-                info!("mTLS listener bound to {}", mtls_addr);
-                
-                // Load TLS configuration
-                let tls_acceptor = Self::create_tls_acceptor(&config).await?;
-                
-                (Some(mtls_listener), Some(tls_acceptor))
-            } else {
-                (None, None)
-            };
-            
+            let (mtls_listener, tls_acceptor) =
+                if config.require_client_cert || !config.cert_path.is_empty() {
+                    let mtls_addr = SocketAddr::from(([0, 0, 0, 0], config.mtls_port));
+                    let mtls_listener = TcpListener::bind(mtls_addr).await.map_err(|e| {
+                        crate::Error::Io(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            e.to_string(),
+                        ))
+                    })?;
+
+                    info!("mTLS listener bound to {}", mtls_addr);
+
+                    // Load TLS configuration
+                    let tls_acceptor = Self::create_tls_acceptor(&config).await?;
+
+                    (Some(mtls_listener), Some(tls_acceptor))
+                } else {
+                    (None, None)
+                };
+
             Ok(Self {
                 http_listener,
                 mtls_listener,
@@ -94,7 +103,7 @@ impl TlsListener {
                 proxy,
             })
         }
-        
+
         #[cfg(not(feature = "standalone"))]
         {
             // Load TLS configuration if needed
@@ -103,7 +112,7 @@ impl TlsListener {
             } else {
                 None
             };
-            
+
             Ok(Self {
                 tls_acceptor,
                 config,
@@ -111,132 +120,191 @@ impl TlsListener {
             })
         }
     }
-    
+
     /// Create TLS acceptor from configuration
     async fn create_tls_acceptor(config: &TlsListenerConfig) -> Result<TlsAcceptor, crate::Error> {
         use std::fs;
-        
+
         use rustls::ServerConfig;
         use rustls_pemfile;
-        
+
         // Load server certificate
-        let cert_file = fs::File::open(&config.cert_path)
-            .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                format!("Failed to open cert file {}: {}", config.cert_path, e))))?;
-        
+        let cert_file = fs::File::open(&config.cert_path).map_err(|e| {
+            crate::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to open cert file {}: {}", config.cert_path, e),
+            ))
+        })?;
+
         let mut cert_reader = std::io::BufReader::new(cert_file);
         let certs = rustls_pemfile::certs(&mut cert_reader)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                format!("Failed to read certificates: {}", e))))?;
-        
+            .map_err(|e| {
+                crate::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to read certificates: {}", e),
+                ))
+            })?;
+
         if certs.is_empty() {
-            return Err(crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                "No certificates found in cert file".to_string())));
+            return Err(crate::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "No certificates found in cert file".to_string(),
+            )));
         }
-        
+
         // Load server private key
-        let key_file = fs::File::open(&config.key_path)
-            .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                format!("Failed to open key file {}: {}", config.key_path, e))))?;
-        
+        let key_file = fs::File::open(&config.key_path).map_err(|e| {
+            crate::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to open key file {}: {}", config.key_path, e),
+            ))
+        })?;
+
         let mut key_reader = std::io::BufReader::new(key_file);
         let keys = rustls_pemfile::pkcs8_private_keys(&mut key_reader)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                format!("Failed to read private key: {}", e))))?;
-        
+            .map_err(|e| {
+                crate::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to read private key: {}", e),
+                ))
+            })?;
+
         if keys.is_empty() {
-            return Err(crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                "No private keys found in key file".to_string())));
+            return Err(crate::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "No private keys found in key file".to_string(),
+            )));
         }
-        
+
         // Create server configuration
-        let mut server_config = ServerConfig::builder()
-            .with_no_client_auth();
-        
+        let mut server_config = ServerConfig::builder().with_no_client_auth();
+
         // Configure client authentication if required
         if config.require_client_cert {
             if let Some(ref client_ca_path) = config.client_ca_path {
-                let ca_file = fs::File::open(client_ca_path)
-                    .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                        format!("Failed to open client CA file {}: {}", client_ca_path, e))))?;
-                
+                let ca_file = fs::File::open(client_ca_path).map_err(|e| {
+                    crate::Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Failed to open client CA file {}: {}", client_ca_path, e),
+                    ))
+                })?;
+
                 let mut ca_reader = std::io::BufReader::new(ca_file);
                 let ca_certs = rustls_pemfile::certs(&mut ca_reader)
                     .collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                        format!("Failed to read client CA certificates: {}", e))))?;
-                
+                    .map_err(|e| {
+                        crate::Error::Io(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("Failed to read client CA certificates: {}", e),
+                        ))
+                    })?;
+
                 if ca_certs.is_empty() {
-                    return Err(crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                        "No client CA certificates found".to_string())));
+                    return Err(crate::Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "No client CA certificates found".to_string(),
+                    )));
                 }
-                
+
                 let mut root_store = rustls::RootCertStore::empty();
                 for cert in ca_certs {
-                    root_store.add(cert).map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                        format!("Failed to add CA cert: {}", e))))?;
+                    root_store.add(cert).map_err(|e| {
+                        crate::Error::Io(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("Failed to add CA cert: {}", e),
+                        ))
+                    })?;
                 }
-                
-                let client_cert_verifier = WebPkiClientVerifier::builder_with_provider(Arc::new(root_store), rustls::crypto::aws_lc_rs::default_provider().into())
-                    .build()
-                    .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                        format!("Failed to build client cert verifier: {}", e))))?;
-                server_config = ServerConfig::builder()
-                    .with_client_cert_verifier(client_cert_verifier);
+
+                let client_cert_verifier = WebPkiClientVerifier::builder_with_provider(
+                    Arc::new(root_store),
+                    rustls::crypto::aws_lc_rs::default_provider().into(),
+                )
+                .build()
+                .map_err(|e| {
+                    crate::Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Failed to build client cert verifier: {}", e),
+                    ))
+                })?;
+                server_config =
+                    ServerConfig::builder().with_client_cert_verifier(client_cert_verifier);
             } else {
-                return Err(crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                    "Client authentication required but no client CA path provided".to_string())));
+                return Err(crate::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Client authentication required but no client CA path provided".to_string(),
+                )));
             }
         }
-        
+
         let server_config = server_config
             .with_single_cert(certs, keys[0].clone_key().into())
-            .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, 
-                format!("Failed to set server certificate: {}", e))))?;
-        
+            .map_err(|e| {
+                crate::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to set server certificate: {}", e),
+                ))
+            })?;
+
         let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
         Ok(tls_acceptor)
     }
-    
+
     /// Start serving both HTTP and HTTPS connections
     #[cfg(feature = "standalone")]
     pub async fn serve(self) -> Result<(), crate::Error> {
         let router = self.proxy.router();
-        
+
         // Create HTTP listener
         let http_addr = SocketAddr::from(([0, 0, 0, 0], crate::proxy::DEFAULT_AUTH_PROXY_PORT));
-        let http_listener = tokio::net::TcpListener::bind(http_addr).await
-            .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
-        
+        let http_listener = tokio::net::TcpListener::bind(http_addr)
+            .await
+            .map_err(|e| {
+                crate::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.to_string(),
+                ))
+            })?;
+
         info!("HTTP listener bound to {}", http_addr);
-        
+
         // Spawn HTTP server
         let http_handle = tokio::spawn(async move {
-            axum::serve(http_listener, router).await
-                .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
+            axum::serve(http_listener, router).await.map_err(|e| {
+                crate::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.to_string(),
+                ))
+            })
         });
-        
+
         // Spawn mTLS listener if configured
         if let (Some(mtls_listener), Some(tls_acceptor)) = (self.mtls_listener, self.tls_acceptor) {
             let mtls_addr = SocketAddr::from(([0, 0, 0, 0], self.config.mtls_port));
-            let mtls_listener = tokio::net::TcpListener::bind(mtls_addr).await
-                .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
-            
+            let mtls_listener = tokio::net::TcpListener::bind(mtls_addr)
+                .await
+                .map_err(|e| {
+                    crate::Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        e.to_string(),
+                    ))
+                })?;
+
             info!("mTLS listener bound to {}", mtls_addr);
-            
+
             let mtls_handle = tokio::spawn(async move {
                 loop {
                     match mtls_listener.accept().await {
                         Ok((stream, addr)) => {
                             let tls_acceptor = tls_acceptor.clone();
-                            
+
                             tokio::spawn(async move {
                                 match tls_acceptor.accept(stream).await {
                                     Ok(tls_stream) => {
                                         debug!("TLS connection established from {}", addr);
-                                        
+
                                         // Extract client certificate information
                                         let client_cert_info = tls_stream
                                             .get_ref()
@@ -253,11 +321,14 @@ impl TlsListener {
                                                     not_after: extract_cert_not_after(cert),
                                                 }
                                             });
-                                        
+
                                         // For now, just log the client cert info and close the connection
                                         // TODO: Implement proper mTLS request handling
                                         info!("Client certificate info: {:?}", client_cert_info);
-                                        debug!("TLS connection from {} established but not fully handled yet", addr);
+                                        debug!(
+                                            "TLS connection from {} established but not fully handled yet",
+                                            addr
+                                        );
                                     }
                                     Err(e) => {
                                         error!("TLS handshake error from {}: {}", addr, e);
@@ -271,7 +342,7 @@ impl TlsListener {
                     }
                 }
             });
-            
+
             // Wait for both servers
             tokio::select! {
                 result = http_handle => {
@@ -293,10 +364,10 @@ impl TlsListener {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Start serving both HTTP and HTTPS connections (no-op for non-standalone)
     #[cfg(not(feature = "standalone"))]
     pub async fn serve(self) -> Result<(), crate::Error> {
@@ -352,7 +423,8 @@ fn extract_cert_not_after(_cert: &CertificateDer<'_>) -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs() + 365 * 24 * 60 * 60
+        .as_secs()
+        + 365 * 24 * 60 * 60
 }
 
 /// Extension trait for HTTP connection to carry client certificate info

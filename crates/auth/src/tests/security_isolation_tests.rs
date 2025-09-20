@@ -385,7 +385,7 @@ async fn test_concurrent_multi_user_authentication() {
         api_key_prefix: "conc_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
-            tls_profile: None,
+        tls_profile: None,
     };
 
     let db = proxy.db();
@@ -537,7 +537,7 @@ async fn test_token_exchange_header_injection_security() {
         api_key_prefix: "inj_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
-            tls_profile: None,
+        tls_profile: None,
     };
 
     let signing_key = k256::ecdsa::SigningKey::random(&mut rng);

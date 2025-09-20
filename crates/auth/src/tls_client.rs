@@ -39,8 +39,8 @@ impl Default for TlsClientConfig {
             client_cert: None,
             client_key: None,
             alpn_protocols: vec![
-                b"h2".to_vec(),  // HTTP/2
-                b"http/1.1".to_vec(),  // HTTP/1.1
+                b"h2".to_vec(),       // HTTP/2
+                b"http/1.1".to_vec(), // HTTP/1.1
             ],
             handshake_timeout: Duration::from_secs(10),
         }
@@ -51,9 +51,15 @@ impl Default for TlsClientConfig {
 #[derive(Clone, Debug)]
 pub struct CachedTlsClient {
     /// HTTP/1.1 client with TLS support
-    pub http_client: Client<HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>, axum::body::Body>,
+    pub http_client: Client<
+        HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>,
+        axum::body::Body,
+    >,
     /// HTTP/2 client with TLS support
-    pub http2_client: Client<HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>, axum::body::Body>,
+    pub http2_client: Client<
+        HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>,
+        axum::body::Body,
+    >,
     /// Configuration used to create this client
     pub config: TlsClientConfig,
     /// Last access timestamp for cache eviction
@@ -121,7 +127,7 @@ impl TlsClientManager {
         // Update cache
         {
             let mut clients = self.clients.lock().unwrap();
-            
+
             // Evict old entries if cache is full
             if clients.len() >= self.max_cache_size {
                 self.evict_old_entries(&mut clients);
@@ -145,14 +151,18 @@ impl TlsClientManager {
             if profile.tls_enabled {
                 // Apply profile configuration
                 config.verify_server_cert = true; // Default to true for TLS-enabled services
-                
+
                 // Load custom CA certificates if specified
                 if !profile.encrypted_upstream_ca_bundle.is_empty() {
-                    config.custom_ca_certs.push(profile.encrypted_upstream_ca_bundle.clone());
+                    config
+                        .custom_ca_certs
+                        .push(profile.encrypted_upstream_ca_bundle.clone());
                 }
 
                 // Load client certificate for mTLS if specified
-                if !profile.encrypted_upstream_client_cert.is_empty() && !profile.encrypted_upstream_client_key.is_empty() {
+                if !profile.encrypted_upstream_client_cert.is_empty()
+                    && !profile.encrypted_upstream_client_key.is_empty()
+                {
                     config.client_cert = Some(profile.encrypted_upstream_client_cert.clone());
                     config.client_key = Some(profile.encrypted_upstream_client_key.clone());
                 }
@@ -163,7 +173,10 @@ impl TlsClientManager {
     }
 
     /// Create a TLS client with the given configuration
-    async fn create_tls_client(&self, config: TlsClientConfig) -> Result<CachedTlsClient, crate::Error> {
+    async fn create_tls_client(
+        &self,
+        config: TlsClientConfig,
+    ) -> Result<CachedTlsClient, crate::Error> {
         let executor = TokioExecutor::new();
 
         // Build rustls client configuration
@@ -177,17 +190,22 @@ impl TlsClientManager {
             for ca_cert in &config.custom_ca_certs {
                 let mut cert_data = ca_cert.as_slice();
                 let mut cert_iter = rustls_pemfile::certs(&mut cert_data);
-                
-                let cert_der = cert_iter.next()
+
+                let cert_der = cert_iter
+                    .next()
                     .transpose()
-                    .map_err(|e| crate::Error::Tls(format!("Failed to parse CA certificate: {}", e)))?
-                    .ok_or_else(|| crate::Error::Tls("No valid CA certificate found".to_string()))?;
-                
+                    .map_err(|e| {
+                        crate::Error::Tls(format!("Failed to parse CA certificate: {}", e))
+                    })?
+                    .ok_or_else(|| {
+                        crate::Error::Tls("No valid CA certificate found".to_string())
+                    })?;
+
                 root_store.add(cert_der).map_err(|e| {
                     crate::Error::Tls(format!("Failed to add CA certificate to root store: {}", e))
                 })?;
             }
-            
+
             // Create new config with custom root store
             // For now, we'll skip this and use the default config
         }
@@ -197,14 +215,19 @@ impl TlsClientManager {
             let mut cert_data = client_cert.as_slice();
             let _cert_chain = rustls_pemfile::certs(&mut cert_data)
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| crate::Error::Tls(format!("Failed to parse client certificate: {}", e)))?;
+                .map_err(|e| {
+                    crate::Error::Tls(format!("Failed to parse client certificate: {}", e))
+                })?;
 
             let mut key_data = client_key.as_slice();
             let mut private_key_iter = rustls_pemfile::pkcs8_private_keys(&mut key_data);
 
-            let _private_key = private_key_iter.next()
+            let _private_key = private_key_iter
+                .next()
                 .transpose()
-                .map_err(|e| crate::Error::Tls(format!("Failed to parse client private key: {}", e)))?
+                .map_err(|e| {
+                    crate::Error::Tls(format!("Failed to parse client private key: {}", e))
+                })?
                 .ok_or_else(|| crate::Error::Tls("No valid private key found".to_string()))?;
 
             // Note: Client certificate configuration would go here
@@ -243,42 +266,42 @@ impl TlsClientManager {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        
+
         config.verify_server_cert.hash(&mut hasher);
         config.custom_ca_certs.hash(&mut hasher);
         config.client_cert.hash(&mut hasher);
         config.client_key.hash(&mut hasher);
         config.alpn_protocols.hash(&mut hasher);
         config.handshake_timeout.hash(&mut hasher);
-        
+
         format!("{:016x}", hasher.finish())
     }
 
     /// Evict old entries from the cache
     fn evict_old_entries(&self, clients: &mut HashMap<String, CachedTlsClient>) {
         let now = std::time::Instant::now();
-        
+
         // Remove expired entries
         clients.retain(|_, client| now.duration_since(client.last_access) < self.cache_ttl);
-        
+
         // If still too many, remove the oldest entries
         if clients.len() >= self.max_cache_size {
             let to_remove = clients.len() - self.max_cache_size + 10; // Remove 10 extra to avoid frequent evictions
-            
+
             // Collect keys to remove first to avoid borrow issues
             let mut keys_to_remove: Vec<(String, std::time::Instant)> = clients
                 .iter()
                 .map(|(key, client)| (key.clone(), client.last_access))
                 .collect();
-            
+
             // Sort by last access time
             keys_to_remove.sort_by_key(|(_, last_access)| *last_access);
-            
+
             // Remove oldest entries
             for (key, _) in keys_to_remove.iter().take(to_remove) {
                 clients.remove(key);
             }
-            
+
             info!("Evicted {} old TLS client cache entries", to_remove);
         }
     }
@@ -288,9 +311,9 @@ impl TlsClientManager {
         let mut clients = self.clients.lock().unwrap();
         let now = std::time::Instant::now();
         let initial_size = clients.len();
-        
+
         clients.retain(|_, client| now.duration_since(client.last_access) < self.cache_ttl);
-        
+
         let removed = initial_size - clients.len();
         if removed > 0 {
             info!("Cleaned up {} expired TLS client cache entries", removed);
@@ -301,10 +324,10 @@ impl TlsClientManager {
     pub fn get_cache_stats(&self) -> TlsClientCacheStats {
         let clients = self.clients.lock().unwrap();
         let now = std::time::Instant::now();
-        
+
         let mut active_count = 0;
         let mut expired_count = 0;
-        
+
         for client in clients.values() {
             if now.duration_since(client.last_access) < self.cache_ttl {
                 active_count += 1;
@@ -312,7 +335,7 @@ impl TlsClientManager {
                 expired_count += 1;
             }
         }
-        
+
         TlsClientCacheStats {
             total_entries: clients.len(),
             active_entries: active_count,

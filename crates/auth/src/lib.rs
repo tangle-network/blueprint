@@ -58,18 +58,18 @@ pub mod proxy;
 pub mod request_auth;
 /// Request extension plumbing for client certificate identity
 pub mod request_extensions;
+/// TLS assets management
+pub mod tls_assets;
+/// TLS client management for outbound connections
+pub mod tls_client;
+/// TLS envelope encryption for certificate material
+pub mod tls_envelope;
+/// TLS listener for dual socket support (HTTP + HTTPS)
+pub mod tls_listener;
 /// Holds the authentication-related types.
 pub mod types;
 /// Header validation utilities
 pub mod validation;
-/// TLS envelope encryption for certificate material
-pub mod tls_envelope;
-/// TLS client management for outbound connections
-pub mod tls_client;
-/// TLS listener for dual socket support (HTTP + HTTPS)
-pub mod tls_listener;
-/// TLS assets management
-pub mod tls_assets;
 
 #[cfg(test)]
 mod test_client;

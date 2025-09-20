@@ -28,7 +28,7 @@ async fn test_api_key_rotation() {
         api_key_prefix: "rot_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
-            tls_profile: None,
+        tls_profile: None,
     };
 
     let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -98,7 +98,7 @@ async fn test_api_key_renewal() {
         api_key_prefix: "ren_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
-            tls_profile: None,
+        tls_profile: None,
     };
     service.save(service_id, &db).unwrap();
 
@@ -150,7 +150,7 @@ async fn test_api_key_revocation() {
         api_key_prefix: "rev_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
-            tls_profile: None,
+        tls_profile: None,
     };
 
     let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -236,7 +236,7 @@ async fn test_expired_api_key_rejection() {
         api_key_prefix: "exp_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
-            tls_profile: None,
+        tls_profile: None,
     };
     service.save(service_id, &db).unwrap();
 
@@ -279,7 +279,7 @@ async fn test_concurrent_api_key_operations() {
         api_key_prefix: "con_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
-            tls_profile: None,
+        tls_profile: None,
     };
     service.save(service_id, &db).unwrap();
 

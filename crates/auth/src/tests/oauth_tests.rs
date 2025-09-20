@@ -55,7 +55,7 @@ fn start_proxy_with_policy(policy: ServiceOAuthPolicy) -> (SocketAddr, ServiceId
         api_key_prefix: "test_".to_string(),
         owners: vec![],
         upstream_url: "http://127.0.0.1:9".to_string(),
-            tls_profile: None,
+        tls_profile: None,
     };
     service.save(service_id, &db).unwrap();
     policy.save(service_id, &db).unwrap();

@@ -393,12 +393,18 @@ impl ServiceModel {
 
     /// Check if TLS is enabled for this service
     pub fn is_tls_enabled(&self) -> bool {
-        self.tls_profile.as_ref().map(|p| p.tls_enabled).unwrap_or(false)
+        self.tls_profile
+            .as_ref()
+            .map(|p| p.tls_enabled)
+            .unwrap_or(false)
     }
 
     /// Check if client mTLS is required for this service
     pub fn requires_client_mtls(&self) -> bool {
-        self.tls_profile.as_ref().map(|p| p.require_client_mtls).unwrap_or(false)
+        self.tls_profile
+            .as_ref()
+            .map(|p| p.require_client_mtls)
+            .unwrap_or(false)
     }
 }
 
@@ -443,10 +449,10 @@ impl TlsCertMetadata {
 
     /// Save the certificate metadata to the database
     pub fn save(&self, db: &RocksDb) -> Result<(), crate::Error> {
-        let cf = db
-            .cf_handle(crate::db::cf::TLS_CERT_METADATA_CF)
-            .ok_or(crate::Error::UnknownColumnFamily(crate::db::cf::TLS_CERT_METADATA_CF))?;
-        
+        let cf = db.cf_handle(crate::db::cf::TLS_CERT_METADATA_CF).ok_or(
+            crate::Error::UnknownColumnFamily(crate::db::cf::TLS_CERT_METADATA_CF),
+        )?;
+
         let key = self.db_key();
         let metadata_bytes = self.encode_to_vec();
         db.put_cf(&cf, key, metadata_bytes)?;
@@ -459,16 +465,16 @@ impl TlsCertMetadata {
         cert_id: &str,
         db: &RocksDb,
     ) -> Result<Option<Self>, crate::Error> {
-        let cf = db
-            .cf_handle(crate::db::cf::TLS_CERT_METADATA_CF)
-            .ok_or(crate::Error::UnknownColumnFamily(crate::db::cf::TLS_CERT_METADATA_CF))?;
-        
+        let cf = db.cf_handle(crate::db::cf::TLS_CERT_METADATA_CF).ok_or(
+            crate::Error::UnknownColumnFamily(crate::db::cf::TLS_CERT_METADATA_CF),
+        )?;
+
         let mut key = Vec::with_capacity(16 + cert_id.len());
         key.extend_from_slice(&service_id.to_be_bytes());
         key.extend_from_slice(cert_id.as_bytes());
-        
+
         let metadata_bytes = db.get_pinned_cf(&cf, key)?;
-        
+
         metadata_bytes
             .map(|bytes| TlsCertMetadata::decode(bytes.as_ref()))
             .transpose()
@@ -515,7 +521,7 @@ pub mod tls_assets {
         let cf = db
             .cf_handle(cf::TLS_ASSETS_CF)
             .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_ASSETS_CF))?;
-        
+
         let key = format!("{}:{}", service_id, asset_type);
         db.put_cf(&cf, key.as_bytes(), encrypted_data)?;
         Ok(())
@@ -530,7 +536,7 @@ pub mod tls_assets {
         let cf = db
             .cf_handle(cf::TLS_ASSETS_CF)
             .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_ASSETS_CF))?;
-        
+
         let key = format!("{}:{}", service_id, asset_type);
         let asset_bytes = db.get_pinned_cf(&cf, key.as_bytes())?;
         Ok(asset_bytes.map(|bytes| bytes.to_vec()))
@@ -545,7 +551,7 @@ pub mod tls_assets {
         let cf = db
             .cf_handle(cf::TLS_ASSETS_CF)
             .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_ASSETS_CF))?;
-        
+
         let key = format!("{}:{}", service_id, asset_type);
         db.delete_cf(&cf, key.as_bytes())?;
         Ok(())
@@ -562,12 +568,12 @@ pub mod tls_assets {
         let cf = db
             .cf_handle(cf::TLS_ISSUANCE_LOG_CF)
             .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_ISSUANCE_LOG_CF))?;
-        
+
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        
+
         let mut log_entry = Vec::new();
         log_entry.extend_from_slice(&timestamp.to_be_bytes());
         log_entry.extend_from_slice(&service_id.to_be_bytes());
@@ -577,7 +583,7 @@ pub mod tls_assets {
         if let Some(tenant_id) = tenant_id {
             log_entry.extend_from_slice(tenant_id.as_bytes());
         }
-        
+
         let log_key = format!("{}:{}", timestamp, cert_id);
         db.put_cf(&cf, log_key.as_bytes(), log_entry)?;
         Ok(())
@@ -591,10 +597,10 @@ pub mod tls_assets {
         let cf = db
             .cf_handle(cf::TLS_CERT_METADATA_CF)
             .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_CERT_METADATA_CF))?;
-        
+
         let mut certificates = Vec::new();
         let prefix = service_id.to_be_bytes();
-        
+
         // Iterate through all certificates for this service
         let iter = db.prefix_iterator_cf(&cf, &prefix);
         for item in iter {
@@ -604,7 +610,7 @@ pub mod tls_assets {
                 certificates.push(metadata);
             }
         }
-        
+
         Ok(certificates)
     }
 }

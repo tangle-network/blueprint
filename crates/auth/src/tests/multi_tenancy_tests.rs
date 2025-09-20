@@ -247,7 +247,7 @@ async fn tenant_token_cannot_impersonate_other_tenant() {
         api_key_prefix: "sec_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:9999".to_string(),
-            tls_profile: None,
+        tls_profile: None,
     };
 
     // Create two different tenant keys
@@ -537,7 +537,7 @@ async fn tenant_data_isolation_verification() {
         api_key_prefix: "iso_".to_string(),
         owners: Vec::new(),
         upstream_url: "http://localhost:8080".to_string(),
-            tls_profile: None,
+        tls_profile: None,
     };
 
     let mut tenant_data = Vec::new();

@@ -18,11 +18,11 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 
-use chacha20poly1305::{
-    aead::{Aead, KeyInit, OsRng, AeadCore},
-    ChaCha20Poly1305, Nonce, Key
-};
 use base64::Engine;
+use chacha20poly1305::{
+    ChaCha20Poly1305, Key, Nonce,
+    aead::{Aead, AeadCore, KeyInit, OsRng},
+};
 use thiserror::Error;
 
 /// Envelope encryption key for TLS material
@@ -53,9 +53,9 @@ impl TlsEnvelopeKey {
 
     /// Create from hex string
     pub fn from_hex(hex_str: &str) -> Result<Self, TlsEnvelopeError> {
-        let bytes = hex::decode(hex_str)
-            .map_err(|e| TlsEnvelopeError::InvalidHexFormat(e.to_string()))?;
-        
+        let bytes =
+            hex::decode(hex_str).map_err(|e| TlsEnvelopeError::InvalidHexFormat(e.to_string()))?;
+
         if bytes.len() != 32 {
             return Err(TlsEnvelopeError::InvalidKeyLength(bytes.len()));
         }
@@ -89,31 +89,35 @@ impl TlsEnvelope {
     pub fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, TlsEnvelopeError> {
         let cipher = ChaCha20Poly1305::new(&self.key.0);
         let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
-        
-        let ciphertext = cipher.encrypt(&nonce, plaintext)
+
+        let ciphertext = cipher
+            .encrypt(&nonce, plaintext)
             .map_err(|e| TlsEnvelopeError::EncryptionError(e.to_string()))?;
-        
+
         // Prepend nonce to ciphertext
         let mut result = Vec::with_capacity(nonce.len() + ciphertext.len());
         result.extend_from_slice(&nonce);
         result.extend_from_slice(&ciphertext);
-        
+
         Ok(result)
     }
 
     /// Decrypt data with envelope encryption
     pub fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>, TlsEnvelopeError> {
         if data.len() < 12 {
-            return Err(TlsEnvelopeError::InvalidCiphertextFormat("data too short for nonce".to_string()));
+            return Err(TlsEnvelopeError::InvalidCiphertextFormat(
+                "data too short for nonce".to_string(),
+            ));
         }
 
         let (nonce_bytes, ciphertext) = data.split_at(12);
         let nonce = Nonce::from_slice(nonce_bytes);
-        
+
         let cipher = ChaCha20Poly1305::new(&self.key.0);
-        let plaintext = cipher.decrypt(nonce, ciphertext)
+        let plaintext = cipher
+            .decrypt(nonce, ciphertext)
             .map_err(|e| TlsEnvelopeError::DecryptionError(e.to_string()))?;
-        
+
         Ok(plaintext)
     }
 
@@ -125,11 +129,11 @@ impl TlsEnvelope {
 
     /// Decrypt base64-encoded string
     pub fn decrypt_string(&self, encoded: &str) -> Result<String, TlsEnvelopeError> {
-        let data = base64::engine::general_purpose::STANDARD.decode(encoded)
+        let data = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
             .map_err(|e| TlsEnvelopeError::Base64Error(e.to_string()))?;
         let plaintext = self.decrypt(&data)?;
-        String::from_utf8(plaintext)
-            .map_err(|e| TlsEnvelopeError::Utf8Error(e.to_string()))
+        String::from_utf8(plaintext).map_err(|e| TlsEnvelopeError::Utf8Error(e.to_string()))
     }
 
     /// Get the envelope key
@@ -139,7 +143,9 @@ impl TlsEnvelope {
 }
 
 /// Initialize TLS envelope key from environment or file
-pub fn init_tls_envelope_key<P: AsRef<Path>>(db_path: P) -> Result<TlsEnvelopeKey, TlsEnvelopeError> {
+pub fn init_tls_envelope_key<P: AsRef<Path>>(
+    db_path: P,
+) -> Result<TlsEnvelopeKey, TlsEnvelopeError> {
     // Try to load key from environment variable first
     if let Ok(key_hex) = std::env::var("TLS_ENVELOPE_KEY") {
         match TlsEnvelopeKey::from_hex(&key_hex) {
@@ -163,7 +169,10 @@ pub fn init_tls_envelope_key<P: AsRef<Path>>(db_path: P) -> Result<TlsEnvelopeKe
                     return Ok(key);
                 }
                 Err(e) => {
-                    warn!("Failed to load TLS envelope key from file {}: {}", key_path, e);
+                    warn!(
+                        "Failed to load TLS envelope key from file {}: {}",
+                        key_path, e
+                    );
                 }
             }
         } else {
@@ -180,7 +189,10 @@ pub fn init_tls_envelope_key<P: AsRef<Path>>(db_path: P) -> Result<TlsEnvelopeKe
                 return Ok(key);
             }
             Err(e) => {
-                warn!("Failed to load TLS envelope key from default location: {}", e);
+                warn!(
+                    "Failed to load TLS envelope key from default location: {}",
+                    e
+                );
             }
         }
     }
@@ -189,16 +201,18 @@ pub fn init_tls_envelope_key<P: AsRef<Path>>(db_path: P) -> Result<TlsEnvelopeKe
     info!("Generating new TLS envelope key");
     let key = TlsEnvelopeKey::generate();
     save_key_to_file(&key, &default_key_path)?;
-    
-    info!("Generated and saved new TLS envelope key to: {:?}", default_key_path);
+
+    info!(
+        "Generated and saved new TLS envelope key to: {:?}",
+        default_key_path
+    );
     Ok(key)
 }
 
 /// Load key from file
 fn load_key_from_file(path: &Path) -> Result<TlsEnvelopeKey, TlsEnvelopeError> {
-    let mut file = fs::File::open(path)
-        .map_err(|e| TlsEnvelopeError::IoError(e.to_string()))?;
-    
+    let mut file = fs::File::open(path).map_err(|e| TlsEnvelopeError::IoError(e.to_string()))?;
+
     let mut key_bytes = Vec::new();
     file.read_to_end(&mut key_bytes)
         .map_err(|e| TlsEnvelopeError::IoError(e.to_string()))?;
@@ -214,12 +228,11 @@ fn load_key_from_file(path: &Path) -> Result<TlsEnvelopeKey, TlsEnvelopeError> {
 
 /// Save key to file with secure permissions
 fn save_key_to_file(key: &TlsEnvelopeKey, path: &Path) -> Result<(), TlsEnvelopeError> {
-    let mut file = fs::File::create(path)
-        .map_err(|e| TlsEnvelopeError::IoError(e.to_string()))?;
-    
+    let mut file = fs::File::create(path).map_err(|e| TlsEnvelopeError::IoError(e.to_string()))?;
+
     file.write_all(key.as_bytes())
         .map_err(|e| TlsEnvelopeError::IoError(e.to_string()))?;
-    
+
     file.sync_all()
         .map_err(|e| TlsEnvelopeError::IoError(e.to_string()))?;
 
@@ -283,7 +296,7 @@ mod tests {
     fn test_key_from_hex() {
         let key = TlsEnvelopeKey::generate();
         let hex_str = key.as_hex();
-        
+
         let decoded = TlsEnvelopeKey::from_hex(&hex_str).expect("Should decode hex");
         assert_eq!(key.as_hex(), decoded.as_hex());
     }
@@ -292,10 +305,10 @@ mod tests {
     fn test_envelope_encryption() {
         let envelope = TlsEnvelope::new();
         let plaintext = b"secret certificate data";
-        
+
         let encrypted = envelope.encrypt(plaintext).expect("Should encrypt");
         let decrypted = envelope.decrypt(&encrypted).expect("Should decrypt");
-        
+
         assert_eq!(plaintext, &decrypted[..]);
     }
 
@@ -303,10 +316,14 @@ mod tests {
     fn test_string_encryption() {
         let envelope = TlsEnvelope::new();
         let plaintext = "secret certificate string";
-        
-        let encrypted = envelope.encrypt_string(plaintext).expect("Should encrypt string");
-        let decrypted = envelope.decrypt_string(&encrypted).expect("Should decrypt string");
-        
+
+        let encrypted = envelope
+            .encrypt_string(plaintext)
+            .expect("Should encrypt string");
+        let decrypted = envelope
+            .decrypt_string(&encrypted)
+            .expect("Should decrypt string");
+
         assert_eq!(plaintext, decrypted);
     }
 
@@ -314,10 +331,10 @@ mod tests {
     fn test_different_keys_fail() {
         let envelope1 = TlsEnvelope::new();
         let envelope2 = TlsEnvelope::new();
-        
+
         let plaintext = b"secret data";
         let encrypted = envelope1.encrypt(plaintext).expect("Should encrypt");
-        
+
         // Should fail with different key
         let result = envelope2.decrypt(&encrypted);
         assert!(result.is_err());
@@ -327,7 +344,7 @@ mod tests {
     fn test_invalid_ciphertext() {
         let envelope = TlsEnvelope::new();
         let invalid_data = b"too short";
-        
+
         let result = envelope.decrypt(invalid_data);
         assert!(result.is_err());
     }
@@ -336,10 +353,10 @@ mod tests {
     fn test_key_persistence() {
         let tmp_dir = tempdir().expect("tempdir");
         let key_path = tmp_dir.path().join("test_key");
-        
+
         let key = TlsEnvelopeKey::generate();
         save_key_to_file(&key, &key_path).expect("Should save key");
-        
+
         let loaded_key = load_key_from_file(&key_path).expect("Should load key");
         assert_eq!(key.as_hex(), loaded_key.as_hex());
     }
@@ -348,10 +365,10 @@ mod tests {
     fn test_base64_roundtrip() {
         let envelope = TlsEnvelope::new();
         let plaintext = "test string for base64 encoding";
-        
+
         let encrypted = envelope.encrypt_string(plaintext).expect("Should encrypt");
         let decrypted = envelope.decrypt_string(&encrypted).expect("Should decrypt");
-        
+
         assert_eq!(plaintext, decrypted);
     }
 }

@@ -29,11 +29,11 @@ use crate::api_keys::{ApiKeyGenerator, ApiKeyModel};
 use crate::db::RocksDb;
 use crate::models::{ApiTokenModel, ServiceModel};
 use crate::paseto_tokens::PasetoTokenManager;
+use crate::request_extensions::{AuthMethod, extract_client_cert_from_request};
 use crate::tls_assets::TlsAssetManager;
 use crate::tls_client::TlsClientManager;
 use crate::tls_envelope::{TlsEnvelope, init_tls_envelope_key};
 use crate::tls_listener::{TlsListener, TlsListenerConfig};
-use crate::request_extensions::{extract_client_cert_from_request, AuthMethod};
 
 /// Maximum size for binary metadata headers in bytes
 /// Configurable via build-time environment variable GRPC_BINARY_METADATA_MAX_SIZE
@@ -52,8 +52,10 @@ fn get_max_binary_metadata_size() -> usize {
 use crate::types::{ServiceId, VerifyChallengeResponse};
 use crate::validation;
 
-type HTTPClient = hyper_util::client::legacy::Client<hyper_util::client::legacy::connect::HttpConnector, Body>;
-type HTTP2Client = hyper_util::client::legacy::Client<hyper_util::client::legacy::connect::HttpConnector, Body>;
+type HTTPClient =
+    hyper_util::client::legacy::Client<hyper_util::client::legacy::connect::HttpConnector, Body>;
+type HTTP2Client =
+    hyper_util::client::legacy::Client<hyper_util::client::legacy::connect::HttpConnector, Body>;
 
 /// The default port for the authenticated proxy server
 // T9 Mapping of TBPM (Tangle Blueprint Manager)
@@ -207,9 +209,13 @@ impl AuthenticatedProxy {
 
     /// Initialize TLS envelope with persistent key
     fn init_tls_envelope<P: AsRef<Path>>(db_path: P) -> Result<TlsEnvelope, crate::Error> {
-        let envelope_key = init_tls_envelope_key(&db_path)
-            .map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
-        
+        let envelope_key = init_tls_envelope_key(&db_path).map_err(|e| {
+            crate::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            ))
+        })?;
+
         Ok(TlsEnvelope::with_key(envelope_key))
     }
 
@@ -984,7 +990,7 @@ async fn unified_proxy(
 
     // Extract client certificate information from request extensions
     let client_cert = extract_client_cert_from_request(&req);
-    
+
     // Determine authentication method based on available information
     let auth_method = if client_cert.is_some() {
         AuthMethod::Mtls
@@ -1191,23 +1197,33 @@ async fn grpc_proxy_with_mtls(
 
     // Determine if we need TLS for the upstream connection
     let use_tls = target_host.scheme() == Some(&uri::Scheme::HTTPS);
-    
+
     // Forward the request using appropriate client
     let response = if use_tls {
         // Use TLS client for HTTPS upstreams
-        let tls_client = s.tls_client_manager.get_client_for_service(service_id).await
+        let tls_client = s
+            .tls_client_manager
+            .get_client_for_service(service_id)
+            .await
             .map_err(|e| {
-                error!("Failed to get TLS client for service {}: {:?}", service_id, e);
+                error!(
+                    "Failed to get TLS client for service {}: {:?}",
+                    service_id, e
+                );
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
-        
+
         // Convert request body to Incoming type
         let (parts, body) = req.into_parts();
         let req_with_incoming = Request::from_parts(parts, body);
-        tls_client.http2_client.request(req_with_incoming).await.map_err(|e| {
-            error!("Failed to forward gRPC request with TLS: {:?}", e);
-            StatusCode::BAD_GATEWAY
-        })?
+        tls_client
+            .http2_client
+            .request(req_with_incoming)
+            .await
+            .map_err(|e| {
+                error!("Failed to forward gRPC request with TLS: {:?}", e);
+                StatusCode::BAD_GATEWAY
+            })?
     } else {
         // Use fallback HTTP/2 client for HTTP upstreams
         s.http2_client.request(req).await.map_err(|e| {
@@ -1278,23 +1294,33 @@ async fn reverse_proxy_with_mtls(
 
     // Determine if we need TLS for the upstream connection
     let use_tls = target_host.scheme() == Some(&uri::Scheme::HTTPS);
-    
+
     // Forward the request using appropriate client
     let response = if use_tls {
         // Use TLS client for HTTPS upstreams
-        let tls_client = s.tls_client_manager.get_client_for_service(service_id).await
+        let tls_client = s
+            .tls_client_manager
+            .get_client_for_service(service_id)
+            .await
             .map_err(|e| {
-                error!("Failed to get TLS client for service {}: {:?}", service_id, e);
+                error!(
+                    "Failed to get TLS client for service {}: {:?}",
+                    service_id, e
+                );
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
-        
+
         // Convert request body to Incoming type
         let (parts, body) = req.into_parts();
         let req_with_incoming = Request::from_parts(parts, body);
-        tls_client.http_client.request(req_with_incoming).await.map_err(|e| {
-            error!("Failed to forward HTTP request with TLS: {:?}", e);
-            StatusCode::BAD_GATEWAY
-        })?
+        tls_client
+            .http_client
+            .request(req_with_incoming)
+            .await
+            .map_err(|e| {
+                error!("Failed to forward HTTP request with TLS: {:?}", e);
+                StatusCode::BAD_GATEWAY
+            })?
     } else {
         // Use fallback HTTP/1.1 client for HTTP upstreams
         s.http_client
