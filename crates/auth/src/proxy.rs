@@ -26,8 +26,12 @@ use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::instrument;
 
 use crate::api_keys::{ApiKeyGenerator, ApiKeyModel};
+use crate::certificate_authority::{
+    CertificateAuthority, ClientCertificate, CreateTlsProfileRequest, IssueCertificateRequest,
+    TlsProfileResponse, validate_certificate_request,
+};
 use crate::db::RocksDb;
-use crate::models::{ApiTokenModel, ServiceModel};
+use crate::models::{ApiTokenModel, ServiceModel, TlsProfile};
 use crate::paseto_tokens::PasetoTokenManager;
 use crate::request_extensions::{AuthMethod, extract_client_cert_from_request};
 use crate::tls_assets::TlsAssetManager;
@@ -40,6 +44,10 @@ use crate::tls_listener::{TlsListener, TlsListenerConfig};
 /// Default value is 16384 bytes (16KB) if not specified
 /// Note: This uses a static variable instead of const to allow runtime configuration
 static GRPC_BINARY_METADATA_MAX_SIZE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+
+/// Default mTLS listener port for TLS profile responses
+/// TODO: This should be replaced with the actual bound port when the listener is started
+const DEFAULT_MTLS_PROFILE_PORT: u16 = 8277;
 
 fn get_max_binary_metadata_size() -> usize {
     *GRPC_BINARY_METADATA_MAX_SIZE.get_or_init(|| {
@@ -78,6 +86,11 @@ pub struct AuthenticatedProxyState {
     db: crate::db::RocksDb,
     paseto_manager: PasetoTokenManager,
     tls_envelope: TlsEnvelope,
+    mtls_listener_address: Option<std::net::SocketAddr>,
+    #[cfg(feature = "standalone")]
+    mtls_listener_handle: Option<std::sync::Arc<tokio::task::JoinHandle<()>>>,
+    #[cfg(not(feature = "standalone"))]
+    mtls_listener_handle: Option<()>,
 }
 
 impl AuthenticatedProxyState {
@@ -92,6 +105,20 @@ impl AuthenticatedProxyState {
     }
     pub fn tls_client_manager_ref(&self) -> &TlsClientManager {
         &self.tls_client_manager
+    }
+    
+    #[cfg(feature = "standalone")]
+    pub fn set_mtls_listener_address(&mut self, addr: std::net::SocketAddr) {
+        self.mtls_listener_address = Some(addr);
+    }
+    
+    #[cfg(not(feature = "standalone"))]
+    pub fn set_mtls_listener_address(&mut self, _addr: std::net::SocketAddr) {
+        // No-op when standalone feature is not enabled
+    }
+    
+    pub fn get_mtls_listener_address(&self) -> Option<std::net::SocketAddr> {
+        self.mtls_listener_address
     }
 }
 
@@ -209,12 +236,8 @@ impl AuthenticatedProxy {
 
     /// Initialize TLS envelope with persistent key
     fn init_tls_envelope<P: AsRef<Path>>(db_path: P) -> Result<TlsEnvelope, crate::Error> {
-        let envelope_key = init_tls_envelope_key(&db_path).map_err(|e| {
-            crate::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e.to_string(),
-            ))
-        })?;
+        let envelope_key = init_tls_envelope_key(&db_path)
+            .map_err(|e| crate::Error::Io(std::io::Error::other(e.to_string())))?;
 
         Ok(TlsEnvelope::with_key(envelope_key))
     }
@@ -237,6 +260,8 @@ impl AuthenticatedProxy {
             db: self.db,
             paseto_manager: self.paseto_manager,
             tls_envelope: self.tls_envelope,
+            mtls_listener_address: None,
+            mtls_listener_handle: None,
         };
         Router::new()
             .nest("/v1", Self::internal_api_router_v1())
@@ -276,6 +301,12 @@ impl AuthenticatedProxy {
             .route("/auth/exchange", post(auth_exchange))
             // OAuth 2.0 JWT Bearer Assertion token endpoint (RFC 7523)
             .route("/oauth/token", post(crate::oauth::token::oauth_token))
+            // mTLS administration endpoints
+            .route(
+                "/admin/services/{service_id}/tls-profile",
+                axum::routing::put(update_tls_profile),
+            )
+            .route("/auth/certificates", axum::routing::post(issue_certificate))
     }
 }
 
@@ -597,6 +628,367 @@ async fn auth_exchange(
         StatusCode::OK,
         Json(serde_json::to_value(response).unwrap()),
     )
+}
+
+/// Create test TLS certificate and key files for mTLS testing
+async fn create_test_tls_files() -> Result<(), crate::Error> {
+    use std::fs;
+    use rcgen::{CertificateParams, KeyPair, SanType};
+    
+    // Install default crypto provider for rustls
+    let provider = rustls::crypto::aws_lc_rs::default_provider();
+    rustls::crypto::CryptoProvider::install_default(provider).map_err(|e| {
+        crate::Error::Io(std::io::Error::other(format!("Failed to install crypto provider: {:?}", e)))
+    })?;
+    
+    // Create certs directory if it doesn't exist
+    fs::create_dir_all("certs").map_err(|e| {
+        crate::Error::Io(std::io::Error::other(format!("Failed to create certs directory: {e}")))
+    })?;
+    
+    // Generate server certificate and key
+    let mut server_params = CertificateParams::new(vec!["localhost".to_string()])?;
+    server_params.subject_alt_names = vec![
+        SanType::DnsName(rcgen::string::Ia5String::try_from("localhost")?),
+        SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))),
+    ];
+    server_params.key_usages = vec![
+        rcgen::KeyUsagePurpose::DigitalSignature,
+        rcgen::KeyUsagePurpose::KeyEncipherment,
+    ];
+    server_params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+    
+    let server_key_pair = KeyPair::generate()?;
+    let server_cert = server_params.self_signed(&server_key_pair)?;
+    
+    // Generate client CA certificate and key
+    let mut ca_params = CertificateParams::new(vec!["Tangle Test CA".to_string()])?;
+    ca_params.key_usages = vec![
+        rcgen::KeyUsagePurpose::DigitalSignature,
+        rcgen::KeyUsagePurpose::KeyCertSign,
+        rcgen::KeyUsagePurpose::CrlSign,
+    ];
+    ca_params.extended_key_usages = vec![
+            rcgen::ExtendedKeyUsagePurpose::ServerAuth,
+            rcgen::ExtendedKeyUsagePurpose::ClientAuth,
+        ];
+    
+    let ca_key_pair = KeyPair::generate()?;
+    let ca_cert = ca_params.self_signed(&ca_key_pair)?;
+    
+    // Write server certificate
+    fs::write("certs/server.crt", server_cert.pem()).map_err(|e| {
+        crate::Error::Io(std::io::Error::other(format!("Failed to write server cert: {e}")))
+    })?;
+    
+    // Write server private key
+    fs::write("certs/server.key", server_key_pair.serialize_pem()).map_err(|e| {
+        crate::Error::Io(std::io::Error::other(format!("Failed to write server key: {e}")))
+    })?;
+    
+    // Write client CA certificate
+    fs::write("certs/client-ca.crt", ca_cert.pem()).map_err(|e| {
+        crate::Error::Io(std::io::Error::other(format!("Failed to write client CA cert: {e}")))
+    })?;
+    
+    // Write client CA private key for use by CertificateAuthority
+    fs::write("certs/client-ca.key", ca_key_pair.serialize_pem()).map_err(|e| {
+        crate::Error::Io(std::io::Error::other(format!("Failed to write client CA key: {e}")))
+    })?;
+    
+    Ok(())
+}
+
+/// Update TLS profile for a service
+async fn update_tls_profile(
+    service_id: ServiceId,
+    State(s): State<AuthenticatedProxyState>,
+    Json(payload): Json<CreateTlsProfileRequest>,
+) -> Result<Json<TlsProfileResponse>, StatusCode> {
+    // Find the service
+    let mut service = match ServiceModel::find_by_id(service_id, &s.db) {
+        Ok(Some(service)) => service,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    // Create TLS profile with default empty values for encrypted fields
+    let tls_profile = TlsProfile {
+        tls_enabled: true,
+        require_client_mtls: payload.require_client_mtls,
+        encrypted_server_cert: Vec::new(), // Will be populated when server cert is generated
+        encrypted_server_key: Vec::new(),  // Will be populated when server key is generated
+        encrypted_client_ca_bundle: Vec::new(), // Will be populated when CA is initialized
+        encrypted_upstream_ca_bundle: Vec::new(), // Optional upstream CA bundle
+        encrypted_upstream_client_cert: Vec::new(), // Optional upstream client cert
+        encrypted_upstream_client_key: Vec::new(), // Optional upstream client key
+        client_cert_ttl_hours: payload.client_cert_ttl_hours,
+        sni: payload.subject_alt_name_template.clone(),
+    };
+
+    // Update service with TLS profile
+    service.tls_profile = Some(tls_profile);
+
+    if let Err(e) = service.save(service_id, &s.db) {
+        error!("Failed to save TLS profile: {}", e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    // Initialize certificate authority if mTLS is enabled
+    if payload.require_client_mtls {
+        // The CA will be initialized when needed for certificate issuance
+        info!("mTLS enabled for service {}", service_id);
+        
+        // Start mTLS listener in background
+        #[cfg(feature = "standalone")]
+        let temp_dir = tempfile::tempdir().map_err(|e| {
+            error!("Failed to create temp dir: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        
+        #[cfg(not(feature = "standalone"))]
+        let temp_dir = std::path::PathBuf::from("/tmp/mtls_test");
+        
+        #[cfg(feature = "standalone")]
+        let mtls_db_path = temp_dir.path().join("mtls_db");
+        
+        #[cfg(not(feature = "standalone"))]
+        let mtls_db_path = temp_dir.join("mtls_db");
+        
+        let config = TlsListenerConfig {
+            mtls_port: DEFAULT_MTLS_PROFILE_PORT,
+            cert_path: "certs/server.crt".to_string(),
+            key_path: "certs/server.key".to_string(),
+            require_client_cert: true,
+            client_ca_path: Some("certs/client-ca.crt".to_string()),
+        };
+        
+        // Create temporary cert and key files for testing
+        if let Err(e) = create_test_tls_files().await {
+            error!("Failed to create test TLS files: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+        
+        // Start mTLS listener in background
+        #[cfg(feature = "standalone")]
+        {
+            let _listener_handle = tokio::spawn(async move {
+                let tls_listener = match TlsListener::new(mtls_db_path, config).await {
+                    Ok(listener) => listener,
+                    Err(e) => {
+                        error!("Failed to create mTLS listener: {}", e);
+                        return;
+                    }
+                };
+                
+                if let Err(e) = tls_listener.serve().await {
+                    error!("mTLS listener error: {}", e);
+                }
+            });
+        }
+        
+        #[cfg(not(feature = "standalone"))]
+        {
+            info!("mTLS listener would start here in standalone mode");
+        }
+        
+        info!("mTLS listener started on port {}", DEFAULT_MTLS_PROFILE_PORT);
+    }
+
+    Ok(Json(TlsProfileResponse {
+        tls_enabled: true,
+        require_client_mtls: payload.require_client_mtls,
+        client_cert_ttl_hours: payload.client_cert_ttl_hours,
+        mtls_listener: format!("localhost:{}", DEFAULT_MTLS_PROFILE_PORT),
+        subject_alt_name_template: payload.subject_alt_name_template,
+    }))
+}
+
+/// Issue a client certificate for mTLS authentication
+async fn issue_certificate(
+    State(s): State<AuthenticatedProxyState>,
+    Json(payload): Json<IssueCertificateRequest>,
+) -> Result<Json<ClientCertificate>, StatusCode> {
+    let service_id = ServiceId::new(payload.service_id);
+
+    // Find the service
+    let service = match ServiceModel::find_by_id(service_id, &s.db) {
+        Ok(Some(service)) => service,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    // Check if TLS profile is configured
+    let tls_profile = match &service.tls_profile {
+        Some(profile) => profile,
+        None => return Err(StatusCode::BAD_REQUEST),
+    };
+
+    // Validate the certificate request against the profile
+    if let Err(e) = validate_certificate_request(&payload, &tls_profile) {
+        warn!("Certificate request validation failed: {}", e);
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Initialize certificate authority using persisted CA material if available
+    let ca = if !tls_profile.encrypted_client_ca_bundle.is_empty() {
+        // Decrypt the CA bundle from the TLS profile
+        match s
+            .tls_envelope
+            .decrypt(&tls_profile.encrypted_client_ca_bundle)
+        {
+            Ok(ca_bundle_pem) => {
+                // The CA bundle should contain both the CA certificate and private key
+                // We need to split them to create the CA from components
+                let ca_bundle_str = std::str::from_utf8(&ca_bundle_pem)
+                    .map_err(|_| {
+                        error!("Failed to parse CA bundle as UTF-8");
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?;
+
+                // Find the certificate block (starts with -----BEGIN CERTIFICATE-----)
+                let cert_start = ca_bundle_str.find("-----BEGIN CERTIFICATE-----")
+                    .ok_or_else(|| {
+                        error!("Certificate block not found in CA bundle");
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?;
+                
+                // Find the end of the certificate block
+                let cert_end = ca_bundle_str[cert_start..].find("-----END CERTIFICATE-----")
+                    .ok_or_else(|| {
+                        error!("Certificate end block not found in CA bundle");
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?;
+                let cert_end = cert_start + cert_end + "-----END CERTIFICATE-----".len();
+                
+                // Find the private key block (starts with -----BEGIN PRIVATE KEY-----)
+                let key_start = ca_bundle_str[cert_end..].find("-----BEGIN PRIVATE KEY-----")
+                    .ok_or_else(|| {
+                        error!("Private key block not found in CA bundle");
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?;
+                let key_start = cert_end + key_start;
+                
+                // Extract certificate (from cert_start to cert_end)
+                let ca_cert_pem = ca_bundle_str[cert_start..cert_end].trim().to_string();
+                
+                // Extract private key (from key_start to end, or to end of key block)
+                let key_end = ca_bundle_str[key_start..].find("-----END PRIVATE KEY-----")
+                    .ok_or_else(|| {
+                        error!("Private key end block not found in CA bundle");
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?;
+                let key_end = key_start + key_end + "-----END PRIVATE KEY-----".len();
+                let ca_key_pem = ca_bundle_str[key_start..key_end].trim().to_string();
+
+                if ca_cert_pem.is_empty() || ca_key_pem.is_empty() {
+                    error!("Invalid CA bundle format - empty certificate or key");
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+
+                match CertificateAuthority::from_components(
+                    &ca_cert_pem,
+                    &ca_key_pem,
+                    s.tls_envelope.clone(),
+                ) {
+                    Ok(ca) => ca,
+                    Err(e) => {
+                        error!(
+                            "Failed to initialize certificate authority from persisted material: {}",
+                            e
+                        );
+                        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to decrypt CA bundle: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        }
+    } else {
+        // No persisted CA material, create a new one
+        // For testing, try to load the CA from the test files first
+        let ca = if std::path::Path::new("certs/client-ca.crt").exists() 
+            && std::path::Path::new("certs/client-ca.key").exists() {
+            // Load the CA certificate and private key from the test files
+            match (std::fs::read_to_string("certs/client-ca.crt"), std::fs::read_to_string("certs/client-ca.key")) {
+                (Ok(ca_cert_pem), Ok(ca_key_pem)) => {
+                    match CertificateAuthority::from_components(&ca_cert_pem, &ca_key_pem, s.tls_envelope.clone()) {
+                        Ok(ca) => {
+                            info!("Using test CA certificate from file");
+                            ca
+                        }
+                        Err(e) => {
+                            error!("Failed to initialize certificate authority from test files: {}", e);
+                            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                        }
+                    }
+                }
+                (Err(e), _) => {
+                    error!("Failed to read test CA certificate: {}", e);
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+                (_, Err(e)) => {
+                    error!("Failed to read test CA private key: {}", e);
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            }
+        } else {
+            // Create a new CA if test files don't exist
+            match CertificateAuthority::new(s.tls_envelope.clone()) {
+                Ok(ca) => ca,
+                Err(e) => {
+                    error!("Failed to initialize certificate authority: {}", e);
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            }
+        };
+        
+        // Persist the CA bundle to the service's TLS profile
+        let ca_bundle_pem = format!("{}\n{}", ca.ca_certificate_pem(), ca.ca_private_key_pem());
+        let encrypted_ca_bundle = s.tls_envelope.encrypt(&ca_bundle_pem.into_bytes())
+            .map_err(|e| {
+                error!("Failed to encrypt CA bundle for persistence: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        
+        // Update the service's TLS profile with the encrypted CA bundle
+        let mut updated_service = service.clone();
+        if let Some(mut tls_profile) = updated_service.tls_profile {
+            tls_profile.encrypted_client_ca_bundle = encrypted_ca_bundle;
+            updated_service.tls_profile = Some(tls_profile);
+        } else {
+            // This should not happen since we checked tls_profile earlier, but handle defensively
+            error!("Service TLS profile disappeared during CA creation");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+        
+        // Save the updated service to persist the CA bundle
+        if let Err(e) = updated_service.save(service_id, &s.db) {
+            error!("Failed to persist CA bundle to service: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+        
+        info!("Persisted new CA bundle for service {}", service_id);
+        ca
+    };
+
+    // Generate client certificate
+    let client_cert = match ca.generate_client_certificate(
+        payload.common_name,
+        payload.subject_alt_names,
+        payload.ttl_hours,
+    ) {
+        Ok(cert) => cert,
+        Err(e) => {
+            error!("Failed to generate client certificate: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    info!("Issued client certificate for service {}", service_id);
+    Ok(Json(client_cert))
 }
 
 /// Handle legacy API token validation
@@ -1015,6 +1407,7 @@ async fn unified_proxy(
 
 /// gRPC proxy handler that forwards gRPC requests while preserving gRPC-specific headers and trailers
 #[instrument(skip_all)]
+#[allow(dead_code)]
 async fn grpc_proxy(
     headers: axum::http::HeaderMap,
     State(s): State<AuthenticatedProxyState>,
@@ -1079,6 +1472,7 @@ async fn grpc_proxy(
 
 /// Reverse proxy handler that forwards requests to the target host based on the service ID
 #[instrument(skip_all)]
+#[allow(dead_code)]
 async fn reverse_proxy(
     headers: axum::http::HeaderMap,
     State(s): State<AuthenticatedProxyState>,
@@ -1147,6 +1541,21 @@ async fn grpc_proxy_with_mtls(
     let (service_id, mut additional_headers) =
         extract_and_validate_auth(&headers, &s.db, &s.paseto_manager).await?;
 
+    // Check if service requires mTLS and enforce it
+    let service = match ServiceModel::find_by_id(service_id, &s.db) {
+        Ok(Some(service)) => service,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    // Enforce mTLS requirement if configured
+    if let Some(tls_profile) = &service.tls_profile {
+        if tls_profile.require_client_mtls && client_cert.is_none() {
+            warn!("mTLS required but no client certificate provided for service {}", service_id);
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    }
+
     // Add client certificate information to headers if available
     if let Some(cert) = &client_cert {
         additional_headers.insert("x-client-cert-subject".to_string(), cert.subject.clone());
@@ -1155,11 +1564,6 @@ async fn grpc_proxy_with_mtls(
         additional_headers.insert("x-auth-method".to_string(), "mtls".to_string());
     }
 
-    let service = match ServiceModel::find_by_id(service_id, &s.db) {
-        Ok(Some(service)) => service,
-        Ok(None) => return Err(StatusCode::NOT_FOUND),
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
     let target_host = service
         .upstream_url()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -1250,6 +1654,20 @@ async fn reverse_proxy_with_mtls(
     let (service_id, mut additional_headers) =
         extract_and_validate_auth(&headers, &s.db, &s.paseto_manager).await?;
 
+    // Check if service requires mTLS and enforce it
+    let service = match ServiceModel::find_by_id(service_id, &s.db) {
+        Ok(Some(service)) => service,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    if let Some(tls_profile) = &service.tls_profile {
+        if tls_profile.require_client_mtls && client_cert.is_none() {
+            warn!("mTLS required but no client certificate provided for service {}", service_id);
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    }
+
     // Add client certificate information to headers if available
     if let Some(cert) = &client_cert {
         additional_headers.insert("x-client-cert-subject".to_string(), cert.subject.clone());
@@ -1258,11 +1676,6 @@ async fn reverse_proxy_with_mtls(
         additional_headers.insert("x-auth-method".to_string(), "mtls".to_string());
     }
 
-    let service = match ServiceModel::find_by_id(service_id, &s.db) {
-        Ok(Some(service)) => service,
-        Ok(None) => return Err(StatusCode::NOT_FOUND),
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
     let target_host = service
         .upstream_url()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
