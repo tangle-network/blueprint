@@ -74,6 +74,7 @@ pub struct TlsClientManager {
     /// Database for persistent storage
     db: RocksDb,
     /// TLS asset manager for certificate management
+    #[allow(dead_code)]
     tls_assets: TlsAssetManager,
     /// Maximum cache size
     max_cache_size: usize,
@@ -194,15 +195,13 @@ impl TlsClientManager {
                 let cert_der = cert_iter
                     .next()
                     .transpose()
-                    .map_err(|e| {
-                        crate::Error::Tls(format!("Failed to parse CA certificate: {}", e))
-                    })?
+                    .map_err(|e| crate::Error::Tls(format!("Failed to parse CA certificate: {e}")))?
                     .ok_or_else(|| {
                         crate::Error::Tls("No valid CA certificate found".to_string())
                     })?;
 
                 root_store.add(cert_der).map_err(|e| {
-                    crate::Error::Tls(format!("Failed to add CA certificate to root store: {}", e))
+                    crate::Error::Tls(format!("Failed to add CA certificate to root store: {e}"))
                 })?;
             }
 
@@ -216,7 +215,7 @@ impl TlsClientManager {
             let _cert_chain = rustls_pemfile::certs(&mut cert_data)
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| {
-                    crate::Error::Tls(format!("Failed to parse client certificate: {}", e))
+                    crate::Error::Tls(format!("Failed to parse client certificate: {e}"))
                 })?;
 
             let mut key_data = client_key.as_slice();
@@ -225,9 +224,7 @@ impl TlsClientManager {
             let _private_key = private_key_iter
                 .next()
                 .transpose()
-                .map_err(|e| {
-                    crate::Error::Tls(format!("Failed to parse client private key: {}", e))
-                })?
+                .map_err(|e| crate::Error::Tls(format!("Failed to parse client private key: {e}")))?
                 .ok_or_else(|| crate::Error::Tls("No valid private key found".to_string()))?;
 
             // Note: Client certificate configuration would go here

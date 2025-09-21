@@ -38,7 +38,7 @@ impl TlsEnvelopeKey {
 
     /// Create from bytes
     pub fn from_bytes(bytes: [u8; 32]) -> Self {
-        TlsEnvelopeKey(Key::from_slice(&bytes).clone())
+        TlsEnvelopeKey(*Key::from_slice(&bytes))
     }
 
     /// Get key as bytes
@@ -139,6 +139,12 @@ impl TlsEnvelope {
     /// Get the envelope key
     pub fn key(&self) -> &TlsEnvelopeKey {
         &self.key
+    }
+}
+
+impl Default for TlsEnvelope {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

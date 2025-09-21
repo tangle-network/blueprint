@@ -3,8 +3,9 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use std::net::SocketAddr;
 
-use tracing::info;
+use tracing::{info, debug, error};
 
 #[cfg(feature = "standalone")]
 use tokio::{net::TcpListener, select, signal, spawn};
@@ -48,9 +49,16 @@ pub struct TlsListener {
     http_listener: TcpListener,
     #[cfg(feature = "standalone")]
     mtls_listener: Option<TcpListener>,
+    #[allow(dead_code)]
     tls_acceptor: Option<TlsAcceptor>,
+    #[allow(dead_code)]
     config: TlsListenerConfig,
+    #[allow(dead_code)]
     proxy: AuthenticatedProxy,
+    #[cfg(feature = "standalone")]
+    mtls_bound_address: Option<SocketAddr>,
+    #[cfg(not(feature = "standalone"))]
+    mtls_bound_address: Option<SocketAddr>,
 }
 
 impl TlsListener {
@@ -75,7 +83,7 @@ impl TlsListener {
             info!("HTTP listener bound to {}", http_addr);
 
             // Create mTLS listener if configured
-            let (mtls_listener, tls_acceptor) =
+            let (mtls_listener, tls_acceptor, mtls_bound_address) =
                 if config.require_client_cert || !config.cert_path.is_empty() {
                     let mtls_addr = SocketAddr::from(([0, 0, 0, 0], config.mtls_port));
                     let mtls_listener = TcpListener::bind(mtls_addr).await.map_err(|e| {
@@ -85,14 +93,22 @@ impl TlsListener {
                         ))
                     })?;
 
-                    info!("mTLS listener bound to {}", mtls_addr);
+                    // Get the actual bound address (may be different from requested if port was 0)
+                    let actual_bound_addr = mtls_listener.local_addr().map_err(|e| {
+                        crate::Error::Io(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            e.to_string(),
+                        ))
+                    })?;
+
+                    info!("mTLS listener bound to {}", actual_bound_addr);
 
                     // Load TLS configuration
                     let tls_acceptor = Self::create_tls_acceptor(&config).await?;
 
-                    (Some(mtls_listener), Some(tls_acceptor))
+                    (Some(mtls_listener), Some(tls_acceptor), Some(actual_bound_addr))
                 } else {
-                    (None, None)
+                    (None, None, None)
                 };
 
             Ok(Self {
@@ -101,6 +117,7 @@ impl TlsListener {
                 tls_acceptor,
                 config,
                 proxy,
+                mtls_bound_address,
             })
         }
 
@@ -117,6 +134,7 @@ impl TlsListener {
                 tls_acceptor,
                 config,
                 proxy,
+                mtls_bound_address: None,
             })
         }
     }
@@ -130,50 +148,46 @@ impl TlsListener {
 
         // Load server certificate
         let cert_file = fs::File::open(&config.cert_path).map_err(|e| {
-            crate::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to open cert file {}: {}", config.cert_path, e),
-            ))
+            crate::Error::Io(std::io::Error::other(format!(
+                "Failed to open cert file {}: {e}",
+                config.cert_path
+            )))
         })?;
 
         let mut cert_reader = std::io::BufReader::new(cert_file);
         let certs = rustls_pemfile::certs(&mut cert_reader)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| {
-                crate::Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to read certificates: {}", e),
-                ))
+                crate::Error::Io(std::io::Error::other(format!(
+                    "Failed to read certificates: {e}"
+                )))
             })?;
 
         if certs.is_empty() {
-            return Err(crate::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(crate::Error::Io(std::io::Error::other(
                 "No certificates found in cert file".to_string(),
             )));
         }
 
         // Load server private key
         let key_file = fs::File::open(&config.key_path).map_err(|e| {
-            crate::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to open key file {}: {}", config.key_path, e),
-            ))
+            crate::Error::Io(std::io::Error::other(format!(
+                "Failed to open key file {}: {e}",
+                config.key_path
+            )))
         })?;
 
         let mut key_reader = std::io::BufReader::new(key_file);
         let keys = rustls_pemfile::pkcs8_private_keys(&mut key_reader)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| {
-                crate::Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to read private key: {}", e),
-                ))
+                crate::Error::Io(std::io::Error::other(format!(
+                    "Failed to read private key: {e}"
+                )))
             })?;
 
         if keys.is_empty() {
-            return Err(crate::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(crate::Error::Io(std::io::Error::other(
                 "No private keys found in key file".to_string(),
             )));
         }
@@ -185,25 +199,22 @@ impl TlsListener {
         if config.require_client_cert {
             if let Some(ref client_ca_path) = config.client_ca_path {
                 let ca_file = fs::File::open(client_ca_path).map_err(|e| {
-                    crate::Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Failed to open client CA file {}: {}", client_ca_path, e),
-                    ))
+                    crate::Error::Io(std::io::Error::other(format!(
+                        "Failed to open client CA file {client_ca_path}: {e}"
+                    )))
                 })?;
 
                 let mut ca_reader = std::io::BufReader::new(ca_file);
                 let ca_certs = rustls_pemfile::certs(&mut ca_reader)
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(|e| {
-                        crate::Error::Io(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("Failed to read client CA certificates: {}", e),
-                        ))
+                        crate::Error::Io(std::io::Error::other(format!(
+                            "Failed to read client CA certificates: {e}"
+                        )))
                     })?;
 
                 if ca_certs.is_empty() {
-                    return Err(crate::Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    return Err(crate::Error::Io(std::io::Error::other(
                         "No client CA certificates found".to_string(),
                     )));
                 }
@@ -211,10 +222,9 @@ impl TlsListener {
                 let mut root_store = rustls::RootCertStore::empty();
                 for cert in ca_certs {
                     root_store.add(cert).map_err(|e| {
-                        crate::Error::Io(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("Failed to add CA cert: {}", e),
-                        ))
+                        crate::Error::Io(std::io::Error::other(format!(
+                            "Failed to add CA cert: {e}"
+                        )))
                     })?;
                 }
 
@@ -224,16 +234,14 @@ impl TlsListener {
                 )
                 .build()
                 .map_err(|e| {
-                    crate::Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Failed to build client cert verifier: {}", e),
-                    ))
+                    crate::Error::Io(std::io::Error::other(format!(
+                        "Failed to build client cert verifier: {e}"
+                    )))
                 })?;
                 server_config =
                     ServerConfig::builder().with_client_cert_verifier(client_cert_verifier);
             } else {
-                return Err(crate::Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(crate::Error::Io(std::io::Error::other(
                     "Client authentication required but no client CA path provided".to_string(),
                 )));
             }
@@ -242,10 +250,9 @@ impl TlsListener {
         let server_config = server_config
             .with_single_cert(certs, keys[0].clone_key().into())
             .map_err(|e| {
-                crate::Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to set server certificate: {}", e),
-                ))
+                crate::Error::Io(std::io::Error::other(format!(
+                    "Failed to set server certificate: {e}"
+                )))
             })?;
 
         let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
@@ -257,18 +264,8 @@ impl TlsListener {
     pub async fn serve(self) -> Result<(), crate::Error> {
         let router = self.proxy.router();
 
-        // Create HTTP listener
-        let http_addr = SocketAddr::from(([0, 0, 0, 0], crate::proxy::DEFAULT_AUTH_PROXY_PORT));
-        let http_listener = tokio::net::TcpListener::bind(http_addr)
-            .await
-            .map_err(|e| {
-                crate::Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e.to_string(),
-                ))
-            })?;
-
-        info!("HTTP listener bound to {}", http_addr);
+        // Reuse existing HTTP listener from new()
+        let http_listener = self.http_listener;
 
         // Spawn HTTP server
         let http_handle = tokio::spawn(async move {
@@ -282,17 +279,7 @@ impl TlsListener {
 
         // Spawn mTLS listener if configured
         if let (Some(mtls_listener), Some(tls_acceptor)) = (self.mtls_listener, self.tls_acceptor) {
-            let mtls_addr = SocketAddr::from(([0, 0, 0, 0], self.config.mtls_port));
-            let mtls_listener = tokio::net::TcpListener::bind(mtls_addr)
-                .await
-                .map_err(|e| {
-                    crate::Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        e.to_string(),
-                    ))
-                })?;
-
-            info!("mTLS listener bound to {}", mtls_addr);
+            // Reuse existing mTLS listener from new()
 
             let mtls_handle = tokio::spawn(async move {
                 loop {
@@ -350,7 +337,7 @@ impl TlsListener {
                 }
                 _ = tokio::signal::ctrl_c() => {
                     info!("Received shutdown signal");
-                    break;
+                    return Ok(());
                 }
             }
         } else {
@@ -361,11 +348,17 @@ impl TlsListener {
                 }
                 _ = tokio::signal::ctrl_c() => {
                     info!("Received shutdown signal");
+                    return Ok(());
                 }
             }
         }
 
         Ok(())
+    }
+
+    /// Get the actual bound mTLS address
+    pub fn get_mtls_bound_address(&self) -> Option<SocketAddr> {
+        self.mtls_bound_address
     }
 
     /// Start serving both HTTP and HTTPS connections (no-op for non-standalone)
@@ -388,6 +381,7 @@ pub struct ClientCertInfo {
 }
 
 /// Extract subject from certificate
+#[allow(dead_code)]
 fn extract_cert_subject(cert: &CertificateDer<'_>) -> String {
     // Parse certificate and extract subject
     // This is a simplified implementation - in production, use proper certificate parsing
@@ -395,18 +389,21 @@ fn extract_cert_subject(cert: &CertificateDer<'_>) -> String {
 }
 
 /// Extract issuer from certificate
+#[allow(dead_code)]
 fn extract_cert_issuer(cert: &CertificateDer<'_>) -> String {
     // Parse certificate and extract issuer
     format!("CN=tangle-ca-{:x}", crc32fast::hash(cert.as_ref()))
 }
 
 /// Extract serial number from certificate
+#[allow(dead_code)]
 fn extract_cert_serial(cert: &CertificateDer<'_>) -> String {
     // Parse certificate and extract serial number
     format!("{:x}", crc32fast::hash(cert.as_ref()))
 }
 
 /// Extract not before timestamp from certificate
+#[allow(dead_code)]
 fn extract_cert_not_before(_cert: &CertificateDer<'_>) -> u64 {
     // Parse certificate and extract not before timestamp
     // Return current time as fallback
@@ -417,6 +414,7 @@ fn extract_cert_not_before(_cert: &CertificateDer<'_>) -> u64 {
 }
 
 /// Extract not after timestamp from certificate
+#[allow(dead_code)]
 fn extract_cert_not_after(_cert: &CertificateDer<'_>) -> u64 {
     // Parse certificate and extract not after timestamp
     // Return current time + 1 year as fallback
@@ -428,6 +426,7 @@ fn extract_cert_not_after(_cert: &CertificateDer<'_>) -> u64 {
 }
 
 /// Extension trait for HTTP connection to carry client certificate info
+#[allow(dead_code)]
 trait HttpConnectionExt {
     fn with_client_cert_info(self, client_cert_info: Option<ClientCertInfo>) -> Self;
 }

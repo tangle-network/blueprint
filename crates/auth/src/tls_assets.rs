@@ -28,7 +28,7 @@ impl TlsAssetManager {
         service_id: u64,
         profile: TlsProfile,
     ) -> Result<(), crate::Error> {
-        let key = format!("tls_profile:{}", service_id);
+        let key = format!("tls_profile:{service_id}");
         let value = profile.encode_to_vec();
         let cf_handle = self.db.cf_handle(cf::TLS_ASSETS_CF).unwrap();
 
@@ -38,7 +38,7 @@ impl TlsAssetManager {
 
     /// Retrieve a TLS profile for a service
     pub fn get_tls_profile(&self, service_id: u64) -> Result<Option<TlsProfile>, crate::Error> {
-        let key = format!("tls_profile:{}", service_id);
+        let key = format!("tls_profile:{service_id}");
         let cf_handle = self.db.cf_handle(cf::TLS_ASSETS_CF).unwrap();
 
         match self.db.get_cf(&cf_handle, key.as_bytes())? {
@@ -52,7 +52,7 @@ impl TlsAssetManager {
 
     /// Delete a TLS profile for a service
     pub fn delete_tls_profile(&self, service_id: u64) -> Result<(), crate::Error> {
-        let key = format!("tls_profile:{}", service_id);
+        let key = format!("tls_profile:{service_id}");
         let cf_handle = self.db.cf_handle(cf::TLS_ASSETS_CF).unwrap();
         self.db.delete_cf(&cf_handle, key.as_bytes())?;
         Ok(())
@@ -64,7 +64,7 @@ impl TlsAssetManager {
         cert_id: &str,
         metadata: TlsCertMetadata,
     ) -> Result<(), crate::Error> {
-        let key = format!("cert_metadata:{}", cert_id);
+        let key = format!("cert_metadata:{cert_id}");
         let value = metadata.encode_to_vec();
         let cf_handle = self.db.cf_handle(cf::TLS_CERT_METADATA_CF).unwrap();
 
@@ -77,7 +77,7 @@ impl TlsAssetManager {
         &self,
         cert_id: &str,
     ) -> Result<Option<TlsCertMetadata>, crate::Error> {
-        let key = format!("cert_metadata:{}", cert_id);
+        let key = format!("cert_metadata:{cert_id}");
         let cf_handle = self.db.cf_handle(cf::TLS_CERT_METADATA_CF).unwrap();
 
         match self.db.get_cf(&cf_handle, key.as_bytes())? {
@@ -94,7 +94,7 @@ impl TlsAssetManager {
         &self,
         service_id: u64,
     ) -> Result<Vec<TlsCertMetadata>, crate::Error> {
-        let prefix = format!("cert_metadata:service:{}:", service_id);
+        let prefix = format!("cert_metadata:service:{service_id}:");
         let mut result = Vec::new();
         let cf_handle = self.db.cf_handle(cf::TLS_CERT_METADATA_CF).unwrap();
 
@@ -113,7 +113,7 @@ impl TlsAssetManager {
         cert_id: &str,
         cert_data: &[u8],
     ) -> Result<(), crate::Error> {
-        let key = format!("cert_data:{}", cert_id);
+        let key = format!("cert_data:{cert_id}");
         let encrypted_data = self.tls_envelope.encrypt(cert_data)?;
         let cf_handle = self.db.cf_handle(cf::TLS_ASSETS_CF).unwrap();
 
@@ -124,7 +124,7 @@ impl TlsAssetManager {
 
     /// Retrieve and decrypt certificate data
     pub fn get_encrypted_cert(&self, cert_id: &str) -> Result<Option<Vec<u8>>, crate::Error> {
-        let key = format!("cert_data:{}", cert_id);
+        let key = format!("cert_data:{cert_id}");
         let cf_handle = self.db.cf_handle(cf::TLS_ASSETS_CF).unwrap();
 
         match self.db.get_cf(&cf_handle, key.as_bytes())? {
@@ -142,7 +142,7 @@ impl TlsAssetManager {
         key_id: &str,
         key_data: &[u8],
     ) -> Result<(), crate::Error> {
-        let key = format!("private_key_data:{}", key_id);
+        let key = format!("private_key_data:{key_id}");
         let encrypted_data = self.tls_envelope.encrypt(key_data)?;
         let cf_handle = self.db.cf_handle(cf::TLS_ASSETS_CF).unwrap();
 
@@ -153,7 +153,7 @@ impl TlsAssetManager {
 
     /// Retrieve and decrypt private key data
     pub fn get_encrypted_private_key(&self, key_id: &str) -> Result<Option<Vec<u8>>, crate::Error> {
-        let key = format!("private_key_data:{}", key_id);
+        let key = format!("private_key_data:{key_id}");
         let cf_handle = self.db.cf_handle(cf::TLS_ASSETS_CF).unwrap();
 
         match self.db.get_cf(&cf_handle, key.as_bytes())? {
@@ -171,7 +171,7 @@ impl TlsAssetManager {
         bundle_id: &str,
         bundle_data: &[u8],
     ) -> Result<(), crate::Error> {
-        let key = format!("ca_bundle_data:{}", bundle_id);
+        let key = format!("ca_bundle_data:{bundle_id}");
         let encrypted_data = self.tls_envelope.encrypt(bundle_data)?;
         let cf_handle = self.db.cf_handle(cf::TLS_ASSETS_CF).unwrap();
 
@@ -185,7 +185,7 @@ impl TlsAssetManager {
         &self,
         bundle_id: &str,
     ) -> Result<Option<Vec<u8>>, crate::Error> {
-        let key = format!("ca_bundle_data:{}", bundle_id);
+        let key = format!("ca_bundle_data:{bundle_id}");
         let cf_handle = self.db.cf_handle(cf::TLS_ASSETS_CF).unwrap();
 
         match self.db.get_cf(&cf_handle, key.as_bytes())? {
@@ -204,7 +204,7 @@ impl TlsAssetManager {
             .unwrap_or_default()
             .as_secs();
 
-        let key = format!("issuance_log:{}", timestamp);
+        let key = format!("issuance_log:{timestamp}");
         let value = log_entry.as_bytes();
         let cf_handle = self.db.cf_handle(cf::TLS_ISSUANCE_LOG_CF).unwrap();
 
@@ -324,13 +324,21 @@ impl TlsAssetManager {
 
                     // Delete the encrypted certificate data
                     let cert_key = format!("cert_data:{}", metadata.cert_id);
-                    if let Err(_) = self.db.delete_cf(&assets_cf_handle, cert_key.as_bytes()) {
+                    if self
+                        .db
+                        .delete_cf(&assets_cf_handle, cert_key.as_bytes())
+                        .is_err()
+                    {
                         // Log error but continue
                     }
 
                     // Delete the encrypted private key data
                     let key_key = format!("private_key_data:{}", metadata.cert_id);
-                    if let Err(_) = self.db.delete_cf(&assets_cf_handle, key_key.as_bytes()) {
+                    if self
+                        .db
+                        .delete_cf(&assets_cf_handle, key_key.as_bytes())
+                        .is_err()
+                    {
                         // Log error but continue
                     }
 
