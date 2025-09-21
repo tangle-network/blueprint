@@ -408,33 +408,36 @@ impl ServiceModel {
     }
 }
 
+/// Configuration for creating a new TlsCertMetadata
+pub struct TlsCertMetadataConfig {
+    pub service_id: u64,
+    pub cert_id: String,
+    pub certificate_pem: String,
+    pub serial: String,
+    pub expires_at: u64,
+    pub usage: String,
+    pub common_name: String,
+    pub issued_by_api_key_id: u64,
+}
+
 impl TlsCertMetadata {
     /// Create a new certificate metadata entry
-    pub fn new(
-        service_id: u64,
-        cert_id: String,
-        certificate_pem: String,
-        serial: String,
-        expires_at: u64,
-        usage: String,
-        common_name: String,
-        issued_by_api_key_id: u64,
-    ) -> Self {
+    pub fn new(config: TlsCertMetadataConfig) -> Self {
         Self {
-            service_id,
-            cert_id,
-            certificate_pem,
-            serial,
-            expires_at,
+            service_id: config.service_id,
+            cert_id: config.cert_id,
+            certificate_pem: config.certificate_pem,
+            serial: config.serial,
+            expires_at: config.expires_at,
             is_revoked: false,
-            usage,
-            common_name,
+            usage: config.usage,
+            common_name: config.common_name,
             subject_alt_names: Vec::new(),
             issued_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
-            issued_by_api_key_id,
+            issued_by_api_key_id: config.issued_by_api_key_id,
             tenant_id: None,
         }
     }
@@ -522,7 +525,7 @@ pub mod tls_assets {
             .cf_handle(cf::TLS_ASSETS_CF)
             .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_ASSETS_CF))?;
 
-        let key = format!("{}:{}", service_id, asset_type);
+        let key = format!("{service_id}:{asset_type}");
         db.put_cf(&cf, key.as_bytes(), encrypted_data)?;
         Ok(())
     }
@@ -537,7 +540,7 @@ pub mod tls_assets {
             .cf_handle(cf::TLS_ASSETS_CF)
             .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_ASSETS_CF))?;
 
-        let key = format!("{}:{}", service_id, asset_type);
+        let key = format!("{service_id}:{asset_type}");
         let asset_bytes = db.get_pinned_cf(&cf, key.as_bytes())?;
         Ok(asset_bytes.map(|bytes| bytes.to_vec()))
     }
@@ -552,7 +555,7 @@ pub mod tls_assets {
             .cf_handle(cf::TLS_ASSETS_CF)
             .ok_or(crate::Error::UnknownColumnFamily(cf::TLS_ASSETS_CF))?;
 
-        let key = format!("{}:{}", service_id, asset_type);
+        let key = format!("{service_id}:{asset_type}");
         db.delete_cf(&cf, key.as_bytes())?;
         Ok(())
     }
@@ -584,7 +587,7 @@ pub mod tls_assets {
             log_entry.extend_from_slice(tenant_id.as_bytes());
         }
 
-        let log_key = format!("{}:{}", timestamp, cert_id);
+        let log_key = format!("{timestamp}:{cert_id}");
         db.put_cf(&cf, log_key.as_bytes(), log_entry)?;
         Ok(())
     }
@@ -602,7 +605,7 @@ pub mod tls_assets {
         let prefix = service_id.to_be_bytes();
 
         // Iterate through all certificates for this service
-        let iter = db.prefix_iterator_cf(&cf, &prefix);
+        let iter = db.prefix_iterator_cf(&cf, prefix);
         for item in iter {
             let (_key, value) = item?;
             let metadata = TlsCertMetadata::decode(&*value)?;
