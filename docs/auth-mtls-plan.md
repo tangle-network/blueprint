@@ -104,6 +104,8 @@
 - `certificate_ttl_longer_than_policy_is_rejected` (`crates/auth/src/tests/mtls_flow_tests.rs:214`): expects the issuance API to enforce max TTL policies and reject oversized requests with `400 Bad Request`.
 - `plaintext_grpc_requests_are_rejected_when_mtls_required` (`crates/auth/src/tests/mtls_flow_tests.rs:245`): describes required behaviour where plaintext gRPC calls are denied with `Code::Unauthenticated` once mTLS is mandatory.
 - `grpc_request_with_signed_certificate_succeeds` (`crates/auth/src/tests/mtls_flow_tests.rs:278`): demonstrates the happy path where a freshly issued client cert enables a mutual TLS gRPC round trip.
+- `ca_material_round_trips` (`crates/auth/src/certificate_authority.rs:240`): asserts the certificate authority rehydrates from persisted PEM without rotation.
+- `client_cert_respects_ttl_and_serial` (`crates/auth/src/certificate_authority.rs:249`): ensures generated certificates honour TTLs and emit unique serials/revocation URLs.
 
 ## Implementation Steps
 1. Add envelope key loader module (mirroring Paseto key init) and introduce encryption helpers.
