@@ -700,7 +700,7 @@ async fn issue_certificate(
     };
 
     // Validate the certificate request against the profile
-    if let Err(e) = validate_certificate_request(&payload, &tls_profile) {
+    if let Err(e) = validate_certificate_request(&payload, tls_profile) {
         warn!("Certificate request validation failed: {}", e);
         return Err(StatusCode::BAD_REQUEST);
     }

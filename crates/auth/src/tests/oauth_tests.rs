@@ -365,13 +365,13 @@ async fn oauth_scopes_are_forwarded_and_normalized_and_client_scopes_stripped() 
     });
 
     // Mint OAuth assertion containing messy/mixed scopes; intersection should yield [data:read, mcp:invoke]
-    let now = now();
+    let current_time = now();
     let claims = Claims {
         iss: "https://issuer.example.com".into(),
         sub: "user-42".into(),
         aud: Some("https://proxy.example.com".into()),
-        iat: now,
-        exp: now + 60,
+        iat: current_time,
+        exp: current_time + 60,
         jti: uuid::Uuid::new_v4().to_string(),
         scope: Some("DATA:READ data:read extra:skip Mcp:InvokE".into()),
     };
@@ -393,6 +393,17 @@ async fn oauth_scopes_are_forwarded_and_normalized_and_client_scopes_stripped() 
     assert!(status.is_success());
     let token_body = token_res.text().await.unwrap();
     let token: TokenResponse = serde_json::from_str(&token_body).unwrap();
+
+    // Validate token metadata fields
+    assert_eq!(token.token_type, "Bearer", "token type should be 'Bearer'");
+    assert!(
+        token.expires_at > current_time,
+        "token should have future expiration time"
+    );
+    assert!(
+        token.expires_in > 0 && token.expires_in <= 900,
+        "token should have reasonable expires_in duration"
+    );
 
     // Call upstream via proxy with malicious client x-scopes header; it must be stripped and replaced by canonical
     let res = client
@@ -478,13 +489,13 @@ async fn oauth_scopes_absent_when_not_allowed_and_client_header_stripped() {
     tokio::spawn(async move { axum::serve(tcp, app).await.unwrap() });
 
     // Assertion with a scope but policy disallows -> Paseto will carry None, proxy must not inject x-scopes
-    let now = now();
+    let current_time = now();
     let claims = Claims {
         iss: "https://issuer.example.com".into(),
         sub: "user-7".into(),
         aud: None,
-        iat: now,
-        exp: now + 60,
+        iat: current_time,
+        exp: current_time + 60,
         jti: uuid::Uuid::new_v4().to_string(),
         scope: Some("logs:read".into()),
     };
@@ -503,6 +514,17 @@ async fn oauth_scopes_absent_when_not_allowed_and_client_header_stripped() {
         .unwrap();
     assert!(token_res.status().is_success());
     let token: TokenResponse = token_res.json().await.unwrap();
+
+    // Validate token metadata fields
+    assert_eq!(token.token_type, "Bearer", "token type should be 'Bearer'");
+    assert!(
+        token.expires_at > current_time,
+        "token should have future expiration time"
+    );
+    assert!(
+        token.expires_in > 0 && token.expires_in <= 900,
+        "token should have reasonable expires_in duration"
+    );
 
     let res = client
         .get(format!("http://{proxy_addr}/echo"))

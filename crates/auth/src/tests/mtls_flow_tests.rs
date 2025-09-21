@@ -49,6 +49,13 @@ use crate::types::{
     VerifyChallengeResponse, headers,
 };
 
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 pub mod proto {
     tonic::include_proto!("blueprint.auth.grpcproxytest");
 }
@@ -292,7 +299,7 @@ impl MtlsTestHarness {
 
         let target = self
             .mtls_addr
-            .map(|addr| format!("https://{}", addr))
+            .map(|addr| format!("https://{addr}"))
             .unwrap_or_else(|| format!("https://{listener}"));
 
         let endpoint = Endpoint::from_shared(target)?
@@ -685,6 +692,23 @@ async fn admin_can_enable_service_mtls_and_issue_certificates() {
         certificate.ca_bundle_pem.contains("BEGIN CERTIFICATE"),
         "response should include CA bundle"
     );
+
+    // Validate certificate metadata fields
+    assert!(
+        certificate.expires_at > now(),
+        "certificate should have future expiration time"
+    );
+    assert!(
+        !certificate.serial.is_empty(),
+        "certificate should have a non-empty serial number"
+    );
+    assert!(
+        certificate
+            .revocation_url
+            .starts_with("/v1/auth/certificates/")
+            && certificate.revocation_url.ends_with("/revoke"),
+        "certificate should have a valid revocation URL"
+    );
 }
 
 #[tokio::test]
@@ -811,6 +835,23 @@ async fn grpc_request_with_signed_certificate_succeeds() {
             "ttl_hours": 1
         }))
         .await;
+
+    // Validate certificate metadata fields
+    assert!(
+        certificate.expires_at > now(),
+        "certificate should have future expiration time"
+    );
+    assert!(
+        !certificate.serial.is_empty(),
+        "certificate should have a non-empty serial number"
+    );
+    assert!(
+        certificate
+            .revocation_url
+            .starts_with("/v1/auth/certificates/")
+            && certificate.revocation_url.ends_with("/revoke"),
+        "certificate should have a valid revocation URL"
+    );
 
     let identity = Identity::from_pem(
         certificate.certificate_pem.clone(),

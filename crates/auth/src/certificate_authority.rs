@@ -124,13 +124,13 @@ impl CertificateAuthority {
         params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
 
         let mut dn = DistinguishedName::new();
-        dn.push(DnType::CommonName, format!("Service {}", service_id));
+        dn.push(DnType::CommonName, format!("Service {service_id}"));
         dn.push(DnType::OrganizationName, "Tangle Network");
         params.distinguished_name = dn;
 
         params.subject_alt_names = dns_names
             .into_iter()
-            .map(|name| try_dns_name(name))
+            .map(try_dns_name)
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .map(SanType::DnsName)
