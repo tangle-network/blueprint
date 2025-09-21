@@ -34,15 +34,17 @@ pem = { workspace = true, default-features = false }
 chacha20poly1305 = { workspace = true, features = ["alloc", "getrandom"] }
 time = { workspace = true }
 
-axum = { workspace = true, default-features = false, features = ["json", "form"] }
-hyper-util = { workspace = true, features = ["client", "client-legacy", "tokio", "http2"] }
+axum = { workspace = true, default-features = false, features = ["json", "form", "http1", "http2", "tokio"] }
+hyper-util = { workspace = true, features = ["client", "client-legacy", "tokio", "http2", "server"] }
 hyper = { workspace = true, features = ["full"] }
 hyper-rustls = { workspace = true }
-tokio = { workspace = true, features = ["full"], optional = true }
+tokio = { workspace = true, features = ["full"] }
 tokio-rustls = { workspace = true, features = ["default"] }
 rustls = { workspace = true, features = ["default"] }
 rustls-pemfile = { workspace = true, features = ["std"] }
 rcgen = { workspace = true, features = ["crypto", "ring", "pem", "x509-parser"] }
+once_cell = { workspace = true }
+x509-parser = { workspace = true }
 
 # Database
 rocksdb = { workspace = true, features = ["lz4"] }
@@ -79,7 +81,7 @@ tonic-build = { workspace = true, features = ["prost"] }
 [features]
 default = ["std", "tracing"]
 std = ["blueprint-std/std", "crc32fast/std", "k256/std", "schnorrkel/std", "base64/std", "prost/std"]
-standalone = ["tokio", "tempfile", "axum/http1", "axum/http2", "axum/tokio"]
+standalone = ["tempfile", "axum/http1", "axum/http2", "axum/tokio"]
 tracing = []
 
 [[bin]]

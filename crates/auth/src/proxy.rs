@@ -1,5 +1,6 @@
 use core::iter::once;
 use core::ops::Add;
+use std::net::IpAddr;
 use std::path::Path;
 
 use axum::Json;
@@ -37,8 +38,9 @@ use crate::request_extensions::{AuthMethod, extract_client_cert_from_request};
 use crate::tls_assets::TlsAssetManager;
 use crate::tls_client::TlsClientManager;
 use crate::tls_envelope::{TlsEnvelope, init_tls_envelope_key};
-use crate::tls_listener::{TlsListener, TlsListenerConfig};
+use crate::tls_listener::{TlsListenerConfig, TlsListenerManager};
 use pem;
+use prost::Message;
 
 /// Maximum size for binary metadata headers in bytes
 /// Configurable via build-time environment variable GRPC_BINARY_METADATA_MAX_SIZE
@@ -73,6 +75,7 @@ pub struct AuthenticatedProxy {
     db: crate::db::RocksDb,
     paseto_manager: PasetoTokenManager,
     tls_envelope: TlsEnvelope,
+    tls_runtime: TlsListenerManager,
 }
 
 #[derive(Clone, Debug)]
@@ -86,6 +89,7 @@ pub struct AuthenticatedProxyState {
     mtls_listener_address: Option<std::net::SocketAddr>,
     #[cfg(feature = "standalone")]
     mtls_listener_handle: Option<std::sync::Arc<tokio::task::JoinHandle<()>>>,
+    tls_runtime: TlsListenerManager,
 }
 
 impl AuthenticatedProxyState {
@@ -100,6 +104,9 @@ impl AuthenticatedProxyState {
     }
     pub fn tls_client_manager_ref(&self) -> &TlsClientManager {
         &self.tls_client_manager
+    }
+    pub fn tls_runtime_ref(&self) -> TlsListenerManager {
+        self.tls_runtime.clone()
     }
 
     #[cfg(feature = "standalone")]
@@ -148,6 +155,14 @@ impl AuthenticatedProxy {
         // Initialize TLS envelope with persistent key
         let tls_envelope = Self::init_tls_envelope(&db_path)?;
 
+        let tls_runtime = TlsListenerManager::new(
+            db.clone(),
+            tls_envelope.clone(),
+            TlsListenerConfig::default(),
+        );
+
+        Self::hydrate_tls_runtime(&tls_runtime, &db)?;
+
         // Initialize TLS asset manager
         let tls_assets = TlsAssetManager::new(db.clone(), tls_envelope.clone());
 
@@ -164,7 +179,55 @@ impl AuthenticatedProxy {
             db,
             paseto_manager,
             tls_envelope,
+            tls_runtime,
         })
+    }
+
+    fn hydrate_tls_runtime(runtime: &TlsListenerManager, db: &RocksDb) -> Result<(), crate::Error> {
+        use crate::db::cf;
+        use rocksdb::IteratorMode;
+
+        let cf_handle = db
+            .cf_handle(cf::SERVICES_USER_KEYS_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(cf::SERVICES_USER_KEYS_CF))?;
+        let iter = db.iterator_cf(&cf_handle, IteratorMode::Start);
+        let mut profiles = Vec::new();
+
+        for item in iter {
+            let (key, value) = item?;
+            if key.len() < 16 {
+                continue;
+            }
+            let mut id_bytes = [0u8; 16];
+            id_bytes.copy_from_slice(&key[..16]);
+            let service_id = ServiceId::from_be_bytes(id_bytes);
+            let service = ServiceModel::decode(value.as_ref())?;
+            if let Some(profile) = service.tls_profile() {
+                if profile.tls_enabled {
+                    profiles.push((service_id, profile.clone()));
+                }
+            }
+        }
+
+        if profiles.is_empty() {
+            return Ok(());
+        }
+
+        let runtime_clone = runtime.clone();
+        let future = async move {
+            for (service_id, profile) in profiles {
+                runtime_clone
+                    .load_service_profile(service_id, &profile)
+                    .await?;
+            }
+            Ok::<(), crate::Error>(())
+        };
+
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(crate::Error::Io)?
+            .block_on(future)
     }
 
     /// Initialize Paseto token manager with persistent key
@@ -237,17 +300,8 @@ impl AuthenticatedProxy {
         Ok(TlsEnvelope::with_key(envelope_key))
     }
 
-    /// Create and start TLS listener with dual socket support
-    pub async fn start_tls_listener<P: AsRef<Path>>(
-        db_path: P,
-        config: Option<TlsListenerConfig>,
-    ) -> Result<(), crate::Error> {
-        let config = config.unwrap_or_default();
-        let listener = TlsListener::new(db_path, config).await?;
-        listener.serve().await
-    }
-
-    pub fn router(self) -> Router {
+    pub fn router(self) -> Router<()> {
+        let runtime = self.tls_runtime.clone();
         let state = AuthenticatedProxyState {
             http_client: self.http_client,
             http2_client: self.http2_client,
@@ -258,8 +312,9 @@ impl AuthenticatedProxy {
             mtls_listener_address: None,
             #[cfg(feature = "standalone")]
             mtls_listener_handle: None,
+            tls_runtime: runtime.clone(),
         };
-        Router::new()
+        let router = Router::new()
             .nest("/v1", Self::internal_api_router_v1())
             .fallback(any(unified_proxy))
             .layer(SetRequestIdLayer::new(
@@ -282,7 +337,10 @@ impl AuthenticatedProxy {
             .layer(SetSensitiveResponseHeadersLayer::new(once(
                 header::AUTHORIZATION,
             )))
-            .with_state(state)
+            .with_state(state);
+
+        runtime.install_router(router.clone());
+        router
     }
 
     pub fn db(&self) -> RocksDb {
@@ -626,55 +684,118 @@ async fn auth_exchange(
     )
 }
 
-/// Create test TLS certificate and key files for mTLS testing
-/// Update TLS profile for a service
 async fn update_tls_profile(
     service_id: ServiceId,
     State(s): State<AuthenticatedProxyState>,
     Json(payload): Json<CreateTlsProfileRequest>,
 ) -> Result<Json<TlsProfileResponse>, StatusCode> {
-    // Find the service
+    let envelope = s.tls_envelope_ref().clone();
+    let runtime = s.tls_runtime_ref();
+
     let mut service = match ServiceModel::find_by_id(service_id, &s.db) {
         Ok(Some(service)) => service,
         Ok(None) => return Err(StatusCode::NOT_FOUND),
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
 
-    // Create TLS profile with default empty values for encrypted fields
-    let tls_profile = TlsProfile {
-        tls_enabled: true,
-        require_client_mtls: payload.require_client_mtls,
-        encrypted_server_cert: Vec::new(), // Will be populated when server cert is generated
-        encrypted_server_key: Vec::new(),  // Will be populated when server key is generated
-        encrypted_client_ca_bundle: Vec::new(), // Will be populated when CA is initialized
-        encrypted_upstream_ca_bundle: Vec::new(), // Optional upstream CA bundle
-        encrypted_upstream_client_cert: Vec::new(), // Optional upstream client cert
-        encrypted_upstream_client_key: Vec::new(), // Optional upstream client key
+    let mut dns_names = payload
+        .allowed_dns_names
+        .clone()
+        .unwrap_or_else(|| vec!["localhost".to_string()]);
+    if dns_names.is_empty() {
+        dns_names.push("localhost".to_string());
+    }
+
+    let mut tls_profile = service.tls_profile.clone().unwrap_or_else(|| TlsProfile {
+        tls_enabled: false,
+        require_client_mtls: false,
+        encrypted_server_cert: Vec::new(),
+        encrypted_server_key: Vec::new(),
+        encrypted_client_ca_bundle: Vec::new(),
+        encrypted_upstream_ca_bundle: Vec::new(),
+        encrypted_upstream_client_cert: Vec::new(),
+        encrypted_upstream_client_key: Vec::new(),
         client_cert_ttl_hours: payload.client_cert_ttl_hours,
-        sni: payload.subject_alt_name_template.clone(),
+        sni: None,
+    });
+
+    let ca = if !tls_profile.encrypted_client_ca_bundle.is_empty() {
+        load_persisted_ca(&envelope, &tls_profile)?
+    } else {
+        CertificateAuthority::new(envelope.clone()).map_err(|e| {
+            error!("Failed to create certificate authority: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     };
 
-    // Update service with TLS profile
-    service.tls_profile = Some(tls_profile);
+    let mut bundle = ca.ca_certificate_pem();
+    if !bundle.ends_with('\n') {
+        bundle.push('\n');
+    }
+    bundle.push_str(&ca.ca_private_key_pem());
 
+    tls_profile.encrypted_client_ca_bundle = envelope.encrypt(bundle.as_bytes()).map_err(|e| {
+        error!("Failed to encrypt CA bundle: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let (server_cert, server_key) = ca
+        .generate_server_certificate(service_id, dns_names.clone())
+        .map_err(|e| {
+            error!("Failed to generate server certificate: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    tls_profile.encrypted_server_cert = envelope.encrypt(server_cert.as_bytes()).map_err(|e| {
+        error!("Failed to encrypt server certificate: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    tls_profile.encrypted_server_key = envelope.encrypt(server_key.as_bytes()).map_err(|e| {
+        error!("Failed to encrypt server key: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    tls_profile.tls_enabled = true;
+    tls_profile.require_client_mtls = payload.require_client_mtls;
+    tls_profile.client_cert_ttl_hours = payload.client_cert_ttl_hours;
+    tls_profile.sni = dns_names.first().cloned();
+
+    service.tls_profile = Some(tls_profile.clone());
     if let Err(e) = service.save(service_id, &s.db) {
-        error!("Failed to save TLS profile: {}", e);
+        error!("Failed to persist TLS profile: {e}");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    // Initialize certificate authority if mTLS is enabled
-    if payload.require_client_mtls {
-        info!("mTLS enabled for service {}", service_id);
-    }
+    let bound_addr = runtime
+        .upsert_service_profile(service_id, &tls_profile)
+        .await
+        .map_err(|e| {
+            error!("Failed to activate TLS profile: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    info!(
+        "TLS profile enabled for service {} with listener {}",
+        service_id, bound_addr
+    );
+
+    let listener_uri = match bound_addr.ip() {
+        IpAddr::V4(ip) if ip.is_unspecified() => {
+            format!("https://localhost:{}", bound_addr.port())
+        }
+        IpAddr::V6(ip) if ip.is_unspecified() => {
+            format!("https://[::1]:{}", bound_addr.port())
+        }
+        _ => format!("https://{bound_addr}"),
+    };
 
     Ok(Json(TlsProfileResponse {
         tls_enabled: true,
         require_client_mtls: payload.require_client_mtls,
         client_cert_ttl_hours: payload.client_cert_ttl_hours,
-        mtls_listener: format!(
-            "https://localhost:{}",
-            TlsListenerConfig::default().mtls_port
-        ),
+        mtls_listener: listener_uri,
+        http_listener: Some(format!("http://localhost:{DEFAULT_AUTH_PROXY_PORT}")),
+        ca_certificate_pem: Some(ca.ca_certificate_pem()),
         subject_alt_name_template: payload.subject_alt_name_template,
     }))
 }
@@ -716,6 +837,16 @@ async fn issue_certificate(
         })?;
 
         persist_new_ca(&s.db, service_id, &mut service_ref, &ca)?;
+        if let Some(profile) = service_ref.tls_profile.as_ref() {
+            if let Err(err) = s
+                .tls_runtime_ref()
+                .upsert_service_profile(service_id, profile)
+                .await
+            {
+                error!("Failed to refresh TLS runtime after CA creation: {err}");
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        }
         ca
     };
 

@@ -1,382 +1,427 @@
-//! TLS listener implementation for dual socket support (HTTP + HTTPS)
-//! Provides mTLS support with client certificate identity extraction
+//! TLS listener runtime for terminating inbound TLS/mTLS connections and
+//! forwarding them into the authenticated proxy router.
 
-use std::net::SocketAddr;
-use std::path::Path;
+use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
-use tracing::info;
-#[cfg(feature = "standalone")]
-use tracing::{debug, error};
-
-#[cfg(feature = "standalone")]
-use tokio::{net::TcpListener, select, signal, spawn};
-use tokio_rustls::TlsAcceptor;
-
-use rustls::pki_types::CertificateDer;
+use axum::{Router, body::Body};
+use blueprint_core::{debug, error, info, warn};
+use hyper::service::service_fn;
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo},
+    server::conn::auto::Builder as AutoH2Builder,
+};
+use once_cell::sync::OnceCell;
+use rustls::crypto::ring;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
+use rustls::{RootCertStore, ServerConfig};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::oneshot;
+use tokio::sync::{Mutex, RwLock};
+use tokio::task::JoinHandle;
+use tokio_rustls::{LazyConfigAcceptor, server::TlsStream};
+use tower::Service;
+use tracing::{Instrument, info_span};
+use x509_parser::prelude::*;
 
-use crate::proxy::AuthenticatedProxy;
+use crate::db::RocksDb;
+use crate::models::TlsProfile;
+use crate::tls_envelope::TlsEnvelope;
+use crate::types::ServiceId;
 
-/// TLS listener configuration
-#[derive(Clone)]
+/// Default bind port for the mutual TLS listener.
+pub const DEFAULT_MTLS_PORT: u16 = 8277;
+
+/// Listener configuration.
+#[derive(Clone, Debug)]
 pub struct TlsListenerConfig {
-    /// Port for HTTPS/mTLS connections
-    pub mtls_port: u16,
-    /// Path to TLS certificate file
-    pub cert_path: String,
-    /// Path to TLS private key file
-    pub key_path: String,
-    /// Whether to require client certificates
-    pub require_client_cert: bool,
-    /// Client CA certificate path for verification
-    pub client_ca_path: Option<String>,
+    /// Socket address to bind for the inbound TLS listener.
+    pub bind_addr: SocketAddr,
 }
 
 impl Default for TlsListenerConfig {
     fn default() -> Self {
         Self {
-            mtls_port: 8277, // Default mTLS port
-            cert_path: "certs/server.crt".to_string(),
-            key_path: "certs/server.key".to_string(),
-            require_client_cert: true,
-            client_ca_path: Some("certs/client-ca.crt".to_string()),
+            bind_addr: SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                std::env::var("AUTH_PROXY_MTLS_PORT")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(DEFAULT_MTLS_PORT),
+            ),
         }
     }
 }
 
-/// TLS listener that handles both HTTP and HTTPS connections
-pub struct TlsListener {
-    #[cfg(feature = "standalone")]
-    http_listener: TcpListener,
-    #[cfg(feature = "standalone")]
-    mtls_listener: Option<TcpListener>,
-    #[allow(dead_code)]
-    tls_acceptor: Option<TlsAcceptor>,
-    #[allow(dead_code)]
+/// Runtime supervisor that owns the TLS listener and per-service TLS material.
+#[derive(Clone)]
+pub struct TlsListenerManager {
+    inner: Arc<TlsListenerInner>,
+}
+
+struct TlsListenerInner {
+    db: RocksDb,
+    envelope: TlsEnvelope,
     config: TlsListenerConfig,
-    #[allow(dead_code)]
-    proxy: AuthenticatedProxy,
-    #[cfg(feature = "standalone")]
-    mtls_bound_address: Option<SocketAddr>,
-    #[cfg(not(feature = "standalone"))]
-    mtls_bound_address: Option<SocketAddr>,
+    router: OnceCell<Router<()>>,
+    profiles: RwLock<HashMap<ServiceId, Arc<ServiceTlsConfig>>>,
+    sni_index: RwLock<HashMap<String, ServiceId>>,
+    lifecycle: Mutex<ListenerLifecycle>,
 }
 
-impl TlsListener {
-    /// Create a new TLS listener with dual socket support
-    pub async fn new<P: AsRef<Path>>(
-        db_path: P,
-        config: TlsListenerConfig,
-    ) -> Result<Self, crate::Error> {
-        let proxy = AuthenticatedProxy::new(db_path)?;
+#[derive(Default)]
+struct ListenerLifecycle {
+    bound_addr: Option<SocketAddr>,
+    shutdown_tx: Option<oneshot::Sender<()>>,
+    handle: Option<JoinHandle<()>>,
+}
 
-        #[cfg(feature = "standalone")]
-        {
-            // Create HTTP listener
-            let http_addr = SocketAddr::from(([0, 0, 0, 0], crate::proxy::DEFAULT_AUTH_PROXY_PORT));
-            let http_listener = TcpListener::bind(http_addr).await.map_err(|e| {
-                crate::Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e.to_string(),
-                ))
-            })?;
+#[derive(Clone)]
+struct ServiceTlsConfig {
+    service_id: ServiceId,
+    server_config: Arc<ServerConfig>,
+    require_client_mtls: bool,
+    sni_hostname: Option<String>,
+}
 
-            info!("HTTP listener bound to {}", http_addr);
-
-            // Create mTLS listener if configured
-            let (mtls_listener, tls_acceptor, mtls_bound_address) =
-                if config.require_client_cert || !config.cert_path.is_empty() {
-                    let mtls_addr = SocketAddr::from(([0, 0, 0, 0], config.mtls_port));
-                    let mtls_listener = TcpListener::bind(mtls_addr).await.map_err(|e| {
-                        crate::Error::Io(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            e.to_string(),
-                        ))
-                    })?;
-
-                    // Get the actual bound address (may be different from requested if port was 0)
-                    let actual_bound_addr = mtls_listener.local_addr().map_err(|e| {
-                        crate::Error::Io(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            e.to_string(),
-                        ))
-                    })?;
-
-                    info!("mTLS listener bound to {}", actual_bound_addr);
-
-                    // Load TLS configuration
-                    let tls_acceptor = Self::create_tls_acceptor(&config).await?;
-
-                    (
-                        Some(mtls_listener),
-                        Some(tls_acceptor),
-                        Some(actual_bound_addr),
-                    )
-                } else {
-                    (None, None, None)
-                };
-
-            Ok(Self {
-                http_listener,
-                mtls_listener,
-                tls_acceptor,
+impl TlsListenerManager {
+    /// Create a new listener manager.
+    pub fn new(db: RocksDb, envelope: TlsEnvelope, config: TlsListenerConfig) -> Self {
+        Self {
+            inner: Arc::new(TlsListenerInner {
+                db,
+                envelope,
                 config,
-                proxy,
-                mtls_bound_address,
-            })
-        }
-
-        #[cfg(not(feature = "standalone"))]
-        {
-            // Load TLS configuration if needed
-            let tls_acceptor = if config.require_client_cert || !config.cert_path.is_empty() {
-                Some(Self::create_tls_acceptor(&config).await?)
-            } else {
-                None
-            };
-
-            Ok(Self {
-                tls_acceptor,
-                config,
-                proxy,
-                mtls_bound_address: None,
-            })
+                router: OnceCell::new(),
+                profiles: RwLock::new(HashMap::new()),
+                sni_index: RwLock::new(HashMap::new()),
+                lifecycle: Mutex::new(ListenerLifecycle::default()),
+            }),
         }
     }
 
-    /// Create TLS acceptor from configuration
-    async fn create_tls_acceptor(config: &TlsListenerConfig) -> Result<TlsAcceptor, crate::Error> {
-        use std::fs;
-
-        use rustls::ServerConfig;
-        use rustls_pemfile;
-
-        // Load server certificate
-        let cert_file = fs::File::open(&config.cert_path).map_err(|e| {
-            crate::Error::Io(std::io::Error::other(format!(
-                "Failed to open cert file {}: {e}",
-                config.cert_path
-            )))
-        })?;
-
-        let mut cert_reader = std::io::BufReader::new(cert_file);
-        let certs = rustls_pemfile::certs(&mut cert_reader)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| {
-                crate::Error::Io(std::io::Error::other(format!(
-                    "Failed to read certificates: {e}"
-                )))
-            })?;
-
-        if certs.is_empty() {
-            return Err(crate::Error::Io(std::io::Error::other(
-                "No certificates found in cert file".to_string(),
-            )));
+    /// Install the axum router that should handle decrypted traffic.
+    pub fn install_router(&self, router: Router<()>) {
+        if self.inner.router.set(router).is_err() {
+            warn!("TLS router already installed; skipping reinstallation");
+            return;
         }
 
-        // Load server private key
-        let key_file = fs::File::open(&config.key_path).map_err(|e| {
-            crate::Error::Io(std::io::Error::other(format!(
-                "Failed to open key file {}: {e}",
-                config.key_path
-            )))
-        })?;
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            let manager = self.clone();
+            handle.spawn(async move {
+                if let Err(err) = manager.ensure_listener().await {
+                    error!(
+                        "failed to start TLS listener after router installation: {}",
+                        err
+                    );
+                }
+            });
+        } else {
+            warn!("No Tokio runtime available; TLS listener start deferred");
+        }
+    }
 
-        let mut key_reader = std::io::BufReader::new(key_file);
-        let keys = rustls_pemfile::pkcs8_private_keys(&mut key_reader)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| {
-                crate::Error::Io(std::io::Error::other(format!(
-                    "Failed to read private key: {e}"
-                )))
-            })?;
+    /// Returns the bound listener address if the TLS listener is running.
+    pub async fn mtls_addr(&self) -> Option<SocketAddr> {
+        let lifecycle = self.inner.lifecycle.lock().await;
+        lifecycle.bound_addr
+    }
 
-        if keys.is_empty() {
-            return Err(crate::Error::Io(std::io::Error::other(
-                "No private keys found in key file".to_string(),
-            )));
+    /// Upsert a service TLS profile and ensure the listener is running with the new configuration.
+    pub async fn upsert_service_profile(
+        &self,
+        service_id: ServiceId,
+        profile: &TlsProfile,
+    ) -> Result<SocketAddr, crate::Error> {
+        let config = self.build_service_config(service_id, profile)?;
+        self.store_service_config(config).await;
+
+        self.ensure_listener().await?;
+        self.mtls_addr()
+            .await
+            .ok_or_else(|| crate::Error::Tls("TLS listener failed to initialise".into()))
+    }
+
+    pub async fn load_service_profile(
+        &self,
+        service_id: ServiceId,
+        profile: &TlsProfile,
+    ) -> Result<(), crate::Error> {
+        let config = self.build_service_config(service_id, profile)?;
+        self.store_service_config(config).await;
+        Ok(())
+    }
+
+    async fn store_service_config(&self, config: ServiceTlsConfig) {
+        let service_id = config.service_id;
+        let sni_hostname = config.sni_hostname.clone();
+        let config = Arc::new(config);
+        {
+            let mut profiles = self.inner.profiles.write().await;
+            profiles.insert(service_id, config.clone());
+        }
+        if let Some(hostname) = sni_hostname {
+            let mut index = self.inner.sni_index.write().await;
+            index.insert(hostname, service_id);
+        }
+    }
+
+    fn build_service_config(
+        &self,
+        service_id: ServiceId,
+        profile: &TlsProfile,
+    ) -> Result<ServiceTlsConfig, crate::Error> {
+        if profile.encrypted_server_cert.is_empty() || profile.encrypted_server_key.is_empty() {
+            return Err(crate::Error::Tls(
+                "TLS profile missing server certificate material".into(),
+            ));
+        }
+        if profile.encrypted_client_ca_bundle.is_empty() {
+            return Err(crate::Error::Tls(
+                "TLS profile missing client CA bundle".into(),
+            ));
         }
 
-        // Create server configuration
-        let mut server_config = ServerConfig::builder().with_no_client_auth();
+        let server_cert_pem = self.decrypt_utf8(&profile.encrypted_server_cert)?;
+        let server_key_pem = self.decrypt_utf8(&profile.encrypted_server_key)?;
+        let ca_bundle_pem = self.decrypt_utf8(&profile.encrypted_client_ca_bundle)?;
 
-        // Configure client authentication if required
-        if config.require_client_cert {
-            if let Some(ref client_ca_path) = config.client_ca_path {
-                let ca_file = fs::File::open(client_ca_path).map_err(|e| {
-                    crate::Error::Io(std::io::Error::other(format!(
-                        "Failed to open client CA file {client_ca_path}: {e}"
-                    )))
-                })?;
+        let server_chain = load_cert_chain(&server_cert_pem)?;
+        let private_key = load_private_key(&server_key_pem)?;
+        let client_roots = load_ca_store(&ca_bundle_pem)?;
 
-                let mut ca_reader = std::io::BufReader::new(ca_file);
-                let ca_certs = rustls_pemfile::certs(&mut ca_reader)
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| {
-                        crate::Error::Io(std::io::Error::other(format!(
-                            "Failed to read client CA certificates: {e}"
-                        )))
-                    })?;
-
-                if ca_certs.is_empty() {
-                    return Err(crate::Error::Io(std::io::Error::other(
-                        "No client CA certificates found".to_string(),
-                    )));
-                }
-
-                let mut root_store = rustls::RootCertStore::empty();
-                for cert in ca_certs {
-                    root_store.add(cert).map_err(|e| {
-                        crate::Error::Io(std::io::Error::other(format!(
-                            "Failed to add CA cert: {e}"
-                        )))
-                    })?;
-                }
-
-                let client_cert_verifier = WebPkiClientVerifier::builder_with_provider(
-                    Arc::new(root_store),
-                    rustls::crypto::aws_lc_rs::default_provider().into(),
+        let verifier = if profile.require_client_mtls {
+            Some(
+                WebPkiClientVerifier::builder_with_provider(
+                    Arc::new(client_roots),
+                    ring::default_provider().into(),
                 )
                 .build()
-                .map_err(|e| {
-                    crate::Error::Io(std::io::Error::other(format!(
-                        "Failed to build client cert verifier: {e}"
-                    )))
-                })?;
-                server_config =
-                    ServerConfig::builder().with_client_cert_verifier(client_cert_verifier);
-            } else {
-                return Err(crate::Error::Io(std::io::Error::other(
-                    "Client authentication required but no client CA path provided".to_string(),
-                )));
-            }
-        }
+                .map_err(|err| {
+                    crate::Error::Tls(format!("failed to construct client verifier: {err}"))
+                })?,
+            )
+        } else {
+            None
+        };
 
-        let server_config = server_config
-            .with_single_cert(certs, keys[0].clone_key().into())
-            .map_err(|e| {
-                crate::Error::Io(std::io::Error::other(format!(
-                    "Failed to set server certificate: {e}"
-                )))
+        let builder = if let Some(verifier) = verifier {
+            ServerConfig::builder().with_client_cert_verifier(verifier)
+        } else {
+            ServerConfig::builder().with_no_client_auth()
+        };
+
+        let mut server_config = builder
+            .with_single_cert(server_chain, private_key)
+            .map_err(|err| {
+                crate::Error::Tls(format!("failed to configure server certificate: {err}"))
             })?;
+        server_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 
-        let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
-        Ok(tls_acceptor)
+        Ok(ServiceTlsConfig {
+            service_id,
+            server_config: Arc::new(server_config),
+            require_client_mtls: profile.require_client_mtls,
+            sni_hostname: profile.sni.clone(),
+        })
     }
 
-    /// Start serving both HTTP and HTTPS connections
-    #[cfg(feature = "standalone")]
-    pub async fn serve(self) -> Result<(), crate::Error> {
-        let router = self.proxy.router();
+    async fn ensure_listener(&self) -> Result<(), crate::Error> {
+        let mut lifecycle = self.inner.lifecycle.lock().await;
+        if lifecycle.handle.is_some() {
+            return Ok(());
+        }
 
-        // Reuse existing HTTP listener from new()
-        let http_listener = self.http_listener;
+        if self.inner.router.get().is_none() {
+            debug!("TLS router not yet installed; deferring listener startup");
+            return Ok(());
+        }
 
-        // Spawn HTTP server
-        let http_handle = tokio::spawn(async move {
-            axum::serve(http_listener, router).await.map_err(|e| {
-                crate::Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e.to_string(),
-                ))
-            })
+        let bind_addr = self.inner.config.bind_addr;
+        let listener = match TcpListener::bind(bind_addr).await {
+            Ok(listener) => listener,
+            Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
+                warn!(
+                    "mTLS listener port {} in use, falling back to ephemeral",
+                    bind_addr
+                );
+                let fallback_addr = SocketAddr::new(bind_addr.ip(), 0);
+                TcpListener::bind(fallback_addr)
+                    .await
+                    .map_err(crate::Error::Io)?
+            }
+            Err(err) => return Err(crate::Error::Io(err)),
+        };
+        let local_addr = listener.local_addr().map_err(crate::Error::Io)?;
+        info!("mTLS listener bound to {}", local_addr);
+
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let manager = self.clone();
+        let span = info_span!("mtls_accept_loop", %local_addr);
+        let handle = tokio::spawn(async move {
+            manager
+                .run_accept_loop(listener, shutdown_rx)
+                .instrument(span)
+                .await;
         });
 
-        // Spawn mTLS listener if configured
-        if let (Some(mtls_listener), Some(tls_acceptor)) = (self.mtls_listener, self.tls_acceptor) {
-            // Reuse existing mTLS listener from new()
+        lifecycle.bound_addr = Some(local_addr);
+        lifecycle.shutdown_tx = Some(shutdown_tx);
+        lifecycle.handle = Some(handle);
+        Ok(())
+    }
 
-            let mtls_handle = tokio::spawn(async move {
-                loop {
-                    match mtls_listener.accept().await {
+    async fn run_accept_loop(self, listener: TcpListener, mut shutdown: oneshot::Receiver<()>) {
+        loop {
+            tokio::select! {
+                biased;
+                _ = &mut shutdown => {
+                    info!("mTLS listener shutting down");
+                    break;
+                }
+                accept = listener.accept() => {
+                    match accept {
                         Ok((stream, addr)) => {
-                            let tls_acceptor = tls_acceptor.clone();
-
+                            let this = self.clone();
                             tokio::spawn(async move {
-                                match tls_acceptor.accept(stream).await {
-                                    Ok(tls_stream) => {
-                                        debug!("TLS connection established from {}", addr);
-
-                                        // Extract client certificate information
-                                        let client_cert_info = tls_stream
-                                            .get_ref()
-                                            .1
-                                            .peer_certificates()
-                                            .and_then(|certs| certs.first())
-                                            .map(|cert| {
-                                                // Extract certificate information for request extension
-                                                ClientCertInfo {
-                                                    subject: extract_cert_subject(cert),
-                                                    issuer: extract_cert_issuer(cert),
-                                                    serial: extract_cert_serial(cert),
-                                                    not_before: extract_cert_not_before(cert),
-                                                    not_after: extract_cert_not_after(cert),
-                                                }
-                                            });
-
-                                        // For now, just log the client cert info and close the connection
-                                        // TODO: Implement proper mTLS request handling
-                                        info!("Client certificate info: {:?}", client_cert_info);
-                                        debug!(
-                                            "TLS connection from {} established but not fully handled yet",
-                                            addr
-                                        );
-                                    }
-                                    Err(e) => {
-                                        error!("TLS handshake error from {}: {}", addr, e);
-                                    }
+                                if let Err(err) = this.handle_connection(stream, addr).await {
+                                    error!("TLS connection error from {}: {}", addr, err);
                                 }
                             });
                         }
-                        Err(e) => {
-                            error!("Failed to accept TLS connection: {}", e);
+                        Err(err) => {
+                            error!("Failed to accept TLS connection: {}", err);
+                            break;
                         }
                     }
                 }
-            });
-
-            // Wait for both servers
-            tokio::select! {
-                result = http_handle => {
-                    result.map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))??;
-                }
-                _ = tokio::signal::ctrl_c() => {
-                    info!("Received shutdown signal");
-                    return Ok(());
-                }
             }
-        } else {
-            // Wait for HTTP server only
-            tokio::select! {
-                result = http_handle => {
-                    result.map_err(|e| crate::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))??;
+        }
+    }
+
+    async fn handle_connection(
+        &self,
+        stream: TcpStream,
+        peer_addr: SocketAddr,
+    ) -> Result<(), crate::Error> {
+        let acceptor = LazyConfigAcceptor::new(rustls::server::Acceptor::default(), stream);
+        let start = acceptor
+            .await
+            .map_err(|err| crate::Error::Tls(format!("TLS client hello error: {err}")))?;
+        let client_hello = start.client_hello();
+        let server_name = client_hello.server_name().map(str::to_owned);
+        let service_config = self.select_service_config(server_name.as_deref()).await?;
+
+        let tls_stream = start
+            .into_stream(service_config.server_config.clone())
+            .await
+            .map_err(|err| crate::Error::Tls(format!("TLS handshake error: {err}")))?;
+
+        debug!(
+            service_id = %service_config.service_id,
+            sni = server_name.as_deref().unwrap_or("<none>"),
+            require_client_mtls = service_config.require_client_mtls,
+            peer = %peer_addr,
+            "TLS handshake completed"
+        );
+
+        let cert_info = client_cert_info_from_stream(&tls_stream);
+        let router = self.inner.router.get().expect("router installed").clone();
+
+        let service_id = service_config.service_id;
+        let svc_cert = cert_info.clone();
+        let service = service_fn(move |mut req| {
+            let svc = router.clone();
+            let cert_info = svc_cert.clone();
+            async move {
+                if let Some(info) = cert_info {
+                    req.extensions_mut().insert(info);
                 }
-                _ = tokio::signal::ctrl_c() => {
-                    info!("Received shutdown signal");
-                    return Ok(());
+                req.extensions_mut().insert(service_id);
+
+                let req = req.map(Body::new);
+
+                let mut router_service = svc.clone().into_service();
+                let response = Service::call(&mut router_service, req)
+                    .await
+                    .expect("router service should be infallible");
+
+                Ok::<_, hyper::Error>(response)
+            }
+        });
+
+        let builder = AutoH2Builder::new(TokioExecutor::new());
+        builder
+            .serve_connection(TokioIo::new(tls_stream), service)
+            .await
+            .map_err(|err| crate::Error::Tls(format!("TLS proxy connection error: {err}")))
+    }
+
+    async fn select_service_config(
+        &self,
+        sni: Option<&str>,
+    ) -> Result<Arc<ServiceTlsConfig>, crate::Error> {
+        if let Some(server_name) = sni {
+            if let Some(service_id) = {
+                let index = self.inner.sni_index.read().await;
+                index.get(server_name).copied()
+            } {
+                let profiles = self.inner.profiles.read().await;
+                if let Some(config) = profiles.get(&service_id) {
+                    return Ok(config.clone());
                 }
             }
         }
 
-        Ok(())
+        let profiles = self.inner.profiles.read().await;
+        profiles
+            .values()
+            .next()
+            .cloned()
+            .ok_or_else(|| crate::Error::Tls("no TLS profiles configured".into()))
     }
 
-    /// Get the actual bound mTLS address
-    pub fn get_mtls_bound_address(&self) -> Option<SocketAddr> {
-        self.mtls_bound_address
+    fn decrypt_utf8(&self, data: &[u8]) -> Result<String, crate::Error> {
+        let bytes = self.inner.envelope.decrypt(data)?;
+        String::from_utf8(bytes)
+            .map_err(|err| crate::Error::Tls(format!("invalid UTF-8 in TLS material: {err}")))
     }
 
-    /// Start serving both HTTP and HTTPS connections (no-op for non-standalone)
-    #[cfg(not(feature = "standalone"))]
-    pub async fn serve(self) -> Result<(), crate::Error> {
-        // In non-standalone mode, the service is handled by the parent process
-        info!("TLS listener configured but not running in standalone mode");
-        Ok(())
+    pub fn envelope(&self) -> &TlsEnvelope {
+        &self.inner.envelope
+    }
+
+    pub fn db(&self) -> &RocksDb {
+        &self.inner.db
     }
 }
 
-/// Client certificate information extracted from TLS connection
+impl Drop for TlsListenerManager {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.inner) > 1 {
+            return;
+        }
+        if let Ok(mut lifecycle) = self.inner.lifecycle.try_lock() {
+            if let Some(tx) = lifecycle.shutdown_tx.take() {
+                let _ = tx.send(());
+            }
+            if let Some(handle) = lifecycle.handle.take() {
+                handle.abort();
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for TlsListenerManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TlsListenerManager").finish()
+    }
+}
+
+/// Metadata extracted from a validated client certificate.
 #[derive(Clone, Debug)]
 pub struct ClientCertInfo {
     pub subject: String,
@@ -386,61 +431,95 @@ pub struct ClientCertInfo {
     pub not_after: u64,
 }
 
-/// Extract subject from certificate
-#[allow(dead_code)]
-fn extract_cert_subject(cert: &CertificateDer<'_>) -> String {
-    // Parse certificate and extract subject
-    // This is a simplified implementation - in production, use proper certificate parsing
-    format!("CN=client-cert-{:x}", crc32fast::hash(cert.as_ref()))
+fn load_cert_chain(pem: &str) -> Result<Vec<CertificateDer<'static>>, crate::Error> {
+    let mut reader = std::io::Cursor::new(pem.as_bytes());
+    let certs = rustls_pemfile::certs(&mut reader)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| crate::Error::Tls(format!("failed to parse certificate chain: {err}")))?;
+    if certs.is_empty() {
+        return Err(crate::Error::Tls(
+            "server certificate chain is empty".into(),
+        ));
+    }
+    Ok(certs)
 }
 
-/// Extract issuer from certificate
-#[allow(dead_code)]
-fn extract_cert_issuer(cert: &CertificateDer<'_>) -> String {
-    // Parse certificate and extract issuer
-    format!("CN=tangle-ca-{:x}", crc32fast::hash(cert.as_ref()))
+fn load_private_key(pem: &str) -> Result<PrivateKeyDer<'static>, crate::Error> {
+    let mut reader = std::io::Cursor::new(pem.as_bytes());
+    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader);
+    match keys.next() {
+        Some(Ok(key)) => Ok(PrivateKeyDer::Pkcs8(key)),
+        Some(Err(err)) => Err(crate::Error::Tls(format!(
+            "failed to parse private key: {err}"
+        ))),
+        None => Err(crate::Error::Tls("server private key not found".into())),
+    }
 }
 
-/// Extract serial number from certificate
-#[allow(dead_code)]
-fn extract_cert_serial(cert: &CertificateDer<'_>) -> String {
-    // Parse certificate and extract serial number
-    format!("{:x}", crc32fast::hash(cert.as_ref()))
+fn load_ca_store(pem_bundle: &str) -> Result<RootCertStore, crate::Error> {
+    let mut store = RootCertStore::empty();
+    let mut reader = std::io::Cursor::new(pem_bundle.as_bytes());
+    let mut loaded_any = false;
+    for item in rustls_pemfile::read_all(&mut reader) {
+        match item.map_err(|err| {
+            crate::Error::Tls(format!("failed to parse CA bundle: {err}"))
+        })? {
+            rustls_pemfile::Item::X509Certificate(cert) => {
+                store
+                    .add(CertificateDer::from(cert))
+                    .map_err(|err| {
+                        crate::Error::Tls(format!(
+                            "failed to add CA certificate to root store: {err}"
+                        ))
+                    })?;
+                loaded_any = true;
+            }
+            _ => {
+                // Ignore non-certificate PEM blocks such as private keys.
+            }
+        }
+    }
+
+    if !loaded_any {
+        return Err(crate::Error::Tls(
+            "client CA bundle does not contain any certificates".into(),
+        ));
+    }
+
+    Ok(store)
 }
 
-/// Extract not before timestamp from certificate
-#[allow(dead_code)]
-fn extract_cert_not_before(_cert: &CertificateDer<'_>) -> u64 {
-    // Parse certificate and extract not before timestamp
-    // Return current time as fallback
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
+fn client_cert_info_from_stream(stream: &TlsStream<TcpStream>) -> Option<ClientCertInfo> {
+    let (_, connection) = stream.get_ref();
+    let cert = connection.peer_certificates()?.first()?.clone();
+    parse_client_certificate(&cert)
 }
 
-/// Extract not after timestamp from certificate
-#[allow(dead_code)]
-fn extract_cert_not_after(_cert: &CertificateDer<'_>) -> u64 {
-    // Parse certificate and extract not after timestamp
-    // Return current time + 1 year as fallback
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        + 365 * 24 * 60 * 60
+fn parse_client_certificate(cert: &CertificateDer<'_>) -> Option<ClientCertInfo> {
+    let (_, parsed) = parse_x509_certificate(cert.as_ref()).ok()?;
+    let subject = parsed.subject().to_string();
+    let issuer = parsed.issuer().to_string();
+    let serial = hex::encode(parsed.raw_serial()).to_ascii_lowercase();
+    let not_before = parsed.validity().not_before.timestamp();
+    let not_after = parsed.validity().not_after.timestamp();
+
+    Some(ClientCertInfo {
+        subject,
+        issuer,
+        serial,
+        not_before: not_before.max(0) as u64,
+        not_after: not_after.max(0) as u64,
+    })
 }
 
-/// Extension trait for HTTP connection to carry client certificate info
-#[allow(dead_code)]
-trait HttpConnectionExt {
-    fn with_client_cert_info(self, client_cert_info: Option<ClientCertInfo>) -> Self;
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl HttpConnectionExt for hyper::server::conn::http1::Builder {
-    fn with_client_cert_info(self, _client_cert_info: Option<ClientCertInfo>) -> Self {
-        // In a real implementation, this would store the client cert info
-        // For now, we'll just return self
-        self
+    #[test]
+    fn default_bind_addr_is_unspecified() {
+        let config = TlsListenerConfig::default();
+        assert_eq!(config.bind_addr.port(), DEFAULT_MTLS_PORT);
+        assert!(matches!(config.bind_addr.ip(), IpAddr::V4(_)));
     }
 }

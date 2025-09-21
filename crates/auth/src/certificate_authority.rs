@@ -278,6 +278,10 @@ pub struct TlsProfileResponse {
     pub require_client_mtls: bool,
     pub client_cert_ttl_hours: u32,
     pub mtls_listener: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_listener: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ca_certificate_pem: Option<String>,
     pub subject_alt_name_template: Option<String>,
 }
 

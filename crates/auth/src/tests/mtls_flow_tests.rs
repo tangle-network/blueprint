@@ -43,7 +43,7 @@ use crate::models::ServiceModel;
 use crate::proxy::AuthenticatedProxy;
 use crate::test_client::TestClient;
 use crate::tls_envelope::{TlsEnvelope, init_tls_envelope_key};
-use crate::tls_listener::{ClientCertInfo, TlsListenerConfig};
+use crate::tls_listener::ClientCertInfo;
 use crate::types::{
     ChallengeRequest, ChallengeResponse, KeyType, ServiceId, VerifyChallengeRequest,
     VerifyChallengeResponse, headers,
@@ -132,6 +132,7 @@ struct MtlsTestHarness {
     tls_shutdown: Option<oneshot::Sender<()>>,
     tls_join: Option<JoinHandle<()>>,
     mtls_addr: Option<SocketAddr>,
+    auto_start_tls_listener: bool,
 }
 
 #[derive(Deserialize)]
@@ -146,6 +147,14 @@ struct CertificateResponse {
 
 impl MtlsTestHarness {
     async fn setup() -> Self {
+        Self::setup_with_options(true).await
+    }
+
+    async fn setup_without_tls_listener() -> Self {
+        Self::setup_with_options(false).await
+    }
+
+    async fn setup_with_options(auto_start_tls_listener: bool) -> Self {
         static INSTALL_PROVIDER: std::sync::Once = std::sync::Once::new();
         INSTALL_PROVIDER.call_once(|| {
             CryptoProvider::install_default(rustls::crypto::ring::default_provider())
@@ -196,6 +205,7 @@ impl MtlsTestHarness {
             tls_shutdown: None,
             tls_join: None,
             mtls_addr: None,
+            auto_start_tls_listener,
         }
     }
 
@@ -244,7 +254,7 @@ impl MtlsTestHarness {
 
         let cert: CertificateResponse = response.json().await;
 
-        if cert.ca_bundle_pem.contains("BEGIN CERTIFICATE") {
+        if self.auto_start_tls_listener && cert.ca_bundle_pem.contains("BEGIN CERTIFICATE") {
             self.ensure_tls_listener()
                 .await
                 .expect("start mtls listener");
@@ -417,8 +427,7 @@ async fn spawn_tls_listener(
 
     let router = router.clone();
 
-    let port = TlsListenerConfig::default().mtls_port;
-    let bind_addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let bind_addr = SocketAddr::from(([127, 0, 0, 1], 0));
     let listener = TcpListener::bind(bind_addr)
         .await
         .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
@@ -881,4 +890,79 @@ async fn grpc_request_with_signed_certificate_succeeds() {
         .await
         .expect("mTLS call should succeed");
     assert_eq!(response.into_inner().message, "mutual-tls");
+}
+
+#[tokio::test]
+async fn tls_profile_response_includes_ca_certificate() {
+    let mut harness = MtlsTestHarness::setup_without_tls_listener().await;
+
+    let profile = harness
+        .put_tls_profile(json!({
+            "require_client_mtls": true,
+            "client_cert_ttl_hours": 24,
+            "allowed_dns_names": ["localhost"]
+        }))
+        .await;
+
+    assert!(
+        profile["ca_certificate_pem"].as_str().is_some(),
+        "expected TLS profile response to include service CA bundle"
+    );
+}
+
+#[tokio::test]
+async fn enabling_profile_starts_mtls_listener() {
+    let mut harness = MtlsTestHarness::setup_without_tls_listener().await;
+
+    let profile = harness
+        .put_tls_profile(json!({
+            "require_client_mtls": true,
+            "client_cert_ttl_hours": 24,
+            "allowed_dns_names": ["localhost"]
+        }))
+        .await;
+
+    let listener = profile["mtls_listener"]
+        .as_str()
+        .expect("mtls listener address present")
+        .trim_start_matches("https://")
+        .to_string();
+
+    let certificate = harness
+        .issue_certificate(json!({
+            "service_id": harness.service_id.id(),
+            "common_name": "tenant-delta",
+            "subject_alt_names": ["localhost"],
+            "ttl_hours": 1
+        }))
+        .await;
+
+    let identity = Identity::from_pem(
+        certificate.certificate_pem.clone(),
+        certificate.private_key_pem.clone(),
+    );
+    let ca = Certificate::from_pem(certificate.ca_bundle_pem.clone());
+
+    let mut client = harness
+        .connect_grpc_with_tls(&listener, identity, ca)
+        .await
+        .expect("mTLS client should connect after enabling profile");
+
+    let mut request = Request::new(EchoRequest {
+        message: "plan-specified-flow".to_string(),
+    });
+    request.metadata_mut().insert(
+        "authorization",
+        MetadataValue::try_from(format!("Bearer {}", harness.api_key).as_str()).unwrap(),
+    );
+    request.metadata_mut().insert(
+        "x-service-id",
+        MetadataValue::try_from(harness.service_header().as_str()).unwrap(),
+    );
+
+    let response = client
+        .echo(request)
+        .await
+        .expect("mTLS call should succeed once profile is enabled");
+    assert_eq!(response.into_inner().message, "plan-specified-flow");
 }
