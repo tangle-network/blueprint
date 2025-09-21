@@ -1,27 +1,49 @@
 //! Red-stage tests describing desired mTLS proxy workflow.
 
 use std::collections::BTreeMap;
+use std::error::Error;
+use std::io::Cursor;
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 
+use hyper::service::service_fn;
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo},
+    server::conn::auto::Builder as AutoH2Builder,
+};
 use rustls::crypto::CryptoProvider;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::{RootCertStore, server::WebPkiClientVerifier};
+use rustls_pemfile;
 
-use axum::http::StatusCode;
+use axum::{Router, http::StatusCode};
+use crc32fast::hash as crc32_hash;
 use futures_util::stream::{self, Stream};
 use k256::ecdsa::SigningKey;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tempfile::tempdir;
-use tokio::{sync::oneshot, task::JoinHandle};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::oneshot,
+    task::JoinHandle,
+};
+use tokio_rustls::{TlsAcceptor, server::TlsStream};
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::metadata::MetadataValue;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity, Server};
 use tonic::{Code, Request, Response, Status};
 
+use crate::certificate_authority::CertificateAuthority;
+use crate::db::RocksDb;
 use crate::models::ServiceModel;
 use crate::proxy::AuthenticatedProxy;
 use crate::test_client::TestClient;
+use crate::tls_envelope::{TlsEnvelope, init_tls_envelope_key};
+use crate::tls_listener::{ClientCertInfo, TlsListenerConfig};
 use crate::types::{
     ChallengeRequest, ChallengeResponse, KeyType, ServiceId, VerifyChallengeRequest,
     VerifyChallengeResponse, headers,
@@ -31,11 +53,14 @@ pub mod proto {
     tonic::include_proto!("blueprint.auth.grpcproxytest");
 }
 
+use pem::{Pem, parse_many};
 use proto::{
     EchoRequest, EchoResponse,
     echo_service_client::EchoServiceClient,
     echo_service_server::{EchoService, EchoServiceServer},
 };
+use tower::ServiceExt;
+use tracing::{error, info};
 
 #[derive(Default)]
 struct TestEchoService;
@@ -89,11 +114,17 @@ impl BackendHandle {
 
 struct MtlsTestHarness {
     _tmp_dir: tempfile::TempDir,
+    db_path: PathBuf,
+    db: RocksDb,
+    tls_router: Router,
     proxy_client: TestClient,
     proxy_addr: String,
     service_id: ServiceId,
     api_key: String,
     backend: Option<BackendHandle>,
+    tls_shutdown: Option<oneshot::Sender<()>>,
+    tls_join: Option<JoinHandle<()>>,
+    mtls_addr: Option<SocketAddr>,
 }
 
 #[derive(Deserialize)]
@@ -108,14 +139,22 @@ struct CertificateResponse {
 
 impl MtlsTestHarness {
     async fn setup() -> Self {
+        static INSTALL_PROVIDER: std::sync::Once = std::sync::Once::new();
+        INSTALL_PROVIDER.call_once(|| {
+            CryptoProvider::install_default(rustls::crypto::ring::default_provider())
+                .expect("install ring provider");
+        });
+
         // Note: Crypto provider should be installed by the test runner
-        
+
         let mut rng = blueprint_std::BlueprintRng::new();
         let tmp_dir = tempdir().expect("tempdir");
+        let db_path = tmp_dir.path().to_path_buf();
 
         let (backend_addr, backend) = spawn_backend().await;
 
         let proxy = AuthenticatedProxy::new(tmp_dir.path()).expect("proxy init");
+        let db = proxy.db();
         let service_id = ServiceId::new(9001);
         let signing_key = SigningKey::random(&mut rng);
         let public_key = signing_key.verifying_key().to_sec1_bytes();
@@ -130,6 +169,7 @@ impl MtlsTestHarness {
         service.save(service_id, &proxy.db()).expect("save service");
 
         let router = proxy.router();
+        let tls_router = router.clone();
         let proxy_client = TestClient::new(router);
         let proxy_addr = format!("http://127.0.0.1:{}", proxy_client.server_port());
 
@@ -138,11 +178,17 @@ impl MtlsTestHarness {
 
         MtlsTestHarness {
             _tmp_dir: tmp_dir,
+            db_path,
+            db,
+            tls_router,
             proxy_client,
             proxy_addr,
             service_id,
             api_key,
             backend: Some(backend),
+            tls_shutdown: None,
+            tls_join: None,
+            mtls_addr: None,
         }
     }
 
@@ -150,7 +196,7 @@ impl MtlsTestHarness {
         self.service_id.to_string()
     }
 
-    async fn put_tls_profile(&self, body: Value) -> Value {
+    async fn put_tls_profile(&mut self, body: Value) -> Value {
         let response = self
             .proxy_client
             .put(&format!(
@@ -172,7 +218,7 @@ impl MtlsTestHarness {
         response.json().await
     }
 
-    async fn issue_certificate(&self, body: Value) -> CertificateResponse {
+    async fn issue_certificate(&mut self, body: Value) -> CertificateResponse {
         let response = self
             .proxy_client
             .post("/v1/auth/certificates")
@@ -189,7 +235,35 @@ impl MtlsTestHarness {
             response.text().await
         );
 
-        response.json().await
+        let cert: CertificateResponse = response.json().await;
+
+        if cert.ca_bundle_pem.contains("BEGIN CERTIFICATE") {
+            self.ensure_tls_listener()
+                .await
+                .expect("start mtls listener");
+        }
+
+        cert
+    }
+
+    async fn ensure_tls_listener(&mut self) -> Result<SocketAddr, Box<dyn Error + Send + Sync>> {
+        if let Some(addr) = self.mtls_addr {
+            return Ok(addr);
+        }
+
+        let (addr, shutdown_tx, join) = spawn_tls_listener(
+            self.db_path.as_path(),
+            self.db.clone(),
+            self.tls_router.clone(),
+            self.service_id,
+        )
+        .await?;
+
+        self.mtls_addr = Some(addr);
+        self.tls_shutdown = Some(shutdown_tx);
+        self.tls_join = Some(join);
+
+        Ok(addr)
     }
 
     fn http_endpoint(&self) -> &str {
@@ -216,7 +290,12 @@ impl MtlsTestHarness {
             .identity(client_identity)
             .domain_name("localhost");
 
-        let endpoint = Endpoint::from_shared(format!("https://{listener}"))?
+        let target = self
+            .mtls_addr
+            .map(|addr| format!("https://{}", addr))
+            .unwrap_or_else(|| format!("https://{listener}"));
+
+        let endpoint = Endpoint::from_shared(target)?
             .timeout(Duration::from_secs(3))
             .tls_config(tls)?;
 
@@ -228,6 +307,12 @@ impl Drop for MtlsTestHarness {
     fn drop(&mut self) {
         if let Some(backend) = self.backend.take() {
             backend.shutdown();
+        }
+        if let Some(tx) = self.tls_shutdown.take() {
+            let _ = tx.send(());
+        }
+        if let Some(handle) = self.tls_join.take() {
+            handle.abort();
         }
     }
 }
@@ -309,6 +394,249 @@ async fn issue_api_key(
     }
 }
 
+async fn spawn_tls_listener(
+    db_path: &Path,
+    db: RocksDb,
+    router: Router,
+    service_id: ServiceId,
+) -> Result<(SocketAddr, oneshot::Sender<()>, JoinHandle<()>), Box<dyn Error + Send + Sync>> {
+    let envelope_key =
+        init_tls_envelope_key(db_path).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+    let envelope = TlsEnvelope::with_key(envelope_key);
+
+    let ca = load_or_create_service_ca(&db, &envelope, service_id)?;
+    let server_config = build_tls_server_config(&ca, service_id)?;
+    let acceptor = TlsAcceptor::from(Arc::new(server_config));
+
+    let router = router.clone();
+
+    let port = TlsListenerConfig::default().mtls_port;
+    let bind_addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let listener = TcpListener::bind(bind_addr)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+    let local_addr = listener
+        .local_addr()
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+    info!("test tls listener bound to {}", local_addr);
+
+    let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
+    let join = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = &mut shutdown_rx => {
+                    info!("shutting down test tls listener");
+                    break;
+                }
+                accept = listener.accept() => {
+                    match accept {
+                        Ok((stream, peer_addr)) => {
+                            let acceptor = acceptor.clone();
+                            let svc = router.clone();
+                            tokio::spawn(async move {
+                                match acceptor.accept(stream).await {
+                                    Ok(tls_stream) => {
+                                        let cert_info = client_cert_info_from_stream(&tls_stream);
+                                        let service = service_fn(move |mut req| {
+                                            let svc = svc.clone();
+                                            let cert_info = cert_info.clone();
+                                            async move {
+                                                if let Some(cert) = cert_info.clone() {
+                                                    req.extensions_mut().insert(cert);
+                                                }
+                                                let response = svc.clone()
+                                                    .oneshot(req)
+                                                    .await
+                                                    .expect("proxy router should be infallible");
+                                                Ok::<_, hyper::Error>(response)
+                                            }
+                                        });
+
+                                        let builder = AutoH2Builder::new(TokioExecutor::new());
+                                        if let Err(err) = builder
+                                            .serve_connection(TokioIo::new(tls_stream), service)
+                                            .await
+                                        {
+                                            error!("TLS proxy connection error: {err}");
+                                        }
+                                    }
+                                    Err(err) => {
+                                        error!("TLS handshake error from {peer_addr}: {err}");
+                                    }
+                                }
+                            });
+                        }
+                        Err(err) => {
+                            error!("Failed to accept TLS connection: {err}");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    Ok((local_addr, shutdown_tx, join))
+}
+
+fn load_or_create_service_ca(
+    db: &RocksDb,
+    envelope: &TlsEnvelope,
+    service_id: ServiceId,
+) -> Result<CertificateAuthority, Box<dyn Error + Send + Sync>> {
+    let mut service = ServiceModel::find_by_id(service_id, db)
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?
+        .ok_or_else(|| {
+            Box::new(std::io::Error::other("service not found")) as Box<dyn Error + Send + Sync>
+        })?;
+
+    let profile = service.tls_profile.as_mut().ok_or_else(|| {
+        Box::new(std::io::Error::other("tls profile missing")) as Box<dyn Error + Send + Sync>
+    })?;
+
+    if profile.encrypted_client_ca_bundle.is_empty() {
+        let ca = CertificateAuthority::new(envelope.clone())
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+        let mut bundle = ca.ca_certificate_pem();
+        if !bundle.ends_with('\n') {
+            bundle.push('\n');
+        }
+        bundle.push_str(&ca.ca_private_key_pem());
+
+        profile.encrypted_client_ca_bundle = envelope
+            .encrypt(bundle.as_bytes())
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+        service
+            .save(service_id, db)
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+        Ok(ca)
+    } else {
+        let decrypted = envelope
+            .decrypt(&profile.encrypted_client_ca_bundle)
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+        let pem_str = String::from_utf8(decrypted)
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+        let (cert_pem, key_pem) = split_ca_bundle(&pem_str)?;
+        CertificateAuthority::from_components(&cert_pem, &key_pem, envelope.clone())
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)
+    }
+}
+
+fn split_ca_bundle(pem_bundle: &str) -> Result<(String, String), Box<dyn Error + Send + Sync>> {
+    let blocks = parse_many(pem_bundle).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+    let mut cert_block: Option<Pem> = None;
+    let mut key_block: Option<Pem> = None;
+
+    for block in blocks {
+        match block.tag.as_str() {
+            "CERTIFICATE" if cert_block.is_none() => cert_block = Some(block),
+            tag if tag.ends_with("PRIVATE KEY") && key_block.is_none() => key_block = Some(block),
+            _ => {}
+        }
+    }
+
+    let cert_pem = cert_block.map(|block| pem::encode(&block)).ok_or_else(|| {
+        Box::new(std::io::Error::other("CA certificate missing")) as Box<dyn Error + Send + Sync>
+    })?;
+    let key_pem = key_block.map(|block| pem::encode(&block)).ok_or_else(|| {
+        Box::new(std::io::Error::other("CA private key missing")) as Box<dyn Error + Send + Sync>
+    })?;
+
+    Ok((cert_pem, key_pem))
+}
+
+fn build_tls_server_config(
+    ca: &CertificateAuthority,
+    service_id: ServiceId,
+) -> Result<rustls::ServerConfig, Box<dyn Error + Send + Sync>> {
+    let (server_cert_pem, server_key_pem) = ca
+        .generate_server_certificate(service_id, vec!["localhost".to_string()])
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+    let server_chain = parse_certificates(&server_cert_pem)?;
+    let server_key = parse_private_key(&server_key_pem)?;
+
+    let ca_certs = parse_certificates(&ca.ca_certificate_pem())?;
+    let mut root_store = RootCertStore::empty();
+    for cert in ca_certs {
+        root_store
+            .add(cert)
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+    }
+
+    let client_verifier = WebPkiClientVerifier::builder(Arc::new(root_store))
+        .build()
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+    let mut server_config = rustls::ServerConfig::builder()
+        .with_client_cert_verifier(client_verifier)
+        .with_single_cert(server_chain, server_key)
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+    server_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+
+    Ok(server_config)
+}
+
+fn parse_certificates(
+    pem_str: &str,
+) -> Result<Vec<CertificateDer<'static>>, Box<dyn Error + Send + Sync>> {
+    let mut reader = Cursor::new(pem_str.as_bytes());
+    let mut certs = Vec::new();
+    for result in rustls_pemfile::certs(&mut reader) {
+        let cert = result.map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+        certs.push(cert);
+    }
+
+    if certs.is_empty() {
+        Err(Box::new(std::io::Error::other("no certificates found")))
+    } else {
+        Ok(certs)
+    }
+}
+
+fn parse_private_key(
+    pem_str: &str,
+) -> Result<PrivateKeyDer<'static>, Box<dyn Error + Send + Sync>> {
+    let mut reader = Cursor::new(pem_str.as_bytes());
+    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader);
+    let key = keys
+        .next()
+        .transpose()
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?
+        .ok_or_else(|| {
+            Box::new(std::io::Error::other("pkcs8 key not found")) as Box<dyn Error + Send + Sync>
+        })?;
+    Ok(key.into())
+}
+
+fn client_cert_info_from_stream(stream: &TlsStream<TcpStream>) -> Option<ClientCertInfo> {
+    let (_, connection) = stream.get_ref();
+    connection
+        .peer_certificates()
+        .and_then(|certs| certs.first())
+        .map(|cert| ClientCertInfo {
+            subject: format!("CN=client-cert-{:x}", crc32_hash(cert.as_ref())),
+            issuer: format!("CN=tangle-ca-{:x}", crc32_hash(cert.as_ref())),
+            serial: format!("{:x}", crc32_hash(cert.as_ref())),
+            not_before: current_unix_timestamp(),
+            not_after: current_unix_timestamp() + 365 * 24 * 60 * 60,
+        })
+}
+
+fn current_unix_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 #[tokio::test]
 async fn admin_can_enable_service_mtls_and_issue_certificates() {
     let _guard = tracing::subscriber::set_default(
@@ -321,7 +649,7 @@ async fn admin_can_enable_service_mtls_and_issue_certificates() {
             .finish(),
     );
 
-    let harness = MtlsTestHarness::setup().await;
+    let mut harness = MtlsTestHarness::setup().await;
 
     let profile = harness
         .put_tls_profile(json!({
@@ -371,7 +699,7 @@ async fn certificate_ttl_longer_than_policy_is_rejected() {
             .finish(),
     );
 
-    let harness = MtlsTestHarness::setup().await;
+    let mut harness = MtlsTestHarness::setup().await;
 
     let _profile = harness
         .put_tls_profile(json!({
@@ -415,7 +743,7 @@ async fn plaintext_grpc_requests_are_rejected_when_mtls_required() {
             .finish(),
     );
 
-    let harness = MtlsTestHarness::setup().await;
+    let mut harness = MtlsTestHarness::setup().await;
 
     harness
         .put_tls_profile(json!({
@@ -459,7 +787,7 @@ async fn grpc_request_with_signed_certificate_succeeds() {
             .finish(),
     );
 
-    let harness = MtlsTestHarness::setup().await;
+    let mut harness = MtlsTestHarness::setup().await;
 
     let profile = harness
         .put_tls_profile(json!({
@@ -472,6 +800,7 @@ async fn grpc_request_with_signed_certificate_succeeds() {
     let listener = profile["mtls_listener"]
         .as_str()
         .expect("mtls listener address present")
+        .trim_start_matches("https://")
         .to_string();
 
     let certificate = harness
