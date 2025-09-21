@@ -158,6 +158,8 @@ futures-core = { version = "0.3.31", default-features = false }
 tokio = { version = "^1", default-features = false }
 tokio-util = { version = "^0.7", default-features = false }
 tokio-cron-scheduler = { version = "0.13.0", default-features = false }
+once_cell = { version = "1.19.0", default-features = false, features = ["std"] }
+x509-parser = { version = "0.18.0" }
 tokio-stream = { version = "0.1.15", default-features = false, features = ["net"] }
 pin-project-lite = "0.2.7"
 tower = { version = "0.5.2", default-features = false }
