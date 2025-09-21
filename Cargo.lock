@@ -2771,6 +2771,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.16",
+ "time",
  "tiny-keccak",
  "tokio",
  "tokio-rustls 0.26.2",
@@ -10601,7 +10602,7 @@ dependencies = [
  "rustls 0.23.31",
  "rustls-webpki 0.103.4",
  "thiserror 2.0.16",
- "x509-parser",
+ "x509-parser 0.17.0",
  "yasna",
 ]
 
@@ -16092,8 +16093,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c83367ba62b3f1dbd0f086ede4e5ebfb4713fb234dbbc5807772a31245ff46d"
 dependencies = [
  "pem 3.0.5",
+ "ring 0.17.14",
  "rustls-pki-types",
  "time",
+ "x509-parser 0.18.0",
  "yasna",
 ]
 
@@ -20556,11 +20559,13 @@ dependencies = [
  "prost 0.13.5",
  "socket2 0.5.10",
  "tokio",
+ "tokio-rustls 0.26.2",
  "tokio-stream",
  "tower 0.5.2",
  "tower-layer",
  "tower-service",
  "tracing",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -22344,6 +22349,24 @@ dependencies = [
  "lazy_static",
  "nom",
  "oid-registry",
+ "rusticata-macros",
+ "thiserror 2.0.16",
+ "time",
+]
+
+[[package]]
+name = "x509-parser"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb3e137310115a65136898d2079f003ce33331a6c4b0d51f1531d1be082b6425"
+dependencies = [
+ "asn1-rs",
+ "data-encoding",
+ "der-parser",
+ "lazy_static",
+ "nom",
+ "oid-registry",
+ "ring 0.17.14",
  "rusticata-macros",
  "thiserror 2.0.16",
  "time",

@@ -32,6 +32,7 @@ uuid = { workspace = true, features = ["v4", "serde"] }
 jsonwebtoken = { workspace = true, default-features = false }
 pem = { workspace = true, default-features = false }
 chacha20poly1305 = { workspace = true, features = ["alloc", "getrandom"] }
+time = { workspace = true }
 
 axum = { workspace = true, default-features = false, features = ["json", "form"] }
 hyper-util = { workspace = true, features = ["client", "client-legacy", "tokio", "http2"] }
@@ -41,6 +42,7 @@ tokio = { workspace = true, features = ["full"], optional = true }
 tokio-rustls = { workspace = true, features = ["default"] }
 rustls = { workspace = true, features = ["default"] }
 rustls-pemfile = { workspace = true, features = ["std"] }
+rcgen = { workspace = true, features = ["crypto", "ring", "pem", "x509-parser"] }
 
 # Database
 rocksdb = { workspace = true, features = ["lz4"] }
