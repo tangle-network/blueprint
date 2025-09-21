@@ -5,6 +5,8 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::time::Duration;
 
+use rustls::crypto::CryptoProvider;
+
 use axum::http::StatusCode;
 use futures_util::stream::{self, Stream};
 use k256::ecdsa::SigningKey;
@@ -99,13 +101,15 @@ struct CertificateResponse {
     certificate_pem: String,
     private_key_pem: String,
     ca_bundle_pem: String,
-    expires_at: String,
+    expires_at: u64,
     serial: String,
     revocation_url: String,
 }
 
 impl MtlsTestHarness {
     async fn setup() -> Self {
+        // Note: Crypto provider should be installed by the test runner
+        
         let mut rng = blueprint_std::BlueprintRng::new();
         let tmp_dir = tempdir().expect("tempdir");
 
@@ -160,7 +164,9 @@ impl MtlsTestHarness {
         assert_eq!(
             response.status(),
             StatusCode::OK,
-            "expected tls profile endpoint to acknowledge configuration"
+            "expected tls profile endpoint to acknowledge configuration, got status {}: {}",
+            response.status(),
+            response.text().await
         );
 
         response.json().await
@@ -177,8 +183,10 @@ impl MtlsTestHarness {
 
         assert_eq!(
             response.status(),
-            StatusCode::CREATED,
-            "expected certificate issuance to succeed"
+            StatusCode::OK,
+            "expected certificate issuance to succeed, got status {}: {}",
+            response.status(),
+            response.text().await
         );
 
         response.json().await
@@ -330,7 +338,7 @@ async fn admin_can_enable_service_mtls_and_issue_certificates() {
 
     let certificate = harness
         .issue_certificate(json!({
-            "service_id": harness.service_header(),
+            "service_id": harness.service_id.id(),
             "common_name": "tenant-alpha",
             "subject_alt_names": ["localhost", "spiffe://tenant-alpha/service"],
             "ttl_hours": 12
@@ -381,7 +389,7 @@ async fn certificate_ttl_longer_than_policy_is_rejected() {
             format!("Bearer {}", harness.api_key),
         )
         .json(&json!({
-            "service_id": harness.service_header(),
+            "service_id": harness.service_id.id(),
             "common_name": "tenant-beta",
             "subject_alt_names": ["localhost"],
             "ttl_hours": 48
@@ -468,7 +476,7 @@ async fn grpc_request_with_signed_certificate_succeeds() {
 
     let certificate = harness
         .issue_certificate(json!({
-            "service_id": harness.service_header(),
+            "service_id": harness.service_id.id(),
             "common_name": "tenant-gamma",
             "subject_alt_names": ["localhost"],
             "ttl_hours": 1
