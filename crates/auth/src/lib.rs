@@ -44,6 +44,8 @@ pub mod api_keys;
 pub mod api_tokens;
 /// Unified authentication token types
 pub mod auth_token;
+/// Certificate Authority utilities for mTLS
+pub mod certificate_authority;
 /// The database module for the authentication process.
 pub mod db;
 /// Database models
@@ -112,6 +114,9 @@ pub enum Error {
 
     #[error("TLS envelope error: {0}")]
     TlsEnvelope(#[from] crate::tls_envelope::TlsEnvelopeError),
+
+    #[error("Certificate generation error: {0}")]
+    Certificate(#[from] rcgen::Error),
 
     #[error("TLS error: {0}")]
     Tls(String),
