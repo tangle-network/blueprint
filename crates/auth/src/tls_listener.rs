@@ -1,11 +1,13 @@
 //! TLS listener implementation for dual socket support (HTTP + HTTPS)
 //! Provides mTLS support with client certificate identity extraction
 
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use std::net::SocketAddr;
 
-use tracing::{info, debug, error};
+use tracing::info;
+#[cfg(feature = "standalone")]
+use tracing::{debug, error};
 
 #[cfg(feature = "standalone")]
 use tokio::{net::TcpListener, select, signal, spawn};
@@ -106,7 +108,11 @@ impl TlsListener {
                     // Load TLS configuration
                     let tls_acceptor = Self::create_tls_acceptor(&config).await?;
 
-                    (Some(mtls_listener), Some(tls_acceptor), Some(actual_bound_addr))
+                    (
+                        Some(mtls_listener),
+                        Some(tls_acceptor),
+                        Some(actual_bound_addr),
+                    )
                 } else {
                     (None, None, None)
                 };
