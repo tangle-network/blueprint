@@ -1,12 +1,12 @@
 //! Integration hooks for remote deployments with Blueprint Manager
 
-use crate::deployment::tracker::{DeploymentTracker, DeploymentType};
 use crate::core::error::Result;
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
-use blueprint_std::collections::HashMap;
-use blueprint_std::sync::Arc;
+use crate::deployment::tracker::{DeploymentTracker, DeploymentType};
 use chrono::{DateTime, Utc};
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -280,7 +280,10 @@ impl RemoteSourceExtension {
         };
 
         // Provision the infrastructure
-        let instance = self.provisioner.provision(CloudProvider::AWS, &resource_spec, "default").await?;
+        let instance = self
+            .provisioner
+            .provision(CloudProvider::AWS, &resource_spec, "default")
+            .await?;
 
         let config = RemoteDeploymentConfig {
             deployment_type: deployment_type_from_provider(&provider),
@@ -323,7 +326,7 @@ pub struct RemoteDeploymentExtensions {
 impl RemoteDeploymentExtensions {
     /// Initialize all remote deployment extensions
     pub async fn initialize(
-        state_dir: &blueprint_std::path::Path,
+        state_dir: &std::path::Path,
         enable_ttl: bool,
         provisioner: Arc<crate::infra::CloudProvisioner>,
     ) -> Result<Self> {

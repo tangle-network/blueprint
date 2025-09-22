@@ -17,16 +17,16 @@ pub mod security;
 pub mod deployment;
 
 // Primary exports
-pub use config::{CloudConfig, AwsConfig, GcpConfig, AzureConfig, DigitalOceanConfig, VultrConfig};
-pub use core::{Error, Result, CloudProvider, ResourceSpec};
-pub use infra::{CloudProvisioner, InstanceStatus, ProvisionedInstance};
+pub use config::{AwsConfig, AzureConfig, CloudConfig, DigitalOceanConfig, GcpConfig, VultrConfig};
+pub use core::{CloudProvider, Error, ResourceSpec, Result};
 pub use deployment::{DeploymentTracker, SshDeploymentClient};
-pub use monitoring::{HealthMonitor, HealthStatus, HealthCheckResult};
+pub use infra::{CloudProvisioner, InstanceStatus, ProvisionedInstance};
+pub use monitoring::{HealthCheckResult, HealthMonitor, HealthStatus};
 pub use pricing::{PricingService, ServiceCostReport as CostReport};
-pub use providers::{ProvisioningConfig, ProvisionedInfrastructure};
+pub use providers::{ProvisionedInfrastructure, ProvisioningConfig};
 
 #[cfg(feature = "aws")]
-pub use providers::{AwsProvisioner, AwsInstanceMapper};
+pub use providers::{AwsInstanceMapper, AwsProvisioner};
 
 // Legacy compatibility for manager integration
 pub mod auto_deployment {

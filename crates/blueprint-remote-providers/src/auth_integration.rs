@@ -4,10 +4,10 @@
 //! to remote instances across cloud providers.
 
 use crate::core::error::{Error, Result};
-use crate::secure_bridge::{SecureBridge, RemoteEndpoint};
-use blueprint_std::collections::HashMap;
-use blueprint_std::sync::Arc;
+use crate::secure_bridge::{RemoteEndpoint, SecureBridge};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::info;
 
 /// Secure cloud credentials with encryption
@@ -23,15 +23,19 @@ impl SecureCloudCredentials {
     /// Create new secure credentials with encryption
     pub async fn new(service_id: u64, provider: &str, credentials: &str) -> Result<Self> {
         // Simple encryption for demo - in production use proper crypto
-        let encrypted = credentials.as_bytes().iter()
+        let encrypted = credentials
+            .as_bytes()
+            .iter()
             .map(|b| b.wrapping_add(42))
             .collect();
 
         // Generate API key for external access
-        let api_key = format!("bpak_{}_{}_{}", 
-                             service_id, 
-                             provider,
-                             uuid::Uuid::new_v4().to_string()[..8].to_string());
+        let api_key = format!(
+            "bpak_{}_{}_{}",
+            service_id,
+            provider,
+            uuid::Uuid::new_v4().to_string()[..8].to_string()
+        );
 
         Ok(Self {
             service_id,
@@ -43,7 +47,9 @@ impl SecureCloudCredentials {
 
     /// Decrypt credentials for use
     pub fn decrypt(&self) -> Result<String> {
-        let decrypted: Vec<u8> = self.encrypted_credentials.iter()
+        let decrypted: Vec<u8> = self
+            .encrypted_credentials
+            .iter()
             .map(|b| b.wrapping_sub(42))
             .collect();
 
@@ -84,7 +90,6 @@ impl RemoteServiceAuth {
             created_at: chrono::Utc::now(),
         };
 
-        
         Ok(auth)
     }
 
@@ -92,11 +97,13 @@ impl RemoteServiceAuth {
     pub async fn generate_access_token(&self, duration_secs: u64) -> Result<String> {
         // Simple token generation - in production use JWT with proper signing
         let expires_at = chrono::Utc::now() + chrono::Duration::seconds(duration_secs as i64);
-        let token = format!("bpat_{}_{}_{}_{}", 
-                           self.service_id,
-                           self.blueprint_id,
-                           expires_at.timestamp(),
-                           uuid::Uuid::new_v4().to_string()[..12].to_string());
+        let token = format!(
+            "bpat_{}_{}_{}_{}",
+            self.service_id,
+            self.blueprint_id,
+            expires_at.timestamp(),
+            uuid::Uuid::new_v4().to_string()[..12].to_string()
+        );
 
         Ok(token)
     }
@@ -120,7 +127,7 @@ impl AuthProxyRemoteExtension {
     /// Register a remote service with the auth proxy
     pub async fn register_service(&self, auth: RemoteServiceAuth) {
         let service_id = auth.service_id;
-        
+
         // Register with secure bridge
         let endpoint = RemoteEndpoint {
             instance_id: auth.instance_id.clone(),
@@ -158,26 +165,27 @@ impl AuthProxyRemoteExtension {
     ) -> Result<(u16, HashMap<String, String>, Vec<u8>)> {
         // Verify service is registered
         let services = self.remote_services.read().await;
-        let _auth = services.get(&service_id)
-            .ok_or_else(|| Error::ConfigurationError(format!("Service {} not registered", service_id)))?;
+        let _auth = services.get(&service_id).ok_or_else(|| {
+            Error::ConfigurationError(format!("Service {} not registered", service_id))
+        })?;
         drop(services);
 
         // Validate access token format and expiry
         if access_token.is_empty() {
             return Err(Error::ConfigurationError("Access token required".into()));
         }
-        
+
         // Validate Blueprint access token format
         if !access_token.starts_with("bpat_") {
             return Err(Error::ConfigurationError("Invalid token format".into()));
         }
-        
+
         // Parse token components: bpat_{service_id}_{blueprint_id}_{timestamp}_{uuid}
         let token_parts: Vec<&str> = access_token.split('_').collect();
         if token_parts.len() != 5 {
             return Err(Error::ConfigurationError("Malformed access token".into()));
         }
-        
+
         // Validate service ID matches
         if let Ok(token_service_id) = token_parts[1].parse::<u64>() {
             if token_service_id != service_id {
@@ -186,12 +194,12 @@ impl AuthProxyRemoteExtension {
         } else {
             return Err(Error::ConfigurationError("Invalid token service ID".into()));
         }
-        
+
         // Check token expiry
         if let Ok(timestamp) = token_parts[3].parse::<i64>() {
             let expires_at = chrono::DateTime::from_timestamp(timestamp, 0)
                 .ok_or_else(|| Error::ConfigurationError("Invalid token timestamp".into()))?;
-            
+
             if chrono::Utc::now() > expires_at {
                 return Err(Error::ConfigurationError("Access token expired".into()));
             }
@@ -201,11 +209,16 @@ impl AuthProxyRemoteExtension {
 
         // Add authentication headers
         let mut auth_headers = headers;
-        auth_headers.insert("Authorization".to_string(), format!("Bearer {}", access_token));
+        auth_headers.insert(
+            "Authorization".to_string(),
+            format!("Bearer {}", access_token),
+        );
         auth_headers.insert("X-Blueprint-Service".to_string(), service_id.to_string());
 
         // Forward request through secure bridge
-        self.bridge.forward_request(service_id, method, path, auth_headers, body).await
+        self.bridge
+            .forward_request(service_id, method, path, auth_headers, body)
+            .await
     }
 
     /// Remove remote service
@@ -244,11 +257,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_secure_credentials() {
-        let creds = SecureCloudCredentials::new(1, "aws", "secret_data").await.unwrap();
+        let creds = SecureCloudCredentials::new(1, "aws", "secret_data")
+            .await
+            .unwrap();
         assert_eq!(creds.service_id, 1);
         assert_eq!(creds.provider, "aws");
         assert!(!creds.api_key.is_empty());
-        
+
         let decrypted = creds.decrypt().unwrap();
         assert_eq!(decrypted, "secret_data");
     }

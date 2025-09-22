@@ -3770,7 +3770,6 @@ dependencies = [
  "aws-sdk-ec2",
  "aws-sdk-eks",
  "aws-smithy-mocks-experimental",
- "blueprint-auth",
  "blueprint-core-testing-utils",
  "blueprint-keystore",
  "blueprint-pricing-engine",

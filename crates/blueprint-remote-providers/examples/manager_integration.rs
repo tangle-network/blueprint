@@ -1,10 +1,10 @@
 //! Remote deployment integration with Blueprint Manager
 
 use blueprint_remote_providers::{
-    deployment::tracker::DeploymentType,
-    deployment::manager_integration::{RemoteDeploymentConfig, RemoteDeploymentExtensions},
     core::remote::CloudProvider,
     core::resources::ResourceSpec,
+    deployment::manager_integration::{RemoteDeploymentConfig, RemoteDeploymentExtensions},
+    deployment::tracker::DeploymentType,
 };
 use std::path::PathBuf;
 use std::sync::Arc;

@@ -7,14 +7,16 @@ use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use k8s_openapi::api::{
     apps::v1::{Deployment, DeploymentSpec},
-    core::v1::{Container, PodSpec, PodTemplateSpec, Service, ServiceSpec, ServicePort, ContainerPort},
+    core::v1::{
+        Container, ContainerPort, PodSpec, PodTemplateSpec, Service, ServicePort, ServiceSpec,
+    },
 };
 use kube::{
-    api::{Api, PostParams},
     Client,
+    api::{Api, PostParams},
 };
 use std::collections::BTreeMap;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// Kubernetes deployment client for Blueprint services
 pub struct KubernetesDeploymentClient {
@@ -28,9 +30,10 @@ impl KubernetesDeploymentClient {
         let config = kube::Config::infer()
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to infer k8s config: {}", e)))?;
-        
-        let client = Client::try_from(config)
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create k8s client: {}", e)))?;
+
+        let client = Client::try_from(config).map_err(|e| {
+            Error::ConfigurationError(format!("Failed to create k8s client: {}", e))
+        })?;
 
         let namespace = namespace.unwrap_or_else(|| "default".to_string());
 
@@ -45,16 +48,21 @@ impl KubernetesDeploymentClient {
         spec: &ResourceSpec,
         replicas: i32,
     ) -> Result<(String, Vec<u16>)> {
-        info!("Deploying Blueprint {} to Kubernetes namespace {}", name, self.namespace);
+        info!(
+            "Deploying Blueprint {} to Kubernetes namespace {}",
+            name, self.namespace
+        );
 
         // Create deployment with QoS port exposure
         let deployment = self.create_blueprint_deployment(name, image, spec, replicas);
         let deployments: Api<Deployment> = Api::namespaced(self.client.clone(), &self.namespace);
-        
+
         let deployment_result = deployments
             .create(&PostParams::default(), &deployment)
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create deployment: {}", e)))?;
+            .map_err(|e| {
+                Error::ConfigurationError(format!("Failed to create deployment: {}", e))
+            })?;
 
         let deployment_name = deployment_result
             .metadata
@@ -64,7 +72,7 @@ impl KubernetesDeploymentClient {
         // Create service with QoS port exposure
         let (service, exposed_ports) = self.create_blueprint_service(name);
         let services: Api<Service> = Api::namespaced(self.client.clone(), &self.namespace);
-        
+
         services
             .create(&PostParams::default(), &service)
             .await
@@ -121,13 +129,25 @@ impl KubernetesDeploymentClient {
             let mut requests = BTreeMap::new();
 
             if spec.cpu > 0.0 {
-                limits.insert("cpu".to_string(), Quantity(format!("{}m", (spec.cpu * 1000.0) as u64)));
-                requests.insert("cpu".to_string(), Quantity(format!("{}m", (spec.cpu * 500.0) as u64))); // 50% request
+                limits.insert(
+                    "cpu".to_string(),
+                    Quantity(format!("{}m", (spec.cpu * 1000.0) as u64)),
+                );
+                requests.insert(
+                    "cpu".to_string(),
+                    Quantity(format!("{}m", (spec.cpu * 500.0) as u64)),
+                ); // 50% request
             }
 
             if spec.memory_gb > 0.0 {
-                limits.insert("memory".to_string(), Quantity(format!("{}Gi", spec.memory_gb)));
-                requests.insert("memory".to_string(), Quantity(format!("{}Gi", spec.memory_gb * 0.5))); // 50% request
+                limits.insert(
+                    "memory".to_string(),
+                    Quantity(format!("{}Gi", spec.memory_gb)),
+                );
+                requests.insert(
+                    "memory".to_string(),
+                    Quantity(format!("{}Gi", spec.memory_gb * 0.5)),
+                ); // 50% request
             }
 
             container.resources = Some(k8s_openapi::api::core::v1::ResourceRequirements {
@@ -142,7 +162,10 @@ impl KubernetesDeploymentClient {
                 name: Some(name.to_string()),
                 labels: Some(BTreeMap::from([
                     ("app".to_string(), name.to_string()),
-                    ("managed-by".to_string(), "blueprint-remote-providers".to_string()),
+                    (
+                        "managed-by".to_string(),
+                        "blueprint-remote-providers".to_string(),
+                    ),
                     ("qos-enabled".to_string(), "true".to_string()),
                 ])),
                 ..Default::default()
@@ -150,9 +173,7 @@ impl KubernetesDeploymentClient {
             spec: Some(DeploymentSpec {
                 replicas: Some(replicas),
                 selector: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector {
-                    match_labels: Some(BTreeMap::from([
-                        ("app".to_string(), name.to_string()),
-                    ])),
+                    match_labels: Some(BTreeMap::from([("app".to_string(), name.to_string())])),
                     ..Default::default()
                 },
                 template: PodTemplateSpec {
@@ -179,21 +200,27 @@ impl KubernetesDeploymentClient {
         let service_ports = vec![
             ServicePort {
                 port: 8080,
-                target_port: Some(k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(8080)),
+                target_port: Some(
+                    k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(8080),
+                ),
                 name: Some("blueprint".to_string()),
                 protocol: Some("TCP".to_string()),
                 ..Default::default()
             },
             ServicePort {
                 port: 9615,
-                target_port: Some(k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(9615)),
+                target_port: Some(
+                    k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(9615),
+                ),
                 name: Some("qos-metrics".to_string()),
                 protocol: Some("TCP".to_string()),
                 ..Default::default()
             },
             ServicePort {
                 port: 9944,
-                target_port: Some(k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(9944)),
+                target_port: Some(
+                    k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(9944),
+                ),
                 name: Some("rpc".to_string()),
                 protocol: Some("TCP".to_string()),
                 ..Default::default()
@@ -207,15 +234,16 @@ impl KubernetesDeploymentClient {
                 name: Some(format!("{}-service", name)),
                 labels: Some(BTreeMap::from([
                     ("app".to_string(), name.to_string()),
-                    ("managed-by".to_string(), "blueprint-remote-providers".to_string()),
+                    (
+                        "managed-by".to_string(),
+                        "blueprint-remote-providers".to_string(),
+                    ),
                 ])),
                 ..Default::default()
             },
             spec: Some(ServiceSpec {
                 type_: Some("LoadBalancer".to_string()), // Expose externally for metrics collection
-                selector: Some(BTreeMap::from([
-                    ("app".to_string(), name.to_string()),
-                ])),
+                selector: Some(BTreeMap::from([("app".to_string(), name.to_string())])),
                 ports: Some(service_ports),
                 ..Default::default()
             }),
@@ -228,7 +256,7 @@ impl KubernetesDeploymentClient {
     /// Get service external endpoint for QoS metrics collection
     pub async fn get_service_endpoint(&self, service_name: &str) -> Result<Option<String>> {
         let services: Api<Service> = Api::namespaced(self.client.clone(), &self.namespace);
-        
+
         match services.get(service_name).await {
             Ok(service) => {
                 if let Some(status) = service.status {
@@ -247,7 +275,10 @@ impl KubernetesDeploymentClient {
                 }
                 Ok(None) // Service exists but no external endpoint yet
             }
-            Err(e) => Err(Error::ConfigurationError(format!("Failed to get service: {}", e))),
+            Err(e) => Err(Error::ConfigurationError(format!(
+                "Failed to get service: {}",
+                e
+            ))),
         }
     }
 

@@ -3,6 +3,8 @@
 //! Provides DigitalOcean resource provisioning capabilities including
 //! Droplets and Kubernetes clusters.
 
+pub mod adapter;
+
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
@@ -62,9 +64,7 @@ impl DigitalOceanProvisioner {
             .json(&droplet_request)
             .send()
             .await
-            .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to create droplet: {}", e))
-            })?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to create droplet: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
@@ -74,9 +74,10 @@ impl DigitalOceanProvisioner {
             )));
         }
 
-        let json: serde_json::Value = response.json().await.map_err(|e| {
-            Error::ConfigurationError(format!("Failed to parse response: {}", e))
-        })?;
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
 
         let droplet_id = json["droplet"]["id"]
             .as_u64()
@@ -219,9 +220,10 @@ impl DigitalOceanProvisioner {
             )));
         }
 
-        let json: serde_json::Value = response.json().await.map_err(|e| {
-            Error::ConfigurationError(format!("Failed to parse response: {}", e))
-        })?;
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
 
         let cluster_id = json["kubernetes_cluster"]["id"]
             .as_str()
@@ -335,17 +337,16 @@ impl DigitalOceanProvisioner {
             .bearer_auth(&self.api_token)
             .send()
             .await
-            .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to get kubeconfig: {}", e))
-            })?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to get kubeconfig: {}", e)))?;
 
         if !response.status().is_success() {
             return Err(Error::ConfigurationError("Failed to get kubeconfig".into()));
         }
 
-        response.text().await.map_err(|e| {
-            Error::ConfigurationError(format!("Failed to read kubeconfig: {}", e))
-        })
+        response
+            .text()
+            .await
+            .map_err(|e| Error::ConfigurationError(format!("Failed to read kubeconfig: {}", e)))
     }
 
     /// Select appropriate droplet size based on resource requirements
@@ -422,9 +423,7 @@ impl DigitalOceanProvisioner {
             .bearer_auth(&self.api_token)
             .send()
             .await
-            .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to delete droplet: {}", e))
-            })?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to delete droplet: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
@@ -451,9 +450,7 @@ impl DigitalOceanProvisioner {
             .bearer_auth(&self.api_token)
             .send()
             .await
-            .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to delete cluster: {}", e))
-            })?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to delete cluster: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();

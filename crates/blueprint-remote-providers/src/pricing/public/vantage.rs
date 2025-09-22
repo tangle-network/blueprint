@@ -51,4 +51,3 @@ pub struct VantageInstance {
     pub on_demand_price: Option<f64>,
     pub spot_price: Option<f64>,
 }
-

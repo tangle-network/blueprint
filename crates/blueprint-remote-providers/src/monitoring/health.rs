@@ -2,14 +2,14 @@
 //!
 //! Provides continuous health checks and auto-recovery for deployed instances
 
-use crate::infra::provisioner::CloudProvisioner;
-use crate::infra::types::InstanceStatus;
-use crate::deployment::tracker::{DeploymentRecord, DeploymentTracker};
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
-use blueprint_std::sync::Arc;
+use crate::deployment::tracker::{DeploymentRecord, DeploymentTracker};
+use crate::infra::provisioner::CloudProvisioner;
+use crate::infra::types::InstanceStatus;
 use blueprint_std::time::Duration;
 use chrono::{DateTime, Utc};
+use std::sync::Arc;
 use tracing::{error, info, warn};
 
 /// Health status of a deployment
@@ -68,8 +68,8 @@ impl HealthMonitor {
     /// Start monitoring all deployments
     pub async fn start_monitoring(self: Arc<Self>) {
         let mut interval = tokio::time::interval(self.check_interval);
-        let mut failure_counts: blueprint_std::collections::HashMap<String, u32> =
-            blueprint_std::collections::HashMap::new();
+        let mut failure_counts: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
 
         loop {
             interval.tick().await;
@@ -255,9 +255,7 @@ impl ApplicationHealthChecker {
     pub async fn check_http(&self, url: &str) -> HealthStatus {
         match self.http_client.get(url).send().await {
             Ok(response) if response.status().is_success() => HealthStatus::Healthy,
-            Ok(response) if response.status().is_server_error() => {
-                HealthStatus::Degraded
-            }
+            Ok(response) if response.status().is_server_error() => HealthStatus::Degraded,
             _ => HealthStatus::Unhealthy,
         }
     }

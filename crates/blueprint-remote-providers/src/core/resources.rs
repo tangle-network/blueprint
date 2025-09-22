@@ -162,8 +162,8 @@ impl ResourceSpec {
     }
 
     /// Convert to pricing units for pricing engine integration
-    pub fn to_pricing_units(&self) -> blueprint_std::collections::HashMap<String, f64> {
-        let mut units = blueprint_std::collections::HashMap::new();
+    pub fn to_pricing_units(&self) -> std::collections::HashMap<String, f64> {
+        let mut units = std::collections::HashMap::new();
         units.insert("CPU".to_string(), self.cpu as f64);
         units.insert("MemoryMB".to_string(), (self.memory_gb * 1024.0) as f64);
         units.insert("StorageMB".to_string(), (self.storage_gb * 1024.0) as f64);
@@ -175,7 +175,7 @@ impl ResourceSpec {
 }
 
 /// Convert resource spec to pricing units
-pub fn to_pricing_units(spec: &ResourceSpec) -> blueprint_std::collections::HashMap<String, f64> {
+pub fn to_pricing_units(spec: &ResourceSpec) -> std::collections::HashMap<String, f64> {
     spec.to_pricing_units()
 }
 

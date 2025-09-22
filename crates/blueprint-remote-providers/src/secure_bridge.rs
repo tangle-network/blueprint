@@ -5,9 +5,9 @@
 
 use crate::core::error::{Error, Result};
 use crate::deployment::tracker::DeploymentRecord;
-use blueprint_std::collections::HashMap;
-use blueprint_std::sync::{Arc, RwLock};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use tracing::{info, warn};
 
 /// Configuration for secure bridge
@@ -69,45 +69,50 @@ impl SecureBridge {
         if config.enable_mtls {
             // Production mTLS certificate configuration
             info!("mTLS enabled for secure bridge");
-            
+
             // Load client certificate and private key for mTLS
-            let cert_path = blueprint_std::env::var("BLUEPRINT_CLIENT_CERT_PATH")
+            let cert_path = std::env::var("BLUEPRINT_CLIENT_CERT_PATH")
                 .unwrap_or_else(|_| "/etc/blueprint/certs/client.crt".to_string());
-            let key_path = blueprint_std::env::var("BLUEPRINT_CLIENT_KEY_PATH")
+            let key_path = std::env::var("BLUEPRINT_CLIENT_KEY_PATH")
                 .unwrap_or_else(|_| "/etc/blueprint/certs/client.key".to_string());
-            let ca_path = blueprint_std::env::var("BLUEPRINT_CA_CERT_PATH")
+            let ca_path = std::env::var("BLUEPRINT_CA_CERT_PATH")
                 .unwrap_or_else(|_| "/etc/blueprint/certs/ca.crt".to_string());
-            
+
             // In production, these certificate files should exist
             // For now, we configure the client to expect them but gracefully degrade
-            if std::path::Path::new(&cert_path).exists() && 
-               std::path::Path::new(&key_path).exists() &&
-               std::path::Path::new(&ca_path).exists() {
-                
+            if std::path::Path::new(&cert_path).exists()
+                && std::path::Path::new(&key_path).exists()
+                && std::path::Path::new(&ca_path).exists()
+            {
                 // Read certificate files
-                let client_cert = std::fs::read(&cert_path)
-                    .map_err(|e| Error::ConfigurationError(format!("Failed to read client cert: {}", e)))?;
-                let client_key = std::fs::read(&key_path)
-                    .map_err(|e| Error::ConfigurationError(format!("Failed to read client key: {}", e)))?;
-                let ca_cert = std::fs::read(&ca_path)
-                    .map_err(|e| Error::ConfigurationError(format!("Failed to read CA cert: {}", e)))?;
-                
+                let client_cert = std::fs::read(&cert_path).map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to read client cert: {}", e))
+                })?;
+                let client_key = std::fs::read(&key_path).map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to read client key: {}", e))
+                })?;
+                let ca_cert = std::fs::read(&ca_path).map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to read CA cert: {}", e))
+                })?;
+
                 // Create identity by combining cert and key into single PEM buffer
                 let mut combined_pem = Vec::new();
                 combined_pem.extend_from_slice(&client_cert);
                 combined_pem.extend_from_slice(b"\n");
                 combined_pem.extend_from_slice(&client_key);
-                
-                let identity = reqwest::Identity::from_pem(&combined_pem)
-                    .map_err(|e| Error::ConfigurationError(format!("Failed to create identity: {}", e)))?;
-                let ca_cert = reqwest::Certificate::from_pem(&ca_cert)
-                    .map_err(|e| Error::ConfigurationError(format!("Failed to parse CA cert: {}", e)))?;
-                
+
+                let identity = reqwest::Identity::from_pem(&combined_pem).map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to create identity: {}", e))
+                })?;
+                let ca_cert = reqwest::Certificate::from_pem(&ca_cert).map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to parse CA cert: {}", e))
+                })?;
+
                 client_builder = client_builder
                     .identity(identity)
                     .add_root_certificate(ca_cert)
                     .use_rustls_tls();
-                    
+
                 info!("mTLS certificates loaded successfully");
             } else {
                 warn!("mTLS certificates not found at expected paths, using system certs");
@@ -118,8 +123,9 @@ impl SecureBridge {
             warn!("mTLS disabled - only for testing");
         }
 
-        let client = client_builder.build()
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create HTTP client: {}", e)))?;
+        let client = client_builder.build().map_err(|e| {
+            Error::ConfigurationError(format!("Failed to create HTTP client: {}", e))
+        })?;
 
         Ok(Self {
             config,
@@ -132,8 +138,10 @@ impl SecureBridge {
     pub async fn register_endpoint(&self, service_id: u64, endpoint: RemoteEndpoint) {
         if let Ok(mut endpoints) = self.endpoints.write() {
             endpoints.insert(service_id, endpoint.clone());
-            info!("Registered remote endpoint for service {}: {}:{}", 
-                  service_id, endpoint.host, endpoint.port);
+            info!(
+                "Registered remote endpoint for service {}: {}:{}",
+                service_id, endpoint.host, endpoint.port
+            );
         }
     }
 
@@ -148,14 +156,20 @@ impl SecureBridge {
 
     /// Health check for remote endpoint
     pub async fn health_check(&self, service_id: u64) -> Result<bool> {
-        let endpoints = self.endpoints.read().map_err(|_| Error::ConfigurationError("Lock poisoned".to_string()))?;
-        let endpoint = endpoints.get(&service_id)
-            .ok_or_else(|| Error::ConfigurationError(format!("No endpoint for service {}", service_id)))?;
+        let endpoints = self
+            .endpoints
+            .read()
+            .map_err(|_| Error::ConfigurationError("Lock poisoned".to_string()))?;
+        let endpoint = endpoints.get(&service_id).ok_or_else(|| {
+            Error::ConfigurationError(format!("No endpoint for service {}", service_id))
+        })?;
 
-        let url = format!("{}://{}:{}/health", 
-                         if endpoint.use_tls { "https" } else { "http" },
-                         endpoint.host,
-                         endpoint.port);
+        let url = format!(
+            "{}://{}:{}/health",
+            if endpoint.use_tls { "https" } else { "http" },
+            endpoint.host,
+            endpoint.port
+        );
 
         match self.client.get(&url).send().await {
             Ok(response) => Ok(response.status().is_success()),
@@ -175,15 +189,21 @@ impl SecureBridge {
         headers: HashMap<String, String>,
         body: Vec<u8>,
     ) -> Result<(u16, HashMap<String, String>, Vec<u8>)> {
-        let endpoints = self.endpoints.read().map_err(|_| Error::ConfigurationError("Lock poisoned".to_string()))?;
-        let endpoint = endpoints.get(&service_id)
-            .ok_or_else(|| Error::ConfigurationError(format!("No endpoint for service {}", service_id)))?;
+        let endpoints = self
+            .endpoints
+            .read()
+            .map_err(|_| Error::ConfigurationError("Lock poisoned".to_string()))?;
+        let endpoint = endpoints.get(&service_id).ok_or_else(|| {
+            Error::ConfigurationError(format!("No endpoint for service {}", service_id))
+        })?;
 
-        let url = format!("{}://{}:{}{}", 
-                         if endpoint.use_tls { "https" } else { "http" },
-                         endpoint.host,
-                         endpoint.port,
-                         path);
+        let url = format!(
+            "{}://{}:{}{}",
+            if endpoint.use_tls { "https" } else { "http" },
+            endpoint.host,
+            endpoint.port,
+            path
+        );
 
         let mut request = match method.to_uppercase().as_str() {
             "GET" => self.client.get(&url),
@@ -191,7 +211,12 @@ impl SecureBridge {
             "PUT" => self.client.put(&url),
             "DELETE" => self.client.delete(&url),
             "PATCH" => self.client.patch(&url),
-            _ => return Err(Error::ConfigurationError(format!("Unsupported method: {}", method))),
+            _ => {
+                return Err(Error::ConfigurationError(format!(
+                    "Unsupported method: {}",
+                    method
+                )));
+            }
         };
 
         // Add headers
@@ -205,17 +230,22 @@ impl SecureBridge {
         }
 
         // Send request
-        let response = request.send().await
+        let response = request
+            .send()
+            .await
             .map_err(|e| Error::ConfigurationError(format!("Request failed: {}", e)))?;
 
         // Extract response
         let status = response.status().as_u16();
-        let response_headers: HashMap<String, String> = response.headers()
+        let response_headers: HashMap<String, String> = response
+            .headers()
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
 
-        let response_body = response.bytes().await
+        let response_body = response
+            .bytes()
+            .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to read response: {}", e)))?
             .to_vec();
 
@@ -227,7 +257,7 @@ impl SecureBridge {
         if let Some(instance_id) = record.resource_ids.get("instance_id") {
             if let Some(public_ip) = record.resource_ids.get("public_ip") {
                 let service_id = record.blueprint_id.parse::<u64>().unwrap_or(0);
-                
+
                 let endpoint = RemoteEndpoint {
                     instance_id: instance_id.clone(),
                     host: public_ip.clone(),

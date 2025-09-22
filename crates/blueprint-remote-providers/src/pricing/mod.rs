@@ -8,4 +8,4 @@ pub mod service;
 
 pub use cost::{CostEstimator, CostReport};
 pub use integration::PricingCalculator;
-pub use service::{PricingService, CostReport as ServiceCostReport};
+pub use service::{CostReport as ServiceCostReport, PricingService};

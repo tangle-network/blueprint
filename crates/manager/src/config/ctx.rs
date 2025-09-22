@@ -114,7 +114,9 @@ impl BlueprintManagerContext {
     }
 
     #[cfg(feature = "remote-providers")]
-    fn load_cloud_config(_config: &BlueprintManagerConfig) -> Option<blueprint_remote_providers::CloudConfig> {
+    fn load_cloud_config(
+        _config: &BlueprintManagerConfig,
+    ) -> Option<blueprint_remote_providers::CloudConfig> {
         // Use the centralized config loading from remote providers crate
         blueprint_remote_providers::CloudConfig::from_env()
     }

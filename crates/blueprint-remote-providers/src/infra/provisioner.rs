@@ -7,11 +7,14 @@ use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 #[cfg(feature = "aws")]
 use crate::infra::adapters::AwsAdapter;
-use crate::infra::adapters::{GcpAdapter, AzureAdapter, DigitalOceanAdapter, VultrAdapter};
+use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
+#[cfg(feature = "gcp")]
+use crate::providers::gcp::GcpAdapter;
+// Azure and Vultr adapters will be added when implemented
 use crate::infra::mapper::InstanceTypeMapper;
 use crate::infra::traits::CloudProviderAdapter;
-use crate::infra::types::{RetryPolicy, InstanceStatus, ProvisionedInstance};
-use blueprint_std::collections::HashMap;
+use crate::infra::types::{InstanceStatus, ProvisionedInstance, RetryPolicy};
+use std::collections::HashMap;
 use tracing::{error, info, warn};
 
 /// Multi-cloud provisioner that handles deployments across all supported providers
@@ -26,40 +29,44 @@ impl CloudProvisioner {
 
         // Initialize provider adapters based on available credentials
         #[cfg(feature = "aws")]
-        if blueprint_std::env::var("AWS_ACCESS_KEY_ID").is_ok() {
+        if std::env::var("AWS_ACCESS_KEY_ID").is_ok() {
             providers.insert(
                 CloudProvider::AWS,
                 Box::new(AwsAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
             );
         }
 
-        if blueprint_std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok() {
+        #[cfg(feature = "gcp")]
+        if std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok() {
             providers.insert(
                 CloudProvider::GCP,
                 Box::new(GcpAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
             );
         }
 
-        if blueprint_std::env::var("AZURE_CLIENT_ID").is_ok() {
-            providers.insert(
-                CloudProvider::Azure,
-                Box::new(AzureAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
+        // Azure adapter not yet implemented
+        // #[cfg(feature = "azure")]
+        // if std::env::var("AZURE_CLIENT_ID").is_ok() {
+        //     providers.insert(
+        //         CloudProvider::Azure,
+        //         Box::new(AzureAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+        //     );
+        // }
 
-        if blueprint_std::env::var("DIGITALOCEAN_TOKEN").is_ok() {
+        if std::env::var("DIGITALOCEAN_TOKEN").is_ok() {
             providers.insert(
                 CloudProvider::DigitalOcean,
-                Box::new(DigitalOceanAdapter::new()?) as Box<dyn CloudProviderAdapter>,
+                Box::new(DigitalOceanAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
             );
         }
 
-        if blueprint_std::env::var("VULTR_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::Vultr,
-                Box::new(VultrAdapter::new()?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
+        // Vultr adapter not yet implemented
+        // if std::env::var("VULTR_API_KEY").is_ok() {
+        //     providers.insert(
+        //         CloudProvider::Vultr,
+        //         Box::new(VultrAdapter::new()?) as Box<dyn CloudProviderAdapter>,
+        //     );
+        // }
 
         Ok(Self {
             providers,
@@ -172,7 +179,7 @@ impl CloudProvisioner {
         instance: &ProvisionedInstance,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
-        env_vars: blueprint_std::collections::HashMap<String, String>,
+        env_vars: std::collections::HashMap<String, String>,
     ) -> Result<crate::infra::traits::BlueprintDeploymentResult> {
         let adapter = self
             .providers
@@ -193,8 +200,6 @@ impl CloudProvisioner {
         self.get_status(provider.clone(), instance_id).await
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

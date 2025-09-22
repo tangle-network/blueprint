@@ -5,9 +5,9 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
-use blueprint_std::collections::HashMap;
-use blueprint_std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use tokio::process::Command;
 use tracing::{debug, info, warn};
 
@@ -201,9 +201,9 @@ impl SshDeploymentClient {
                 }
 
                 // Add network configuration - expose QoS metrics port and RPC endpoint
-                docker_cmd.push_str(" -p 0.0.0.0:8080:8080");  // Blueprint endpoint
-                docker_cmd.push_str(" -p 0.0.0.0:9615:9615");  // QoS gRPC metrics port
-                docker_cmd.push_str(" -p 0.0.0.0:9944:9944");  // RPC endpoint for heartbeat
+                docker_cmd.push_str(" -p 0.0.0.0:8080:8080"); // Blueprint endpoint
+                docker_cmd.push_str(" -p 0.0.0.0:9615:9615"); // QoS gRPC metrics port
+                docker_cmd.push_str(" -p 0.0.0.0:9944:9944"); // RPC endpoint for heartbeat
 
                 // Add container name and image
                 docker_cmd.push_str(&format!(
@@ -216,7 +216,7 @@ impl SshDeploymentClient {
             }
             ContainerRuntime::Podman => {
                 let mut podman_cmd = format!("podman create");
-                
+
                 // Add resource limits
                 if let Some(cpu) = limits.cpu_cores {
                     podman_cmd.push_str(&format!(" --cpus={}", cpu));
@@ -224,24 +224,24 @@ impl SshDeploymentClient {
                 if let Some(mem) = limits.memory_mb {
                     podman_cmd.push_str(&format!(" --memory={}m", mem));
                 }
-                
+
                 // Add environment variables
                 for (key, value) in env_vars {
                     podman_cmd.push_str(&format!(" -e {}={}", key, value));
                 }
-                
+
                 // Add network configuration - expose QoS metrics port and RPC endpoint
-                podman_cmd.push_str(" -p 0.0.0.0:8080:8080");  // Blueprint endpoint
-                podman_cmd.push_str(" -p 0.0.0.0:9615:9615");  // QoS gRPC metrics port
-                podman_cmd.push_str(" -p 0.0.0.0:9944:9944");  // RPC endpoint for heartbeat
-                
+                podman_cmd.push_str(" -p 0.0.0.0:8080:8080"); // Blueprint endpoint
+                podman_cmd.push_str(" -p 0.0.0.0:9615:9615"); // QoS gRPC metrics port
+                podman_cmd.push_str(" -p 0.0.0.0:9944:9944"); // RPC endpoint for heartbeat
+
                 // Add container name and image
                 podman_cmd.push_str(&format!(
                     " --name blueprint-{} {}",
                     chrono::Utc::now().timestamp(),
                     image
                 ));
-                
+
                 podman_cmd
             }
             ContainerRuntime::Containerd => {
@@ -573,14 +573,25 @@ impl SshDeploymentClient {
     /// Get container status
     pub async fn get_container_status(&self, container_id: &str) -> Result<String> {
         let cmd = match self.runtime {
-            ContainerRuntime::Docker => format!("docker ps -a --filter id={} --format '{{{{.Status}}}}'", container_id),
-            ContainerRuntime::Podman => format!("podman ps -a --filter id={} --format '{{{{.Status}}}}'", container_id),
-            ContainerRuntime::Containerd => format!("ctr container info {} | grep Status", container_id),
+            ContainerRuntime::Docker => format!(
+                "docker ps -a --filter id={} --format '{{{{.Status}}}}'",
+                container_id
+            ),
+            ContainerRuntime::Podman => format!(
+                "podman ps -a --filter id={} --format '{{{{.Status}}}}'",
+                container_id
+            ),
+            ContainerRuntime::Containerd => {
+                format!("ctr container info {} | grep Status", container_id)
+            }
         };
 
         let output = self.run_remote_command(&cmd).await?;
         if output.trim().is_empty() {
-            return Err(Error::ConfigurationError(format!("Container {} not found", container_id)));
+            return Err(Error::ConfigurationError(format!(
+                "Container {} not found",
+                container_id
+            )));
         }
         Ok(output.trim().to_string())
     }

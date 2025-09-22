@@ -204,23 +204,23 @@ pub struct RemoteDeploymentOptions {
     /// Enable remote cloud deployments (AWS, GCP, Azure, etc.)
     #[arg(long)]
     pub enable_remote_deployments: bool,
-    
+
     /// Automatically deploy to cheapest available provider
     #[arg(long)]
     pub auto_select_cheapest: bool,
-    
+
     /// Preferred cloud provider (aws, gcp, azure, digitalocean, vultr)
     #[arg(long)]
     pub preferred_provider: Option<String>,
-    
+
     /// Maximum hourly cost in USD for auto-deployments
     #[arg(long, default_value_t = 1.0)]
     pub max_hourly_cost: f64,
-    
+
     /// Path to cloud credentials file
     #[arg(long)]
     pub cloud_credentials_path: Option<PathBuf>,
-    
+
     /// Use Kubernetes for deployments when available
     #[arg(long)]
     pub prefer_kubernetes: bool,

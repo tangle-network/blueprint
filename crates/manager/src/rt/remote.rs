@@ -1,12 +1,12 @@
 //! Remote service runtime implementation for cloud deployments
 
-use crate::error::{Error, Result};
 use super::service::Status;
+use crate::error::{Error, Result};
+use blueprint_core::{error, info, warn};
 use blueprint_remote_providers::deployment::manager_integration::RemoteDeploymentConfig;
 use blueprint_remote_providers::deployment::tracker::DeploymentTracker;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use blueprint_core::{info, warn, error};
 
 /// A remote service instance running on a cloud provider
 pub struct RemoteServiceInstance {
@@ -25,14 +25,19 @@ impl RemoteServiceInstance {
     }
 
     pub async fn start(&mut self) -> Result<()> {
-        let provider = self.config.provider.as_ref()
+        let provider = self
+            .config
+            .provider
+            .as_ref()
             .map(|p| format!("{:?}", p))
             .unwrap_or_else(|| "unknown".to_string());
-        info!("Starting remote service on {} (instance: {})", 
-            provider, self.config.instance_id);
-        
+        info!(
+            "Starting remote service on {} (instance: {})",
+            provider, self.config.instance_id
+        );
+
         *self.status.write().await = Status::Pending;
-        
+
         // The deployment was already created in try_remote_deployment
         // Just verify it's running
         match self.tracker.get_deployment(&self.config.instance_id).await {
@@ -56,21 +61,31 @@ impl RemoteServiceInstance {
     }
 
     pub async fn shutdown(&mut self) -> Result<()> {
-        let provider = self.config.provider.as_ref()
+        let provider = self
+            .config
+            .provider
+            .as_ref()
             .map(|p| format!("{:?}", p))
             .unwrap_or_else(|| "unknown".to_string());
-        info!("Shutting down remote service on {} (instance: {})",
-            provider, self.config.instance_id);
-        
+        info!(
+            "Shutting down remote service on {} (instance: {})",
+            provider, self.config.instance_id
+        );
+
         // Mark for termination in tracker
-        self.tracker.mark_for_termination(&self.config.instance_id).await?;
-        
+        self.tracker
+            .mark_for_termination(&self.config.instance_id)
+            .await?;
+
         *self.status.write().await = Status::Finished;
         Ok(())
     }
 
     pub async fn logs(&self, _lines: usize) -> Result<Vec<String>> {
-        let provider = self.config.provider.as_ref()
+        let provider = self
+            .config
+            .provider
+            .as_ref()
             .map(|p| format!("{:?}", p))
             .unwrap_or_else(|| "unknown".to_string());
         // This would fetch logs from the remote provider

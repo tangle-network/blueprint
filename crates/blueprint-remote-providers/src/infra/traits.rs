@@ -3,8 +3,8 @@
 use crate::core::error::Result;
 use crate::core::resources::ResourceSpec;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
-use blueprint_std::collections::HashMap;
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 /// Blueprint deployment result containing connection information and exposed ports
 #[derive(Debug, Clone)]
@@ -32,8 +32,10 @@ impl BlueprintDeploymentResult {
 
     /// Build QoS gRPC endpoint URL
     pub fn qos_grpc_endpoint(&self) -> Option<String> {
-        self.qos_metrics_port()
-            .map(|port| format!("http://{}:{}", self.instance.public_ip, port))
+        match (self.qos_metrics_port(), &self.instance.public_ip) {
+            (Some(port), Some(ip)) => Some(format!("http://{}:{}", ip, port)),
+            _ => None,
+        }
     }
 }
 
@@ -46,31 +48,46 @@ pub trait CloudProviderAdapter: Send + Sync {
         instance_type: &str,
         region: &str,
     ) -> Result<ProvisionedInstance>;
-    
+
     /// Terminate an existing instance
     async fn terminate_instance(&self, instance_id: &str) -> Result<()>;
-    
+
     /// Get the current status of an instance
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus>;
-    
-    /// Deploy a Blueprint service to a provisioned instance with QoS port exposure
-    /// 
-    /// This method handles the complete deployment flow:
-    /// 1. Connect to the provisioned instance via SSH
-    /// 2. Install container runtime if needed
-    /// 3. Deploy Blueprint container with proper port mapping (8080, 9615, 9944)
-    /// 4. Return deployment result with QoS endpoint information
+
+    /// Deploy a Blueprint service with QoS port exposure
+    ///
+    /// Routes to appropriate deployment method based on target:
+    /// - VirtualMachine: SSH + Docker deployment
+    /// - ManagedKubernetes: Provider's managed K8s (EKS/GKE/AKS)
+    /// - GenericKubernetes: kubectl API deployment
+    async fn deploy_blueprint_with_target(
+        &self,
+        target: &crate::core::deployment_target::DeploymentTarget,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: HashMap<String, String>,
+    ) -> Result<BlueprintDeploymentResult>;
+
+    /// Legacy method - deploys to VM by default
     async fn deploy_blueprint(
         &self,
         instance: &ProvisionedInstance,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult>;
-    
+    ) -> Result<BlueprintDeploymentResult> {
+        use crate::core::deployment_target::{ContainerRuntime, DeploymentTarget};
+        let target = DeploymentTarget::VirtualMachine {
+            runtime: ContainerRuntime::Docker,
+        };
+        self.deploy_blueprint_with_target(&target, blueprint_image, resource_spec, env_vars)
+            .await
+    }
+
     /// Check if a Blueprint deployment is healthy and responsive
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool>;
-    
+
     /// Cleanup a Blueprint deployment from an instance
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()>;
 }

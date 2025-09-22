@@ -9,13 +9,13 @@ use blueprint_auth::db::RocksDb;
 use blueprint_clients::tangle::EventsClient;
 use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
-#[cfg(feature = "remote-providers")]
-use blueprint_remote_providers::core::resources::ResourceSpec;
 use blueprint_core::{error, info, warn};
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
+#[cfg(feature = "remote-providers")]
+use blueprint_remote_providers::core::resources::ResourceSpec;
 use blueprint_runner::config::BlueprintEnvironment;
 use color_eyre::Report;
 use color_eyre::eyre::OptionExt;
@@ -256,7 +256,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
                 services_client,
             )
             .await?;
-            
+
             #[cfg(feature = "remote-providers")]
             {
                 // Handle remote provider events
@@ -267,24 +267,27 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
                             services_client,
                             event.hash,
                             evt.request_id,
-                        ).await {
+                        )
+                        .await
+                        {
                             Ok(spec) => {
-                                info!("Extracted resource requirements for request {}: {:?}", 
-                                    evt.request_id, spec);
+                                info!(
+                                    "Extracted resource requirements for request {}: {:?}",
+                                    evt.request_id, spec
+                                );
                                 Some(spec)
                             }
                             Err(e) => {
-                                warn!("Failed to extract resource requirements for request {}: {}. Using defaults.", 
-                                    evt.request_id, e);
+                                warn!(
+                                    "Failed to extract resource requirements for request {}: {}. Using defaults.",
+                                    evt.request_id, e
+                                );
                                 None
                             }
                         };
 
-                        mgr.on_service_initiated(
-                            evt.blueprint_id,
-                            evt.service_id,
-                            resource_spec,
-                        ).await?;
+                        mgr.on_service_initiated(evt.blueprint_id, evt.service_id, resource_spec)
+                            .await?;
                     }
                 }
             }
@@ -498,8 +501,10 @@ async fn extract_resource_requirements_from_request(
         .await?
         .ok_or_else(|| Error::Other(format!("Service request {} not found", request_id)))?;
 
-    info!("Found service request: blueprint_id={}, args={:?}", 
-        service_request.blueprint_id, service_request.args);
+    info!(
+        "Found service request: blueprint_id={}, args={:?}",
+        service_request.blueprint_id, service_request.args
+    );
 
     // Parse resource requirements from request args
     // The customer's paid quote resource specs should be in the request args
@@ -515,14 +520,17 @@ fn parse_resource_spec_from_args(args: &[u8]) -> Result<ResourceSpec> {
     // 1. As structured JSON in the args
     // 2. As SCALE-encoded parameters
     // 3. As predefined resource tiers based on payment amount
-    
+
     // Try to decode args as JSON first (most common for resource specs)
     if let Ok(json_str) = std::str::from_utf8(args) {
         if let Ok(spec) = serde_json::from_str::<ResourceSpec>(json_str) {
-            info!("Successfully parsed ResourceSpec from JSON args: {:?}", spec);
+            info!(
+                "Successfully parsed ResourceSpec from JSON args: {:?}",
+                spec
+            );
             return Ok(spec);
         }
-        
+
         // Try to parse as structured arguments with resource fields
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(json_str) {
             if let Some(resources) = extract_resources_from_json(&value) {
@@ -531,11 +539,11 @@ fn parse_resource_spec_from_args(args: &[u8]) -> Result<ResourceSpec> {
             }
         }
     }
-    
+
     // If args don't contain explicit resource specs, derive from payment amount
     // This would require integration with pricing engine to reverse-calculate
     // specs from the amount paid by the customer
-    
+
     warn!("Could not parse resource requirements from args, using minimal defaults");
     Ok(ResourceSpec::minimal())
 }
@@ -545,15 +553,20 @@ fn parse_resource_spec_from_args(args: &[u8]) -> Result<ResourceSpec> {
 fn extract_resources_from_json(value: &serde_json::Value) -> Option<ResourceSpec> {
     // Look for common resource specification patterns in the JSON
     let cpu = value.get("cpu")?.as_f64().unwrap_or(2.0);
-    let memory_gb = value.get("memory_gb")
+    let memory_gb = value
+        .get("memory_gb")
         .or_else(|| value.get("memory"))
-        .or_else(|| value.get("ram"))
-        ?.as_f64().unwrap_or(4.0);
-    let storage_gb = value.get("storage_gb")
+        .or_else(|| value.get("ram"))?
+        .as_f64()
+        .unwrap_or(4.0);
+    let storage_gb = value
+        .get("storage_gb")
         .or_else(|| value.get("disk"))
-        .or_else(|| value.get("storage"))
-        ?.as_f64().unwrap_or(50.0);
-    let gpu_count = value.get("gpu_count")
+        .or_else(|| value.get("storage"))?
+        .as_f64()
+        .unwrap_or(50.0);
+    let gpu_count = value
+        .get("gpu_count")
         .or_else(|| value.get("gpu"))
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);

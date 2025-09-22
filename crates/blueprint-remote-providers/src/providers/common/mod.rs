@@ -2,8 +2,8 @@
 
 use crate::core::remote::CloudProvider;
 use async_trait::async_trait;
-use blueprint_std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Result of instance type selection
 #[derive(Debug, Clone, Serialize, Deserialize)]

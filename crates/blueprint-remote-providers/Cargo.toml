@@ -28,7 +28,7 @@ toml = "0.8"
 tracing.workspace = true
 
 # Blueprint dependencies (removed blueprint-manager and blueprint-qos to avoid cyclic dependency)
-blueprint-auth.workspace = true
+# blueprint-auth.workspace = true
 blueprint-keystore.workspace = true
 blueprint-pricing-engine = { workspace = true, optional = true }
 parity-scale-codec = { workspace = true, features = ["derive"] }
@@ -69,6 +69,8 @@ proptest = "1.0"
 mockito = "1.0"
 # Official AWS mocking library
 aws-smithy-mocks-experimental = "0.2"
+# Additional dependencies for integration tests
+chrono = { workspace = true, features = ["serde"] }
 # For regex in wiremock matchers
 regex = "1.10"
 # For container-based testing

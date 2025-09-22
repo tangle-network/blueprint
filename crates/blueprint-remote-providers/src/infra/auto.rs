@@ -3,18 +3,18 @@
 //! This module provides the core logic for automatically selecting and deploying
 //! to the cheapest available cloud provider based on resource requirements.
 
-use crate::deployment::manager_integration::RemoteDeploymentConfig;
 use crate::core::error::{Error, Result};
-use crate::pricing::fetcher::PricingFetcher;
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
-use blueprint_std::collections::HashMap;
-use blueprint_std::path::Path;
-use blueprint_std::sync::Arc;
-use tracing::{info, warn};
+use crate::deployment::manager_integration::RemoteDeploymentConfig;
+use crate::pricing::fetcher::PricingFetcher;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{info, warn};
 
 /// Deployment preferences configured by operators
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,7 +87,7 @@ impl AutoDeploymentManager {
 
     /// Load deployment preferences from a TOML configuration file
     pub fn load_deployment_preferences(&mut self, config_path: &std::path::Path) -> Result<()> {
-        let config_str = blueprint_std::fs::read_to_string(config_path)
+        let config_str = std::fs::read_to_string(config_path)
             .map_err(|e| Error::ConfigurationError(format!("Failed to read config file: {}", e)))?;
 
         let preferences: DeploymentPreferences = toml::from_str(&config_str)
@@ -113,30 +113,43 @@ impl AutoDeploymentManager {
     }
 
     /// Check if a deployment type is compiled in (has required feature flags)
-    fn is_deployment_type_compiled(deployment_type: crate::deployment::tracker::DeploymentType) -> bool {
+    fn is_deployment_type_compiled(
+        deployment_type: crate::deployment::tracker::DeploymentType,
+    ) -> bool {
         use crate::deployment::tracker::DeploymentType;
-        
+
         match deployment_type {
             // Kubernetes deployments require the kubernetes feature
             #[cfg(feature = "kubernetes")]
-            DeploymentType::AwsEks | DeploymentType::GcpGke | DeploymentType::AzureAks | 
-            DeploymentType::DigitalOceanDoks | DeploymentType::VultrVke => true,
-            
+            DeploymentType::AwsEks
+            | DeploymentType::GcpGke
+            | DeploymentType::AzureAks
+            | DeploymentType::DigitalOceanDoks
+            | DeploymentType::VultrVke => true,
+
             #[cfg(not(feature = "kubernetes"))]
-            DeploymentType::AwsEks | DeploymentType::GcpGke | DeploymentType::AzureAks | 
-            DeploymentType::DigitalOceanDoks | DeploymentType::VultrVke => false,
-            
+            DeploymentType::AwsEks
+            | DeploymentType::GcpGke
+            | DeploymentType::AzureAks
+            | DeploymentType::DigitalOceanDoks
+            | DeploymentType::VultrVke => false,
+
             // VM deployments and SSH are always available
-            DeploymentType::AwsEc2 | DeploymentType::GcpGce | DeploymentType::AzureVm |
-            DeploymentType::DigitalOceanDroplet | DeploymentType::VultrInstance |
-            DeploymentType::SshRemote | DeploymentType::BareMetal => true,
-            
+            DeploymentType::AwsEc2
+            | DeploymentType::GcpGce
+            | DeploymentType::AzureVm
+            | DeploymentType::DigitalOceanDroplet
+            | DeploymentType::VultrInstance
+            | DeploymentType::SshRemote
+            | DeploymentType::BareMetal => true,
+
             // Local deployments are not managed by remote providers
-            DeploymentType::LocalDocker | DeploymentType::LocalKubernetes | 
-            DeploymentType::LocalHypervisor => false,
+            DeploymentType::LocalDocker
+            | DeploymentType::LocalKubernetes
+            | DeploymentType::LocalHypervisor => false,
         }
     }
-    
+
     /// Set maximum hourly cost limit
     pub fn set_max_hourly_cost(&mut self, cost: f64) {
         self.max_hourly_cost = cost;
@@ -151,7 +164,9 @@ impl AutoDeploymentManager {
         for provider in enabled.iter() {
             tracing::info!(
                 "  - {} in region {} (priority {})",
-                provider.provider, provider.region, provider.priority
+                provider.provider,
+                provider.region,
+                provider.priority
             );
         }
     }
@@ -170,20 +185,23 @@ impl AutoDeploymentManager {
 
         let mut best_option = None;
         let mut best_price = f64::MAX;
-        
+
         {
             let mut fetcher = self.pricing_fetcher.write().await;
 
             // Get real pricing for each provider
             for provider_config in enabled_providers.iter() {
                 // Find best instance dynamically based on requirements
-                match fetcher.find_best_instance(
-                    provider_config.provider.clone(),
-                    &provider_config.region,
-                    spec.cpu,
-                    spec.memory_gb,
-                    self.max_hourly_cost,
-                ).await {
+                match fetcher
+                    .find_best_instance(
+                        provider_config.provider.clone(),
+                        &provider_config.region,
+                        spec.cpu,
+                        spec.memory_gb,
+                        self.max_hourly_cost,
+                    )
+                    .await
+                {
                     Ok(instance) if instance.hourly_price < best_price => {
                         best_price = instance.hourly_price;
                         best_option = Some((
@@ -193,16 +211,20 @@ impl AutoDeploymentManager {
                         ));
                     }
                     Err(e) => {
-                        tracing::debug!("No suitable instance for {:?}: {}", provider_config.provider, e);
+                        tracing::debug!(
+                            "No suitable instance for {:?}: {}",
+                            provider_config.provider,
+                            e
+                        );
                     }
                     _ => {}
                 }
             }
         }
 
-        best_option.ok_or_else(|| Error::ConfigurationError(
-            "No affordable deployment options available".into()
-        ))
+        best_option.ok_or_else(|| {
+            Error::ConfigurationError("No affordable deployment options available".into())
+        })
     }
 
     /// Automatically deploy a service to the cheapest provider
@@ -215,7 +237,8 @@ impl AutoDeploymentManager {
     ) -> Result<RemoteDeploymentConfig> {
         tracing::info!(
             "Auto-deploying service blueprint:{} service:{}",
-            blueprint_id, service_id
+            blueprint_id,
+            service_id
         );
 
         // Find cheapest provider with real pricing
@@ -223,26 +246,33 @@ impl AutoDeploymentManager {
 
         tracing::info!(
             "Deploying to {} in {} (${:.4}/hour)",
-            provider, region, price
+            provider,
+            region,
+            price
         );
 
         // Actually provision infrastructure and deploy Blueprint
         let provisioner = crate::infra::provisioner::CloudProvisioner::new().await?;
-        
+
         // Step 1: Provision cloud instance
         tracing::info!("Provisioning {} instance in {}", provider, region);
-        let instance = provisioner.provision(provider.clone(), &spec, &region).await?;
-        
+        let instance = provisioner
+            .provision(provider.clone(), &spec, &region)
+            .await?;
+
         // Step 2: Wait for instance to be running and get public IP
         let mut attempts = 0;
         let max_attempts = 30; // 5 minutes max wait time
         let mut updated_instance = instance;
-        
+
         while updated_instance.public_ip.is_none() && attempts < max_attempts {
             tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-            
+
             // Get updated instance info to check for public IP
-            match provisioner.get_instance_status(&provider, &updated_instance.id).await {
+            match provisioner
+                .get_instance_status(&provider, &updated_instance.id)
+                .await
+            {
                 Ok(status) if status == crate::infra::types::InstanceStatus::Running => {
                     // Try to get the instance details with public IP
                     // For now, we'll use a placeholder IP since getting public IP requires provider-specific calls
@@ -259,16 +289,18 @@ impl AutoDeploymentManager {
                 }
             }
         }
-        
+
         if updated_instance.public_ip.is_none() {
-            return Err(Error::Other("Instance failed to get public IP within timeout".into()));
+            return Err(Error::Other(
+                "Instance failed to get public IP within timeout".into(),
+            ));
         }
-        
+
         // Step 3: Deploy Blueprint to the instance
         tracing::info!("Deploying Blueprint to provisioned instance");
         let blueprint_image = format!("blueprint:{}-{}", blueprint_id, service_id); // TODO: Get actual image
-        let env_vars = blueprint_std::collections::HashMap::new(); // TODO: Add environment variables
-        
+        let env_vars = std::collections::HashMap::new(); // TODO: Add environment variables
+
         let deployment_result = provisioner
             .deploy_blueprint_to_instance(
                 &provider,
@@ -278,14 +310,16 @@ impl AutoDeploymentManager {
                 env_vars,
             )
             .await?;
-        
-        tracing::info!("Successfully deployed Blueprint with QoS endpoint: {:?}", 
-              deployment_result.qos_grpc_endpoint());
-        
+
+        tracing::info!(
+            "Successfully deployed Blueprint with QoS endpoint: {:?}",
+            deployment_result.qos_grpc_endpoint()
+        );
+
         // Choose deployment type based on operator preferences and feature availability
         let deployment_preferences = self.deployment_preferences.read().await;
         let deployment_type = self.get_deployment_type(&provider, Some(&deployment_preferences));
-        
+
         // Create deployment config with actual deployment info
         let config = RemoteDeploymentConfig {
             deployment_type,
@@ -296,10 +330,10 @@ impl AutoDeploymentManager {
             ttl_seconds,
             deployed_at: Utc::now(),
         };
-        
+
         Ok(config)
     }
-    
+
     /// Get deployment type based on operator preferences and feature availability
     fn get_deployment_type(
         &self,
@@ -307,7 +341,7 @@ impl AutoDeploymentManager {
         preferences: Option<&DeploymentPreferences>,
     ) -> crate::deployment::tracker::DeploymentType {
         use crate::deployment::tracker::DeploymentType;
-        
+
         // If operator specified a preference, use it (if available)
         if let Some(prefs) = preferences {
             if let Some(preferred) = prefs.preferred_type {
@@ -315,7 +349,7 @@ impl AutoDeploymentManager {
                     return preferred;
                 }
             }
-            
+
             // Try allowed types in order
             for &deployment_type in &prefs.allowed_types {
                 if self.is_deployment_type_available(deployment_type, provider) {
@@ -323,11 +357,11 @@ impl AutoDeploymentManager {
                 }
             }
         }
-        
+
         // Default fallback: prioritize VMs (simpler, cheaper) over managed K8s
         self.get_default_deployment_type(provider)
     }
-    
+
     /// Check if a deployment type is available (compiled in and configured)
     fn is_deployment_type_available(
         &self,
@@ -335,12 +369,12 @@ impl AutoDeploymentManager {
         provider: &CloudProvider,
     ) -> bool {
         use crate::deployment::tracker::DeploymentType;
-        
+
         // First check if it's compiled in
         if !Self::is_deployment_type_compiled(deployment_type) {
             return false;
         }
-        
+
         // Then check if provider matches deployment type
         match deployment_type {
             // Kubernetes deployments (already verified to be compiled in)
@@ -349,31 +383,32 @@ impl AutoDeploymentManager {
             DeploymentType::AzureAks => matches!(provider, CloudProvider::Azure),
             DeploymentType::DigitalOceanDoks => matches!(provider, CloudProvider::DigitalOcean),
             DeploymentType::VultrVke => matches!(provider, CloudProvider::Vultr),
-            
+
             // VM deployments
             DeploymentType::AwsEc2 => matches!(provider, CloudProvider::AWS),
             DeploymentType::GcpGce => matches!(provider, CloudProvider::GCP),
             DeploymentType::AzureVm => matches!(provider, CloudProvider::Azure),
             DeploymentType::DigitalOceanDroplet => matches!(provider, CloudProvider::DigitalOcean),
             DeploymentType::VultrInstance => matches!(provider, CloudProvider::Vultr),
-            
+
             // SSH remote is always available
             DeploymentType::SshRemote => true,
             DeploymentType::BareMetal => true,
-            
+
             // Local deployments are not managed by remote providers
-            DeploymentType::LocalDocker | DeploymentType::LocalKubernetes | 
-            DeploymentType::LocalHypervisor => false,
+            DeploymentType::LocalDocker
+            | DeploymentType::LocalKubernetes
+            | DeploymentType::LocalHypervisor => false,
         }
     }
-    
+
     /// Get the default deployment type for a provider (prefer VMs over managed K8s)
     fn get_default_deployment_type(
         &self,
         provider: &CloudProvider,
     ) -> crate::deployment::tracker::DeploymentType {
         use crate::deployment::tracker::DeploymentType;
-        
+
         match provider {
             CloudProvider::AWS => DeploymentType::AwsEc2,
             CloudProvider::GCP => DeploymentType::GcpGce,
@@ -387,10 +422,10 @@ impl AutoDeploymentManager {
     /// Generate an example configuration file for deployment preferences
     pub fn generate_example_config(output_path: &Path) -> Result<()> {
         let example_config = DeploymentPreferences::default();
-        
+
         let config_toml = toml::to_string_pretty(&example_config)
             .map_err(|e| Error::ConfigurationError(format!("Failed to serialize config: {}", e)))?;
-        
+
         let config_with_comments = format!(
             r#"# Blueprint Remote Providers - Deployment Preferences Configuration
 # 
@@ -431,11 +466,15 @@ allow_fallback = true
 # ]
 "#
         );
-        
-        blueprint_std::fs::write(output_path, config_with_comments)
-            .map_err(|e| Error::ConfigurationError(format!("Failed to write config file: {}", e)))?;
-        
-        tracing::info!("Generated example deployment preferences config at: {:?}", output_path);
+
+        std::fs::write(output_path, config_with_comments).map_err(|e| {
+            Error::ConfigurationError(format!("Failed to write config file: {}", e))
+        })?;
+
+        tracing::info!(
+            "Generated example deployment preferences config at: {:?}",
+            output_path
+        );
         Ok(())
     }
 
@@ -453,13 +492,13 @@ mod tests {
     #[tokio::test]
     async fn test_find_cheapest_provider() {
         let manager = AutoDeploymentManager::new();
-        
+
         let spec = ResourceSpec::basic();
-        
+
         // Should return default AWS without configured providers
         let result = manager.find_cheapest_provider(&spec).await;
         assert!(result.is_ok());
-        
+
         let (provider, region, price) = result.unwrap();
         assert_eq!(provider, CloudProvider::AWS);
         assert_eq!(region, "us-west-2");

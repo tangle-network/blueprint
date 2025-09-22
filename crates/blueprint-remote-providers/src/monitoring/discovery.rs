@@ -5,8 +5,8 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
-use blueprint_std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tracing::debug;
 
 /// Machine type discovery service

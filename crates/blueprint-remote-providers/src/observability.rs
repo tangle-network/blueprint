@@ -1,7 +1,7 @@
 //! Observability and metrics collection for remote providers
 
-use blueprint_std::collections::HashMap;
-use blueprint_std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Metrics collector for remote provider observability
@@ -28,7 +28,7 @@ impl MetricsCollector {
         let metrics = self.metrics.read().await;
         metrics.clone()
     }
-    
+
     /// Alias for compatibility with QoS module
     pub async fn get_all_metrics(&self) -> HashMap<String, f64> {
         self.get_metrics().await

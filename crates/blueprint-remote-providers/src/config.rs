@@ -66,12 +66,15 @@ impl CloudConfig {
     /// Load configuration from environment variables
     pub fn from_env() -> Option<Self> {
         use std::env;
-        
+
         let mut cloud_config = CloudConfig::default();
         let mut any_enabled = false;
 
         // AWS configuration
-        if let (Ok(key), Ok(secret)) = (env::var("AWS_ACCESS_KEY_ID"), env::var("AWS_SECRET_ACCESS_KEY")) {
+        if let (Ok(key), Ok(secret)) = (
+            env::var("AWS_ACCESS_KEY_ID"),
+            env::var("AWS_SECRET_ACCESS_KEY"),
+        ) {
             cloud_config.aws = Some(AwsConfig {
                 enabled: true,
                 region: env::var("AWS_DEFAULT_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
@@ -88,7 +91,8 @@ impl CloudConfig {
                 .unwrap_or_else(|_| "/etc/gcp/service-account.json".to_string());
             cloud_config.gcp = Some(GcpConfig {
                 enabled: true,
-                region: env::var("GCP_DEFAULT_REGION").unwrap_or_else(|_| "us-central1".to_string()),
+                region: env::var("GCP_DEFAULT_REGION")
+                    .unwrap_or_else(|_| "us-central1".to_string()),
                 project_id,
                 service_account_path,
                 priority: Some(8),
@@ -100,7 +104,7 @@ impl CloudConfig {
         if let (Ok(client_id), Ok(client_secret), Ok(tenant_id)) = (
             env::var("AZURE_CLIENT_ID"),
             env::var("AZURE_CLIENT_SECRET"),
-            env::var("AZURE_TENANT_ID")
+            env::var("AZURE_TENANT_ID"),
         ) {
             cloud_config.azure = Some(AzureConfig {
                 enabled: true,

@@ -138,7 +138,10 @@ impl SecurityRuleProvider for AwsSecurityRules {
         tracing::info!("Creating AWS security group: {}", name);
         tracing::debug!("Config: {}", group_config);
 
-        Ok(format!("sg-{}", uuid::Uuid::new_v4().to_string()[..8].to_string()))
+        Ok(format!(
+            "sg-{}",
+            uuid::Uuid::new_v4().to_string()[..8].to_string()
+        ))
     }
 
     async fn update_security_rules(
@@ -218,7 +221,10 @@ impl SecurityRuleProvider for GcpFirewallRules {
         tracing::info!("Creating GCP firewall rules for {}: {:?}", name, rules);
 
         // TODO: Implement actual GCP API calls
-        Ok(format!("fw-{}", uuid::Uuid::new_v4().to_string()[..8].to_string()))
+        Ok(format!(
+            "fw-{}",
+            uuid::Uuid::new_v4().to_string()[..8].to_string()
+        ))
     }
 
     async fn update_security_rules(
@@ -299,7 +305,10 @@ impl SecurityRuleProvider for DigitalOceanFirewall {
         tracing::debug!("Config: {}", firewall_config);
 
         // TODO: Implement actual DO API call
-        Ok(format!("fw-{}", uuid::Uuid::new_v4().to_string()[..8].to_string()))
+        Ok(format!(
+            "fw-{}",
+            uuid::Uuid::new_v4().to_string()[..8].to_string()
+        ))
     }
 
     async fn update_security_rules(
@@ -369,10 +378,17 @@ impl SecurityRuleProvider for KubernetesNetworkPolicy {
         _name: &str,
     ) -> Result<String> {
         let policy = self.generate_network_policy(config);
-        tracing::info!("Creating Kubernetes NetworkPolicy in {}: {}", self.namespace, policy);
+        tracing::info!(
+            "Creating Kubernetes NetworkPolicy in {}: {}",
+            self.namespace,
+            policy
+        );
 
         // TODO: Implement actual Kubernetes API call
-        Ok(format!("netpol-{}", uuid::Uuid::new_v4().to_string()[..8].to_string()))
+        Ok(format!(
+            "netpol-{}",
+            uuid::Uuid::new_v4().to_string()[..8].to_string()
+        ))
     }
 
     async fn update_security_rules(
@@ -410,8 +426,12 @@ impl SecurityRuleProvider for SecurityProvider {
         match self {
             SecurityProvider::Aws(provider) => provider.create_security_rules(config, name).await,
             SecurityProvider::Gcp(provider) => provider.create_security_rules(config, name).await,
-            SecurityProvider::DigitalOcean(provider) => provider.create_security_rules(config, name).await,
-            SecurityProvider::Kubernetes(provider) => provider.create_security_rules(config, name).await,
+            SecurityProvider::DigitalOcean(provider) => {
+                provider.create_security_rules(config, name).await
+            }
+            SecurityProvider::Kubernetes(provider) => {
+                provider.create_security_rules(config, name).await
+            }
         }
     }
 
@@ -421,10 +441,18 @@ impl SecurityRuleProvider for SecurityProvider {
         config: &BlueprintSecurityConfig,
     ) -> Result<()> {
         match self {
-            SecurityProvider::Aws(provider) => provider.update_security_rules(rule_id, config).await,
-            SecurityProvider::Gcp(provider) => provider.update_security_rules(rule_id, config).await,
-            SecurityProvider::DigitalOcean(provider) => provider.update_security_rules(rule_id, config).await,
-            SecurityProvider::Kubernetes(provider) => provider.update_security_rules(rule_id, config).await,
+            SecurityProvider::Aws(provider) => {
+                provider.update_security_rules(rule_id, config).await
+            }
+            SecurityProvider::Gcp(provider) => {
+                provider.update_security_rules(rule_id, config).await
+            }
+            SecurityProvider::DigitalOcean(provider) => {
+                provider.update_security_rules(rule_id, config).await
+            }
+            SecurityProvider::Kubernetes(provider) => {
+                provider.update_security_rules(rule_id, config).await
+            }
         }
     }
 
@@ -432,7 +460,9 @@ impl SecurityRuleProvider for SecurityProvider {
         match self {
             SecurityProvider::Aws(provider) => provider.delete_security_rules(rule_id).await,
             SecurityProvider::Gcp(provider) => provider.delete_security_rules(rule_id).await,
-            SecurityProvider::DigitalOcean(provider) => provider.delete_security_rules(rule_id).await,
+            SecurityProvider::DigitalOcean(provider) => {
+                provider.delete_security_rules(rule_id).await
+            }
             SecurityProvider::Kubernetes(provider) => provider.delete_security_rules(rule_id).await,
         }
     }
@@ -466,8 +496,9 @@ impl SecurityManager {
         config: &BlueprintSecurityConfig,
         name: &str,
     ) -> Result<String> {
-        let security_provider = self.providers.get(provider)
-            .ok_or_else(|| Error::ConfigurationError(format!("No security provider for {:?}", provider)))?;
+        let security_provider = self.providers.get(provider).ok_or_else(|| {
+            Error::ConfigurationError(format!("No security provider for {:?}", provider))
+        })?;
 
         security_provider.create_security_rules(config, name).await
     }
@@ -479,10 +510,13 @@ impl SecurityManager {
         rule_id: &str,
         config: &BlueprintSecurityConfig,
     ) -> Result<()> {
-        let security_provider = self.providers.get(provider)
-            .ok_or_else(|| Error::ConfigurationError(format!("No security provider for {:?}", provider)))?;
+        let security_provider = self.providers.get(provider).ok_or_else(|| {
+            Error::ConfigurationError(format!("No security provider for {:?}", provider))
+        })?;
 
-        security_provider.update_security_rules(rule_id, config).await
+        security_provider
+            .update_security_rules(rule_id, config)
+            .await
     }
 
     /// Delete security rules
@@ -491,8 +525,9 @@ impl SecurityManager {
         provider: &CloudProvider,
         rule_id: &str,
     ) -> Result<()> {
-        let security_provider = self.providers.get(provider)
-            .ok_or_else(|| Error::ConfigurationError(format!("No security provider for {:?}", provider)))?;
+        let security_provider = self.providers.get(provider).ok_or_else(|| {
+            Error::ConfigurationError(format!("No security provider for {:?}", provider))
+        })?;
 
         security_provider.delete_security_rules(rule_id).await
     }
@@ -534,14 +569,24 @@ mod tests {
     #[tokio::test]
     async fn test_security_manager() {
         let mut manager = SecurityManager::new();
-        
-        let aws_provider = Box::new(AwsSecurityRules::new("us-east-1".to_string(), None));
+
+        let aws_provider =
+            SecurityProvider::Aws(AwsSecurityRules::new("us-east-1".to_string(), None));
         manager.register_provider(CloudProvider::AWS, aws_provider);
 
         let config = BlueprintSecurityConfig::default();
-        let rule_id = manager.create_security_rules(&CloudProvider::AWS, &config, "test").await.unwrap();
-        
-        manager.update_security_rules(&CloudProvider::AWS, &rule_id, &config).await.unwrap();
-        manager.delete_security_rules(&CloudProvider::AWS, &rule_id).await.unwrap();
+        let rule_id = manager
+            .create_security_rules(&CloudProvider::AWS, &config, "test")
+            .await
+            .unwrap();
+
+        manager
+            .update_security_rules(&CloudProvider::AWS, &rule_id, &config)
+            .await
+            .unwrap();
+        manager
+            .delete_security_rules(&CloudProvider::AWS, &rule_id)
+            .await
+            .unwrap();
     }
 }

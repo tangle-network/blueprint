@@ -102,7 +102,7 @@ impl VerifiedBlueprint {
                 let mut service = {
                     if ctx.config.remote_deployment_opts.enable_remote_deployments {
                         info!("Remote deployments enabled, checking deployment strategy...");
-                        
+
                         // Try remote deployment first if enabled
                         match try_remote_deployment(
                             ctx,
@@ -110,7 +110,9 @@ impl VerifiedBlueprint {
                             *service_id,
                             limits.clone(),
                             &sub_service_str,
-                        ).await {
+                        )
+                        .await
+                        {
                             Ok(remote_service) => {
                                 info!("Successfully deployed service remotely");
                                 remote_service
@@ -118,34 +120,36 @@ impl VerifiedBlueprint {
                             Err(e) => {
                                 warn!("Remote deployment failed: {}, falling back to local", e);
                                 // Fall back to local deployment
-                                source.spawn(
-                                    ctx,
-                                    limits,
-                                    blueprint_config,
-                                    id,
-                                    env,
-                                    args,
-                                    &sub_service_str,
-                                    &cache_dir,
-                                    &runtime_dir,
-                                )
-                                .await?
+                                source
+                                    .spawn(
+                                        ctx,
+                                        limits,
+                                        blueprint_config,
+                                        id,
+                                        env,
+                                        args,
+                                        &sub_service_str,
+                                        &cache_dir,
+                                        &runtime_dir,
+                                    )
+                                    .await?
                             }
                         }
                     } else {
                         // Local deployment
-                        source.spawn(
-                            ctx,
-                            limits,
-                            blueprint_config,
-                            id,
-                            env,
-                            args,
-                            &sub_service_str,
-                            &cache_dir,
-                            &runtime_dir,
-                        )
-                        .await?
+                        source
+                            .spawn(
+                                ctx,
+                                limits,
+                                blueprint_config,
+                                id,
+                                env,
+                                args,
+                                &sub_service_str,
+                                &cache_dir,
+                                &runtime_dir,
+                            )
+                            .await?
                     }
                 };
 
@@ -273,10 +277,12 @@ pub(crate) fn check_blueprint_events(
         match evt {
             Ok(evt) => {
                 info!("Service initiated event: {evt:?}");
-                info!("Available event fields - blueprint_id: {}, service_id: {}, request_id: {}, operator: {:?}", 
-                    evt.blueprint_id, evt.service_id, evt.request_id, evt.operator);
+                info!(
+                    "Available event fields - blueprint_id: {}, service_id: {}, request_id: {}, operator: {:?}",
+                    evt.blueprint_id, evt.service_id, evt.request_id, evt.operator
+                );
                 result.needs_update = true;
-                
+
                 #[cfg(feature = "remote-providers")]
                 {
                     // Store event data for remote provider handling
@@ -547,8 +553,7 @@ async fn try_remote_deployment(
     service_name: &str,
 ) -> Result<Service> {
     use blueprint_remote_providers::{
-        auto_deployment::AutoDeploymentManager,
-        resources::ResourceSpec,
+        auto_deployment::AutoDeploymentManager, resources::ResourceSpec,
     };
 
     info!("Attempting remote deployment for service: {}", service_name);
@@ -563,7 +568,11 @@ async fn try_remote_deployment(
     };
 
     // Load credentials if provided
-    let credentials_path = ctx.config.remote_deployment_opts.cloud_credentials_path.as_ref()
+    let credentials_path = ctx
+        .config
+        .remote_deployment_opts
+        .cloud_credentials_path
+        .as_ref()
         .ok_or_else(|| Error::Other("Cloud credentials path not configured".into()))?;
 
     // Create auto-deployment manager
@@ -587,19 +596,17 @@ async fn try_remote_deployment(
     // Create DeploymentTracker with proper path configuration
     let tracker_path = ctx.data_dir().join("remote_deployments");
     let tracker = std::sync::Arc::new(
-        blueprint_remote_providers::deployment::tracker::DeploymentTracker::new(&tracker_path).await?
+        blueprint_remote_providers::deployment::tracker::DeploymentTracker::new(&tracker_path)
+            .await?,
     );
-    
+
     // Create the remote service instance
-    let remote_instance = crate::rt::remote::RemoteServiceInstance::new(
-        deployment_config,
-        tracker,
-    );
-    
+    let remote_instance = crate::rt::remote::RemoteServiceInstance::new(deployment_config, tracker);
+
     // Create runtime directory for this service
     let runtime_dir = ctx.runtime_dir().join(format!("remote-{}", service_id));
     std::fs::create_dir_all(&runtime_dir)?;
-    
+
     // Return the Service wrapped around the remote instance
     Service::new_remote(ctx, runtime_dir, service_name, remote_instance).await
 }

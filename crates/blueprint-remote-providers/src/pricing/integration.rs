@@ -7,9 +7,9 @@
 use crate::core::error::Result;
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
-use blueprint_std::collections::HashMap;
-use blueprint_std::path::Path;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::Path;
 
 /// Pricing calculator that integrates with the Pricing Engine
 ///
@@ -45,7 +45,7 @@ impl PricingCalculator {
 
     /// Load pricing configuration from a specific file
     pub fn from_config_file(path: &Path) -> Result<Self> {
-        let config_str = blueprint_std::fs::read_to_string(path)
+        let config_str = std::fs::read_to_string(path)
             .map_err(|e| crate::core::error::Error::ConfigurationError(e.to_string()))?;
 
         let pricing_config: PricingConfig = toml::from_str(&config_str)
