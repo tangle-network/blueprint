@@ -131,21 +131,21 @@ async fn docker_container_deployment() {
 #[serial]
 async fn test_blueprint_containerization_for_remote_deployment() {
     println!("Testing blueprint containerization for remote provider deployment...");
-    
+
     let binary_path = Path::new(INCREDIBLE_SQUARING_BINARY);
     assert!(
         binary_path.exists(),
         "Blueprint binary required for containerization test"
     );
-    
+
     // Test that we can create a deployment-ready container configuration
     // This validates the foundation for remote provider deployments
     println!("✓ Blueprint binary available for containerization");
-    
+
     // Test deployment configuration for remote providers
+    use blueprint_remote_providers::core::deployment_target::{ContainerRuntime, DeploymentTarget};
     use blueprint_remote_providers::core::resources::ResourceSpec;
-    use blueprint_remote_providers::core::deployment_target::{DeploymentTarget, ContainerRuntime};
-    
+
     let resource_spec = ResourceSpec {
         cpu: 2.0,
         memory_gb: 4.0,
@@ -154,19 +154,21 @@ async fn test_blueprint_containerization_for_remote_deployment() {
         allow_spot: false,
         qos: Default::default(),
     };
-    
+
     let deployment_target = DeploymentTarget::VirtualMachine {
         runtime: ContainerRuntime::Docker,
     };
-    
-    println!("✓ Resource spec configured for remote deployment: CPU={}, Memory={}GB", 
-             resource_spec.cpu, resource_spec.memory_gb);
+
+    println!(
+        "✓ Resource spec configured for remote deployment: CPU={}, Memory={}GB",
+        resource_spec.cpu, resource_spec.memory_gb
+    );
     println!("✓ Deployment target configured: {:?}", deployment_target);
-    
+
     // Test QoS port configuration for remote access
     let qos_ports = [8080, 9615, 9944];
     println!("✓ QoS ports configured for remote access: {:?}", qos_ports);
-    
+
     println!("✓ Blueprint containerization test completed - ready for remote deployment");
 }
 
