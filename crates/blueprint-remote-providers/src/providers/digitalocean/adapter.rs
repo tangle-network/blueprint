@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use tracing::{info, warn};
 
 /// DigitalOcean adapter for Blueprint deployment
+#[derive(Debug)]
 pub struct DigitalOceanAdapter {
     provisioner: DigitalOceanProvisioner,
 }

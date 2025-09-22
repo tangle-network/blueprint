@@ -8,6 +8,7 @@ pub mod adapter;
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tracing::{info, warn};
 
 /// DigitalOcean infrastructure provisioner
@@ -550,5 +551,14 @@ mod tests {
         assert!(user_data.contains("docker.io"));
         assert!(user_data.contains("CPUQuota=200%"));
         assert!(user_data.contains("MemoryMax=4096M"));
+    }
+}
+
+impl fmt::Debug for DigitalOceanProvisioner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DigitalOceanProvisioner")
+            .field("api_token", &"[REDACTED]")
+            .field("default_region", &self.default_region)
+            .finish()
     }
 }

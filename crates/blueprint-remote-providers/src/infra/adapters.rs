@@ -87,6 +87,8 @@ mod tests {
     fn test_supported_providers() {
         let providers = AdapterFactory::supported_providers();
         assert!(providers.contains(&CloudProvider::AWS));
-        assert_eq!(providers.len(), 1);
+        assert!(providers.contains(&CloudProvider::DigitalOcean));
+        assert!(providers.contains(&CloudProvider::GCP));
+        assert_eq!(providers.len(), 3);
     }
 }
