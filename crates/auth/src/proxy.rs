@@ -703,15 +703,15 @@ async fn update_tls_profile(
     let allowlist_to_store = payload
         .allowed_dns_names
         .clone()
-        .or_else(|| existing_profile.as_ref().map(|p| p.allowed_dns_names.clone()))
+        .or_else(|| {
+            existing_profile
+                .as_ref()
+                .map(|p| p.allowed_dns_names.clone())
+        })
         .unwrap_or_default();
 
     let mut server_dns_names = if let Some(list) = payload.allowed_dns_names.clone() {
-        if list.is_empty() {
-            None
-        } else {
-            Some(list)
-        }
+        if list.is_empty() { None } else { Some(list) }
     } else if let Some(profile) = existing_profile.as_ref() {
         if !profile.allowed_dns_names.is_empty() {
             Some(profile.allowed_dns_names.clone())
