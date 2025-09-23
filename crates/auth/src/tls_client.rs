@@ -96,7 +96,7 @@ impl TlsClientManager {
     ) -> Result<CachedTlsClient, crate::Error> {
         // Load service model
         let service = ServiceModel::find_by_id(service_id, &self.db)?
-            .ok_or_else(|| crate::Error::ServiceNotFound(service_id))?;
+            .ok_or(crate::Error::ServiceNotFound(service_id))?;
 
         // Get TLS configuration for service
         let tls_config = self.get_service_tls_config(&service).await?;
