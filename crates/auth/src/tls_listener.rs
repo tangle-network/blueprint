@@ -364,24 +364,37 @@ impl TlsListenerManager {
         &self,
         sni: Option<&str>,
     ) -> Result<Arc<ServiceTlsConfig>, crate::Error> {
+        let profiles = self.inner.profiles.read().await;
+
         if let Some(server_name) = sni {
-            if let Some(service_id) = {
+            let maybe_service_id = {
                 let index = self.inner.sni_index.read().await;
                 index.get(server_name).copied()
-            } {
-                let profiles = self.inner.profiles.read().await;
+            };
+
+            if let Some(service_id) = maybe_service_id {
                 if let Some(config) = profiles.get(&service_id) {
                     return Ok(config.clone());
                 }
             }
+
+            if profiles.len() == 1 {
+                // Guarded fallback to support the brief window while SNI index updates.
+                return Ok(profiles.values().next().cloned().expect("length checked"));
+            }
+
+            return Err(crate::Error::Tls(format!(
+                "unrecognized TLS server name: {server_name}"
+            )));
         }
 
-        let profiles = self.inner.profiles.read().await;
-        profiles
-            .values()
-            .next()
-            .cloned()
-            .ok_or_else(|| crate::Error::Tls("no TLS profiles configured".into()))
+        match profiles.len() {
+            0 => Err(crate::Error::Tls("no TLS profiles configured".into())),
+            1 => Ok(profiles.values().next().cloned().expect("length checked")),
+            _ => Err(crate::Error::Tls(
+                "TLS client did not provide SNI and multiple profiles are configured".into(),
+            )),
+        }
     }
 
     fn decrypt_utf8(&self, data: &[u8]) -> Result<String, crate::Error> {
@@ -461,17 +474,11 @@ fn load_ca_store(pem_bundle: &str) -> Result<RootCertStore, crate::Error> {
     let mut reader = std::io::Cursor::new(pem_bundle.as_bytes());
     let mut loaded_any = false;
     for item in rustls_pemfile::read_all(&mut reader) {
-        match item.map_err(|err| {
-            crate::Error::Tls(format!("failed to parse CA bundle: {err}"))
-        })? {
+        match item.map_err(|err| crate::Error::Tls(format!("failed to parse CA bundle: {err}")))? {
             rustls_pemfile::Item::X509Certificate(cert) => {
-                store
-                    .add(CertificateDer::from(cert))
-                    .map_err(|err| {
-                        crate::Error::Tls(format!(
-                            "failed to add CA certificate to root store: {err}"
-                        ))
-                    })?;
+                store.add(cert).map_err(|err| {
+                    crate::Error::Tls(format!("failed to add CA certificate to root store: {err}"))
+                })?;
                 loaded_any = true;
             }
             _ => {
@@ -503,12 +510,25 @@ fn parse_client_certificate(cert: &CertificateDer<'_>) -> Option<ClientCertInfo>
     let not_before = parsed.validity().not_before.timestamp();
     let not_after = parsed.validity().not_after.timestamp();
 
+    // Convert timestamps to u64, handling negative values (certificates before 1970)
+    // by using wrapping arithmetic to preserve the actual timestamp information
+    let not_before_u64 = if not_before < 0 {
+        not_before.wrapping_neg() as u64 | (1 << 63)
+    } else {
+        not_before as u64
+    };
+    let not_after_u64 = if not_after < 0 {
+        not_after.wrapping_neg() as u64 | (1 << 63)
+    } else {
+        not_after as u64
+    };
+
     Some(ClientCertInfo {
         subject,
         issuer,
         serial,
-        not_before: not_before.max(0) as u64,
-        not_after: not_after.max(0) as u64,
+        not_before: not_before_u64,
+        not_after: not_after_u64,
     })
 }
 
