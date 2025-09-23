@@ -2,11 +2,12 @@
 //! Provides mechanisms to extract and inject mTLS identity information
 
 use axum::extract::FromRequestParts;
-use axum::http::HeaderMap;
 use axum::http::request::Parts;
+use axum::http::{HeaderMap, HeaderValue};
 use std::collections::HashMap;
 
 use crate::tls_listener::ClientCertInfo;
+use tracing::warn;
 
 /// Request extension that carries client certificate information
 #[derive(Clone, Debug)]
@@ -57,24 +58,32 @@ impl ClientCertExtension {
         let mut headers = HeaderMap::new();
 
         if let Some(cert) = &self.client_cert {
-            // Inject client certificate information as headers
-            headers.insert("x-client-cert-subject", cert.subject.parse().unwrap());
-            headers.insert("x-client-cert-issuer", cert.issuer.parse().unwrap());
-            headers.insert("x-client-cert-serial", cert.serial.parse().unwrap());
-            headers.insert(
-                "x-client-cert-not-before",
-                cert.not_before.to_string().parse().unwrap(),
-            );
-            headers.insert(
-                "x-client-cert-not-after",
-                cert.not_after.to_string().parse().unwrap(),
-            );
+            // Inject client certificate information as headers, skipping values that cannot be represented.
+            try_insert_header(&mut headers, "x-client-cert-subject", &cert.subject);
+            try_insert_header(&mut headers, "x-client-cert-issuer", &cert.issuer);
+            try_insert_header(&mut headers, "x-client-cert-serial", &cert.serial);
 
-            // Add authentication method header
-            headers.insert("x-auth-method", "mtls".parse().unwrap());
+            let not_before = cert.not_before.to_string();
+            try_insert_header(&mut headers, "x-client-cert-not-before", &not_before);
+
+            let not_after = cert.not_after.to_string();
+            try_insert_header(&mut headers, "x-client-cert-not-after", &not_after);
+
+            headers.insert("x-auth-method", HeaderValue::from_static("mtls"));
         }
 
         headers
+    }
+}
+
+fn try_insert_header(headers: &mut HeaderMap, name: &'static str, value: &str) {
+    match HeaderValue::from_str(value) {
+        Ok(header_value) => {
+            headers.insert(name, header_value);
+        }
+        Err(err) => {
+            warn!("skipping header `{}` due to invalid value: {}", name, err);
+        }
     }
 }
 
