@@ -698,15 +698,34 @@ async fn update_tls_profile(
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
 
-    let mut dns_names = payload
+    let existing_profile = service.tls_profile.clone();
+
+    let allowlist_to_store = payload
         .allowed_dns_names
         .clone()
-        .unwrap_or_else(|| vec!["localhost".to_string()]);
-    if dns_names.is_empty() {
-        dns_names.push("localhost".to_string());
-    }
+        .or_else(|| existing_profile.as_ref().map(|p| p.allowed_dns_names.clone()))
+        .unwrap_or_default();
 
-    let mut tls_profile = service.tls_profile.clone().unwrap_or_else(|| TlsProfile {
+    let mut server_dns_names = if let Some(list) = payload.allowed_dns_names.clone() {
+        if list.is_empty() {
+            None
+        } else {
+            Some(list)
+        }
+    } else if let Some(profile) = existing_profile.as_ref() {
+        if !profile.allowed_dns_names.is_empty() {
+            Some(profile.allowed_dns_names.clone())
+        } else if let Some(existing_sni) = profile.sni.clone() {
+            Some(vec![existing_sni])
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+    .unwrap_or_else(|| vec!["localhost".to_string()]);
+
+    let mut tls_profile = existing_profile.unwrap_or_else(|| TlsProfile {
         tls_enabled: false,
         require_client_mtls: false,
         encrypted_server_cert: Vec::new(),
@@ -717,6 +736,8 @@ async fn update_tls_profile(
         encrypted_upstream_client_key: Vec::new(),
         client_cert_ttl_hours: payload.client_cert_ttl_hours,
         sni: None,
+        subject_alt_name_template: payload.subject_alt_name_template.clone(),
+        allowed_dns_names: allowlist_to_store.clone(),
     });
 
     let ca = if !tls_profile.encrypted_client_ca_bundle.is_empty() {
@@ -740,7 +761,7 @@ async fn update_tls_profile(
     })?;
 
     let (server_cert, server_key) = ca
-        .generate_server_certificate(service_id, dns_names.clone())
+        .generate_server_certificate(service_id, server_dns_names.clone())
         .map_err(|e| {
             error!("Failed to generate server certificate: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
@@ -758,7 +779,11 @@ async fn update_tls_profile(
     tls_profile.tls_enabled = true;
     tls_profile.require_client_mtls = payload.require_client_mtls;
     tls_profile.client_cert_ttl_hours = payload.client_cert_ttl_hours;
-    tls_profile.sni = dns_names.first().cloned();
+    if let Some(template) = payload.subject_alt_name_template.clone() {
+        tls_profile.subject_alt_name_template = Some(template);
+    }
+    tls_profile.allowed_dns_names = allowlist_to_store.clone();
+    tls_profile.sni = server_dns_names.first().cloned();
 
     service.tls_profile = Some(tls_profile.clone());
     if let Err(e) = service.save(service_id, &s.db) {
@@ -796,7 +821,8 @@ async fn update_tls_profile(
         mtls_listener: listener_uri,
         http_listener: Some(format!("http://localhost:{DEFAULT_AUTH_PROXY_PORT}")),
         ca_certificate_pem: Some(ca.ca_certificate_pem()),
-        subject_alt_name_template: payload.subject_alt_name_template,
+        subject_alt_name_template: tls_profile.subject_alt_name_template.clone(),
+        allowed_dns_names: tls_profile.allowed_dns_names.clone(),
     }))
 }
 
