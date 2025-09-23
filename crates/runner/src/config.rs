@@ -4,6 +4,10 @@ use std::path::PathBuf;
 
 use crate::error::ConfigError;
 use alloc::string::{String, ToString};
+#[cfg(feature = "tls")]
+use blueprint_auth::models::TlsProfile;
+#[cfg(feature = "tls")]
+use blueprint_auth::tls_envelope::{TlsEnvelope, TlsEnvelopeKey};
 #[cfg(feature = "std")]
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_manager_bridge::client::Bridge;
@@ -254,6 +258,12 @@ pub struct BlueprintEnvironment {
     /// The target number of peers to connect to
     #[cfg(feature = "networking")]
     pub target_peer_count: u32,
+
+    // ========
+    // TLS CONFIGURATION
+    // ========
+    #[cfg(feature = "tls")]
+    pub tls_profile: Option<TlsProfile>,
 }
 
 impl Default for BlueprintEnvironment {
@@ -281,6 +291,9 @@ impl Default for BlueprintEnvironment {
             enable_kademlia: false,
             #[cfg(feature = "networking")]
             target_peer_count: 0,
+
+            #[cfg(feature = "tls")]
+            tls_profile: None,
         }
     }
 }
@@ -347,6 +360,10 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
     #[cfg(feature = "networking")]
     let target_peer_count = settings.target_peer_count.unwrap_or(24);
 
+    // Create TLS profile before settings is moved
+    #[cfg(feature = "tls")]
+    let tls_profile = create_tls_profile(&settings)?;
+
     let protocol_settings = ProtocolSettings::load(settings)?;
 
     Ok(BlueprintEnvironment {
@@ -372,7 +389,125 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         enable_kademlia,
         #[cfg(feature = "networking")]
         target_peer_count,
+        #[cfg(feature = "tls")]
+        tls_profile,
     })
+}
+
+#[cfg(feature = "tls")]
+fn load_tls_envelope(settings: &BlueprintSettings) -> Result<TlsEnvelope, ConfigError> {
+    if let Ok(key_hex) = std::env::var("TLS_ENVELOPE_KEY") {
+        let key = TlsEnvelopeKey::from_hex(&key_hex).map_err(|e| {
+            ConfigError::MissingTlsConfig(format!("Invalid TLS_ENVELOPE_KEY value: {e}"))
+        })?;
+        return Ok(TlsEnvelope::with_key(key));
+    }
+
+    let key_path = if let Ok(path) = std::env::var("TLS_ENVELOPE_KEY_PATH") {
+        Some(PathBuf::from(path))
+    } else {
+        let default_path = settings.data_dir.join(".tls_envelope_key");
+        if default_path.exists() {
+            Some(default_path)
+        } else {
+            None
+        }
+    };
+
+    if let Some(path) = key_path {
+        let key_bytes = std::fs::read(&path).map_err(|e| ConfigError::IoError(e.to_string()))?;
+        if key_bytes.len() != 32 {
+            return Err(ConfigError::MissingTlsConfig(format!(
+                "TLS envelope key at {} must be 32 bytes but was {}",
+                path.display(),
+                key_bytes.len()
+            )));
+        }
+        let mut key_array = [0u8; 32];
+        key_array.copy_from_slice(&key_bytes);
+        return Ok(TlsEnvelope::with_key(TlsEnvelopeKey::from_bytes(key_array)));
+    }
+
+    Err(ConfigError::MissingTlsConfig(
+        "TLS_ENVELOPE_KEY or TLS_ENVELOPE_KEY_PATH must be set when TLS is enabled".into(),
+    ))
+}
+
+#[cfg(feature = "tls")]
+fn encrypt_file(path: &Path, envelope: &TlsEnvelope) -> Result<Vec<u8>, ConfigError> {
+    let data = std::fs::read(path).map_err(|e| ConfigError::IoError(e.to_string()))?;
+    envelope
+        .encrypt(&data)
+        .map_err(|e| ConfigError::Other(Box::new(e)))
+}
+
+#[cfg(feature = "tls")]
+fn encrypt_optional_file(
+    path: Option<&PathBuf>,
+    envelope: &TlsEnvelope,
+) -> Result<Vec<u8>, ConfigError> {
+    if let Some(path) = path {
+        encrypt_file(path.as_path(), envelope)
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+#[cfg(feature = "tls")]
+/// Create a TLS profile from the given settings
+///
+/// # Errors
+/// Returns [`ConfigError::MissingTlsConfig`] when mandatory TLS files or keys are absent, and
+/// propagates IO or encryption failures encountered while loading and envelope-encrypting TLS assets.
+pub fn create_tls_profile(settings: &BlueprintSettings) -> Result<Option<TlsProfile>, ConfigError> {
+    if !settings.tls_enabled {
+        return Ok(None);
+    }
+
+    let envelope = load_tls_envelope(settings)?;
+
+    let server_cert_path = settings.tls_server_cert_path.as_ref().ok_or_else(|| {
+        ConfigError::MissingTlsConfig(
+            "Server certificate path is required when TLS is enabled".to_string(),
+        )
+    })?;
+    let encrypted_server_cert = encrypt_file(server_cert_path.as_path(), &envelope)?;
+
+    let server_key_path = settings.tls_server_key_path.as_ref().ok_or_else(|| {
+        ConfigError::MissingTlsConfig("Server key path is required when TLS is enabled".to_string())
+    })?;
+    let encrypted_server_key = encrypt_file(server_key_path.as_path(), &envelope)?;
+
+    let client_ca_path = settings.tls_client_ca_path.as_ref().ok_or_else(|| {
+        ConfigError::MissingTlsConfig(
+            "Client CA bundle path is required when TLS is enabled".to_string(),
+        )
+    })?;
+    let encrypted_client_ca_bundle = encrypt_file(client_ca_path.as_path(), &envelope)?;
+
+    let encrypted_upstream_ca_bundle =
+        encrypt_optional_file(settings.tls_upstream_ca_path.as_ref(), &envelope)?;
+
+    let encrypted_upstream_client_cert =
+        encrypt_optional_file(settings.tls_upstream_client_cert_path.as_ref(), &envelope)?;
+
+    let encrypted_upstream_client_key =
+        encrypt_optional_file(settings.tls_upstream_client_key_path.as_ref(), &envelope)?;
+
+    Ok(Some(TlsProfile {
+        tls_enabled: true,
+        require_client_mtls: settings.tls_require_client_mtls,
+        encrypted_server_cert,
+        encrypted_server_key,
+        encrypted_client_ca_bundle,
+        encrypted_upstream_ca_bundle,
+        encrypted_upstream_client_cert,
+        encrypted_upstream_client_key,
+        client_cert_ttl_hours: settings.tls_client_cert_ttl_hours,
+        sni: settings.tls_sni.clone(),
+        subject_alt_name_template: settings.tls_subject_alt_name_template.clone(),
+        allowed_dns_names: settings.tls_allowed_dns_names.clone().unwrap_or_default(),
+    }))
 }
 
 impl BlueprintEnvironment {
@@ -617,6 +752,30 @@ impl ContextConfig {
                 permission_controller,
                 #[cfg(feature = "eigenlayer")]
                 strategy,
+                #[cfg(feature = "tls")]
+                tls_enabled: false,
+                #[cfg(feature = "tls")]
+                tls_server_cert_path: None,
+                #[cfg(feature = "tls")]
+                tls_server_key_path: None,
+                #[cfg(feature = "tls")]
+                tls_client_ca_path: None,
+                #[cfg(feature = "tls")]
+                tls_require_client_mtls: false,
+                #[cfg(feature = "tls")]
+                tls_upstream_ca_path: None,
+                #[cfg(feature = "tls")]
+                tls_upstream_client_cert_path: None,
+                #[cfg(feature = "tls")]
+                tls_upstream_client_key_path: None,
+                #[cfg(feature = "tls")]
+                tls_client_cert_ttl_hours: 24,
+                #[cfg(feature = "tls")]
+                tls_sni: None,
+                #[cfg(feature = "tls")]
+                tls_subject_alt_name_template: None,
+                #[cfg(feature = "tls")]
+                tls_allowed_dns_names: None,
             }),
         }
     }
@@ -917,6 +1076,57 @@ pub struct BlueprintSettings {
         required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
     )]
     pub strategy: Option<alloy_primitives::Address>,
+    // ========
+    // TLS CONFIGURATION
+    // ========
+    /// Enable TLS for service registration
+    #[cfg(feature = "tls")]
+    #[arg(long, env)]
+    pub tls_enabled: bool,
+    #[cfg(feature = "tls")]
+    /// Path to server certificate file (PEM format)
+    #[arg(long, env)]
+    pub tls_server_cert_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Path to server private key file (PEM format)
+    #[arg(long, env)]
+    pub tls_server_key_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Path to client CA bundle file (PEM format) for mTLS
+    #[arg(long, env)]
+    pub tls_client_ca_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Require client mTLS authentication
+    #[arg(long, env)]
+    pub tls_require_client_mtls: bool,
+    #[cfg(feature = "tls")]
+    /// Path to upstream CA bundle file (PEM format)
+    #[arg(long, env)]
+    pub tls_upstream_ca_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Path to upstream client certificate file (PEM format)
+    #[arg(long, env)]
+    pub tls_upstream_client_cert_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Path to upstream client private key file (PEM format)
+    #[arg(long, env)]
+    pub tls_upstream_client_key_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Client certificate TTL in hours
+    #[arg(long, env, default_value_t = 24u32)]
+    pub tls_client_cert_ttl_hours: u32,
+    #[cfg(feature = "tls")]
+    /// SNI hostname for TLS connections
+    #[arg(long, env)]
+    pub tls_sni: Option<String>,
+    #[cfg(feature = "tls")]
+    /// Subject alternative name template
+    #[arg(long, env)]
+    pub tls_subject_alt_name_template: Option<String>,
+    #[cfg(feature = "tls")]
+    /// Allowed DNS names for TLS connections
+    #[arg(long, env, value_delimiter = ',')]
+    pub tls_allowed_dns_names: Option<Vec<String>>,
 }
 
 impl Default for BlueprintSettings {
@@ -985,6 +1195,34 @@ impl Default for BlueprintSettings {
             permission_controller: None,
             #[cfg(feature = "eigenlayer")]
             strategy: None,
+
+            // ========
+            // TLS CONFIGURATION
+            // ========
+            #[cfg(feature = "tls")]
+            tls_enabled: false,
+            #[cfg(feature = "tls")]
+            tls_server_cert_path: None,
+            #[cfg(feature = "tls")]
+            tls_server_key_path: None,
+            #[cfg(feature = "tls")]
+            tls_client_ca_path: None,
+            #[cfg(feature = "tls")]
+            tls_require_client_mtls: false,
+            #[cfg(feature = "tls")]
+            tls_upstream_ca_path: None,
+            #[cfg(feature = "tls")]
+            tls_upstream_client_cert_path: None,
+            #[cfg(feature = "tls")]
+            tls_upstream_client_key_path: None,
+            #[cfg(feature = "tls")]
+            tls_client_cert_ttl_hours: 24,
+            #[cfg(feature = "tls")]
+            tls_sni: None,
+            #[cfg(feature = "tls")]
+            tls_subject_alt_name_template: None,
+            #[cfg(feature = "tls")]
+            tls_allowed_dns_names: None,
         }
     }
 }
