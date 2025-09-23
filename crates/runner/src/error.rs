@@ -142,6 +142,14 @@ pub enum ConfigError {
     /// Missing `SymbioticContractAddresses`
     #[error("Missing SymbioticContractAddresses")]
     MissingSymbioticContractAddresses,
+    /// Missing TLS configuration
+    #[cfg(feature = "tls")]
+    #[error("Missing TLS configuration: {0}")]
+    MissingTlsConfig(String),
+    /// IO error during configuration loading
+    #[cfg(feature = "tls")]
+    #[error("IO error: {0}")]
+    IoError(String),
 
     #[error("{0}")]
     Other(#[from] Box<dyn core::error::Error + Send + Sync>),

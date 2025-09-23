@@ -27,6 +27,8 @@ use blueprint_core::{JobCall, JobResult};
 use blueprint_qos::heartbeat::HeartbeatConsumer;
 use blueprint_router::Router;
 use config::BlueprintEnvironment;
+#[cfg(feature = "tls")]
+use config::ProtocolSettings;
 use core::future::{self, poll_fn};
 use core::pin::Pin;
 use error::RunnerError as Error;
@@ -77,6 +79,16 @@ unsafe impl Send for DynBlueprintConfig<'_> {}
 unsafe impl Sync for DynBlueprintConfig<'_> {}
 
 impl BlueprintConfig for () {}
+
+#[cfg(feature = "tls")]
+fn resolve_service_id(env: &BlueprintEnvironment) -> Option<u64> {
+    #[allow(unreachable_patterns)]
+    match &env.protocol_settings {
+        #[cfg(feature = "tangle")]
+        ProtocolSettings::Tangle(settings) => settings.service_id,
+        _ => None,
+    }
+}
 
 /// A background service to be handled by a [`BlueprintRunner`]
 ///
@@ -857,6 +869,41 @@ where
             );
             e
         })?;
+
+        // Update TLS configuration if enabled
+        #[cfg(feature = "tls")]
+        if let Some(tls_profile) = &env.tls_profile {
+            blueprint_core::info!(
+                target: "blueprint-runner",
+                "Updating service TLS profile"
+            );
+
+            let service_id = resolve_service_id(&env).ok_or_else(|| {
+                blueprint_core::error!(
+                    target: "blueprint-runner",
+                    "TLS profile provided but service ID is missing from configuration"
+                );
+                crate::error::ConfigError::MissingServiceId
+            })?;
+
+            bridge
+                .update_blueprint_service_tls_profile(service_id, Some(tls_profile.clone()))
+                .await
+                .map_err(|e| {
+                    blueprint_core::error!(
+                        target: "blueprint-runner",
+                        service_id,
+                        "[FATAL] Failed to update TLS profile for service {service_id}: {e}"
+                    );
+                    e
+                })?;
+
+            blueprint_core::info!(
+                target: "blueprint-runner",
+                service_id,
+                "TLS profile updated successfully"
+            );
+        }
 
         loop {
             tokio::select! {

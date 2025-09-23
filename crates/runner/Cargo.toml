@@ -20,6 +20,7 @@ blueprint-keystore = { workspace = true }
 blueprint-crypto = { workspace = true }
 blueprint-qos = { workspace = true }
 blueprint-manager-bridge = { workspace = true, features = ["client"] }
+blueprint-auth = { workspace = true, optional = true }
 
 futures-core.workspace = true
 futures-util.workspace = true
@@ -62,6 +63,8 @@ eigensdk = { workspace = true, features = [
 
 [dev-dependencies]
 blueprint-sdk = { path = "../sdk", features = ["std", "tangle"] }
+tempfile = "3.8"
+serde_json = "1.0"
 
 [features]
 default = ["std", "networking"]
@@ -76,6 +79,9 @@ networking = ["dep:blueprint-networking", "dep:crossbeam-channel", "dep:libp2p",
 
 ## Enable Trusted Execution Environment (TEE) support for the runner
 tee = []
+
+## Enable TLS support for service registration
+tls = ["dep:blueprint-auth"]
 
 #! ### Protocols
 
