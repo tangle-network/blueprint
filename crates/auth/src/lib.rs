@@ -48,10 +48,14 @@ pub mod auth_token;
 pub mod db;
 /// Database models
 pub mod models;
+/// OAuth 2.0 JWT assertion verifier and per-service policy
+pub mod oauth;
 /// Paseto token generation and validation
 pub mod paseto_tokens;
 /// Authenticated Proxy Server built on top of Axum.
 pub mod proxy;
+/// Request-level auth context parsing and extractors
+pub mod request_auth;
 /// Holds the authentication-related types.
 pub mod types;
 /// Header validation utilities

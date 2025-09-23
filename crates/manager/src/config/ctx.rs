@@ -49,7 +49,7 @@ impl BlueprintManagerContext {
         config.verify_directories_exist()?;
         #[cfg(feature = "vm-sandbox")]
         let (network_manager, network_interface) = {
-            use tracing::info;
+            use blueprint_core::info;
 
             let interface = config.verify_network_interface()?;
 

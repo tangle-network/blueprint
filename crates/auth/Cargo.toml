@@ -11,6 +11,7 @@ rust-version.workspace = true
 
 [dependencies]
 blueprint-std = { workspace = true }
+blueprint-core = { workspace = true, features = ["tracing"] }
 
 thiserror = { workspace = true }
 tower = { workspace = true, features = ["util"] }
@@ -26,10 +27,12 @@ crc32fast = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "alloc", "serde", "pem"] }
 schnorrkel = { workspace = true }
 serde_json = { workspace = true }
-pasetors = { version = "0.7.7", default-features = false, features = ["v4", "serde_json", "std"] }
+pasetors = { workspace = true, default-features = false, features = ["v4", "serde_json", "std"] }
 uuid = { workspace = true, features = ["v4", "serde"] }
+jsonwebtoken = { workspace = true, default-features = false }
+pem = { workspace = true, default-features = false }
 
-axum = { workspace = true, default-features = false, features = ["json"] }
+axum = { workspace = true, default-features = false, features = ["json", "form"] }
 hyper-util = { workspace = true, features = ["client", "client-legacy", "tokio", "http2"] }
 
 # Database
@@ -47,12 +50,18 @@ serde_json = { workspace = true, features = ["alloc"] }
 bytes = { workspace = true }
 tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter", "make"] }
 tokio = { workspace = true, features = ["full"] }
-axum = { workspace = true, features = ["json", "multipart", "http1", "tokio"] }
+axum = { workspace = true, features = ["json", "multipart", "http1", "http2", "tokio"] }
 reqwest = { workspace = true, features = ["json", "multipart"] }
 futures-util = { workspace = true }
 http = { workspace = true }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["fmt", "env-filter", "registry"] }
+openssl = { version = "0.10", features = ["vendored"] }
+tokio-stream = { workspace = true }
+tonic = { workspace = true, features = ["codegen", "prost", "transport"] }
+
+[build-dependencies]
+tonic-build = { workspace = true, features = ["prost"] }
 
 [features]
 default = ["std", "tracing"]

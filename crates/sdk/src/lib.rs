@@ -103,6 +103,7 @@ pub use blueprint_runner as runner;
 
 /// Blueprint authentication proxy and utilities
 pub use blueprint_auth as auth;
+pub use blueprint_auth::request_auth::AuthContext;
 
 /// Manager <-> service communication bridge
 pub use blueprint_manager_bridge as bridge;

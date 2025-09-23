@@ -159,6 +159,7 @@ futures-core = { version = "0.3.31", default-features = false }
 tokio = { version = "^1", default-features = false }
 tokio-util = { version = "^0.7", default-features = false }
 tokio-cron-scheduler = { version = "0.13.0", default-features = false }
+tokio-stream = { version = "0.1.15", default-features = false, features = ["net"] }
 pin-project-lite = "0.2.7"
 tower = { version = "0.5.2", default-features = false }
 tower-http = { version = "0.6", default-features = false }
@@ -166,7 +167,7 @@ async-stream = { version = "0.3.6", default-features = false }
 
 # CLI & Configuration
 cargo-generate = { version = "0.23", default-features = false }
-clap = { version = "4.5.41" }
+clap = { version = "4.5.45" }
 clap-cargo = { version = "0.14", default-features = false }
 toml = { version = "0.9.2", default-features = false }
 dialoguer = { version = "0.11.0", default-features = false }
@@ -198,9 +199,12 @@ bytes = { version = "1.10.1", default-features = false }
 hashbrown = { version = "0.15.4", default-features = false }
 base64 = { version = "0.22.0", default-features = false }
 rust_decimal = { version = "1.37", default-features = false }
+jsonwebtoken = { version = "9", default-features = false }
+pasetors = { version = "0.7.7", default-features = false }
+pem = { version = "1.1", default-features = false }
 
 # Error Handling & Logging
-anyhow = { version = "1.0.98", default-features = false }
+anyhow = { version = "1.0.99", default-features = false }
 color-eyre = { version = "0.6", default-features = false }
 colored = { version = "3.0.0", default-features = false }
 log = { version = "0.4.22", default-features = false }
@@ -245,7 +249,7 @@ tokio-vsock = { version = "0.7.1", default-features = false }
 nix = { version = "0.30.1", default-features = false }
 capctl = { version = "0.2.4", default-features = false }
 netdev = { version = "0.35.3", default-features = false }
-nftables = { version = "0.6.2", default-features = false }
+nftables = { version = "0.6.3", default-features = false }
 
 # Development & Testing
 async-trait = { version = "0.1.81", default-features = false }
@@ -272,7 +276,7 @@ chrono = { version = "0.4", default-features = false }
 # System & OS
 sysinfo = { version = "0.34.2", default-features = false }
 num_cpus = { version = "1.17", default-features = false }
-libc = { version = "0.2.173", default-features = false }
+libc = { version = "0.2.175", default-features = false }
 
 # gRPC & Protocol Buffers
 tonic = { version = "0.13.1", default-features = false }
