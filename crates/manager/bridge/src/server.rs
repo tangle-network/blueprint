@@ -233,9 +233,9 @@ impl BlueprintManagerBridge for BridgeService {
                     ));
                 }
 
-                if profile.encrypted_client_ca_bundle.is_empty() {
+                if profile.require_client_mtls && profile.encrypted_client_ca_bundle.is_empty() {
                     return Err(tonic::Status::invalid_argument(
-                        "Client CA bundle is required when TLS is enabled",
+                        "Client CA bundle is required when mutual TLS authentication is enabled",
                     ));
                 }
             }
@@ -437,9 +437,9 @@ impl BlueprintManagerBridge for BridgeService {
                         ));
                     }
 
-                    if profile.encrypted_client_ca_bundle.is_empty() {
+                    if profile.require_client_mtls && profile.encrypted_client_ca_bundle.is_empty() {
                         return Err(tonic::Status::invalid_argument(
-                            "Client CA bundle is required when TLS is enabled",
+                            "Client CA bundle is required when mutual TLS authentication is enabled",
                         ));
                     }
                 }
@@ -518,9 +518,36 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
+        // Test that client CA bundle is optional when client mTLS is disabled
+        let optional_ca_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 2,
+            api_key_prefix: "test".to_string(),
+            upstream_url: "http://localhost:8080".to_string(),
+            owners: vec![],
+            tls_profile: Some(TlsProfileConfig {
+                tls_enabled: true,
+                require_client_mtls: false,
+                encrypted_server_cert: b"cert".to_vec(),
+                encrypted_server_key: b"key".to_vec(),
+                encrypted_client_ca_bundle: Vec::new(),
+                encrypted_upstream_ca_bundle: Vec::new(),
+                encrypted_upstream_client_cert: Vec::new(),
+                encrypted_upstream_client_key: Vec::new(),
+                client_cert_ttl_hours: 24,
+                sni: None,
+                subject_alt_name_template: None,
+                allowed_dns_names: Vec::new(),
+            }),
+        });
+
+        let result = service
+            .register_blueprint_service_proxy(optional_ca_request)
+            .await;
+        assert!(result.is_ok());
+
         // Test invalid server TLS configuration (missing cert)
         let invalid_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
-            service_id: 2,
+            service_id: 3,
             api_key_prefix: "test".to_string(),
             upstream_url: "http://localhost:8080".to_string(),
             owners: vec![],
@@ -548,17 +575,14 @@ mod tests {
             result.as_ref().unwrap_err().code(),
             tonic::Code::InvalidArgument
         );
-        assert!(
-            result
-                .as_ref()
-                .unwrap_err()
-                .message()
-                .contains("server certificate")
+        assert_eq!(
+            result.as_ref().unwrap_err().message(),
+            "Server certificate and key are required when TLS is enabled"
         );
 
         // Test invalid server TLS configuration (missing key)
         let invalid_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
-            service_id: 3,
+            service_id: 4,
             api_key_prefix: "test".to_string(),
             upstream_url: "http://localhost:8080".to_string(),
             owners: vec![],
@@ -586,12 +610,9 @@ mod tests {
             result.as_ref().unwrap_err().code(),
             tonic::Code::InvalidArgument
         );
-        assert!(
-            result
-                .as_ref()
-                .unwrap_err()
-                .message()
-                .contains("server key")
+        assert_eq!(
+            result.as_ref().unwrap_err().message(),
+            "Server certificate and key are required when TLS is enabled"
         );
     }
 
@@ -658,12 +679,9 @@ mod tests {
             result.as_ref().unwrap_err().code(),
             tonic::Code::InvalidArgument
         );
-        assert!(
-            result
-                .as_ref()
-                .unwrap_err()
-                .message()
-                .contains("client CA bundle")
+        assert_eq!(
+            result.as_ref().unwrap_err().message(),
+            "Client CA bundle is required when mutual TLS authentication is enabled"
         );
     }
 
@@ -687,7 +705,7 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        // Test updating to valid TLS configuration
+        // Test updating to valid TLS configuration without client CA when mTLS is disabled
         let valid_update_request = tonic::Request::new(UpdateBlueprintServiceTlsProfileRequest {
             service_id: 1,
             tls_profile: Some(TlsProfileConfig {
@@ -695,7 +713,7 @@ mod tests {
                 require_client_mtls: false,
                 encrypted_server_cert: b"cert".to_vec(),
                 encrypted_server_key: b"key".to_vec(),
-                encrypted_client_ca_bundle: b"ca".to_vec(),
+                encrypted_client_ca_bundle: Vec::new(),
                 encrypted_upstream_ca_bundle: Vec::new(),
                 encrypted_upstream_client_cert: Vec::new(),
                 encrypted_upstream_client_key: Vec::new(),
