@@ -40,7 +40,7 @@ pub struct ApiTokenModel {
 }
 
 /// TLS profile configuration for a service
-#[derive(prost::Message, Clone)]
+#[derive(prost::Message, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TlsProfile {
     /// Whether TLS is enabled for this service
     #[prost(bool)]
