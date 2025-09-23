@@ -1,8 +1,8 @@
 #![allow(unused_variables, unreachable_code)]
 
-use std::path::PathBuf;
 #[cfg(feature = "tls")]
 use std::path::Path;
+use std::path::PathBuf;
 
 use crate::error::ConfigError;
 use alloc::string::{String, ToString};
