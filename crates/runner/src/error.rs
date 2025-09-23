@@ -146,6 +146,10 @@ pub enum ConfigError {
     #[cfg(feature = "tls")]
     #[error("Missing TLS configuration: {0}")]
     MissingTlsConfig(String),
+    /// Invalid TLS configuration values
+    #[cfg(feature = "tls")]
+    #[error("Invalid TLS configuration: {0}")]
+    InvalidTlsConfig(String),
     /// IO error during configuration loading
     #[cfg(feature = "tls")]
     #[error("IO error: {0}")]

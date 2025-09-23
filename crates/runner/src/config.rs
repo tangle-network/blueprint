@@ -1,6 +1,8 @@
 #![allow(unused_variables, unreachable_code)]
 
 use std::path::PathBuf;
+#[cfg(feature = "tls")]
+use std::path::Path;
 
 use crate::error::ConfigError;
 use alloc::string::{String, ToString};
@@ -398,7 +400,7 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
 fn load_tls_envelope(settings: &BlueprintSettings) -> Result<TlsEnvelope, ConfigError> {
     if let Ok(key_hex) = std::env::var("TLS_ENVELOPE_KEY") {
         let key = TlsEnvelopeKey::from_hex(&key_hex).map_err(|e| {
-            ConfigError::MissingTlsConfig(format!("Invalid TLS_ENVELOPE_KEY value: {e}"))
+            ConfigError::InvalidTlsConfig(format!("Invalid TLS_ENVELOPE_KEY value: {e}"))
         })?;
         return Ok(TlsEnvelope::with_key(key));
     }
@@ -417,7 +419,7 @@ fn load_tls_envelope(settings: &BlueprintSettings) -> Result<TlsEnvelope, Config
     if let Some(path) = key_path {
         let key_bytes = std::fs::read(&path).map_err(|e| ConfigError::IoError(e.to_string()))?;
         if key_bytes.len() != 32 {
-            return Err(ConfigError::MissingTlsConfig(format!(
+            return Err(ConfigError::InvalidTlsConfig(format!(
                 "TLS envelope key at {} must be 32 bytes but was {}",
                 path.display(),
                 key_bytes.len()
