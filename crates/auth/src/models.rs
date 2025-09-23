@@ -72,6 +72,12 @@ pub struct TlsProfile {
     /// Optional SNI hostname for this service
     #[prost(string, optional)]
     pub sni: Option<String>,
+    /// Template to derive subjectAltNames for issued certificates
+    #[prost(string, optional)]
+    pub subject_alt_name_template: Option<String>,
+    /// Allowed DNS names for issued certificates
+    #[prost(string, repeated)]
+    pub allowed_dns_names: Vec<String>,
 }
 
 /// Represents a service model stored in the database.

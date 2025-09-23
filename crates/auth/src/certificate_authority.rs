@@ -10,6 +10,7 @@ use rcgen::{
     Issuer, KeyPair, KeyUsagePurpose, SanType, SerialNumber,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use time::OffsetDateTime;
 
 use crate::tls_envelope::TlsEnvelope;
@@ -283,6 +284,8 @@ pub struct TlsProfileResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ca_certificate_pem: Option<String>,
     pub subject_alt_name_template: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_dns_names: Vec<String>,
 }
 
 /// Validate a certificate issuance request against the stored TLS profile.
@@ -303,7 +306,32 @@ pub fn validate_certificate_request(
         ))));
     }
 
-    // TODO: enforce SAN allowlists when the profile stores them.
+    if !profile.allowed_dns_names.is_empty() {
+        let allowed: HashSet<&str> = profile
+            .allowed_dns_names
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+
+        for san in &request.subject_alt_names {
+            let candidate = if let Some(rest) = san.strip_prefix("DNS:") {
+                Some(rest)
+            } else if san.starts_with("URI:") || san.contains("://") {
+                None
+            } else {
+                Some(san.as_str())
+            };
+
+            if let Some(name) = candidate {
+                if !allowed.contains(name) {
+                    return Err(crate::Error::Io(std::io::Error::other(format!(
+                        "Subject alternative name `{name}` is not allowed by profile",
+                    ))));
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
