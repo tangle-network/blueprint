@@ -1,11 +1,11 @@
+use crate::VSOCK_PORT;
 use crate::blueprint_manager_bridge_server::{
     BlueprintManagerBridge, BlueprintManagerBridgeServer,
 };
-use crate::client::VSOCK_PORT;
 use crate::{
     AddOwnerToServiceRequest, Error, PortRequest, PortResponse,
     RegisterBlueprintServiceProxyRequest, RemoveOwnerFromServiceRequest,
-    UnregisterBlueprintServiceProxyRequest,
+    UnregisterBlueprintServiceProxyRequest, UpdateBlueprintServiceTlsProfileRequest,
 };
 use blueprint_auth::{
     db::RocksDb,
@@ -201,6 +201,7 @@ impl BlueprintManagerBridge for BridgeService {
             api_key_prefix,
             upstream_url,
             owners,
+            tls_profile,
         } = req.into_inner();
 
         let db = &self.db;
@@ -213,11 +214,38 @@ impl BlueprintManagerBridge for BridgeService {
                 key_bytes: owner.key_bytes,
             })
             .collect();
+
+        // Convert TLS profile if provided
+        let tls_profile = tls_profile.map(|config| {
+            let profile: blueprint_auth::models::TlsProfile = config.into();
+            profile
+        });
+
+        // Validate TLS profile if TLS is enabled
+        if let Some(ref profile) = tls_profile {
+            if profile.tls_enabled {
+                // Validate required fields for TLS
+                if profile.encrypted_server_cert.is_empty()
+                    || profile.encrypted_server_key.is_empty()
+                {
+                    return Err(tonic::Status::invalid_argument(
+                        "Server certificate and key are required when TLS is enabled",
+                    ));
+                }
+
+                if profile.encrypted_client_ca_bundle.is_empty() {
+                    return Err(tonic::Status::invalid_argument(
+                        "Client CA bundle is required when TLS is enabled",
+                    ));
+                }
+            }
+        }
+
         let service = ServiceModel {
             api_key_prefix,
             owners: service_owners,
             upstream_url,
-            tls_profile: None,
+            tls_profile,
         };
 
         // Save to database
@@ -367,6 +395,75 @@ impl BlueprintManagerBridge for BridgeService {
 
         Ok(Response::new(()))
     }
+
+    async fn update_blueprint_service_tls_profile(
+        &self,
+        req: Request<UpdateBlueprintServiceTlsProfileRequest>,
+    ) -> Result<Response<()>, tonic::Status> {
+        let UpdateBlueprintServiceTlsProfileRequest {
+            service_id,
+            tls_profile,
+        } = req.into_inner();
+
+        let db = &self.db;
+        let service_id = ServiceId(service_id, 0);
+
+        // Load existing service
+        let mut service = ServiceModel::find_by_id(service_id, db)
+            .map_err(|e| {
+                error!("Failed to load service {} from database: {e}", service_id);
+                tonic::Status::internal(format!("Database error: {e}"))
+            })?
+            .ok_or_else(|| {
+                error!(
+                    "Service {} not found for update_blueprint_service_tls_profile",
+                    service_id
+                );
+                tonic::Status::not_found(format!("Service {} not found", service_id))
+            })?;
+
+        // Convert and validate TLS profile if provided
+        let new_tls_profile = tls_profile
+            .map(|config| {
+                let profile: blueprint_auth::models::TlsProfile = config.into();
+
+                // Validate required fields for TLS
+                if profile.tls_enabled {
+                    if profile.encrypted_server_cert.is_empty()
+                        || profile.encrypted_server_key.is_empty()
+                    {
+                        return Err(tonic::Status::invalid_argument(
+                            "Server certificate and key are required when TLS is enabled",
+                        ));
+                    }
+
+                    if profile.require_client_mtls && profile.encrypted_client_ca_bundle.is_empty()
+                    {
+                        return Err(tonic::Status::invalid_argument(
+                            "Client CA bundle is required when client mTLS is enabled",
+                        ));
+                    }
+                }
+
+                Ok(profile)
+            })
+            .transpose()?;
+
+        // Update TLS profile
+        service.tls_profile = new_tls_profile;
+
+        // Save updated service
+        service.save(service_id, db).map_err(|e| {
+            error!(
+                "Failed to save updated service {} TLS profile to database: {e}",
+                service_id
+            );
+            tonic::Status::internal(format!("Database error: {e}"))
+        })?;
+
+        info!("Updated TLS profile for service ID: {}", service_id);
+        Ok(Response::new(()))
+    }
 }
 
 // TODO: Actually allocate a port to the VM
@@ -380,4 +477,309 @@ async fn allocate_host_port(hint: u16) -> Result<u16, tonic::Status> {
         .port();
     drop(listener);
     Ok(port)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::TlsProfileConfig;
+    use blueprint_auth::db::{RocksDb, RocksDbConfig};
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn test_tls_profile_validation_server_tls_required() {
+        let tmp_dir = tempdir().unwrap();
+        let db = RocksDb::open(tmp_dir.path(), &RocksDbConfig::default()).unwrap();
+        let service = BridgeService::new(tokio::sync::oneshot::channel().0, db);
+
+        // Test valid server TLS configuration
+        let valid_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 1,
+            api_key_prefix: "test".to_string(),
+            upstream_url: "http://localhost:8080".to_string(),
+            owners: vec![],
+            tls_profile: Some(TlsProfileConfig {
+                tls_enabled: true,
+                require_client_mtls: false,
+                encrypted_server_cert: b"cert".to_vec(),
+                encrypted_server_key: b"key".to_vec(),
+                encrypted_client_ca_bundle: Vec::new(),
+                encrypted_upstream_ca_bundle: Vec::new(),
+                encrypted_upstream_client_cert: Vec::new(),
+                encrypted_upstream_client_key: Vec::new(),
+                client_cert_ttl_hours: 24,
+                sni: None,
+                subject_alt_name_template: None,
+                allowed_dns_names: Vec::new(),
+            }),
+        });
+
+        let result = service
+            .register_blueprint_service_proxy(valid_request)
+            .await;
+        assert!(result.is_ok());
+
+        // Test invalid server TLS configuration (missing cert)
+        let invalid_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 2,
+            api_key_prefix: "test".to_string(),
+            upstream_url: "http://localhost:8080".to_string(),
+            owners: vec![],
+            tls_profile: Some(TlsProfileConfig {
+                tls_enabled: true,
+                require_client_mtls: false,
+                encrypted_server_cert: Vec::new(), // Missing
+                encrypted_server_key: b"key".to_vec(),
+                encrypted_client_ca_bundle: Vec::new(),
+                encrypted_upstream_ca_bundle: Vec::new(),
+                encrypted_upstream_client_cert: Vec::new(),
+                encrypted_upstream_client_key: Vec::new(),
+                client_cert_ttl_hours: 24,
+                sni: None,
+                subject_alt_name_template: None,
+                allowed_dns_names: Vec::new(),
+            }),
+        });
+
+        let result = service
+            .register_blueprint_service_proxy(invalid_request)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.as_ref().unwrap_err().code(),
+            tonic::Code::InvalidArgument
+        );
+        assert!(
+            result
+                .as_ref()
+                .unwrap_err()
+                .message()
+                .contains("server certificate")
+        );
+
+        // Test invalid server TLS configuration (missing key)
+        let invalid_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 3,
+            api_key_prefix: "test".to_string(),
+            upstream_url: "http://localhost:8080".to_string(),
+            owners: vec![],
+            tls_profile: Some(TlsProfileConfig {
+                tls_enabled: true,
+                require_client_mtls: false,
+                encrypted_server_cert: b"cert".to_vec(),
+                encrypted_server_key: Vec::new(), // Missing
+                encrypted_client_ca_bundle: Vec::new(),
+                encrypted_upstream_ca_bundle: Vec::new(),
+                encrypted_upstream_client_cert: Vec::new(),
+                encrypted_upstream_client_key: Vec::new(),
+                client_cert_ttl_hours: 24,
+                sni: None,
+                subject_alt_name_template: None,
+                allowed_dns_names: Vec::new(),
+            }),
+        });
+
+        let result = service
+            .register_blueprint_service_proxy(invalid_request)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.as_ref().unwrap_err().code(),
+            tonic::Code::InvalidArgument
+        );
+        assert!(
+            result
+                .as_ref()
+                .unwrap_err()
+                .message()
+                .contains("server key")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tls_profile_validation_client_mtls_required() {
+        let tmp_dir = tempdir().unwrap();
+        let db = RocksDb::open(tmp_dir.path(), &RocksDbConfig::default()).unwrap();
+        let service = BridgeService::new(tokio::sync::oneshot::channel().0, db);
+
+        // Test valid client mTLS configuration
+        let valid_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 1,
+            api_key_prefix: "test".to_string(),
+            upstream_url: "http://localhost:8080".to_string(),
+            owners: vec![],
+            tls_profile: Some(TlsProfileConfig {
+                tls_enabled: true,
+                require_client_mtls: true,
+                encrypted_server_cert: b"cert".to_vec(),
+                encrypted_server_key: b"key".to_vec(),
+                encrypted_client_ca_bundle: b"client_ca".to_vec(),
+                encrypted_upstream_ca_bundle: Vec::new(),
+                encrypted_upstream_client_cert: Vec::new(),
+                encrypted_upstream_client_key: Vec::new(),
+                client_cert_ttl_hours: 24,
+                sni: None,
+                subject_alt_name_template: None,
+                allowed_dns_names: Vec::new(),
+            }),
+        });
+
+        let result = service
+            .register_blueprint_service_proxy(valid_request)
+            .await;
+        assert!(result.is_ok());
+
+        // Test invalid client mTLS configuration (missing client CA)
+        let invalid_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 2,
+            api_key_prefix: "test".to_string(),
+            upstream_url: "http://localhost:8080".to_string(),
+            owners: vec![],
+            tls_profile: Some(TlsProfileConfig {
+                tls_enabled: true,
+                require_client_mtls: true,
+                encrypted_server_cert: b"cert".to_vec(),
+                encrypted_server_key: b"key".to_vec(),
+                encrypted_client_ca_bundle: Vec::new(), // Missing
+                encrypted_upstream_ca_bundle: Vec::new(),
+                encrypted_upstream_client_cert: Vec::new(),
+                encrypted_upstream_client_key: Vec::new(),
+                client_cert_ttl_hours: 24,
+                sni: None,
+                subject_alt_name_template: None,
+                allowed_dns_names: Vec::new(),
+            }),
+        });
+
+        let result = service
+            .register_blueprint_service_proxy(invalid_request)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.as_ref().unwrap_err().code(),
+            tonic::Code::InvalidArgument
+        );
+        assert!(
+            result
+                .as_ref()
+                .unwrap_err()
+                .message()
+                .contains("client CA bundle")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tls_profile_update_validation() {
+        let tmp_dir = tempdir().unwrap();
+        let db = RocksDb::open(tmp_dir.path(), &RocksDbConfig::default()).unwrap();
+        let service = BridgeService::new(tokio::sync::oneshot::channel().0, db.clone());
+
+        // First register a service without TLS
+        let register_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 1,
+            api_key_prefix: "test".to_string(),
+            upstream_url: "http://localhost:8080".to_string(),
+            owners: vec![],
+            tls_profile: None,
+        });
+
+        let result = service
+            .register_blueprint_service_proxy(register_request)
+            .await;
+        assert!(result.is_ok());
+
+        // Test updating to valid TLS configuration
+        let valid_update_request = tonic::Request::new(UpdateBlueprintServiceTlsProfileRequest {
+            service_id: 1,
+            tls_profile: Some(TlsProfileConfig {
+                tls_enabled: true,
+                require_client_mtls: false,
+                encrypted_server_cert: b"cert".to_vec(),
+                encrypted_server_key: b"key".to_vec(),
+                encrypted_client_ca_bundle: Vec::new(),
+                encrypted_upstream_ca_bundle: Vec::new(),
+                encrypted_upstream_client_cert: Vec::new(),
+                encrypted_upstream_client_key: Vec::new(),
+                client_cert_ttl_hours: 24,
+                sni: Some("example.com".to_string()),
+                subject_alt_name_template: None,
+                allowed_dns_names: Vec::new(),
+            }),
+        });
+
+        let result = service
+            .update_blueprint_service_tls_profile(valid_update_request)
+            .await;
+        assert!(result.is_ok());
+
+        // Test updating to invalid TLS configuration
+        let invalid_update_request = tonic::Request::new(UpdateBlueprintServiceTlsProfileRequest {
+            service_id: 1,
+            tls_profile: Some(TlsProfileConfig {
+                tls_enabled: true,
+                require_client_mtls: true,
+                encrypted_server_cert: b"cert".to_vec(),
+                encrypted_server_key: b"key".to_vec(),
+                encrypted_client_ca_bundle: Vec::new(), // Missing for client mTLS
+                encrypted_upstream_ca_bundle: Vec::new(),
+                encrypted_upstream_client_cert: Vec::new(),
+                encrypted_upstream_client_key: Vec::new(),
+                client_cert_ttl_hours: 24,
+                sni: None,
+                subject_alt_name_template: None,
+                allowed_dns_names: Vec::new(),
+            }),
+        });
+
+        let result = service
+            .update_blueprint_service_tls_profile(invalid_update_request)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn test_tls_profile_disable_tls() {
+        let tmp_dir = tempdir().unwrap();
+        let db = RocksDb::open(tmp_dir.path(), &RocksDbConfig::default()).unwrap();
+        let service = BridgeService::new(tokio::sync::oneshot::channel().0, db.clone());
+
+        // First register a service with TLS
+        let register_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 1,
+            api_key_prefix: "test".to_string(),
+            upstream_url: "http://localhost:8080".to_string(),
+            owners: vec![],
+            tls_profile: Some(TlsProfileConfig {
+                tls_enabled: true,
+                require_client_mtls: false,
+                encrypted_server_cert: b"cert".to_vec(),
+                encrypted_server_key: b"key".to_vec(),
+                encrypted_client_ca_bundle: Vec::new(),
+                encrypted_upstream_ca_bundle: Vec::new(),
+                encrypted_upstream_client_cert: Vec::new(),
+                encrypted_upstream_client_key: Vec::new(),
+                client_cert_ttl_hours: 24,
+                sni: None,
+                subject_alt_name_template: None,
+                allowed_dns_names: Vec::new(),
+            }),
+        });
+
+        let result = service
+            .register_blueprint_service_proxy(register_request)
+            .await;
+        assert!(result.is_ok());
+
+        // Test disabling TLS by setting TLS profile to None
+        let disable_request = tonic::Request::new(UpdateBlueprintServiceTlsProfileRequest {
+            service_id: 1,
+            tls_profile: None,
+        });
+
+        let result = service
+            .update_blueprint_service_tls_profile(disable_request)
+            .await;
+        assert!(result.is_ok());
+    }
 }
