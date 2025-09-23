@@ -8,6 +8,7 @@ use crate::models::{TlsCertMetadata, TlsProfile};
 use crate::tls_envelope::TlsEnvelope;
 use blueprint_std::Rng;
 use prost::Message;
+use tracing::error;
 
 /// TLS asset manager for handling certificate and key operations
 #[derive(Clone, Debug)]
@@ -312,6 +313,8 @@ impl TlsAssetManager {
         let assets_cf_handle = self.db.cf_handle(cf::TLS_ASSETS_CF).unwrap();
 
         // Get all certificate metadata
+        let mut errors = Vec::new();
+
         for item in self
             .db
             .prefix_iterator_cf(&metadata_cf_handle, b"cert_metadata:")
@@ -324,22 +327,24 @@ impl TlsAssetManager {
 
                     // Delete the encrypted certificate data
                     let cert_key = format!("cert_data:{}", metadata.cert_id);
-                    if self
-                        .db
-                        .delete_cf(&assets_cf_handle, cert_key.as_bytes())
-                        .is_err()
-                    {
-                        // Log error but continue
+                    if let Err(err) = self.db.delete_cf(&assets_cf_handle, cert_key.as_bytes()) {
+                        error!(
+                            certificate_id = %metadata.cert_id,
+                            error = %err,
+                            "failed to delete encrypted certificate data during cleanup"
+                        );
+                        errors.push(format!("cert_data:{}: {}", metadata.cert_id, err));
                     }
 
                     // Delete the encrypted private key data
                     let key_key = format!("private_key_data:{}", metadata.cert_id);
-                    if self
-                        .db
-                        .delete_cf(&assets_cf_handle, key_key.as_bytes())
-                        .is_err()
-                    {
-                        // Log error but continue
+                    if let Err(err) = self.db.delete_cf(&assets_cf_handle, key_key.as_bytes()) {
+                        error!(
+                            certificate_id = %metadata.cert_id,
+                            error = %err,
+                            "failed to delete encrypted private key during cleanup"
+                        );
+                        errors.push(format!("private_key_data:{}: {}", metadata.cert_id, err));
                     }
 
                     cleaned_count += 1;
@@ -347,6 +352,13 @@ impl TlsAssetManager {
             }
         }
 
-        Ok(cleaned_count)
+        if errors.is_empty() {
+            Ok(cleaned_count)
+        } else {
+            Err(crate::Error::Tls(format!(
+                "cleaned {cleaned_count} expired certificates but encountered errors: {}",
+                errors.join("; ")
+            )))
+        }
     }
 }
