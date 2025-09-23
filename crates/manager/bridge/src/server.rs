@@ -437,10 +437,9 @@ impl BlueprintManagerBridge for BridgeService {
                         ));
                     }
 
-                    if profile.require_client_mtls && profile.encrypted_client_ca_bundle.is_empty()
-                    {
+                    if profile.encrypted_client_ca_bundle.is_empty() {
                         return Err(tonic::Status::invalid_argument(
-                            "Client CA bundle is required when client mTLS is enabled",
+                            "Client CA bundle is required when TLS is enabled",
                         ));
                     }
                 }
@@ -503,7 +502,7 @@ mod tests {
                 require_client_mtls: false,
                 encrypted_server_cert: b"cert".to_vec(),
                 encrypted_server_key: b"key".to_vec(),
-                encrypted_client_ca_bundle: Vec::new(),
+                encrypted_client_ca_bundle: b"ca".to_vec(),
                 encrypted_upstream_ca_bundle: Vec::new(),
                 encrypted_upstream_client_cert: Vec::new(),
                 encrypted_upstream_client_key: Vec::new(),
@@ -530,7 +529,7 @@ mod tests {
                 require_client_mtls: false,
                 encrypted_server_cert: Vec::new(), // Missing
                 encrypted_server_key: b"key".to_vec(),
-                encrypted_client_ca_bundle: Vec::new(),
+                encrypted_client_ca_bundle: b"ca".to_vec(),
                 encrypted_upstream_ca_bundle: Vec::new(),
                 encrypted_upstream_client_cert: Vec::new(),
                 encrypted_upstream_client_key: Vec::new(),
@@ -568,7 +567,7 @@ mod tests {
                 require_client_mtls: false,
                 encrypted_server_cert: b"cert".to_vec(),
                 encrypted_server_key: Vec::new(), // Missing
-                encrypted_client_ca_bundle: Vec::new(),
+                encrypted_client_ca_bundle: b"ca".to_vec(),
                 encrypted_upstream_ca_bundle: Vec::new(),
                 encrypted_upstream_client_cert: Vec::new(),
                 encrypted_upstream_client_key: Vec::new(),
@@ -696,7 +695,7 @@ mod tests {
                 require_client_mtls: false,
                 encrypted_server_cert: b"cert".to_vec(),
                 encrypted_server_key: b"key".to_vec(),
-                encrypted_client_ca_bundle: Vec::new(),
+                encrypted_client_ca_bundle: b"ca".to_vec(),
                 encrypted_upstream_ca_bundle: Vec::new(),
                 encrypted_upstream_client_cert: Vec::new(),
                 encrypted_upstream_client_key: Vec::new(),
@@ -755,7 +754,7 @@ mod tests {
                 require_client_mtls: false,
                 encrypted_server_cert: b"cert".to_vec(),
                 encrypted_server_key: b"key".to_vec(),
-                encrypted_client_ca_bundle: Vec::new(),
+                encrypted_client_ca_bundle: b"ca".to_vec(),
                 encrypted_upstream_ca_bundle: Vec::new(),
                 encrypted_upstream_client_cert: Vec::new(),
                 encrypted_upstream_client_key: Vec::new(),
