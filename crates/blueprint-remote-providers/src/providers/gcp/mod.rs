@@ -3,10 +3,11 @@
 pub mod adapter;
 
 use crate::core::error::{Error, Result};
+use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::providers::common::{InstanceSelection, ProvisionedInfrastructure, ProvisioningConfig};
 use std::collections::HashMap;
-// removed unused imports
+use tracing::{info, warn};
 
 /// GCP Compute Engine provisioner
 pub struct GcpProvisioner {
@@ -200,14 +201,18 @@ impl GcpProvisioner {
             .as_str()
             .map(|s| s.to_string());
 
+        let mut metadata = HashMap::new();
+        metadata.insert("zone".to_string(), zone.clone());
+        metadata.insert("project_id".to_string(), self.project_id.clone());
+        
         Ok(ProvisionedInfrastructure {
             provider: CloudProvider::GCP,
-            instance_id: instance["id"].to_string(),
+            instance_id: instance["id"].as_str().unwrap_or("").to_string(),
             public_ip,
             private_ip,
             region: config.region.clone(),
             instance_type: instance_selection.instance_type,
-            metadata: HashMap::new(),
+            metadata,
         })
     }
 

@@ -69,7 +69,7 @@ async fn test_proxy_to_remote_health_check() {
         blueprint_id: 100,
     };
     
-    bridge.register_endpoint(1, endpoint).await;
+    bridge.register_endpoint(1, endpoint).await.unwrap();
     
     // Perform health check
     let healthy = bridge.health_check(1).await.unwrap();
@@ -103,7 +103,7 @@ async fn test_proxy_request_forwarding() {
         blueprint_id: 200,
     };
     
-    bridge.register_endpoint(2, endpoint).await;
+    bridge.register_endpoint(2, endpoint).await.unwrap();
     
     // Forward request
     let headers = HashMap::from([
@@ -115,7 +115,6 @@ async fn test_proxy_request_forwarding() {
         "GET",
         "/api/data",
         headers,
-        None,
         vec![],
     ).await.unwrap();
     
@@ -146,7 +145,7 @@ async fn test_circuit_breaker_integration() {
         blueprint_id: 300,
     };
     
-    bridge.register_endpoint(3, endpoint).await;
+    bridge.register_endpoint(3, endpoint).await.unwrap();
     
     // First few requests should fail but be allowed
     for _ in 0..3 {
@@ -155,7 +154,6 @@ async fn test_circuit_breaker_integration() {
             "GET",
             "/health",
             HashMap::new(),
-            None,
             vec![],
         ).await;
         assert!(result.is_err());
@@ -168,7 +166,6 @@ async fn test_circuit_breaker_integration() {
         "GET",
         "/health",
         HashMap::new(),
-        None,
         vec![],
     ).await;
     let elapsed = start.elapsed();
@@ -213,7 +210,6 @@ async fn test_auth_integration_with_proxy() {
         "127.0.0.1".to_string(),
         9003,
         credentials,
-        &db,
     ).await.unwrap();
     
     extension.register_service(auth).await;
@@ -276,7 +272,7 @@ async fn test_retry_with_intermittent_failures() {
         blueprint_id: 400,
     };
     
-    bridge.register_endpoint(4, endpoint).await;
+    bridge.register_endpoint(4, endpoint).await.unwrap();
     
     // Should succeed after retries
     let result = bridge.forward_request(
@@ -284,7 +280,6 @@ async fn test_retry_with_intermittent_failures() {
         "GET",
         "/health",
         HashMap::new(),
-        None,
         vec![],
     ).await;
     

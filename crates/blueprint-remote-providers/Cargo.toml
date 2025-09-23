@@ -28,6 +28,7 @@ blake3 = "1.5"
 hex = "0.4"
 zeroize = { version = "1.8", features = ["derive"] }
 url = "2.5"
+jsonwebtoken = "9.3"
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 toml = "0.8"

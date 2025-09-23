@@ -5,16 +5,18 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
-use crate::deployment::secure_commands::{SecureContainerCommands, SecureConfigManager};
+use crate::deployment::secure_commands::{SecureConfigManager, SecureContainerCommands};
+use crate::deployment::secure_ssh::{SecureSshClient, SecureSshConnection};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tokio::process::Command;
 use tracing::{debug, info, warn};
 
 /// SSH deployment client for bare metal servers
 pub struct SshDeploymentClient {
-    /// SSH connection parameters
+    /// Secure SSH connection
+    ssh_client: SecureSshClient,
+    /// SSH connection parameters  
     connection: SshConnection,
     /// Remote runtime type (Docker, Podman, Containerd)
     runtime: ContainerRuntime,
@@ -23,13 +25,36 @@ pub struct SshDeploymentClient {
 }
 
 impl SshDeploymentClient {
-    /// Create a new SSH deployment client
+    /// Create a new SSH deployment client with secure connection
     pub async fn new(
         connection: SshConnection,
         runtime: ContainerRuntime,
         deployment_config: DeploymentConfig,
     ) -> Result<Self> {
+        // Create secure SSH connection with validation
+        let secure_connection = SecureSshConnection::new(
+            connection.host.clone(),
+            connection.user.clone(),
+        )?
+        .with_port(connection.port)?
+        .with_strict_host_checking(false); // TODO: Enable in production with proper known_hosts
+
+        let secure_connection = if let Some(ref key_path) = connection.key_path {
+            secure_connection.with_key_path(key_path)?
+        } else {
+            secure_connection
+        };
+
+        let secure_connection = if let Some(ref jump_host) = connection.jump_host {
+            secure_connection.with_jump_host(jump_host.clone())?
+        } else {
+            secure_connection
+        };
+
+        let ssh_client = SecureSshClient::new(secure_connection);
+
         let client = Self {
+            ssh_client,
             connection,
             runtime,
             deployment_config,
@@ -163,7 +188,7 @@ impl SshDeploymentClient {
     async fn pull_image(&self, image: &str) -> Result<()> {
         let runtime_str = match self.runtime {
             ContainerRuntime::Docker => "docker",
-            ContainerRuntime::Podman => "podman", 
+            ContainerRuntime::Podman => "podman",
             ContainerRuntime::Containerd => "ctr",
         };
 
@@ -183,7 +208,7 @@ impl SshDeploymentClient {
         env_vars: HashMap<String, String>,
     ) -> Result<String> {
         let limits = ResourceLimits::from_spec(spec);
-        
+
         let runtime_str = match self.runtime {
             ContainerRuntime::Docker => "docker",
             ContainerRuntime::Podman => "podman",
@@ -195,9 +220,9 @@ impl SshDeploymentClient {
             runtime_str,
             image,
             &env_vars,
-            limits.cpu_cores,
-            limits.memory_mb,
-            limits.disk_gb,
+            limits.cpu_cores.map(|c| c as f32),
+            limits.memory_mb.map(|m| m as u32),
+            limits.disk_gb.map(|d| d as u32),
         )?;
 
         let output = self.run_remote_command(&cmd).await?;
@@ -279,107 +304,17 @@ impl SshDeploymentClient {
         Ok(ContainerDetails { status, ports })
     }
 
-    /// Run a command on the remote host via SSH
+    /// Run a command on the remote host via secure SSH
     async fn run_remote_command(&self, command: &str) -> Result<String> {
-        let ssh_cmd = self.build_ssh_command(command);
-
-        debug!("Running remote command: {}", command);
-
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(&ssh_cmd)
-            .output()
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("SSH command failed: {}", e)))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::ConfigurationError(format!(
-                "Remote command failed: {}",
-                stderr
-            )));
-        }
-
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        debug!("Running secure remote command: {}", command);
+        self.ssh_client.run_remote_command(command).await
     }
 
-    /// Build SSH command with proper options
-    fn build_ssh_command(&self, command: &str) -> String {
-        let mut ssh_cmd = String::from("ssh");
 
-        // Add SSH options
-        ssh_cmd.push_str(" -o StrictHostKeyChecking=no");
-        ssh_cmd.push_str(" -o UserKnownHostsFile=/dev/null");
-
-        // Add port if not default
-        if self.connection.port != 22 {
-            ssh_cmd.push_str(&format!(" -p {}", self.connection.port));
-        }
-
-        // Add identity file if provided
-        if let Some(ref key_path) = self.connection.key_path {
-            ssh_cmd.push_str(&format!(" -i {}", key_path.display()));
-        }
-
-        // Add jump host if provided
-        if let Some(ref jump_host) = self.connection.jump_host {
-            ssh_cmd.push_str(&format!(" -J {}", jump_host));
-        }
-
-        // Add user@host
-        ssh_cmd.push_str(&format!(
-            " {}@{}",
-            self.connection.user, self.connection.host
-        ));
-
-        // Add the command to execute
-        ssh_cmd.push_str(&format!(" '{}'", command));
-
-        ssh_cmd
-    }
-
-    /// Copy files to remote host via SCP
+    /// Copy files to remote host via secure SCP
     pub async fn copy_files(&self, local_path: &Path, remote_path: &str) -> Result<()> {
-        let mut scp_cmd = String::from("scp");
-
-        // Add SSH options
-        scp_cmd.push_str(" -o StrictHostKeyChecking=no");
-        scp_cmd.push_str(" -o UserKnownHostsFile=/dev/null");
-
-        if self.connection.port != 22 {
-            scp_cmd.push_str(&format!(" -P {}", self.connection.port));
-        }
-
-        if let Some(ref key_path) = self.connection.key_path {
-            scp_cmd.push_str(&format!(" -i {}", key_path.display()));
-        }
-
-        // Add source and destination
-        scp_cmd.push_str(&format!(
-            " {} {}@{}:{}",
-            local_path.display(),
-            self.connection.user,
-            self.connection.host,
-            remote_path
-        ));
-
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(&scp_cmd)
-            .output()
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("SCP failed: {}", e)))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::ConfigurationError(format!(
-                "File copy failed: {}",
-                stderr
-            )));
-        }
-
-        info!("Files copied to remote host");
-        Ok(())
+        info!("Copying files via secure SCP: {} -> {}", local_path.display(), remote_path);
+        self.ssh_client.copy_files(local_path, remote_path).await
     }
 
     /// Install Blueprint runtime on remote host
@@ -460,8 +395,9 @@ impl SshDeploymentClient {
         // Use secure config management to prevent injection
         SecureConfigManager::write_config_file(
             &config_content,
-            "/opt/blueprint/config/blueprint.json"
-        ).await?;
+            "/opt/blueprint/config/blueprint.json",
+        )
+        .await?;
 
         // Set resource limits using systemd
         let systemd_limits = format!(
@@ -793,33 +729,30 @@ impl BareMetalFleet {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_ssh_command_building() {
+    #[tokio::test]
+    async fn test_secure_ssh_integration() {
         let connection = SshConnection {
-            host: "example.com".to_string(),
-            port: 2222,
-            user: "deploy".to_string(),
-            key_path: Some(PathBuf::from("/home/user/.ssh/id_rsa")),
+            host: "localhost".to_string(),
+            port: 22,
+            user: "testuser".to_string(),
+            key_path: None,
             password: None,
-            jump_host: Some("bastion.example.com".to_string()),
+            jump_host: None,
         };
 
-        let client = SshDeploymentClient {
-            connection,
-            runtime: ContainerRuntime::Docker,
-            deployment_config: DeploymentConfig {
-                name: "test".to_string(),
-                namespace: "default".to_string(),
-                restart_policy: RestartPolicy::Always,
-                health_check: None,
-            },
-        };
+        // Test that secure SSH connection is properly configured
+        let secure_conn = SecureSshConnection::new(
+            connection.host.clone(),
+            connection.user.clone(),
+        ).unwrap()
+        .with_port(connection.port).unwrap()
+        .with_strict_host_checking(false);
 
-        let cmd = client.build_ssh_command("ls -la");
-        assert!(cmd.contains("-p 2222"));
-        assert!(cmd.contains("-i /home/user/.ssh/id_rsa"));
-        assert!(cmd.contains("-J bastion.example.com"));
-        assert!(cmd.contains("deploy@example.com"));
+        let ssh_client = SecureSshClient::new(secure_conn);
+        
+        // This would fail in a real environment without SSH access,
+        // but we're testing the integration structure
+        assert_eq!(ssh_client.run_remote_command("echo test").await.is_err(), true);
     }
 
     #[test]

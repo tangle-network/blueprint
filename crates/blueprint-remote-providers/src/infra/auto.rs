@@ -7,6 +7,7 @@ use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::deployment::manager_integration::RemoteDeploymentConfig;
+use crate::deployment::tracker::DeploymentType;
 use crate::pricing::fetcher::PricingFetcher;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -115,7 +116,6 @@ impl AutoDeploymentManager {
     fn is_deployment_type_compiled(
         deployment_type: crate::deployment::tracker::DeploymentType,
     ) -> bool {
-
         match deployment_type {
             // Kubernetes deployments require the kubernetes feature
             #[cfg(feature = "kubernetes")]
@@ -338,7 +338,6 @@ impl AutoDeploymentManager {
         provider: &CloudProvider,
         preferences: Option<&DeploymentPreferences>,
     ) -> crate::deployment::tracker::DeploymentType {
-
         // If operator specified a preference, use it (if available)
         if let Some(prefs) = preferences {
             if let Some(preferred) = prefs.preferred_type {
@@ -365,7 +364,6 @@ impl AutoDeploymentManager {
         deployment_type: crate::deployment::tracker::DeploymentType,
         provider: &CloudProvider,
     ) -> bool {
-
         // First check if it's compiled in
         if !Self::is_deployment_type_compiled(deployment_type) {
             return false;
@@ -403,7 +401,6 @@ impl AutoDeploymentManager {
         &self,
         provider: &CloudProvider,
     ) -> crate::deployment::tracker::DeploymentType {
-
         match provider {
             CloudProvider::AWS => DeploymentType::AwsEc2,
             CloudProvider::GCP => DeploymentType::GcpGce,

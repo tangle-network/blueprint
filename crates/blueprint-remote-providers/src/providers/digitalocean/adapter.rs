@@ -136,13 +136,13 @@ impl CloudProviderAdapter for DigitalOceanAdapter {
     }
 
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
-        use crate::security::{SecureHttpClient, ApiAuthentication};
-        
+        use crate::security::{ApiAuthentication, SecureHttpClient};
+
         if let Some(endpoint) = deployment.qos_grpc_endpoint() {
             // Use secure HTTP client for health checks
             let client = SecureHttpClient::new()?;
             let auth = ApiAuthentication::None; // Health endpoint typically doesn't require auth
-            
+
             match client.get(&format!("{}/health", endpoint), &auth).await {
                 Ok(response) => Ok(response.status().is_success()),
                 Err(_) => Ok(false),
@@ -201,41 +201,50 @@ impl DigitalOceanAdapter {
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
-        use crate::deployment::kubernetes::KubernetesDeploymentClient;
+        {
+            use crate::deployment::KubernetesDeploymentClient;
 
-        info!("Deploying to DOKS cluster: {}", cluster_id);
+            info!("Deploying to DOKS cluster: {}", cluster_id);
 
-        let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
-        let (deployment_id, exposed_ports) = k8s_client
-            .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
-            .await?;
+            let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
+            let (deployment_id, exposed_ports) = k8s_client
+                .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
+                .await?;
 
-        let mut port_mappings = HashMap::new();
-        for port in exposed_ports {
-            port_mappings.insert(port, port);
+            let mut port_mappings = HashMap::new();
+            for port in exposed_ports {
+                port_mappings.insert(port, port);
+            }
+
+            let mut metadata = HashMap::new();
+            metadata.insert("provider".to_string(), "digitalocean-doks".to_string());
+            metadata.insert("cluster_id".to_string(), cluster_id.to_string());
+            metadata.insert("namespace".to_string(), namespace.to_string());
+
+            let instance = ProvisionedInstance {
+                id: format!("doks-{}", cluster_id),
+                public_ip: None,
+                private_ip: None,
+                status: InstanceStatus::Running,
+                provider: crate::core::remote::CloudProvider::DigitalOcean,
+                region: "nyc3".to_string(),
+                instance_type: "doks-cluster".to_string(),
+            };
+
+            Ok(BlueprintDeploymentResult {
+                instance,
+                blueprint_id: deployment_id,
+                port_mappings,
+                metadata,
+            })
         }
-
-        let mut metadata = HashMap::new();
-        metadata.insert("provider".to_string(), "digitalocean-doks".to_string());
-        metadata.insert("cluster_id".to_string(), cluster_id.to_string());
-        metadata.insert("namespace".to_string(), namespace.to_string());
-
-        let instance = ProvisionedInstance {
-            id: format!("doks-{}", cluster_id),
-            public_ip: None,
-            private_ip: None,
-            status: InstanceStatus::Running,
-            provider: crate::core::remote::CloudProvider::DigitalOcean,
-            region: "nyc3".to_string(),
-            instance_type: "doks-cluster".to_string(),
-        };
-
-        Ok(BlueprintDeploymentResult {
-            instance,
-            blueprint_id: deployment_id,
-            port_mappings,
-            metadata,
-        })
+        
+        #[cfg(not(feature = "kubernetes"))]
+        {
+            Err(Error::ConfigurationError(
+                "Kubernetes feature not enabled".to_string(),
+            ))
+        }
     }
 
     /// Deploy to generic Kubernetes cluster
@@ -247,40 +256,49 @@ impl DigitalOceanAdapter {
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
-        use crate::deployment::kubernetes::KubernetesDeploymentClient;
+        {
+            use crate::deployment::KubernetesDeploymentClient;
 
-        info!("Deploying to generic Kubernetes namespace: {}", namespace);
+            info!("Deploying to generic Kubernetes namespace: {}", namespace);
 
-        let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
-        let (deployment_id, exposed_ports) = k8s_client
-            .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
-            .await?;
+            let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
+            let (deployment_id, exposed_ports) = k8s_client
+                .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
+                .await?;
 
-        let mut port_mappings = HashMap::new();
-        for port in exposed_ports {
-            port_mappings.insert(port, port);
+            let mut port_mappings = HashMap::new();
+            for port in exposed_ports {
+                port_mappings.insert(port, port);
+            }
+
+            let mut metadata = HashMap::new();
+            metadata.insert("provider".to_string(), "generic-k8s".to_string());
+            metadata.insert("namespace".to_string(), namespace.to_string());
+
+            let instance = ProvisionedInstance {
+                id: format!("k8s-{}", namespace),
+                public_ip: None,
+                private_ip: None,
+                status: InstanceStatus::Running,
+                provider: crate::core::remote::CloudProvider::Generic,
+                region: "generic".to_string(),
+                instance_type: "kubernetes-cluster".to_string(),
+            };
+
+            Ok(BlueprintDeploymentResult {
+                instance,
+                blueprint_id: deployment_id,
+                port_mappings,
+                metadata,
+            })
         }
-
-        let mut metadata = HashMap::new();
-        metadata.insert("provider".to_string(), "generic-k8s".to_string());
-        metadata.insert("namespace".to_string(), namespace.to_string());
-
-        let instance = ProvisionedInstance {
-            id: format!("k8s-{}", namespace),
-            public_ip: None,
-            private_ip: None,
-            status: InstanceStatus::Running,
-            provider: crate::core::remote::CloudProvider::Generic,
-            region: "generic".to_string(),
-            instance_type: "kubernetes-cluster".to_string(),
-        };
-
-        Ok(BlueprintDeploymentResult {
-            instance,
-            blueprint_id: deployment_id,
-            port_mappings,
-            metadata,
-        })
+        
+        #[cfg(not(feature = "kubernetes"))]
+        {
+            Err(Error::ConfigurationError(
+                "Kubernetes feature not enabled".to_string(),
+            ))
+        }
     }
 
     async fn health_check_blueprint(

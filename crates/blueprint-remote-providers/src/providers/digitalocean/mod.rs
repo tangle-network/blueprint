@@ -7,7 +7,7 @@ pub mod adapter;
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
-use crate::security::{SecureHttpClient, ApiAuthentication};
+use crate::security::{ApiAuthentication, SecureHttpClient};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tracing::{info, warn};
@@ -198,10 +198,7 @@ impl DigitalOceanProvisioner {
 
         let response = self
             .client
-            .post(url)
-            .bearer_auth(&self.api_token)
-            .json(&cluster_request)
-            .send()
+            .post(url, &self.auth, Some(cluster_request))
             .await
             .map_err(|e| {
                 Error::ConfigurationError(format!("Failed to create DOKS cluster: {}", e))
@@ -237,9 +234,7 @@ impl DigitalOceanProvisioner {
 
         let response = self
             .client
-            .get(&url)
-            .bearer_auth(&self.api_token)
-            .send()
+            .get(&url, &self.auth)
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to get K8s versions: {}", e)))?;
 
@@ -286,9 +281,7 @@ impl DigitalOceanProvisioner {
 
         let response = self
             .client
-            .get(&url)
-            .bearer_auth(&self.api_token)
-            .send()
+            .get(&url, &self.auth)
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to get cluster: {}", e)))?;
 
@@ -328,9 +321,7 @@ impl DigitalOceanProvisioner {
 
         let response = self
             .client
-            .get(&url)
-            .bearer_auth(&self.api_token)
-            .send()
+            .get(&url, &self.auth)
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to get kubeconfig: {}", e)))?;
 
@@ -414,9 +405,7 @@ impl DigitalOceanProvisioner {
 
         let response = self
             .client
-            .delete(&url)
-            .bearer_auth(&self.api_token)
-            .send()
+            .delete(&url, &self.auth)
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to delete droplet: {}", e)))?;
 
@@ -441,9 +430,7 @@ impl DigitalOceanProvisioner {
 
         let response = self
             .client
-            .delete(&url)
-            .bearer_auth(&self.api_token)
-            .send()
+            .delete(&url, &self.auth)
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to delete cluster: {}", e)))?;
 
@@ -490,13 +477,12 @@ mod tests {
     use super::*;
     use crate::core::resources::ResourceSpec;
 
-    #[test]
-    fn test_droplet_size_selection() {
-        let provisioner = DigitalOceanProvisioner {
-            client: reqwest::Client::new(),
-            api_token: "test".to_string(),
-            default_region: "nyc3".to_string(),
-        };
+    #[tokio::test]
+    async fn test_droplet_size_selection() {
+        let provisioner = DigitalOceanProvisioner::new(
+            "test_token".to_string(),
+            "nyc3".to_string(),
+        ).await.unwrap();
 
         // Test small instance
         let spec = ResourceSpec {
@@ -523,13 +509,12 @@ mod tests {
         assert_eq!(provisioner.select_droplet_size(&spec), "s-8vcpu-16gb");
     }
 
-    #[test]
-    fn test_user_data_generation() {
-        let provisioner = DigitalOceanProvisioner {
-            client: reqwest::Client::new(),
-            api_token: "test".to_string(),
-            default_region: "nyc3".to_string(),
-        };
+    #[tokio::test]
+    async fn test_user_data_generation() {
+        let provisioner = DigitalOceanProvisioner::new(
+            "test_token".to_string(),
+            "nyc3".to_string(),
+        ).await.unwrap();
 
         let spec = ResourceSpec {
             cpu: 2.0,

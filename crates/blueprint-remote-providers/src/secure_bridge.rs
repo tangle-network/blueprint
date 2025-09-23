@@ -59,16 +59,58 @@ pub struct SecureBridge {
 }
 
 impl SecureBridge {
+    /// Validate certificate format and basic security properties
+    fn validate_certificate_format(cert_data: &[u8], cert_type: &str) -> Result<()> {
+        let cert_str = String::from_utf8(cert_data.to_vec())
+            .map_err(|_| Error::ConfigurationError(format!("{} must be valid UTF-8", cert_type)))?;
+
+        // Basic PEM format validation
+        if !cert_str.contains("-----BEGIN") || !cert_str.contains("-----END") {
+            return Err(Error::ConfigurationError(format!(
+                "{} must be in PEM format",
+                cert_type
+            )));
+        }
+
+        // Validate certificate is not obviously invalid
+        if cert_data.len() < 100 {
+            return Err(Error::ConfigurationError(format!(
+                "{} appears to be too short to be valid",
+                cert_type
+            )));
+        }
+
+        // Check for common certificate types
+        let valid_headers = [
+            "-----BEGIN CERTIFICATE-----",
+            "-----BEGIN PRIVATE KEY-----",
+            "-----BEGIN RSA PRIVATE KEY-----",
+            "-----BEGIN EC PRIVATE KEY-----",
+        ];
+
+        if !valid_headers.iter().any(|header| cert_str.contains(header)) {
+            return Err(Error::ConfigurationError(format!(
+                "{} does not contain recognized PEM headers",
+                cert_type
+            )));
+        }
+
+        // TODO: Add certificate expiry validation in production
+        // TODO: Add certificate chain validation
+
+        Ok(())
+    }
+
     /// Create new secure bridge
     pub async fn new(config: SecureBridgeConfig) -> Result<Self> {
         let mut client_builder = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(config.connect_timeout_secs))
             .tcp_keepalive(std::time::Duration::from_secs(60));
 
-        // Configure TLS settings
+        // Configure TLS settings with production-grade certificate validation
         if config.enable_mtls {
             // Production mTLS certificate configuration
-            info!("mTLS enabled for secure bridge");
+            info!("mTLS enabled for secure bridge - strict certificate validation");
 
             // Load client certificate and private key for mTLS
             let cert_path = std::env::var("BLUEPRINT_CLIENT_CERT_PATH")
@@ -78,8 +120,21 @@ impl SecureBridge {
             let ca_path = std::env::var("BLUEPRINT_CA_CERT_PATH")
                 .unwrap_or_else(|_| "/etc/blueprint/certs/ca.crt".to_string());
 
-            // In production, these certificate files should exist
-            // For now, we configure the client to expect them but gracefully degrade
+            // PRODUCTION SECURITY: Enforce certificate presence in production
+            let is_production = std::env::var("BLUEPRINT_ENV")
+                .unwrap_or_else(|_| "development".to_string())
+                == "production";
+
+            if is_production
+                && (!std::path::Path::new(&cert_path).exists()
+                    || !std::path::Path::new(&key_path).exists()
+                    || !std::path::Path::new(&ca_path).exists())
+            {
+                return Err(Error::ConfigurationError(
+                    "Production deployment requires mTLS certificates at configured paths".into(),
+                ));
+            }
+
             if std::path::Path::new(&cert_path).exists()
                 && std::path::Path::new(&key_path).exists()
                 && std::path::Path::new(&ca_path).exists()
@@ -94,6 +149,11 @@ impl SecureBridge {
                 let ca_cert = std::fs::read(&ca_path).map_err(|e| {
                     Error::ConfigurationError(format!("Failed to read CA cert: {}", e))
                 })?;
+
+                // Validate certificate formats before use
+                Self::validate_certificate_format(&client_cert, "client certificate")?;
+                Self::validate_certificate_format(&client_key, "client private key")?;
+                Self::validate_certificate_format(&ca_cert, "CA certificate")?;
 
                 // Create identity by combining cert and key into single PEM buffer
                 let mut combined_pem = Vec::new();
@@ -111,16 +171,31 @@ impl SecureBridge {
                 client_builder = client_builder
                     .identity(identity)
                     .add_root_certificate(ca_cert)
-                    .use_rustls_tls();
+                    .use_rustls_tls()
+                    .tls_built_in_root_certs(false); // Only trust our CA
 
-                info!("mTLS certificates loaded successfully");
+                info!("mTLS certificates loaded and validated successfully");
+            } else if is_production {
+                return Err(Error::ConfigurationError(
+                    "mTLS certificates required for production deployment".into(),
+                ));
             } else {
-                warn!("mTLS certificates not found at expected paths, using system certs");
+                warn!("mTLS certificates not found - using system certs for development");
                 client_builder = client_builder.use_rustls_tls();
             }
         } else {
+            let is_production = std::env::var("BLUEPRINT_ENV")
+                .unwrap_or_else(|_| "development".to_string())
+                == "production";
+
+            if is_production {
+                return Err(Error::ConfigurationError(
+                    "mTLS cannot be disabled in production environment".into(),
+                ));
+            }
+
             client_builder = client_builder.danger_accept_invalid_certs(true);
-            warn!("mTLS disabled - only for testing");
+            warn!("mTLS disabled - DEVELOPMENT ONLY");
         }
 
         let client = client_builder.build().map_err(|e| {
@@ -134,14 +209,64 @@ impl SecureBridge {
         })
     }
 
-    /// Register a remote endpoint
-    pub async fn register_endpoint(&self, service_id: u64, endpoint: RemoteEndpoint) {
+    /// Validate endpoint for security - prevent SSRF attacks
+    fn validate_endpoint_security(endpoint: &RemoteEndpoint) -> Result<()> {
+        // SECURITY: Only allow localhost and private IP ranges for remote instances
+        let host = &endpoint.host;
+
+        // Parse IP address
+        if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+            match ip {
+                std::net::IpAddr::V4(ipv4) => {
+                    if !ipv4.is_loopback() && !ipv4.is_private() {
+                        return Err(Error::ConfigurationError(
+                            "Remote endpoints must use localhost or private IP ranges only".into(),
+                        ));
+                    }
+                }
+                std::net::IpAddr::V6(ipv6) => {
+                    if !ipv6.is_loopback() {
+                        return Err(Error::ConfigurationError(
+                            "Remote endpoints must use localhost for IPv6".into(),
+                        ));
+                    }
+                }
+            }
+        } else {
+            // If it's a hostname, only allow localhost variants
+            if !host.starts_with("localhost") && host != "127.0.0.1" && host != "::1" {
+                return Err(Error::ConfigurationError(
+                    "Remote endpoints must use localhost hostname only".into(),
+                ));
+            }
+        }
+
+        // Validate port range (u16 max is 65535, so only check minimum)
+        if endpoint.port < 1024 {
+            return Err(Error::ConfigurationError(
+                "Port must be >= 1024".into(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Register a remote endpoint with security validation
+    pub async fn register_endpoint(&self, service_id: u64, endpoint: RemoteEndpoint) -> Result<()> {
+        // SECURITY: Validate endpoint before registration
+        Self::validate_endpoint_security(&endpoint)?;
+
         if let Ok(mut endpoints) = self.endpoints.write() {
             endpoints.insert(service_id, endpoint.clone());
             info!(
-                "Registered remote endpoint for service {}: {}:{}",
+                "Registered secure remote endpoint for service {}: {}:{}",
                 service_id, endpoint.host, endpoint.port
             );
+            Ok(())
+        } else {
+            Err(Error::ConfigurationError(
+                "Failed to acquire endpoint lock".into(),
+            ))
         }
     }
 
@@ -173,8 +298,9 @@ impl SecureBridge {
 
         match self.client.get(&url).send().await {
             Ok(response) => Ok(response.status().is_success()),
-            Err(e) => {
-                warn!("Health check failed for service {}: {}", service_id, e);
+            Err(_) => {
+                // SECURITY: Don't log detailed error information to prevent information disclosure
+                warn!("Health check failed for service {}", service_id);
                 Ok(false)
             }
         }
@@ -267,7 +393,7 @@ impl SecureBridge {
                     blueprint_id: service_id,
                 };
 
-                self.register_endpoint(service_id, endpoint).await;
+                let _ = self.register_endpoint(service_id, endpoint).await;
             }
         }
     }
@@ -321,7 +447,7 @@ mod tests {
         };
 
         // Register endpoint
-        bridge.register_endpoint(1, endpoint.clone()).await;
+        bridge.register_endpoint(1, endpoint.clone()).await.unwrap();
         assert_eq!(bridge.list_endpoints().await.len(), 1);
 
         // Get endpoint
