@@ -55,7 +55,6 @@ eigensdk = { workspace = true, features = [
     "client-elcontracts",
     "types",
     "utils",
-    "logging",
     "client-avsregistry",
     "crypto-bls",
 ], optional = true }

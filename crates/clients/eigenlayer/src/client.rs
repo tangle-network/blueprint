@@ -6,14 +6,13 @@ use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_std::collections::HashMap;
 use eigensdk::client_avsregistry::reader::AvsRegistryReader;
 use eigensdk::common::get_ws_provider;
-use eigensdk::logging::get_test_logger;
-use eigensdk::utils::rewardsv2::middleware::registrycoordinator::RegistryCoordinator;
-use eigensdk::utils::rewardsv2::middleware::stakeregistry::{IStakeRegistry, StakeRegistry};
-use eigensdk::utils::slashing::core::allocationmanager::{
+use eigensdk::utils::rewardsv2::middleware::registry_coordinator::RegistryCoordinator;
+use eigensdk::utils::rewardsv2::middleware::stake_registry::{IStakeRegistry, StakeRegistry};
+use eigensdk::utils::slashing::core::allocation_manager::{
     AllocationManager, IAllocationManagerTypes,
 };
-use eigensdk::utils::slashing::core::delegationmanager::DelegationManager;
-use eigensdk::utils::slashing::middleware::operatorstateretriever::OperatorStateRetriever;
+use eigensdk::utils::slashing::core::delegation_manager::DelegationManager;
+use eigensdk::utils::slashing::middleware::operator_state_retriever::OperatorStateRetriever;
 use num_bigint::BigInt;
 
 /// Client that provides access to EigenLayer utility functions through the use of the [`BlueprintEnvironment`].
@@ -105,7 +104,6 @@ impl EigenlayerClient {
         let registry_coordinator_address = contract_addresses.registry_coordinator_address;
         let operator_state_retriever_address = contract_addresses.operator_state_retriever_address;
         eigensdk::client_avsregistry::reader::AvsRegistryChainReader::new(
-            eigensdk::logging::get_test_logger(),
             registry_coordinator_address,
             operator_state_retriever_address,
             http_rpc_endpoint.to_string(),
@@ -131,7 +129,6 @@ impl EigenlayerClient {
         let service_manager_address = contract_addresses.service_manager_address;
 
         eigensdk::client_avsregistry::writer::AvsRegistryChainWriter::build_avs_registry_chain_writer(
-            eigensdk::logging::get_test_logger(),
             self.config.http_rpc_endpoint.to_string(),
             private_key,
             registry_coordinator_address,
@@ -159,7 +156,6 @@ impl EigenlayerClient {
         let avs_registry_reader = self.avs_registry_reader().await?;
 
         eigensdk::services_operatorsinfo::operatorsinfo_inmemory::OperatorInfoServiceInMemory::new(
-            eigensdk::logging::get_test_logger(),
             avs_registry_reader,
             self.config.ws_rpc_endpoint.to_string(),
         )
@@ -219,7 +215,6 @@ impl EigenlayerClient {
         Ok(
             eigensdk::services_blsaggregation::bls_agg::BlsAggregatorService::new(
                 avs_registry_service,
-                get_test_logger(),
             ),
         )
     }
@@ -293,12 +288,12 @@ impl EigenlayerClient {
             contract_addresses.registry_coordinator_address,
             provider.clone(),
         );
-        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?._0;
+        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?;
         let instance =
             StakeRegistry::StakeRegistryInstance::new(stake_registry_address, provider.clone());
         let call_builder = instance.getStakeHistory(operator_id, quorum_number);
         let response = call_builder.call().await?;
-        Ok(response._0)
+        Ok(response)
     }
 
     /// Get an Operator stake update at a given index.
@@ -318,12 +313,12 @@ impl EigenlayerClient {
             contract_addresses.registry_coordinator_address,
             provider.clone(),
         );
-        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?._0;
+        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?;
         let instance =
             StakeRegistry::StakeRegistryInstance::new(stake_registry_address, provider.clone());
         let call_builder = instance.getStakeUpdateAtIndex(quorum_number, operator_id, index);
         let response = call_builder.call().await?;
-        Ok(response._0)
+        Ok(response)
     }
 
     /// Get an Operator's stake at a given block number.
@@ -343,12 +338,12 @@ impl EigenlayerClient {
             contract_addresses.registry_coordinator_address,
             provider.clone(),
         );
-        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?._0;
+        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?;
         let instance =
             StakeRegistry::StakeRegistryInstance::new(stake_registry_address, provider.clone());
         let call_builder = instance.getStakeAtBlockNumber(operator_id, quorum_number, block_number);
         let response = call_builder.call().await?;
-        Ok(response._0)
+        Ok(response)
     }
 
     // TODO: Slashing contract equivalent
@@ -360,7 +355,6 @@ impl EigenlayerClient {
     //     let http_rpc_endpoint = self.config.http_rpc_endpoint.clone();
     //     let contract_addresses = self.config.protocol_settings.eigenlayer()?;
     //     let chain_reader = eigensdk::client_elcontracts::reader::ELChainReader::new(
-    //         eigensdk::logging::get_test_logger(),
     //         Some(contract_addresses.allocation_manager_address),
     //         contract_addresses.delegation_manager_address,
     //         contract_addresses.rewards_coordinator_address,
@@ -387,12 +381,12 @@ impl EigenlayerClient {
             contract_addresses.registry_coordinator_address,
             provider.clone(),
         );
-        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?._0;
+        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?;
         let instance =
             StakeRegistry::StakeRegistryInstance::new(stake_registry_address, provider.clone());
         let call_builder = instance.getLatestStakeUpdate(operator_id, quorum_number);
         let response = call_builder.call().await?;
-        Ok(response._0)
+        Ok(response)
     }
 
     /// Get an Operator's ID as [`FixedBytes`] from its [`Address`].
@@ -432,13 +426,13 @@ impl EigenlayerClient {
             contract_addresses.registry_coordinator_address,
             provider.clone(),
         );
-        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?._0;
+        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?;
         let instance =
             StakeRegistry::StakeRegistryInstance::new(stake_registry_address, provider.clone());
         let call_builder =
             instance.getTotalStakeAtBlockNumberFromIndex(quorum_number, block_number, index);
         let response = call_builder.call().await?;
-        Ok(response._0)
+        Ok(response)
     }
 
     /// Get the total stake history length of a given quorum.
@@ -456,12 +450,12 @@ impl EigenlayerClient {
             contract_addresses.registry_coordinator_address,
             provider.clone(),
         );
-        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?._0;
+        let stake_registry_address = registry_coordinator.stakeRegistry().call().await?;
         let instance =
             StakeRegistry::StakeRegistryInstance::new(stake_registry_address, provider.clone());
         let call_builder = instance.getTotalStakeHistoryLength(quorum_number);
         let response = call_builder.call().await?;
-        Ok(response._0)
+        Ok(response)
     }
 
     /// Provides the public keys of existing registered operators within the provided block range.
@@ -528,7 +522,7 @@ impl EigenlayerClient {
             .call()
             .await?;
 
-        Ok(result._0)
+        Ok(result)
     }
 
     /// Get strategy allocations for a specific operator and strategy.
@@ -603,7 +597,7 @@ impl EigenlayerClient {
             .call()
             .await?;
 
-        Ok(result._0)
+        Ok(result)
     }
 
     /// Get slashable shares in queue for a specific operator and strategy.
@@ -638,7 +632,7 @@ impl EigenlayerClient {
             .call()
             .await?;
 
-        Ok(result._0)
+        Ok(result)
     }
 
     /// Get all operators for a service at a specific block.

@@ -30,7 +30,7 @@ pub async fn xsquare_eigen(
     let client = ctx.eigen_context.client.clone();
 
     let task_created_events = events.iter().filter_map(|log| {
-        NewTaskCreated::decode_log(&log.inner, true)
+        NewTaskCreated::decode_log(&log.inner)
             .map(|event| event.data)
             .ok()
     });

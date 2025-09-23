@@ -10,10 +10,9 @@ use blueprint_keystore::backends::Backend;
 use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
 use blueprint_keystore::crypto::k256::K256Ecdsa;
 use eigensdk::client_elcontracts::{reader::ELChainReader, writer::ELChainWriter};
-use eigensdk::logging::get_test_logger;
 use eigensdk::types::operator::Operator;
-use eigensdk::utils::rewardsv2::middleware::ecdsastakeregistry::ECDSAStakeRegistry;
-use eigensdk::utils::rewardsv2::middleware::ecdsastakeregistry::ISignatureUtils::SignatureWithSaltAndExpiry;
+use eigensdk::utils::rewardsv2::middleware::ecdsa_stake_registry::ECDSAStakeRegistry;
+use eigensdk::utils::rewardsv2::middleware::ecdsa_stake_registry::ISignatureUtils::SignatureWithSaltAndExpiry;
 use std::str::FromStr;
 
 /// Eigenlayer protocol configuration for ECDSA-based contracts
@@ -73,7 +72,7 @@ async fn requires_registration_ecdsa_impl(env: &BlueprintEnvironment) -> Result<
         .await
         .map_err(EigenlayerError::Contract)
     {
-        Ok(is_registered) => Ok(!is_registered._0),
+        Ok(is_registered) => Ok(!is_registered),
         Err(e) => Err(e.into()),
     }
 }
@@ -110,9 +109,7 @@ async fn register_ecdsa_impl(
 
     let provider = get_provider_http(env.http_rpc_endpoint.clone());
 
-    let logger = get_test_logger();
     let el_chain_reader = ELChainReader::new(
-        logger,
         Some(allocation_manager_address),
         delegation_manager_address,
         rewards_coordinator_address,
@@ -210,6 +207,6 @@ async fn register_ecdsa_impl(
             EigenlayerError::Registration(format!("Failed to check registration: {}", e))
         })?;
 
-    blueprint_core::info!("Operator Registration Status {:?}", is_registered._0);
+    blueprint_core::info!("Operator Registration Status {:?}", is_registered);
     Ok(())
 }

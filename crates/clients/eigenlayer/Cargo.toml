@@ -28,7 +28,6 @@ eigensdk = { workspace = true, features = [
 	"common",
 	"client-avsregistry",
 	"client-elcontracts",
-	"logging",
 	"services-blsaggregation",
 	"services-operatorsinfo",
 	"services-avsregistry",

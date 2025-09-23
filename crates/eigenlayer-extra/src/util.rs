@@ -16,7 +16,7 @@ pub async fn get_allocation_manager_address(
 ) -> Result<Address, alloy_contract::Error> {
     let provider = get_provider_http(http_endpoint);
     let delegation_manager =
-        eigensdk::utils::slashing::core::delegationmanager::DelegationManager::DelegationManagerInstance::new(
+        eigensdk::utils::slashing::core::delegation_manager::DelegationManager::DelegationManagerInstance::new(
             delegation_manager_addr,
             provider,
         );
@@ -24,7 +24,6 @@ pub async fn get_allocation_manager_address(
         .allocationManager()
         .call()
         .await
-        .map(|a| a._0)
 }
 
 /// Generate the Operator ID from the BLS Keypair
