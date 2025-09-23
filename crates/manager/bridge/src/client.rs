@@ -1,17 +1,17 @@
+use crate::VSOCK_PORT;
 use crate::blueprint_manager_bridge_client::BlueprintManagerBridgeClient;
 use crate::{
     AddOwnerToServiceRequest, Error, PortRequest, RegisterBlueprintServiceProxyRequest,
-    RemoveOwnerFromServiceRequest, ServiceOwner, UnregisterBlueprintServiceProxyRequest,
+    RemoveOwnerFromServiceRequest, ServiceOwner, TlsProfileConfig,
+    UnregisterBlueprintServiceProxyRequest, UpdateBlueprintServiceTlsProfileRequest,
 };
-use blueprint_auth::models::ServiceOwnerModel;
+use blueprint_auth::models::{ServiceOwnerModel, TlsProfile};
 use blueprint_core::debug;
 use hyper_util::rt::TokioIo;
 use std::path::Path;
 use tokio::net::UnixStream;
 use tokio_vsock::{VsockAddr, VsockStream};
 use tonic::transport::Channel;
-
-pub const VSOCK_PORT: u32 = 8000;
 
 #[derive(Debug)]
 pub struct Bridge {
@@ -112,6 +112,7 @@ impl Bridge {
     /// * `api_key_prefix`: An optional string slice representing the prefix of the API key used for service authentication.
     /// * `upstream_url`: A string slice representing the URL of the upstream service.
     /// * `owners`: A slice of `ServiceOwnerModel` defining the owners authorized to use this service.
+    /// * `tls_profile`: An optional `TlsProfile` defining the TLS configuration for this service.
     ///
     /// # Errors
     /// - Returns an error if registering the service proxy fails, such as issues with the provided parameters or bridge internal errors.
@@ -121,6 +122,7 @@ impl Bridge {
         api_key_prefix: Option<&str>,
         upstream_url: &str,
         owners: &[ServiceOwnerModel],
+        tls_profile: Option<TlsProfile>,
     ) -> Result<(), Error> {
         let owners = owners
             .iter()
@@ -130,11 +132,14 @@ impl Bridge {
             })
             .collect();
 
+        let tls_profile = tls_profile.map(TlsProfileConfig::from);
+
         let request = RegisterBlueprintServiceProxyRequest {
             service_id,
             api_key_prefix: api_key_prefix.unwrap_or_default().to_owned(),
             upstream_url: upstream_url.to_string(),
             owners,
+            tls_profile,
         };
 
         self.client
@@ -222,5 +227,229 @@ impl Bridge {
             .await?;
 
         Ok(())
+    }
+
+    /// Updates the TLS profile for a registered blueprint service.
+    ///
+    /// This method allows a blueprint to update the TLS configuration of a service after registration.
+    /// TLS assets should already be envelope-encrypted before calling this method.
+    ///
+    /// # Arguments
+    /// * `service_id`: A `u64` unique identifier for the service.
+    /// * `tls_profile`: An optional `TlsProfile` defining the new TLS configuration.
+    ///   If `None`, TLS will be disabled for the service.
+    ///
+    /// # Errors
+    /// - Returns an error if updating the TLS profile fails, such as invalid service ID or bridge internal errors.
+    pub async fn update_blueprint_service_tls_profile(
+        &self,
+        service_id: u64,
+        tls_profile: Option<TlsProfile>,
+    ) -> Result<(), Error> {
+        let tls_profile = tls_profile.map(TlsProfileConfig::from);
+
+        let request = UpdateBlueprintServiceTlsProfileRequest {
+            service_id,
+            tls_profile,
+        };
+
+        self.client
+            .clone()
+            .update_blueprint_service_tls_profile(request)
+            .await?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use blueprint_auth::models::TlsProfile;
+    use zerocopy::IntoBytes;
+
+    #[test]
+    fn test_tls_profile_conversion() {
+        let auth_profile = TlsProfile {
+            tls_enabled: true,
+            require_client_mtls: true,
+            encrypted_server_cert: b"server_cert".to_vec(),
+            encrypted_server_key: b"server_key".to_vec(),
+            encrypted_client_ca_bundle: b"client_ca".to_vec(),
+            encrypted_upstream_ca_bundle: b"upstream_ca".to_vec(),
+            encrypted_upstream_client_cert: b"upstream_cert".to_vec(),
+            encrypted_upstream_client_key: b"upstream_key".to_vec(),
+            client_cert_ttl_hours: 24,
+            sni: Some("example.com".to_string()),
+            subject_alt_name_template: Some("service-{id}.example.com".to_string()),
+            allowed_dns_names: vec!["example.com".to_string(), "*.example.com".to_string()],
+        };
+
+        // Convert auth to protobuf
+        let proto_config: TlsProfileConfig = auth_profile.clone().into();
+
+        assert!(proto_config.tls_enabled);
+        assert!(proto_config.require_client_mtls);
+        assert_eq!(proto_config.encrypted_server_cert, b"server_cert");
+        assert_eq!(proto_config.encrypted_server_key, b"server_key");
+        assert_eq!(proto_config.encrypted_client_ca_bundle, b"client_ca");
+        assert_eq!(proto_config.sni, Some("example.com".to_string()));
+
+        // Convert protobuf back to auth
+        let converted_auth: TlsProfile = proto_config.into();
+
+        assert_eq!(converted_auth.tls_enabled, auth_profile.tls_enabled);
+        assert_eq!(
+            converted_auth.require_client_mtls,
+            auth_profile.require_client_mtls
+        );
+        assert_eq!(
+            converted_auth.encrypted_server_cert,
+            auth_profile.encrypted_server_cert
+        );
+        assert_eq!(
+            converted_auth.encrypted_server_key,
+            auth_profile.encrypted_server_key
+        );
+        assert_eq!(
+            converted_auth.client_cert_ttl_hours,
+            auth_profile.client_cert_ttl_hours
+        );
+        assert_eq!(converted_auth.sni, auth_profile.sni);
+        assert_eq!(
+            converted_auth.allowed_dns_names,
+            auth_profile.allowed_dns_names
+        );
+    }
+
+    #[test]
+    fn test_tls_profile_none_conversion() {
+        let auth_profile = TlsProfile {
+            tls_enabled: false,
+            require_client_mtls: false,
+            encrypted_server_cert: Vec::new(),
+            encrypted_server_key: Vec::new(),
+            encrypted_client_ca_bundle: Vec::new(),
+            encrypted_upstream_ca_bundle: Vec::new(),
+            encrypted_upstream_client_cert: Vec::new(),
+            encrypted_upstream_client_key: Vec::new(),
+            client_cert_ttl_hours: 0,
+            sni: None,
+            subject_alt_name_template: None,
+            allowed_dns_names: Vec::new(),
+        };
+
+        let proto_config: TlsProfileConfig = auth_profile.clone().into();
+        let converted_auth: TlsProfile = proto_config.into();
+
+        assert!(!converted_auth.tls_enabled);
+        assert!(!converted_auth.require_client_mtls);
+        assert!(converted_auth.encrypted_server_cert.is_empty());
+        assert!(converted_auth.sni.is_none());
+        assert!(converted_auth.allowed_dns_names.is_empty());
+    }
+
+    #[test]
+    fn test_tls_profile_partial_fields() {
+        let auth_profile = TlsProfile {
+            tls_enabled: true,
+            require_client_mtls: false,
+            encrypted_server_cert: b"cert".to_vec(),
+            encrypted_server_key: b"key".to_vec(),
+            encrypted_client_ca_bundle: Vec::new(),
+            encrypted_upstream_ca_bundle: Vec::new(),
+            encrypted_upstream_client_cert: Vec::new(),
+            encrypted_upstream_client_key: Vec::new(),
+            client_cert_ttl_hours: 48,
+            sni: None,
+            subject_alt_name_template: Some("*.example.com".to_string()),
+            allowed_dns_names: vec!["example.com".to_string()],
+        };
+
+        let proto_config: TlsProfileConfig = auth_profile.clone().into();
+        let converted_auth: TlsProfile = proto_config.into();
+
+        assert!(converted_auth.tls_enabled);
+        assert!(!converted_auth.require_client_mtls);
+        assert_eq!(converted_auth.encrypted_server_cert, b"cert");
+        assert_eq!(converted_auth.client_cert_ttl_hours, 48);
+        assert_eq!(
+            converted_auth.subject_alt_name_template,
+            Some("*.example.com".to_string())
+        );
+        assert_eq!(
+            converted_auth.allowed_dns_names,
+            vec!["example.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_tls_profile_upstream_only() {
+        let auth_profile = TlsProfile {
+            tls_enabled: true,
+            require_client_mtls: false,
+            encrypted_server_cert: Vec::new(),
+            encrypted_server_key: Vec::new(),
+            encrypted_client_ca_bundle: Vec::new(),
+            encrypted_upstream_ca_bundle: b"upstream_ca".to_vec(),
+            encrypted_upstream_client_cert: b"upstream_cert".to_vec(),
+            encrypted_upstream_client_key: b"upstream_key".to_vec(),
+            client_cert_ttl_hours: 0,
+            sni: None,
+            subject_alt_name_template: None,
+            allowed_dns_names: Vec::new(),
+        };
+
+        let proto_config: TlsProfileConfig = auth_profile.clone().into();
+        let converted_auth: TlsProfile = proto_config.into();
+
+        assert!(converted_auth.tls_enabled);
+        assert!(!converted_auth.require_client_mtls);
+        assert!(converted_auth.encrypted_server_cert.is_empty());
+        assert!(converted_auth.encrypted_server_key.is_empty());
+        assert_eq!(converted_auth.encrypted_upstream_ca_bundle, b"upstream_ca");
+        assert_eq!(
+            converted_auth.encrypted_upstream_client_cert,
+            b"upstream_cert"
+        );
+        assert_eq!(
+            converted_auth.encrypted_upstream_client_key,
+            b"upstream_key"
+        );
+    }
+
+    #[test]
+    fn test_tls_profile_server_validation_scenario() {
+        // Test a typical server TLS scenario without client mTLS
+        let auth_profile = TlsProfile {
+            tls_enabled: true,
+            require_client_mtls: false,
+            encrypted_server_cert:
+                b"-----BEGIN CERTIFICATE-----\nserver cert\n-----END CERTIFICATE-----"
+                    .as_bytes()
+                    .to_vec(),
+            encrypted_server_key:
+                b"-----BEGIN PRIVATE KEY-----\nserver key\n-----END PRIVATE KEY-----"
+                    .as_bytes()
+                    .to_vec(),
+            encrypted_client_ca_bundle: Vec::new(),
+            encrypted_upstream_ca_bundle: Vec::new(),
+            encrypted_upstream_client_cert: Vec::new(),
+            encrypted_upstream_client_key: Vec::new(),
+            client_cert_ttl_hours: 24,
+            sni: Some("api.example.com".to_string()),
+            subject_alt_name_template: None,
+            allowed_dns_names: vec!["api.example.com".to_string()],
+        };
+
+        let proto_config: TlsProfileConfig = auth_profile.clone().into();
+        let converted_auth: TlsProfile = proto_config.into();
+
+        assert!(converted_auth.tls_enabled);
+        assert!(!converted_auth.require_client_mtls);
+        assert!(!converted_auth.encrypted_server_cert.is_empty());
+        assert!(!converted_auth.encrypted_server_key.is_empty());
+        assert!(converted_auth.encrypted_client_ca_bundle.is_empty());
+        assert_eq!(converted_auth.sni, Some("api.example.com".to_string()));
     }
 }
