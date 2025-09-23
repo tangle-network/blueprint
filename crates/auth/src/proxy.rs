@@ -35,7 +35,6 @@ use crate::db::RocksDb;
 use crate::models::{ApiTokenModel, ServiceModel, TlsProfile};
 use crate::paseto_tokens::PasetoTokenManager;
 use crate::request_extensions::{AuthMethod, extract_client_cert_from_request};
-use crate::tls_assets::TlsAssetManager;
 use crate::tls_client::TlsClientManager;
 use crate::tls_envelope::{TlsEnvelope, init_tls_envelope_key};
 use crate::tls_listener::{TlsListenerConfig, TlsListenerManager};
@@ -163,11 +162,8 @@ impl AuthenticatedProxy {
 
         Self::hydrate_tls_runtime(&tls_runtime, &db)?;
 
-        // Initialize TLS asset manager
-        let tls_assets = TlsAssetManager::new(db.clone(), tls_envelope.clone());
-
         // Initialize TLS client manager
-        let tls_client_manager = TlsClientManager::new(db.clone(), tls_assets);
+        let tls_client_manager = TlsClientManager::new(db.clone());
 
         // Initialize Paseto token manager with persistent key
         let paseto_manager = Self::init_paseto_manager(&db_path)?;

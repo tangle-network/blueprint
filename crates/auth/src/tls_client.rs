@@ -11,7 +11,6 @@ use rustls_pemfile;
 
 use crate::db::RocksDb;
 use crate::models::ServiceModel;
-use crate::tls_assets::TlsAssetManager;
 use crate::types::ServiceId;
 
 /// TLS client configuration for outbound connections
@@ -73,9 +72,6 @@ pub struct TlsClientManager {
     clients: Arc<Mutex<HashMap<String, CachedTlsClient>>>,
     /// Database for persistent storage
     db: RocksDb,
-    /// TLS asset manager for certificate management
-    #[allow(dead_code)]
-    tls_assets: TlsAssetManager,
     /// Maximum cache size
     max_cache_size: usize,
     /// Cache entry TTL
@@ -84,11 +80,10 @@ pub struct TlsClientManager {
 
 impl TlsClientManager {
     /// Create a new TLS client manager
-    pub fn new(db: RocksDb, tls_assets: TlsAssetManager) -> Self {
+    pub fn new(db: RocksDb) -> Self {
         Self {
             clients: Arc::new(Mutex::new(HashMap::new())),
             db,
-            tls_assets,
             max_cache_size: 100,
             cache_ttl: Duration::from_secs(3600), // 1 hour
         }

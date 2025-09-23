@@ -1,6 +1,7 @@
 //! Red-stage tests describing desired mTLS proxy workflow.
 
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
 use std::error::Error;
 use std::io::Cursor;
 use std::net::SocketAddr;
@@ -646,11 +647,12 @@ fn client_cert_info_from_stream(stream: &TlsStream<TcpStream>) -> Option<ClientC
         })
 }
 
-fn current_unix_timestamp() -> u64 {
-    std::time::SystemTime::now()
+fn current_unix_timestamp() -> i64 {
+    let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs()
+        .as_secs();
+    i64::try_from(secs).unwrap_or(i64::MAX)
 }
 
 #[tokio::test]

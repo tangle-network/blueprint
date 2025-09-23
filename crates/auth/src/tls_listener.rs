@@ -440,8 +440,8 @@ pub struct ClientCertInfo {
     pub subject: String,
     pub issuer: String,
     pub serial: String,
-    pub not_before: u64,
-    pub not_after: u64,
+    pub not_before: i64,
+    pub not_after: i64,
 }
 
 fn load_cert_chain(pem: &str) -> Result<Vec<CertificateDer<'static>>, crate::Error> {
@@ -510,25 +510,12 @@ fn parse_client_certificate(cert: &CertificateDer<'_>) -> Option<ClientCertInfo>
     let not_before = parsed.validity().not_before.timestamp();
     let not_after = parsed.validity().not_after.timestamp();
 
-    // Convert timestamps to u64, handling negative values (certificates before 1970)
-    // by using wrapping arithmetic to preserve the actual timestamp information
-    let not_before_u64 = if not_before < 0 {
-        not_before.wrapping_neg() as u64 | (1 << 63)
-    } else {
-        not_before as u64
-    };
-    let not_after_u64 = if not_after < 0 {
-        not_after.wrapping_neg() as u64 | (1 << 63)
-    } else {
-        not_after as u64
-    };
-
     Some(ClientCertInfo {
         subject,
         issuer,
         serial,
-        not_before: not_before_u64,
-        not_after: not_after_u64,
+        not_before,
+        not_after,
     })
 }
 

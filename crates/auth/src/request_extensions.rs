@@ -5,6 +5,7 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, HeaderValue};
 use std::collections::HashMap;
+use std::convert::TryFrom;
 
 use crate::tls_listener::ClientCertInfo;
 use tracing::warn;
@@ -47,6 +48,9 @@ impl ClientCertExtension {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs();
+            let Ok(now) = i64::try_from(now) else {
+                return false;
+            };
             cert.not_before <= now && now <= cert.not_after
         } else {
             false
