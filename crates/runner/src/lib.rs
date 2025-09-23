@@ -880,14 +880,13 @@ where
                 "Updating service TLS profile"
             );
 
-            let service_id = resolve_service_id(&env)
-                .inspect_err(|err| {
-                    blueprint_core::error!(
-                        target: "blueprint-runner",
-                        error = ?err,
-                        "TLS profile provided but service ID is missing from configuration"
-                    );
-                })?;
+            let service_id = resolve_service_id(&env).inspect_err(|err| {
+                blueprint_core::error!(
+                    target: "blueprint-runner",
+                    error = ?err,
+                    "TLS profile provided but service ID is missing from configuration"
+                );
+            })?;
 
             bridge
                 .update_blueprint_service_tls_profile(service_id, Some(tls_profile.clone()))
