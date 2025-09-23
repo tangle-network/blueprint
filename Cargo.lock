@@ -3406,18 +3406,20 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager-bridge"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "blueprint-auth",
  "blueprint-core",
  "hyper-util",
  "prost 0.13.5",
+ "tempfile",
  "thiserror 2.0.16",
  "tokio",
  "tokio-vsock",
  "tonic 0.13.1",
  "tonic-build",
  "tower 0.5.2",
+ "zerocopy",
 ]
 
 [[package]]
@@ -3643,6 +3645,7 @@ dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer",
  "alloy-signer-local",
+ "blueprint-auth",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-evm-extra",
@@ -3666,7 +3669,9 @@ dependencies = [
  "libp2p",
  "sc-keystore",
  "serde",
+ "serde_json",
  "tangle-subxt",
+ "tempfile",
  "thiserror 2.0.16",
  "tokio",
  "tower 0.5.2",
