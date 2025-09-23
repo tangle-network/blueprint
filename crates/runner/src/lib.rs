@@ -81,12 +81,14 @@ unsafe impl Sync for DynBlueprintConfig<'_> {}
 impl BlueprintConfig for () {}
 
 #[cfg(feature = "tls")]
-fn resolve_service_id(env: &BlueprintEnvironment) -> Option<u64> {
+fn resolve_service_id(env: &BlueprintEnvironment) -> Result<u64, crate::error::ConfigError> {
     #[allow(unreachable_patterns)]
     match &env.protocol_settings {
         #[cfg(feature = "tangle")]
-        ProtocolSettings::Tangle(settings) => settings.service_id,
-        _ => None,
+        ProtocolSettings::Tangle(settings) => settings
+            .service_id
+            .ok_or(crate::error::ConfigError::MissingServiceId),
+        _ => Err(crate::error::ConfigError::MissingServiceId),
     }
 }
 
@@ -878,13 +880,14 @@ where
                 "Updating service TLS profile"
             );
 
-            let service_id = resolve_service_id(&env).ok_or_else(|| {
-                blueprint_core::error!(
-                    target: "blueprint-runner",
-                    "TLS profile provided but service ID is missing from configuration"
-                );
-                crate::error::ConfigError::MissingServiceId
-            })?;
+            let service_id = resolve_service_id(&env)
+                .inspect_err(|err| {
+                    blueprint_core::error!(
+                        target: "blueprint-runner",
+                        error = ?err,
+                        "TLS profile provided but service ID is missing from configuration"
+                    );
+                })?;
 
             bridge
                 .update_blueprint_service_tls_profile(service_id, Some(tls_profile.clone()))
