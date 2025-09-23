@@ -710,7 +710,7 @@ async fn update_tls_profile(
         })
         .unwrap_or_default();
 
-    let mut server_dns_names = if let Some(list) = payload.allowed_dns_names.clone() {
+    let server_dns_names = if let Some(list) = payload.allowed_dns_names.clone() {
         if list.is_empty() { None } else { Some(list) }
     } else if let Some(profile) = existing_profile.as_ref() {
         if !profile.allowed_dns_names.is_empty() {
