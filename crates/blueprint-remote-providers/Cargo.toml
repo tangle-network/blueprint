@@ -17,11 +17,17 @@ blueprint-std.workspace = true
 anyhow.workspace = true
 async-trait = "0.1"
 auto_impl = "1.2"
-chrono = { workspace = true, features = ["serde"] }
+chrono = { workspace = true, features = ["serde", "clock"] }
 futures.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 serde_yaml = "0.9"
+shell-escape = "0.1"
+aes-gcm = "0.10"
+blake3 = "1.5"
+hex = "0.4"
+zeroize = { version = "1.8", features = ["derive"] }
+url = "2.5"
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 toml = "0.8"
@@ -46,10 +52,11 @@ aws-sdk-autoscaling = { version = "1.47", optional = true }
 
 # HTTP client for cloud APIs and pricing
 reqwest = { workspace = true, features = ["json", "rustls-tls"] }
-rustls = { version = "0.23", features = ["ring"] }
+rustls = { version = "0.23", features = ["aws_lc_rs"] }
 
-# TLS and secure communication
+# TLS and secure communication  
 tokio-rustls = "0.26"
+aws-lc-rs = "1.13" # Replaces ring for RUSTSEC-2025-0009 mitigation
 chacha20poly1305 = "0.10"
 
 
@@ -70,7 +77,7 @@ mockito = "1.0"
 # Official AWS mocking library
 aws-smithy-mocks-experimental = "0.2"
 # Additional dependencies for integration tests
-chrono = { workspace = true, features = ["serde"] }
+chrono = { workspace = true, features = ["serde", "clock"] }
 # For regex in wiremock matchers
 regex = "1.10"
 # For container-based testing

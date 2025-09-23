@@ -1,6 +1,8 @@
 //! Deployment orchestration and tracking
 
 pub mod manager_integration;
+pub mod secure_commands;
+pub mod secure_ssh;
 pub mod ssh;
 pub mod tracker;
 

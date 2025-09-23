@@ -7,28 +7,27 @@ pub mod adapter;
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
+use crate::security::{SecureHttpClient, ApiAuthentication};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tracing::{info, warn};
 
 /// DigitalOcean infrastructure provisioner
 pub struct DigitalOceanProvisioner {
-    client: reqwest::Client,
-    api_token: String,
+    client: SecureHttpClient,
+    auth: ApiAuthentication,
     default_region: String,
 }
 
 impl DigitalOceanProvisioner {
     /// Create a new DigitalOcean provisioner
     pub async fn new(api_token: String, default_region: String) -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .timeout(blueprint_std::time::Duration::from_secs(30))
-            .build()
-            .map_err(|e| Error::ConfigurationError(e.to_string()))?;
+        let client = SecureHttpClient::new()?;
+        let auth = ApiAuthentication::digitalocean(api_token);
 
         Ok(Self {
             client,
-            api_token,
+            auth,
             default_region,
         })
     }
@@ -60,10 +59,7 @@ impl DigitalOceanProvisioner {
 
         let response = self
             .client
-            .post(url)
-            .bearer_auth(&self.api_token)
-            .json(&droplet_request)
-            .send()
+            .post_json(url, &self.auth, droplet_request)
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to create droplet: {}", e)))?;
 
@@ -117,9 +113,7 @@ impl DigitalOceanProvisioner {
 
         let response = self
             .client
-            .get(&url)
-            .bearer_auth(&self.api_token)
-            .send()
+            .get(&url, &self.auth)
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to get droplet: {}", e)))?;
 

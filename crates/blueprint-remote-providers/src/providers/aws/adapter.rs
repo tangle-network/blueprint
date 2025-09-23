@@ -317,6 +317,7 @@ impl AwsAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        #[cfg(feature = "kubernetes")]
         use crate::deployment::kubernetes::KubernetesDeploymentClient;
 
         // TODO: Configure kubectl for EKS cluster
@@ -364,6 +365,7 @@ impl AwsAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        #[cfg(feature = "kubernetes")]
         use crate::deployment::kubernetes::KubernetesDeploymentClient;
 
         info!("Deploying to generic Kubernetes namespace: {}", namespace);

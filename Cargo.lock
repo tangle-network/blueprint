@@ -2005,6 +2005,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c953fe1ba023e6b7730c0d4b031d06f267f23a46167dcbd40316644b10a17ba"
 dependencies = [
  "aws-lc-sys",
+ "untrusted 0.7.1",
  "zeroize",
 ]
 
@@ -3771,14 +3772,17 @@ dependencies = [
 name = "blueprint-remote-providers"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "aes-gcm",
  "anyhow",
  "async-trait",
  "auto_impl",
  "aws-config",
+ "aws-lc-rs",
  "aws-sdk-autoscaling",
  "aws-sdk-ec2",
  "aws-sdk-eks",
  "aws-smithy-mocks-experimental",
+ "blake3",
  "blueprint-core-testing-utils",
  "blueprint-keystore",
  "blueprint-pricing-engine",
@@ -3787,6 +3791,7 @@ dependencies = [
  "chacha20poly1305",
  "chrono",
  "futures",
+ "hex",
  "k8s-openapi 0.21.1",
  "kube 0.90.0",
  "libc",
@@ -3802,6 +3807,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "serial_test",
+ "shell-escape",
  "tempfile",
  "testcontainers",
  "thiserror 2.0.12",
@@ -3810,8 +3816,10 @@ dependencies = [
  "tokio-test",
  "toml 0.8.23",
  "tracing",
+ "url",
  "uuid 1.17.0",
  "wiremock",
+ "zeroize",
 ]
 
 [[package]]
@@ -18278,6 +18286,12 @@ checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
 ]
+
+[[package]]
+name = "shell-escape"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shell-words"

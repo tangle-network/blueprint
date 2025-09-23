@@ -555,7 +555,8 @@ impl MachineTypeDiscovery {
     }
 }
 
-/// Cloud provider credentials
+/// DEPRECATED: Insecure plaintext credentials - use EncryptedCloudCredentials instead
+// TODO: Replace with EncryptedCloudCredentials for secure credential storage
 #[derive(Debug, Clone, Default)]
 pub struct CloudCredentials {
     // AWS

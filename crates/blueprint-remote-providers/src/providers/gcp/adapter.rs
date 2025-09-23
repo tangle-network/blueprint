@@ -328,6 +328,7 @@ impl GcpAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        #[cfg(feature = "kubernetes")]
         use crate::deployment::kubernetes::KubernetesDeploymentClient;
 
         info!("Deploying to GKE cluster: {}", cluster_id);
@@ -374,6 +375,7 @@ impl GcpAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        #[cfg(feature = "kubernetes")]
         use crate::deployment::kubernetes::KubernetesDeploymentClient;
 
         info!("Deploying to generic Kubernetes namespace: {}", namespace);

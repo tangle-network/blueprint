@@ -3,11 +3,10 @@
 pub mod adapter;
 
 use crate::core::error::{Error, Result};
-use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::providers::common::{InstanceSelection, ProvisionedInfrastructure, ProvisioningConfig};
 use std::collections::HashMap;
-use tracing::{info, warn};
+// removed unused imports
 
 /// GCP Compute Engine provisioner
 pub struct GcpProvisioner {

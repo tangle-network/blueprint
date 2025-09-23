@@ -136,8 +136,14 @@ impl CloudProviderAdapter for DigitalOceanAdapter {
     }
 
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
+        use crate::security::{SecureHttpClient, ApiAuthentication};
+        
         if let Some(endpoint) = deployment.qos_grpc_endpoint() {
-            match reqwest::get(&format!("{}/health", endpoint)).await {
+            // Use secure HTTP client for health checks
+            let client = SecureHttpClient::new()?;
+            let auth = ApiAuthentication::None; // Health endpoint typically doesn't require auth
+            
+            match client.get(&format!("{}/health", endpoint), &auth).await {
                 Ok(response) => Ok(response.status().is_success()),
                 Err(_) => Ok(false),
             }
@@ -194,6 +200,7 @@ impl DigitalOceanAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        #[cfg(feature = "kubernetes")]
         use crate::deployment::kubernetes::KubernetesDeploymentClient;
 
         info!("Deploying to DOKS cluster: {}", cluster_id);
@@ -239,6 +246,7 @@ impl DigitalOceanAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        #[cfg(feature = "kubernetes")]
         use crate::deployment::kubernetes::KubernetesDeploymentClient;
 
         info!("Deploying to generic Kubernetes namespace: {}", namespace);

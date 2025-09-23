@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+// removed unused imports
 
 /// Deployment preferences configured by operators
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +29,6 @@ pub struct DeploymentPreferences {
 
 impl Default for DeploymentPreferences {
     fn default() -> Self {
-        use crate::deployment::tracker::DeploymentType;
         Self {
             preferred_type: None,
             // Default: prefer VMs over managed K8s (cost and simplicity)
@@ -116,7 +115,6 @@ impl AutoDeploymentManager {
     fn is_deployment_type_compiled(
         deployment_type: crate::deployment::tracker::DeploymentType,
     ) -> bool {
-        use crate::deployment::tracker::DeploymentType;
 
         match deployment_type {
             // Kubernetes deployments require the kubernetes feature
@@ -340,7 +338,6 @@ impl AutoDeploymentManager {
         provider: &CloudProvider,
         preferences: Option<&DeploymentPreferences>,
     ) -> crate::deployment::tracker::DeploymentType {
-        use crate::deployment::tracker::DeploymentType;
 
         // If operator specified a preference, use it (if available)
         if let Some(prefs) = preferences {
@@ -368,7 +365,6 @@ impl AutoDeploymentManager {
         deployment_type: crate::deployment::tracker::DeploymentType,
         provider: &CloudProvider,
     ) -> bool {
-        use crate::deployment::tracker::DeploymentType;
 
         // First check if it's compiled in
         if !Self::is_deployment_type_compiled(deployment_type) {
@@ -407,7 +403,6 @@ impl AutoDeploymentManager {
         &self,
         provider: &CloudProvider,
     ) -> crate::deployment::tracker::DeploymentType {
-        use crate::deployment::tracker::DeploymentType;
 
         match provider {
             CloudProvider::AWS => DeploymentType::AwsEc2,

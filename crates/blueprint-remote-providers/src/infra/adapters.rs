@@ -7,6 +7,7 @@
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use crate::infra::traits::CloudProviderAdapter;
+#[cfg(feature = "aws")]
 pub use crate::providers::aws::AwsAdapter;
 pub use crate::providers::gcp::GcpAdapter;
 // pub use crate::providers::azure::AzureAdapter;

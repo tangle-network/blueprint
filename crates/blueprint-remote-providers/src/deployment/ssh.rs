@@ -5,6 +5,7 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
+use crate::deployment::secure_commands::{SecureContainerCommands, SecureConfigManager};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -160,18 +161,21 @@ impl SshDeploymentClient {
 
     /// Pull container image on remote host
     async fn pull_image(&self, image: &str) -> Result<()> {
-        let cmd = match self.runtime {
-            ContainerRuntime::Docker => format!("docker pull {}", image),
-            ContainerRuntime::Podman => format!("podman pull {}", image),
-            ContainerRuntime::Containerd => format!("ctr image pull {}", image),
+        let runtime_str = match self.runtime {
+            ContainerRuntime::Docker => "docker",
+            ContainerRuntime::Podman => "podman", 
+            ContainerRuntime::Containerd => "ctr",
         };
+
+        // Use secure command building to prevent injection
+        let cmd = SecureContainerCommands::build_pull_command(runtime_str, image)?;
 
         info!("Pulling image {} on remote host", image);
         self.run_remote_command(&cmd).await?;
         Ok(())
     }
 
-    /// Create container with resource limits
+    /// Create container with resource limits (SECURITY: Fixed command injection vulnerabilities)
     async fn create_container(
         &self,
         image: &str,
@@ -179,81 +183,22 @@ impl SshDeploymentClient {
         env_vars: HashMap<String, String>,
     ) -> Result<String> {
         let limits = ResourceLimits::from_spec(spec);
-
-        let cmd = match self.runtime {
-            ContainerRuntime::Docker => {
-                let mut docker_cmd = format!("docker create");
-
-                // Add resource limits
-                if let Some(cpu) = limits.cpu_cores {
-                    docker_cmd.push_str(&format!(" --cpus={}", cpu));
-                }
-                if let Some(mem) = limits.memory_mb {
-                    docker_cmd.push_str(&format!(" --memory={}m", mem));
-                }
-                if let Some(disk) = limits.disk_gb {
-                    docker_cmd.push_str(&format!(" --storage-opt size={}G", disk));
-                }
-
-                // Add environment variables
-                for (key, value) in env_vars {
-                    docker_cmd.push_str(&format!(" -e {}={}", key, value));
-                }
-
-                // Add network configuration - expose QoS metrics port and RPC endpoint
-                docker_cmd.push_str(" -p 0.0.0.0:8080:8080"); // Blueprint endpoint
-                docker_cmd.push_str(" -p 0.0.0.0:9615:9615"); // QoS gRPC metrics port
-                docker_cmd.push_str(" -p 0.0.0.0:9944:9944"); // RPC endpoint for heartbeat
-
-                // Add container name and image
-                docker_cmd.push_str(&format!(
-                    " --name blueprint-{} {}",
-                    chrono::Utc::now().timestamp(),
-                    image
-                ));
-
-                docker_cmd
-            }
-            ContainerRuntime::Podman => {
-                let mut podman_cmd = format!("podman create");
-
-                // Add resource limits
-                if let Some(cpu) = limits.cpu_cores {
-                    podman_cmd.push_str(&format!(" --cpus={}", cpu));
-                }
-                if let Some(mem) = limits.memory_mb {
-                    podman_cmd.push_str(&format!(" --memory={}m", mem));
-                }
-
-                // Add environment variables
-                for (key, value) in env_vars {
-                    podman_cmd.push_str(&format!(" -e {}={}", key, value));
-                }
-
-                // Add network configuration - expose QoS metrics port and RPC endpoint
-                podman_cmd.push_str(" -p 0.0.0.0:8080:8080"); // Blueprint endpoint
-                podman_cmd.push_str(" -p 0.0.0.0:9615:9615"); // QoS gRPC metrics port
-                podman_cmd.push_str(" -p 0.0.0.0:9944:9944"); // RPC endpoint for heartbeat
-
-                // Add container name and image
-                podman_cmd.push_str(&format!(
-                    " --name blueprint-{} {}",
-                    chrono::Utc::now().timestamp(),
-                    image
-                ));
-
-                podman_cmd
-            }
-            ContainerRuntime::Containerd => {
-                // Containerd requires more complex setup
-                format!(
-                    "ctr run --rm --memory-limit {} {} blueprint-{}",
-                    limits.memory_mb.unwrap_or(2048) * 1024 * 1024,
-                    image,
-                    chrono::Utc::now().timestamp()
-                )
-            }
+        
+        let runtime_str = match self.runtime {
+            ContainerRuntime::Docker => "docker",
+            ContainerRuntime::Podman => "podman",
+            ContainerRuntime::Containerd => "ctr",
         };
+
+        // Use secure command building to prevent injection attacks
+        let cmd = SecureContainerCommands::build_create_command(
+            runtime_str,
+            image,
+            &env_vars,
+            limits.cpu_cores,
+            limits.memory_mb,
+            limits.disk_gb,
+        )?;
 
         let output = self.run_remote_command(&cmd).await?;
 
@@ -269,13 +214,21 @@ impl SshDeploymentClient {
         Ok(container_id)
     }
 
-    /// Start a container
+    /// Start a container (SECURITY: Fixed command injection vulnerabilities)
     async fn start_container(&self, container_id: &str) -> Result<()> {
-        let cmd = match self.runtime {
-            ContainerRuntime::Docker => format!("docker start {}", container_id),
-            ContainerRuntime::Podman => format!("podman start {}", container_id),
+        let runtime_str = match self.runtime {
+            ContainerRuntime::Docker => "docker",
+            ContainerRuntime::Podman => "podman",
             ContainerRuntime::Containerd => return Ok(()), // Containerd starts immediately with ctr run
         };
+
+        // Use secure command building to prevent injection
+        let cmd = SecureContainerCommands::build_container_command(
+            runtime_str,
+            "start",
+            container_id,
+            None,
+        )?;
 
         self.run_remote_command(&cmd).await?;
         info!("Started container: {}", container_id);
@@ -500,15 +453,15 @@ impl SshDeploymentClient {
         self.copy_files(blueprint_path, "/opt/blueprint/bin/")
             .await?;
 
-        // Create configuration file
+        // Create configuration file (SECURITY: Fixed command injection vulnerability)
         let config_content = serde_json::to_string_pretty(config)
             .map_err(|e| Error::ConfigurationError(format!("Failed to serialize config: {}", e)))?;
 
-        let create_config = format!(
-            "echo '{}' | sudo tee /opt/blueprint/config/blueprint.json",
-            config_content
-        );
-        self.run_remote_command(&create_config).await?;
+        // Use secure config management to prevent injection
+        SecureConfigManager::write_config_file(
+            &config_content,
+            "/opt/blueprint/config/blueprint.json"
+        ).await?;
 
         // Set resource limits using systemd
         let systemd_limits = format!(
@@ -542,23 +495,11 @@ impl SshDeploymentClient {
         })
     }
 
-    /// Monitor container logs
+    /// Monitor container logs (SECURITY: Fixed command injection vulnerabilities)
     pub async fn stream_logs(&self, container_id: &str, follow: bool) -> Result<String> {
-        let cmd = match self.runtime {
-            ContainerRuntime::Docker => {
-                format!(
-                    "docker logs{} {}",
-                    if follow { " -f" } else { "" },
-                    container_id
-                )
-            }
-            ContainerRuntime::Podman => {
-                format!(
-                    "podman logs{} {}",
-                    if follow { " -f" } else { "" },
-                    container_id
-                )
-            }
+        let runtime_str = match self.runtime {
+            ContainerRuntime::Docker => "docker",
+            ContainerRuntime::Podman => "podman",
             ContainerRuntime::Containerd => {
                 // Containerd doesn't have direct log streaming
                 return Err(Error::ConfigurationError(
@@ -566,6 +507,14 @@ impl SshDeploymentClient {
                 ));
             }
         };
+
+        // Use secure command building to prevent injection
+        let cmd = SecureContainerCommands::build_container_command(
+            runtime_str,
+            "logs",
+            container_id,
+            Some(follow),
+        )?;
 
         self.run_remote_command(&cmd).await
     }
