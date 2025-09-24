@@ -102,27 +102,7 @@ impl CertificateAuthority {
         service_id: ServiceId,
         dns_names: Vec<String>,
     ) -> Result<(String, String), crate::Error> {
-        let mut params = CertificateParams::default();
-        params.key_usages = vec![
-            KeyUsagePurpose::DigitalSignature,
-            KeyUsagePurpose::KeyEncipherment,
-        ];
-        params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
-
-        let mut dn = DistinguishedName::new();
-        dn.push(DnType::CommonName, format!("Service {service_id}"));
-        dn.push(DnType::OrganizationName, "Tangle Network");
-        params.distinguished_name = dn;
-
-        params.subject_alt_names = dns_names
-            .into_iter()
-            .map(try_dns_name)
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .map(SanType::DnsName)
-            .collect();
-
-        params.serial_number = Some(random_serial()?);
+        let params = server_certificate_params(service_id, dns_names)?;
 
         let leaf_key = KeyPair::generate()?;
         let issuer = self.issuer()?;
@@ -216,6 +196,35 @@ fn ca_certificate_params() -> CertificateParams {
     params.distinguished_name = dn;
 
     params
+}
+
+fn server_certificate_params(
+    service_id: ServiceId,
+    dns_names: Vec<String>,
+) -> Result<CertificateParams, crate::Error> {
+    let mut params = CertificateParams::default();
+    params.key_usages = vec![
+        KeyUsagePurpose::DigitalSignature,
+        KeyUsagePurpose::KeyEncipherment,
+    ];
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+
+    let mut dn = DistinguishedName::new();
+    dn.push(DnType::CommonName, format!("Service {service_id}"));
+    dn.push(DnType::OrganizationName, "Tangle Network");
+    params.distinguished_name = dn;
+
+    params.subject_alt_names = dns_names
+        .into_iter()
+        .map(try_dns_name)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .map(SanType::DnsName)
+        .collect();
+
+    params.serial_number = Some(random_serial()?);
+
+    Ok(params)
 }
 
 /// Random 128-bit serial compliant with RFC 5280 (avoid negative).
