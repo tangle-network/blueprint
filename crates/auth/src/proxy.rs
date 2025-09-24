@@ -943,7 +943,7 @@ fn load_persisted_ca(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    CertificateAuthority::from_components(&cert, &key, clone_envelope(envelope)).map_err(|e| {
+    CertificateAuthority::from_components(cert, key, clone_envelope(envelope)).map_err(|e| {
         error!("Failed to rehydrate certificate authority: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })

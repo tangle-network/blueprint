@@ -57,12 +57,12 @@ impl CertificateAuthority {
 
     /// Restore a CA from persisted certificate and key PEM strings.
     pub fn from_components(
-        ca_cert_pem: &str,
-        ca_key_pem: &str,
+        ca_cert_pem: String,
+        ca_key_pem: String,
         tls_envelope: TlsEnvelope,
     ) -> Result<Self, crate::Error> {
         // Basic sanity validation – ensure the PEM really contains a certificate.
-        let blocks = pem::parse_many(ca_cert_pem).map_err(|e| {
+        let blocks = pem::parse_many(&ca_cert_pem).map_err(|e| {
             crate::Error::Io(std::io::Error::other(format!(
                 "Failed to parse CA certificate PEM: {e}"
             )))
@@ -73,7 +73,7 @@ impl CertificateAuthority {
             )));
         }
 
-        let ca_key_pair = KeyPair::from_pem(ca_key_pem).map_err(|e| {
+        let ca_key_pair = KeyPair::from_pem(&ca_key_pem).map_err(|e| {
             crate::Error::Io(std::io::Error::other(format!(
                 "Failed to parse CA private key PEM: {e}"
             )))
@@ -82,7 +82,7 @@ impl CertificateAuthority {
         debug!("Loaded existing certificate authority");
         Ok(Self {
             ca_key_pair,
-            ca_cert_pem: ca_cert_pem.to_string(),
+            ca_cert_pem,
             tls_envelope,
         })
     }
@@ -347,9 +347,12 @@ mod tests {
         let cert_pem = ca.ca_certificate_pem();
         let key_pem = ca.ca_private_key_pem();
 
-        let restored =
-            CertificateAuthority::from_components(&cert_pem, &key_pem, TlsEnvelope::new())
-                .expect("restore ca");
+        let restored = CertificateAuthority::from_components(
+            cert_pem.clone(),
+            key_pem.clone(),
+            TlsEnvelope::new(),
+        )
+        .expect("restore ca");
 
         assert_eq!(restored.ca_certificate_pem(), cert_pem);
         assert_eq!(restored.ca_private_key_pem(), key_pem);

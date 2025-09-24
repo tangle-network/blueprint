@@ -539,7 +539,7 @@ fn load_or_create_service_ca(
             .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
 
         let (cert_pem, key_pem) = split_ca_bundle(&pem_str)?;
-        CertificateAuthority::from_components(&cert_pem, &key_pem, envelope.clone())
+        CertificateAuthority::from_components(cert_pem, key_pem, envelope.clone())
             .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)
     }
 }
