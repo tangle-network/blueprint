@@ -10,7 +10,6 @@ use rcgen::{
     Issuer, KeyPair, KeyUsagePurpose, SanType, SerialNumber,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use time::OffsetDateTime;
 
 use crate::tls_envelope::TlsEnvelope;
@@ -270,98 +269,108 @@ fn try_uri_name(value: String) -> Result<rcgen::string::Ia5String, crate::Error>
     })
 }
 
-/// Issued client certificate bundle returned to callers.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ClientCertificate {
-    pub certificate_pem: String,
-    pub private_key_pem: String,
-    pub ca_bundle_pem: String,
-    pub serial: String,
-    pub expires_at: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub revocation_url: Option<String>,
-}
+mod types {
+    use super::*;
+    use crate::models::TlsProfile;
 
-/// Request payload for creating or updating a TLS profile.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateTlsProfileRequest {
-    pub require_client_mtls: bool,
-    pub client_cert_ttl_hours: u32,
-    pub subject_alt_name_template: Option<String>,
-    pub allowed_dns_names: Option<Vec<String>>,
-}
-
-/// Request payload for client certificate issuance.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IssueCertificateRequest {
-    pub service_id: u64,
-    pub common_name: String,
-    pub subject_alt_names: Vec<String>,
-    pub ttl_hours: u32,
-}
-
-/// Response returned when updating a TLS profile.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TlsProfileResponse {
-    pub tls_enabled: bool,
-    pub require_client_mtls: bool,
-    pub client_cert_ttl_hours: u32,
-    pub mtls_listener: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub http_listener: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ca_certificate_pem: Option<String>,
-    pub subject_alt_name_template: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub allowed_dns_names: Vec<String>,
-}
-
-/// Validate a certificate issuance request against the stored TLS profile.
-pub fn validate_certificate_request(
-    request: &IssueCertificateRequest,
-    profile: &crate::models::TlsProfile,
-) -> Result<(), crate::Error> {
-    if !profile.require_client_mtls {
-        return Err(crate::Error::Io(std::io::Error::other(
-            "Client mTLS is not enabled for this service",
-        )));
+    /// Issued client certificate bundle returned to callers.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct ClientCertificate {
+        pub certificate_pem: String,
+        pub private_key_pem: String,
+        pub ca_bundle_pem: String,
+        pub serial: String,
+        pub expires_at: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub revocation_url: Option<String>,
     }
 
-    if request.ttl_hours > profile.client_cert_ttl_hours {
-        return Err(crate::Error::Io(std::io::Error::other(format!(
-            "Certificate TTL {} hours exceeds maximum allowed {} hours",
-            request.ttl_hours, profile.client_cert_ttl_hours
-        ))));
+    /// Request payload for creating or updating a TLS profile.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct CreateTlsProfileRequest {
+        pub require_client_mtls: bool,
+        pub client_cert_ttl_hours: u32,
+        pub subject_alt_name_template: Option<String>,
+        pub allowed_dns_names: Option<Vec<String>>,
     }
 
-    if !profile.allowed_dns_names.is_empty() {
-        let allowed: HashSet<&str> = profile
-            .allowed_dns_names
-            .iter()
-            .map(|s| s.as_str())
-            .collect();
+    /// Request payload for client certificate issuance.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct IssueCertificateRequest {
+        pub service_id: u64,
+        pub common_name: String,
+        pub subject_alt_names: Vec<String>,
+        pub ttl_hours: u32,
+    }
 
-        for san in &request.subject_alt_names {
-            let candidate = if let Some(rest) = san.strip_prefix("DNS:") {
-                Some(rest)
-            } else if san.starts_with("URI:") || san.contains("://") {
-                None
-            } else {
-                Some(san.as_str())
-            };
+    /// Response returned when updating a TLS profile.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct TlsProfileResponse {
+        pub tls_enabled: bool,
+        pub require_client_mtls: bool,
+        pub client_cert_ttl_hours: u32,
+        pub mtls_listener: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub http_listener: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub ca_certificate_pem: Option<String>,
+        pub subject_alt_name_template: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub allowed_dns_names: Vec<String>,
+    }
 
-            if let Some(name) = candidate {
-                if !allowed.contains(name) {
-                    return Err(crate::Error::Io(std::io::Error::other(format!(
-                        "Subject alternative name `{name}` is not allowed by profile",
-                    ))));
+    /// Validate a certificate issuance request against the stored TLS profile.
+    pub fn validate_certificate_request(
+        request: &IssueCertificateRequest,
+        profile: &TlsProfile,
+    ) -> Result<(), crate::Error> {
+        if !profile.require_client_mtls {
+            return Err(crate::Error::Io(std::io::Error::other(
+                "Client mTLS is not enabled for this service",
+            )));
+        }
+
+        if request.ttl_hours > profile.client_cert_ttl_hours {
+            return Err(crate::Error::Io(std::io::Error::other(format!(
+                "Certificate TTL {} hours exceeds maximum allowed {} hours",
+                request.ttl_hours, profile.client_cert_ttl_hours
+            ))));
+        }
+
+        if !profile.allowed_dns_names.is_empty() {
+            let allowed: HashSet<&str> = profile
+                .allowed_dns_names
+                .iter()
+                .map(|s| s.as_str())
+                .collect();
+
+            for san in &request.subject_alt_names {
+                let candidate = if let Some(rest) = san.strip_prefix("DNS:") {
+                    Some(rest)
+                } else if san.starts_with("URI:") || san.contains("://") {
+                    None
+                } else {
+                    Some(san.as_str())
+                };
+
+                if let Some(name) = candidate {
+                    if !allowed.contains(name) {
+                        return Err(crate::Error::Io(std::io::Error::other(format!(
+                            "Subject alternative name `{name}` is not allowed by profile",
+                        ))));
+                    }
                 }
             }
         }
-    }
 
-    Ok(())
+        Ok(())
+    }
 }
+
+pub use types::{
+    ClientCertificate, CreateTlsProfileRequest, IssueCertificateRequest, TlsProfileResponse,
+    validate_certificate_request,
+};
 
 #[cfg(test)]
 mod tests {
