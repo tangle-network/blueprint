@@ -244,10 +244,12 @@ fn random_serial() -> Result<SerialNumber, crate::Error> {
 
     let mut rng = blueprint_std::BlueprintRng::new();
     let mut bytes = [0u8; 16];
-    rng.fill_bytes(&mut bytes);
-    bytes[0] &= 0x7F; // ensure positive (highest bit zero)
-    if bytes.iter().all(|b| *b == 0) {
-        bytes[15] = 1; // avoid zero serials
+    loop {
+        rng.fill_bytes(&mut bytes);
+        bytes[0] &= 0x7F; // ensure positive (highest bit zero)
+        if bytes.iter().any(|b| *b != 0) {
+            break;
+        }
     }
     Ok(SerialNumber::from_slice(&bytes))
 }
