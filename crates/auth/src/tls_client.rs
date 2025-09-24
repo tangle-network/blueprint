@@ -6,9 +6,9 @@ use blueprint_core::{debug, info};
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
-use rustls::client::{ServerCertVerified, ServerCertVerifier};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::{ClientConfig, RootCertStore};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
+use rustls::{ClientConfig, DigitallySignedStruct, RootCertStore, SignatureScheme};
 use rustls_pemfile;
 
 use crate::db::RocksDb;
@@ -344,14 +344,13 @@ fn merge_ca_bundle(store: &mut RootCertStore, pem_data: &[u8]) -> Result<(), cra
     let mut loaded_any = false;
 
     for item in rustls_pemfile::read_all(&mut reader) {
-        match item.map_err(|err| crate::Error::Tls(format!("Failed to parse CA bundle: {err}")))? {
-            rustls_pemfile::Item::X509Certificate(cert) => {
-                store.add(cert).map_err(|err| {
-                    crate::Error::Tls(format!("Failed to add CA certificate to root store: {err}"))
-                })?;
-                loaded_any = true;
-            }
-            _ => {}
+        let item =
+            item.map_err(|err| crate::Error::Tls(format!("Failed to parse CA bundle: {err}")))?;
+        if let rustls_pemfile::Item::X509Certificate(cert) = item {
+            store.add(cert).map_err(|err| {
+                crate::Error::Tls(format!("Failed to add CA certificate to root store: {err}"))
+            })?;
+            loaded_any = true;
         }
     }
 
@@ -364,6 +363,7 @@ fn merge_ca_bundle(store: &mut RootCertStore, pem_data: &[u8]) -> Result<(), cra
     Ok(())
 }
 
+#[derive(Debug)]
 struct NoCertificateVerification;
 
 impl ServerCertVerifier for NoCertificateVerification {
@@ -371,12 +371,47 @@ impl ServerCertVerifier for NoCertificateVerification {
         &self,
         _end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
-        _server_name: &rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _server_name: &ServerName,
         _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
+        _now: UnixTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
+        let _ = (
+            _end_entity,
+            _intermediates,
+            _server_name,
+            _ocsp_response,
+            _now,
+        );
         Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![
+            SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            SignatureScheme::ED25519,
+        ]
     }
 }
 
@@ -394,17 +429,19 @@ fn load_cert_chain_from_bytes(pem: &[u8]) -> Result<Vec<CertificateDer<'static>>
 }
 
 fn load_private_key_from_bytes(pem: &[u8]) -> Result<PrivateKeyDer<'static>, crate::Error> {
-    let mut reader = std::io::Cursor::new(pem);
-    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader);
-    if let Some(result) = keys.next() {
-        return result.map(PrivateKeyDer::Pkcs8).map_err(|err| {
+    if let Some(result) = {
+        let mut reader = std::io::Cursor::new(pem);
+        rustls_pemfile::pkcs8_private_keys(&mut reader).next()
+    } {
+        return result.map(PrivateKeyDer::from).map_err(|err| {
             crate::Error::Tls(format!("Failed to parse PKCS#8 private key: {err}"))
         });
     }
 
-    reader.set_position(0);
-    let mut rsa_keys = rustls_pemfile::rsa_private_keys(&mut reader);
-    if let Some(result) = rsa_keys.next() {
+    if let Some(result) = {
+        let mut reader = std::io::Cursor::new(pem);
+        rustls_pemfile::rsa_private_keys(&mut reader).next()
+    } {
         return result
             .map(PrivateKeyDer::from)
             .map_err(|err| crate::Error::Tls(format!("Failed to parse RSA private key: {err}")));

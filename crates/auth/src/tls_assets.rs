@@ -10,7 +10,7 @@ use blueprint_std::Rng;
 use prost::Message;
 use tracing::error;
 
-use x509_parser::prelude::X509Certificate;
+use x509_parser::prelude::{FromDer, X509Certificate};
 
 /// TLS asset manager for handling certificate and key operations
 #[derive(Clone, Debug)]
@@ -264,7 +264,7 @@ impl TlsAssetManager {
             return Ok(false);
         }
 
-        let leaf_cert_der = extract_certificates(cert_data).map_err(|e| {
+        let leaf_cert_der = Self::extract_certificates(cert_data).map_err(|e| {
             crate::Error::Io(std::io::Error::other(format!(
                 "Failed to parse certificate: {e}"
             )))
@@ -278,7 +278,7 @@ impl TlsAssetManager {
             )))
         })?;
 
-        let ca_ders = extract_certificates(ca_bundle_data).map_err(|e| {
+        let ca_ders = Self::extract_certificates(ca_bundle_data).map_err(|e| {
             crate::Error::Io(std::io::Error::other(format!(
                 "Failed to parse CA bundle: {e}"
             )))
@@ -288,7 +288,7 @@ impl TlsAssetManager {
             match X509Certificate::from_der(&ca_der) {
                 Ok((_, ca_cert)) => {
                     if leaf_cert
-                        .verify_signature(Some(&ca_cert.public_key()))
+                        .verify_signature(Some(ca_cert.public_key()))
                         .is_ok()
                     {
                         return Ok(true);

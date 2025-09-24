@@ -272,6 +272,7 @@ fn try_uri_name(value: String) -> Result<rcgen::string::Ia5String, crate::Error>
 mod types {
     use super::*;
     use crate::models::TlsProfile;
+    use std::collections::HashSet;
 
     /// Issued client certificate bundle returned to callers.
     #[derive(Debug, Clone, Serialize, Deserialize)]

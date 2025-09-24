@@ -261,9 +261,7 @@ pub struct BlueprintEnvironment {
     #[cfg(feature = "networking")]
     pub target_peer_count: u32,
 
-    // ========
-    // TLS CONFIGURATION
-    // ========
+    // TLS configuration
     #[cfg(feature = "tls")]
     pub tls_profile: Option<TlsProfile>,
 }
@@ -1078,9 +1076,7 @@ pub struct BlueprintSettings {
         required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
     )]
     pub strategy: Option<alloy_primitives::Address>,
-    // ========
-    // TLS CONFIGURATION
-    // ========
+    // TLS configuration
     /// Enable TLS for service registration
     #[cfg(feature = "tls")]
     #[arg(long, env)]

@@ -27,8 +27,6 @@ use blueprint_core::{JobCall, JobResult};
 use blueprint_qos::heartbeat::HeartbeatConsumer;
 use blueprint_router::Router;
 use config::BlueprintEnvironment;
-#[cfg(feature = "tls")]
-use config::ProtocolSettings;
 use core::future::{self, poll_fn};
 use core::pin::Pin;
 use error::RunnerError as Error;
@@ -82,6 +80,8 @@ impl BlueprintConfig for () {}
 
 #[cfg(feature = "tls")]
 fn resolve_service_id(env: &BlueprintEnvironment) -> Result<u64, crate::error::ConfigError> {
+    #[cfg(feature = "tangle")]
+    use config::ProtocolSettings;
     #[allow(unreachable_patterns)]
     match &env.protocol_settings {
         #[cfg(feature = "tangle")]
