@@ -175,34 +175,16 @@ impl TlsClientManager {
     ) -> Result<CachedTlsClient, crate::Error> {
         let executor = TokioExecutor::new();
 
-        // Build rustls client configuration
-        let client_config = ClientConfig::builder()
-            .with_root_certificates(RootCertStore::empty())
-            .with_no_client_auth();
-
-        // Add custom CA certificates
+        let mut root_store = RootCertStore::empty();
         if !config.custom_ca_certs.is_empty() {
-            let mut root_store = RootCertStore::empty();
-            for ca_cert in &config.custom_ca_certs {
-                let mut cert_data = ca_cert.as_slice();
-                let mut cert_iter = rustls_pemfile::certs(&mut cert_data);
-
-                let cert_der = cert_iter
-                    .next()
-                    .transpose()
-                    .map_err(|e| crate::Error::Tls(format!("Failed to parse CA certificate: {e}")))?
-                    .ok_or_else(|| {
-                        crate::Error::Tls("No valid CA certificate found".to_string())
-                    })?;
-
-                root_store.add(cert_der).map_err(|e| {
-                    crate::Error::Tls(format!("Failed to add CA certificate to root store: {e}"))
-                })?;
+            for ca_bundle in &config.custom_ca_certs {
+                merge_ca_bundle(&mut root_store, ca_bundle)?;
             }
-
-            // Create new config with custom root store
-            // For now, we'll skip this and use the default config
         }
+
+        let client_config = ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
 
         // Configure client certificate for mTLS
         if let (Some(client_cert), Some(client_key)) = (&config.client_cert, &config.client_key) {
@@ -356,4 +338,29 @@ impl TlsClientCacheStats {
             (self.total_entries as f64 / self.max_cache_size as f64) * 100.0
         }
     }
+}
+
+fn merge_ca_bundle(store: &mut RootCertStore, pem_data: &[u8]) -> Result<(), crate::Error> {
+    let mut reader = std::io::Cursor::new(pem_data);
+    let mut loaded_any = false;
+
+    for item in rustls_pemfile::read_all(&mut reader) {
+        match item.map_err(|err| crate::Error::Tls(format!("Failed to parse CA bundle: {err}")))? {
+            rustls_pemfile::Item::X509Certificate(cert) => {
+                store.add(cert).map_err(|err| {
+                    crate::Error::Tls(format!("Failed to add CA certificate to root store: {err}"))
+                })?;
+                loaded_any = true;
+            }
+            _ => {}
+        }
+    }
+
+    if !loaded_any {
+        return Err(crate::Error::Tls(
+            "CA bundle does not contain any certificates".into(),
+        ));
+    }
+
+    Ok(())
 }
