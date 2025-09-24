@@ -62,12 +62,12 @@ impl CertificateAuthority {
         tls_envelope: TlsEnvelope,
     ) -> Result<Self, crate::Error> {
         // Basic sanity validation – ensure the PEM really contains a certificate.
-        let blocks = pem::parse_many(&ca_cert_pem).map_err(|e| {
+        let cert_block = pem::parse(&ca_cert_pem).map_err(|e| {
             crate::Error::Io(std::io::Error::other(format!(
                 "Failed to parse CA certificate PEM: {e}"
             )))
         })?;
-        if blocks.is_empty() || blocks.iter().all(|b| b.tag != "CERTIFICATE") {
+        if cert_block.tag != "CERTIFICATE" {
             return Err(crate::Error::Io(std::io::Error::other(
                 "CA bundle is missing a CERTIFICATE block",
             )));
