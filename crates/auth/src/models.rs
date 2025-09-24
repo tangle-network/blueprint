@@ -79,6 +79,25 @@ pub struct TlsProfile {
     #[prost(string, repeated)]
     pub allowed_dns_names: Vec<String>,
 }
+impl TlsProfile {
+    /// Convenience constructor for tests and setup code.
+    pub fn new(tls_enabled: bool, require_client_mtls: bool, client_cert_ttl_hours: u32) -> Self {
+        Self {
+            tls_enabled,
+            require_client_mtls,
+            encrypted_server_cert: Vec::new(),
+            encrypted_server_key: Vec::new(),
+            encrypted_client_ca_bundle: Vec::new(),
+            encrypted_upstream_ca_bundle: Vec::new(),
+            encrypted_upstream_client_cert: Vec::new(),
+            encrypted_upstream_client_key: Vec::new(),
+            client_cert_ttl_hours,
+            sni: None,
+            subject_alt_name_template: None,
+            allowed_dns_names: Vec::new(),
+        }
+    }
+}
 
 /// Represents a service model stored in the database.
 #[derive(prost::Message, Clone)]
@@ -319,6 +338,16 @@ impl From<&GeneratedApiToken> for ApiTokenModel {
 }
 
 impl ServiceModel {
+    /// Convenience constructor to reduce boilerplate in tests.
+    pub fn new(api_key_prefix: impl Into<String>, upstream_url: impl Into<String>) -> Self {
+        Self {
+            api_key_prefix: api_key_prefix.into(),
+            owners: Vec::new(),
+            upstream_url: upstream_url.into(),
+            tls_profile: None,
+        }
+    }
+
     /// Find a service by its ID in the database.
     pub fn find_by_id(id: ServiceId, db: &RocksDb) -> Result<Option<Self>, crate::Error> {
         let cf = db

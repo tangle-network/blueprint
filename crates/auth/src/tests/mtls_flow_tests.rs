@@ -176,12 +176,7 @@ impl MtlsTestHarness {
         let signing_key = SigningKey::random(&mut rng);
         let public_key = signing_key.verifying_key().to_sec1_bytes();
 
-        let mut service = ServiceModel {
-            api_key_prefix: "mtls_".to_string(),
-            owners: vec![],
-            upstream_url: format!("http://{backend_addr}"),
-            tls_profile: None,
-        };
+        let mut service = ServiceModel::new("mtls_", format!("http://{backend_addr}"));
         service.add_owner(KeyType::Ecdsa, public_key.to_vec());
         service.save(service_id, &proxy.db()).expect("save service");
 
