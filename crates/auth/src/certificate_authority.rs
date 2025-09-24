@@ -26,22 +26,7 @@ pub struct CertificateAuthority {
 impl CertificateAuthority {
     /// Create a brand new CA certificate and key.
     pub fn new(tls_envelope: TlsEnvelope) -> Result<Self, crate::Error> {
-        let mut params = CertificateParams::default();
-        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
-        params.key_usages = vec![
-            KeyUsagePurpose::KeyCertSign,
-            KeyUsagePurpose::CrlSign,
-            KeyUsagePurpose::DigitalSignature,
-        ];
-        params.extended_key_usages = vec![
-            ExtendedKeyUsagePurpose::ServerAuth,
-            ExtendedKeyUsagePurpose::ClientAuth,
-        ];
-
-        let mut dn = DistinguishedName::new();
-        dn.push(DnType::CommonName, "Tangle Network CA");
-        dn.push(DnType::OrganizationName, "Tangle Network");
-        params.distinguished_name = dn;
+        let params = ca_certificate_params();
 
         let ca_key_pair = KeyPair::generate()?;
         let ca_cert = params.self_signed(&ca_key_pair)?;
@@ -210,6 +195,27 @@ impl CertificateAuthority {
     pub fn envelope(&self) -> &TlsEnvelope {
         &self.tls_envelope
     }
+}
+
+fn ca_certificate_params() -> CertificateParams {
+    let mut params = CertificateParams::default();
+    params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    params.key_usages = vec![
+        KeyUsagePurpose::KeyCertSign,
+        KeyUsagePurpose::CrlSign,
+        KeyUsagePurpose::DigitalSignature,
+    ];
+    params.extended_key_usages = vec![
+        ExtendedKeyUsagePurpose::ServerAuth,
+        ExtendedKeyUsagePurpose::ClientAuth,
+    ];
+
+    let mut dn = DistinguishedName::new();
+    dn.push(DnType::CommonName, "Tangle Network CA");
+    dn.push(DnType::OrganizationName, "Tangle Network");
+    params.distinguished_name = dn;
+
+    params
 }
 
 /// Random 128-bit serial compliant with RFC 5280 (avoid negative).
