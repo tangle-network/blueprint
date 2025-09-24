@@ -118,39 +118,8 @@ impl CertificateAuthority {
         subject_alt_names: Vec<String>,
         ttl_hours: u32,
     ) -> Result<ClientCertificate, crate::Error> {
-        let mut params = CertificateParams::default();
-        params.key_usages = vec![
-            KeyUsagePurpose::DigitalSignature,
-            KeyUsagePurpose::KeyAgreement,
-        ];
-        params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
-
-        let mut dn = DistinguishedName::new();
-        dn.push(DnType::CommonName, common_name.clone());
-        dn.push(DnType::OrganizationName, "Tangle Network");
-        params.distinguished_name = dn;
-
-        for san in subject_alt_names {
-            if let Some(rest) = san.strip_prefix("DNS:") {
-                let dns = try_dns_name(rest.to_string())?;
-                params.subject_alt_names.push(SanType::DnsName(dns));
-                continue;
-            }
-            if let Some(rest) = san.strip_prefix("URI:") {
-                let uri = try_uri_name(rest.to_string())?;
-                params.subject_alt_names.push(SanType::URI(uri));
-                continue;
-            }
-            let dns = try_dns_name(san.clone())?;
-            params.subject_alt_names.push(SanType::DnsName(dns));
-        }
-
-        let now = OffsetDateTime::now_utc();
-        params.not_before = now;
-        let ttl = time::Duration::hours(i64::from(ttl_hours));
-        let expiry = now + ttl;
-        params.not_after = expiry;
-        params.serial_number = Some(random_serial()?);
+        let (params, expiry) =
+            client_certificate_params(&common_name, subject_alt_names, ttl_hours)?;
 
         let client_key = KeyPair::generate()?;
         let issuer = self.issuer()?;
@@ -225,6 +194,48 @@ fn server_certificate_params(
     params.serial_number = Some(random_serial()?);
 
     Ok(params)
+}
+
+fn client_certificate_params(
+    common_name: &str,
+    subject_alt_names: Vec<String>,
+    ttl_hours: u32,
+) -> Result<(CertificateParams, OffsetDateTime), crate::Error> {
+    let mut params = CertificateParams::default();
+    params.key_usages = vec![
+        KeyUsagePurpose::DigitalSignature,
+        KeyUsagePurpose::KeyAgreement,
+    ];
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+
+    let mut dn = DistinguishedName::new();
+    dn.push(DnType::CommonName, common_name);
+    dn.push(DnType::OrganizationName, "Tangle Network");
+    params.distinguished_name = dn;
+
+    for san in subject_alt_names {
+        if let Some(rest) = san.strip_prefix("DNS:") {
+            let dns = try_dns_name(rest.to_string())?;
+            params.subject_alt_names.push(SanType::DnsName(dns));
+            continue;
+        }
+        if let Some(rest) = san.strip_prefix("URI:") {
+            let uri = try_uri_name(rest.to_string())?;
+            params.subject_alt_names.push(SanType::URI(uri));
+            continue;
+        }
+        let dns = try_dns_name(san.clone())?;
+        params.subject_alt_names.push(SanType::DnsName(dns));
+    }
+
+    let now = OffsetDateTime::now_utc();
+    params.not_before = now;
+    let ttl = time::Duration::hours(i64::from(ttl_hours));
+    let expiry = now + ttl;
+    params.not_after = expiry;
+    params.serial_number = Some(random_serial()?);
+
+    Ok((params, expiry))
 }
 
 /// Random 128-bit serial compliant with RFC 5280 (avoid negative).
