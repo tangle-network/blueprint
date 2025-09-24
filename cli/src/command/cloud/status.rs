@@ -8,6 +8,9 @@ use std::time::Duration;
 
 use super::CloudProvider;
 
+#[cfg(feature = "remote-deployer")]
+use blueprint_remote_providers::{DeploymentTracker, CloudProvisioner};
+
 #[derive(Debug)]
 struct DeploymentStatus {
     id: String,
@@ -117,45 +120,19 @@ async fn show_deployment_details(id: &str) -> Result<()> {
 }
 
 async fn show_all_deployments() -> Result<()> {
-    // Mock data for demo
-    let deployments = vec![
-        DeploymentStatus {
-            id: "dep-abc123".to_string(),
-            provider: "AWS".to_string(),
-            region: "us-east-1".to_string(),
-            status: "🟢 Running".to_string(),
-            ip: "54.123.45.67".to_string(),
-            uptime: "2h 45m".to_string(),
-            ttl: "21h 15m".to_string(),
-        },
-        DeploymentStatus {
-            id: "dep-def456".to_string(),
-            provider: "GCP".to_string(),
-            region: "us-central1".to_string(),
-            status: "🟢 Running".to_string(),
-            ip: "35.222.33.44".to_string(),
-            uptime: "5d 3h".to_string(),
-            ttl: "Never".to_string(),
-        },
-        DeploymentStatus {
-            id: "dep-ghi789".to_string(),
-            provider: "DigitalOcean".to_string(),
-            region: "nyc3".to_string(),
-            status: "🟡 Starting".to_string(),
-            ip: "Pending".to_string(),
-            uptime: "0m".to_string(),
-            ttl: "24h".to_string(),
-        },
-        DeploymentStatus {
-            id: "dep-jkl012".to_string(),
-            provider: "Vultr".to_string(),
-            region: "ewr".to_string(),
-            status: "🔴 Stopped".to_string(),
-            ip: "N/A".to_string(),
-            uptime: "N/A".to_string(),
-            ttl: "Expired".to_string(),
-        },
-    ];
+    #[cfg(feature = "remote-deployer")]
+    let deployments = {
+        match load_real_deployments().await {
+            Ok(deployments) => deployments,
+            Err(e) => {
+                println!("⚠️  Failed to load deployments from tracker: {}", e);
+                get_mock_deployments()
+            }
+        }
+    };
+
+    #[cfg(not(feature = "remote-deployer"))]
+    let deployments = get_mock_deployments();
 
     if deployments.is_empty() {
         println!("No active deployments.");
@@ -271,14 +248,37 @@ pub async fn terminate(deployment_id: Option<String>, all: bool, yes: bool) -> R
         let spinner = indicatif::ProgressBar::new_spinner();
         spinner.set_style(indicatif::ProgressStyle::default_spinner().template("{spinner} {msg}")?);
 
-        spinner.set_message("Stopping services...");
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        #[cfg(feature = "remote-deployer")]
+        {
+            spinner.set_message("Initializing cloud provisioner...");
+            match CloudProvisioner::new().await {
+                Ok(provisioner) => {
+                    spinner.set_message("Terminating instance...");
+                    // TODO: Get provider from deployment tracker
+                    // For now, we need to load deployment info to get the provider
+                    if let Err(e) = terminate_real_deployment(&provisioner, id).await {
+                        spinner.finish_with_message(format!("❌ Failed to terminate {}: {}", id, e));
+                        return Ok(());
+                    }
+                }
+                Err(e) => {
+                    spinner.finish_with_message(format!("❌ Failed to initialize provisioner: {}", e));
+                    return Ok(());
+                }
+            }
+        }
 
-        spinner.set_message("Deallocating resources...");
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        #[cfg(not(feature = "remote-deployer"))]
+        {
+            spinner.set_message("Stopping services...");
+            tokio::time::sleep(Duration::from_secs(1)).await;
 
-        spinner.set_message("Cleaning up...");
-        tokio::time::sleep(Duration::from_millis(500)).await;
+            spinner.set_message("Deallocating resources...");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+
+            spinner.set_message("Cleaning up...");
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
 
         spinner.finish_with_message(format!("✅ {} terminated", id));
     } else {
@@ -289,4 +289,134 @@ pub async fn terminate(deployment_id: Option<String>, all: bool, yes: bool) -> R
     }
 
     Ok(())
+}
+
+#[cfg(feature = "remote-deployer")]
+async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
+    use std::path::PathBuf;
+
+    // Try to load from default deployment tracker path
+    let tracker_path = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".tangle")
+        .join("remote_deployments");
+
+    if !tracker_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let tracker = DeploymentTracker::new(&tracker_path).await
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize deployment tracker: {}", e))?;
+
+    let mut deployments = Vec::new();
+    let all_deployments = tracker.list_all().await
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to load deployments: {}", e))?;
+
+    for deployment in all_deployments {
+        let status_icon = match deployment.status.as_str() {
+            "running" => "🟢",
+            "starting" => "🟡",
+            "stopped" | "terminated" => "🔴",
+            _ => "⚪",
+        };
+
+        let uptime = format!("{}h {}m", 
+            deployment.created_at.elapsed().as_secs() / 3600,
+            (deployment.created_at.elapsed().as_secs() % 3600) / 60
+        );
+
+        deployments.push(DeploymentStatus {
+            id: deployment.instance_id,
+            provider: format!("{:?}", deployment.provider),
+            region: deployment.region,
+            status: format!("{} {}", status_icon, deployment.status),
+            ip: deployment.public_ip.unwrap_or_else(|| "Pending".to_string()),
+            uptime,
+            ttl: deployment.ttl_expires_at
+                .map(|expires| {
+                    let remaining = expires.signed_duration_since(chrono::Utc::now());
+                    if remaining.num_seconds() > 0 {
+                        format!("{}h {}m", remaining.num_hours(), (remaining.num_minutes() % 60))
+                    } else {
+                        "Expired".to_string()
+                    }
+                })
+                .unwrap_or_else(|| "Never".to_string()),
+        });
+    }
+
+    Ok(deployments)
+}
+
+#[cfg(feature = "remote-deployer")]
+async fn terminate_real_deployment(provisioner: &CloudProvisioner, instance_id: &str) -> Result<()> {
+    use std::path::PathBuf;
+
+    // Load deployment tracker to get the provider info
+    let tracker_path = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".tangle")
+        .join("remote_deployments");
+
+    if !tracker_path.exists() {
+        return Err(color_eyre::eyre::eyre!("No deployment tracker found"));
+    }
+
+    let tracker = DeploymentTracker::new(&tracker_path).await
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize deployment tracker: {}", e))?;
+
+    let deployment = tracker.get_by_instance_id(instance_id).await
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to find deployment: {}", e))?
+        .ok_or_else(|| color_eyre::eyre::eyre!("Deployment {} not found", instance_id))?;
+
+    // Terminate the instance
+    provisioner.terminate(deployment.provider, instance_id).await
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to terminate instance: {}", e))?;
+
+    // Remove from tracker
+    tracker.remove_by_instance_id(instance_id).await
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to remove from tracker: {}", e))?;
+
+    Ok(())
+}
+
+fn get_mock_deployments() -> Vec<DeploymentStatus> {
+    vec![
+        DeploymentStatus {
+            id: "dep-abc123".to_string(),
+            provider: "AWS".to_string(),
+            region: "us-east-1".to_string(),
+            status: "🟢 Running".to_string(),
+            ip: "54.123.45.67".to_string(),
+            uptime: "2h 45m".to_string(),
+            ttl: "21h 15m".to_string(),
+        },
+        DeploymentStatus {
+            id: "dep-def456".to_string(),
+            provider: "GCP".to_string(),
+            region: "us-central1".to_string(),
+            status: "🟢 Running".to_string(),
+            ip: "35.222.33.44".to_string(),
+            uptime: "5d 3h".to_string(),
+            ttl: "Never".to_string(),
+        },
+        DeploymentStatus {
+            id: "dep-ghi789".to_string(),
+            provider: "DigitalOcean".to_string(),
+            region: "nyc3".to_string(),
+            status: "🟡 Starting".to_string(),
+            ip: "Pending".to_string(),
+            uptime: "0m".to_string(),
+            ttl: "24h".to_string(),
+        },
+        DeploymentStatus {
+            id: "dep-jkl012".to_string(),
+            provider: "Vultr".to_string(),
+            region: "ewr".to_string(),
+            status: "🔴 Stopped".to_string(),
+            ip: "N/A".to_string(),
+            uptime: "N/A".to_string(),
+            ttl: "Expired".to_string(),
+        },
+    ]
 }

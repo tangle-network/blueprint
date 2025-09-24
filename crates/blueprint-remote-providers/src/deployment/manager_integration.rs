@@ -110,7 +110,7 @@ impl TtlManager {
         );
     }
 
-    /// Check for expired services
+    /// Check for expired services and trigger cleanup
     pub async fn check_expired_services(&self) -> Result<Vec<(u64, u64)>> {
         let now = Utc::now();
         let registry = self.ttl_registry.read().await;
@@ -131,6 +131,20 @@ impl TtlManager {
                 blueprint_id, service_id
             );
 
+            // Use registry to get deployment details for cleanup
+            if let Some(deployment_config) = self.registry.get(blueprint_id, service_id).await {
+                info!(
+                    "Cleaning up expired deployment: {} (provider: {:?})",
+                    deployment_config.instance_id,
+                    deployment_config.provider
+                );
+
+                // Trigger cleanup using the deployment registry
+                if let Err(e) = self.registry.cleanup(blueprint_id, service_id).await {
+                    warn!("Failed to cleanup deployment from registry: {}", e);
+                }
+            }
+
             // Send expiry notification to main event loop
             if self.expiry_tx.send((blueprint_id, service_id)).is_ok() {
                 cleaned.push((blueprint_id, service_id));
@@ -142,6 +156,47 @@ impl TtlManager {
         }
 
         Ok(cleaned)
+    }
+
+    /// Get active TTL registrations count (uses registry for validation)
+    pub async fn get_active_ttl_count(&self) -> usize {
+        let ttl_registry = self.ttl_registry.read().await;
+        let mut active_count = 0;
+
+        // Cross-reference TTL entries with actual deployments in registry
+        for (blueprint_id, service_id) in ttl_registry.keys() {
+            if self.registry.get(*blueprint_id, *service_id).await.is_some() {
+                active_count += 1;
+            }
+        }
+
+        active_count
+    }
+
+    /// Sync TTL registry with deployment registry (cleanup orphaned entries)
+    pub async fn sync_with_deployment_registry(&self) -> Result<usize> {
+        let ttl_entries: Vec<(u64, u64)> = {
+            let ttl_registry = self.ttl_registry.read().await;
+            ttl_registry.keys().cloned().collect()
+        };
+
+        let mut orphaned_count = 0;
+
+        // Remove TTL entries that no longer have corresponding deployments
+        for (blueprint_id, service_id) in ttl_entries {
+            if self.registry.get(blueprint_id, service_id).await.is_none() {
+                info!(
+                    "Removing orphaned TTL entry for blueprint {} service {}",
+                    blueprint_id, service_id
+                );
+
+                let mut ttl_registry = self.ttl_registry.write().await;
+                ttl_registry.remove(&(blueprint_id, service_id));
+                orphaned_count += 1;
+            }
+        }
+
+        Ok(orphaned_count)
     }
 }
 

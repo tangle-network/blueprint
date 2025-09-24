@@ -296,7 +296,13 @@ impl SecureBridge {
             endpoint.port
         );
 
-        match self.client.get(&url).send().await {
+        // Apply config-based timeout for health checks
+        let health_request = self
+            .client
+            .get(&url)
+            .timeout(std::time::Duration::from_secs(self.config.connect_timeout_secs));
+
+        match health_request.send().await {
             Ok(response) => Ok(response.status().is_success()),
             Err(_) => {
                 // SECURITY: Don't log detailed error information to prevent information disclosure
@@ -355,8 +361,9 @@ impl SecureBridge {
             request = request.body(body);
         }
 
-        // Send request
+        // Apply config-based timeout for requests
         let response = request
+            .timeout(std::time::Duration::from_secs(self.config.connect_timeout_secs))
             .send()
             .await
             .map_err(|e| Error::ConfigurationError(format!("Request failed: {}", e)))?;
@@ -409,6 +416,20 @@ impl SecureBridge {
         match self.endpoints.read() {
             Ok(endpoints) => endpoints.iter().map(|(id, ep)| (*id, ep.clone())).collect(),
             Err(_) => vec![],
+        }
+    }
+
+    /// Get bridge configuration (for monitoring/debugging)
+    pub fn get_config(&self) -> &SecureBridgeConfig {
+        &self.config
+    }
+
+    /// Check if endpoint registration is within connection limits
+    pub async fn can_register_endpoint(&self, _service_id: u64) -> bool {
+        // Check current endpoint count against config limits
+        match self.endpoints.read() {
+            Ok(endpoints) => endpoints.len() < self.config.max_connections_per_endpoint * 100, // Scale by factor for total limit
+            Err(_) => false,
         }
     }
 }

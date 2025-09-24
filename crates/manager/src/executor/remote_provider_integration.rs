@@ -5,12 +5,10 @@
 use crate::config::BlueprintManagerContext;
 use crate::error::Result;
 use blueprint_core::{error, info};
-use blueprint_remote_providers::auto_deployment::{AutoDeploymentManager, EnabledProvider};
 use blueprint_remote_providers::deployment::manager_integration::{
-    RemoteDeploymentRegistry, RemoteEventHandler,
+    RemoteDeploymentRegistry, RemoteEventHandler, TtlManager,
 };
-use blueprint_remote_providers::deployment::tracker::DeploymentTracker;
-use blueprint_remote_providers::infrastructure::InfrastructureProvisioner;
+use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker};
 use blueprint_remote_providers::{
     AwsConfig, AzureConfig, CloudConfig, CloudProvider, DigitalOceanConfig, GcpConfig,
     ResourceSpec, VultrConfig,
@@ -21,8 +19,9 @@ use tokio::sync::RwLock;
 
 /// Remote provider manager that handles cloud deployments
 pub struct RemoteProviderManager {
-    auto_deployment: Arc<AutoDeploymentManager>,
-    event_handler: Arc<RemoteEventHandler>,
+    provisioner: Arc<CloudProvisioner>,
+    registry: Arc<RemoteDeploymentRegistry>,
+    ttl_manager: Arc<TtlManager>,
     enabled: bool,
 }
 
@@ -44,21 +43,16 @@ impl RemoteProviderManager {
 
         // Create registry and provisioner
         let registry = Arc::new(RemoteDeploymentRegistry::new(tracker.clone()));
-        let provisioner = Arc::new(InfrastructureProvisioner::new(CloudProvider::AWS).await?);
+        let provisioner = Arc::new(CloudProvisioner::new().await?);
 
-        // Create auto-deployment manager
-        let auto_deployment = Arc::new(AutoDeploymentManager::new(registry.clone(), provisioner)?);
-
-        // Configure enabled providers from config
-        let providers = Self::parse_cloud_config(config);
-        auto_deployment.configure_providers(providers).await;
-
-        // Create event handler
-        let event_handler = Arc::new(RemoteEventHandler::new(registry));
+        // Create TTL manager for automatic cleanup
+        let (expiry_tx, _expiry_rx) = tokio::sync::mpsc::unbounded_channel();
+        let ttl_manager = Arc::new(TtlManager::new(registry.clone(), expiry_tx));
 
         Ok(Some(Self {
-            auto_deployment,
-            event_handler,
+            provisioner,
+            registry,
+            ttl_manager,
             enabled: true,
         }))
     }
@@ -82,23 +76,23 @@ impl RemoteProviderManager {
         // Use provided resources or default
         let resource_spec = resource_requirements.unwrap_or_else(ResourceSpec::minimal);
 
-        // Auto-deploy to cheapest provider
+        // Deploy to the most suitable provider based on resource requirements
+        let provider = CloudProvider::AWS; // TODO: Use intelligent provider selection
+        
         match self
-            .auto_deployment
-            .auto_deploy_service(
-                blueprint_id,
-                service_id,
-                resource_spec,
-                None, // No TTL by default
-            )
+            .provisioner
+            .provision(provider, &resource_spec, "us-west-2")
             .await
         {
-            Ok(deployment) => {
+            Ok(instance) => {
                 info!(
                     "Service deployed to {}: instance={}",
-                    deployment.provider.unwrap_or(CloudProvider::AWS),
-                    deployment.instance_id
+                    provider,
+                    instance.instance_id
                 );
+                
+                // Register with TTL manager for automatic cleanup
+                self.ttl_manager.register_ttl(blueprint_id, service_id, 3600).await; // 1 hour default
             }
             Err(e) => {
                 error!("Failed to deploy service: {}", e);
@@ -119,90 +113,17 @@ impl RemoteProviderManager {
             blueprint_id, service_id
         );
 
-        self.event_handler
-            .on_service_terminated(blueprint_id, service_id)
-            .await?;
+        // Remove TTL registration for the terminated service
+        self.ttl_manager.unregister_ttl(blueprint_id, service_id).await;
+
+        // Clean up deployment from registry
+        if let Err(e) = self.registry.cleanup(blueprint_id, service_id).await {
+            error!("Failed to cleanup deployment from registry: {}", e);
+        }
 
         Ok(())
     }
 
-    fn parse_cloud_config(config: &CloudConfig) -> Vec<EnabledProvider> {
-        let mut providers = Vec::new();
-
-        if let Some(aws) = &config.aws {
-            providers.push(EnabledProvider {
-                provider: CloudProvider::AWS,
-                region: aws.region.clone(),
-                credentials_env: HashMap::from([
-                    ("AWS_ACCESS_KEY_ID".to_string(), aws.access_key.clone()),
-                    ("AWS_SECRET_ACCESS_KEY".to_string(), aws.secret_key.clone()),
-                ]),
-                enabled: aws.enabled,
-                priority: aws.priority.unwrap_or(10),
-            });
-        }
-
-        if let Some(do_config) = &config.digital_ocean {
-            providers.push(EnabledProvider {
-                provider: CloudProvider::DigitalOcean,
-                region: do_config.region.clone(),
-                credentials_env: HashMap::from([(
-                    "DO_API_TOKEN".to_string(),
-                    do_config.api_token.clone(),
-                )]),
-                enabled: do_config.enabled,
-                priority: do_config.priority.unwrap_or(5),
-            });
-        }
-
-        if let Some(gcp) = &config.gcp {
-            providers.push(EnabledProvider {
-                provider: CloudProvider::GCP,
-                region: gcp.region.clone(),
-                credentials_env: HashMap::from([
-                    ("GCP_PROJECT_ID".to_string(), gcp.project_id.clone()),
-                    (
-                        "GOOGLE_APPLICATION_CREDENTIALS".to_string(),
-                        gcp.service_account_path.clone(),
-                    ),
-                ]),
-                enabled: gcp.enabled,
-                priority: gcp.priority.unwrap_or(8),
-            });
-        }
-
-        if let Some(azure) = &config.azure {
-            providers.push(EnabledProvider {
-                provider: CloudProvider::Azure,
-                region: azure.region.clone(),
-                credentials_env: HashMap::from([
-                    ("AZURE_CLIENT_ID".to_string(), azure.client_id.clone()),
-                    (
-                        "AZURE_CLIENT_SECRET".to_string(),
-                        azure.client_secret.clone(),
-                    ),
-                    ("AZURE_TENANT_ID".to_string(), azure.tenant_id.clone()),
-                ]),
-                enabled: azure.enabled,
-                priority: azure.priority.unwrap_or(7),
-            });
-        }
-
-        if let Some(vultr) = &config.vultr {
-            providers.push(EnabledProvider {
-                provider: CloudProvider::Vultr,
-                region: vultr.region.clone(),
-                credentials_env: HashMap::from([(
-                    "VULTR_API_KEY".to_string(),
-                    vultr.api_key.clone(),
-                )]),
-                enabled: vultr.enabled,
-                priority: vultr.priority.unwrap_or(3),
-            });
-        }
-
-        providers
-    }
 }
 
 // Cloud configuration types are now imported from blueprint_remote_providers

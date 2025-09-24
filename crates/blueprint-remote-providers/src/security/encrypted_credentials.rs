@@ -215,13 +215,27 @@ mod tests {
             ..Default::default()
         };
 
+        // Create a copy for encryption before credentials is consumed
+        let credentials_copy = PlaintextCredentials {
+            aws_access_key: credentials.aws_access_key.clone(),
+            aws_secret_key: credentials.aws_secret_key.clone(),
+            gcp_project_id: credentials.gcp_project_id.clone(),
+            gcp_service_account_key: credentials.gcp_service_account_key.clone(),
+            azure_client_id: credentials.azure_client_id.clone(),
+            azure_client_secret: credentials.azure_client_secret.clone(),
+            azure_tenant_id: credentials.azure_tenant_id.clone(),
+            azure_subscription_id: credentials.azure_subscription_id.clone(),
+            do_api_token: credentials.do_api_token.clone(),
+            vultr_api_key: credentials.vultr_api_key.clone(),
+        };
+
         // Encrypt credentials
-        let encrypted = EncryptedCloudCredentials::encrypt("aws", credentials.clone()).unwrap();
+        let encrypted = EncryptedCloudCredentials::encrypt("aws", credentials_copy).unwrap();
         assert!(encrypted.is_encrypted());
         assert_eq!(encrypted.provider(), "aws");
 
-        // Verify plaintext is zeroized
-        credentials.zeroize();
+        // Verify plaintext is zeroized (automatic on drop)
+        drop(credentials);
 
         // Cannot decrypt without proper key
         let wrong_key = [0u8; 32];

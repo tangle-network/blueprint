@@ -3,11 +3,8 @@
 pub mod adapter;
 
 use crate::core::error::{Error, Result};
-use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::providers::common::{InstanceSelection, ProvisionedInfrastructure, ProvisioningConfig};
-use std::collections::HashMap;
-use tracing::{info, warn};
 
 /// GCP Compute Engine provisioner
 pub struct GcpProvisioner {
@@ -355,6 +352,21 @@ impl GcpProvisioner {
             "n1-standard-8" => 0.380,
             _ => 0.10,
         })
+    }
+
+    /// Get instance type recommendation and cost estimate for given specifications
+    pub fn get_instance_recommendation(&self, spec: &ResourceSpec) -> InstanceSelection {
+        Self::map_instance(spec)
+    }
+
+    /// Get cost estimate for a specific instance type
+    pub fn get_cost_estimate(&self, instance_type: &str) -> Option<f64> {
+        Self::estimate_cost(instance_type)
+    }
+
+    /// Get the startup script used for instance initialization
+    pub fn get_startup_script(&self) -> &'static str {
+        Self::generate_startup_script()
     }
 
     /// Terminate a GCE instance

@@ -14,6 +14,7 @@ use crate::providers::gcp::GcpAdapter;
 use crate::infra::mapper::InstanceTypeMapper;
 use crate::infra::traits::CloudProviderAdapter;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance, RetryPolicy};
+use crate::monitoring::discovery::{MachineTypeDiscovery, CloudCredentials};
 use std::collections::HashMap;
 use tracing::{error, info, warn};
 
@@ -21,6 +22,7 @@ use tracing::{error, info, warn};
 pub struct CloudProvisioner {
     providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
     retry_policy: RetryPolicy,
+    discovery: MachineTypeDiscovery,
 }
 
 impl CloudProvisioner {
@@ -71,6 +73,7 @@ impl CloudProvisioner {
         Ok(Self {
             providers,
             retry_policy: RetryPolicy::default(),
+            discovery: MachineTypeDiscovery::new(),
         })
     }
 
@@ -198,6 +201,42 @@ impl CloudProvisioner {
         instance_id: &str,
     ) -> Result<crate::infra::types::InstanceStatus> {
         self.get_status(provider.clone(), instance_id).await
+    }
+
+    /// Use discovery service to find optimal instance type for requirements
+    pub async fn discover_optimal_instance(
+        &mut self,
+        provider: &CloudProvider,
+        resource_spec: &ResourceSpec,
+        region: &str,
+        max_hourly_cost: Option<f64>,
+    ) -> Result<String> {
+        // Try to discover machine types for the provider
+        let credentials = CloudCredentials::default(); // TODO: Load from secure storage
+        
+        match self.discovery.discover_machine_types(provider, region, &credentials).await {
+            Ok(_machines) => {
+                // Use discovery service to find best match
+                if let Some(machine) = self.discovery.find_best_match(
+                    provider,
+                    resource_spec.cpu as u32,
+                    resource_spec.memory_gb as f64,
+                    resource_spec.gpu_count.unwrap_or(0) > 0,
+                    max_hourly_cost,
+                ) {
+                    info!("Discovery found optimal instance: {} (${:.2}/hr)", 
+                          machine.name, machine.hourly_price.unwrap_or(0.0));
+                    return Ok(machine.name);
+                }
+            }
+            Err(e) => {
+                warn!("Discovery failed for {:?}: {}, falling back to mapper", provider, e);
+            }
+        }
+
+        // Fallback to instance mapper
+        let instance_selection = InstanceTypeMapper::map_to_instance_type(resource_spec, provider);
+        Ok(instance_selection.instance_type)
     }
 }
 

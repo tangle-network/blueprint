@@ -11,8 +11,7 @@ use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 
 #[cfg(feature = "remote-deployer")]
 use blueprint_remote_providers::{
-    deployment_tracker::DeploymentTracker, infrastructure_unified::UnifiedProvisioner,
-    ssh_deployment::SshDeploymentService,
+    CloudProvisioner, DeploymentTracker, SshDeploymentClient as SshDeploymentService,
 };
 
 use blueprint_std::collections::HashMap;
@@ -192,21 +191,17 @@ impl RemoteDeploymentService {
         #[cfg(feature = "remote-deployer")]
         {
             // Use real cloud provider SDK
-            use blueprint_remote_providers::cloud_provisioner::CloudProvisioner;
-            use blueprint_remote_providers::ssh_deployment::SshDeploymentService;
+            use blueprint_remote_providers::CloudProvisioner;
 
             let provisioner = CloudProvisioner::new()
                 .await
                 .map_err(|e| Error::Other(format!("Failed to create provisioner: {}", e)))?;
 
-            // Convert resource spec to provider requirements
-            let requirements = convert_resource_spec(&resource_spec);
-
-            // Provision the actual instance
+            // Provision the actual instance using the remote providers resource spec directly
             let instance = provisioner
                 .provision(
                     provider,
-                    &requirements,
+                    &convert_resource_spec(&resource_spec),
                     "us-west-2", // TODO: Get region from config
                 )
                 .await

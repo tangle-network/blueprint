@@ -146,16 +146,16 @@ impl SshDeploymentClient {
         env_vars: HashMap<String, String>,
     ) -> Result<RemoteDeployment> {
         info!(
-            "Deploying Blueprint {} to {}",
-            blueprint_image, self.connection.host
+            "Deploying Blueprint {} to {} (deployment: {}, namespace: {})",
+            blueprint_image, self.connection.host, self.deployment_config.name, self.deployment_config.namespace
         );
 
         // Pull the Blueprint image
         self.pull_image(blueprint_image).await?;
 
-        // Create container with resource limits
+        // Create container with deployment config-based naming and settings
         let container_id = self
-            .create_container(blueprint_image, spec, env_vars)
+            .create_container_with_config(blueprint_image, spec, env_vars)
             .await?;
 
         // Start the container
@@ -236,6 +236,74 @@ impl SshDeploymentClient {
             .to_string();
 
         info!("Created container: {}", container_id);
+        Ok(container_id)
+    }
+
+    /// Create container with deployment config-based naming and restart policies
+    async fn create_container_with_config(
+        &self,
+        image: &str,
+        spec: &ResourceSpec,
+        mut env_vars: HashMap<String, String>,
+    ) -> Result<String> {
+        let limits = ResourceLimits::from_spec(spec);
+
+        // Add deployment config variables to environment
+        env_vars.insert("BLUEPRINT_DEPLOYMENT_NAME".to_string(), self.deployment_config.name.clone());
+        env_vars.insert("BLUEPRINT_NAMESPACE".to_string(), self.deployment_config.namespace.clone());
+        env_vars.insert("BLUEPRINT_RESTART_POLICY".to_string(), format!("{:?}", self.deployment_config.restart_policy));
+
+        let runtime_str = match self.runtime {
+            ContainerRuntime::Docker => "docker",
+            ContainerRuntime::Podman => "podman",
+            ContainerRuntime::Containerd => "ctr",
+        };
+
+        // Build container name based on deployment config
+        let container_name = format!("{}-{}", self.deployment_config.name, self.deployment_config.namespace);
+
+        // Use secure command building to prevent injection attacks
+        let mut cmd = SecureContainerCommands::build_create_command(
+            runtime_str,
+            image,
+            &env_vars,
+            limits.cpu_cores.map(|c| c as f32),
+            limits.memory_mb.map(|m| m as u32),
+            limits.disk_gb.map(|d| d as u32),
+        )?;
+
+        // Apply restart policy based on deployment config
+        let restart_policy_flag = match self.deployment_config.restart_policy {
+            RestartPolicy::Always => "--restart=always",
+            RestartPolicy::OnFailure => "--restart=on-failure",
+            RestartPolicy::Never => "--restart=no",
+        };
+
+        // Insert restart policy and name into command
+        if runtime_str != "ctr" {
+            cmd = cmd.replace("run -d", &format!("run -d --name {} {}", container_name, restart_policy_flag));
+        }
+
+        // Add health check if configured
+        if let Some(ref health_check) = self.deployment_config.health_check {
+            if runtime_str == "docker" {
+                let health_cmd = format!("--health-cmd='{}' --health-interval={}s --health-timeout={}s --health-retries={}",
+                    health_check.command, health_check.interval, health_check.timeout, health_check.retries);
+                cmd = cmd.replace("run -d", &format!("run -d {}", health_cmd));
+            }
+        }
+
+        let output = self.run_remote_command(&cmd).await?;
+
+        // Extract container ID from output
+        let container_id = output
+            .lines()
+            .next()
+            .ok_or_else(|| Error::ConfigurationError("Failed to get container ID".into()))?
+            .trim()
+            .to_string();
+
+        info!("Created container: {} with deployment config", container_id);
         Ok(container_id)
     }
 
@@ -453,6 +521,11 @@ impl SshDeploymentClient {
         )?;
 
         self.run_remote_command(&cmd).await
+    }
+
+    /// Get deployment configuration
+    pub fn get_deployment_config(&self) -> &DeploymentConfig {
+        &self.deployment_config
     }
 
     /// Get container status
