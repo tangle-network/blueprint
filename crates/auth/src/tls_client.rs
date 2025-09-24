@@ -6,6 +6,8 @@ use blueprint_core::{debug, info};
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
+use rustls::client::{ServerCertVerified, ServerCertVerifier};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::{ClientConfig, RootCertStore};
 use rustls_pemfile;
 
@@ -182,33 +184,30 @@ impl TlsClientManager {
             }
         }
 
-        let client_config = ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
+        let builder = ClientConfig::builder().with_root_certificates(root_store);
 
-        // Configure client certificate for mTLS
-        if let (Some(client_cert), Some(client_key)) = (&config.client_cert, &config.client_key) {
-            let mut cert_data = client_cert.as_slice();
-            let _cert_chain = rustls_pemfile::certs(&mut cert_data)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| {
-                    crate::Error::Tls(format!("Failed to parse client certificate: {e}"))
-                })?;
+        let mut client_config = if let (Some(client_cert), Some(client_key)) =
+            (config.client_cert.as_ref(), config.client_key.as_ref())
+        {
+            let cert_chain = load_cert_chain_from_bytes(client_cert)?;
+            let private_key = load_private_key_from_bytes(client_key)?;
+            builder
+                .with_client_auth_cert(cert_chain, private_key)
+                .map_err(|err| {
+                    crate::Error::Tls(format!("failed to configure client mTLS: {err}"))
+                })?
+        } else {
+            builder.with_no_client_auth()
+        };
 
-            let mut key_data = client_key.as_slice();
-            let mut private_key_iter = rustls_pemfile::pkcs8_private_keys(&mut key_data);
+        client_config.alpn_protocols = config.alpn_protocols.clone();
 
-            let _private_key = private_key_iter
-                .next()
-                .transpose()
-                .map_err(|e| crate::Error::Tls(format!("Failed to parse client private key: {e}")))?
-                .ok_or_else(|| crate::Error::Tls("No valid private key found".to_string()))?;
-
-            // Note: Client certificate configuration would go here
-            // For now, we'll skip this as it requires more complex rustls API usage
+        if !config.verify_server_cert {
+            client_config
+                .dangerous()
+                .set_certificate_verifier(Arc::new(NoCertificateVerification));
         }
 
-        // Create HTTPS connector with default config for now
         let https_connector = hyper_rustls::HttpsConnectorBuilder::new()
             .with_tls_config(client_config)
             .https_or_http()
@@ -363,4 +362,55 @@ fn merge_ca_bundle(store: &mut RootCertStore, pem_data: &[u8]) -> Result<(), cra
     }
 
     Ok(())
+}
+
+struct NoCertificateVerification;
+
+impl ServerCertVerifier for NoCertificateVerification {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &rustls::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: std::time::SystemTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        Ok(ServerCertVerified::assertion())
+    }
+}
+
+fn load_cert_chain_from_bytes(pem: &[u8]) -> Result<Vec<CertificateDer<'static>>, crate::Error> {
+    let mut reader = std::io::Cursor::new(pem);
+    let certs = rustls_pemfile::certs(&mut reader)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| crate::Error::Tls(format!("Failed to parse client certificate: {err}")))?;
+    if certs.is_empty() {
+        return Err(crate::Error::Tls(
+            "Client certificate chain is empty".into(),
+        ));
+    }
+    Ok(certs)
+}
+
+fn load_private_key_from_bytes(pem: &[u8]) -> Result<PrivateKeyDer<'static>, crate::Error> {
+    let mut reader = std::io::Cursor::new(pem);
+    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader);
+    if let Some(result) = keys.next() {
+        return result.map(PrivateKeyDer::Pkcs8).map_err(|err| {
+            crate::Error::Tls(format!("Failed to parse PKCS#8 private key: {err}"))
+        });
+    }
+
+    reader.set_position(0);
+    let mut rsa_keys = rustls_pemfile::rsa_private_keys(&mut reader);
+    if let Some(result) = rsa_keys.next() {
+        return result
+            .map(PrivateKeyDer::from)
+            .map_err(|err| crate::Error::Tls(format!("Failed to parse RSA private key: {err}")));
+    }
+
+    Err(crate::Error::Tls(
+        "Client private key not found in provided PEM".into(),
+    ))
 }
