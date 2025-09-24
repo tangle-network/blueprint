@@ -10,6 +10,8 @@ use blueprint_std::Rng;
 use prost::Message;
 use tracing::error;
 
+use x509_parser::prelude::X509Certificate;
+
 /// TLS asset manager for handling certificate and key operations
 #[derive(Clone, Debug)]
 pub struct TlsAssetManager {
@@ -258,14 +260,47 @@ impl TlsAssetManager {
         cert_data: &[u8],
         ca_bundle_data: &[u8],
     ) -> Result<bool, crate::Error> {
-        // This is a simplified validation - in production, use proper certificate validation
-        // For now, we'll just check that the certificate data is not empty
         if cert_data.is_empty() || ca_bundle_data.is_empty() {
             return Ok(false);
         }
 
-        // TODO: Implement proper certificate chain validation using openssl or similar
-        Ok(true)
+        let leaf_cert_der = extract_certificates(cert_data).map_err(|e| {
+            crate::Error::Io(std::io::Error::other(format!(
+                "Failed to parse certificate: {e}"
+            )))
+        })?;
+        let leaf_der = leaf_cert_der
+            .first()
+            .ok_or_else(|| crate::Error::Io(std::io::Error::other("Certificate data missing")))?;
+        let (_, leaf_cert) = X509Certificate::from_der(leaf_der).map_err(|e| {
+            crate::Error::Io(std::io::Error::other(format!(
+                "Invalid certificate DER: {e}"
+            )))
+        })?;
+
+        let ca_ders = extract_certificates(ca_bundle_data).map_err(|e| {
+            crate::Error::Io(std::io::Error::other(format!(
+                "Failed to parse CA bundle: {e}"
+            )))
+        })?;
+
+        for ca_der in ca_ders {
+            match X509Certificate::from_der(&ca_der) {
+                Ok((_, ca_cert)) => {
+                    if leaf_cert
+                        .verify_signature(Some(&ca_cert.public_key()))
+                        .is_ok()
+                    {
+                        return Ok(true);
+                    }
+                }
+                Err(err) => {
+                    error!("Failed to parse CA certificate for validation: {err}");
+                }
+            }
+        }
+
+        Ok(false)
     }
 
     /// Check if certificate is expired
@@ -304,6 +339,28 @@ impl TlsAssetManager {
         }
 
         Ok(result)
+    }
+
+    fn extract_certificates(input: &[u8]) -> Result<Vec<Vec<u8>>, String> {
+        if input.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        if let Ok(pem_str) = std::str::from_utf8(input) {
+            if let Ok(blocks) = pem::parse_many(pem_str) {
+                let mut ders = Vec::new();
+                for block in blocks {
+                    if block.tag == "CERTIFICATE" {
+                        ders.push(block.contents);
+                    }
+                }
+                if !ders.is_empty() {
+                    return Ok(ders);
+                }
+            }
+        }
+
+        Ok(vec![input.to_vec()])
     }
 
     /// Cleanup expired certificates
