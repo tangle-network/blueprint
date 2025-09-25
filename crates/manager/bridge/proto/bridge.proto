@@ -31,6 +31,8 @@ message RegisterBlueprintServiceProxyRequest {
   string upstream_url = 3;
   // Service owners that are allowed to use this service.
   repeated ServiceOwner owners = 4;
+  // TLS profile configuration for this service (optional)
+  optional TlsProfileConfig tls_profile = 5;
 }
 
 message UnregisterBlueprintServiceProxyRequest {
@@ -52,6 +54,40 @@ message RemoveOwnerFromServiceRequest {
   ServiceOwner owner_to_remove = 2;
 }
 
+message UpdateBlueprintServiceTlsProfileRequest {
+  // The unique ID of the service.
+  uint64 service_id = 1;
+  // TLS profile configuration to update (optional)
+  optional TlsProfileConfig tls_profile = 2;
+}
+
+message TlsProfileConfig {
+  // Whether TLS is enabled for this service
+  bool tls_enabled = 1;
+  // Whether client mTLS is required
+  bool require_client_mtls = 2;
+  // Encrypted server certificate PEM (expected to be envelope-encrypted)
+  bytes encrypted_server_cert = 3;
+  // Encrypted server private key PEM (expected to be envelope-encrypted)
+  bytes encrypted_server_key = 4;
+  // Encrypted client CA bundle PEM (expected to be envelope-encrypted)
+  bytes encrypted_client_ca_bundle = 5;
+  // Encrypted upstream CA bundle PEM (expected to be envelope-encrypted)
+  bytes encrypted_upstream_ca_bundle = 6;
+  // Encrypted upstream client certificate PEM (expected to be envelope-encrypted)
+  bytes encrypted_upstream_client_cert = 7;
+  // Encrypted upstream client private key PEM (expected to be envelope-encrypted)
+  bytes encrypted_upstream_client_key = 8;
+  // Maximum client certificate TTL in hours
+  uint32 client_cert_ttl_hours = 9;
+  // Optional SNI hostname for this service
+  optional string sni = 10;
+  // Template to derive subjectAltNames for issued certificates
+  optional string subject_alt_name_template = 11;
+  // Allowed DNS names for issued certificates
+  repeated string allowed_dns_names = 12;
+}
+
 service BlueprintManagerBridge {
   rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);
   rpc RequestPort(PortRequest) returns (PortResponse);
@@ -69,5 +105,8 @@ service BlueprintManagerBridge {
       returns (google.protobuf.Empty);
   // This is called by the blueprint to remove an owner from a service.
   rpc RemoveOwnerFromService(RemoveOwnerFromServiceRequest)
+      returns (google.protobuf.Empty);
+  // This is called by the blueprint to update the TLS profile of a service.
+  rpc UpdateBlueprintServiceTlsProfile(UpdateBlueprintServiceTlsProfileRequest)
       returns (google.protobuf.Empty);
 }

@@ -158,6 +158,8 @@ futures-core = { version = "0.3.31", default-features = false }
 tokio = { version = "^1", default-features = false }
 tokio-util = { version = "^0.7", default-features = false }
 tokio-cron-scheduler = { version = "0.13.0", default-features = false }
+once_cell = { version = "1.19.0", default-features = false, features = ["std"] }
+x509-parser = { version = "0.18.0" }
 tokio-stream = { version = "0.1.15", default-features = false, features = ["net"] }
 pin-project-lite = "0.2.7"
 tower = { version = "0.5.2", default-features = false }
@@ -174,6 +176,7 @@ dotenv = { version = "0.15", default-features = false }
 
 # Cryptography & Blockchain
 bip39 = { version = "2.2.0", default-features = false }
+chacha20poly1305 = { version = "0.10.1", default-features = false }
 ed25519-zebra = { version = "4", default-features = false }
 hex = { version = "0.4.3", default-features = false }
 k256 = { version = "0.13.3", default-features = false }
@@ -232,7 +235,11 @@ axum = { version = "0.8", default-features = false }
 openssl-sys = { version = "0.9.109", default-features = false }
 rtnetlink = { version = "0.16.0", default-features = false }
 ipnet = { version = "2.11.0", default-features = false }
-rustls = { version = "0.23", default-features = false }
+rustls = { version = "0.23.31", default-features = false, features = ["std"] }
+tokio-rustls = { version = "0.26.2", default-features = false, features = ["tls12"] }
+rustls-pemfile = { version = "2.2.0", default-features = false }
+rcgen = { version = "0.14.3", default-features = false, features = ["pem"] }
+hyper-rustls = { version = "0.27.7", default-features = false, features = ["http2", "ring"] }
 local-ip-address = "0.6.5"
 
 # System & OS
@@ -277,7 +284,7 @@ num_cpus = { version = "1.17", default-features = false }
 libc = { version = "0.2.175", default-features = false }
 
 # gRPC & Protocol Buffers
-tonic = { version = "0.13.1", default-features = false }
+tonic = { version = "0.13.1", default-features = false, features = ["tls-webpki-roots"] }
 prost = { version = "0.13", default-features = false }
 tonic-build = { version = "0.13.1", default-features = false }
 
@@ -337,6 +344,7 @@ num-bigint = { version = "0.4.6", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
 rayon = { version = "1", default-features = false }
 zeroize = { version = "1.8.1", default-features = false }
+zerocopy = { version = "0.8", default-features = false }
 
 # Eigenlayer
 eigensdk = { version = "0.5.0", default-features = false }

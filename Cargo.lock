@@ -2746,27 +2746,36 @@ dependencies = [
  "blueprint-sdk",
  "blueprint-std",
  "bytes",
+ "chacha20poly1305",
  "crc32fast",
  "futures-util",
  "hashbrown 0.15.5",
  "hex",
  "http 1.3.1",
+ "hyper 1.7.0",
+ "hyper-rustls 0.27.7",
  "hyper-util",
  "jsonwebtoken 9.3.1",
  "k256",
+ "once_cell",
  "openssl",
  "pasetors",
  "pem 1.1.1",
  "prost 0.13.5",
+ "rcgen 0.14.4",
  "reqwest 0.12.23",
  "rocksdb",
+ "rustls 0.23.31",
+ "rustls-pemfile 2.2.0",
  "schnorrkel",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.16",
+ "time",
  "tiny-keccak",
  "tokio",
+ "tokio-rustls 0.26.2",
  "tokio-stream",
  "tonic 0.13.1",
  "tonic-build",
@@ -2775,6 +2784,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.20",
  "uuid 1.18.0",
+ "x509-parser 0.18.0",
 ]
 
 [[package]]
@@ -3396,18 +3406,20 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager-bridge"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "blueprint-auth",
  "blueprint-core",
  "hyper-util",
  "prost 0.13.5",
+ "tempfile",
  "thiserror 2.0.16",
  "tokio",
  "tokio-vsock",
  "tonic 0.13.1",
  "tonic-build",
  "tower 0.5.2",
+ "zerocopy",
 ]
 
 [[package]]
@@ -3633,6 +3645,7 @@ dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer",
  "alloy-signer-local",
+ "blueprint-auth",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-evm-extra",
@@ -3656,7 +3669,9 @@ dependencies = [
  "libp2p",
  "sc-keystore",
  "serde",
+ "serde_json",
  "tangle-subxt",
+ "tempfile",
  "thiserror 2.0.16",
  "tokio",
  "tower 0.5.2",
@@ -10589,12 +10604,12 @@ dependencies = [
  "futures-rustls",
  "libp2p-core",
  "libp2p-identity",
- "rcgen",
+ "rcgen 0.13.2",
  "ring 0.17.14",
  "rustls 0.23.31",
  "rustls-webpki 0.103.4",
  "thiserror 2.0.16",
- "x509-parser",
+ "x509-parser 0.17.0",
  "yasna",
 ]
 
@@ -16079,6 +16094,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rcgen"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c83367ba62b3f1dbd0f086ede4e5ebfb4713fb234dbbc5807772a31245ff46d"
+dependencies = [
+ "pem 3.0.5",
+ "ring 0.17.14",
+ "rustls-pki-types",
+ "time",
+ "x509-parser 0.18.0",
+ "yasna",
+]
+
+[[package]]
 name = "recvmsg"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20537,11 +20566,13 @@ dependencies = [
  "prost 0.13.5",
  "socket2 0.5.10",
  "tokio",
+ "tokio-rustls 0.26.2",
  "tokio-stream",
  "tower 0.5.2",
  "tower-layer",
  "tower-service",
  "tracing",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -22325,6 +22356,24 @@ dependencies = [
  "lazy_static",
  "nom",
  "oid-registry",
+ "rusticata-macros",
+ "thiserror 2.0.16",
+ "time",
+]
+
+[[package]]
+name = "x509-parser"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb3e137310115a65136898d2079f003ce33331a6c4b0d51f1531d1be082b6425"
+dependencies = [
+ "asn1-rs",
+ "data-encoding",
+ "der-parser",
+ "lazy_static",
+ "nom",
+ "oid-registry",
+ "ring 0.17.14",
  "rusticata-macros",
  "thiserror 2.0.16",
  "time",
