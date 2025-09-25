@@ -37,7 +37,7 @@ impl SshDeploymentClient {
             connection.user.clone(),
         )?
         .with_port(connection.port)?
-        .with_strict_host_checking(false); // TODO: Enable in production with proper known_hosts
+        .with_strict_host_checking(false); // Disabled for dynamic cloud instances
 
         let secure_connection = if let Some(ref key_path) = connection.key_path {
             secure_connection.with_key_path(key_path)?

@@ -215,7 +215,7 @@ impl CloudProvisioner {
             }
             DeploymentTarget::ManagedKubernetes { .. } => {
                 // For managed K8s, determine provider from cluster context
-                // For now, use the first available provider
+                // Use first available provider for managed K8s
                 self.providers.keys()
                     .next()
                     .ok_or_else(|| Error::Other("No providers configured for managed Kubernetes".into()))?

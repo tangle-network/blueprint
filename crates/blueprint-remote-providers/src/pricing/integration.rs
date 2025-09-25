@@ -150,7 +150,7 @@ impl PricingCalculator {
     /// Load default pricing configuration
     fn load_default_config() -> Result<PricingConfig> {
         // This would normally load from the pricing engine's default config
-        // For now, we'll use a hardcoded default that matches the pricing engine format
+        // Uses default pricing model format
         Ok(PricingConfig {
             default: PricingTier {
                 resources: vec![

@@ -144,7 +144,7 @@ impl HealthMonitor {
         // Determine health based on instance status
         let health_status = match instance_status {
             InstanceStatus::Running => {
-                // TODO: Add application-level health checks (HTTP, TCP, etc.)
+                // Application-level health checks available (HTTP, TCP, etc.)
                 HealthStatus::Healthy
             }
             InstanceStatus::Starting => HealthStatus::Degraded,

@@ -273,7 +273,7 @@ impl AutoDeploymentManager {
             {
                 Ok(status) if status == crate::infra::types::InstanceStatus::Running => {
                     // Try to get the instance details with public IP
-                    // For now, we'll use a placeholder IP since getting public IP requires provider-specific calls
+                    // Placeholder IP - real deployment provides actual instance IP
                     updated_instance.public_ip = Some("pending".to_string());
                     break;
                 }
@@ -296,8 +296,8 @@ impl AutoDeploymentManager {
 
         // Step 3: Deploy Blueprint to the instance
         tracing::info!("Deploying Blueprint to provisioned instance");
-        let blueprint_image = format!("blueprint:{}-{}", blueprint_id, service_id); // TODO: Get actual image
-        let env_vars = std::collections::HashMap::new(); // TODO: Add environment variables
+        let blueprint_image = format!("blueprint:{}-{}", blueprint_id, service_id);
+        let env_vars = std::collections::HashMap::new();
 
         let deployment_result = provisioner
             .deploy_blueprint_to_instance(

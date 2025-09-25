@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn test_credential_encryption_decryption() {
-        let mut credentials = PlaintextCredentials {
+        let credentials = PlaintextCredentials {
             aws_access_key: Some("AKIATEST123".to_string()),
             aws_secret_key: Some("secretkey123".to_string()),
             gcp_project_id: Some("test-project".to_string()),
@@ -216,18 +216,7 @@ mod tests {
         };
 
         // Create a copy for encryption before credentials is consumed
-        let credentials_copy = PlaintextCredentials {
-            aws_access_key: credentials.aws_access_key.clone(),
-            aws_secret_key: credentials.aws_secret_key.clone(),
-            gcp_project_id: credentials.gcp_project_id.clone(),
-            gcp_service_account_key: credentials.gcp_service_account_key.clone(),
-            azure_client_id: credentials.azure_client_id.clone(),
-            azure_client_secret: credentials.azure_client_secret.clone(),
-            azure_tenant_id: credentials.azure_tenant_id.clone(),
-            azure_subscription_id: credentials.azure_subscription_id.clone(),
-            do_api_token: credentials.do_api_token.clone(),
-            vultr_api_key: credentials.vultr_api_key.clone(),
-        };
+        let credentials_copy = credentials.clone();
 
         // Encrypt credentials
         let encrypted = EncryptedCloudCredentials::encrypt("aws", credentials_copy).unwrap();

@@ -58,8 +58,32 @@ pub struct ProvisionedInfrastructure {
 impl ProvisionedInfrastructure {
     /// Check if the infrastructure is ready for deployment
     pub async fn is_ready(&self) -> bool {
-        // TODO: Add instance health checks
-        self.public_ip.is_some() || self.private_ip.is_some()
+        // Check if we have network connectivity
+        let has_network = self.public_ip.is_some() || self.private_ip.is_some();
+        if !has_network {
+            return false;
+        }
+
+        // Perform health check based on endpoint availability
+        if let Some(endpoint) = self.get_endpoint() {
+            // Try SSH port (22) for VM instances
+            self.check_port_open(&endpoint, 22).await
+        } else {
+            false
+        }
+    }
+
+    /// Check if a port is open on the given host
+    async fn check_port_open(&self, host: &str, port: u16) -> bool {
+        use tokio::net::TcpStream;
+        use tokio::time::timeout;
+        use std::time::Duration;
+
+        let addr = format!("{}:{}", host, port);
+        match timeout(Duration::from_secs(5), TcpStream::connect(&addr)).await {
+            Ok(Ok(_)) => true,
+            _ => false,
+        }
     }
 
     /// Get connection endpoint for this infrastructure

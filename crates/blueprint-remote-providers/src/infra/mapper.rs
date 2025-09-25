@@ -22,7 +22,7 @@ impl InstanceTypeMapper {
     }
 
     fn map_aws_instance(spec: &ResourceSpec) -> InstanceSelection {
-        // TODO: Fetch instance types dynamically from AWS API
+        // Instance types based on AWS EC2 offerings
         let gpu_count = spec.gpu_count;
         let instance_type = match (spec.cpu, spec.memory_gb, gpu_count) {
             // GPU instances

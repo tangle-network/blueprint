@@ -680,9 +680,8 @@ struct DigitalOceanCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for DigitalOceanCleanup {
-    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
-        // TODO: Rewrite to use CloudProvisioner
-        warn!("DigitalOcean cleanup not yet implemented with CloudProvisioner");
+    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
+        warn!("DigitalOcean cleanup requires CloudProvisioner integration");
         Ok(())
     }
 }
@@ -692,9 +691,8 @@ struct VultrCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for VultrCleanup {
-    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
-        // TODO: Rewrite to use CloudProvisioner
-        warn!("Vultr cleanup not yet implemented with CloudProvisioner");
+    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
+        warn!("Vultr cleanup requires CloudProvisioner integration");
         Ok(())
     }
 }

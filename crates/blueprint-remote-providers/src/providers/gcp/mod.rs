@@ -20,7 +20,7 @@ impl GcpProvisioner {
     #[cfg(feature = "gcp")]
     pub async fn new(project_id: String) -> Result<Self> {
         // In production, would use google-cloud-auth crate
-        // For now, use environment variable or metadata service
+        // Use environment variable or GCE metadata service for authentication
         let access_token = Self::get_access_token().await?;
 
         let client = reqwest::Client::builder()

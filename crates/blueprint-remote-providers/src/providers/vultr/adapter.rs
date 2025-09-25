@@ -49,16 +49,7 @@ impl CloudProviderAdapter for VultrAdapter {
 
         let instance_name = format!("blueprint-{}", uuid::Uuid::new_v4());
         
-        // TODO: Implement actual Vultr provisioning
-        let instance = ProvisionedInstance {
-            id: format!("vultr-{}", uuid::Uuid::new_v4()),
-            public_ip: Some("192.168.1.1".to_string()),
-            private_ip: Some("10.0.0.1".to_string()),
-            status: InstanceStatus::Running,
-            provider: crate::core::remote::CloudProvider::Vultr,
-            region: region.to_string(),
-            instance_type: instance_type.to_string(),
-        };
+        return Err(Error::Other("Vultr provisioning not yet implemented. Use AWS, GCP, or DigitalOcean for production deployments.".into()));
 
         info!(
             "Provisioned Vultr instance {} in region {}", 
@@ -69,14 +60,11 @@ impl CloudProviderAdapter for VultrAdapter {
     }
 
     async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        // TODO: Implement actual Vultr termination
-        info!("Terminating Vultr instance: {}", instance_id);
-        Ok(())
+        self.provisioner.terminate_instance(instance_id).await
     }
 
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        info!("Checking status for Vultr instance: {}", instance_id);
-        Ok(InstanceStatus::Running)
+        self.provisioner.get_instance_status(instance_id).await
     }
 
     async fn deploy_blueprint_with_target(
@@ -112,21 +100,58 @@ impl CloudProviderAdapter for VultrAdapter {
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         let instance = self.provision_instance("vc2-2c-4gb", "ewr").await?;
-        
-        // TODO: Implement SSH deployment similar to other providers
-        warn!("Vultr instance SSH deployment not fully implemented");
+        let public_ip = instance.public_ip.as_ref()
+            .ok_or_else(|| Error::Other("Instance has no public IP".into()))?;
+
+        // SSH connection configuration
+        let connection = SshConnection {
+            host: public_ip.clone(),
+            user: self.get_ssh_username().to_string(),
+            key_path: std::env::var("VULTR_SSH_KEY_PATH").ok().map(|p| p.into()),
+            port: 22,
+            password: None,
+            jump_host: None,
+        };
+
+        let deployment_config = DeploymentConfig {
+            name: format!("blueprint-{}", uuid::Uuid::new_v4()),
+            namespace: "blueprint-vultr".to_string(),
+            restart_policy: crate::deployment::ssh::RestartPolicy::OnFailure,
+            health_check: None,
+        };
+
+        let ssh_client = SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
+            .await
+            .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {}", e)))?;
+
+        let deployment = ssh_client
+            .deploy_blueprint(blueprint_image, resource_spec, env_vars)
+            .await
+            .map_err(|e| Error::Other(format!("Blueprint deployment failed: {}", e)))?;
 
         let mut port_mappings = HashMap::new();
-        port_mappings.insert(8080, 8080);
-        port_mappings.insert(9615, 9615);
-        port_mappings.insert(9944, 9944);
+        for (internal_port_str, external_port_str) in &deployment.ports {
+            if let (Ok(internal), Ok(external)) = (
+                internal_port_str.trim_end_matches("/tcp").parse::<u16>(),
+                external_port_str.parse::<u16>(),
+            ) {
+                port_mappings.insert(internal, external);
+            }
+        }
 
         let mut metadata = HashMap::new();
         metadata.insert("provider".to_string(), "vultr-instance".to_string());
+        metadata.insert("container_id".to_string(), deployment.container_id.clone());
+        metadata.insert("ssh_host".to_string(), deployment.host.clone());
+
+        info!(
+            "Successfully deployed blueprint {} to Vultr instance {}",
+            deployment.container_id, instance.id
+        );
 
         Ok(BlueprintDeploymentResult {
-            instance,
-            blueprint_id: format!("vultr-{}", uuid::Uuid::new_v4()),
+            instance: instance.clone(),
+            blueprint_id: deployment.container_id,
             port_mappings,
             metadata,
         })

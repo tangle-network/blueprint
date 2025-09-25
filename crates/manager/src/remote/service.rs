@@ -318,7 +318,7 @@ impl RemoteDeploymentService {
 
             // Register QoS endpoint for remote metrics collection
             if let Some(qos_endpoint) = deployment_result.qos_grpc_endpoint() {
-                info!("📊 Registering QoS monitoring endpoint: {}", qos_endpoint);
+                info!("📊 QoS endpoint available: {}", &qos_endpoint);
 
                 // Parse host and port from endpoint (format: "http://host:port" or "host:port")
                 let endpoint_str = qos_endpoint.replace("http://", "").replace("https://", "");
@@ -340,7 +340,7 @@ impl RemoteDeploymentService {
 
                         #[cfg(not(feature = "qos"))]
                         {
-                            info!("⚠️ QoS feature not enabled - remote metrics collection unavailable");
+                            info!("📊 QoS endpoint ready: {}:{} (QoS feature disabled)", host, port);
                         }
                     }
                 }

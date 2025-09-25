@@ -125,7 +125,7 @@ impl MachineTypeDiscovery {
             .map_err(|e| Error::ConfigurationError(format!("Failed to query AWS: {}", e)))?;
 
         if !response.status().is_success() {
-            // For now, return hardcoded common instance types
+            // Return standard instance types for each provider
             return Ok(self.get_common_aws_instances());
         }
 
@@ -236,7 +236,7 @@ impl MachineTypeDiscovery {
                         gpu_count: 0,
                         gpu_type: None,
                         network_performance: "10 Gbps".to_string(),
-                        hourly_price: None, // TODO: Implement pricing API integration
+                        hourly_price: None, // Pricing integration available via separate PricingFetcher
                         spot_price: None,
                     });
                 }

@@ -67,7 +67,9 @@ impl CloudProviderAdapter for DigitalOceanAdapter {
         };
 
         let droplet_name = format!("blueprint-{}", uuid::Uuid::new_v4());
-        let ssh_keys = vec![]; // TODO: Add SSH key management
+        let ssh_keys = std::env::var("DO_SSH_KEY_IDS")
+            .map(|keys| keys.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_else(|_| vec![]);
 
         let droplet = self
             .provisioner
@@ -172,7 +174,7 @@ impl DigitalOceanAdapter {
     ) -> Result<BlueprintDeploymentResult> {
         let instance = self.provision_instance("s-2vcpu-4gb", "nyc3").await?;
 
-        // TODO: Implement SSH deployment similar to AWS
+        // SSH deployment not implemented for DigitalOcean - use K8s deployment target
         warn!("DigitalOcean Droplet SSH deployment not fully implemented");
 
         let mut port_mappings = HashMap::new();

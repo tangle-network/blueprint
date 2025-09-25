@@ -47,10 +47,32 @@ impl RemoteClusterManager {
             Config::infer().await?
         };
 
-        // If a specific context is requested, we need to validate it exists
-        // Note: kube-rs doesn't have a direct with_context method
-        // TODO: Implement context switching properly
-        let kube_config = kube_config;
+        // If a specific context is requested, switch to it
+        let kube_config = if let Some(context_name) = config.context {
+            // Load the full kubeconfig to access all contexts
+            let kubeconfig_yaml = if let Some(ref path) = config.kubeconfig_path {
+                std::fs::read_to_string(path)
+                    .map_err(|e| Error::Other(format!("Failed to read kubeconfig: {}", e)))?
+            } else {
+                let home = std::env::var("HOME").map_err(|_| Error::Other("HOME not set".into()))?;
+                let default_path = format!("{}/.kube/config", home);
+                std::fs::read_to_string(&default_path)
+                    .map_err(|e| Error::Other(format!("Failed to read kubeconfig: {}", e)))?
+            };
+
+            let mut kubeconfig: Kubeconfig = serde_yaml::from_str(&kubeconfig_yaml)
+                .map_err(|e| Error::Other(format!("Failed to parse kubeconfig: {}", e)))?;
+
+            // Set the current context to the requested one
+            if !kubeconfig.contexts.iter().any(|c| c.name == context_name) {
+                return Err(Error::Other(format!("Context '{}' not found in kubeconfig", context_name)));
+            }
+            kubeconfig.current_context = Some(context_name);
+
+            Config::from_custom_kubeconfig(kubeconfig, &Default::default()).await?
+        } else {
+            kube_config
+        };
 
         let client = Client::try_from(kube_config)?;
 

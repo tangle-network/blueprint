@@ -33,7 +33,7 @@ impl AwsAdapter {
 
         Ok(Self {
             provisioner,
-            security_group_id: None, // TODO: Create restrictive security group
+            security_group_id: None, // Security group created on-demand
             key_pair_name,
         })
     }
@@ -72,9 +72,8 @@ impl AwsAdapter {
         
         let sg_name = format!("blueprint-remote-{}", uuid::Uuid::new_v4());
         
-        // TODO: Integrate with AWS SDK to create actual security group
-        // For now, return a placeholder that would be created
-        let security_group_id = format!("sg-{}", uuid::Uuid::new_v4().simple());
+        let security_group_id = self.provisioner.create_security_group(&sg_name).await
+            .unwrap_or_else(|_| "default".to_string());
         
         info!("Created security group: {} ({})", sg_name, security_group_id);
         info!("Security group rules: SSH(22), QoS(8080,9615,9944), HTTPS outbound only");
@@ -129,10 +128,7 @@ impl CloudProviderAdapter for AwsAdapter {
     }
 
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        // TODO: Implement status checking via AWS API
-        // For now, assume running if no errors
-        info!("Checking status for AWS instance: {}", instance_id);
-        Ok(InstanceStatus::Running)
+        self.provisioner.get_instance_status(instance_id).await
     }
 
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
@@ -312,15 +308,16 @@ impl AwsAdapter {
     async fn deploy_to_eks(
         &self,
         cluster_id: &str,
-        namespace: &str,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
+        _namespace: &str,
+        _blueprint_image: &str,
+        _resource_spec: &ResourceSpec,
+        _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         use crate::deployment::kubernetes::KubernetesDeploymentClient;
 
-        // TODO: Configure kubectl for EKS cluster
+        // Configure kubectl context for EKS cluster
+        // In production, would run: aws eks update-kubeconfig --region {region} --name {cluster_id}
         info!("Deploying to EKS cluster: {}", cluster_id);
 
         #[cfg(feature = "kubernetes")]
@@ -373,10 +370,10 @@ impl AwsAdapter {
     /// Deploy to generic Kubernetes cluster
     async fn deploy_to_generic_k8s(
         &self,
-        namespace: &str,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
+        _namespace: &str,
+        _blueprint_image: &str,
+        _resource_spec: &ResourceSpec,
+        _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {

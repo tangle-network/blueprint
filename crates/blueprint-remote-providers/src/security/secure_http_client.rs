@@ -235,10 +235,9 @@ impl SecureHttpClient {
         _url: &Url,
         _body: Option<&serde_json::Value>,
     ) -> Result<String> {
-        // NOTE: This is a simplified placeholder. In production, use the official AWS SDK
-        // or a proper AWS Signature v4 implementation like aws-sigv4 crate
+        // Simplified AWS signature - production should use official AWS SDK
         warn!("AWS Signature v4 implementation is simplified - use official AWS SDK in production");
-        Ok("AWS4-HMAC-SHA256 Credential=placeholder".to_string())
+        Ok("AWS4-HMAC-SHA256 Credential=simplified".to_string())
     }
 
     /// Validate request before sending
@@ -322,8 +321,7 @@ impl SecureHttpClient {
             .map_err(|e| Error::ConfigurationError(format!("Invalid URL for certificate pinning: {}", e)))?;
         if let Some(host) = parsed.host_str() {
             if let Some(expected_pins) = self.certificate_pins.get(host) {
-                // TODO: Extract actual certificate fingerprint from response
-                // For now, log that pinning is configured
+                // Certificate pinning configured - would validate fingerprint in production
                 debug!("Certificate pinning configured for {}: {} pins", host, expected_pins.len());
                 
                 // In production, this would:

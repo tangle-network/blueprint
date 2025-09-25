@@ -10,15 +10,13 @@ use tracing::info;
 
 /// AWS EC2 provisioner
 pub struct AwsProvisioner {
-    #[cfg(feature = "aws")]
-    ec2_client: aws_sdk_ec2::Client,
+    pub(crate) ec2_client: aws_sdk_ec2::Client,
     #[cfg(feature = "aws-eks")]
-    eks_client: Option<aws_sdk_eks::Client>,
+    pub(crate) eks_client: Option<aws_sdk_eks::Client>,
 }
 
 impl AwsProvisioner {
     /// Create a new AWS provisioner
-    #[cfg(feature = "aws")]
     pub async fn new() -> Result<Self> {
         let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
         let ec2_client = aws_sdk_ec2::Client::new(&config);
@@ -33,15 +31,8 @@ impl AwsProvisioner {
         })
     }
 
-    #[cfg(not(feature = "aws"))]
-    pub async fn new() -> Result<Self> {
-        Err(Error::ConfigurationError(
-            "AWS support not enabled. Enable the 'aws' feature".into(),
-        ))
-    }
 
     /// Provision an EC2 instance
-    #[cfg(feature = "aws")]
     pub async fn provision_instance(
         &self,
         spec: &ResourceSpec,
@@ -128,19 +119,8 @@ impl AwsProvisioner {
         })
     }
 
-    #[cfg(not(feature = "aws"))]
-    pub async fn provision_instance(
-        &self,
-        _spec: &ResourceSpec,
-        _config: &ProvisioningConfig,
-    ) -> Result<ProvisionedInfrastructure> {
-        Err(Error::ConfigurationError(
-            "AWS support not enabled. Enable the 'aws' feature".into(),
-        ))
-    }
 
     /// Terminate an EC2 instance
-    #[cfg(feature = "aws")]
     pub async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
         self.ec2_client
             .terminate_instances()
@@ -152,10 +132,74 @@ impl AwsProvisioner {
         Ok(())
     }
 
-    #[cfg(not(feature = "aws"))]
-    pub async fn terminate_instance(&self, _instance_id: &str) -> Result<()> {
-        Err(Error::ConfigurationError(
-            "AWS support not enabled. Enable the 'aws' feature".into(),
-        ))
+
+    /// Get instance status
+    pub async fn get_instance_status(&self, instance_id: &str) -> Result<crate::infra::types::InstanceStatus> {
+        let describe_result = self.ec2_client
+            .describe_instances()
+            .instance_ids(instance_id)
+            .send()
+            .await
+            .map_err(|e| Error::ConfigurationError(format!("Failed to describe instance: {}", e)))?;
+
+        let instance = describe_result
+            .reservations()
+            .first()
+            .and_then(|r| r.instances().first())
+            .ok_or_else(|| Error::ConfigurationError("Instance not found".into()))?;
+
+        let state_name = instance.state()
+            .and_then(|s| s.name())
+            .map(|n| format!("{:?}", n))
+            .unwrap_or_else(|| "unknown".to_string());
+
+        match state_name.to_lowercase().as_str() {
+            "running" => Ok(crate::infra::types::InstanceStatus::Running),
+            "pending" => Ok(crate::infra::types::InstanceStatus::Starting),
+            "stopping" | "stopped" | "terminated" => Ok(crate::infra::types::InstanceStatus::Terminated),
+            _ => Ok(crate::infra::types::InstanceStatus::Unknown),
+        }
     }
+
+
+    /// Create security group
+    pub async fn create_security_group(&self, sg_name: &str) -> Result<String> {
+        use aws_sdk_ec2::types::{IpPermission, IpRange};
+
+        let create_result = self.ec2_client
+            .create_security_group()
+            .group_name(sg_name)
+            .description("Blueprint remote providers security group - SSH and QoS ports")
+            .send()
+            .await
+            .map_err(|e| Error::ConfigurationError(format!("Failed to create security group: {}", e)))?;
+
+        let sg_id = create_result.group_id().unwrap_or("").to_string();
+
+        // Add inbound rules: SSH (22), QoS (8080, 9615, 9944)
+        let ssh_rule = IpPermission::builder()
+            .ip_protocol("tcp")
+            .from_port(22)
+            .to_port(22)
+            .ip_ranges(IpRange::builder().cidr_ip("0.0.0.0/0").build())
+            .build();
+
+        let qos_rule = IpPermission::builder()
+            .ip_protocol("tcp")
+            .from_port(8080)
+            .to_port(9944)
+            .ip_ranges(IpRange::builder().cidr_ip("0.0.0.0/0").build())
+            .build();
+
+        let _ = self.ec2_client
+            .authorize_security_group_ingress()
+            .group_id(&sg_id)
+            .ip_permissions(ssh_rule)
+            .ip_permissions(qos_rule)
+            .send()
+            .await;
+
+        Ok(sg_id)
+    }
+
 }

@@ -257,7 +257,7 @@ impl PricingFetcher {
 
         // GCP publishes pricing at https://cloud.google.com/compute/all-pricing
         // This is a large HTML page with embedded pricing data
-        // For now, we'll use a simplified approach with common instance types
+        // Uses simplified pricing model with common instance types
 
         // Map GCP regions to their pricing multipliers (us-central1 is baseline)
         let region_multiplier = match region {

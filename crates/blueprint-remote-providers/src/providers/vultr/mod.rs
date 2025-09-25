@@ -1,9 +1,7 @@
 //! Vultr cloud provider implementation
 
 pub mod adapter;
+pub mod provisioner;
 
 pub use adapter::VultrAdapter;
-
-// TODO: Implement VultrProvisioner for actual instance provisioning
-// pub mod provisioner;
-// pub use provisioner::VultrProvisioner;
+pub use provisioner::VultrProvisioner;
