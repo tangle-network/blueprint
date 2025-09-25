@@ -5,11 +5,11 @@ use alloy_provider::network::Ethereum;
 use alloy_rpc_types_eth::TransactionReceipt;
 use blueprint_core::info;
 use dialoguer::console::style;
-use eigensdk::utils::rewardsv2::middleware::ecdsastakeregistry::ECDSAStakeRegistry;
-use eigensdk::utils::rewardsv2::middleware::ecdsastakeregistry::ECDSAStakeRegistry::Quorum;
-use eigensdk::utils::slashing::middleware::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
-use eigensdk::utils::slashing::middleware::registrycoordinator::IStakeRegistryTypes::StrategyParams;
-use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordinator;
+use eigensdk::utils::rewardsv2::middleware::ecdsa_stake_registry::ECDSAStakeRegistry;
+use eigensdk::utils::rewardsv2::middleware::ecdsa_stake_registry::ECDSAStakeRegistry::Quorum;
+use eigensdk::utils::slashing::middleware::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
+use eigensdk::utils::slashing::middleware::registry_coordinator::IStakeRegistryTypes::StrategyParams;
+use eigensdk::utils::slashing::middleware::registry_coordinator::RegistryCoordinator;
 use std::fs::{self};
 use tempfile::TempDir;
 use testcontainers::{
