@@ -1,9 +1,9 @@
-[target.aarch64-apple-darwin]
-linker = "clang++"
-
-[env]
-CXXFLAGS = "-include cstdint"
-
 [build]
-# For access to tokio metrics
-rustflags = ["--cfg", "tokio_unstable"]
+# Configuration for macOS development
+
+[alias]
+# Convenient aliases for macOS development
+check-mac = "check --no-default-features --features macos-dev"
+build-mac = "build --no-default-features --features macos-dev"  
+test-mac = "test --no-default-features --features macos-dev"
+run-mac = "run --no-default-features --features macos-dev"

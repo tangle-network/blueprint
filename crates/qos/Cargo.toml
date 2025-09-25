@@ -17,7 +17,9 @@ blueprint-core = { workspace = true, default-features = false, features = ["trac
 blueprint-crypto = { workspace = true, features = ["hashing", "sp-core", "tangle-pair-signer"] }
 blueprint-keystore = { workspace = true }
 blueprint-std = { workspace = true }
+blueprint-remote-providers = { workspace = true, optional = true }
 
+async-trait = { workspace = true }
 bollard = { workspace = true, features = ["ssl"] }
 tempfile = { workspace = true }
 tangle-subxt = { workspace = true, features = ["std"] }
@@ -37,6 +39,7 @@ opentelemetry-semantic-conventions = { workspace = true, features = ["semconv_ex
 opentelemetry_sdk = { workspace = true, features = ["metrics", "rt-tokio", "trace"] }
 axum = { workspace = true, features = ["tokio", "http1", "http2", "json"] }
 futures = { workspace = true, features = ["executor"] }
+tracing = { workspace = true }
 tracing-loki = { workspace = true, features = ["compat-0-2-1"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 tracing-opentelemetry = { workspace = true }
@@ -61,3 +64,4 @@ std = [
     "blueprint-std/std",
     "sp-core/std",
 ]
+remote = ["dep:blueprint-remote-providers"]

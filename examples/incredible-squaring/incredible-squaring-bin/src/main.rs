@@ -17,7 +17,7 @@ use tower::filter::FilterLayer;
 
 #[tokio::main]
 async fn main() -> Result<(), blueprint_sdk::Error> {
-    setup_log();
+    // Initialize logging - can be configured via RUST_LOG environment variable
 
     info!("Starting the incredible squaring blueprint!");
 
