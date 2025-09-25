@@ -5,11 +5,16 @@ use alloy_provider::{
     PendingTransactionBuilder, PendingTransactionError, Provider, ProviderBuilder, RootProvider,
     WsConnect,
 };
+use reqwest::Url as ReqwestUrl;
 use alloy_rpc_types::eth::TransactionReceipt;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::TransportErrorKind;
 use blueprint_std::str::FromStr;
 use url::Url;
+
+fn to_reqwest_url(url: Url) -> ReqwestUrl {
+    ReqwestUrl::parse(url.as_str()).expect("valid URL")
+}
 
 /// 1 day
 pub const SIGNATURE_EXPIRY: U256 = U256::from_limbs([86400, 0, 0, 0]);
@@ -26,10 +31,9 @@ pub fn get_provider_http<T: TryInto<Url>>(http_endpoint: T) -> RootProvider
 where
     <T as TryInto<Url>>::Error: std::fmt::Debug,
 {
-    ProviderBuilder::new()
-        .on_http(http_endpoint.try_into().unwrap())
-        .root()
-        .clone()
+    let endpoint: Url = http_endpoint.try_into().unwrap();
+    let provider = ProviderBuilder::new().connect_http(to_reqwest_url(endpoint));
+    provider.root().clone()
 }
 
 /// Get the provider for a http endpoint with the specified [`Wallet`](EthereumWallet)
@@ -47,11 +51,11 @@ pub fn get_wallet_provider_http<T: TryInto<Url>>(
 where
     <T as TryInto<Url>>::Error: std::fmt::Debug,
 {
-    ProviderBuilder::new()
+    let endpoint: Url = http_endpoint.try_into().unwrap();
+    let provider = ProviderBuilder::new()
         .wallet(wallet)
-        .on_http(http_endpoint.try_into().unwrap())
-        .root()
-        .clone()
+        .connect_http(to_reqwest_url(endpoint));
+    provider.root().clone()
 }
 
 /// Get the provider for a websocket endpoint
@@ -63,12 +67,11 @@ where
 /// - If the provided websocket endpoint is not a valid URL
 #[must_use]
 pub async fn get_provider_ws(ws_endpoint: &str) -> RootProvider {
-    ProviderBuilder::new()
-        .on_ws(WsConnect::new(ws_endpoint))
+    let provider = ProviderBuilder::new()
+        .connect_ws(WsConnect::new(ws_endpoint))
         .await
-        .unwrap()
-        .root()
-        .clone()
+        .unwrap();
+    provider.root().clone()
 }
 
 #[allow(clippy::type_complexity)]
@@ -86,11 +89,11 @@ where
 {
     let signer = PrivateKeySigner::from_str(key).expect("wrong key ");
     let wallet = EthereumWallet::from(signer);
-    ProviderBuilder::new()
+    let endpoint: Url = rpc_url.try_into().unwrap();
+    let provider = ProviderBuilder::new()
         .wallet(wallet.clone())
-        .on_http(rpc_url.try_into().unwrap())
-        .root()
-        .clone()
+        .connect_http(to_reqwest_url(endpoint));
+    provider.root().clone()
 }
 
 /// Wait for a transaction to finish and return its receipt.
@@ -117,9 +120,11 @@ pub async fn wait_transaction(
     let url = rpc_url
         .try_into()
         .map_err(|_| TransportErrorKind::custom_str("Invalid RPC URL"))?;
-    let root_provider = ProviderBuilder::new()
+    let reqwest_url = to_reqwest_url(url);
+    let provider = ProviderBuilder::new()
         .disable_recommended_fillers()
-        .on_http(url);
+        .connect_http(reqwest_url);
+    let root_provider = provider.root().clone();
     let pending_tx = PendingTransactionBuilder::new(root_provider, tx_hash);
     pending_tx.get_receipt().await
 }

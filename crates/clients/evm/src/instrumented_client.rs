@@ -12,6 +12,7 @@ use alloy_rpc_types_eth::{
     TransactionReceipt, TransactionRequest,
 };
 use alloy_transport::{TransportError, TransportResult};
+use reqwest::Url as ReqwestUrl;
 use blueprint_metrics_rpc_calls::RpcCallsMetrics as RpcCallsCollector;
 use blueprint_std::string::String;
 use blueprint_std::string::ToString;
@@ -125,12 +126,15 @@ impl InstrumentedClient {
     ///
     /// Returns an error if the URL is invalid or if there is an error getting the version.
     pub async fn new<T: TryInto<Url>>(url: T) -> Result<Self, InstrumentedClientError> {
-        let url = url
+        let endpoint: Url = url
             .try_into()
             .map_err(|_| InstrumentedClientError::InvalidUrl)?;
-        let http_client = ProviderBuilder::new()
+        let reqwest_url = ReqwestUrl::parse(endpoint.as_str())
+            .map_err(|_| InstrumentedClientError::InvalidUrl)?;
+        let provider = ProviderBuilder::new()
             .disable_recommended_fillers()
-            .on_http(url);
+            .connect_http(reqwest_url);
+        let http_client = provider.root().clone();
         let net_version = http_client
             .get_net_version()
             .await
@@ -158,15 +162,16 @@ impl InstrumentedClient {
     ///
     /// Returns an error if the URL is invalid or if there is an error getting the version.
     pub async fn new_ws<T: TryInto<Url>>(url: T) -> Result<Self, InstrumentedClientError> {
-        let url = url
+        let endpoint: Url = url
             .try_into()
             .map_err(|_| InstrumentedClientError::InvalidUrl)?;
-        let ws_connect = WsConnect::new(url);
+        let ws_connect = WsConnect::new(endpoint);
 
-        let ws_client = ProviderBuilder::new()
+        let provider = ProviderBuilder::new()
             .disable_recommended_fillers()
-            .on_ws(ws_connect)
+            .connect_ws(ws_connect)
             .await?;
+        let ws_client = provider.root().clone();
         let net_version = ws_client
             .get_net_version()
             .await
