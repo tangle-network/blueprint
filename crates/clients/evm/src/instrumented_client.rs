@@ -12,13 +12,13 @@ use alloy_rpc_types_eth::{
     TransactionReceipt, TransactionRequest,
 };
 use alloy_transport::{TransportError, TransportResult};
-use reqwest::Url as ReqwestUrl;
 use blueprint_metrics_rpc_calls::RpcCallsMetrics as RpcCallsCollector;
 use blueprint_std::string::String;
 use blueprint_std::string::ToString;
 use blueprint_std::time::Instant;
 use blueprint_std::vec::Vec;
 use hex;
+use reqwest::Url as ReqwestUrl;
 use thiserror::Error;
 use url::Url;
 

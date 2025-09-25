@@ -5,11 +5,11 @@ use alloy_provider::{
     PendingTransactionBuilder, PendingTransactionError, Provider, ProviderBuilder, RootProvider,
     WsConnect,
 };
-use reqwest::Url as ReqwestUrl;
 use alloy_rpc_types::eth::TransactionReceipt;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::TransportErrorKind;
 use blueprint_std::str::FromStr;
+use reqwest::Url as ReqwestUrl;
 use url::Url;
 
 fn to_reqwest_url(url: Url) -> ReqwestUrl {

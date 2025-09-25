@@ -19,10 +19,7 @@ pub async fn get_allocation_manager_address(
             delegation_manager_addr,
             provider,
         );
-    delegation_manager
-        .allocationManager()
-        .call()
-        .await
+    delegation_manager.allocationManager().call().await
 }
 
 /// Generate the Operator ID from the BLS Keypair
