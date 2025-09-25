@@ -76,12 +76,34 @@ impl RemoteProviderManager {
         // Use provided resources or default
         let resource_spec = resource_requirements.unwrap_or_else(ResourceSpec::minimal);
 
-        // Deploy to the most suitable provider based on resource requirements
-        let provider = CloudProvider::AWS; // TODO: Use intelligent provider selection
-        
+        // Use intelligent provider selection based on resource requirements
+        let provider = if resource_spec.gpu_count.is_some() {
+            // GPU workloads prefer GCP or AWS
+            CloudProvider::GCP
+        } else if resource_spec.cpu > 8.0 {
+            // High CPU workloads prefer cost-optimized providers
+            CloudProvider::Vultr
+        } else if resource_spec.memory_gb > 32.0 {
+            // High memory workloads prefer AWS or GCP
+            CloudProvider::AWS
+        } else {
+            // Standard workloads use cost-optimized providers
+            CloudProvider::DigitalOcean
+        };
+
+        // Get appropriate region for the provider
+        let region = match provider {
+            CloudProvider::AWS => "us-east-1",
+            CloudProvider::GCP => "us-central1",
+            CloudProvider::Azure => "eastus",
+            CloudProvider::DigitalOcean => "nyc3",
+            CloudProvider::Vultr => "ewr",
+            _ => "default",
+        };
+
         match self
             .provisioner
-            .provision(provider, &resource_spec, "us-west-2")
+            .provision(provider, &resource_spec, region)
             .await
         {
             Ok(instance) => {

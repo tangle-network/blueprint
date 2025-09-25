@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-// removed unused imports
+use tracing::{debug, info};
 
 /// Deployment preferences configured by operators
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -471,8 +471,40 @@ allow_fallback = true
     }
 
     /// Load cloud credentials from a file
-    pub fn load_credentials_from_file(&mut self, _path: &Path) -> Result<()> {
-        // TODO: Implement credential loading
+    pub fn load_credentials_from_file(&mut self, path: &Path) -> Result<()> {
+        use std::fs;
+
+        // Read the credentials file (expected format: KEY=value per line)
+        let contents = fs::read_to_string(path)
+            .map_err(|e| Error::Other(format!("Failed to read credentials file: {}", e)))?;
+
+        // Parse and set environment variables
+        for line in contents.lines() {
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim();
+                let value = value.trim();
+
+                // Set supported credential environment variables
+                match key {
+                    "AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY" | "AWS_REGION" |
+                    "GOOGLE_APPLICATION_CREDENTIALS" | "GOOGLE_CLOUD_PROJECT" |
+                    "AZURE_CLIENT_ID" | "AZURE_CLIENT_SECRET" | "AZURE_TENANT_ID" |
+                    "DIGITALOCEAN_TOKEN" | "DO_TOKEN" |
+                    "VULTR_API_KEY" => {
+                        // SAFETY: We're only setting environment variables during initialization
+                        // before any threads are spawned that might read them
+                        unsafe {
+                            std::env::set_var(key, value);
+                        }
+                        info!("Loaded credential: {}", key);
+                    }
+                    _ => {
+                        debug!("Skipping unknown credential key: {}", key);
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 }

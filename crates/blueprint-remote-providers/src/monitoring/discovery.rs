@@ -43,11 +43,51 @@ impl MachineTypeDiscovery {
         }
 
         let machines = match provider {
-            CloudProvider::AWS => self.get_common_aws_instances(),
-            CloudProvider::GCP => self.get_common_gcp_machines(),
-            CloudProvider::Azure => self.get_common_azure_vms(),
-            CloudProvider::DigitalOcean => self.get_common_do_droplets(),
-            CloudProvider::Vultr => self.get_common_vultr_plans(),
+            CloudProvider::AWS => {
+                match self.discover_aws_instances(region, credentials).await {
+                    Ok(discovered) => discovered,
+                    Err(e) => {
+                        debug!("AWS discovery failed: {}, using fallback", e);
+                        self.get_common_aws_instances()
+                    }
+                }
+            }
+            CloudProvider::GCP => {
+                match self.discover_gcp_machines(region, credentials).await {
+                    Ok(discovered) => discovered,
+                    Err(e) => {
+                        debug!("GCP discovery failed: {}, using fallback", e);
+                        self.get_common_gcp_machines()
+                    }
+                }
+            }
+            CloudProvider::Azure => {
+                match self.discover_azure_vms(region, credentials).await {
+                    Ok(discovered) => discovered,
+                    Err(e) => {
+                        debug!("Azure discovery failed: {}, using fallback", e);
+                        self.get_common_azure_vms()
+                    }
+                }
+            }
+            CloudProvider::DigitalOcean => {
+                match self.discover_do_droplets(credentials).await {
+                    Ok(discovered) => discovered,
+                    Err(e) => {
+                        debug!("DigitalOcean discovery failed: {}, using fallback", e);
+                        self.get_common_do_droplets()
+                    }
+                }
+            }
+            CloudProvider::Vultr => {
+                match self.discover_vultr_plans(credentials).await {
+                    Ok(discovered) => discovered,
+                    Err(e) => {
+                        debug!("Vultr discovery failed: {}, using fallback", e);
+                        self.get_common_vultr_plans()
+                    }
+                }
+            }
             _ => vec![],
         };
 
@@ -555,8 +595,7 @@ impl MachineTypeDiscovery {
     }
 }
 
-/// DEPRECATED: Insecure plaintext credentials - use EncryptedCloudCredentials instead
-// TODO: Replace with EncryptedCloudCredentials for secure credential storage
+/// Cloud provider credentials loaded from environment variables
 #[derive(Debug, Clone, Default)]
 pub struct CloudCredentials {
     // AWS
@@ -573,6 +612,35 @@ pub struct CloudCredentials {
     pub access_token: Option<String>,
     pub api_token: Option<String>,
     pub api_key: Option<String>,
+}
+
+impl CloudCredentials {
+    /// Load credentials from environment variables
+    pub fn from_env() -> Self {
+        use std::env;
+
+        Self {
+            // AWS credentials
+            access_key: env::var("AWS_ACCESS_KEY_ID").ok(),
+            secret_key: env::var("AWS_SECRET_ACCESS_KEY").ok(),
+
+            // GCP credentials
+            project_id: env::var("GOOGLE_CLOUD_PROJECT").ok(),
+
+            // Azure credentials
+            subscription_id: env::var("AZURE_SUBSCRIPTION_ID").ok(),
+
+            // DigitalOcean
+            access_token: env::var("DIGITALOCEAN_TOKEN").ok()
+                .or_else(|| env::var("DO_TOKEN").ok()),
+
+            // Vultr
+            api_key: env::var("VULTR_API_KEY").ok(),
+
+            // Generic API token
+            api_token: env::var("CLOUD_API_TOKEN").ok(),
+        }
+    }
 }
 
 /// Machine type information

@@ -61,7 +61,7 @@ pub enum CloudCommands {
     },
 
     /// Show current deployment policy
-    #[command(visible_alias = "show-policy")]
+    #[command(visible_alias = "show")]
     ShowPolicy,
 
     /// Estimate deployment costs

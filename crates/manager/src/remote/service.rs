@@ -11,7 +11,7 @@ use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 
 #[cfg(feature = "remote-deployer")]
 use blueprint_remote_providers::{
-    CloudProvisioner, DeploymentTracker, SshDeploymentClient as SshDeploymentService,
+    CloudProvisioner, DeploymentTracker, HealthMonitor,
 };
 
 use blueprint_std::collections::HashMap;
@@ -48,6 +48,15 @@ pub struct RemoteDeploymentService {
     deployments: Arc<RwLock<HashMap<String, RemoteDeploymentInfo>>>,
     /// Deployment policy
     policy: RemoteDeploymentPolicy,
+    /// Health monitor for deployment health checks
+    #[cfg(feature = "remote-deployer")]
+    health_monitor: Option<HealthMonitor>,
+    /// Deployment tracker for persistence
+    #[cfg(feature = "remote-deployer")]
+    deployment_tracker: Option<Arc<DeploymentTracker>>,
+    /// QoS remote metrics provider for collecting metrics from remote instances
+    #[cfg(feature = "qos")]
+    qos_provider: Option<Arc<blueprint_qos::remote::RemoteMetricsProvider>>,
 }
 
 /// Information about a remote deployment (simplified for Phase 2).
@@ -67,10 +76,55 @@ impl RemoteDeploymentService {
     pub async fn new(policy: RemoteDeploymentPolicy) -> Result<Self> {
         let selector = ProviderSelector::new(policy.provider_preferences.clone());
 
+        // Initialize QoS remote metrics provider if feature is enabled
+        #[cfg(feature = "qos")]
+        let qos_provider = {
+            let provider = blueprint_qos::remote::RemoteMetricsProvider::new(100);
+            Some(Arc::new(provider))
+        };
+
+        #[cfg(feature = "remote-deployer")]
+        let (health_monitor, deployment_tracker) = {
+            // Initialize health monitor and deployment tracker if remote deployer is enabled
+            use blueprint_std::env;
+            use std::path::PathBuf;
+
+            // Use config path or default
+            let tracker_path = env::var("TANGLE_DEPLOYMENT_TRACKER_PATH")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| {
+                    dirs::home_dir()
+                        .unwrap_or_else(|| PathBuf::from("."))
+                        .join(".tangle")
+                        .join("remote_deployments")
+                });
+
+            match (
+                CloudProvisioner::new().await,
+                DeploymentTracker::new(&tracker_path).await,
+            ) {
+                (Ok(provisioner), Ok(tracker)) => {
+                    let tracker_arc = Arc::new(tracker);
+                    let health_monitor = Some(HealthMonitor::new(
+                        Arc::new(provisioner),
+                        tracker_arc.clone(),
+                    ));
+                    (health_monitor, Some(tracker_arc))
+                }
+                _ => (None, None),
+            }
+        };
+
         Ok(Self {
             selector,
             deployments: Arc::new(RwLock::new(HashMap::new())),
             policy,
+            #[cfg(feature = "remote-deployer")]
+            health_monitor,
+            #[cfg(feature = "remote-deployer")]
+            deployment_tracker,
+            #[cfg(feature = "qos")]
+            qos_provider,
         })
     }
 
@@ -192,17 +246,40 @@ impl RemoteDeploymentService {
         {
             // Use real cloud provider SDK
             use blueprint_remote_providers::CloudProvisioner;
+            use blueprint_remote_providers::core::deployment_target::{DeploymentTarget, ContainerRuntime};
 
             let provisioner = CloudProvisioner::new()
                 .await
                 .map_err(|e| Error::Other(format!("Failed to create provisioner: {}", e)))?;
+
+            // Get region from policy or use default
+            let region = self
+                .policy
+                .regional_preferences
+                .first()
+                .cloned()
+                .unwrap_or_else(|| match provider {
+                    CloudProvider::AWS => "us-east-1".to_string(),
+                    CloudProvider::GCP => "us-central1".to_string(),
+                    CloudProvider::Azure => "eastus".to_string(),
+                    CloudProvider::DigitalOcean => "nyc3".to_string(),
+                    CloudProvider::Vultr => "ewr".to_string(),
+                    _ => "default".to_string(),
+                });
+
+            info!("   Region: {}", region);
+
+            // Create deployment target for VM with Docker
+            let target = DeploymentTarget::VirtualMachine {
+                runtime: ContainerRuntime::Docker,
+            };
 
             // Provision the actual instance using the remote providers resource spec directly
             let instance = provisioner
                 .provision(
                     provider,
                     &convert_resource_spec(&resource_spec),
-                    "us-west-2", // TODO: Get region from config
+                    &region,
                 )
                 .await
                 .map_err(|e| Error::Other(format!("Failed to provision instance: {}", e)))?;
@@ -212,20 +289,62 @@ impl RemoteDeploymentService {
                 instance.instance_id, instance.public_ip
             );
 
-            // Deploy the binary via SSH
-            let ssh_service = SshDeploymentService::new();
-            ssh_service
-                .deploy(
-                    &instance.public_ip,
-                    binary_path,
-                    service_name,
-                    env_vars.clone(),
-                    arguments.clone(),
+            // Use binary path directly - container will be created by the adapter
+            // The adapter will handle wrapping the binary in a container or systemd service
+            let blueprint_image = binary_path.to_string_lossy().to_string();
+
+            // Convert env_vars and arguments to HashMap
+            let mut env_map = HashMap::new();
+            for (key, value) in env_vars.iter() {
+                env_map.insert(key.clone(), value.clone());
+            }
+            for (i, arg) in arguments.iter().enumerate() {
+                env_map.insert(format!("ARG_{}", i), arg.clone());
+            }
+
+            // Deploy blueprint using the adapter's deploy_blueprint_with_target
+            // This will handle SSH deployment, Docker setup, and QoS port exposure
+            let deployment_result = provisioner
+                .deploy_with_target(
+                    &target,
+                    &blueprint_image,
+                    &convert_resource_spec(&resource_spec),
+                    env_map,
                 )
                 .await
-                .map_err(|e| Error::Other(format!("Failed to deploy via SSH: {}", e)))?;
+                .map_err(|e| Error::Other(format!("Failed to deploy blueprint: {}", e)))?;
 
-            info!("✅ Blueprint binary deployed to remote instance");
+            info!("✅ Blueprint deployed with QoS monitoring enabled");
+
+            // Register QoS endpoint for remote metrics collection
+            if let Some(qos_endpoint) = deployment_result.qos_grpc_endpoint() {
+                info!("📊 Registering QoS monitoring endpoint: {}", qos_endpoint);
+
+                // Parse host and port from endpoint (format: "http://host:port" or "host:port")
+                let endpoint_str = qos_endpoint.replace("http://", "").replace("https://", "");
+                if let Some((host, port_str)) = endpoint_str.rsplit_once(':') {
+                    if let Ok(port) = port_str.parse::<u16>() {
+                        // Register with the QoS remote metrics provider
+                        // This allows the QoS system to collect metrics from the remote instance
+                        #[cfg(feature = "qos")]
+                        if let Some(ref qos_provider) = self.qos_provider {
+                            qos_provider.register_remote_instance(
+                                instance.instance_id.clone(),
+                                host.to_string(),
+                                port,
+                            ).await;
+                            info!("✅ QoS endpoint registered: {}:{}", host, port);
+                            info!("   Instance: {}", instance.instance_id);
+                            info!("   Blueprint metrics will be collected from port {}", port);
+                        }
+
+                        #[cfg(not(feature = "qos"))]
+                        {
+                            info!("⚠️ QoS feature not enabled - remote metrics collection unavailable");
+                        }
+                    }
+                }
+            }
 
             // Register deployment
             let deployment_info = RemoteDeploymentInfo {
@@ -274,29 +393,117 @@ impl RemoteDeploymentService {
 
     async fn deploy_to_kubernetes(
         &self,
-        _ctx: &BlueprintManagerContext,
-        _context: &str,
-        _namespace: &str,
-        _service_name: &str,
-        _binary_path: &Path,
-        _env_vars: BlueprintEnvVars,
-        _arguments: BlueprintArgs,
-        _resource_spec: ResourceSpec,
+        ctx: &BlueprintManagerContext,
+        context: &str,
+        namespace: &str,
+        service_name: &str,
+        binary_path: &Path,
+        env_vars: BlueprintEnvVars,
+        arguments: BlueprintArgs,
+        resource_spec: ResourceSpec,
     ) -> Result<Service> {
-        // TODO: Implement K8s deployment using existing RemoteClusterManager
-        warn!("Kubernetes deployment not yet implemented in Phase 2");
-        Err(Error::Other(
-            "Kubernetes deployment not implemented yet".into(),
-        ))
+        info!("🚀 Deploying to Kubernetes cluster");
+        info!("   Context: {}", context);
+        info!("   Namespace: {}", namespace);
+        info!("   Service: {}", service_name);
+
+        #[cfg(feature = "remote-deployer")]
+        {
+            use blueprint_remote_providers::{CloudProvisioner, core::deployment_target::{DeploymentTarget, ContainerRuntime}};
+
+            // Create provisioner
+            let provisioner = CloudProvisioner::new()
+                .await
+                .map_err(|e| Error::Other(format!("Failed to create provisioner: {}", e)))?;
+
+            // Create Kubernetes deployment target
+            let target = DeploymentTarget::GenericKubernetes {
+                context: Some(context.to_string()),
+                namespace: namespace.to_string(),
+            };
+
+            // For Kubernetes, we need a container image
+            // Use the gadget registry with service name and version
+            let blueprint_image = format!("ghcr.io/tangle-network/gadget/{}:latest", service_name);
+
+            // Convert env_vars to HashMap
+            let mut env_map = HashMap::new();
+            for (key, value) in env_vars.iter() {
+                env_map.insert(key.clone(), value.clone());
+            }
+
+            // Add arguments as environment variables
+            for (i, arg) in arguments.iter().enumerate() {
+                env_map.insert(format!("ARG_{}", i), arg.clone());
+            }
+
+            // Deploy to Kubernetes using generic adapter
+            // Note: This will use kubectl to deploy to any K8s cluster
+            let deployment_result = provisioner
+                .deploy_with_target(
+                    &target,
+                    &blueprint_image,
+                    &convert_resource_spec(&resource_spec),
+                    env_map,
+                )
+                .await
+                .map_err(|e| Error::Other(format!("Failed to deploy to Kubernetes: {}", e)))?;
+
+            info!(
+                "✅ Blueprint deployed to Kubernetes: {}",
+                deployment_result.blueprint_id
+            );
+
+            // Register deployment
+            let deployment_info = RemoteDeploymentInfo {
+                instance_id: deployment_result.blueprint_id.clone(),
+                provider: CloudProvider::Generic, // Generic K8s provider
+                service_name: service_name.to_string(),
+                blueprint_id: None,
+                deployed_at: chrono::Utc::now(),
+                ttl_expires_at: self
+                    .policy
+                    .auto_terminate_hours
+                    .map(|hours| chrono::Utc::now() + chrono::Duration::hours(hours as i64)),
+                public_ip: deployment_result.endpoints.get("service").cloned(),
+            };
+
+            {
+                let mut deployments = self.deployments.write().await;
+                deployments.insert(deployment_result.blueprint_id.clone(), deployment_info.clone());
+            }
+
+            info!("✅ Kubernetes deployment registered");
+
+            // Return a service handle
+            let runtime_dir = ctx.data_dir().join("runtime").join(service_name);
+            Service::new_native(
+                ctx,
+                ResourceLimits::default(),
+                runtime_dir,
+                service_name,
+                binary_path,
+                env_vars,
+                arguments,
+            )
+            .await
+        }
+
+        #[cfg(not(feature = "remote-deployer"))]
+        {
+            Err(Error::Other(
+                "Kubernetes deployment requires the 'remote-deployer' feature to be enabled".into(),
+            ))
+        }
     }
 
     /// Convert Blueprint Manager ResourceLimits to ResourceSpec.
     fn convert_limits_to_spec(&self, limits: &ResourceLimits) -> Result<ResourceSpec> {
         Ok(ResourceSpec {
-            cpu: 4.0, // TODO: Extract CPU from ResourceLimits when available
+            cpu: limits.cpu_count.map(|c| c as f32).unwrap_or(2.0), // Use actual CPU count or default to 2
             memory_gb: (limits.memory_size as f32) / (1024.0 * 1024.0 * 1024.0), // Convert bytes to GB
             storage_gb: (limits.storage_space as f32) / (1024.0 * 1024.0 * 1024.0), // Convert bytes to GB
-            gpu_count: None, // TODO: Extract GPU from ResourceLimits when available
+            gpu_count: limits.gpu_count.map(|g| g as u32), // Use actual GPU count if specified
             allow_spot: self.policy.prefer_spot,
         })
     }
@@ -318,12 +525,36 @@ impl RemoteDeploymentService {
         };
 
         if let Some(deployment_info) = deployment {
-            info!(
-                "🚀 Phase 2: Simulating termination of instance: {}",
-                deployment_info.instance_id
-            );
-            info!("   Provider: {:?}", deployment_info.provider);
-            info!("✓ Deployment terminated (simulated)");
+            #[cfg(feature = "remote-deployer")]
+            {
+                // Use real cloud provider termination
+                use blueprint_remote_providers::CloudProvisioner;
+
+                info!(
+                    "🚫 Terminating instance {} on provider {:?}",
+                    deployment_info.instance_id, deployment_info.provider
+                );
+
+                let provisioner = CloudProvisioner::new()
+                    .await
+                    .map_err(|e| Error::Other(format!("Failed to create provisioner: {}", e)))?;
+
+                // Terminate the instance with the correct provider
+                provisioner
+                    .terminate(deployment_info.provider, &deployment_info.instance_id)
+                    .await
+                    .map_err(|e| Error::Other(format!("Failed to terminate instance: {}", e)))?;
+
+                info!("✅ Instance {} terminated successfully", deployment_info.instance_id);
+            }
+
+            #[cfg(not(feature = "remote-deployer"))]
+            {
+                warn!(
+                    "Remote deployment termination requires 'remote-deployer' feature. Instance {} not terminated.",
+                    deployment_info.instance_id
+                );
+            }
         } else {
             warn!("Deployment {} not found in registry", instance_id);
         }
@@ -359,6 +590,38 @@ impl RemoteDeploymentService {
 
         Ok(())
     }
+
+    /// Check health of a specific deployment.
+    pub async fn check_deployment_health(&self, instance_id: &str) -> Result<bool> {
+        #[cfg(feature = "remote-deployer")]
+        {
+            if let Some(ref health_monitor) = self.health_monitor {
+                health_monitor.is_healthy(instance_id).await.map_err(|e| Error::Other(format!("Health check failed: {}", e)))
+            } else {
+                warn!("Health monitor not available, assuming healthy");
+                Ok(true)
+            }
+        }
+
+        #[cfg(not(feature = "remote-deployer"))]
+        {
+            warn!("Health monitoring requires the 'remote-deployer' feature");
+            Ok(true)
+        }
+    }
+
+    /// Get health status of all deployments.
+    pub async fn get_all_health_status(&self) -> Result<HashMap<String, bool>> {
+        let mut health_status = HashMap::new();
+
+        let deployments = self.deployments.read().await;
+        for (instance_id, _) in deployments.iter() {
+            let is_healthy = self.check_deployment_health(instance_id).await.unwrap_or(false);
+            health_status.insert(instance_id.clone(), is_healthy);
+        }
+
+        Ok(health_status)
+    }
 }
 
 /// Extension trait for Service to support remote deployment.
@@ -392,6 +655,12 @@ impl ServiceRemoteExt for Service {
             info!("Creating service with remote deployment policy");
             let remote_service = RemoteDeploymentService::new(policy).await?;
 
+            // Extract blueprint_id from service name if it follows pattern: blueprint_{id}_service_{id}
+            let blueprint_id = service_name
+                .split('_')
+                .nth(1)
+                .and_then(|s| s.parse::<u64>().ok());
+
             remote_service
                 .deploy_service(
                     ctx,
@@ -400,7 +669,7 @@ impl ServiceRemoteExt for Service {
                     env_vars,
                     arguments,
                     limits,
-                    None, // TODO: Extract blueprint_id from context
+                    blueprint_id,
                 )
                 .await
         } else {

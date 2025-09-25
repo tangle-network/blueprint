@@ -278,8 +278,8 @@ pub(crate) fn check_blueprint_events(
             Ok(evt) => {
                 info!("Service initiated event: {evt:?}");
                 info!(
-                    "Available event fields - blueprint_id: {}, service_id: {}, request_id: {}, operator: {:?}",
-                    evt.blueprint_id, evt.service_id, evt.request_id, evt.operator
+                    "Available event fields - blueprint_id: {}, service_id: {}, request_id: {}, owner: {:?}",
+                    evt.blueprint_id, evt.service_id, evt.request_id, evt.owner
                 );
                 result.needs_update = true;
 

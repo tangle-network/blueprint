@@ -9,7 +9,7 @@ use std::time::Duration;
 use super::CloudProvider;
 
 #[cfg(feature = "remote-deployer")]
-use blueprint_remote_providers::{DeploymentTracker, CloudProvisioner};
+use blueprint_remote_providers::{DeploymentTracker, CloudProvisioner, HealthMonitor};
 
 #[derive(Debug)]
 struct DeploymentStatus {
@@ -17,6 +17,7 @@ struct DeploymentStatus {
     provider: String,
     region: String,
     status: String,
+    health: Option<String>,
     ip: String,
     uptime: String,
     ttl: String,
@@ -308,11 +309,24 @@ async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
     let tracker = DeploymentTracker::new(&tracker_path).await
         .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize deployment tracker: {}", e))?;
 
+    // Initialize health monitor for real-time health checks
+    let provisioner = std::sync::Arc::new(CloudProvisioner::new().await
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize provisioner: {}", e))?);
+    let tracker_arc = std::sync::Arc::new(tracker);
+    let health_monitor = HealthMonitor::new(provisioner, tracker_arc.clone());
+
     let mut deployments = Vec::new();
-    let all_deployments = tracker.list_all().await
+    let all_deployments = tracker_arc.list_all().await
         .map_err(|e| color_eyre::eyre::eyre!("Failed to load deployments: {}", e))?;
 
     for deployment in all_deployments {
+        // Perform health check for the deployment
+        let health_status = match health_monitor.is_healthy(&deployment.id).await {
+            Ok(true) => Some("💚 Healthy".to_string()),
+            Ok(false) => Some("❤️ Unhealthy".to_string()),
+            Err(_) => Some("❓ Unknown".to_string()),
+        };
+
         let status_icon = match deployment.status.as_str() {
             "running" => "🟢",
             "starting" => "🟡",
@@ -330,6 +344,7 @@ async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
             provider: format!("{:?}", deployment.provider),
             region: deployment.region,
             status: format!("{} {}", status_icon, deployment.status),
+            health: health_status,
             ip: deployment.public_ip.unwrap_or_else(|| "Pending".to_string()),
             uptime,
             ttl: deployment.ttl_expires_at
@@ -387,6 +402,7 @@ fn get_mock_deployments() -> Vec<DeploymentStatus> {
             provider: "AWS".to_string(),
             region: "us-east-1".to_string(),
             status: "🟢 Running".to_string(),
+            health: Some("💚 Healthy".to_string()),
             ip: "54.123.45.67".to_string(),
             uptime: "2h 45m".to_string(),
             ttl: "21h 15m".to_string(),
@@ -396,6 +412,7 @@ fn get_mock_deployments() -> Vec<DeploymentStatus> {
             provider: "GCP".to_string(),
             region: "us-central1".to_string(),
             status: "🟢 Running".to_string(),
+            health: Some("💚 Healthy".to_string()),
             ip: "35.222.33.44".to_string(),
             uptime: "5d 3h".to_string(),
             ttl: "Never".to_string(),
@@ -405,6 +422,7 @@ fn get_mock_deployments() -> Vec<DeploymentStatus> {
             provider: "DigitalOcean".to_string(),
             region: "nyc3".to_string(),
             status: "🟡 Starting".to_string(),
+            health: Some("❓ Unknown".to_string()),
             ip: "Pending".to_string(),
             uptime: "0m".to_string(),
             ttl: "24h".to_string(),
@@ -414,6 +432,7 @@ fn get_mock_deployments() -> Vec<DeploymentStatus> {
             provider: "Vultr".to_string(),
             region: "ewr".to_string(),
             status: "🔴 Stopped".to_string(),
+            health: Some("❤️ Unhealthy".to_string()),
             ip: "N/A".to_string(),
             uptime: "N/A".to_string(),
             ttl: "Expired".to_string(),

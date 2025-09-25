@@ -586,6 +586,126 @@ impl SshDeploymentClient {
         info!("Cleaned up container: {}", container_id);
         Ok(())
     }
+
+    /// Deploy a blueprint to the remote host (main deployment entry point)
+    pub async fn deploy(
+        &self,
+        host_ip: &str,
+        binary_path: &Path,
+        service_name: &str,
+        env_vars: HashMap<String, String>,
+        arguments: Vec<String>,
+    ) -> Result<()> {
+        info!("Deploying blueprint '{}' to {}", service_name, host_ip);
+
+        // Ensure we're connected to the right host
+        if self.connection.host != host_ip {
+            return Err(Error::ConfigurationError(
+                format!("Host mismatch: expected {}, got {}", self.connection.host, host_ip)
+            ));
+        }
+
+        // Copy binary to remote host
+        let remote_binary_path = format!("/opt/blueprint/bin/{}", service_name);
+        self.copy_files(binary_path, &remote_binary_path).await?;
+
+        // Make binary executable
+        self.run_remote_command(&format!("chmod +x {}", remote_binary_path)).await?;
+
+        // Create service configuration
+        let mut service_env = env_vars;
+        for (i, arg) in arguments.iter().enumerate() {
+            service_env.insert(format!("ARG_{}", i), arg.clone());
+        }
+
+        // Create systemd service unit for the blueprint
+        let service_unit = format!(r#"
+[Unit]
+Description=Blueprint Service: {}
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={}
+Restart=always
+RestartSec=10
+User=blueprint
+Group=blueprint
+WorkingDirectory=/opt/blueprint
+{}
+
+[Install]
+WantedBy=multi-user.target
+"#, 
+            service_name, 
+            remote_binary_path,
+            service_env.iter()
+                .map(|(k, v)| format!("Environment={}={}", k, v))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+
+        // Write service file
+        let service_file = format!("/etc/systemd/system/blueprint-{}.service", service_name);
+        self.run_remote_command(&format!("sudo tee {} > /dev/null << 'EOF'\n{}\nEOF", service_file, service_unit)).await?;
+
+        // Enable and start service
+        self.run_remote_command("sudo systemctl daemon-reload").await?;
+        self.run_remote_command(&format!("sudo systemctl enable blueprint-{}", service_name)).await?;
+        self.run_remote_command(&format!("sudo systemctl start blueprint-{}", service_name)).await?;
+
+        // Verify service is running
+        let status = self.run_remote_command(&format!("sudo systemctl is-active blueprint-{}", service_name)).await?;
+        if status.trim() == "active" {
+            info!("✅ Blueprint service '{}' deployed and running", service_name);
+            Ok(())
+        } else {
+            Err(Error::ConfigurationError(
+                format!("Failed to start blueprint service: {}", status)
+            ))
+        }
+    }
+
+    /// Create a new client with default settings for simple deployment
+    pub fn default() -> Self {
+        // This is a simplified constructor for basic usage
+        // In production, proper connection details should be provided
+        Self {
+            ssh_client: SecureSshClient::new(SecureSshConnection {
+                host: "localhost".to_string(),
+                port: 22,
+                user: "root".to_string(),
+                key_path: Some("~/.ssh/id_rsa".into()),
+                jump_host: None,
+                known_hosts_file: None,
+                strict_host_checking: false,
+            }),
+            connection: SshConnection {
+                host: "localhost".to_string(),
+                port: 22,
+                user: "root".to_string(),
+                key_path: Some("~/.ssh/id_rsa".into()),
+                password: None,
+                jump_host: None,
+            },
+            runtime: ContainerRuntime::Docker,
+            deployment_config: DeploymentConfig {
+                name: "default".to_string(),
+                namespace: "blueprint".to_string(),
+                restart_policy: RestartPolicy::Always,
+                health_check: None,
+            },
+        }
+    }
+}
+
+/// SSH authentication method
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SshAuth {
+    /// SSH key authentication
+    Key(String),
+    /// Password authentication
+    Password(String),
 }
 
 /// SSH connection parameters

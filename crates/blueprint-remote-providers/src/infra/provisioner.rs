@@ -194,6 +194,48 @@ impl CloudProvisioner {
             .await
     }
 
+    /// Deploy a Blueprint with specific deployment target
+    pub async fn deploy_with_target(
+        &self,
+        target: &crate::core::deployment_target::DeploymentTarget,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: std::collections::HashMap<String, String>,
+    ) -> Result<crate::infra::traits::BlueprintDeploymentResult> {
+        use crate::core::deployment_target::DeploymentTarget;
+
+        // Determine provider based on target
+        let provider = match target {
+            DeploymentTarget::GenericKubernetes { .. } => {
+                // For generic K8s, we need a provider that supports kubectl
+                // Use the first available provider that has K8s support
+                self.providers.keys()
+                    .next()
+                    .ok_or_else(|| Error::Other("No providers configured for Kubernetes deployment".into()))?
+            }
+            DeploymentTarget::ManagedKubernetes { .. } => {
+                // For managed K8s, determine provider from cluster context
+                // For now, use the first available provider
+                self.providers.keys()
+                    .next()
+                    .ok_or_else(|| Error::Other("No providers configured for managed Kubernetes".into()))?
+            }
+            _ => {
+                // For other targets, use first available provider
+                self.providers.keys()
+                    .next()
+                    .ok_or_else(|| Error::Other("No providers configured".into()))?
+            }
+        };
+
+        let adapter = self.providers.get(provider)
+            .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
+
+        adapter
+            .deploy_blueprint_with_target(target, blueprint_image, resource_spec, env_vars)
+            .await
+    }
+
     /// Get the status of an instance using the appropriate adapter (alias for compatibility)
     pub async fn get_instance_status(
         &self,
@@ -211,8 +253,8 @@ impl CloudProvisioner {
         region: &str,
         max_hourly_cost: Option<f64>,
     ) -> Result<String> {
-        // Try to discover machine types for the provider
-        let credentials = CloudCredentials::default(); // TODO: Load from secure storage
+        // Load credentials from environment variables
+        let credentials = CloudCredentials::from_env();
         
         match self.discovery.discover_machine_types(provider, region, &credentials).await {
             Ok(_machines) => {
