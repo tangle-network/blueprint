@@ -44,6 +44,7 @@ document-features = { workspace = true, features = ["default"] }
 thiserror = { workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 url = { workspace = true }
+reqwest = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

@@ -22,6 +22,7 @@ serde = { workspace = true }
 serde_json = { workspace = true, features = ["alloc"] }
 thiserror = { workspace = true }
 url = { workspace = true }
+reqwest = { workspace = true }
 
 # Alloy dependencies
 alloy-primitives = { workspace = true }
