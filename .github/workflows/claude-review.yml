@@ -19,9 +19,9 @@ jobs:
           fetch-depth: 1
 
       - name: Auto review PR
-        uses: anthropics/claude-code-action@beta
+        uses: anthropics/claude-code-action@v1
         with:
-          direct_prompt: |
+          prompt: |
             Review this PR like an expert, critical L7 engineering lead. Optimize token usage, high signal to noise:
             - Code quality and best practices match repo
             - Potential bugs or issues
@@ -30,5 +30,6 @@ jobs:
             - Missing documentation
 
             Be constructive and specific in your feedback. Give inline comments where applicable.
+          claude_args: |
+            --allowedTools "mcp__github__add_pull_request_review_comment"
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          allowed_tools: "mcp__github__add_pull_request_review_comment"

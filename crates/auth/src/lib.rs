@@ -44,6 +44,8 @@ pub mod api_keys;
 pub mod api_tokens;
 /// Unified authentication token types
 pub mod auth_token;
+/// Certificate Authority utilities for mTLS
+pub mod certificate_authority;
 /// The database module for the authentication process.
 pub mod db;
 /// Database models
@@ -56,6 +58,16 @@ pub mod paseto_tokens;
 pub mod proxy;
 /// Request-level auth context parsing and extractors
 pub mod request_auth;
+/// Request extension plumbing for client certificate identity
+pub mod request_extensions;
+/// TLS assets management
+pub mod tls_assets;
+/// TLS client management for outbound connections
+pub mod tls_client;
+/// TLS envelope encryption for certificate material
+pub mod tls_envelope;
+/// TLS listener for dual socket support (HTTP + HTTPS)
+pub mod tls_listener;
 /// Holds the authentication-related types.
 pub mod types;
 /// Header validation utilities
@@ -99,6 +111,18 @@ pub enum Error {
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("TLS envelope error: {0}")]
+    TlsEnvelope(#[from] crate::tls_envelope::TlsEnvelopeError),
+
+    #[error("Certificate generation error: {0}")]
+    Certificate(#[from] rcgen::Error),
+
+    #[error("TLS error: {0}")]
+    Tls(String),
+
+    #[error("Service not found: {0}")]
+    ServiceNotFound(crate::types::ServiceId),
 }
 
 /// Generates a random challenge string to be used in the authentication process.

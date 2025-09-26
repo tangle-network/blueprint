@@ -26,6 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }],
         // The URL of the upstream service that this proxy will forward requests to
         upstream_url: String::from("http://localhost:3000"),
+        tls_profile: None,
     }
     .save(ServiceId::new(0), &proxy.db())?;
 

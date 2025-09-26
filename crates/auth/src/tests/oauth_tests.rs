@@ -55,6 +55,7 @@ fn start_proxy_with_policy(policy: ServiceOAuthPolicy) -> (SocketAddr, ServiceId
         api_key_prefix: "test_".to_string(),
         owners: vec![],
         upstream_url: "http://127.0.0.1:9".to_string(),
+        tls_profile: None,
     };
     service.save(service_id, &db).unwrap();
     policy.save(service_id, &db).unwrap();
@@ -104,14 +105,16 @@ async fn oauth_success_rs256() {
         jti: uuid::Uuid::new_v4().to_string(),
         scope: Some("data:read extra:skip".into()),
     };
-    let _jwt = encode(&Header::new(Algorithm::RS256), &claims, &rsa_encoding_key()).unwrap();
+    let jwt = encode(&Header::new(Algorithm::RS256), &claims, &rsa_encoding_key()).unwrap();
 
     let client = reqwest::Client::new();
     let res = client
         .post(format!("http://{addr}/v1/oauth/token"))
         .header("content-type", "application/x-www-form-urlencoded")
         .header("x-service-id", service_id.to_string())
-        .body("grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt}".to_string())
+        .body(format!(
+            "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt}"
+        ))
         .send()
         .await
         .unwrap();
@@ -150,7 +153,7 @@ async fn oauth_rejects_unsupported_alg_hs256() {
         exp: now + 60,
         jti: uuid::Uuid::new_v4().to_string(),
     };
-    let _jwt = jsonwebtoken::encode(
+    let jwt = jsonwebtoken::encode(
         &Header::new(Algorithm::HS256),
         &claims,
         &jsonwebtoken::EncodingKey::from_secret(b"secret"),
@@ -162,7 +165,9 @@ async fn oauth_rejects_unsupported_alg_hs256() {
         .post(format!("http://{addr}/v1/oauth/token"))
         .header("content-type", "application/x-www-form-urlencoded")
         .header("x-service-id", service_id.to_string())
-        .body("grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt}".to_string())
+        .body(format!(
+            "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt}"
+        ))
         .send()
         .await
         .unwrap();
@@ -194,7 +199,7 @@ async fn oauth_rejects_expired_and_future_iat() {
         jti: uuid::Uuid::new_v4().to_string(),
         scope: None,
     };
-    let _jwt_expired = encode(
+    let jwt_expired = encode(
         &Header::new(Algorithm::RS256),
         &expired,
         &rsa_encoding_key(),
@@ -204,10 +209,9 @@ async fn oauth_rejects_expired_and_future_iat() {
         .post(format!("http://{addr}/v1/oauth/token"))
         .header("content-type", "application/x-www-form-urlencoded")
         .header("x-service-id", service_id.to_string())
-        .body(
+        .body(format!(
             "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt_expired}"
-                .to_string(),
-        )
+        ))
         .send()
         .await
         .unwrap();
@@ -223,15 +227,14 @@ async fn oauth_rejects_expired_and_future_iat() {
         jti: uuid::Uuid::new_v4().to_string(),
         scope: None,
     };
-    let _jwt_future = encode(&Header::new(Algorithm::RS256), &future, &rsa_encoding_key()).unwrap();
+    let jwt_future = encode(&Header::new(Algorithm::RS256), &future, &rsa_encoding_key()).unwrap();
     let res2 = client
         .post(format!("http://{addr}/v1/oauth/token"))
         .header("content-type", "application/x-www-form-urlencoded")
         .header("x-service-id", service_id.to_string())
-        .body(
+        .body(format!(
             "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt_future}"
-                .to_string(),
-        )
+        ))
         .send()
         .await
         .unwrap();
@@ -291,9 +294,9 @@ async fn oauth_rejects_replay_jti() {
 #[derive(serde::Deserialize)]
 struct TokenResponse {
     access_token: String,
-    _token_type: String,
-    _expires_at: u64,
-    _expires_in: u64,
+    token_type: String,
+    expires_at: u64,
+    expires_in: u64,
 }
 
 #[tokio::test]
@@ -337,7 +340,8 @@ async fn oauth_scopes_are_forwarded_and_normalized_and_client_scopes_stripped() 
     let service = crate::models::ServiceModel {
         api_key_prefix: "test_".to_string(),
         owners: vec![],
-        upstream_url: format!("http://{}", echo_addr),
+        upstream_url: format!("http://{echo_addr}"),
+        tls_profile: None,
     };
     service.save(service_id, &db).unwrap();
     let policy = ServiceOAuthPolicy {
@@ -361,17 +365,17 @@ async fn oauth_scopes_are_forwarded_and_normalized_and_client_scopes_stripped() 
     });
 
     // Mint OAuth assertion containing messy/mixed scopes; intersection should yield [data:read, mcp:invoke]
-    let now = now();
+    let current_time = now();
     let claims = Claims {
         iss: "https://issuer.example.com".into(),
         sub: "user-42".into(),
         aud: Some("https://proxy.example.com".into()),
-        iat: now,
-        exp: now + 60,
+        iat: current_time,
+        exp: current_time + 60,
         jti: uuid::Uuid::new_v4().to_string(),
         scope: Some("DATA:READ data:read extra:skip Mcp:InvokE".into()),
     };
-    let _jwt = encode(&Header::new(Algorithm::RS256), &claims, &rsa_encoding_key()).unwrap();
+    let jwt = encode(&Header::new(Algorithm::RS256), &claims, &rsa_encoding_key()).unwrap();
 
     // Exchange for Paseto
     let client = reqwest::Client::new();
@@ -379,7 +383,9 @@ async fn oauth_scopes_are_forwarded_and_normalized_and_client_scopes_stripped() 
         .post(format!("http://{proxy_addr}/v1/oauth/token"))
         .header("content-type", "application/x-www-form-urlencoded")
         .header("x-service-id", service_id.to_string())
-        .body("grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt}".to_string())
+        .body(format!(
+            "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt}"
+        ))
         .send()
         .await
         .unwrap();
@@ -387,6 +393,17 @@ async fn oauth_scopes_are_forwarded_and_normalized_and_client_scopes_stripped() 
     assert!(status.is_success());
     let token_body = token_res.text().await.unwrap();
     let token: TokenResponse = serde_json::from_str(&token_body).unwrap();
+
+    // Validate token metadata fields
+    assert_eq!(token.token_type, "Bearer", "token type should be 'Bearer'");
+    assert!(
+        token.expires_at > current_time,
+        "token should have future expiration time"
+    );
+    assert!(
+        token.expires_in > 0 && token.expires_in <= 900,
+        "token should have reasonable expires_in duration"
+    );
 
     // Call upstream via proxy with malicious client x-scopes header; it must be stripped and replaced by canonical
     let res = client
@@ -449,7 +466,8 @@ async fn oauth_scopes_absent_when_not_allowed_and_client_header_stripped() {
     let service = crate::models::ServiceModel {
         api_key_prefix: "test_".to_string(),
         owners: vec![],
-        upstream_url: format!("http://{}", echo_addr),
+        upstream_url: format!("http://{echo_addr}"),
+        tls_profile: None,
     };
     service.save(service_id, &db).unwrap();
     let policy = ServiceOAuthPolicy {
@@ -471,29 +489,42 @@ async fn oauth_scopes_absent_when_not_allowed_and_client_header_stripped() {
     tokio::spawn(async move { axum::serve(tcp, app).await.unwrap() });
 
     // Assertion with a scope but policy disallows -> Paseto will carry None, proxy must not inject x-scopes
-    let now = now();
+    let current_time = now();
     let claims = Claims {
         iss: "https://issuer.example.com".into(),
         sub: "user-7".into(),
         aud: None,
-        iat: now,
-        exp: now + 60,
+        iat: current_time,
+        exp: current_time + 60,
         jti: uuid::Uuid::new_v4().to_string(),
         scope: Some("logs:read".into()),
     };
-    let _jwt = encode(&Header::new(Algorithm::RS256), &claims, &rsa_encoding_key()).unwrap();
+    let jwt = encode(&Header::new(Algorithm::RS256), &claims, &rsa_encoding_key()).unwrap();
 
     let client = reqwest::Client::new();
     let token_res = client
         .post(format!("http://{proxy_addr}/v1/oauth/token"))
         .header("content-type", "application/x-www-form-urlencoded")
         .header("x-service-id", service_id.to_string())
-        .body("grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt}".to_string())
+        .body(format!(
+            "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt}"
+        ))
         .send()
         .await
         .unwrap();
     assert!(token_res.status().is_success());
     let token: TokenResponse = token_res.json().await.unwrap();
+
+    // Validate token metadata fields
+    assert_eq!(token.token_type, "Bearer", "token type should be 'Bearer'");
+    assert!(
+        token.expires_at > current_time,
+        "token should have future expiration time"
+    );
+    assert!(
+        token.expires_in > 0 && token.expires_in <= 900,
+        "token should have reasonable expires_in duration"
+    );
 
     let res = client
         .get(format!("http://{proxy_addr}/echo"))

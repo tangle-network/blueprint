@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-manager-bridge"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 description = "Bridge for Blueprint manager to service communication"
 authors.workspace = true
 edition.workspace = true
@@ -20,6 +20,8 @@ tokio = { workspace = true, features = ["net"] }
 tonic = { workspace = true, features = ["codegen", "transport", "prost"] }
 prost = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
+tempfile.workspace = true
+zerocopy.workspace = true
 
 # Client
 hyper-util = { workspace = true, features = ["tokio"], optional = true }

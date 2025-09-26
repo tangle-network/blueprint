@@ -1,5 +1,6 @@
 use core::iter::once;
 use core::ops::Add;
+use std::net::IpAddr;
 use std::path::Path;
 
 use axum::Json;
@@ -26,9 +27,19 @@ use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::instrument;
 
 use crate::api_keys::{ApiKeyGenerator, ApiKeyModel};
+use crate::certificate_authority::{
+    CertificateAuthority, ClientCertificate, CreateTlsProfileRequest, IssueCertificateRequest,
+    TlsProfileResponse, validate_certificate_request,
+};
 use crate::db::RocksDb;
-use crate::models::{ApiTokenModel, ServiceModel};
+use crate::models::{ApiTokenModel, ServiceModel, TlsProfile};
 use crate::paseto_tokens::PasetoTokenManager;
+use crate::request_extensions::{AuthMethod, extract_client_cert_from_request};
+use crate::tls_client::TlsClientManager;
+use crate::tls_envelope::{TlsEnvelope, init_tls_envelope_key};
+use crate::tls_listener::{TlsListenerConfig, TlsListenerManager};
+use pem;
+use prost::Message;
 
 /// Maximum size for binary metadata headers in bytes
 /// Configurable via build-time environment variable GRPC_BINARY_METADATA_MAX_SIZE
@@ -47,8 +58,10 @@ fn get_max_binary_metadata_size() -> usize {
 use crate::types::{ServiceId, VerifyChallengeResponse};
 use crate::validation;
 
-type HTTPClient = hyper_util::client::legacy::Client<HttpConnector, Body>;
-type HTTP2Client = hyper_util::client::legacy::Client<HttpConnector, Body>;
+type HTTPClient =
+    hyper_util::client::legacy::Client<hyper_util::client::legacy::connect::HttpConnector, Body>;
+type HTTP2Client =
+    hyper_util::client::legacy::Client<hyper_util::client::legacy::connect::HttpConnector, Body>;
 
 /// The default port for the authenticated proxy server
 // T9 Mapping of TBPM (Tangle Blueprint Manager)
@@ -57,16 +70,25 @@ pub const DEFAULT_AUTH_PROXY_PORT: u16 = 8276;
 pub struct AuthenticatedProxy {
     http_client: HTTPClient,
     http2_client: HTTP2Client,
+    tls_client_manager: TlsClientManager,
     db: crate::db::RocksDb,
     paseto_manager: PasetoTokenManager,
+    tls_envelope: TlsEnvelope,
+    tls_runtime: TlsListenerManager,
 }
 
 #[derive(Clone, Debug)]
 pub struct AuthenticatedProxyState {
     http_client: HTTPClient,
     http2_client: HTTP2Client,
+    tls_client_manager: TlsClientManager,
     db: crate::db::RocksDb,
     paseto_manager: PasetoTokenManager,
+    tls_envelope: TlsEnvelope,
+    mtls_listener_address: Option<std::net::SocketAddr>,
+    #[cfg(feature = "standalone")]
+    mtls_listener_handle: Option<std::sync::Arc<tokio::task::JoinHandle<()>>>,
+    tls_runtime: TlsListenerManager,
 }
 
 impl AuthenticatedProxyState {
@@ -76,28 +98,51 @@ impl AuthenticatedProxyState {
     pub fn paseto_manager_ref(&self) -> &PasetoTokenManager {
         &self.paseto_manager
     }
+    pub fn tls_envelope_ref(&self) -> &TlsEnvelope {
+        &self.tls_envelope
+    }
+    pub fn tls_client_manager_ref(&self) -> &TlsClientManager {
+        &self.tls_client_manager
+    }
+    pub fn tls_runtime_ref(&self) -> TlsListenerManager {
+        self.tls_runtime.clone()
+    }
+
+    #[cfg(feature = "standalone")]
+    pub fn set_mtls_listener_address(&mut self, addr: std::net::SocketAddr) {
+        self.mtls_listener_address = Some(addr);
+    }
+
+    #[cfg(not(feature = "standalone"))]
+    pub fn set_mtls_listener_address(&mut self, _addr: std::net::SocketAddr) {
+        // No-op when standalone feature is not enabled
+    }
+
+    pub fn get_mtls_listener_address(&self) -> Option<std::net::SocketAddr> {
+        self.mtls_listener_address
+    }
 }
 
 impl AuthenticatedProxy {
     pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self, crate::Error> {
         let executer = TokioExecutor::new();
 
-        // Configure HTTP connector for HTTP/1.1 support
+        // Configure HTTP connector for HTTP/1.1 support (fallback for non-TLS)
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false); // Allow both HTTP and HTTPS
         http_connector.set_nodelay(true); // Improve performance
 
-        // Build HTTP/1.1 client for REST requests
+        // Build HTTP/1.1 client for REST requests (fallback for non-TLS)
         let http_client: HTTPClient = hyper_util::client::legacy::Builder::new(executer.clone())
             .http2_only(false) // Allow HTTP/1.1 only
             .build(http_connector.clone());
 
-        // Configure HTTP connector for HTTP/2 support
+        // Configure HTTP connector for HTTP/2 support (fallback for non-TLS)
         let mut http2_connector = HttpConnector::new();
         http2_connector.enforce_http(false); // Allow both HTTP and HTTPS
         http2_connector.set_nodelay(true); // Improve performance for gRPC
 
-        // Build HTTP/2 client for gRPC requests
+        // Build HTTP/2 client for gRPC requests (fallback for non-TLS)
         let http2_client: HTTP2Client = hyper_util::client::legacy::Builder::new(executer)
             .http2_only(true) // Use HTTP/2 only for gRPC compatibility
             .http2_adaptive_window(true) // Enable adaptive flow control for better gRPC performance
@@ -106,15 +151,79 @@ impl AuthenticatedProxy {
         let db_config = crate::db::RocksDbConfig::default();
         let db = crate::db::RocksDb::open(&db_path, &db_config)?;
 
+        // Initialize TLS envelope with persistent key
+        let tls_envelope = Self::init_tls_envelope(&db_path)?;
+
+        let tls_runtime = TlsListenerManager::new(
+            db.clone(),
+            tls_envelope.clone(),
+            TlsListenerConfig::default(),
+        );
+
+        Self::hydrate_tls_runtime(&tls_runtime, &db)?;
+
+        // Initialize TLS client manager
+        let tls_client_manager = TlsClientManager::new(db.clone());
+
         // Initialize Paseto token manager with persistent key
         let paseto_manager = Self::init_paseto_manager(&db_path)?;
 
         Ok(AuthenticatedProxy {
             http_client,
             http2_client,
+            tls_client_manager,
             db,
             paseto_manager,
+            tls_envelope,
+            tls_runtime,
         })
+    }
+
+    fn hydrate_tls_runtime(runtime: &TlsListenerManager, db: &RocksDb) -> Result<(), crate::Error> {
+        use crate::db::cf;
+        use rocksdb::IteratorMode;
+
+        let cf_handle = db
+            .cf_handle(cf::SERVICES_USER_KEYS_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(cf::SERVICES_USER_KEYS_CF))?;
+        let iter = db.iterator_cf(&cf_handle, IteratorMode::Start);
+        let mut profiles = Vec::new();
+
+        for item in iter {
+            let (key, value) = item?;
+            if key.len() < 16 {
+                continue;
+            }
+            let mut id_bytes = [0u8; 16];
+            id_bytes.copy_from_slice(&key[..16]);
+            let service_id = ServiceId::from_be_bytes(id_bytes);
+            let service = ServiceModel::decode(value.as_ref())?;
+            if let Some(profile) = service.tls_profile() {
+                if profile.tls_enabled {
+                    profiles.push((service_id, profile.clone()));
+                }
+            }
+        }
+
+        if profiles.is_empty() {
+            return Ok(());
+        }
+
+        let runtime_clone = runtime.clone();
+        let future = async move {
+            for (service_id, profile) in profiles {
+                runtime_clone
+                    .load_service_profile(service_id, &profile)
+                    .await?;
+            }
+            Ok::<(), crate::Error>(())
+        };
+
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(crate::Error::Io)?
+            .block_on(future)
     }
 
     /// Initialize Paseto token manager with persistent key
@@ -179,14 +288,29 @@ impl AuthenticatedProxy {
         Ok(manager)
     }
 
-    pub fn router(self) -> Router {
+    /// Initialize TLS envelope with persistent key
+    fn init_tls_envelope<P: AsRef<Path>>(db_path: P) -> Result<TlsEnvelope, crate::Error> {
+        let envelope_key = init_tls_envelope_key(&db_path)
+            .map_err(|e| crate::Error::Io(std::io::Error::other(e.to_string())))?;
+
+        Ok(TlsEnvelope::with_key(envelope_key))
+    }
+
+    pub fn router(self) -> Router<()> {
+        let runtime = self.tls_runtime.clone();
         let state = AuthenticatedProxyState {
             http_client: self.http_client,
             http2_client: self.http2_client,
+            tls_client_manager: self.tls_client_manager,
             db: self.db,
             paseto_manager: self.paseto_manager,
+            tls_envelope: self.tls_envelope,
+            mtls_listener_address: None,
+            #[cfg(feature = "standalone")]
+            mtls_listener_handle: None,
+            tls_runtime: runtime.clone(),
         };
-        Router::new()
+        let router = Router::new()
             .nest("/v1", Self::internal_api_router_v1())
             .fallback(any(unified_proxy))
             .layer(SetRequestIdLayer::new(
@@ -209,7 +333,10 @@ impl AuthenticatedProxy {
             .layer(SetSensitiveResponseHeadersLayer::new(once(
                 header::AUTHORIZATION,
             )))
-            .with_state(state)
+            .with_state(state);
+
+        runtime.install_router(router.clone());
+        router
     }
 
     pub fn db(&self) -> RocksDb {
@@ -224,6 +351,12 @@ impl AuthenticatedProxy {
             .route("/auth/exchange", post(auth_exchange))
             // OAuth 2.0 JWT Bearer Assertion token endpoint (RFC 7523)
             .route("/oauth/token", post(crate::oauth::token::oauth_token))
+            // mTLS administration endpoints
+            .route(
+                "/admin/services/{service_id}/tls-profile",
+                axum::routing::put(update_tls_profile),
+            )
+            .route("/auth/certificates", axum::routing::post(issue_certificate))
     }
 }
 
@@ -545,6 +678,309 @@ async fn auth_exchange(
         StatusCode::OK,
         Json(serde_json::to_value(response).unwrap()),
     )
+}
+
+async fn update_tls_profile(
+    service_id: ServiceId,
+    State(s): State<AuthenticatedProxyState>,
+    Json(payload): Json<CreateTlsProfileRequest>,
+) -> Result<Json<TlsProfileResponse>, StatusCode> {
+    let envelope = s.tls_envelope_ref().clone();
+    let runtime = s.tls_runtime_ref();
+
+    let mut service = match ServiceModel::find_by_id(service_id, &s.db) {
+        Ok(Some(service)) => service,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    let existing_profile = service.tls_profile.clone();
+
+    let allowlist_to_store = payload
+        .allowed_dns_names
+        .clone()
+        .or_else(|| {
+            existing_profile
+                .as_ref()
+                .map(|p| p.allowed_dns_names.clone())
+        })
+        .unwrap_or_default();
+
+    let server_dns_names = if let Some(list) = payload.allowed_dns_names.clone() {
+        if list.is_empty() { None } else { Some(list) }
+    } else if let Some(profile) = existing_profile.as_ref() {
+        if !profile.allowed_dns_names.is_empty() {
+            Some(profile.allowed_dns_names.clone())
+        } else if let Some(existing_sni) = profile.sni.clone() {
+            Some(vec![existing_sni])
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+    .unwrap_or_else(|| vec!["localhost".to_string()]);
+
+    let mut tls_profile = existing_profile.unwrap_or_else(|| TlsProfile {
+        tls_enabled: false,
+        require_client_mtls: false,
+        encrypted_server_cert: Vec::new(),
+        encrypted_server_key: Vec::new(),
+        encrypted_client_ca_bundle: Vec::new(),
+        encrypted_upstream_ca_bundle: Vec::new(),
+        encrypted_upstream_client_cert: Vec::new(),
+        encrypted_upstream_client_key: Vec::new(),
+        client_cert_ttl_hours: payload.client_cert_ttl_hours,
+        sni: None,
+        subject_alt_name_template: payload.subject_alt_name_template.clone(),
+        allowed_dns_names: allowlist_to_store.clone(),
+    });
+
+    let ca = if !tls_profile.encrypted_client_ca_bundle.is_empty() {
+        load_persisted_ca(&envelope, &tls_profile)?
+    } else {
+        CertificateAuthority::new(envelope.clone()).map_err(|e| {
+            error!("Failed to create certificate authority: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+    };
+
+    let mut bundle = ca.ca_certificate_pem();
+    if !bundle.ends_with('\n') {
+        bundle.push('\n');
+    }
+    bundle.push_str(&ca.ca_private_key_pem());
+
+    tls_profile.encrypted_client_ca_bundle = envelope.encrypt(bundle.as_bytes()).map_err(|e| {
+        error!("Failed to encrypt CA bundle: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let (server_cert, server_key) = ca
+        .generate_server_certificate(service_id, server_dns_names.clone())
+        .map_err(|e| {
+            error!("Failed to generate server certificate: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    tls_profile.encrypted_server_cert = envelope.encrypt(server_cert.as_bytes()).map_err(|e| {
+        error!("Failed to encrypt server certificate: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    tls_profile.encrypted_server_key = envelope.encrypt(server_key.as_bytes()).map_err(|e| {
+        error!("Failed to encrypt server key: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    tls_profile.tls_enabled = true;
+    tls_profile.require_client_mtls = payload.require_client_mtls;
+    tls_profile.client_cert_ttl_hours = payload.client_cert_ttl_hours;
+    if let Some(template) = payload.subject_alt_name_template.clone() {
+        tls_profile.subject_alt_name_template = Some(template);
+    }
+    tls_profile.allowed_dns_names = allowlist_to_store.clone();
+    tls_profile.sni = server_dns_names.first().cloned();
+
+    service.tls_profile = Some(tls_profile.clone());
+    if let Err(e) = service.save(service_id, &s.db) {
+        error!("Failed to persist TLS profile: {e}");
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    let bound_addr = runtime
+        .upsert_service_profile(service_id, &tls_profile)
+        .await
+        .map_err(|e| {
+            error!("Failed to activate TLS profile: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    info!(
+        "TLS profile enabled for service {} with listener {}",
+        service_id, bound_addr
+    );
+
+    let listener_uri = match bound_addr.ip() {
+        IpAddr::V4(ip) if ip.is_unspecified() => {
+            format!("https://localhost:{}", bound_addr.port())
+        }
+        IpAddr::V6(ip) if ip.is_unspecified() => {
+            format!("https://[::1]:{}", bound_addr.port())
+        }
+        _ => format!("https://{bound_addr}"),
+    };
+
+    Ok(Json(TlsProfileResponse {
+        tls_enabled: true,
+        require_client_mtls: payload.require_client_mtls,
+        client_cert_ttl_hours: payload.client_cert_ttl_hours,
+        mtls_listener: listener_uri,
+        http_listener: Some(format!("http://localhost:{DEFAULT_AUTH_PROXY_PORT}")),
+        ca_certificate_pem: Some(ca.ca_certificate_pem()),
+        subject_alt_name_template: tls_profile.subject_alt_name_template.clone(),
+        allowed_dns_names: tls_profile.allowed_dns_names.clone(),
+    }))
+}
+
+/// Issue a client certificate for mTLS authentication
+async fn issue_certificate(
+    State(s): State<AuthenticatedProxyState>,
+    Json(payload): Json<IssueCertificateRequest>,
+) -> Result<Json<ClientCertificate>, StatusCode> {
+    let service_id = ServiceId::new(payload.service_id);
+
+    // Find the service
+    let service = match ServiceModel::find_by_id(service_id, &s.db) {
+        Ok(Some(service)) => service,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    // Check if TLS profile is configured
+    let tls_profile = match &service.tls_profile {
+        Some(profile) => profile,
+        None => return Err(StatusCode::BAD_REQUEST),
+    };
+
+    // Validate the certificate request against the profile
+    if let Err(e) = validate_certificate_request(&payload, tls_profile) {
+        warn!("Certificate request validation failed: {}", e);
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Initialize certificate authority using persisted CA material if available
+    let mut service_ref = service.clone();
+    let ca = if !tls_profile.encrypted_client_ca_bundle.is_empty() {
+        load_persisted_ca(&s.tls_envelope, tls_profile)?
+    } else {
+        let ca = CertificateAuthority::new(s.tls_envelope.clone()).map_err(|e| {
+            error!("Failed to initialise certificate authority: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        persist_new_ca(&s.db, service_id, &mut service_ref, &ca)?;
+        if let Some(profile) = service_ref.tls_profile.as_ref() {
+            if let Err(err) = s
+                .tls_runtime_ref()
+                .upsert_service_profile(service_id, profile)
+                .await
+            {
+                error!("Failed to refresh TLS runtime after CA creation: {err}");
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        }
+        ca
+    };
+
+    // Generate client certificate
+    let mut client_cert = match ca.generate_client_certificate(
+        payload.common_name,
+        payload.subject_alt_names,
+        payload.ttl_hours,
+    ) {
+        Ok(cert) => cert,
+        Err(e) => {
+            error!("Failed to generate client certificate: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    if client_cert.revocation_url.is_none() {
+        client_cert.revocation_url = Some(format!(
+            "/v1/auth/certificates/{}/revoke",
+            client_cert.serial
+        ));
+    }
+
+    info!(
+        "Issued client certificate for service {} with serial {}",
+        service_id, client_cert.serial
+    );
+    Ok(Json(client_cert))
+}
+
+fn load_persisted_ca(
+    envelope: &TlsEnvelope,
+    profile: &TlsProfile,
+) -> Result<CertificateAuthority, StatusCode> {
+    let decrypted = envelope
+        .decrypt(&profile.encrypted_client_ca_bundle)
+        .map_err(|e| {
+            error!("Failed to decrypt stored CA bundle: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let pem_str = String::from_utf8(decrypted).map_err(|e| {
+        error!("Stored CA bundle is not valid UTF-8: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let blocks = pem::parse_many(&pem_str).map_err(|e| {
+        error!("Failed to parse stored CA bundle: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let mut ca_cert_pem: Option<String> = None;
+    let mut ca_key_pem: Option<String> = None;
+
+    for block in blocks {
+        let encoded = pem::encode(&block);
+        match block.tag.as_str() {
+            "CERTIFICATE" if ca_cert_pem.is_none() => ca_cert_pem = Some(encoded),
+            tag if tag.ends_with("PRIVATE KEY") && ca_key_pem.is_none() => {
+                ca_key_pem = Some(encoded)
+            }
+            _ => {}
+        }
+    }
+
+    let cert = ca_cert_pem.ok_or_else(|| {
+        error!("Stored CA bundle missing certificate block");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    let key = ca_key_pem.ok_or_else(|| {
+        error!("Stored CA bundle missing private key block");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    CertificateAuthority::from_components(cert, key, clone_envelope(envelope)).map_err(|e| {
+        error!("Failed to rehydrate certificate authority: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
+}
+
+fn persist_new_ca(
+    db: &RocksDb,
+    service_id: ServiceId,
+    service: &mut ServiceModel,
+    ca: &CertificateAuthority,
+) -> Result<(), StatusCode> {
+    let mut bundle = ca.ca_certificate_pem();
+    if !bundle.ends_with('\n') {
+        bundle.push('\n');
+    }
+    bundle.push_str(&ca.ca_private_key_pem());
+
+    let encrypted = ca.envelope().encrypt(bundle.as_bytes()).map_err(|e| {
+        error!("Failed to encrypt CA bundle: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    if let Some(profile) = service.tls_profile.as_mut() {
+        profile.encrypted_client_ca_bundle = encrypted;
+    } else {
+        error!("TLS profile unexpectedly missing while persisting CA");
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    service.save(service_id, db).map_err(|e| {
+        error!("Failed to persist CA bundle to service: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
+}
+
+fn clone_envelope(envelope: &TlsEnvelope) -> TlsEnvelope {
+    TlsEnvelope::with_key(envelope.key().clone())
 }
 
 /// Handle legacy API token validation
@@ -936,35 +1372,72 @@ async fn unified_proxy(
     info!("Unified proxy called with headers: {:?}", headers);
     info!("Request method: {}, URI: {}", req.method(), req.uri());
 
+    // Extract client certificate information from request extensions
+    let client_cert = extract_client_cert_from_request(&req);
+
+    // Determine authentication method based on available information
+    let auth_method = if client_cert.is_some() {
+        AuthMethod::Mtls
+    } else if headers.get("authorization").is_some() {
+        AuthMethod::AccessToken
+    } else if headers.get("x-api-key").is_some() {
+        AuthMethod::ApiKey
+    } else {
+        AuthMethod::OAuth
+    };
+
     let is_grpc = is_grpc_request(&headers, &req);
 
     if is_grpc {
         info!("Detected gRPC request, using gRPC proxy path");
-        grpc_proxy(headers, State(s), req).await
+        grpc_proxy_with_mtls(headers, State(s), req, client_cert, auth_method).await
     } else {
         info!("Detected HTTP request, using HTTP proxy path");
-        reverse_proxy(headers, State(s), req).await
+        reverse_proxy_with_mtls(headers, State(s), req, client_cert, auth_method).await
     }
 }
 
-/// gRPC proxy handler that forwards gRPC requests while preserving gRPC-specific headers and trailers
+/// gRPC proxy handler with mTLS support
 #[instrument(skip_all)]
-async fn grpc_proxy(
+async fn grpc_proxy_with_mtls(
     headers: axum::http::HeaderMap,
     State(s): State<AuthenticatedProxyState>,
     mut req: Request,
+    client_cert: Option<crate::tls_listener::ClientCertInfo>,
+    _auth_method: AuthMethod,
 ) -> Result<Response, StatusCode> {
-    debug!("gRPC proxy called with headers: {:?}", headers);
+    debug!("gRPC proxy with mTLS called with headers: {:?}", headers);
 
     // Extract and validate authentication
-    let (service_id, additional_headers) =
+    let (service_id, mut additional_headers) =
         extract_and_validate_auth(&headers, &s.db, &s.paseto_manager).await?;
 
+    // Check if service requires mTLS and enforce it
     let service = match ServiceModel::find_by_id(service_id, &s.db) {
         Ok(Some(service)) => service,
         Ok(None) => return Err(StatusCode::NOT_FOUND),
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
+
+    // Enforce mTLS requirement if configured
+    if let Some(tls_profile) = &service.tls_profile {
+        if tls_profile.require_client_mtls && client_cert.is_none() {
+            warn!(
+                "mTLS required but no client certificate provided for service {}",
+                service_id
+            );
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    // Add client certificate information to headers if available
+    if let Some(cert) = &client_cert {
+        additional_headers.insert("x-client-cert-subject".to_string(), cert.subject.clone());
+        additional_headers.insert("x-client-cert-issuer".to_string(), cert.issuer.clone());
+        additional_headers.insert("x-client-cert-serial".to_string(), cert.serial.clone());
+        additional_headers.insert("x-auth-method".to_string(), "mtls".to_string());
+    }
+
     let target_host = service
         .upstream_url()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -1000,33 +1473,86 @@ async fn grpc_proxy(
 
     debug!("Forwarding gRPC request with headers: {:?}", req.headers());
 
-    // Forward the request to the target server using HTTP/2 client for gRPC
-    let response = s.http2_client.request(req).await.map_err(|e| {
-        error!("Failed to forward gRPC request: {:?}", e);
-        StatusCode::BAD_GATEWAY
-    })?;
+    // Determine if we need TLS for the upstream connection
+    let use_tls = target_host.scheme() == Some(&uri::Scheme::HTTPS);
+
+    // Forward the request using appropriate client
+    let response = if use_tls {
+        // Use TLS client for HTTPS upstreams
+        let tls_client = s
+            .tls_client_manager
+            .get_client_for_service(service_id)
+            .await
+            .map_err(|e| {
+                error!(
+                    "Failed to get TLS client for service {}: {:?}",
+                    service_id, e
+                );
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        // Convert request body to Incoming type
+        let (parts, body) = req.into_parts();
+        let req_with_incoming = Request::from_parts(parts, body);
+        tls_client
+            .http2_client
+            .request(req_with_incoming)
+            .await
+            .map_err(|e| {
+                error!("Failed to forward gRPC request with TLS: {:?}", e);
+                StatusCode::BAD_GATEWAY
+            })?
+    } else {
+        // Use fallback HTTP/2 client for HTTP upstreams
+        s.http2_client.request(req).await.map_err(|e| {
+            error!("Failed to forward gRPC request: {:?}", e);
+            StatusCode::BAD_GATEWAY
+        })?
+    };
 
     debug!("gRPC response received: {:?}", response);
 
     Ok(response.into_response())
 }
 
-/// Reverse proxy handler that forwards requests to the target host based on the service ID
+/// Reverse proxy handler with mTLS support
 #[instrument(skip_all)]
-async fn reverse_proxy(
+async fn reverse_proxy_with_mtls(
     headers: axum::http::HeaderMap,
     State(s): State<AuthenticatedProxyState>,
     mut req: Request,
+    client_cert: Option<crate::tls_listener::ClientCertInfo>,
+    _auth_method: AuthMethod,
 ) -> Result<Response, StatusCode> {
     // Extract and validate authentication
-    let (service_id, additional_headers) =
+    let (service_id, mut additional_headers) =
         extract_and_validate_auth(&headers, &s.db, &s.paseto_manager).await?;
 
+    // Check if service requires mTLS and enforce it
     let service = match ServiceModel::find_by_id(service_id, &s.db) {
         Ok(Some(service)) => service,
         Ok(None) => return Err(StatusCode::NOT_FOUND),
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
+
+    if let Some(tls_profile) = &service.tls_profile {
+        if tls_profile.require_client_mtls && client_cert.is_none() {
+            warn!(
+                "mTLS required but no client certificate provided for service {}",
+                service_id
+            );
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    // Add client certificate information to headers if available
+    if let Some(cert) = &client_cert {
+        additional_headers.insert("x-client-cert-subject".to_string(), cert.subject.clone());
+        additional_headers.insert("x-client-cert-issuer".to_string(), cert.issuer.clone());
+        additional_headers.insert("x-client-cert-serial".to_string(), cert.serial.clone());
+        additional_headers.insert("x-auth-method".to_string(), "mtls".to_string());
+    }
+
     let target_host = service
         .upstream_url()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -1056,12 +1582,42 @@ async fn reverse_proxy(
     sanitize_request_headers(&mut req, false);
     apply_additional_headers(&mut req, additional_headers, false);
 
-    // Forward the request to the target server using HTTP/1.1 client for REST
-    let response = s
-        .http_client
-        .request(req)
-        .await
-        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    // Determine if we need TLS for the upstream connection
+    let use_tls = target_host.scheme() == Some(&uri::Scheme::HTTPS);
+
+    // Forward the request using appropriate client
+    let response = if use_tls {
+        // Use TLS client for HTTPS upstreams
+        let tls_client = s
+            .tls_client_manager
+            .get_client_for_service(service_id)
+            .await
+            .map_err(|e| {
+                error!(
+                    "Failed to get TLS client for service {}: {:?}",
+                    service_id, e
+                );
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        // Convert request body to Incoming type
+        let (parts, body) = req.into_parts();
+        let req_with_incoming = Request::from_parts(parts, body);
+        tls_client
+            .http_client
+            .request(req_with_incoming)
+            .await
+            .map_err(|e| {
+                error!("Failed to forward HTTP request with TLS: {:?}", e);
+                StatusCode::BAD_GATEWAY
+            })?
+    } else {
+        // Use fallback HTTP/1.1 client for HTTP upstreams
+        s.http_client
+            .request(req)
+            .await
+            .map_err(|_| StatusCode::BAD_GATEWAY)?
+    };
 
     Ok(response.into_response())
 }
@@ -1119,6 +1675,7 @@ mod tests {
             api_key_prefix: "test_".to_string(),
             owners: Vec::new(),
             upstream_url: format!("http://localhost:{}", local_addr.port()),
+            tls_profile: None,
         };
 
         let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -1250,6 +1807,7 @@ mod tests {
             api_key_prefix: "test_".to_string(),
             owners: Vec::new(),
             upstream_url: format!("http://localhost:{}", local_addr.port()),
+            tls_profile: None,
         };
 
         let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -1339,6 +1897,7 @@ mod tests {
             api_key_prefix: "test_".to_string(),
             owners: Vec::new(),
             upstream_url: "http://localhost:9999".to_string(),
+            tls_profile: None,
         };
 
         let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
