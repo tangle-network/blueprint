@@ -16,9 +16,9 @@ cache_path = "contracts/cache"
 broadcast = "contracts/broadcast"
 libs = ["dependencies"]
 remappings = [
-    "@eigenlayer/=dependencies/eigenlayer-middleware-0.5.4/lib/eigenlayer-contracts/src/",
-    "@eigenlayer-middleware/=dependencies/eigenlayer-middleware-0.5.4/",
-    "eigenlayer-contracts/=dependencies/eigenlayer-middleware-0.5.4/lib/eigenlayer-contracts/",
+    "@eigenlayer/=dependencies/eigenlayer-middleware-1.3.1/lib/eigenlayer-contracts/src/",
+    "@eigenlayer-middleware/=dependencies/eigenlayer-middleware-1.3.1/",
+    "eigenlayer-contracts/=dependencies/eigenlayer-middleware-1.3.1/lib/eigenlayer-contracts/",
     "forge-std-1.9.6/=dependencies/forge-std-1.9.6/",
     "incredible-squaring/=contracts/src/",
 ]
@@ -29,6 +29,6 @@ remappings_location = "txt"
 remappings_version = false
 
 [dependencies]
-eigenlayer-middleware = { version = "0.5.4", git = "https://github.com/Layr-Labs/eigenlayer-middleware", rev = "4d63f27247587607beb67f96fdabec4b2c1321ef" }
+eigenlayer-middleware = { version = "1.3.1", git = "https://github.com/Layr-Labs/eigenlayer-middleware", rev = "fd26169c7f988a53ad9ca1e745f40754afed4ed4" }
 forge-std = "1.9.6"
 "@openzeppelin-contracts" = "4.7.0"

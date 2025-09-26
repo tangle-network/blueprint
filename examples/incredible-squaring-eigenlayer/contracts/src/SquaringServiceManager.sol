@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.9;
 
-import "@eigenlayer/contracts/libraries/BytesLib.sol";
 import "./TaskManager.sol";
 import "@eigenlayer-middleware/src/ServiceManagerBase.sol";
 
@@ -11,7 +10,6 @@ import {IRewardsCoordinator} from "@eigenlayer/contracts/interfaces/IRewardsCoor
  * @title Primary entrypoint for procuring services from IncredibleSquaring.
  */
 contract SquaringServiceManager is ServiceManagerBase {
-    using BytesLib for bytes;
 
     TaskManager public immutable squaringTaskManager;
 

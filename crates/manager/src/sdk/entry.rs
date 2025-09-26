@@ -47,7 +47,5 @@ pub fn setup_blueprint_manager_logger(
         let _ = logger.compact().try_init();
     }
 
-    //let _ = env_logger::try_init();
-
     Ok(())
 }

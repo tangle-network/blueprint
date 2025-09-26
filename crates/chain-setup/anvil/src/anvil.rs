@@ -162,8 +162,8 @@ pub async fn start_anvil_testnet_with_state(
 }
 
 #[allow(clippy::missing_errors_doc)] // TODO: should this even be public?
-pub async fn get_receipt<T, P, D>(
-    call: CallBuilder<T, P, D, Ethereum>,
+pub async fn get_receipt<P, D>(
+    call: CallBuilder<P, D, Ethereum>,
 ) -> Result<TransactionReceipt, Error>
 where
     P: Provider<Ethereum>,

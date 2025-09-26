@@ -5,9 +5,9 @@ use blueprint_chain_setup::anvil::get_receipt;
 use blueprint_core::info;
 use blueprint_evm_extra::util::get_provider_http;
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
-use eigensdk::utils::slashing::middleware::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
-use eigensdk::utils::slashing::middleware::registrycoordinator::IStakeRegistryTypes::StrategyParams;
-use eigensdk::utils::slashing::middleware::registrycoordinator::RegistryCoordinator;
+use eigensdk::utils::slashing::middleware::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
+use eigensdk::utils::slashing::middleware::registry_coordinator::IStakeRegistryTypes::StrategyParams;
+use eigensdk::utils::slashing::middleware::registry_coordinator::RegistryCoordinator;
 use url::Url;
 
 // ================= Core Eigenlayer Deployment Addresses =================

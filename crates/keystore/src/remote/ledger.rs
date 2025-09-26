@@ -1,6 +1,6 @@
 use super::{EcdsaRemoteSigner, RemoteConfig};
 use crate::error::{Error, Result};
-use alloy_primitives::{Address, PrimitiveSignature};
+use alloy_primitives::{Address, Signature};
 use alloy_signer::Signer;
 use alloy_signer_ledger::{HDPath, LedgerSigner};
 use blueprint_crypto::k256::{K256Ecdsa, K256VerifyingKey};
@@ -144,7 +144,7 @@ impl From<K256VerifyingKey> for AddressWrapper {
 
 impl EcdsaRemoteSigner<K256Ecdsa> for LedgerRemoteSigner {
     type Public = AddressWrapper;
-    type Signature = PrimitiveSignature;
+    type Signature = Signature;
     type KeyId = Self::Public;
     type Config = LedgerRemoteSignerConfig;
 

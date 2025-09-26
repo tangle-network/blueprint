@@ -78,7 +78,7 @@ pub async fn deploy_new_mbsm_revision<T: Signer<TangleConfig>>(
     let provider = alloy_provider::ProviderBuilder::new()
         .network::<AnyNetwork>()
         .wallet(wallet)
-        .on_ws(WsConnect::new(evm_rpc_endpoint))
+        .connect_ws(WsConnect::new(evm_rpc_endpoint))
         .await?;
 
     let constructor_call = constructorCall {

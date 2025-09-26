@@ -6,8 +6,8 @@ use crate::contexts::x_square::EigenSquareContext;
 use crate::SquaringTask;
 use crate::jobs::compute_x_square::xsquare_eigen;
 use crate::jobs::initialize_task::initialize_bls_task;
-use eigenlayer_contract_deployer::bindings::core::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
-use eigenlayer_contract_deployer::bindings::core::registrycoordinator::IStakeRegistryTypes::StrategyParams;
+use eigenlayer_contract_deployer::bindings::core::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
+use eigenlayer_contract_deployer::bindings::core::registry_coordinator::IStakeRegistryTypes::StrategyParams;
 use eigenlayer_contract_deployer::bindings::RegistryCoordinator;
 use eigenlayer_contract_deployer::core::{
     deploy_core_contracts, DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData, EigenPodManagerConfig, RewardsCoordinatorConfig, StrategyFactoryConfig, StrategyManagerConfig

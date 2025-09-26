@@ -64,3 +64,4 @@ blueprint-build-utils = { workspace = true }
 [features]
 default = ["std"]
 std = []
+build-script = []

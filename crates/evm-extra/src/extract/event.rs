@@ -86,7 +86,7 @@ where
         let events = logs
             .iter()
             .filter(|log| T::SIGNATURE_HASH == log.topics()[0])
-            .filter_map(|log| T::decode_log(&log.inner, true).ok())
+            .filter_map(|log| T::decode_log(&log.inner).ok())
             .map(|event| event.data)
             .collect();
 
@@ -128,7 +128,7 @@ impl<T: SolEvent + Clone> TryFrom<&mut JobCallParts> for FirstEvent<T> {
             .iter()
             .find_map(|log| {
                 if Some(&T::SIGNATURE_HASH) == log.topic0() {
-                    T::decode_log(&log.inner, true).ok()
+                    T::decode_log(&log.inner).ok()
                 } else {
                     None
                 }
@@ -174,7 +174,7 @@ impl<T: SolEvent + Clone> TryFrom<&mut JobCallParts> for LastEvent<T> {
             .rev()
             .find_map(|log| {
                 if Some(&T::SIGNATURE_HASH) == log.topic0() {
-                    T::decode_log(&log.inner, true).ok()
+                    T::decode_log(&log.inner).ok()
                 } else {
                     None
                 }
