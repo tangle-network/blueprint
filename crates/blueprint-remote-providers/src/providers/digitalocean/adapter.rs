@@ -45,6 +45,7 @@ impl DigitalOceanAdapter {
     }
 
     /// Get SSH username for DigitalOcean droplets
+    #[allow(dead_code)]
     fn get_ssh_username(&self) -> &'static str {
         "root"
     }
@@ -303,6 +304,7 @@ impl DigitalOceanAdapter {
         }
     }
 
+    #[allow(dead_code)]
     async fn health_check_blueprint(
         &self,
         _deployment: &BlueprintDeploymentResult,
@@ -310,6 +312,7 @@ impl DigitalOceanAdapter {
         Ok(false)
     }
 
+    #[allow(dead_code)]
     async fn cleanup_blueprint(&self, _deployment: &BlueprintDeploymentResult) -> Result<()> {
         Ok(())
     }

@@ -647,6 +647,7 @@ fn parse_log_line(service_id: &str, container_id: &str, line: &str) -> LogEntry 
 }
 
 /// Parse Kubernetes log line (with timestamp prefix)
+#[allow(dead_code)]
 fn parse_k8s_log_line(service_id: &str, pod_name: &str, line: &str) -> LogEntry {
     // K8s logs often have format: "2024-01-01T12:00:00.000Z message"
     let parts: Vec<&str> = line.splitn(2, ' ').collect();
@@ -688,6 +689,7 @@ fn detect_log_level(message: &str) -> LogLevel {
 }
 
 /// Parse timestamp string
+#[allow(dead_code)]
 fn parse_timestamp(s: &str) -> Option<SystemTime> {
     // Try ISO 8601 format
     if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {

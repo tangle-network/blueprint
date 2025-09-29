@@ -201,6 +201,7 @@ impl SshDeploymentClient {
     }
 
     /// Create container with resource limits (SECURITY: Fixed command injection vulnerabilities)
+    #[allow(dead_code)]
     async fn create_container(
         &self,
         image: &str,

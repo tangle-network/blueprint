@@ -14,6 +14,7 @@ use tracing::{info, warn};
 /// Vultr adapter for Blueprint deployment
 pub struct VultrAdapter {
     provisioner: VultrProvisioner,
+    #[allow(dead_code)]
     api_key: String,
 }
 

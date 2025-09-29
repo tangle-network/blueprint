@@ -193,6 +193,7 @@ impl ErrorRecovery {
 pub struct SshConnectionRecovery {
     max_reconnect_attempts: u32,
     connection_timeout: Duration,
+    #[allow(dead_code)]
     keepalive_interval: Duration,
 }
 

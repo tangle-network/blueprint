@@ -381,6 +381,7 @@ impl PricingFetcher {
 }
 
 /// Convert common region names to AWS pricing API region names
+#[allow(dead_code)]
 fn convert_to_aws_region(region: &str) -> &str {
     match region {
         "us-east-1" => "us-east-1",

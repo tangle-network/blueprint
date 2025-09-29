@@ -610,7 +610,7 @@ impl UpdateManager {
         &mut self,
         ssh_client: &SshDeploymentClient,
         new_image: &str,
-        resource_spec: &ResourceSpec,
+        _resource_spec: &ResourceSpec, // TODO: Use resource spec to set container limits
         env_vars: HashMap<String, String>,
     ) -> Result<String> {
         let version = self.generate_version();

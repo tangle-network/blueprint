@@ -659,6 +659,9 @@ impl CleanupHandler for GcpCleanup {
             }
         }
 
+        #[cfg(not(feature = "gcp"))]
+        let _ = deployment;
+
         Ok(())
     }
 }
@@ -764,6 +767,9 @@ impl CleanupHandler for EksCleanup {
             }
         }
 
+        #[cfg(not(feature = "aws-eks"))]
+        let _ = deployment;
+
         Ok(())
     }
 }
@@ -791,6 +797,9 @@ impl CleanupHandler for GkeCleanup {
                 }
             }
         }
+
+        #[cfg(not(feature = "gcp"))]
+        let _ = deployment;
 
         Ok(())
     }

@@ -10,6 +10,7 @@ use crate::providers::common::{InstanceSelection, ProvisionedInfrastructure, Pro
 pub struct GcpProvisioner {
     #[cfg(feature = "gcp")]
     project_id: String,
+    #[allow(dead_code)]
     client: reqwest::Client,
     #[cfg(feature = "gcp")]
     access_token: Option<String>,
