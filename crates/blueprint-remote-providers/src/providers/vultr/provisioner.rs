@@ -49,7 +49,11 @@ impl VultrProvisioner {
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         let plan = self.select_plan(spec);
-        let region = config.region.as_deref().unwrap_or("ewr"); // Newark default
+        let region = if config.region.is_empty() {
+            "ewr" // Newark default
+        } else {
+            &config.region
+        };
 
         info!("Provisioning Vultr instance with plan {} in region {}", plan, region);
 
@@ -255,6 +259,7 @@ ufw allow 9944/tcp
 ufw --force enable
 "#;
 
-        base64::encode(script)
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD.encode(script)
     }
 }

@@ -12,6 +12,7 @@ documentation = "https://docs.rs/blueprint-remote-providers"
 [dependencies]
 # Blueprint standard library
 blueprint-std.workspace = true
+base64 = "0.22"
 
 # Core dependencies
 anyhow.workspace = true
@@ -50,9 +51,10 @@ aws-config = { version = "1.5", optional = true }
 aws-sdk-ec2 = { version = "1.47", optional = true }
 aws-sdk-eks = { version = "1.47", optional = true }
 aws-sdk-autoscaling = { version = "1.47", optional = true }
+aws-sdk-cloudwatchlogs = { version = "1.47", optional = true }
 
 # HTTP client for cloud APIs and pricing
-reqwest = { workspace = true, features = ["json", "rustls-tls"] }
+reqwest = { workspace = true, features = ["json", "rustls-tls", "gzip", "deflate"] }
 rustls = { version = "0.23", features = ["aws_lc_rs"] }
 
 # TLS and secure communication  
@@ -77,8 +79,12 @@ proptest = "1.0"
 mockito = "1.0"
 # Official AWS mocking library
 aws-smithy-mocks-experimental = "0.2"
+aws-smithy-runtime = { version = "1.7", features = ["test-util"] }
+aws-smithy-types = "1.2"
+http = "1.0"
 # Additional dependencies for integration tests
 chrono = { workspace = true, features = ["serde", "clock"] }
+rand = "0.8"
 # For regex in wiremock matchers
 regex = "1.10"
 # For container-based testing
@@ -89,7 +95,7 @@ k8s-openapi = { version = "0.21", features = ["v1_29"] }
 
 [features]
 default = ["aws"]
-aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-autoscaling"]
+aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-autoscaling", "dep:aws-sdk-cloudwatchlogs"]
 aws-eks = ["aws", "dep:aws-sdk-eks"]
 gcp = []  # GCP support via REST API
 azure = []  # Azure support via REST API

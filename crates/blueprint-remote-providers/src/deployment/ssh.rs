@@ -587,6 +587,196 @@ impl SshDeploymentClient {
         Ok(())
     }
 
+    /// Deploy a container with environment variables
+    pub async fn deploy_container(
+        &self,
+        image: &str,
+        env_vars: HashMap<String, String>,
+    ) -> Result<String> {
+        let spec = ResourceSpec::basic();
+        self.create_container_with_config(image, &spec, env_vars).await
+    }
+
+    /// Deploy a container with a specific name
+    pub async fn deploy_container_with_name(
+        &self,
+        image: &str,
+        name: &str,
+        env_vars: HashMap<String, String>,
+    ) -> Result<String> {
+        let runtime_str = match self.runtime {
+            ContainerRuntime::Docker => "docker",
+            ContainerRuntime::Podman => "podman",
+            ContainerRuntime::Containerd => "ctr",
+        };
+
+        // Build command with specific name
+        let mut cmd = format!("{} run -d --name {}", runtime_str, name);
+
+        // Add environment variables
+        for (key, value) in &env_vars {
+            cmd.push_str(&format!(" -e {}={}", key, value));
+        }
+
+        // Add image
+        cmd.push_str(&format!(" {}", image));
+
+        let output = self.run_remote_command(&cmd).await?;
+
+        let container_id = output
+            .lines()
+            .next()
+            .ok_or_else(|| Error::ConfigurationError("Failed to get container ID".into()))?
+            .trim()
+            .to_string();
+
+        info!("Created container {} with name {}", container_id, name);
+        Ok(container_id)
+    }
+
+    /// Update a container (stop old, start new with same config)
+    pub async fn update_container(
+        &self,
+        new_image: &str,
+        env_vars: HashMap<String, String>,
+    ) -> Result<String> {
+        // Get current container name from deployment config
+        let container_name = format!("{}-{}", self.deployment_config.name, self.deployment_config.namespace);
+
+        // Stop and remove old container
+        let stop_cmd = match self.runtime {
+            ContainerRuntime::Docker => format!("docker stop {} && docker rm {}", container_name, container_name),
+            ContainerRuntime::Podman => format!("podman stop {} && podman rm {}", container_name, container_name),
+            ContainerRuntime::Containerd => format!("ctr task kill {} && ctr container rm {}", container_name, container_name),
+        };
+
+        // Ignore errors from stop/remove (container might not exist)
+        let _ = self.run_remote_command(&stop_cmd).await;
+
+        // Deploy new container with same name
+        self.deploy_container_with_name(new_image, &container_name, env_vars).await
+    }
+
+    /// Remove a container
+    pub async fn remove_container(&self, container_id: &str) -> Result<()> {
+        let cmd = match self.runtime {
+            ContainerRuntime::Docker => format!("docker rm -f {}", container_id),
+            ContainerRuntime::Podman => format!("podman rm -f {}", container_id),
+            ContainerRuntime::Containerd => format!("ctr container rm {}", container_id),
+        };
+
+        self.run_remote_command(&cmd).await?;
+        info!("Removed container: {}", container_id);
+        Ok(())
+    }
+
+    /// Check if a container is healthy
+    pub async fn health_check_container(&self, container_id: &str) -> Result<bool> {
+        // First check if container is running
+        let status = self.get_container_status(container_id).await?;
+        if !status.contains("Up") && !status.contains("running") {
+            return Ok(false);
+        }
+
+        // Check container health status if available (Docker only)
+        if self.runtime == ContainerRuntime::Docker {
+            let cmd = format!("docker inspect --format='{{{{.State.Health.Status}}}}' {}", container_id);
+            match self.run_remote_command(&cmd).await {
+                Ok(health) => {
+                    let health = health.trim();
+                    if health == "healthy" {
+                        return Ok(true);
+                    } else if health == "unhealthy" {
+                        return Ok(false);
+                    }
+                    // If no health check configured, fall through to basic check
+                }
+                Err(_) => {
+                    // Health check not configured, fall through to basic check
+                }
+            }
+        }
+
+        // Basic connectivity check - try to execute a simple command in the container
+        let test_cmd = match self.runtime {
+            ContainerRuntime::Docker => format!("docker exec {} echo ok", container_id),
+            ContainerRuntime::Podman => format!("podman exec {} echo ok", container_id),
+            ContainerRuntime::Containerd => format!("ctr task exec {} echo ok", container_id),
+        };
+
+        match self.run_remote_command(&test_cmd).await {
+            Ok(output) => Ok(output.trim() == "ok"),
+            Err(_) => Ok(false),
+        }
+    }
+
+    /// Switch traffic to a new container (update load balancer/proxy config)
+    pub async fn switch_traffic_to(&self, new_container_name: &str) -> Result<()> {
+        // This would typically update nginx/haproxy/envoy configuration
+        // For now, we'll implement a basic nginx config update
+
+        let nginx_config = format!(r#"
+upstream backend {{
+    server {}:8080;
+}}
+
+server {{
+    listen 80;
+    location / {{
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }}
+}}
+"#, new_container_name);
+
+        // Write new nginx config
+        self.run_remote_command(&format!(
+            "echo '{}' | sudo tee /etc/nginx/sites-available/blueprint",
+            nginx_config
+        )).await?;
+
+        // Reload nginx
+        self.run_remote_command("sudo nginx -s reload").await?;
+
+        info!("Switched traffic to container: {}", new_container_name);
+        Ok(())
+    }
+
+    /// Reconnect SSH connection
+    pub async fn reconnect(&mut self) -> Result<()> {
+        info!("Reconnecting SSH to {}", self.connection.host);
+
+        // Create new secure connection
+        let secure_connection = SecureSshConnection::new(
+            self.connection.host.clone(),
+            self.connection.user.clone(),
+        )?
+        .with_port(self.connection.port)?
+        .with_strict_host_checking(false);
+
+        let secure_connection = if let Some(ref key_path) = self.connection.key_path {
+            secure_connection.with_key_path(key_path)?
+        } else {
+            secure_connection
+        };
+
+        let secure_connection = if let Some(ref jump_host) = self.connection.jump_host {
+            secure_connection.with_jump_host(jump_host.clone())?
+        } else {
+            secure_connection
+        };
+
+        // Replace SSH client
+        self.ssh_client = SecureSshClient::new(secure_connection);
+
+        // Test reconnection
+        self.test_connection().await?;
+
+        info!("SSH reconnection successful");
+        Ok(())
+    }
+
     /// Deploy a blueprint to the remote host (main deployment entry point)
     pub async fn deploy(
         &self,

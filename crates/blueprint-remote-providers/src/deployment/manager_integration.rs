@@ -328,7 +328,7 @@ impl RemoteSourceExtension {
         ttl_seconds: Option<u64>,
     ) -> Result<RemoteDeploymentConfig> {
         // Create provisioning config
-        let config = crate::providers::common::ProvisioningConfig {
+        let _config = crate::providers::common::ProvisioningConfig {
             name: format!("{}-{}", blueprint_id, service_id),
             region: region.clone(),
             ..Default::default()

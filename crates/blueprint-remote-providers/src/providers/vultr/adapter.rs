@@ -4,14 +4,16 @@ use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
-// use crate::providers::vultr::VultrProvisioner;
+use crate::providers::vultr::provisioner::VultrProvisioner;
+use crate::providers::common::ProvisioningConfig;
+use crate::deployment::ssh::{ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::{info, warn};
 
 /// Vultr adapter for Blueprint deployment
 pub struct VultrAdapter {
-    // provisioner: VultrProvisioner,
+    provisioner: VultrProvisioner,
     api_key: String,
 }
 
@@ -20,9 +22,9 @@ impl VultrAdapter {
     pub async fn new() -> Result<Self> {
         let api_key = std::env::var("VULTR_API_KEY")
             .map_err(|_| Error::Other("VULTR_API_KEY environment variable not set".into()))?;
-        
-        // let provisioner = VultrProvisioner::new(api_key.clone()).await?;
-        Ok(Self { api_key })
+
+        let provisioner = VultrProvisioner::new(api_key.clone()).await?;
+        Ok(Self { api_key, provisioner })
     }
 
     /// Get SSH username for Vultr instances
@@ -35,12 +37,12 @@ impl VultrAdapter {
 impl CloudProviderAdapter for VultrAdapter {
     async fn provision_instance(
         &self,
-        instance_type: &str,
+        _instance_type: &str,
         region: &str,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {
             cpu: 2.0,
-            memory_gb: 4.0, 
+            memory_gb: 4.0,
             storage_gb: 80.0,
             gpu_count: None,
             allow_spot: false,
@@ -48,15 +50,32 @@ impl CloudProviderAdapter for VultrAdapter {
         };
 
         let instance_name = format!("blueprint-{}", uuid::Uuid::new_v4());
-        
-        return Err(Error::Other("Vultr provisioning not yet implemented. Use AWS, GCP, or DigitalOcean for production deployments.".into()));
+
+        let config = ProvisioningConfig {
+            name: instance_name.clone(),
+            region: region.to_string(),
+            ssh_key_name: std::env::var("VULTR_SSH_KEY_ID").ok(),
+            ami_id: None,
+            machine_image: None,
+            custom_config: HashMap::new(),
+        };
+
+        let infra = self.provisioner.provision_instance(&spec, &config).await?;
 
         info!(
-            "Provisioned Vultr instance {} in region {}", 
-            instance.id, region
+            "Provisioned Vultr instance {} in region {}",
+            infra.instance_id, region
         );
 
-        Ok(instance)
+        Ok(ProvisionedInstance {
+            id: infra.instance_id,
+            public_ip: infra.public_ip,
+            private_ip: infra.private_ip,
+            status: InstanceStatus::Running,
+            provider: crate::core::remote::CloudProvider::Vultr,
+            region: infra.region,
+            instance_type: infra.instance_type,
+        })
     }
 
     async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
@@ -81,10 +100,26 @@ impl CloudProviderAdapter for VultrAdapter {
                 self.deploy_to_instance(blueprint_image, resource_spec, env_vars).await
             }
             DeploymentTarget::ManagedKubernetes { cluster_id, namespace } => {
-                self.deploy_to_vke(cluster_id, namespace, blueprint_image, resource_spec, env_vars).await
+                #[cfg(feature = "kubernetes")]
+                {
+                    self.deploy_to_vke(cluster_id, namespace, blueprint_image, resource_spec, env_vars).await
+                }
+                #[cfg(not(feature = "kubernetes"))]
+                {
+                    let _ = (cluster_id, namespace);
+                    Err(Error::Other("Kubernetes support not enabled".into()))
+                }
             }
             DeploymentTarget::GenericKubernetes { context: _, namespace } => {
-                self.deploy_to_generic_k8s(namespace, blueprint_image, resource_spec, env_vars).await
+                #[cfg(feature = "kubernetes")]
+                {
+                    self.deploy_to_generic_k8s(namespace, blueprint_image, resource_spec, env_vars).await
+                }
+                #[cfg(not(feature = "kubernetes"))]
+                {
+                    let _ = namespace;
+                    Err(Error::Other("Kubernetes support not enabled".into()))
+                }
             }
             DeploymentTarget::Serverless { .. } => {
                 Err(Error::Other("Vultr serverless deployment not implemented".into()))
@@ -92,6 +127,45 @@ impl CloudProviderAdapter for VultrAdapter {
         }
     }
 
+
+
+
+
+
+
+    async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
+        if let Some(endpoint) = deployment.qos_grpc_endpoint() {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()
+                .map_err(|e| Error::Other(format!("Failed to create HTTP client: {}", e)))?;
+
+            match client.get(&format!("{}/health", endpoint)).send().await {
+                Ok(response) => {
+                    let healthy = response.status().is_success();
+                    if healthy {
+                        info!("Vultr blueprint {} health check passed", deployment.blueprint_id);
+                    }
+                    Ok(healthy)
+                }
+                Err(e) => {
+                    warn!("Vultr health check failed: {}", e);
+                    Ok(false)
+                }
+            }
+        } else {
+            Ok(false)
+        }
+    }
+
+    async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
+        info!("Cleaning up Vultr blueprint deployment: {}", deployment.blueprint_id);
+        self.terminate_instance(&deployment.instance.id).await
+    }
+}
+
+// Private helper methods
+impl VultrAdapter {
     /// Deploy to Vultr instance via SSH
     async fn deploy_to_instance(
         &self,
@@ -158,6 +232,7 @@ impl CloudProviderAdapter for VultrAdapter {
     }
 
     /// Deploy to VKE cluster
+    #[cfg(feature = "kubernetes")]
     async fn deploy_to_vke(
         &self,
         cluster_id: &str,
@@ -204,6 +279,7 @@ impl CloudProviderAdapter for VultrAdapter {
     }
 
     /// Deploy to generic Kubernetes cluster
+    #[cfg(feature = "kubernetes")]
     async fn deploy_to_generic_k8s(
         &self,
         namespace: &str,
@@ -245,13 +321,5 @@ impl CloudProviderAdapter for VultrAdapter {
             port_mappings,
             metadata,
         })
-    }
-
-    async fn health_check_blueprint(&self, _deployment: &BlueprintDeploymentResult) -> Result<bool> {
-        Ok(false)
-    }
-
-    async fn cleanup_blueprint(&self, _deployment: &BlueprintDeploymentResult) -> Result<()> {
-        Ok(())
     }
 }

@@ -10,9 +10,9 @@ use crate::infra::traits::CloudProviderAdapter;
 #[cfg(feature = "aws")]
 pub use crate::providers::aws::AwsAdapter;
 pub use crate::providers::gcp::GcpAdapter;
-// pub use crate::providers::azure::AzureAdapter;
+pub use crate::providers::azure::adapter::AzureAdapter;
 pub use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
-// pub use crate::providers::vultr::VultrAdapter;
+pub use crate::providers::vultr::adapter::VultrAdapter;
 use std::sync::Arc;
 
 /// Factory for creating cloud provider adapters
@@ -30,16 +30,18 @@ impl AdapterFactory {
                 let adapter = GcpAdapter::new().await?;
                 Ok(Arc::new(adapter))
             }
-            CloudProvider::Azure => Err(Error::Other(
-                "Azure provider not yet implemented".to_string(),
-            )),
+            CloudProvider::Azure => {
+                let adapter = AzureAdapter::new().await?;
+                Ok(Arc::new(adapter))
+            }
             CloudProvider::DigitalOcean => {
                 let adapter = DigitalOceanAdapter::new().await?;
                 Ok(Arc::new(adapter))
             }
-            CloudProvider::Vultr => Err(Error::Other(
-                "Vultr provider not yet implemented".to_string(),
-            )),
+            CloudProvider::Vultr => {
+                let adapter = VultrAdapter::new().await?;
+                Ok(Arc::new(adapter))
+            }
             _ => Err(Error::Other(format!(
                 "Provider {:?} not supported yet",
                 provider
@@ -52,7 +54,9 @@ impl AdapterFactory {
         vec![
             CloudProvider::AWS,
             CloudProvider::GCP,
+            CloudProvider::Azure,
             CloudProvider::DigitalOcean,
+            CloudProvider::Vultr,
         ]
     }
 
@@ -60,7 +64,7 @@ impl AdapterFactory {
     pub fn is_supported(provider: &CloudProvider) -> bool {
         matches!(
             provider,
-            CloudProvider::AWS | CloudProvider::GCP | CloudProvider::DigitalOcean
+            CloudProvider::AWS | CloudProvider::GCP | CloudProvider::Azure | CloudProvider::DigitalOcean | CloudProvider::Vultr
         )
     }
 }
@@ -76,20 +80,40 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_unsupported_provider() {
-        let adapter = AdapterFactory::create_adapter(CloudProvider::GCP).await;
-        assert!(
-            adapter.is_err(),
-            "GCP adapter should not be implemented yet"
-        );
+    async fn test_gcp_adapter_creation() {
+        // GCP requires project ID to be set
+        if std::env::var("GCP_PROJECT_ID").is_ok() {
+            let adapter = AdapterFactory::create_adapter(CloudProvider::GCP).await;
+            assert!(adapter.is_ok(), "GCP adapter should be available");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_azure_adapter_creation() {
+        // Azure requires env vars to be set
+        if std::env::var("AZURE_SUBSCRIPTION_ID").is_ok() {
+            let adapter = AdapterFactory::create_adapter(CloudProvider::Azure).await;
+            assert!(adapter.is_ok(), "Azure adapter should be available");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_vultr_adapter_creation() {
+        // Vultr requires API key
+        if std::env::var("VULTR_API_KEY").is_ok() {
+            let adapter = AdapterFactory::create_adapter(CloudProvider::Vultr).await;
+            assert!(adapter.is_ok(), "Vultr adapter should be available");
+        }
     }
 
     #[test]
     fn test_supported_providers() {
         let providers = AdapterFactory::supported_providers();
         assert!(providers.contains(&CloudProvider::AWS));
+        assert!(providers.contains(&CloudProvider::Azure));
         assert!(providers.contains(&CloudProvider::DigitalOcean));
+        assert!(providers.contains(&CloudProvider::Vultr));
         assert!(providers.contains(&CloudProvider::GCP));
-        assert_eq!(providers.len(), 3);
+        assert_eq!(providers.len(), 5);
     }
 }

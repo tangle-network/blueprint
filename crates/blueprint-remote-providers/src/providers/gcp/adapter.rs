@@ -118,7 +118,7 @@ impl GcpAdapter {
 impl CloudProviderAdapter for GcpAdapter {
     async fn provision_instance(
         &self,
-        instance_type: &str,
+        _instance_type: &str,
         region: &str,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {
@@ -143,7 +143,7 @@ impl CloudProviderAdapter for GcpAdapter {
             ),
             custom_config: {
                 let mut config = HashMap::new();
-                if let Some(key_path) = &self.ssh_key_path {
+                if let Some(_key_path) = &self.ssh_key_path {
                     // In production, read SSH public key from file
                     config.insert("ssh_public_key".to_string(), "".to_string());
                 }
@@ -168,7 +168,7 @@ impl CloudProviderAdapter for GcpAdapter {
         self.provisioner.terminate_instance(instance_id, zone).await
     }
 
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
+    async fn get_instance_status(&self, _instance_id: &str) -> Result<InstanceStatus> {
         #[cfg(feature = "gcp")]
         {
             let zone = "us-central1-a"; // Default zone
@@ -364,11 +364,11 @@ impl GcpAdapter {
     /// Deploy to GKE cluster
     async fn deploy_to_gke(
         &self,
-        cluster_id: &str,
-        namespace: &str,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
+        _cluster_id: &str,
+        _namespace: &str,
+        _blueprint_image: &str,
+        _resource_spec: &ResourceSpec,
+        _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
@@ -421,10 +421,10 @@ impl GcpAdapter {
     /// Deploy to generic Kubernetes cluster
     async fn deploy_to_generic_k8s(
         &self,
-        namespace: &str,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
+        _namespace: &str,
+        _blueprint_image: &str,
+        _resource_spec: &ResourceSpec,
+        _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {

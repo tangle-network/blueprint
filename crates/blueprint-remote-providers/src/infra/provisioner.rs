@@ -10,7 +10,8 @@ use crate::infra::adapters::AwsAdapter;
 use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
 #[cfg(feature = "gcp")]
 use crate::providers::gcp::GcpAdapter;
-// Azure and Vultr adapters will be added when implemented
+use crate::providers::azure::adapter::AzureAdapter;
+use crate::providers::vultr::adapter::VultrAdapter;
 use crate::infra::mapper::InstanceTypeMapper;
 use crate::infra::traits::CloudProviderAdapter;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance, RetryPolicy};
@@ -46,14 +47,13 @@ impl CloudProvisioner {
             );
         }
 
-        // Azure adapter not yet implemented
-        // #[cfg(feature = "azure")]
-        // if std::env::var("AZURE_CLIENT_ID").is_ok() {
-        //     providers.insert(
-        //         CloudProvider::Azure,
-        //         Box::new(AzureAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-        //     );
-        // }
+        // Azure adapter
+        if std::env::var("AZURE_SUBSCRIPTION_ID").is_ok() {
+            providers.insert(
+                CloudProvider::Azure,
+                Box::new(AzureAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
 
         if std::env::var("DIGITALOCEAN_TOKEN").is_ok() {
             providers.insert(
@@ -62,13 +62,13 @@ impl CloudProvisioner {
             );
         }
 
-        // Vultr adapter not yet implemented
-        // if std::env::var("VULTR_API_KEY").is_ok() {
-        //     providers.insert(
-        //         CloudProvider::Vultr,
-        //         Box::new(VultrAdapter::new()?) as Box<dyn CloudProviderAdapter>,
-        //     );
-        // }
+        // Vultr adapter
+        if std::env::var("VULTR_API_KEY").is_ok() {
+            providers.insert(
+                CloudProvider::Vultr,
+                Box::new(VultrAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
 
         Ok(Self {
             providers,

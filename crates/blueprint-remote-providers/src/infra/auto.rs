@@ -415,7 +415,7 @@ impl AutoDeploymentManager {
     pub fn generate_example_config(output_path: &Path) -> Result<()> {
         let example_config = DeploymentPreferences::default();
 
-        let config_toml = toml::to_string_pretty(&example_config)
+        let _config_toml = toml::to_string_pretty(&example_config)
             .map_err(|e| Error::ConfigurationError(format!("Failed to serialize config: {}", e)))?;
 
         let config_with_comments = format!(

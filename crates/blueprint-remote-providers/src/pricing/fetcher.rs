@@ -29,8 +29,13 @@ struct CachedPricing {
 
 impl PricingFetcher {
     pub fn new() -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
         Self {
-            client: reqwest::Client::new(),
+            client,
             cache: HashMap::new(),
         }
     }
@@ -109,77 +114,77 @@ impl PricingFetcher {
         Ok(instances)
     }
 
-    async fn fetch_aws_instances(&self, region: &str) -> Result<Vec<InstanceInfo>> {
-        debug!("Fetching AWS instances from Vantage API");
+    async fn fetch_aws_instances(&self, _region: &str) -> Result<Vec<InstanceInfo>> {
+        debug!("Fetching AWS instances from ec2.shop pricing API");
 
-        let url = "https://instances.vantage.sh/instances.json";
-
-        #[derive(Deserialize, Debug)]
-        struct VantageInstance {
-            instance_type: String,
-            #[serde(rename = "vCPU")]
-            vcpu: Option<f32>,
-            memory: Option<f32>,
-            pricing: Option<serde_json::Value>,
-        }
+        // Use ec2.shop - production-ready AWS pricing API with real data
+        let url = "https://ec2.shop/?format=json";
 
         let response = self
             .client
             .get(url)
-            .timeout(std::time::Duration::from_secs(10))
+            .header("User-Agent", "blueprint-remote-providers/0.1.0")
+            .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| Error::Other(format!("Failed to fetch AWS pricing: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to fetch AWS pricing from ec2.shop: {}", e)))?;
 
-        let instances: Vec<VantageInstance> = response
+        if !response.status().is_success() {
+            return Err(Error::Other(format!(
+                "ec2.shop API returned status: {}",
+                response.status()
+            )));
+        }
+
+        #[derive(Deserialize, Debug)]
+        struct Ec2ShopResponse {
+            #[serde(rename = "Prices")]
+            prices: Vec<Ec2ShopInstance>,
+        }
+
+        #[derive(Deserialize, Debug)]
+        struct Ec2ShopInstance {
+            #[serde(rename = "InstanceType")]
+            instance_type: String,
+            #[serde(rename = "Memory")]
+            memory: String,
+            #[serde(rename = "VCPUS")]
+            vcpus: i32,
+            #[serde(rename = "Cost")]
+            cost: f64,
+        }
+
+        let pricing_data: Ec2ShopResponse = response
             .json()
             .await
-            .map_err(|e| Error::Other(format!("Failed to parse AWS pricing: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to parse ec2.shop JSON: {}", e)))?;
 
-        let mut result = Vec::new();
-        // Limit to prevent huge responses
-        for inst in instances.into_iter().take(1000) {
-            if let (Some(vcpu), Some(memory)) = (inst.vcpu, inst.memory) {
-                // Extract price for the specified region
-                let price = if let Some(pricing) = inst.pricing {
-                    if let Some(region_data) = pricing.get(region) {
-                        if let Some(linux_data) = region_data.get("linux") {
-                            if let Some(ondemand) = linux_data.get("ondemand") {
-                                // Price might be a string or number
-                                if let Some(price_str) = ondemand.as_str() {
-                                    price_str.parse::<f64>().unwrap_or(0.0)
-                                } else {
-                                    ondemand.as_f64().unwrap_or(0.0)
-                                }
-                            } else {
-                                0.0
-                            }
-                        } else {
-                            0.0
-                        }
-                    } else {
-                        0.0
-                    }
-                } else {
-                    0.0
-                };
+        let mut instances = Vec::new();
 
-                if price > 0.0 {
-                    result.push(InstanceInfo {
-                        name: inst.instance_type,
-                        vcpus: vcpu,
-                        memory_gb: memory,
-                        hourly_price: price,
-                    });
-                }
+        for price in pricing_data.prices.into_iter().take(100) { // Limit for performance
+            // Parse memory string like "1 GiB" or "0.5 GiB"
+            let memory_gb = price.memory
+                .split_whitespace()
+                .next()
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(0.0);
+
+            if price.vcpus > 0 && memory_gb > 0.0 && price.cost > 0.0 {
+                instances.push(InstanceInfo {
+                    name: price.instance_type,
+                    vcpus: price.vcpus as f32,
+                    memory_gb,
+                    hourly_price: price.cost,
+                });
             }
         }
 
-        if result.is_empty() {
-            Err(Error::Other("No instances found for region".to_string()))
-        } else {
-            Ok(result)
+        if instances.is_empty() {
+            return Err(Error::Other("No AWS instances found in ec2.shop data".to_string()));
         }
+
+        debug!("Fetched {} AWS instances from ec2.shop API", instances.len());
+        Ok(instances)
     }
 
     async fn fetch_azure_instances(&self, region: &str) -> Result<Vec<InstanceInfo>> {
@@ -375,6 +380,21 @@ impl PricingFetcher {
     }
 }
 
+/// Convert common region names to AWS pricing API region names
+fn convert_to_aws_region(region: &str) -> &str {
+    match region {
+        "us-east-1" => "us-east-1",
+        "us-east-2" => "us-east-2",
+        "us-west-1" => "us-west-1",
+        "us-west-2" => "us-west-2",
+        "eu-west-1" => "eu-west-1",
+        "eu-central-1" => "eu-central-1",
+        "ap-southeast-1" => "ap-southeast-1",
+        "ap-northeast-1" => "ap-northeast-1",
+        _ => "us-east-1", // Default to us-east-1 for unknown regions
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -399,7 +419,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_aws_pricing_works() {
-        let mut fetcher = PricingFetcher::new();
+        let fetcher = PricingFetcher::new();
 
         // AWS should work with Vantage API
         let result = fetcher.fetch_aws_instances("us-east-1").await;

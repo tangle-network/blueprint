@@ -650,11 +650,11 @@ impl CleanupHandler for GcpCleanup {
                 deployment.metadata.get("project_id"),
                 deployment.region.as_ref(),
             ) {
-                let provisioner = GcpProvisioner::new(project.clone()).await?;
+                let mut provisioner = GcpProvisioner::new(project.clone()).await?;
 
                 if let Some(instance_name) = deployment.resource_ids.get("instance_name") {
                     info!("Deleting GCP instance: {}", instance_name);
-                    info!("GCE cleanup not yet implemented");
+                    provisioner.terminate_instance(instance_name, zone).await?;
                 }
             }
         }
@@ -669,7 +669,14 @@ struct AzureCleanup;
 #[async_trait::async_trait]
 impl CleanupHandler for AzureCleanup {
     async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
-        warn!("Azure cleanup not yet implemented with CloudProvisioner");
+        if let Some(instance_id) = deployment.resource_ids.get("instance_id") {
+            use crate::infra::provisioner::CloudProvisioner;
+            use crate::core::remote::CloudProvider;
+
+            info!("Deleting Azure VM: {}", instance_id);
+            let provisioner = CloudProvisioner::new().await?;
+            provisioner.terminate(CloudProvider::Azure, instance_id).await?;
+        }
 
         Ok(())
     }
@@ -680,8 +687,15 @@ struct DigitalOceanCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for DigitalOceanCleanup {
-    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
-        warn!("DigitalOcean cleanup requires CloudProvisioner integration");
+    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
+        if let Some(instance_id) = deployment.resource_ids.get("instance_id") {
+            use crate::infra::provisioner::CloudProvisioner;
+            use crate::core::remote::CloudProvider;
+
+            info!("Deleting DigitalOcean droplet: {}", instance_id);
+            let provisioner = CloudProvisioner::new().await?;
+            provisioner.terminate(CloudProvider::DigitalOcean, instance_id).await?;
+        }
         Ok(())
     }
 }
@@ -691,8 +705,15 @@ struct VultrCleanup;
 
 #[async_trait::async_trait]
 impl CleanupHandler for VultrCleanup {
-    async fn cleanup(&self, _deployment: &DeploymentRecord) -> Result<()> {
-        warn!("Vultr cleanup requires CloudProvisioner integration");
+    async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
+        if let Some(instance_id) = deployment.resource_ids.get("instance_id") {
+            use crate::infra::provisioner::CloudProvisioner;
+            use crate::core::remote::CloudProvider;
+
+            info!("Deleting Vultr instance: {}", instance_id);
+            let provisioner = CloudProvisioner::new().await?;
+            provisioner.terminate(CloudProvider::Vultr, instance_id).await?;
+        }
         Ok(())
     }
 }
@@ -765,7 +786,8 @@ impl CleanupHandler for GkeCleanup {
 
                 if let Some(cluster_name) = deployment.resource_ids.get("cluster_name") {
                     info!("Deleting GKE cluster: {}", cluster_name);
-                    info!("GKE cleanup not yet implemented");
+                    // GKE cluster deletion requires gcloud SDK or complex API calls
+                    warn!("GKE cluster cleanup not implemented - use gcloud CLI");
                 }
             }
         }
@@ -780,8 +802,11 @@ struct AksCleanup;
 #[async_trait::async_trait]
 impl CleanupHandler for AksCleanup {
     async fn cleanup(&self, deployment: &DeploymentRecord) -> Result<()> {
-        warn!("AKS cleanup not yet implemented with CloudProvisioner");
-
+        if let Some(cluster_name) = deployment.resource_ids.get("cluster_name") {
+            info!("Deleting AKS cluster: {}", cluster_name);
+            // AKS cluster deletion requires Azure CLI or complex API calls
+            warn!("AKS cluster cleanup not implemented - use az CLI");
+        }
         Ok(())
     }
 }

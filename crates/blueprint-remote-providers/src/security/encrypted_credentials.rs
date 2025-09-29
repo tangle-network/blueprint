@@ -49,7 +49,32 @@ pub struct PlaintextCredentials {
 }
 
 impl EncryptedCloudCredentials {
-    /// Create new encrypted credentials
+    /// Create new encrypted credentials with provided key
+    pub fn encrypt_with_key(provider: &str, credentials: PlaintextCredentials, key: &[u8; 32]) -> Result<Self> {
+        let cipher = Aes256Gcm::new_from_slice(key)
+            .map_err(|e| Error::ConfigurationError(format!("Invalid key: {}", e)))?;
+
+        // Generate random nonce
+        let nonce_bytes = Self::generate_nonce();
+        let nonce = Nonce::from_slice(&nonce_bytes);
+
+        // Serialize and encrypt credentials
+        let plaintext = serde_json::to_vec(&credentials)
+            .map_err(|e| Error::ConfigurationError(format!("Serialization failed: {}", e)))?;
+
+        let encrypted_data = cipher
+            .encrypt(nonce, plaintext.as_ref())
+            .map_err(|e| Error::ConfigurationError(format!("Encryption failed: {}", e)))?;
+
+        Ok(Self {
+            provider: provider.to_string(),
+            encrypted_data,
+            nonce: nonce.to_vec(),
+            metadata: HashMap::new(),
+        })
+    }
+
+    /// Create new encrypted credentials (generates random key - for testing only)
     pub fn encrypt(provider: &str, credentials: PlaintextCredentials) -> Result<Self> {
         // Generate encryption key (in production, derive from master key or HSM)
         let key = Aes256Gcm::generate_key(&mut OsRng);
@@ -140,7 +165,7 @@ impl SecureCredentialManager {
         provider: &str,
         credentials: PlaintextCredentials,
     ) -> Result<EncryptedCloudCredentials> {
-        let mut encrypted = EncryptedCloudCredentials::encrypt(provider, credentials)?;
+        let mut encrypted = EncryptedCloudCredentials::encrypt_with_key(provider, credentials, &self.master_key)?;
         encrypted.add_metadata("created_at".to_string(), chrono::Utc::now().to_rfc3339());
         encrypted.add_metadata("version".to_string(), "1.0".to_string());
         Ok(encrypted)
@@ -165,6 +190,17 @@ impl SecureCredentialManager {
 
 /// Secure AWS credential extraction
 impl PlaintextCredentials {
+    /// Create from JSON string
+    pub fn from_json(json: &str) -> Result<Self> {
+        serde_json::from_str(json)
+            .map_err(|e| Error::ConfigurationError(format!("Invalid JSON: {}", e)))
+    }
+
+    /// Convert to JSON string
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+    }
+
     pub fn aws_credentials(&self) -> Option<(&str, &str)> {
         match (&self.aws_access_key, &self.aws_secret_key) {
             (Some(access), Some(secret)) => Some((access, secret)),
@@ -208,23 +244,20 @@ mod tests {
 
     #[test]
     fn test_credential_encryption_decryption() {
-        let credentials = PlaintextCredentials {
-            aws_access_key: Some("AKIATEST123".to_string()),
-            aws_secret_key: Some("secretkey123".to_string()),
-            gcp_project_id: Some("test-project".to_string()),
-            ..Default::default()
-        };
-
-        // Create a copy for encryption before credentials is consumed
-        let credentials_copy = credentials.clone();
+        // Create credentials directly for encryption
+        // Note: We need to avoid moving out of ZeroizeOnDrop struct
+        let mut credentials = PlaintextCredentials::default();
+        credentials.aws_access_key = Some("AKIATEST123".to_string());
+        credentials.aws_secret_key = Some("secretkey123".to_string());
+        credentials.gcp_project_id = Some("test-project".to_string());
 
         // Encrypt credentials
-        let encrypted = EncryptedCloudCredentials::encrypt("aws", credentials_copy).unwrap();
+        let encrypted = EncryptedCloudCredentials::encrypt("aws", credentials).unwrap();
         assert!(encrypted.is_encrypted());
         assert_eq!(encrypted.provider(), "aws");
 
         // Verify plaintext is zeroized (automatic on drop)
-        drop(credentials);
+        // drop(credentials); // Already consumed in encrypt call
 
         // Cannot decrypt without proper key
         let wrong_key = [0u8; 32];
@@ -264,22 +297,6 @@ mod tests {
     }
 }
 
-impl PlaintextCredentials {
-    /// Create from JSON string
-    pub fn from_json(json_str: &str) -> crate::core::error::Result<Self> {
-        serde_json::from_str(json_str).map_err(|e| {
-            crate::core::error::Error::ConfigurationError(format!(
-                "Invalid credentials JSON: {}",
-                e
-            ))
-        })
-    }
-
-    /// Convert to JSON string
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
-    }
-}
 
 impl Default for PlaintextCredentials {
     fn default() -> Self {

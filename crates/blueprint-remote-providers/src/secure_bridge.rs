@@ -459,7 +459,7 @@ mod tests {
 
         let endpoint = RemoteEndpoint {
             instance_id: "i-test123".to_string(),
-            host: "test.example.com".to_string(),
+            host: "localhost".to_string(),
             port: 8080,
             use_tls: true,
             service_id: 1,

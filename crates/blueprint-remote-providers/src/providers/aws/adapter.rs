@@ -86,7 +86,7 @@ impl AwsAdapter {
 impl CloudProviderAdapter for AwsAdapter {
     async fn provision_instance(
         &self,
-        instance_type: &str,
+        _instance_type: &str,
         region: &str,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {

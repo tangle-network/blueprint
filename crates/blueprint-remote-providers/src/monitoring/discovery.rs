@@ -664,7 +664,7 @@ mod tests {
 
     #[test]
     fn test_machine_type_discovery() {
-        let mut discovery = MachineTypeDiscovery::new();
+        let discovery = MachineTypeDiscovery::new();
 
         // Test getting fallback machines
         let aws_machines = discovery.get_common_aws_instances();

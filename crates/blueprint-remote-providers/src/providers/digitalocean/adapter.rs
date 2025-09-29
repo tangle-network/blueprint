@@ -54,7 +54,7 @@ impl DigitalOceanAdapter {
 impl CloudProviderAdapter for DigitalOceanAdapter {
     async fn provision_instance(
         &self,
-        instance_type: &str,
+        _instance_type: &str,
         region: &str,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {
@@ -168,9 +168,9 @@ impl DigitalOceanAdapter {
     /// Deploy to DigitalOcean Droplet via SSH
     async fn deploy_to_droplet(
         &self,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
+        _blueprint_image: &str,
+        _resource_spec: &ResourceSpec,
+        _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         let instance = self.provision_instance("s-2vcpu-4gb", "nyc3").await?;
 
@@ -196,11 +196,11 @@ impl DigitalOceanAdapter {
     /// Deploy to DOKS cluster
     async fn deploy_to_doks(
         &self,
-        cluster_id: &str,
-        namespace: &str,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
+        _cluster_id: &str,
+        _namespace: &str,
+        _blueprint_image: &str,
+        _resource_spec: &ResourceSpec,
+        _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
@@ -252,10 +252,10 @@ impl DigitalOceanAdapter {
     /// Deploy to generic Kubernetes cluster
     async fn deploy_to_generic_k8s(
         &self,
-        namespace: &str,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
+        _namespace: &str,
+        _blueprint_image: &str,
+        _resource_spec: &ResourceSpec,
+        _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {

@@ -72,7 +72,7 @@ pub trait CloudProviderAdapter: Send + Sync {
     /// Legacy method - deploys to VM by default
     async fn deploy_blueprint(
         &self,
-        instance: &ProvisionedInstance,
+        _instance: &ProvisionedInstance,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
