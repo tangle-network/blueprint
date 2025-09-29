@@ -601,6 +601,18 @@ impl SshDeploymentClient {
         name: &str,
         env_vars: HashMap<String, String>,
     ) -> Result<String> {
+        // Use default resource limits if not specified
+        self.deploy_container_with_resources(image, name, env_vars, None).await
+    }
+
+    /// Deploy a container with specific name and resource limits
+    pub async fn deploy_container_with_resources(
+        &self,
+        image: &str,
+        name: &str,
+        env_vars: HashMap<String, String>,
+        resource_spec: Option<&ResourceSpec>,
+    ) -> Result<String> {
         let runtime_str = match self.runtime {
             ContainerRuntime::Docker => "docker",
             ContainerRuntime::Podman => "podman",
@@ -609,6 +621,35 @@ impl SshDeploymentClient {
 
         // Build command with specific name
         let mut cmd = format!("{runtime_str} run -d --name {name}");
+
+        // Add resource limits if specified
+        if let Some(spec) = resource_spec {
+            match self.runtime {
+                ContainerRuntime::Docker | ContainerRuntime::Podman => {
+                    // CPU limits (in CPU units, e.g., 1.5 = 1.5 CPUs)
+                    cmd.push_str(&format!(" --cpus={}", spec.cpu));
+
+                    // Memory limits (convert GB to format like "2g")
+                    cmd.push_str(&format!(" --memory={}g", spec.memory_gb));
+
+                    // GPU support if requested
+                    if let Some(gpu_count) = spec.gpu_count {
+                        if gpu_count > 0 {
+                            cmd.push_str(&format!(" --gpus={}", gpu_count));
+                        }
+                    }
+                }
+                ContainerRuntime::Containerd => {
+                    // Containerd uses different syntax for resource limits
+                    if spec.cpu > 0.0 {
+                        cmd.push_str(&format!(" --cpu-quota={}", (spec.cpu * 100000.0) as u64));
+                    }
+                    if spec.memory_gb > 0.0 {
+                        cmd.push_str(&format!(" --memory-limit={}g", spec.memory_gb));
+                    }
+                }
+            }
+        }
 
         // Add environment variables
         for (key, value) in &env_vars {
@@ -627,7 +668,8 @@ impl SshDeploymentClient {
             .trim()
             .to_string();
 
-        info!("Created container {} with name {}", container_id, name);
+        info!("Created container {} with name {} and resource limits: {:?}",
+              container_id, name, resource_spec);
         Ok(container_id)
     }
 
@@ -636,6 +678,17 @@ impl SshDeploymentClient {
         &self,
         new_image: &str,
         env_vars: HashMap<String, String>,
+    ) -> Result<String> {
+        // Use default resource limits if not specified
+        self.update_container_with_resources(new_image, env_vars, None).await
+    }
+
+    /// Update a container with specific resource limits
+    pub async fn update_container_with_resources(
+        &self,
+        new_image: &str,
+        env_vars: HashMap<String, String>,
+        resource_spec: Option<&ResourceSpec>,
     ) -> Result<String> {
         // Get current container name from deployment config
         let container_name = format!("{}-{}", self.deployment_config.name, self.deployment_config.namespace);
@@ -650,8 +703,8 @@ impl SshDeploymentClient {
         // Ignore errors from stop/remove (container might not exist)
         let _ = self.run_remote_command(&stop_cmd).await;
 
-        // Deploy new container with same name
-        self.deploy_container_with_name(new_image, &container_name, env_vars).await
+        // Deploy new container with same name and resource limits
+        self.deploy_container_with_resources(new_image, &container_name, env_vars, resource_spec).await
     }
 
     /// Remove a container

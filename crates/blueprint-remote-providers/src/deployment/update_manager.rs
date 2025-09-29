@@ -621,7 +621,7 @@ impl UpdateManager {
         &mut self,
         ssh_client: &SshDeploymentClient,
         new_image: &str,
-        _resource_spec: &ResourceSpec, // TODO: Use resource spec to set container limits
+        resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<String> {
         let version = self.generate_version();
@@ -629,10 +629,10 @@ impl UpdateManager {
 
         match &self.strategy {
             UpdateStrategy::BlueGreen { .. } => {
-                // Deploy new container alongside old one
+                // Deploy new container alongside old one with resource limits
                 let new_container_name = format!("blueprint-{version}");
                 let new_container_id = ssh_client
-                    .deploy_container_with_name(new_image, &new_container_name, env_vars.clone())
+                    .deploy_container_with_resources(new_image, &new_container_name, env_vars.clone(), Some(resource_spec))
                     .await?;
 
                 // Health check new container
@@ -655,9 +655,9 @@ impl UpdateManager {
                 }
             }
             _ => {
-                // Simple replace for other strategies
+                // Simple replace for other strategies with resource limits
                 let new_container_id = ssh_client
-                    .update_container(new_image, env_vars)
+                    .update_container_with_resources(new_image, env_vars, Some(resource_spec))
                     .await?;
 
                 self.active_version = Some(version.clone());
