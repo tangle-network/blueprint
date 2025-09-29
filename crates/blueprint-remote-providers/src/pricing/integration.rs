@@ -253,7 +253,7 @@ pub struct ResourceCost {
 impl DetailedCostReport {
     /// Generate a human-readable summary
     pub fn summary(&self) -> String {
-        let mut summary = format!("Cost Report for {}\n", self.provider.to_string());
+        let mut summary = format!("Cost Report for {}\n", self.provider);
         summary.push_str(&format!("Duration: {:.1} hours\n", self.duration_hours));
         summary.push_str(&format!(
             "Base Hourly Cost: ${:.4}\n",

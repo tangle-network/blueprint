@@ -146,7 +146,7 @@ impl CloudProviderAdapter for DigitalOceanAdapter {
             let client = SecureHttpClient::new()?;
             let auth = ApiAuthentication::None; // Health endpoint typically doesn't require auth
 
-            match client.get(&format!("{}/health", endpoint), &auth).await {
+            match client.get(&format!("{endpoint}/health"), &auth).await {
                 Ok(response) => Ok(response.status().is_success()),
                 Err(_) => Ok(false),
             }

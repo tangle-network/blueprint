@@ -253,7 +253,7 @@ impl CloudProviderAdapter for GcpAdapter {
 
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
         if let Some(endpoint) = deployment.qos_grpc_endpoint() {
-            match reqwest::get(&format!("{}/health", endpoint)).await {
+            match reqwest::get(&format!("{endpoint}/health")).await {
                 Ok(response) => Ok(response.status().is_success()),
                 Err(_) => Ok(false),
             }
@@ -309,8 +309,7 @@ impl GcpAdapter {
                 .await
                 .map_err(|e| {
                     Error::Other(format!(
-                        "Failed to establish secure SSH connection to GCP instance: {}",
-                        e
+                        "Failed to establish secure SSH connection to GCP instance: {e}"
                     ))
                 })?;
 
@@ -318,7 +317,7 @@ impl GcpAdapter {
         let deployment = ssh_client
             .deploy_blueprint(blueprint_image, resource_spec, env_vars)
             .await
-            .map_err(|e| Error::Other(format!("Blueprint deployment to GCP failed: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Blueprint deployment to GCP failed: {e}")))?;
 
         // Extract and validate port mappings
         let mut port_mappings = HashMap::new();

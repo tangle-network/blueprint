@@ -59,8 +59,7 @@ async fn test_cloud_provisioner_initialization() {
         }
         other => {
             println!(
-                "✓ Provider initialization returned expected error: {:?}",
-                other
+                "✓ Provider initialization returned expected error: {other:?}"
             );
         }
     }
@@ -136,7 +135,7 @@ async fn test_digitalocean_adapter_integration() {
 
                     // Test QoS endpoint accessibility
                     if let Some(qos_endpoint) = deployment.qos_grpc_endpoint() {
-                        println!("Testing QoS endpoint: {}", qos_endpoint);
+                        println!("Testing QoS endpoint: {qos_endpoint}");
 
                         // Give blueprint time to start
                         sleep(Duration::from_secs(10)).await;
@@ -154,8 +153,7 @@ async fn test_digitalocean_adapter_integration() {
                             }
                             Err(e) => {
                                 println!(
-                                    "⚠ QoS health check failed: {} (expected for test environment)",
-                                    e
+                                    "⚠ QoS health check failed: {e} (expected for test environment)"
                                 );
                             }
                         }
@@ -166,13 +164,12 @@ async fn test_digitalocean_adapter_integration() {
                     let cleanup_result = adapter.cleanup_blueprint(&deployment).await;
                     match cleanup_result {
                         Ok(_) => println!("✓ Deployment cleaned up successfully"),
-                        Err(e) => println!("⚠ Cleanup failed: {}", e),
+                        Err(e) => println!("⚠ Cleanup failed: {e}"),
                     }
                 }
                 Err(e) => {
                     println!(
-                        "⚠ Blueprint deployment failed: {} (expected without proper SSH setup)",
-                        e
+                        "⚠ Blueprint deployment failed: {e} (expected without proper SSH setup)"
                     );
                 }
             }
@@ -182,13 +179,12 @@ async fn test_digitalocean_adapter_integration() {
             let terminate_result = adapter.terminate_instance(&instance.id).await;
             match terminate_result {
                 Ok(_) => println!("✓ Instance terminated successfully"),
-                Err(e) => println!("⚠ Instance termination failed: {}", e),
+                Err(e) => println!("⚠ Instance termination failed: {e}"),
             }
         }
         Err(e) => {
             println!(
-                "⚠ Instance provisioning failed: {} (may be expected due to API limits or configuration)",
-                e
+                "⚠ Instance provisioning failed: {e} (may be expected due to API limits or configuration)"
             );
         }
     }
@@ -220,7 +216,7 @@ async fn test_multi_provider_deployment() {
     let mut results = Vec::new();
 
     for (provider, region) in providers_to_test {
-        println!("Testing provider: {}", provider);
+        println!("Testing provider: {provider}");
 
         let result = provisioner
             .provision(provider.clone(), &resource_spec, region)
@@ -235,7 +231,7 @@ async fn test_multi_provider_deployment() {
                 results.push((provider, instance));
             }
             Err(e) => {
-                println!("⚠ Failed to provision on {}: {}", provider, e);
+                println!("⚠ Failed to provision on {provider}: {e}");
                 // This is expected if credentials aren't configured
             }
         }
@@ -298,7 +294,7 @@ async fn test_kubernetes_deployment_targets() {
     ];
 
     for target in deployment_targets {
-        println!("Testing deployment target: {:?}", target);
+        println!("Testing deployment target: {target:?}");
 
         // We can't actually deploy without a real cluster, but we can test the structure
         match target {
@@ -307,14 +303,12 @@ async fn test_kubernetes_deployment_targets() {
                 namespace,
             } => {
                 println!(
-                    "✓ Managed Kubernetes target configured: {} / {}",
-                    cluster_id, namespace
+                    "✓ Managed Kubernetes target configured: {cluster_id} / {namespace}"
                 );
             }
             DeploymentTarget::GenericKubernetes { context, namespace } => {
                 println!(
-                    "✓ Generic Kubernetes target configured: {:?} / {}",
-                    context, namespace
+                    "✓ Generic Kubernetes target configured: {context:?} / {namespace}"
                 );
             }
             _ => {}
@@ -350,11 +344,11 @@ async fn test_qos_remote_integration() {
 
     // Test QoS endpoint URL generation
     let test_ip = "192.168.1.100";
-    let qos_metrics_url = format!("http://{}:9615/metrics", test_ip);
-    let qos_health_url = format!("http://{}:9615/health", test_ip);
+    let qos_metrics_url = format!("http://{test_ip}:9615/metrics");
+    let qos_health_url = format!("http://{test_ip}:9615/health");
 
-    println!("QoS metrics URL: {}", qos_metrics_url);
-    println!("QoS health URL: {}", qos_health_url);
+    println!("QoS metrics URL: {qos_metrics_url}");
+    println!("QoS health URL: {qos_health_url}");
 
     assert!(
         qos_metrics_url.contains("9615"),

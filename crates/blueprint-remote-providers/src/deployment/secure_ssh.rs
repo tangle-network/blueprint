@@ -43,8 +43,7 @@ impl SecureSshConnection {
     pub fn with_port(mut self, port: u16) -> Result<Self> {
         if port == 0 {
             return Err(Error::ConfigurationError(format!(
-                "Invalid SSH port: {}",
-                port
+                "Invalid SSH port: {port}"
             )));
         }
         self.port = port;
@@ -97,8 +96,7 @@ impl SecureSshConnection {
         ];
         if host.chars().any(|c| dangerous_chars.contains(&c)) {
             return Err(Error::ConfigurationError(format!(
-                "Hostname contains dangerous characters: {}",
-                host
+                "Hostname contains dangerous characters: {host}"
             )));
         }
 
@@ -108,8 +106,7 @@ impl SecureSshConnection {
             .all(|c| c.is_ascii_alphanumeric() || "-._".contains(c))
         {
             return Err(Error::ConfigurationError(format!(
-                "Invalid hostname format: {}",
-                host
+                "Invalid hostname format: {host}"
             )));
         }
 
@@ -128,8 +125,7 @@ impl SecureSshConnection {
         ];
         if user.chars().any(|c| dangerous_chars.contains(&c)) {
             return Err(Error::ConfigurationError(format!(
-                "Username contains dangerous characters: {}",
-                user
+                "Username contains dangerous characters: {user}"
             )));
         }
 
@@ -139,8 +135,7 @@ impl SecureSshConnection {
             .all(|c| c.is_ascii_alphanumeric() || "-_".contains(c))
         {
             return Err(Error::ConfigurationError(format!(
-                "Invalid username format: {}",
-                user
+                "Invalid username format: {user}"
             )));
         }
 
@@ -172,7 +167,7 @@ impl SecureSshConnection {
         {
             use std::os::unix::fs::PermissionsExt;
             let metadata = path.metadata().map_err(|e| {
-                Error::ConfigurationError(format!("Cannot read key file metadata: {}", e))
+                Error::ConfigurationError(format!("Cannot read key file metadata: {e}"))
             })?;
             let perms = metadata.permissions().mode();
 
@@ -214,13 +209,12 @@ impl SecureSshClient {
             .arg(&ssh_cmd)
             .output()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("SSH command failed: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("SSH command failed: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(Error::ConfigurationError(format!(
-                "Remote command failed: {}",
-                stderr
+                "Remote command failed: {stderr}"
             )));
         }
 
@@ -263,23 +257,23 @@ impl SecureSshClient {
         // Add identity file if provided (with validation and escaping)
         if let Some(ref key_path) = self.connection.key_path {
             let escaped_path = escape(key_path.to_str().unwrap().into());
-            ssh_cmd.push_str(&format!(" -i {}", escaped_path));
+            ssh_cmd.push_str(&format!(" -i {escaped_path}"));
         }
 
         // Add jump host if provided (with validation and escaping)
         if let Some(ref jump_host) = self.connection.jump_host {
             let escaped_jump = escape(jump_host.into());
-            ssh_cmd.push_str(&format!(" -J {}", escaped_jump));
+            ssh_cmd.push_str(&format!(" -J {escaped_jump}"));
         }
 
         // Add user@host with proper escaping
         let escaped_user = escape(self.connection.user.as_str().into());
         let escaped_host = escape(self.connection.host.as_str().into());
-        ssh_cmd.push_str(&format!(" {}@{}", escaped_user, escaped_host));
+        ssh_cmd.push_str(&format!(" {escaped_user}@{escaped_host}"));
 
         // Add the command to execute with proper escaping
         let escaped_command = escape(command.into());
-        ssh_cmd.push_str(&format!(" {}", escaped_command));
+        ssh_cmd.push_str(&format!(" {escaped_command}"));
 
         Ok(ssh_cmd)
     }
@@ -309,8 +303,7 @@ impl SecureSshClient {
         for pattern in &dangerous_patterns {
             if command.contains(pattern) {
                 return Err(Error::ConfigurationError(format!(
-                    "Dangerous command pattern detected: {}",
-                    pattern
+                    "Dangerous command pattern detected: {pattern}"
                 )));
             }
         }
@@ -337,13 +330,12 @@ impl SecureSshClient {
             .arg(&scp_cmd)
             .output()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("SCP failed: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("SCP failed: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(Error::ConfigurationError(format!(
-                "File copy failed: {}",
-                stderr
+                "File copy failed: {stderr}"
             )));
         }
 
@@ -378,7 +370,7 @@ impl SecureSshClient {
         // Add identity file if provided
         if let Some(ref key_path) = self.connection.key_path {
             let escaped_path = escape(key_path.to_str().unwrap().into());
-            scp_cmd.push_str(&format!(" -i {}", escaped_path));
+            scp_cmd.push_str(&format!(" -i {escaped_path}"));
         }
 
         // Add source and destination with proper escaping
@@ -388,8 +380,7 @@ impl SecureSshClient {
         let escaped_remote = escape(remote_path.into());
 
         scp_cmd.push_str(&format!(
-            " {} {}@{}:{}",
-            escaped_local, escaped_user, escaped_host, escaped_remote
+            " {escaped_local} {escaped_user}@{escaped_host}:{escaped_remote}"
         ));
 
         Ok(scp_cmd)
@@ -434,8 +425,7 @@ impl SecureSshClient {
         ];
         if path.chars().any(|c| dangerous_chars.contains(&c)) {
             return Err(Error::ConfigurationError(format!(
-                "Remote path contains dangerous characters: {}",
-                path
+                "Remote path contains dangerous characters: {path}"
             )));
         }
 

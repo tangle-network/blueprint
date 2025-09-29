@@ -62,21 +62,19 @@ impl SecureBridge {
     /// Validate certificate format and basic security properties
     fn validate_certificate_format(cert_data: &[u8], cert_type: &str) -> Result<()> {
         let cert_str = String::from_utf8(cert_data.to_vec())
-            .map_err(|_| Error::ConfigurationError(format!("{} must be valid UTF-8", cert_type)))?;
+            .map_err(|_| Error::ConfigurationError(format!("{cert_type} must be valid UTF-8")))?;
 
         // Basic PEM format validation
         if !cert_str.contains("-----BEGIN") || !cert_str.contains("-----END") {
             return Err(Error::ConfigurationError(format!(
-                "{} must be in PEM format",
-                cert_type
+                "{cert_type} must be in PEM format"
             )));
         }
 
         // Validate certificate is not obviously invalid
         if cert_data.len() < 100 {
             return Err(Error::ConfigurationError(format!(
-                "{} appears to be too short to be valid",
-                cert_type
+                "{cert_type} appears to be too short to be valid"
             )));
         }
 
@@ -90,8 +88,7 @@ impl SecureBridge {
 
         if !valid_headers.iter().any(|header| cert_str.contains(header)) {
             return Err(Error::ConfigurationError(format!(
-                "{} does not contain recognized PEM headers",
-                cert_type
+                "{cert_type} does not contain recognized PEM headers"
             )));
         }
 
@@ -140,13 +137,13 @@ impl SecureBridge {
             {
                 // Read certificate files
                 let client_cert = std::fs::read(&cert_path).map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to read client cert: {}", e))
+                    Error::ConfigurationError(format!("Failed to read client cert: {e}"))
                 })?;
                 let client_key = std::fs::read(&key_path).map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to read client key: {}", e))
+                    Error::ConfigurationError(format!("Failed to read client key: {e}"))
                 })?;
                 let ca_cert = std::fs::read(&ca_path).map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to read CA cert: {}", e))
+                    Error::ConfigurationError(format!("Failed to read CA cert: {e}"))
                 })?;
 
                 // Validate certificate formats before use
@@ -161,10 +158,10 @@ impl SecureBridge {
                 combined_pem.extend_from_slice(&client_key);
 
                 let identity = reqwest::Identity::from_pem(&combined_pem).map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to create identity: {}", e))
+                    Error::ConfigurationError(format!("Failed to create identity: {e}"))
                 })?;
                 let ca_cert = reqwest::Certificate::from_pem(&ca_cert).map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to parse CA cert: {}", e))
+                    Error::ConfigurationError(format!("Failed to parse CA cert: {e}"))
                 })?;
 
                 client_builder = client_builder
@@ -198,7 +195,7 @@ impl SecureBridge {
         }
 
         let client = client_builder.build().map_err(|e| {
-            Error::ConfigurationError(format!("Failed to create HTTP client: {}", e))
+            Error::ConfigurationError(format!("Failed to create HTTP client: {e}"))
         })?;
 
         Ok(Self {
@@ -280,20 +277,22 @@ impl SecureBridge {
 
     /// Health check for remote endpoint
     pub async fn health_check(&self, service_id: u64) -> Result<bool> {
-        let endpoints = self
-            .endpoints
-            .read()
-            .map_err(|_| Error::ConfigurationError("Lock poisoned".to_string()))?;
-        let endpoint = endpoints.get(&service_id).ok_or_else(|| {
-            Error::ConfigurationError(format!("No endpoint for service {}", service_id))
-        })?;
+        let url = {
+            let endpoints = self
+                .endpoints
+                .read()
+                .map_err(|_| Error::ConfigurationError("Lock poisoned".to_string()))?;
+            let endpoint = endpoints.get(&service_id).ok_or_else(|| {
+                Error::ConfigurationError(format!("No endpoint for service {service_id}"))
+            })?;
 
-        let url = format!(
-            "{}://{}:{}/health",
-            if endpoint.use_tls { "https" } else { "http" },
-            endpoint.host,
-            endpoint.port
-        );
+            format!(
+                "{}://{}:{}/health",
+                if endpoint.use_tls { "https" } else { "http" },
+                endpoint.host,
+                endpoint.port
+            )
+        }; // Lock is dropped here
 
         // Apply config-based timeout for health checks
         let health_request = self
@@ -320,21 +319,23 @@ impl SecureBridge {
         headers: HashMap<String, String>,
         body: Vec<u8>,
     ) -> Result<(u16, HashMap<String, String>, Vec<u8>)> {
-        let endpoints = self
-            .endpoints
-            .read()
-            .map_err(|_| Error::ConfigurationError("Lock poisoned".to_string()))?;
-        let endpoint = endpoints.get(&service_id).ok_or_else(|| {
-            Error::ConfigurationError(format!("No endpoint for service {}", service_id))
-        })?;
+        let url = {
+            let endpoints = self
+                .endpoints
+                .read()
+                .map_err(|_| Error::ConfigurationError("Lock poisoned".to_string()))?;
+            let endpoint = endpoints.get(&service_id).ok_or_else(|| {
+                Error::ConfigurationError(format!("No endpoint for service {service_id}"))
+            })?;
 
-        let url = format!(
-            "{}://{}:{}{}",
-            if endpoint.use_tls { "https" } else { "http" },
-            endpoint.host,
-            endpoint.port,
-            path
-        );
+            format!(
+                "{}://{}:{}{}",
+                if endpoint.use_tls { "https" } else { "http" },
+                endpoint.host,
+                endpoint.port,
+                path
+            )
+        }; // Lock is dropped here
 
         let mut request = match method.to_uppercase().as_str() {
             "GET" => self.client.get(&url),
@@ -344,8 +345,7 @@ impl SecureBridge {
             "PATCH" => self.client.patch(&url),
             _ => {
                 return Err(Error::ConfigurationError(format!(
-                    "Unsupported method: {}",
-                    method
+                    "Unsupported method: {method}"
                 )));
             }
         };
@@ -365,7 +365,7 @@ impl SecureBridge {
             .timeout(std::time::Duration::from_secs(self.config.connect_timeout_secs))
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Request failed: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Request failed: {e}")))?;
 
         // Extract response
         let status = response.status().as_u16();
@@ -378,7 +378,7 @@ impl SecureBridge {
         let response_body = response
             .bytes()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to read response: {}", e)))?
+            .map_err(|e| Error::ConfigurationError(format!("Failed to read response: {e}")))?
             .to_vec();
 
         Ok((status, response_headers, response_body))

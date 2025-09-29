@@ -140,7 +140,7 @@ impl AwsProvisioner {
             .instance_ids(instance_id)
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to describe instance: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to describe instance: {e}")))?;
 
         let instance = describe_result
             .reservations()
@@ -150,7 +150,7 @@ impl AwsProvisioner {
 
         let state_name = instance.state()
             .and_then(|s| s.name())
-            .map(|n| format!("{:?}", n))
+            .map(|n| format!("{n:?}"))
             .unwrap_or_else(|| "unknown".to_string());
 
         match state_name.to_lowercase().as_str() {
@@ -172,7 +172,7 @@ impl AwsProvisioner {
             .description("Blueprint remote providers security group - SSH and QoS ports")
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create security group: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to create security group: {e}")))?;
 
         let sg_id = create_result.group_id().unwrap_or("").to_string();
 

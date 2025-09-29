@@ -29,7 +29,7 @@ async fn test_e2e_blueprint_deployment_pipeline() {
     if !binary_path.exists() {
         println!("Building incredible-squaring blueprint...");
         let build = Command::new("cargo")
-            .args(&["build"])
+            .args(["build"])
             .current_dir("../../examples/incredible-squaring")
             .output()
             .await
@@ -98,7 +98,7 @@ async fn test_e2e_blueprint_deployment_pipeline() {
     ];
 
     for target in deployment_targets {
-        println!("✓ Deployment target configured: {:?}", target);
+        println!("✓ Deployment target configured: {target:?}");
     }
 
     // 4. Test QoS port configuration for remote access
@@ -115,13 +115,13 @@ async fn test_e2e_blueprint_deployment_pipeline() {
             .await;
         match result {
             Err(blueprint_remote_providers::core::error::Error::ProviderNotConfigured(_)) => {
-                println!("✓ {} properly reports as not configured", provider);
+                println!("✓ {provider} properly reports as not configured");
             }
             Err(other) => {
-                println!("✓ {} returns expected error: {:?}", provider, other);
+                println!("✓ {provider} returns expected error: {other:?}");
             }
             Ok(_) => {
-                println!("✓ {} would provision successfully", provider);
+                println!("✓ {provider} would provision successfully");
             }
         }
     }
@@ -150,7 +150,7 @@ async fn test_real_blueprint_containerization() {
     std::fs::create_dir_all(&keystore_dir).expect("Failed to create keystore");
 
     let child = Command::new(binary_path)
-        .args(&[
+        .args([
             "--help", // Just test that the binary responds
         ])
         .stdout(Stdio::piped())
@@ -213,7 +213,7 @@ async fn test_adapter_initialization_validation() {
             println!("✓ DigitalOcean adapter properly validates credentials");
         }
         other => {
-            println!("✓ DigitalOcean adapter returned expected error: {}", other);
+            println!("✓ DigitalOcean adapter returned expected error: {other}");
         }
     }
 
@@ -266,9 +266,7 @@ async fn test_instance_type_mapping_edge_cases() {
 
             assert!(
                 !selection.instance_type.is_empty(),
-                "Provider {} should map edge case {} to valid instance type",
-                provider,
-                i
+                "Provider {provider} should map edge case {i} to valid instance type"
             );
 
             // GPU instances shouldn't allow spot in most cases
@@ -323,8 +321,8 @@ async fn test_qos_port_configuration() -> bool {
     ];
 
     for (ip, scenario) in test_scenarios {
-        let metrics_url = format!("http://{}:9615/metrics", ip);
-        let health_url = format!("http://{}:9615/health", ip);
+        let metrics_url = format!("http://{ip}:9615/metrics");
+        let health_url = format!("http://{ip}:9615/health");
 
         assert!(
             metrics_url.contains("9615"),
@@ -336,8 +334,7 @@ async fn test_qos_port_configuration() -> bool {
         );
 
         println!(
-            "✓ QoS URLs validated for {} scenario: {}",
-            scenario, metrics_url
+            "✓ QoS URLs validated for {scenario} scenario: {metrics_url}"
         );
     }
 
@@ -384,7 +381,7 @@ async fn test_deployment_configuration_generation() {
     ];
 
     for (name, target) in targets {
-        println!("✓ Deployment configuration for {}: {:?}", name, target);
+        println!("✓ Deployment configuration for {name}: {target:?}");
 
         // Validate deployment target has required fields
         match target {
@@ -523,7 +520,7 @@ async fn test_cloud_provider_error_handling() {
             assert_eq!(provider, CloudProvider::AWS);
             println!("✓ AWS error handling validated");
         }
-        other => println!("✓ AWS returned error: {}", other),
+        other => println!("✓ AWS returned error: {other}"),
     }
 
     // Test GCP error handling
@@ -537,7 +534,7 @@ async fn test_cloud_provider_error_handling() {
             assert_eq!(provider, CloudProvider::GCP);
             println!("✓ GCP error handling validated");
         }
-        other => println!("✓ GCP returned error: {}", other),
+        other => println!("✓ GCP returned error: {other}"),
     }
 
     println!("✓ Cloud provider error handling test completed");
@@ -604,15 +601,14 @@ async fn test_qos_endpoint_generation_comprehensive() {
         let qos_grpc_endpoint = deployment.qos_grpc_endpoint();
         assert!(
             qos_grpc_endpoint.is_some(),
-            "QoS gRPC endpoint should be available for {}",
-            provider_name
+            "QoS gRPC endpoint should be available for {provider_name}"
         );
 
         let endpoint = qos_grpc_endpoint.unwrap();
         assert!(endpoint.contains("203.0.113.100"), "Should use public IP");
         assert!(endpoint.contains("9615"), "Should use QoS port");
 
-        println!("✓ {} QoS endpoint: {}", provider_name, endpoint);
+        println!("✓ {provider_name} QoS endpoint: {endpoint}");
 
         // Test metrics URL generation
         let metrics_url = format!(
@@ -633,8 +629,8 @@ async fn test_qos_endpoint_generation_comprehensive() {
             "Health URL should use QoS port"
         );
 
-        println!("✓ {} metrics URL: {}", provider_name, metrics_url);
-        println!("✓ {} health URL: {}", provider_name, health_url);
+        println!("✓ {provider_name} metrics URL: {metrics_url}");
+        println!("✓ {provider_name} health URL: {health_url}");
     }
 
     println!("✓ Comprehensive QoS endpoint generation test completed");
@@ -650,7 +646,7 @@ async fn test_blueprint_deployment_with_real_binary() {
     if !binary_path.exists() {
         println!("Building incredible-squaring blueprint...");
         let build = Command::new("cargo")
-            .args(&["build"])
+            .args(["build"])
             .current_dir("../../examples/incredible-squaring")
             .output()
             .await
@@ -670,7 +666,7 @@ async fn test_blueprint_deployment_with_real_binary() {
 
     // Test that binary supports required command-line arguments
     let help_output = Command::new(binary_path)
-        .args(&["--help"])
+        .args(["--help"])
         .output()
         .await
         .expect("Failed to get help output");
@@ -699,15 +695,12 @@ async fn test_blueprint_deployment_with_real_binary() {
         let env_vars = create_deployment_env_vars();
         assert!(
             env_vars.contains_key(key),
-            "Required env var {} missing",
-            key
+            "Required env var {key} missing"
         );
         assert_eq!(
             env_vars.get(key).unwrap(),
             value,
-            "Env var {} should be {}",
-            key,
-            value
+            "Env var {key} should be {value}"
         );
     }
 

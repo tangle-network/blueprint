@@ -145,14 +145,14 @@ async fn test_version_limit_enforcement() {
     // Add more than the maximum number of versions (MAX_VERSION_HISTORY = 10)
     for i in 0..15 {
         let version = DeploymentVersion {
-            version: format!("v1.{}.0", i),
-            blueprint_image: format!("myapp:1.{}.0", i),
+            version: format!("v1.{i}.0"),
+            blueprint_image: format!("myapp:1.{i}.0"),
             resource_spec: ResourceSpec::basic(),
             env_vars: HashMap::new(),
             deployment_time: SystemTime::now(),
             status: VersionStatus::Active,
             metadata: HashMap::new(),
-            container_id: Some(format!("container{}", i)),
+            container_id: Some(format!("container{i}")),
         };
         manager.add_version(version);
     }
@@ -259,14 +259,14 @@ async fn test_history_limit_and_ordering() {
     // Add versions with different timestamps
     for i in 0..7 {
         let version = DeploymentVersion {
-            version: format!("v1.{}.0", i),
-            blueprint_image: format!("myapp:1.{}.0", i),
+            version: format!("v1.{i}.0"),
+            blueprint_image: format!("myapp:1.{i}.0"),
             resource_spec: ResourceSpec::basic(),
             env_vars: HashMap::new(),
             deployment_time: SystemTime::now(),
             status: VersionStatus::Inactive,
             metadata: HashMap::new(),
-            container_id: Some(format!("container{}", i)),
+            container_id: Some(format!("container{i}")),
         };
         manager.add_version(version);
 

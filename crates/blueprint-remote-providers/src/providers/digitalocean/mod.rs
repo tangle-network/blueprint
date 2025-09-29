@@ -61,20 +61,19 @@ impl DigitalOceanProvisioner {
             .client
             .post_json(url, &self.auth, droplet_request)
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create droplet: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to create droplet: {e}")))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::ConfigurationError(format!(
-                "DO API error: {}",
-                error_text
+                "DO API error: {error_text}"
             )));
         }
 
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
         let droplet_id = json["droplet"]["id"]
             .as_u64()
@@ -109,13 +108,13 @@ impl DigitalOceanProvisioner {
 
     /// Get droplet details
     async fn get_droplet_details(&self, droplet_id: u64) -> Result<Droplet> {
-        let url = format!("https://api.digitalocean.com/v2/droplets/{}", droplet_id);
+        let url = format!("https://api.digitalocean.com/v2/droplets/{droplet_id}");
 
         let response = self
             .client
             .get(&url, &self.auth)
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to get droplet: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to get droplet: {e}")))?;
 
         if !response.status().is_success() {
             return Err(Error::ConfigurationError(
@@ -126,7 +125,7 @@ impl DigitalOceanProvisioner {
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
         let droplet = &json["droplet"];
 
@@ -201,21 +200,20 @@ impl DigitalOceanProvisioner {
             .post(url, &self.auth, Some(cluster_request))
             .await
             .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to create DOKS cluster: {}", e))
+                Error::ConfigurationError(format!("Failed to create DOKS cluster: {e}"))
             })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::ConfigurationError(format!(
-                "DOKS API error: {}",
-                error_text
+                "DOKS API error: {error_text}"
             )));
         }
 
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
         let cluster_id = json["kubernetes_cluster"]["id"]
             .as_str()
@@ -230,18 +228,18 @@ impl DigitalOceanProvisioner {
 
     /// Get latest Kubernetes version
     async fn get_latest_k8s_version(&self) -> Result<String> {
-        let url = format!("https://api.digitalocean.com/v2/kubernetes/options");
+        let url = "https://api.digitalocean.com/v2/kubernetes/options".to_string();
 
         let response = self
             .client
             .get(&url, &self.auth)
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to get K8s versions: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to get K8s versions: {e}")))?;
 
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
         json["options"]["versions"]
             .as_array()
@@ -275,15 +273,14 @@ impl DigitalOceanProvisioner {
     /// Get cluster details
     async fn get_cluster_details(&self, cluster_id: &str) -> Result<DOKSCluster> {
         let url = format!(
-            "https://api.digitalocean.com/v2/kubernetes/clusters/{}",
-            cluster_id
+            "https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}"
         );
 
         let response = self
             .client
             .get(&url, &self.auth)
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to get cluster: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to get cluster: {e}")))?;
 
         if !response.status().is_success() {
             return Err(Error::ConfigurationError(
@@ -294,7 +291,7 @@ impl DigitalOceanProvisioner {
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
         let cluster = &json["kubernetes_cluster"];
 
@@ -315,15 +312,14 @@ impl DigitalOceanProvisioner {
     /// Get kubeconfig for a cluster
     pub async fn get_kubeconfig(&self, cluster_id: &str) -> Result<String> {
         let url = format!(
-            "https://api.digitalocean.com/v2/kubernetes/clusters/{}/kubeconfig",
-            cluster_id
+            "https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}/kubeconfig"
         );
 
         let response = self
             .client
             .get(&url, &self.auth)
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to get kubeconfig: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to get kubeconfig: {e}")))?;
 
         if !response.status().is_success() {
             return Err(Error::ConfigurationError("Failed to get kubeconfig".into()));
@@ -332,7 +328,7 @@ impl DigitalOceanProvisioner {
         response
             .text()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to read kubeconfig: {}", e)))
+            .map_err(|e| Error::ConfigurationError(format!("Failed to read kubeconfig: {e}")))
     }
 
     /// Select appropriate droplet size based on resource requirements
@@ -401,19 +397,18 @@ impl DigitalOceanProvisioner {
 
     /// Delete a droplet
     pub async fn delete_droplet(&self, droplet_id: u64) -> Result<()> {
-        let url = format!("https://api.digitalocean.com/v2/droplets/{}", droplet_id);
+        let url = format!("https://api.digitalocean.com/v2/droplets/{droplet_id}");
 
         let response = self
             .client
             .delete(&url, &self.auth)
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to delete droplet: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to delete droplet: {e}")))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::ConfigurationError(format!(
-                "Failed to delete droplet: {}",
-                error_text
+                "Failed to delete droplet: {error_text}"
             )));
         }
 
@@ -424,21 +419,19 @@ impl DigitalOceanProvisioner {
     /// Delete a Kubernetes cluster
     pub async fn delete_kubernetes_cluster(&self, cluster_id: &str) -> Result<()> {
         let url = format!(
-            "https://api.digitalocean.com/v2/kubernetes/clusters/{}",
-            cluster_id
+            "https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}"
         );
 
         let response = self
             .client
             .delete(&url, &self.auth)
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to delete cluster: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to delete cluster: {e}")))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::ConfigurationError(format!(
-                "Failed to delete cluster: {}",
-                error_text
+                "Failed to delete cluster: {error_text}"
             )));
         }
 

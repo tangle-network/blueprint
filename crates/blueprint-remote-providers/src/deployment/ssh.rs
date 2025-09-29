@@ -282,7 +282,7 @@ impl SshDeploymentClient {
 
         // Insert restart policy and name into command
         if runtime_str != "ctr" {
-            cmd = cmd.replace("run -d", &format!("run -d --name {} {}", container_name, restart_policy_flag));
+            cmd = cmd.replace("run -d", &format!("run -d --name {container_name} {restart_policy_flag}"));
         }
 
         // Add health check if configured
@@ -290,7 +290,7 @@ impl SshDeploymentClient {
             if runtime_str == "docker" {
                 let health_cmd = format!("--health-cmd='{}' --health-interval={}s --health-timeout={}s --health-retries={}",
                     health_check.command, health_check.interval, health_check.timeout, health_check.retries);
-                cmd = cmd.replace("run -d", &format!("run -d {}", health_cmd));
+                cmd = cmd.replace("run -d", &format!("run -d {health_cmd}"));
             }
         }
 
@@ -332,14 +332,14 @@ impl SshDeploymentClient {
     /// Get container details
     async fn get_container_details(&self, container_id: &str) -> Result<ContainerDetails> {
         let inspect_cmd = match self.runtime {
-            ContainerRuntime::Docker => format!("docker inspect {}", container_id),
-            ContainerRuntime::Podman => format!("podman inspect {}", container_id),
-            ContainerRuntime::Containerd => format!("ctr container info {}", container_id),
+            ContainerRuntime::Docker => format!("docker inspect {container_id}"),
+            ContainerRuntime::Podman => format!("podman inspect {container_id}"),
+            ContainerRuntime::Containerd => format!("ctr container info {container_id}"),
         };
 
         let output = self.run_remote_command(&inspect_cmd).await?;
         let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| {
-            Error::ConfigurationError(format!("Failed to parse container info: {}", e))
+            Error::ConfigurationError(format!("Failed to parse container info: {e}"))
         })?;
 
         // Parse container details from JSON
@@ -459,7 +459,7 @@ impl SshDeploymentClient {
 
         // Create configuration file (SECURITY: Fixed command injection vulnerability)
         let config_content = serde_json::to_string_pretty(config)
-            .map_err(|e| Error::ConfigurationError(format!("Failed to serialize config: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to serialize config: {e}")))?;
 
         // Use secure config management to prevent injection
         SecureConfigManager::write_config_file(
@@ -533,23 +533,20 @@ impl SshDeploymentClient {
     pub async fn get_container_status(&self, container_id: &str) -> Result<String> {
         let cmd = match self.runtime {
             ContainerRuntime::Docker => format!(
-                "docker ps -a --filter id={} --format '{{{{.Status}}}}'",
-                container_id
+                "docker ps -a --filter id={container_id} --format '{{{{.Status}}}}'"
             ),
             ContainerRuntime::Podman => format!(
-                "podman ps -a --filter id={} --format '{{{{.Status}}}}'",
-                container_id
+                "podman ps -a --filter id={container_id} --format '{{{{.Status}}}}'"
             ),
             ContainerRuntime::Containerd => {
-                format!("ctr container info {} | grep Status", container_id)
+                format!("ctr container info {container_id} | grep Status")
             }
         };
 
         let output = self.run_remote_command(&cmd).await?;
         if output.trim().is_empty() {
             return Err(Error::ConfigurationError(format!(
-                "Container {} not found",
-                container_id
+                "Container {container_id} not found"
             )));
         }
         Ok(output.trim().to_string())
@@ -558,9 +555,9 @@ impl SshDeploymentClient {
     /// Stop a container
     pub async fn stop_container(&self, container_id: &str) -> Result<()> {
         let cmd = match self.runtime {
-            ContainerRuntime::Docker => format!("docker stop {}", container_id),
-            ContainerRuntime::Podman => format!("podman stop {}", container_id),
-            ContainerRuntime::Containerd => format!("ctr task kill {}", container_id),
+            ContainerRuntime::Docker => format!("docker stop {container_id}"),
+            ContainerRuntime::Podman => format!("podman stop {container_id}"),
+            ContainerRuntime::Containerd => format!("ctr task kill {container_id}"),
         };
 
         self.run_remote_command(&cmd).await?;
@@ -572,14 +569,13 @@ impl SshDeploymentClient {
     pub async fn cleanup_deployment(&self, container_id: &str) -> Result<()> {
         let stop_cmd = match self.runtime {
             ContainerRuntime::Docker => {
-                format!("docker stop {} && docker rm {}", container_id, container_id)
+                format!("docker stop {container_id} && docker rm {container_id}")
             }
             ContainerRuntime::Podman => {
-                format!("podman stop {} && podman rm {}", container_id, container_id)
+                format!("podman stop {container_id} && podman rm {container_id}")
             }
             ContainerRuntime::Containerd => format!(
-                "ctr task kill {} && ctr container rm {}",
-                container_id, container_id
+                "ctr task kill {container_id} && ctr container rm {container_id}"
             ),
         };
 
@@ -612,15 +608,15 @@ impl SshDeploymentClient {
         };
 
         // Build command with specific name
-        let mut cmd = format!("{} run -d --name {}", runtime_str, name);
+        let mut cmd = format!("{runtime_str} run -d --name {name}");
 
         // Add environment variables
         for (key, value) in &env_vars {
-            cmd.push_str(&format!(" -e {}={}", key, value));
+            cmd.push_str(&format!(" -e {key}={value}"));
         }
 
         // Add image
-        cmd.push_str(&format!(" {}", image));
+        cmd.push_str(&format!(" {image}"));
 
         let output = self.run_remote_command(&cmd).await?;
 
@@ -646,9 +642,9 @@ impl SshDeploymentClient {
 
         // Stop and remove old container
         let stop_cmd = match self.runtime {
-            ContainerRuntime::Docker => format!("docker stop {} && docker rm {}", container_name, container_name),
-            ContainerRuntime::Podman => format!("podman stop {} && podman rm {}", container_name, container_name),
-            ContainerRuntime::Containerd => format!("ctr task kill {} && ctr container rm {}", container_name, container_name),
+            ContainerRuntime::Docker => format!("docker stop {container_name} && docker rm {container_name}"),
+            ContainerRuntime::Podman => format!("podman stop {container_name} && podman rm {container_name}"),
+            ContainerRuntime::Containerd => format!("ctr task kill {container_name} && ctr container rm {container_name}"),
         };
 
         // Ignore errors from stop/remove (container might not exist)
@@ -661,9 +657,9 @@ impl SshDeploymentClient {
     /// Remove a container
     pub async fn remove_container(&self, container_id: &str) -> Result<()> {
         let cmd = match self.runtime {
-            ContainerRuntime::Docker => format!("docker rm -f {}", container_id),
-            ContainerRuntime::Podman => format!("podman rm -f {}", container_id),
-            ContainerRuntime::Containerd => format!("ctr container rm {}", container_id),
+            ContainerRuntime::Docker => format!("docker rm -f {container_id}"),
+            ContainerRuntime::Podman => format!("podman rm -f {container_id}"),
+            ContainerRuntime::Containerd => format!("ctr container rm {container_id}"),
         };
 
         self.run_remote_command(&cmd).await?;
@@ -681,7 +677,7 @@ impl SshDeploymentClient {
 
         // Check container health status if available (Docker only)
         if self.runtime == ContainerRuntime::Docker {
-            let cmd = format!("docker inspect --format='{{{{.State.Health.Status}}}}' {}", container_id);
+            let cmd = format!("docker inspect --format='{{{{.State.Health.Status}}}}' {container_id}");
             match self.run_remote_command(&cmd).await {
                 Ok(health) => {
                     let health = health.trim();
@@ -700,9 +696,9 @@ impl SshDeploymentClient {
 
         // Basic connectivity check - try to execute a simple command in the container
         let test_cmd = match self.runtime {
-            ContainerRuntime::Docker => format!("docker exec {} echo ok", container_id),
-            ContainerRuntime::Podman => format!("podman exec {} echo ok", container_id),
-            ContainerRuntime::Containerd => format!("ctr task exec {} echo ok", container_id),
+            ContainerRuntime::Docker => format!("docker exec {container_id} echo ok"),
+            ContainerRuntime::Podman => format!("podman exec {container_id} echo ok"),
+            ContainerRuntime::Containerd => format!("ctr task exec {container_id} echo ok"),
         };
 
         match self.run_remote_command(&test_cmd).await {
@@ -718,7 +714,7 @@ impl SshDeploymentClient {
 
         let nginx_config = format!(r#"
 upstream backend {{
-    server {}:8080;
+    server {new_container_name}:8080;
 }}
 
 server {{
@@ -729,12 +725,11 @@ server {{
         proxy_set_header X-Real-IP $remote_addr;
     }}
 }}
-"#, new_container_name);
+"#);
 
         // Write new nginx config
         self.run_remote_command(&format!(
-            "echo '{}' | sudo tee /etc/nginx/sites-available/blueprint",
-            nginx_config
+            "echo '{nginx_config}' | sudo tee /etc/nginx/sites-available/blueprint"
         )).await?;
 
         // Reload nginx
@@ -797,16 +792,16 @@ server {{
         }
 
         // Copy binary to remote host
-        let remote_binary_path = format!("/opt/blueprint/bin/{}", service_name);
+        let remote_binary_path = format!("/opt/blueprint/bin/{service_name}");
         self.copy_files(binary_path, &remote_binary_path).await?;
 
         // Make binary executable
-        self.run_remote_command(&format!("chmod +x {}", remote_binary_path)).await?;
+        self.run_remote_command(&format!("chmod +x {remote_binary_path}")).await?;
 
         // Create service configuration
         let mut service_env = env_vars;
         for (i, arg) in arguments.iter().enumerate() {
-            service_env.insert(format!("ARG_{}", i), arg.clone());
+            service_env.insert(format!("ARG_{i}"), arg.clone());
         }
 
         // Create systemd service unit for the blueprint
@@ -831,34 +826,34 @@ WantedBy=multi-user.target
             service_name, 
             remote_binary_path,
             service_env.iter()
-                .map(|(k, v)| format!("Environment={}={}", k, v))
+                .map(|(k, v)| format!("Environment={k}={v}"))
                 .collect::<Vec<_>>()
                 .join("\n")
         );
 
         // Write service file
-        let service_file = format!("/etc/systemd/system/blueprint-{}.service", service_name);
-        self.run_remote_command(&format!("sudo tee {} > /dev/null << 'EOF'\n{}\nEOF", service_file, service_unit)).await?;
+        let service_file = format!("/etc/systemd/system/blueprint-{service_name}.service");
+        self.run_remote_command(&format!("sudo tee {service_file} > /dev/null << 'EOF'\n{service_unit}\nEOF")).await?;
 
         // Enable and start service
         self.run_remote_command("sudo systemctl daemon-reload").await?;
-        self.run_remote_command(&format!("sudo systemctl enable blueprint-{}", service_name)).await?;
-        self.run_remote_command(&format!("sudo systemctl start blueprint-{}", service_name)).await?;
+        self.run_remote_command(&format!("sudo systemctl enable blueprint-{service_name}")).await?;
+        self.run_remote_command(&format!("sudo systemctl start blueprint-{service_name}")).await?;
 
         // Verify service is running
-        let status = self.run_remote_command(&format!("sudo systemctl is-active blueprint-{}", service_name)).await?;
+        let status = self.run_remote_command(&format!("sudo systemctl is-active blueprint-{service_name}")).await?;
         if status.trim() == "active" {
             info!("✅ Blueprint service '{}' deployed and running", service_name);
             Ok(())
         } else {
             Err(Error::ConfigurationError(
-                format!("Failed to start blueprint service: {}", status)
+                format!("Failed to start blueprint service: {status}")
             ))
         }
     }
 
-    /// Create a new client with default settings for simple deployment
-    pub fn default() -> Self {
+    /// Create a new client with localhost settings for testing
+    pub fn localhost() -> Self {
         // This is a simplified constructor for basic usage
         // In production, proper connection details should be provided
         Self {
@@ -952,17 +947,14 @@ pub struct DeploymentConfig {
 
 /// Container restart policy
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum RestartPolicy {
     Always,
+    #[default]
     OnFailure,
     Never,
 }
 
-impl Default for RestartPolicy {
-    fn default() -> Self {
-        RestartPolicy::OnFailure
-    }
-}
 
 impl Default for DeploymentConfig {
     fn default() -> Self {
@@ -1136,7 +1128,7 @@ mod tests {
         
         // This would fail in a real environment without SSH access,
         // but we're testing the integration structure
-        assert_eq!(ssh_client.run_remote_command("echo test").await.is_err(), true);
+        assert!(ssh_client.run_remote_command("echo test").await.is_err());
     }
 
     #[test]

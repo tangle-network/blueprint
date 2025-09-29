@@ -68,6 +68,12 @@ pub struct AutoDeploymentManager {
     deployment_preferences: Arc<RwLock<DeploymentPreferences>>,
 }
 
+impl Default for AutoDeploymentManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AutoDeploymentManager {
     pub fn new() -> Self {
         Self {
@@ -88,10 +94,10 @@ impl AutoDeploymentManager {
     /// Load deployment preferences from a TOML configuration file
     pub fn load_deployment_preferences(&mut self, config_path: &std::path::Path) -> Result<()> {
         let config_str = std::fs::read_to_string(config_path)
-            .map_err(|e| Error::ConfigurationError(format!("Failed to read config file: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to read config file: {e}")))?;
 
         let preferences: DeploymentPreferences = toml::from_str(&config_str)
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse config: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse config: {e}")))?;
 
         // Validate that deployment types are available with current feature flags
         for deployment_type in &preferences.allowed_types {
@@ -271,7 +277,7 @@ impl AutoDeploymentManager {
                 .get_instance_status(&provider, &updated_instance.id)
                 .await
             {
-                Ok(status) if status == crate::infra::types::InstanceStatus::Running => {
+                Ok(crate::infra::types::InstanceStatus::Running) => {
                     // Try to get the instance details with public IP
                     // Placeholder IP - real deployment provides actual instance IP
                     updated_instance.public_ip = Some("pending".to_string());
@@ -296,7 +302,7 @@ impl AutoDeploymentManager {
 
         // Step 3: Deploy Blueprint to the instance
         tracing::info!("Deploying Blueprint to provisioned instance");
-        let blueprint_image = format!("blueprint:{}-{}", blueprint_id, service_id);
+        let blueprint_image = format!("blueprint:{blueprint_id}-{service_id}");
         let env_vars = std::collections::HashMap::new();
 
         let deployment_result = provisioner
@@ -416,10 +422,9 @@ impl AutoDeploymentManager {
         let example_config = DeploymentPreferences::default();
 
         let _config_toml = toml::to_string_pretty(&example_config)
-            .map_err(|e| Error::ConfigurationError(format!("Failed to serialize config: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to serialize config: {e}")))?;
 
-        let config_with_comments = format!(
-            r#"# Blueprint Remote Providers - Deployment Preferences Configuration
+        let config_with_comments = r#"# Blueprint Remote Providers - Deployment Preferences Configuration
 # 
 # This file configures how the auto-deployment manager selects deployment types
 # when deploying Blueprints to remote cloud providers.
@@ -432,35 +437,34 @@ impl AutoDeploymentManager {
 # Options: "AwsEc2", "AwsEks", "GcpGce", "GcpGke", "AzureVm", "AzureAks", 
 #          "DigitalOceanDroplet", "DigitalOceanDoks", "VultrInstance", "VultrVke",
 #          "SshRemote", "BareMetal"
-preferred_type = {{ type = "AwsEc2" }}
+preferred_type = { type = "AwsEc2" }
 
 # List of allowed deployment types in priority order
 # The manager will try these in order if the preferred type is unavailable
 allowed_types = [
-    {{ type = "AwsEc2" }},
-    {{ type = "GcpGce" }},
-    {{ type = "AzureVm" }},
-    {{ type = "DigitalOceanDroplet" }},
-    {{ type = "VultrInstance" }},
-    {{ type = "SshRemote" }},
+    { type = "AwsEc2" },
+    { type = "GcpGce" },
+    { type = "AzureVm" },
+    { type = "DigitalOceanDroplet" },
+    { type = "VultrInstance" },
+    { type = "SshRemote" },
 ]
 
 # Whether to allow fallback to default if preferences unavailable
 allow_fallback = true
 
 # Example with Kubernetes enabled (requires 'kubernetes' feature):
-# preferred_type = {{ type = "AwsEks" }}
+# preferred_type = { type = "AwsEks" }
 # allowed_types = [
-#     {{ type = "AwsEks" }},
-#     {{ type = "GcpGke" }},
-#     {{ type = "AwsEc2" }},    # Fallback to VMs
-#     {{ type = "GcpGce" }},
+#     { type = "AwsEks" },
+#     { type = "GcpGke" },
+#     { type = "AwsEc2" },    # Fallback to VMs
+#     { type = "GcpGce" },
 # ]
-"#
-        );
+"#.to_string();
 
         std::fs::write(output_path, config_with_comments).map_err(|e| {
-            Error::ConfigurationError(format!("Failed to write config file: {}", e))
+            Error::ConfigurationError(format!("Failed to write config file: {e}"))
         })?;
 
         tracing::info!(
@@ -476,7 +480,7 @@ allow_fallback = true
 
         // Read the credentials file (expected format: KEY=value per line)
         let contents = fs::read_to_string(path)
-            .map_err(|e| Error::Other(format!("Failed to read credentials file: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to read credentials file: {e}")))?;
 
         // Parse and set environment variables
         for line in contents.lines() {

@@ -27,6 +27,12 @@ struct CachedPricing {
     fetched_at: std::time::Instant,
 }
 
+impl Default for PricingFetcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PricingFetcher {
     pub fn new() -> Self {
         let client = reqwest::Client::builder()
@@ -57,17 +63,14 @@ impl PricingFetcher {
             if instance.vcpus >= min_cpu
                 && instance.memory_gb >= min_memory_gb
                 && instance.hourly_price <= max_price
-            {
-                if best.is_none() || instance.hourly_price < best.as_ref().unwrap().hourly_price {
+                && (best.is_none() || instance.hourly_price < best.as_ref().unwrap().hourly_price) {
                     best = Some(instance);
                 }
-            }
         }
 
         best.ok_or_else(|| {
             Error::Other(format!(
-                "No instance found for {} vCPUs, {} GB RAM under ${}/hr",
-                min_cpu, min_memory_gb, max_price
+                "No instance found for {min_cpu} vCPUs, {min_memory_gb} GB RAM under ${max_price}/hr"
             ))
         })
     }
@@ -78,7 +81,7 @@ impl PricingFetcher {
         provider: CloudProvider,
         region: &str,
     ) -> Result<Vec<InstanceInfo>> {
-        let cache_key = format!("{:?}-{}", provider, region);
+        let cache_key = format!("{provider:?}-{region}");
 
         // Check cache (24 hour TTL - pricing doesn't change frequently)
         if let Some(cached) = self.cache.get(&cache_key) {
@@ -96,8 +99,7 @@ impl PricingFetcher {
             CloudProvider::DigitalOcean => self.fetch_digitalocean_instances(region).await?,
             _ => {
                 return Err(Error::Other(format!(
-                    "No pricing API available for provider: {:?}",
-                    provider
+                    "No pricing API available for provider: {provider:?}"
                 )));
             }
         };
@@ -127,7 +129,7 @@ impl PricingFetcher {
             .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| Error::Other(format!("Failed to fetch AWS pricing from ec2.shop: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to fetch AWS pricing from ec2.shop: {e}")))?;
 
         if !response.status().is_success() {
             return Err(Error::Other(format!(
@@ -157,7 +159,7 @@ impl PricingFetcher {
         let pricing_data: Ec2ShopResponse = response
             .json()
             .await
-            .map_err(|e| Error::Other(format!("Failed to parse ec2.shop JSON: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to parse ec2.shop JSON: {e}")))?;
 
         let mut instances = Vec::new();
 
@@ -206,12 +208,12 @@ impl PricingFetcher {
             .timeout(std::time::Duration::from_secs(10))
             .send()
             .await
-            .map_err(|e| Error::Other(format!("Failed to fetch Azure pricing: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to fetch Azure pricing: {e}")))?;
 
         let instances: Vec<VantageAzureInstance> = response
             .json()
             .await
-            .map_err(|e| Error::Other(format!("Failed to parse Azure pricing: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to parse Azure pricing: {e}")))?;
 
         let mut result = Vec::new();
         // Limit to prevent huge responses
@@ -318,12 +320,12 @@ impl PricingFetcher {
             .timeout(std::time::Duration::from_secs(10))
             .send()
             .await
-            .map_err(|e| Error::Other(format!("Failed to fetch DO pricing: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to fetch DO pricing: {e}")))?;
 
         let html = response
             .text()
             .await
-            .map_err(|e| Error::Other(format!("Failed to read DO pricing: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to read DO pricing: {e}")))?;
 
         // Extract JSON data from __NEXT_DATA__ script tag
         let json_start = html
@@ -339,7 +341,7 @@ impl PricingFetcher {
 
         // Parse the JSON
         let data: serde_json::Value = serde_json::from_str(json_str)
-            .map_err(|e| Error::Other(format!("Failed to parse DO pricing JSON: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to parse DO pricing JSON: {e}")))?;
 
         let mut result = Vec::new();
 

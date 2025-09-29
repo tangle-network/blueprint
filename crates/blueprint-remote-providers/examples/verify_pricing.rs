@@ -34,7 +34,7 @@ async fn test_direct_apis() {
             println!("❌ HTTP {}", resp.status());
         }
         Err(e) => {
-            println!("❌ Failed: {}", e);
+            println!("❌ Failed: {e}");
         }
     }
 
@@ -53,7 +53,7 @@ async fn test_direct_apis() {
             println!("❌ HTTP {}", resp.status());
         }
         Err(e) => {
-            println!("❌ Failed: {}", e);
+            println!("❌ Failed: {e}");
         }
     }
 
@@ -76,7 +76,7 @@ async fn test_direct_apis() {
             println!("❌ HTTP {}", resp.status());
         }
         Err(e) => {
-            println!("❌ Failed: {}", e);
+            println!("❌ Failed: {e}");
         }
     }
 }
@@ -90,7 +90,7 @@ async fn test_pricing_fetcher() {
         (CloudProvider::GCP, "us-central1"),   // GCP with hardcoded data
         (CloudProvider::DigitalOcean, "nyc1"), // DO via web scraping
     ] {
-        print!("   {:?}: ", provider);
+        print!("   {provider:?}: ");
 
         match fetcher
             .find_best_instance(
@@ -104,7 +104,7 @@ async fn test_pricing_fetcher() {
                 println!("✅ {} @ ${:.4}/hr", instance.name, instance.hourly_price);
             }
             Err(e) => {
-                println!("❌ {}", e);
+                println!("❌ {e}");
             }
         }
     }

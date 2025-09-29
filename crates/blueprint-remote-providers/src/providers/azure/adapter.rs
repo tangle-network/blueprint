@@ -78,7 +78,7 @@ impl CloudProviderAdapter for AzureAdapter {
     }
 
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        let vm_name = instance_id.split('/').last().unwrap_or(instance_id);
+        let vm_name = instance_id.split('/').next_back().unwrap_or(instance_id);
 
         let subscription_id = std::env::var("AZURE_SUBSCRIPTION_ID")
             .map_err(|_| Error::ConfigurationError("AZURE_SUBSCRIPTION_ID not set".into()))?;
@@ -86,8 +86,7 @@ impl CloudProviderAdapter for AzureAdapter {
             .unwrap_or_else(|_| "blueprint-resources".to_string());
 
         let url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Compute/virtualMachines/{}/instanceView?api-version=2023-09-01",
-            subscription_id, resource_group, vm_name
+            "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Compute/virtualMachines/{vm_name}/instanceView?api-version=2023-09-01"
         );
 
         let client = reqwest::Client::new();
@@ -99,7 +98,7 @@ impl CloudProviderAdapter for AzureAdapter {
             .bearer_auth(&token)
             .send()
             .await
-            .map_err(|e| Error::Other(format!("Failed to get instance status: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to get instance status: {e}")))?;
 
         if response.status() == 404 {
             return Ok(InstanceStatus::Terminated);
@@ -110,7 +109,7 @@ impl CloudProviderAdapter for AzureAdapter {
         }
 
         let json: serde_json::Value = response.json().await
-            .map_err(|e| Error::Other(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to parse response: {e}")))?;
 
         if let Some(statuses) = json["statuses"].as_array() {
             for status in statuses {
@@ -183,9 +182,9 @@ impl CloudProviderAdapter for AzureAdapter {
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()
-                .map_err(|e| Error::Other(format!("Failed to create HTTP client: {}", e)))?;
+                .map_err(|e| Error::Other(format!("Failed to create HTTP client: {e}")))?;
 
-            match client.get(&format!("{}/health", endpoint)).send().await {
+            match client.get(format!("{endpoint}/health")).send().await {
                 Ok(response) => {
                     let healthy = response.status().is_success();
                     if healthy {
@@ -241,12 +240,12 @@ impl AzureAdapter {
 
         let ssh_client = SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
             .await
-            .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {e}")))?;
 
         let deployment = ssh_client
             .deploy_blueprint(blueprint_image, resource_spec, env_vars)
             .await
-            .map_err(|e| Error::Other(format!("Blueprint deployment failed: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Blueprint deployment failed: {e}")))?;
 
         let mut port_mappings = HashMap::new();
         for (internal_port_str, external_port_str) in &deployment.ports {

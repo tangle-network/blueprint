@@ -218,7 +218,7 @@ impl SshConnectionRecovery {
 
         match timeout(
             self.connection_timeout,
-            TcpStream::connect(format!("{}:{}", host, port)),
+            TcpStream::connect(format!("{host}:{port}")),
         )
         .await
         {

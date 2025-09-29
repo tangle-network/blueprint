@@ -404,6 +404,9 @@ impl GcpProvisioner {
     }
 }
 
+// Re-export both provisioner and adapter
+pub use adapter::GcpAdapter;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -435,6 +438,3 @@ mod tests {
         assert!(GcpProvisioner::estimate_cost("n2-standard-16").unwrap() > 0.5);
     }
 }
-
-// Re-export both provisioner and adapter
-pub use adapter::GcpAdapter;

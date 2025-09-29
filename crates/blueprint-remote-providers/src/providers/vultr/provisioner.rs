@@ -34,7 +34,7 @@ impl VultrProvisioner {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to create HTTP client: {e}")))?;
 
         Ok(Self {
             api_key,
@@ -78,15 +78,15 @@ impl VultrProvisioner {
             .json(&create_payload)
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create instance: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to create instance: {e}")))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Vultr API error: {}", error_text)));
+            return Err(Error::ConfigurationError(format!("Vultr API error: {error_text}")));
         }
 
         let response_json: serde_json::Value = response.json().await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
         let instance_id = response_json["instance"]["id"]
             .as_str()
@@ -139,21 +139,21 @@ impl VultrProvisioner {
 
     /// Get instance details
     async fn get_instance(&self, instance_id: &str) -> Result<VultrInstance> {
-        let url = format!("https://api.vultr.com/v2/instances/{}", instance_id);
+        let url = format!("https://api.vultr.com/v2/instances/{instance_id}");
 
         let response = self.client
             .get(&url)
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to get instance: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to get instance: {e}")))?;
 
         if !response.status().is_success() {
             return Err(Error::ConfigurationError("Failed to get instance details".into()));
         }
 
         let json: serde_json::Value = response.json().await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
         let instance = &json["instance"];
 
@@ -173,18 +173,18 @@ impl VultrProvisioner {
 
     /// Terminate instance
     pub async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        let url = format!("https://api.vultr.com/v2/instances/{}", instance_id);
+        let url = format!("https://api.vultr.com/v2/instances/{instance_id}");
 
         let response = self.client
             .delete(&url)
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to terminate instance: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to terminate instance: {e}")))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Failed to terminate: {}", error_text)));
+            return Err(Error::ConfigurationError(format!("Failed to terminate: {error_text}")));
         }
 
         info!("Terminated Vultr instance: {}", instance_id);

@@ -56,7 +56,7 @@ impl AzureProvisioner {
         if let Ok(resp) = response {
             if resp.status().is_success() {
                 let json: serde_json::Value = resp.json().await
-                    .map_err(|e| Error::ConfigurationError(format!("Failed to parse token: {}", e)))?;
+                    .map_err(|e| Error::ConfigurationError(format!("Failed to parse token: {e}")))?;
                 if let Some(token) = json["access_token"].as_str() {
                     self.access_token = Some(token.to_string());
                     return Ok(token.to_string());
@@ -67,16 +67,16 @@ impl AzureProvisioner {
         // Fall back to Azure CLI
         use std::process::Command;
         let output = Command::new("az")
-            .args(&["account", "get-access-token", "--query", "accessToken", "-o", "tsv"])
+            .args(["account", "get-access-token", "--query", "accessToken", "-o", "tsv"])
             .output()
-            .map_err(|e| Error::ConfigurationError(format!("Failed to get Azure token via CLI: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to get Azure token via CLI: {e}")))?;
 
         if !output.status.success() {
             return Err(Error::ConfigurationError("Failed to get Azure access token".into()));
         }
 
         let token = String::from_utf8(output.stdout)
-            .map_err(|e| Error::ConfigurationError(format!("Invalid token format: {}", e)))?
+            .map_err(|e| Error::ConfigurationError(format!("Invalid token format: {e}")))?
             .trim()
             .to_string();
 
@@ -99,7 +99,7 @@ impl AzureProvisioner {
         };
 
         // Create network interface first
-        let nic_name = format!("{}-nic", vm_name);
+        let nic_name = format!("{vm_name}-nic");
         let nic_id = self.create_network_interface(&nic_name, location, &token).await?;
 
         // Determine VM size based on spec
@@ -162,11 +162,11 @@ impl AzureProvisioner {
             .json(&vm_body)
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create VM: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to create VM: {e}")))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Azure API error: {}", error_text)));
+            return Err(Error::ConfigurationError(format!("Azure API error: {error_text}")));
         }
 
         // Wait for VM to be ready and get IP
@@ -197,7 +197,7 @@ impl AzureProvisioner {
         self.ensure_virtual_network(vnet_name, subnet_name, location, token).await?;
 
         // Create public IP
-        let pip_name = format!("{}-pip", nic_name);
+        let pip_name = format!("{nic_name}-pip");
         let pip_id = self.create_public_ip(&pip_name, location, token).await?;
 
         // Create network interface
@@ -235,11 +235,11 @@ impl AzureProvisioner {
             .json(&nic_body)
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create NIC: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to create NIC: {e}")))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Failed to create NIC: {}", error_text)));
+            return Err(Error::ConfigurationError(format!("Failed to create NIC: {error_text}")));
         }
 
         Ok(format!(
@@ -304,7 +304,7 @@ impl AzureProvisioner {
             .json(&pip_body)
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create public IP: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to create public IP: {e}")))?;
 
         if !response.status().is_success() {
             return Err(Error::ConfigurationError("Failed to create public IP".into()));
@@ -341,7 +341,7 @@ impl AzureProvisioner {
             if let Ok(resp) = response {
                 if resp.status().is_success() {
                     let json: serde_json::Value = resp.json().await
-                        .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+                        .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
                     if let Some(statuses) = json["statuses"].as_array() {
                         let is_running = statuses.iter().any(|s|
@@ -350,7 +350,7 @@ impl AzureProvisioner {
 
                         if is_running {
                             // Get public IP
-                            let pip_name = format!("{}-nic-pip", vm_name);
+                            let pip_name = format!("{vm_name}-nic-pip");
                             let pip_url = format!(
                                 "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/publicIPAddresses/{}?api-version=2023-09-01",
                                 self.subscription_id, self.resource_group, pip_name
@@ -361,11 +361,11 @@ impl AzureProvisioner {
                                 .bearer_auth(token)
                                 .send()
                                 .await
-                                .map_err(|e| Error::ConfigurationError(format!("Failed to get public IP: {}", e)))?;
+                                .map_err(|e| Error::ConfigurationError(format!("Failed to get public IP: {e}")))?;
 
                             if pip_response.status().is_success() {
                                 let pip_json: serde_json::Value = pip_response.json().await
-                                    .map_err(|e| Error::ConfigurationError(format!("Failed to parse IP response: {}", e)))?;
+                                    .map_err(|e| Error::ConfigurationError(format!("Failed to parse IP response: {e}")))?;
 
                                 if let Some(ip) = pip_json["properties"]["ipAddress"].as_str() {
                                     return Ok(ip.to_string());
@@ -412,7 +412,7 @@ impl AzureProvisioner {
     /// Terminate an Azure VM
     pub async fn terminate_instance(&mut self, instance_id: &str) -> Result<()> {
         let token = self.get_access_token().await?;
-        let vm_name = instance_id.split('/').last().unwrap_or(instance_id);
+        let vm_name = instance_id.split('/').next_back().unwrap_or(instance_id);
 
         // Delete VM
         let url = format!(
@@ -425,11 +425,11 @@ impl AzureProvisioner {
             .bearer_auth(&token)
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to terminate VM: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to terminate VM: {e}")))?;
 
         if !response.status().is_success() && response.status() != 404 {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Failed to terminate VM: {}", error_text)));
+            return Err(Error::ConfigurationError(format!("Failed to terminate VM: {error_text}")));
         }
 
         // Clean up associated resources
@@ -441,7 +441,7 @@ impl AzureProvisioner {
     /// Clean up VM resources (NIC, public IP, disks)
     async fn cleanup_vm_resources(&self, vm_name: &str, token: &str) -> Result<()> {
         // Delete NIC
-        let nic_name = format!("{}-nic", vm_name);
+        let nic_name = format!("{vm_name}-nic");
         let nic_url = format!(
             "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/networkInterfaces/{}?api-version=2023-09-01",
             self.subscription_id, self.resource_group, nic_name
@@ -449,7 +449,7 @@ impl AzureProvisioner {
         let _ = self.client.delete(&nic_url).bearer_auth(token).send().await;
 
         // Delete public IP
-        let pip_name = format!("{}-nic-pip", vm_name);
+        let pip_name = format!("{vm_name}-nic-pip");
         let pip_url = format!(
             "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/publicIPAddresses/{}?api-version=2023-09-01",
             self.subscription_id, self.resource_group, pip_name

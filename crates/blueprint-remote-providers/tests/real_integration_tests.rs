@@ -49,7 +49,7 @@ async fn test_real_cloud_provisioning_lifecycle() {
             continue;
         }
 
-        println!("🚀 Testing real provisioning with {:?}", provider);
+        println!("🚀 Testing real provisioning with {provider:?}");
 
         // Provision real instance
         let instance = match timeout(
@@ -61,7 +61,7 @@ async fn test_real_cloud_provisioning_lifecycle() {
                 instance
             }
             Ok(Err(e)) => {
-                println!("❌ Provisioning failed: {}", e);
+                println!("❌ Provisioning failed: {e}");
                 continue;
             }
             Err(_) => {
@@ -87,7 +87,7 @@ async fn test_real_cloud_provisioning_lifecycle() {
             provisioner.terminate(provider, &instance.id)
         ).await {
             Ok(Ok(_)) => println!("✅ Instance terminated successfully"),
-            Ok(Err(e)) => println!("⚠️  Termination error: {}", e),
+            Ok(Err(e)) => println!("⚠️  Termination error: {e}"),
             Err(_) => println!("⚠️  Termination timed out - manual cleanup may be needed"),
         }
 
@@ -128,12 +128,12 @@ async fn test_real_blueprint_update_rollback() {
         .await
         .expect("Failed to deploy v1");
 
-    println!("✅ Deployed v1 container: {}", v1_container);
+    println!("✅ Deployed v1 container: {v1_container}");
 
     // Wait for v1 to be healthy
     sleep(Duration::from_secs(5)).await;
     let v1_healthy = ssh_client.health_check_container(&v1_container).await.unwrap_or(false);
-    println!("🏥 V1 health: {}", v1_healthy);
+    println!("🏥 V1 health: {v1_healthy}");
 
     if v1_healthy {
         // Update to v2
@@ -141,7 +141,7 @@ async fn test_real_blueprint_update_rollback() {
         let v2_env = create_test_env("v2");
         match update_manager.update_via_ssh(&ssh_client, "nginx:1.21", &ResourceSpec::basic(), v2_env).await {
             Ok(v2_container) => {
-                println!("✅ Updated to v2: {}", v2_container);
+                println!("✅ Updated to v2: {v2_container}");
 
                 // Wait and check v2 health
                 sleep(Duration::from_secs(5)).await;
@@ -159,7 +159,7 @@ async fn test_real_blueprint_update_rollback() {
                     println!("❌ V2 health check failed");
                 }
             }
-            Err(e) => println!("❌ Update failed: {}", e),
+            Err(e) => println!("❌ Update failed: {e}"),
         }
     }
 
@@ -198,7 +198,7 @@ async fn test_real_log_streaming() {
         .expect("Failed to deploy logging container");
 
     // Start the container with a command that generates logs
-    let _log_cmd = format!("docker exec {} sh -c 'while true; do echo \"Test log $(date)\"; sleep 1; done' &", container);
+    let _log_cmd = format!("docker exec {container} sh -c 'while true; do echo \"Test log $(date)\"; sleep 1; done' &");
     // Command execution is an internal implementation detail
     // SSH operations are tested through the public deployment interface
 
@@ -225,7 +225,7 @@ async fn test_real_log_streaming() {
                 println!("✅ Log streaming working");
             }
         }
-        Ok(Err(e)) => println!("❌ Log streaming error: {}", e),
+        Ok(Err(e)) => println!("❌ Log streaming error: {e}"),
         Err(_) => println!("⏰ Log streaming timed out"),
     }
 
@@ -255,7 +255,7 @@ async fn test_real_pricing_api_calls() {
     let providers = [CloudProvider::AWS, CloudProvider::DigitalOcean];
 
     for provider in &providers {
-        println!("\n💲 Testing {} pricing:", provider);
+        println!("\n💲 Testing {provider} pricing:");
 
         let region = match provider {
             CloudProvider::AWS => "eu-west-1",
@@ -273,7 +273,7 @@ async fn test_real_pricing_api_calls() {
                 2.0  // max $2/hour
             )).await {
             Ok(Ok(instance)) => {
-                println!("✅ {} pricing API SUCCESS:", provider);
+                println!("✅ {provider} pricing API SUCCESS:");
                 println!("   Best instance: {}", instance.name);
                 println!("   Specifications: {} vCPUs, {:.1} GB RAM", instance.vcpus, instance.memory_gb);
                 println!("   Cost: ${:.4}/hour (${:.2}/month)", instance.hourly_price, instance.hourly_price * 730.0);
@@ -284,10 +284,10 @@ async fn test_real_pricing_api_calls() {
                 assert!(instance.hourly_price <= 2.0, "Instance should be within budget");
             }
             Ok(Err(e)) => {
-                panic!("Pricing API must work for {}: {}", provider, e);
+                panic!("Pricing API must work for {provider}: {e}");
             }
             Err(_) => {
-                println!("⏰ {} pricing API timeout - network may be unavailable", provider);
+                println!("⏰ {provider} pricing API timeout - network may be unavailable");
             }
         }
     }
@@ -321,7 +321,7 @@ async fn create_test_docker_ssh_client() -> Result<SshDeploymentClient, Box<dyn 
 
 async fn cleanup_test_docker() {
     let _ = tokio::process::Command::new("docker")
-        .args(&["rm", "-f", "blueprint-test-ssh"])
+        .args(["rm", "-f", "blueprint-test-ssh"])
         .output()
         .await;
 }

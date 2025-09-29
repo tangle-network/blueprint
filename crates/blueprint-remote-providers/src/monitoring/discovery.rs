@@ -15,6 +15,12 @@ pub struct MachineTypeDiscovery {
     cache: HashMap<CloudProvider, Vec<MachineType>>,
 }
 
+impl Default for MachineTypeDiscovery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MachineTypeDiscovery {
     /// Create a new discovery service
     pub fn new() -> Self {
@@ -105,8 +111,7 @@ impl MachineTypeDiscovery {
     ) -> Result<Vec<MachineType>> {
         // AWS DescribeInstanceTypes API
         let url = format!(
-            "https://ec2.{}.amazonaws.com/?Action=DescribeInstanceTypes&Version=2016-11-15",
-            region
+            "https://ec2.{region}.amazonaws.com/?Action=DescribeInstanceTypes&Version=2016-11-15"
         );
 
         // In production, this would use proper AWS signature v4
@@ -122,7 +127,7 @@ impl MachineTypeDiscovery {
             )
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to query AWS: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to query AWS: {e}")))?;
 
         if !response.status().is_success() {
             // Return standard instance types for each provider
@@ -199,8 +204,7 @@ impl MachineTypeDiscovery {
             .ok_or_else(|| Error::ConfigurationError("GCP project ID required".into()))?;
 
         let url = format!(
-            "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/machineTypes",
-            project_id, zone
+            "https://compute.googleapis.com/compute/v1/projects/{project_id}/zones/{zone}/machineTypes"
         );
 
         let response = self
@@ -209,14 +213,14 @@ impl MachineTypeDiscovery {
             .bearer_auth(credentials.access_token.as_ref().unwrap_or(&String::new()))
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to query GCP: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to query GCP: {e}")))?;
 
         if !response.status().is_success() {
             return Ok(self.get_common_gcp_machines());
         }
 
         let json: serde_json::Value = response.json().await.map_err(|e| {
-            Error::ConfigurationError(format!("Failed to parse GCP response: {}", e))
+            Error::ConfigurationError(format!("Failed to parse GCP response: {e}"))
         })?;
 
         let mut machines = Vec::new();
@@ -292,8 +296,7 @@ impl MachineTypeDiscovery {
             .ok_or_else(|| Error::ConfigurationError("Azure subscription ID required".into()))?;
 
         let url = format!(
-            "https://management.azure.com/subscriptions/{}/providers/Microsoft.Compute/locations/{}/vmSizes?api-version=2023-03-01",
-            subscription_id, location
+            "https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.Compute/locations/{location}/vmSizes?api-version=2023-03-01"
         );
 
         let response = self
@@ -302,14 +305,14 @@ impl MachineTypeDiscovery {
             .bearer_auth(credentials.access_token.as_ref().unwrap_or(&String::new()))
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to query Azure: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to query Azure: {e}")))?;
 
         if !response.status().is_success() {
             return Ok(self.get_common_azure_vms());
         }
 
         let json: serde_json::Value = response.json().await.map_err(|e| {
-            Error::ConfigurationError(format!("Failed to parse Azure response: {}", e))
+            Error::ConfigurationError(format!("Failed to parse Azure response: {e}"))
         })?;
 
         let mut machines = Vec::new();
@@ -389,7 +392,7 @@ impl MachineTypeDiscovery {
             .send()
             .await
             .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to query DigitalOcean: {}", e))
+                Error::ConfigurationError(format!("Failed to query DigitalOcean: {e}"))
             })?;
 
         if !response.status().is_success() {
@@ -397,7 +400,7 @@ impl MachineTypeDiscovery {
         }
 
         let json: serde_json::Value = response.json().await.map_err(|e| {
-            Error::ConfigurationError(format!("Failed to parse DO response: {}", e))
+            Error::ConfigurationError(format!("Failed to parse DO response: {e}"))
         })?;
 
         let mut machines = Vec::new();
@@ -484,14 +487,14 @@ impl MachineTypeDiscovery {
             )
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to query Vultr: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to query Vultr: {e}")))?;
 
         if !response.status().is_success() {
             return Ok(self.get_common_vultr_plans());
         }
 
         let json: serde_json::Value = response.json().await.map_err(|e| {
-            Error::ConfigurationError(format!("Failed to parse Vultr response: {}", e))
+            Error::ConfigurationError(format!("Failed to parse Vultr response: {e}"))
         })?;
 
         let mut machines = Vec::new();
@@ -579,8 +582,8 @@ impl MachineTypeDiscovery {
                 .filter(|m| m.memory_gb >= min_memory_gb)
                 .filter(|m| !needs_gpu || m.gpu_count > 0)
                 .filter(|m| {
-                    max_price_per_hour.map_or(true, |max| {
-                        m.hourly_price.map_or(true, |price| price <= max)
+                    max_price_per_hour.is_none_or(|max| {
+                        m.hourly_price.is_none_or(|price| price <= max)
                     })
                 })
                 .min_by(|a, b| {

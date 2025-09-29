@@ -124,7 +124,7 @@ impl HealthMonitor {
     /// Check health of a single deployment
     async fn check_deployment_health(&self, deployment: &DeploymentRecord) -> HealthCheckResult {
         // Determine provider from deployment type
-        let provider = deployment.deployment_type.to_provider();
+        let provider = deployment.deployment_type.as_provider();
 
         // Check instance status
         let instance_status = match self.provisioner.get_status(provider, &deployment.id).await {
@@ -136,7 +136,7 @@ impl HealthMonitor {
                     instance_status: InstanceStatus::Unknown,
                     last_check: Utc::now(),
                     consecutive_failures: 0,
-                    message: Some(format!("Failed to get instance status: {}", e)),
+                    message: Some(format!("Failed to get instance status: {e}")),
                 };
             }
         };
@@ -167,7 +167,7 @@ impl HealthMonitor {
     async fn attempt_recovery(&self, deployment: &DeploymentRecord) -> Result<()> {
         info!("Starting recovery for deployment {}", deployment.id);
 
-        let provider = deployment.deployment_type.to_provider();
+        let provider = deployment.deployment_type.as_provider();
 
         // First, try to terminate the existing instance
         if let Err(e) = self
@@ -229,7 +229,7 @@ impl HealthMonitor {
             .tracker
             .get(deployment_id)
             .await?
-            .ok_or_else(|| Error::Other(format!("Deployment {} not found", deployment_id)))?;
+            .ok_or_else(|| Error::Other(format!("Deployment {deployment_id} not found")))?;
 
         let result = self.check_deployment_health(&deployment).await;
         Ok(result.status == HealthStatus::Healthy)
@@ -239,6 +239,12 @@ impl HealthMonitor {
 /// Application-level health checker
 pub struct ApplicationHealthChecker {
     http_client: reqwest::Client,
+}
+
+impl Default for ApplicationHealthChecker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ApplicationHealthChecker {
@@ -262,7 +268,7 @@ impl ApplicationHealthChecker {
 
     /// Check TCP port connectivity
     pub async fn check_tcp(&self, host: &str, port: u16) -> HealthStatus {
-        match tokio::net::TcpStream::connect(format!("{}:{}", host, port)).await {
+        match tokio::net::TcpStream::connect(format!("{host}:{port}")).await {
             Ok(_) => HealthStatus::Healthy,
             Err(_) => HealthStatus::Unhealthy,
         }
@@ -271,7 +277,7 @@ impl ApplicationHealthChecker {
 
 impl crate::deployment::tracker::DeploymentType {
     /// Convert deployment type to cloud provider
-    fn to_provider(&self) -> CloudProvider {
+    fn as_provider(&self) -> CloudProvider {
         use crate::deployment::tracker::DeploymentType;
 
         match self {

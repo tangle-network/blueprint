@@ -43,8 +43,7 @@ impl AdapterFactory {
                 Ok(Arc::new(adapter))
             }
             _ => Err(Error::Other(format!(
-                "Provider {:?} not supported yet",
-                provider
+                "Provider {provider:?} not supported yet"
             ))),
         }
     }

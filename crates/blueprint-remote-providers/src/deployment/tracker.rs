@@ -84,13 +84,13 @@ impl DeploymentTracker {
         let deployment = deployments
             .get(blueprint_id)
             .ok_or_else(|| {
-                Error::ConfigurationError(format!("No deployment found for {}", blueprint_id))
+                Error::ConfigurationError(format!("No deployment found for {blueprint_id}"))
             })?
             .clone();
         drop(deployments);
 
         // Perform cleanup
-        self.cleanup_deployment(&blueprint_id, &deployment).await?;
+        self.cleanup_deployment(blueprint_id, &deployment).await?;
 
         // Remove from tracking
         let mut deployments = self.deployments.write().await;
@@ -254,21 +254,21 @@ impl DeploymentTracker {
     async fn load_state(path: &Path) -> Result<HashMap<String, DeploymentRecord>> {
         let content = tokio::fs::read_to_string(path)
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to read state: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to read state: {e}")))?;
 
         serde_json::from_str(&content)
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse state: {}", e)))
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse state: {e}")))
     }
 
     /// Save state to disk
     async fn save_state(&self) -> Result<()> {
         let deployments = self.deployments.read().await;
         let json = serde_json::to_string_pretty(&*deployments)
-            .map_err(|e| Error::ConfigurationError(format!("Failed to serialize state: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to serialize state: {e}")))?;
 
         tokio::fs::write(&self.state_file, json)
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to write state: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to write state: {e}")))?;
 
         Ok(())
     }
@@ -480,17 +480,16 @@ impl CleanupHandler for LocalDockerCleanup {
             info!("Cleaning up Docker container: {}", container_id);
 
             let output = tokio::process::Command::new("docker")
-                .args(&["rm", "-f", container_id])
+                .args(["rm", "-f", container_id])
                 .output()
                 .await
-                .map_err(|e| Error::ConfigurationError(format!("Docker cleanup failed: {}", e)))?;
+                .map_err(|e| Error::ConfigurationError(format!("Docker cleanup failed: {e}")))?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 if !stderr.contains("No such container") {
                     return Err(Error::ConfigurationError(format!(
-                        "Docker rm failed: {}",
-                        stderr
+                        "Docker rm failed: {stderr}"
                     )));
                 }
             }
@@ -516,7 +515,7 @@ impl CleanupHandler for LocalKubernetesCleanup {
             info!("Cleaning up Kubernetes pod: {}/{}", namespace, pod_name);
 
             let output = tokio::process::Command::new("kubectl")
-                .args(&[
+                .args([
                     "delete",
                     "pod",
                     pod_name,
@@ -526,14 +525,13 @@ impl CleanupHandler for LocalKubernetesCleanup {
                 ])
                 .output()
                 .await
-                .map_err(|e| Error::ConfigurationError(format!("kubectl cleanup failed: {}", e)))?;
+                .map_err(|e| Error::ConfigurationError(format!("kubectl cleanup failed: {e}")))?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 if !stderr.contains("NotFound") {
                     return Err(Error::ConfigurationError(format!(
-                        "kubectl delete failed: {}",
-                        stderr
+                        "kubectl delete failed: {stderr}"
                     )));
                 }
             }
@@ -543,7 +541,7 @@ impl CleanupHandler for LocalKubernetesCleanup {
         for (resource_type, resource_name) in &deployment.resource_ids {
             if resource_type != "pod" && resource_type != "namespace" {
                 let _ = tokio::process::Command::new("kubectl")
-                    .args(&["delete", resource_type, resource_name, "-n", namespace])
+                    .args(["delete", resource_type, resource_name, "-n", namespace])
                     .output()
                     .await;
             }
@@ -566,7 +564,7 @@ impl CleanupHandler for LocalHypervisorCleanup {
             if let Some(api_socket) = deployment.resource_ids.get("api_socket") {
                 let client = reqwest::Client::new();
                 let _ = client
-                    .put(&format!("http://localhost/{}/shutdown", api_socket))
+                    .put(format!("http://localhost/{api_socket}/shutdown"))
                     .send()
                     .await;
             }
@@ -611,7 +609,7 @@ impl CleanupHandler for AwsCleanup {
                     .send()
                     .await
                     .map_err(|e| {
-                        Error::ConfigurationError(format!("Failed to terminate EC2: {}", e))
+                        Error::ConfigurationError(format!("Failed to terminate EC2: {e}"))
                     })?;
             }
 

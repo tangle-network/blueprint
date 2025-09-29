@@ -33,7 +33,7 @@ impl BlueprintDeploymentResult {
     /// Build QoS gRPC endpoint URL
     pub fn qos_grpc_endpoint(&self) -> Option<String> {
         match (self.qos_metrics_port(), &self.instance.public_ip) {
-            (Some(port), Some(ip)) => Some(format!("http://{}:{}", ip, port)),
+            (Some(port), Some(ip)) => Some(format!("http://{ip}:{port}")),
             _ => None,
         }
     }

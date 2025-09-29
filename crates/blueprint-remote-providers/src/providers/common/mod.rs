@@ -79,11 +79,8 @@ impl ProvisionedInfrastructure {
         use tokio::time::timeout;
         use std::time::Duration;
 
-        let addr = format!("{}:{}", host, port);
-        match timeout(Duration::from_secs(5), TcpStream::connect(&addr)).await {
-            Ok(Ok(_)) => true,
-            _ => false,
-        }
+        let addr = format!("{host}:{port}");
+        matches!(timeout(Duration::from_secs(5), TcpStream::connect(&addr)).await, Ok(Ok(_)))
     }
 
     /// Get connection endpoint for this infrastructure

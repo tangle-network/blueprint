@@ -16,6 +16,32 @@ use tracing::{debug, error, info, warn};
 /// Maximum number of deployment versions to keep
 const MAX_VERSION_HISTORY: usize = 10;
 
+/// Parameters for deployment updates
+#[derive(Debug, Clone)]
+pub struct UpdateParams {
+    pub version: String,
+    pub new_image: String,
+    pub resource_spec: ResourceSpec,
+    pub env_vars: HashMap<String, String>,
+}
+
+/// Parameters for rolling deployment updates
+#[derive(Debug, Clone)]
+pub struct RollingUpdateParams {
+    pub base: UpdateParams,
+    pub max_unavailable: u32,
+    pub max_surge: u32,
+}
+
+/// Parameters for canary deployment updates
+#[derive(Debug, Clone)]
+pub struct CanaryUpdateParams {
+    pub base: UpdateParams,
+    pub initial_percentage: u8,
+    pub increment: u8,
+    pub interval: Duration,
+}
+
 /// Deployment update strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateStrategy {
@@ -129,41 +155,40 @@ impl UpdateManager {
 
         match &self.strategy {
             UpdateStrategy::BlueGreen { switch_timeout, health_check_duration } => {
-                self.blue_green_update(
-                    adapter,
-                    &new_version,
-                    new_image,
-                    resource_spec,
+                let params = UpdateParams {
+                    version: new_version.clone(),
+                    new_image: new_image.to_string(),
+                    resource_spec: resource_spec.clone(),
                     env_vars,
-                    current_deployment,
-                    *switch_timeout,
-                    *health_check_duration,
-                ).await
+                };
+                self.blue_green_update(adapter, &params, current_deployment, *switch_timeout, *health_check_duration).await
             }
             UpdateStrategy::RollingUpdate { max_unavailable, max_surge } => {
-                self.rolling_update(
-                    adapter,
-                    &new_version,
-                    new_image,
-                    resource_spec,
-                    env_vars,
-                    current_deployment,
-                    *max_unavailable,
-                    *max_surge,
-                ).await
+                let params = RollingUpdateParams {
+                    base: UpdateParams {
+                        version: new_version.clone(),
+                        new_image: new_image.to_string(),
+                        resource_spec: resource_spec.clone(),
+                        env_vars,
+                    },
+                    max_unavailable: *max_unavailable,
+                    max_surge: *max_surge,
+                };
+                self.rolling_update(adapter, &params, current_deployment).await
             }
             UpdateStrategy::Canary { initial_percentage, increment, interval } => {
-                self.canary_update(
-                    adapter,
-                    &new_version,
-                    new_image,
-                    resource_spec,
-                    env_vars,
-                    current_deployment,
-                    *initial_percentage,
-                    *increment,
-                    *interval,
-                ).await
+                let params = CanaryUpdateParams {
+                    base: UpdateParams {
+                        version: new_version.clone(),
+                        new_image: new_image.to_string(),
+                        resource_spec: resource_spec.clone(),
+                        env_vars,
+                    },
+                    initial_percentage: *initial_percentage,
+                    increment: *increment,
+                    interval: *interval,
+                };
+                self.canary_update(adapter, &params, current_deployment).await
             }
             UpdateStrategy::Recreate => {
                 self.recreate_update(
@@ -182,23 +207,20 @@ impl UpdateManager {
     async fn blue_green_update<A: CloudProviderAdapter>(
         &mut self,
         adapter: &A,
-        version: &str,
-        new_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
+        params: &UpdateParams,
         current_deployment: &BlueprintDeploymentResult,
         _switch_timeout: Duration,
         health_check_duration: Duration,
     ) -> Result<BlueprintDeploymentResult> {
-        info!("Starting blue-green deployment for version {}", version);
+        info!("Starting blue-green deployment for version {}", params.version);
 
         // Deploy new version (green)
-        let mut green_env = env_vars.clone();
-        green_env.insert("DEPLOYMENT_VERSION".to_string(), version.to_string());
+        let mut green_env = params.env_vars.clone();
+        green_env.insert("DEPLOYMENT_VERSION".to_string(), params.version.clone());
         green_env.insert("DEPLOYMENT_COLOR".to_string(), "green".to_string());
 
         let green_deployment = adapter
-            .deploy_blueprint(&current_deployment.instance, new_image, resource_spec, green_env.clone())
+            .deploy_blueprint(&current_deployment.instance, &params.new_image, &params.resource_spec, green_env.clone())
             .await
             .map_err(|e| {
                 error!("Failed to deploy green version: {}", e);
@@ -207,9 +229,9 @@ impl UpdateManager {
 
         // Add to version history
         self.add_version(DeploymentVersion {
-            version: version.to_string(),
-            blueprint_image: new_image.to_string(),
-            resource_spec: resource_spec.clone(),
+            version: params.version.clone(),
+            blueprint_image: params.new_image.clone(),
+            resource_spec: params.resource_spec.clone(),
             env_vars: green_env,
             deployment_time: SystemTime::now(),
             status: VersionStatus::Staging,
@@ -236,7 +258,7 @@ impl UpdateManager {
                 }
 
                 // Mark green as active
-                if let Some(v) = self.versions.iter_mut().find(|v| v.version == version) {
+                if let Some(v) = self.versions.iter_mut().find(|v| v.version == params.version) {
                     v.status = VersionStatus::Active;
                 }
 
@@ -247,7 +269,7 @@ impl UpdateManager {
                     }
                 }
 
-                self.active_version = Some(version.to_string());
+                self.active_version = Some(params.version.clone());
 
                 // Cleanup old deployment after switch
                 sleep(Duration::from_secs(30)).await;
@@ -261,7 +283,7 @@ impl UpdateManager {
                 error!("Green deployment health check failed, cleaning up");
 
                 // Mark as failed
-                if let Some(v) = self.versions.iter_mut().find(|v| v.version == version) {
+                if let Some(v) = self.versions.iter_mut().find(|v| v.version == params.version) {
                     v.status = VersionStatus::Failed;
                 }
 
@@ -277,23 +299,18 @@ impl UpdateManager {
     async fn rolling_update<A: CloudProviderAdapter>(
         &mut self,
         adapter: &A,
-        version: &str,
-        new_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
+        params: &RollingUpdateParams,
         current_deployment: &BlueprintDeploymentResult,
-        _max_unavailable: u32,
-        _max_surge: u32,
     ) -> Result<BlueprintDeploymentResult> {
-        info!("Starting rolling update to version {}", version);
+        info!("Starting rolling update to version {}", params.base.version);
 
         // For single instance, this is similar to recreate with health checks
-        let mut new_env = env_vars.clone();
-        new_env.insert("DEPLOYMENT_VERSION".to_string(), version.to_string());
+        let mut new_env = params.base.env_vars.clone();
+        new_env.insert("DEPLOYMENT_VERSION".to_string(), params.base.version.clone());
 
         // Deploy new version
         let new_deployment = adapter
-            .deploy_blueprint(&current_deployment.instance, new_image, resource_spec, new_env.clone())
+            .deploy_blueprint(&current_deployment.instance, &params.base.new_image, &params.base.resource_spec, new_env.clone())
             .await?;
 
         // Wait for new deployment to be healthy
@@ -308,9 +325,9 @@ impl UpdateManager {
 
         // Update version tracking
         self.add_version(DeploymentVersion {
-            version: version.to_string(),
-            blueprint_image: new_image.to_string(),
-            resource_spec: resource_spec.clone(),
+            version: params.base.version.clone(),
+            blueprint_image: params.base.new_image.clone(),
+            resource_spec: params.base.resource_spec.clone(),
             env_vars: new_env,
             deployment_time: SystemTime::now(),
             status: VersionStatus::Active,
@@ -318,7 +335,7 @@ impl UpdateManager {
             container_id: Some(new_deployment.blueprint_id.clone()),
         });
 
-        self.active_version = Some(version.to_string());
+        self.active_version = Some(params.base.version.clone());
 
         Ok(new_deployment)
     }
@@ -327,28 +344,22 @@ impl UpdateManager {
     async fn canary_update<A: CloudProviderAdapter>(
         &mut self,
         adapter: &A,
-        version: &str,
-        new_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
+        params: &CanaryUpdateParams,
         current_deployment: &BlueprintDeploymentResult,
-        initial_percentage: u8,
-        increment: u8,
-        interval: Duration,
     ) -> Result<BlueprintDeploymentResult> {
-        info!("Starting canary deployment for version {}", version);
+        info!("Starting canary deployment for version {}", params.base.version);
 
         // Deploy canary version
-        let mut canary_env = env_vars.clone();
-        canary_env.insert("DEPLOYMENT_VERSION".to_string(), version.to_string());
+        let mut canary_env = params.base.env_vars.clone();
+        canary_env.insert("DEPLOYMENT_VERSION".to_string(), params.base.version.clone());
         canary_env.insert("DEPLOYMENT_TYPE".to_string(), "canary".to_string());
 
         let canary_deployment = adapter
-            .deploy_blueprint(&current_deployment.instance, new_image, resource_spec, canary_env.clone())
+            .deploy_blueprint(&current_deployment.instance, &params.base.new_image, &params.base.resource_spec, canary_env.clone())
             .await?;
 
         // Gradually increase traffic percentage
-        let mut current_percentage = initial_percentage;
+        let mut current_percentage = params.initial_percentage;
 
         while current_percentage < 100 {
             info!("Canary at {}% traffic", current_percentage);
@@ -357,13 +368,13 @@ impl UpdateManager {
             if !adapter.health_check_blueprint(&canary_deployment).await? {
                 warn!("Canary health check failed at {}%, rolling back", current_percentage);
                 adapter.cleanup_blueprint(&canary_deployment).await?;
-                return Err(Error::Other(format!("Canary failed at {}%", current_percentage)));
+                return Err(Error::Other(format!("Canary failed at {current_percentage}%")));
             }
 
             // Wait before increasing traffic
-            sleep(interval).await;
+            sleep(params.interval).await;
 
-            current_percentage = (current_percentage + increment).min(100);
+            current_percentage = (current_percentage + params.increment).min(100);
         }
 
         // Full rollout successful
@@ -374,9 +385,9 @@ impl UpdateManager {
 
         // Update version tracking
         self.add_version(DeploymentVersion {
-            version: version.to_string(),
-            blueprint_image: new_image.to_string(),
-            resource_spec: resource_spec.clone(),
+            version: params.base.version.clone(),
+            blueprint_image: params.base.new_image.clone(),
+            resource_spec: params.base.resource_spec.clone(),
             env_vars: canary_env,
             deployment_time: SystemTime::now(),
             status: VersionStatus::Active,
@@ -384,7 +395,7 @@ impl UpdateManager {
             container_id: Some(canary_deployment.blueprint_id.clone()),
         });
 
-        self.active_version = Some(version.to_string());
+        self.active_version = Some(params.base.version.clone());
 
         Ok(canary_deployment)
     }
@@ -439,7 +450,7 @@ impl UpdateManager {
         info!("Rolling back to version {}", target_version);
 
         let version = self.get_version(target_version)
-            .ok_or_else(|| Error::Other(format!("Version {} not found", target_version)))?
+            .ok_or_else(|| Error::Other(format!("Version {target_version} not found")))?
             .clone();
 
         if version.status == VersionStatus::Failed {
@@ -544,7 +555,7 @@ impl UpdateManager {
             .unwrap()
             .as_secs();
 
-        format!("v{}", timestamp)
+        format!("v{timestamp}")
     }
 
     /// Get deployment history
@@ -619,7 +630,7 @@ impl UpdateManager {
         match &self.strategy {
             UpdateStrategy::BlueGreen { .. } => {
                 // Deploy new container alongside old one
-                let new_container_name = format!("blueprint-{}", version);
+                let new_container_name = format!("blueprint-{version}");
                 let new_container_id = ssh_client
                     .deploy_container_with_name(new_image, &new_container_name, env_vars.clone())
                     .await?;
@@ -631,7 +642,7 @@ impl UpdateManager {
 
                     // Stop old container
                     if let Some(old_version) = &self.active_version {
-                        let old_container_name = format!("blueprint-{}", old_version);
+                        let old_container_name = format!("blueprint-{old_version}");
                         ssh_client.stop_container(&old_container_name).await?;
                     }
 
@@ -662,7 +673,7 @@ impl UpdateManager {
         target_version: &str,
     ) -> Result<()> {
         let version = self.get_version(target_version)
-            .ok_or_else(|| Error::Other(format!("Version {} not found", target_version)))?
+            .ok_or_else(|| Error::Other(format!("Version {target_version} not found")))?
             .clone();
 
         // Redeploy the target version
@@ -709,14 +720,14 @@ mod tests {
         // Add more than MAX_VERSION_HISTORY versions
         for i in 0..15 {
             let version = DeploymentVersion {
-                version: format!("v{}", i),
-                blueprint_image: format!("image:v{}", i),
+                version: format!("v{i}"),
+                blueprint_image: format!("image:v{i}"),
                 resource_spec: ResourceSpec::basic(),
                 env_vars: HashMap::new(),
                 deployment_time: SystemTime::now(),
                 status: VersionStatus::Inactive,
                 metadata: HashMap::new(),
-                container_id: Some(format!("container{}", i)),
+                container_id: Some(format!("container{i}")),
             };
             manager.add_version(version);
         }

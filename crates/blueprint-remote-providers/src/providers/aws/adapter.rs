@@ -138,10 +138,10 @@ impl CloudProviderAdapter for AwsAdapter {
                 .timeout(std::time::Duration::from_secs(10))
                 .danger_accept_invalid_certs(false) // Strict TLS validation
                 .build()
-                .map_err(|e| Error::Other(format!("Failed to create secure HTTP client: {}", e)))?;
+                .map_err(|e| Error::Other(format!("Failed to create secure HTTP client: {e}")))?;
 
             // Health check with proper error handling
-            match client.get(&format!("{}/health", qos_endpoint)).send().await {
+            match client.get(format!("{qos_endpoint}/health")).send().await {
                 Ok(response) => {
                     let is_healthy = response.status().is_success();
                     if is_healthy {
@@ -256,14 +256,14 @@ impl AwsAdapter {
             SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
                 .await
                 .map_err(|e| {
-                    Error::Other(format!("Failed to establish secure SSH connection: {}", e))
+                    Error::Other(format!("Failed to establish secure SSH connection: {e}"))
                 })?;
 
         // Deploy with QoS port exposure (8080, 9615, 9944)
         let deployment = ssh_client
             .deploy_blueprint(blueprint_image, resource_spec, env_vars)
             .await
-            .map_err(|e| Error::Other(format!("Blueprint deployment failed: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Blueprint deployment failed: {e}")))?;
 
         // Extract and validate port mappings
         let mut port_mappings = HashMap::new();
@@ -330,9 +330,9 @@ impl AwsAdapter {
         
         #[cfg(not(feature = "kubernetes"))]
         {
-            return Err(Error::ConfigurationError(
+            Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
-            ));
+            ))
         }
 
         #[cfg(feature = "kubernetes")]

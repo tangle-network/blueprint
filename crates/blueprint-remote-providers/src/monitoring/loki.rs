@@ -22,7 +22,7 @@ impl LokiClient {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .map_err(|e| Error::Other(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to create HTTP client: {e}")))?;
 
         let mut labels = HashMap::new();
         labels.insert("job".to_string(), "blueprint".to_string());
@@ -52,11 +52,11 @@ impl LokiClient {
             .json(&push_request)
             .send()
             .await
-            .map_err(|e| Error::Other(format!("Failed to push logs to Loki: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to push logs to Loki: {e}")))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::Other(format!("Loki push failed: {}", error_text)));
+            return Err(Error::Other(format!("Loki push failed: {error_text}")));
         }
 
         debug!("Successfully pushed {} log entries to Loki", num_entries);
@@ -90,15 +90,15 @@ impl LokiClient {
             .query(&params)
             .send()
             .await
-            .map_err(|e| Error::Other(format!("Failed to query Loki: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to query Loki: {e}")))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::Other(format!("Loki query failed: {}", error_text)));
+            return Err(Error::Other(format!("Loki query failed: {error_text}")));
         }
 
         let query_response: QueryResponse = response.json().await
-            .map_err(|e| Error::Other(format!("Failed to parse Loki response: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to parse Loki response: {e}")))?;
 
         Ok(self.parse_query_response(query_response))
     }
@@ -130,7 +130,7 @@ impl LokiClient {
 
             streams_map
                 .entry(labels_str)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push([timestamp, entry.message]);
         }
 
@@ -185,10 +185,10 @@ impl LokiClient {
 
         // Check if Loki is already running
         let output = tokio::process::Command::new("docker")
-            .args(&["ps", "--filter", "name=loki", "--format", "{{.Names}}"])
+            .args(["ps", "--filter", "name=loki", "--format", "{{.Names}}"])
             .output()
             .await
-            .map_err(|e| Error::Other(format!("Failed to check Docker: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to check Docker: {e}")))?;
 
         if String::from_utf8_lossy(&output.stdout).contains("loki") {
             info!("Loki is already running");
@@ -197,7 +197,7 @@ impl LokiClient {
 
         // Start Loki container
         let output = tokio::process::Command::new("docker")
-            .args(&[
+            .args([
                 "run", "-d",
                 "--name", "loki",
                 "-p", "3100:3100",
@@ -207,12 +207,12 @@ impl LokiClient {
             ])
             .output()
             .await
-            .map_err(|e| Error::Other(format!("Failed to start Loki: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to start Loki: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if !stderr.contains("already in use") {
-                return Err(Error::Other(format!("Failed to start Loki: {}", stderr)));
+                return Err(Error::Other(format!("Failed to start Loki: {stderr}")));
             }
         }
 
@@ -220,7 +220,7 @@ impl LokiClient {
 
         // Optional: Start Grafana for visualization
         let _ = tokio::process::Command::new("docker")
-            .args(&[
+            .args([
                 "run", "-d",
                 "--name", "grafana",
                 "-p", "3000:3000",

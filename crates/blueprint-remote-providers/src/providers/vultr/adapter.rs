@@ -139,9 +139,9 @@ impl CloudProviderAdapter for VultrAdapter {
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()
-                .map_err(|e| Error::Other(format!("Failed to create HTTP client: {}", e)))?;
+                .map_err(|e| Error::Other(format!("Failed to create HTTP client: {e}")))?;
 
-            match client.get(&format!("{}/health", endpoint)).send().await {
+            match client.get(format!("{endpoint}/health")).send().await {
                 Ok(response) => {
                     let healthy = response.status().is_success();
                     if healthy {
@@ -197,12 +197,12 @@ impl VultrAdapter {
 
         let ssh_client = SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
             .await
-            .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {e}")))?;
 
         let deployment = ssh_client
             .deploy_blueprint(blueprint_image, resource_spec, env_vars)
             .await
-            .map_err(|e| Error::Other(format!("Blueprint deployment failed: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Blueprint deployment failed: {e}")))?;
 
         let mut port_mappings = HashMap::new();
         for (internal_port_str, external_port_str) in &deployment.ports {

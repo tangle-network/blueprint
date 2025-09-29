@@ -137,7 +137,7 @@ impl CloudProvisioner {
         let mut retries = 0;
         while retries < 10 {
             match adapter.get_instance_status(instance_id).await {
-                Ok(status) if status == InstanceStatus::Terminated => {
+                Ok(InstanceStatus::Terminated) => {
                     info!("Instance {} successfully terminated", instance_id);
                     return Ok(());
                 }

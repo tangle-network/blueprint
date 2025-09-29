@@ -18,15 +18,14 @@ impl SecureContainerCommands {
         // Validate image name format (basic Docker image name validation)
         if !Self::is_valid_image_name(image) {
             return Err(Error::ConfigurationError(format!(
-                "Invalid image name: {}. Image names must follow Docker naming conventions.",
-                image
+                "Invalid image name: {image}. Image names must follow Docker naming conventions."
             )));
         }
 
         let escaped_image = escape(image.into());
         let escaped_runtime = escape(runtime.into());
 
-        Ok(format!("{} pull {}", escaped_runtime, escaped_image))
+        Ok(format!("{escaped_runtime} pull {escaped_image}"))
     }
 
     /// Safely build a container create command with escaped environment variables
@@ -41,8 +40,7 @@ impl SecureContainerCommands {
         // Validate inputs
         if !Self::is_valid_image_name(image) {
             return Err(Error::ConfigurationError(format!(
-                "Invalid image name: {}",
-                image
+                "Invalid image name: {image}"
             )));
         }
 
@@ -56,17 +54,17 @@ impl SecureContainerCommands {
             cmd.push_str(&format!(" --cpus={}", Self::format_cpu_limit(cpu)?));
         }
         if let Some(mem) = memory_mb {
-            cmd.push_str(&format!(" --memory={}m", mem));
+            cmd.push_str(&format!(" --memory={mem}m"));
         }
         if let Some(disk) = disk_gb {
-            cmd.push_str(&format!(" --storage-opt size={}G", disk));
+            cmd.push_str(&format!(" --storage-opt size={disk}G"));
         }
 
         // Add environment variables with proper escaping
         for (key, value) in env_vars {
             let escaped_key = escape(key.into());
             let escaped_value = escape(value.into());
-            cmd.push_str(&format!(" -e {}={}", escaped_key, escaped_value));
+            cmd.push_str(&format!(" -e {escaped_key}={escaped_value}"));
         }
 
         // Add security hardening options
@@ -91,8 +89,7 @@ impl SecureContainerCommands {
         let timestamp = chrono::Utc::now().timestamp();
         let escaped_image = escape(image.into());
         cmd.push_str(&format!(
-            " --name blueprint-{} {}",
-            timestamp, escaped_image
+            " --name blueprint-{timestamp} {escaped_image}"
         ));
 
         Ok(cmd)
@@ -108,8 +105,7 @@ impl SecureContainerCommands {
         // Validate container ID format (Docker container ID validation)
         if !Self::is_valid_container_id(container_id) {
             return Err(Error::ConfigurationError(format!(
-                "Invalid container ID: {}. Container IDs must be alphanumeric.",
-                container_id
+                "Invalid container ID: {container_id}. Container IDs must be alphanumeric."
             )));
         }
 
@@ -117,8 +113,7 @@ impl SecureContainerCommands {
         let valid_actions = ["start", "stop", "logs", "inspect", "rm"];
         if !valid_actions.contains(&action) {
             return Err(Error::ConfigurationError(format!(
-                "Invalid container action: {}. Allowed actions: {:?}",
-                action, valid_actions
+                "Invalid container action: {action}. Allowed actions: {valid_actions:?}"
             )));
         }
 
@@ -126,11 +121,11 @@ impl SecureContainerCommands {
         let escaped_action = escape(action.into());
         let escaped_id = escape(container_id.into());
 
-        let mut cmd = format!("{} {} {}", escaped_runtime, escaped_action, escaped_id);
+        let mut cmd = format!("{escaped_runtime} {escaped_action} {escaped_id}");
 
         // Add follow flag for logs if specified
         if action == "logs" && follow_logs.unwrap_or(false) {
-            cmd = format!("{} {} -f {}", escaped_runtime, escaped_action, escaped_id);
+            cmd = format!("{escaped_runtime} {escaped_action} -f {escaped_id}");
         }
 
         Ok(cmd)
@@ -180,24 +175,21 @@ impl SecureContainerCommands {
             // Validate environment variable names
             if key.is_empty() || key.len() > 255 {
                 return Err(Error::ConfigurationError(format!(
-                    "Invalid environment variable name length: {}",
-                    key
+                    "Invalid environment variable name length: {key}"
                 )));
             }
 
             // Environment variable names should be alphanumeric + underscore
             if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
                 return Err(Error::ConfigurationError(format!(
-                    "Invalid environment variable name: {}. Names must be alphanumeric + underscore.",
-                    key
+                    "Invalid environment variable name: {key}. Names must be alphanumeric + underscore."
                 )));
             }
 
             // Validate environment variable values
             if value.len() > 4096 {
                 return Err(Error::ConfigurationError(format!(
-                    "Environment variable value too long: {} (max 4096 chars)",
-                    key
+                    "Environment variable value too long: {key} (max 4096 chars)"
                 )));
             }
 
@@ -230,8 +222,7 @@ impl SecureContainerCommands {
             for pattern in &suspicious_patterns {
                 if value.contains(pattern) {
                     return Err(Error::ConfigurationError(format!(
-                        "Suspicious pattern '{}' detected in environment variable '{}': {}",
-                        pattern, key, value
+                        "Suspicious pattern '{pattern}' detected in environment variable '{key}': {value}"
                     )));
                 }
             }
@@ -249,8 +240,7 @@ impl SecureContainerCommands {
         if let Some(cpu) = cpu_cores {
             if cpu <= 0.0 || cpu > 32.0 || !cpu.is_finite() {
                 return Err(Error::ConfigurationError(format!(
-                    "Invalid CPU limit: {}. Must be between 0.1 and 32.0 cores.",
-                    cpu
+                    "Invalid CPU limit: {cpu}. Must be between 0.1 and 32.0 cores."
                 )));
             }
         }
@@ -258,8 +248,7 @@ impl SecureContainerCommands {
         if let Some(memory) = memory_mb {
             if memory == 0 || memory > 128 * 1024 {
                 return Err(Error::ConfigurationError(format!(
-                    "Invalid memory limit: {}MB. Must be between 1MB and 128GB.",
-                    memory
+                    "Invalid memory limit: {memory}MB. Must be between 1MB and 128GB."
                 )));
             }
         }
@@ -267,8 +256,7 @@ impl SecureContainerCommands {
         if let Some(disk) = disk_gb {
             if disk == 0 || disk > 1024 {
                 return Err(Error::ConfigurationError(format!(
-                    "Invalid disk limit: {}GB. Must be between 1GB and 1TB.",
-                    disk
+                    "Invalid disk limit: {disk}GB. Must be between 1GB and 1TB."
                 )));
             }
         }
@@ -280,12 +268,11 @@ impl SecureContainerCommands {
     fn format_cpu_limit(cpu: f32) -> Result<String> {
         if !cpu.is_finite() || cpu <= 0.0 {
             return Err(Error::ConfigurationError(format!(
-                "Invalid CPU value: {}",
-                cpu
+                "Invalid CPU value: {cpu}"
             )));
         }
 
-        Ok(format!("{:.2}", cpu))
+        Ok(format!("{cpu:.2}"))
     }
 }
 
@@ -306,23 +293,22 @@ impl SecureConfigManager {
         tokio::fs::write(temp_path, config_content)
             .await
             .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to write temp config: {}", e))
+                Error::ConfigurationError(format!("Failed to write temp config: {e}"))
             })?;
 
         // Use secure file operations instead of shell commands
         let mut cmd = AsyncCommand::new("sudo");
-        cmd.args(&["cp", temp_path, target_path.as_ref().to_str().unwrap()]);
+        cmd.args(["cp", temp_path, target_path.as_ref().to_str().unwrap()]);
 
         let output = cmd
             .output()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to copy config: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to copy config: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(Error::ConfigurationError(format!(
-                "Config copy failed: {}",
-                stderr
+                "Config copy failed: {stderr}"
             )));
         }
 
@@ -336,7 +322,7 @@ impl SecureConfigManager {
     fn validate_config_content(content: &str) -> Result<()> {
         // Validate JSON structure
         let _: serde_json::Value = serde_json::from_str(content)
-            .map_err(|e| Error::ConfigurationError(format!("Invalid JSON config: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Invalid JSON config: {e}")))?;
 
         // Check for suspicious patterns in configuration
         let suspicious_patterns = [
@@ -366,8 +352,7 @@ impl SecureConfigManager {
         for pattern in &suspicious_patterns {
             if content.contains(pattern) {
                 return Err(Error::ConfigurationError(format!(
-                    "Suspicious pattern '{}' detected in configuration",
-                    pattern
+                    "Suspicious pattern '{pattern}' detected in configuration"
                 )));
             }
         }

@@ -10,6 +10,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
+/// Type alias for TTL registry mapping (blueprint_id, service_id) to expiry time
+type TtlRegistry = Arc<RwLock<HashMap<(u64, u64), DateTime<Utc>>>>;
+
 /// Remote deployment configuration that extends a service
 #[derive(Debug, Clone)]
 pub struct RemoteDeploymentConfig {
@@ -81,7 +84,7 @@ pub struct TtlManager {
     /// Registry for remote deployments
     registry: Arc<RemoteDeploymentRegistry>,
     /// Mapping of (blueprint_id, service_id) to TTL expiry time
-    ttl_registry: Arc<RwLock<HashMap<(u64, u64), DateTime<Utc>>>>,
+    ttl_registry: TtlRegistry,
     /// Channel to notify main event loop of TTL expirations
     expiry_tx: tokio::sync::mpsc::UnboundedSender<(u64, u64)>,
 }
@@ -329,7 +332,7 @@ impl RemoteSourceExtension {
     ) -> Result<RemoteDeploymentConfig> {
         // Create provisioning config
         let _config = crate::providers::common::ProvisioningConfig {
-            name: format!("{}-{}", blueprint_id, service_id),
+            name: format!("{blueprint_id}-{service_id}"),
             region: region.clone(),
             ..Default::default()
         };

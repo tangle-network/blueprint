@@ -33,7 +33,7 @@ impl SecureHttpClient {
             .connection_verbose(false) // Disable verbose logging in production
             .build()
             .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to create HTTP client: {}", e))
+                Error::ConfigurationError(format!("Failed to create HTTP client: {e}"))
             })?;
 
         let mut certificate_pins = HashMap::new();
@@ -107,7 +107,7 @@ impl SecureHttpClient {
 
         let request = request_builder
             .build()
-            .map_err(|e| Error::ConfigurationError(format!("Failed to build request: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to build request: {e}")))?;
 
         // Validate request before sending
         self.validate_request(&request)?;
@@ -118,7 +118,7 @@ impl SecureHttpClient {
         let response = tokio::time::timeout(self.timeout, self.client.execute(request))
             .await
             .map_err(|_| Error::ConfigurationError("Request timeout".into()))?
-            .map_err(|e| Error::ConfigurationError(format!("Request failed: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Request failed: {e}")))?;
 
         // Validate response
         self.validate_response(&response).await?;
@@ -132,7 +132,7 @@ impl SecureHttpClient {
     /// Validate URL for security
     fn validate_url(&self, url: &str) -> Result<Url> {
         let parsed = Url::parse(url)
-            .map_err(|e| Error::ConfigurationError(format!("Invalid URL: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Invalid URL: {e}")))?;
 
         // Must be HTTPS
         if parsed.scheme() != "https" {
@@ -147,8 +147,7 @@ impl SecureHttpClient {
         // Check against allowlist of known cloud provider domains
         if !self.is_allowed_domain(host) {
             return Err(Error::ConfigurationError(format!(
-                "Domain not in allowlist: {}",
-                host
+                "Domain not in allowlist: {host}"
             )));
         }
 
@@ -187,7 +186,7 @@ impl SecureHttpClient {
         // Exact match or subdomain of allowed domains
         allowed_domains
             .iter()
-            .any(|&domain| host == domain || host.ends_with(&format!(".{}", domain)))
+            .any(|&domain| host == domain || host.ends_with(&format!(".{domain}")))
     }
 
     /// Add authentication to request
@@ -266,8 +265,7 @@ impl SecureHttpClient {
             // Check for header injection
             if value_str.contains('\n') || value_str.contains('\r') {
                 return Err(Error::ConfigurationError(format!(
-                    "Header injection detected in {}: {}",
-                    name_str, value_str
+                    "Header injection detected in {name_str}: {value_str}"
                 )));
             }
         }
@@ -318,7 +316,7 @@ impl SecureHttpClient {
     /// Validate certificate pinning for enhanced security
     fn validate_certificate_pinning(&self, url: &str, _response: &Response) -> Result<()> {
         let parsed = Url::parse(url)
-            .map_err(|e| Error::ConfigurationError(format!("Invalid URL for certificate pinning: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Invalid URL for certificate pinning: {e}")))?;
         if let Some(host) = parsed.host_str() {
             if let Some(expected_pins) = self.certificate_pins.get(host) {
                 // Certificate pinning configured - would validate fingerprint in production

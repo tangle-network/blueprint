@@ -156,10 +156,10 @@ mod aws_sdk_tests {
         // This tests the real provisioning logic with SDK test harness
         match timeout(Duration::from_secs(10), test_aws_provision_with_client(client, &spec)).await {
             Ok(Ok(instance_id)) => {
-                println!("✅ AWS SDK test successful: {}", instance_id);
+                println!("✅ AWS SDK test successful: {instance_id}");
                 assert_eq!(instance_id, "i-1234567890abcdef0");
             }
-            Ok(Err(e)) => println!("❌ AWS SDK test error: {}", e),
+            Ok(Err(e)) => println!("❌ AWS SDK test error: {e}"),
             Err(_) => println!("⏰ AWS SDK test timeout"),
         }
     }
@@ -258,7 +258,7 @@ async fn test_multi_provider_real_sdk_integration() {
     let provisioner = match CloudProvisioner::new().await {
         Ok(p) => p,
         Err(e) => {
-            println!("⚠️  Could not create provisioner: {}", e);
+            println!("⚠️  Could not create provisioner: {e}");
             return;
         }
     };
@@ -274,10 +274,10 @@ async fn test_multi_provider_real_sdk_integration() {
     ];
 
     for provider in &providers {
-        println!("\n🔍 Testing {} SDK integration:", provider);
+        println!("\n🔍 Testing {provider} SDK integration:");
 
         // Test real instance type mapping
-        let instance_selection = InstanceTypeMapper::map_to_instance_type(&spec, &provider);
+        let instance_selection = InstanceTypeMapper::map_to_instance_type(&spec, provider);
         println!("  ✅ Mapped to instance type: {}", instance_selection.instance_type);
 
         // Test real pricing lookup
@@ -307,10 +307,10 @@ async fn test_multi_provider_real_sdk_integration() {
                 assert!(instance.memory_gb >= spec.memory_gb);
             }
             Ok(Err(e)) => {
-                panic!("Pricing API must work for provider {:?}: {}", provider, e);
+                panic!("Pricing API must work for provider {provider:?}: {e}");
             }
             Err(_) => {
-                panic!("Pricing API timeout for provider {:?}", provider);
+                panic!("Pricing API timeout for provider {provider:?}");
             }
         }
 
@@ -352,7 +352,7 @@ async fn test_blueprint_with_real_sdk_provisioning() {
         println!("⚠️  Blueprint binary not found - building...");
 
         let build_result = tokio::process::Command::new("cargo")
-            .args(&["build"])
+            .args(["build"])
             .current_dir("../../examples/incredible-squaring")
             .output()
             .await;
@@ -366,7 +366,7 @@ async fn test_blueprint_with_real_sdk_provisioning() {
                 return;
             }
             Err(e) => {
-                println!("❌ Build error: {}", e);
+                println!("❌ Build error: {e}");
                 return;
             }
         }
@@ -458,7 +458,7 @@ async fn test_real_cost_estimation_with_blueprint_data() {
     let providers = [CloudProvider::AWS, CloudProvider::DigitalOcean];
 
     for provider in &providers {
-        println!("\n💲 {} pricing:", provider);
+        println!("\n💲 {provider} pricing:");
 
         // Use the real find_best_instance API to get actual pricing
         let region = match provider {
@@ -487,7 +487,7 @@ async fn test_real_cost_estimation_with_blueprint_data() {
                 assert!(instance.hourly_price < 1.0, "Blueprint should cost less than $1/hour");
             }
             Ok(Err(e)) => {
-                panic!("Pricing API must work: {}", e);
+                panic!("Pricing API must work: {e}");
             }
             Err(_) => println!("  ⏰ Pricing API timeout"),
         }

@@ -200,7 +200,7 @@ async fn stream_from_source(
             };
 
             let deployment_config = DeploymentConfig {
-                name: format!("log-stream-{}", container_id),
+                name: format!("log-stream-{container_id}"),
                 namespace: "default".to_string(),
                 restart_policy: crate::deployment::ssh::RestartPolicy::OnFailure,
                 health_check: None,
@@ -210,7 +210,7 @@ async fn stream_from_source(
                 Ok(ssh_client) => stream_ssh_logs(tx, service_id, ssh_client, container_id, follow).await,
                 Err(e) => {
                     error!("Failed to create SSH client for log streaming: {}", e);
-                    Err(e.into())
+                    Err(e)
                 }
             }
         }
@@ -460,7 +460,7 @@ async fn stream_local_docker_logs(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| Error::Other(format!("Failed to start docker logs: {}", e)))?;
+        .map_err(|e| Error::Other(format!("Failed to start docker logs: {e}")))?;
 
     let stdout = child.stdout.take()
         .ok_or_else(|| Error::Other("Failed to capture stdout".into()))?;
@@ -520,7 +520,7 @@ async fn stream_local_kubernetes_logs(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| Error::Other(format!("Failed to start kubectl logs: {}", e)))?;
+        .map_err(|e| Error::Other(format!("Failed to start kubectl logs: {e}")))?;
 
     let stdout = child.stdout.take()
         .ok_or_else(|| Error::Other("Failed to capture stdout".into()))?;
@@ -570,7 +570,7 @@ async fn stream_local_file_logs(
     let mut child = cmd
         .stdout(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| Error::Other(format!("Failed to start tail: {}", e)))?;
+        .map_err(|e| Error::Other(format!("Failed to start tail: {e}")))?;
 
     let stdout = child.stdout.take()
         .ok_or_else(|| Error::Other("Failed to capture stdout".into()))?;
@@ -713,6 +713,12 @@ pub struct LogFilters {
     pub search_text: Option<String>,
     pub since: Option<SystemTime>,
     pub until: Option<SystemTime>,
+}
+
+impl Default for LogAggregator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LogAggregator {

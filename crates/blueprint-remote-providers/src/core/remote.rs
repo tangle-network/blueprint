@@ -234,7 +234,7 @@ impl fmt::Display for CloudProvider {
             CloudProvider::Linode => write!(f, "Linode"),
             CloudProvider::Generic => write!(f, "Generic"),
             CloudProvider::DockerLocal => write!(f, "Docker (Local)"),
-            CloudProvider::DockerRemote(host) => write!(f, "Docker (Remote: {})", host),
+            CloudProvider::DockerRemote(host) => write!(f, "Docker (Remote: {host})"),
             CloudProvider::BareMetal(hosts) => write!(f, "Bare Metal ({} hosts)", hosts.len()),
         }
     }

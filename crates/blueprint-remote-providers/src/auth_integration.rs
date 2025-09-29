@@ -46,11 +46,11 @@ impl SecureCloudCredentials {
     /// Create new secure credentials with production-grade encryption
     pub async fn new(service_id: u64, provider: &str, credentials: &str) -> Result<Self> {
         // Generate secure salt for key derivation
-        let salt = blake3::hash(format!("{}_{}", service_id, provider).as_bytes());
+        let salt = blake3::hash(format!("{service_id}_{provider}").as_bytes());
 
         // Create secure credential manager with derived key
         let password = std::env::var("BLUEPRINT_CREDENTIAL_KEY")
-            .unwrap_or_else(|_| format!("blueprint_default_key_{}", service_id));
+            .unwrap_or_else(|_| format!("blueprint_default_key_{service_id}"));
         let credential_manager =
             Arc::new(SecureCredentialManager::new(&password, salt.as_bytes())?);
 
@@ -159,7 +159,7 @@ impl RemoteServiceAuth {
         let encoding_key = EncodingKey::from_secret(jwt_secret.as_bytes());
 
         let token = jsonwebtoken::encode(&header, &claims, &encoding_key)
-            .map_err(|e| Error::ConfigurationError(format!("JWT encoding failed: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("JWT encoding failed: {e}")))?;
 
         Ok(token)
     }
@@ -224,7 +224,7 @@ impl AuthProxyRemoteExtension {
         // Verify service is registered
         let services = self.remote_services.read().await;
         let _auth = services.get(&service_id).ok_or_else(|| {
-            Error::ConfigurationError(format!("Service {} not registered", service_id))
+            Error::ConfigurationError(format!("Service {service_id} not registered"))
         })?;
         drop(services);
 
@@ -235,7 +235,7 @@ impl AuthProxyRemoteExtension {
 
         // Get JWT secret for validation (same as used for signing)
         let jwt_secret = std::env::var("BLUEPRINT_JWT_SECRET")
-            .unwrap_or_else(|_| format!("blueprint_jwt_secret_{}", service_id));
+            .unwrap_or_else(|_| format!("blueprint_jwt_secret_{service_id}"));
 
         // Validate JWT signature and claims
         let validation = Validation::new(Algorithm::HS256);
@@ -243,7 +243,7 @@ impl AuthProxyRemoteExtension {
 
         let token_data =
             jsonwebtoken::decode::<AccessTokenClaims>(&access_token, &decoding_key, &validation)
-                .map_err(|e| Error::ConfigurationError(format!("JWT validation failed: {}", e)))?;
+                .map_err(|e| Error::ConfigurationError(format!("JWT validation failed: {e}")))?;
 
         let claims = token_data.claims;
 
@@ -271,7 +271,7 @@ impl AuthProxyRemoteExtension {
         let mut auth_headers = headers;
         auth_headers.insert(
             "Authorization".to_string(),
-            format!("Bearer {}", access_token),
+            format!("Bearer {access_token}"),
         );
         auth_headers.insert("X-Blueprint-Service".to_string(), service_id.to_string());
 

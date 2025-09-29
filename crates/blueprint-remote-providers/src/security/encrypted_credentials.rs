@@ -26,6 +26,7 @@ pub struct EncryptedCloudCredentials {
 
 /// Plaintext credential data (only exists during encryption/decryption)
 #[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Default)]
 pub struct PlaintextCredentials {
     // AWS
     pub aws_access_key: Option<String>,
@@ -52,7 +53,7 @@ impl EncryptedCloudCredentials {
     /// Create new encrypted credentials with provided key
     pub fn encrypt_with_key(provider: &str, credentials: PlaintextCredentials, key: &[u8; 32]) -> Result<Self> {
         let cipher = Aes256Gcm::new_from_slice(key)
-            .map_err(|e| Error::ConfigurationError(format!("Invalid key: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Invalid key: {e}")))?;
 
         // Generate random nonce
         let nonce_bytes = Self::generate_nonce();
@@ -60,11 +61,11 @@ impl EncryptedCloudCredentials {
 
         // Serialize and encrypt credentials
         let plaintext = serde_json::to_vec(&credentials)
-            .map_err(|e| Error::ConfigurationError(format!("Serialization failed: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Serialization failed: {e}")))?;
 
         let encrypted_data = cipher
             .encrypt(nonce, plaintext.as_ref())
-            .map_err(|e| Error::ConfigurationError(format!("Encryption failed: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Encryption failed: {e}")))?;
 
         Ok(Self {
             provider: provider.to_string(),
@@ -86,11 +87,11 @@ impl EncryptedCloudCredentials {
 
         // Serialize and encrypt credentials
         let plaintext = serde_json::to_vec(&credentials)
-            .map_err(|e| Error::ConfigurationError(format!("Serialization failed: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Serialization failed: {e}")))?;
 
         let encrypted_data = cipher
             .encrypt(nonce, plaintext.as_ref())
-            .map_err(|e| Error::ConfigurationError(format!("Encryption failed: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Encryption failed: {e}")))?;
 
         Ok(Self {
             provider: provider.to_string(),
@@ -103,16 +104,16 @@ impl EncryptedCloudCredentials {
     /// Decrypt credentials (temporarily exposes plaintext)
     pub fn decrypt(&self, key: &[u8; 32]) -> Result<PlaintextCredentials> {
         let cipher = Aes256Gcm::new_from_slice(key)
-            .map_err(|e| Error::ConfigurationError(format!("Invalid key: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Invalid key: {e}")))?;
 
         let nonce = Nonce::from_slice(&self.nonce);
 
         let plaintext = cipher
             .decrypt(nonce, self.encrypted_data.as_ref())
-            .map_err(|e| Error::ConfigurationError(format!("Decryption failed: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Decryption failed: {e}")))?;
 
         let credentials: PlaintextCredentials = serde_json::from_slice(&plaintext)
-            .map_err(|e| Error::ConfigurationError(format!("Deserialization failed: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Deserialization failed: {e}")))?;
 
         Ok(credentials)
     }
@@ -193,7 +194,7 @@ impl PlaintextCredentials {
     /// Create from JSON string
     pub fn from_json(json: &str) -> Result<Self> {
         serde_json::from_str(json)
-            .map_err(|e| Error::ConfigurationError(format!("Invalid JSON: {}", e)))
+            .map_err(|e| Error::ConfigurationError(format!("Invalid JSON: {e}")))
     }
 
     /// Convert to JSON string
@@ -298,19 +299,3 @@ mod tests {
 }
 
 
-impl Default for PlaintextCredentials {
-    fn default() -> Self {
-        Self {
-            aws_access_key: None,
-            aws_secret_key: None,
-            gcp_project_id: None,
-            gcp_service_account_key: None,
-            azure_subscription_id: None,
-            azure_client_id: None,
-            azure_client_secret: None,
-            azure_tenant_id: None,
-            do_api_token: None,
-            vultr_api_key: None,
-        }
-    }
-}
