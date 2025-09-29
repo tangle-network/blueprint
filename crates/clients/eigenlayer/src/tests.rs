@@ -9,8 +9,8 @@ use blueprint_chain_setup_anvil::get_receipt;
 use blueprint_core_testing_utils::setup_log;
 use blueprint_evm_extra::util::get_provider_from_signer;
 
-use eigenlayer_contract_deployer::bindings::core::registrycoordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
-use eigenlayer_contract_deployer::bindings::core::registrycoordinator::IStakeRegistryTypes::StrategyParams;
+use eigenlayer_contract_deployer::bindings::core::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
+use eigenlayer_contract_deployer::bindings::core::registry_coordinator::IStakeRegistryTypes::StrategyParams;
 use eigenlayer_contract_deployer::bindings::RegistryCoordinator;
 use eigenlayer_contract_deployer::core::{
     deploy_core_contracts, DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData, EigenPodManagerConfig, RewardsCoordinatorConfig, StrategyFactoryConfig, StrategyManagerConfig
