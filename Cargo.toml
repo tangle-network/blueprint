@@ -238,7 +238,7 @@ ipnet = { version = "2.11.0", default-features = false }
 rustls = { version = "0.23.31", default-features = false, features = ["std"] }
 tokio-rustls = { version = "0.26.2", default-features = false, features = ["tls12"] }
 rustls-pemfile = { version = "2.2.0", default-features = false }
-rcgen = { version = "0.14.3", default-features = false, features = ["pem"] }
+rcgen = { version = "0.14.5", default-features = false, features = ["pem"] }
 hyper-rustls = { version = "0.27.7", default-features = false, features = ["http2", "ring"] }
 local-ip-address = "0.6.5"
 
