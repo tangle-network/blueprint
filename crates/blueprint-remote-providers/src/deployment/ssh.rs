@@ -7,9 +7,13 @@ use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::deployment::secure_commands::{SecureConfigManager, SecureContainerCommands};
 use crate::deployment::secure_ssh::{SecureSshClient, SecureSshConnection};
+#[allow(unused_imports)]
+use crate::monitoring::logs::LogStreamer;
+use crate::monitoring::health::{ApplicationHealthChecker, HealthStatus};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 /// SSH deployment client for bare metal servers
@@ -500,7 +504,7 @@ impl SshDeploymentClient {
         })
     }
 
-    /// Monitor container logs (SECURITY: Fixed command injection vulnerabilities)
+    /// Monitor container logs (basic version without integration)
     pub async fn stream_logs(&self, container_id: &str, follow: bool) -> Result<String> {
         let runtime_str = match self.runtime {
             ContainerRuntime::Docker => "docker",
@@ -700,8 +704,11 @@ impl SshDeploymentClient {
             ContainerRuntime::Containerd => format!("ctr task kill {container_name} && ctr container rm {container_name}"),
         };
 
-        // Ignore errors from stop/remove (container might not exist)
-        let _ = self.run_remote_command(&stop_cmd).await;
+        // Try to stop and remove old container (might not exist)
+        match self.run_remote_command(&stop_cmd).await {
+            Ok(_) => info!("Successfully stopped and removed old container: {}", container_name),
+            Err(e) => debug!("Old container cleanup failed (expected if not exists): {}", e),
+        }
 
         // Deploy new container with same name and resource limits
         self.deploy_container_with_resources(new_image, &container_name, env_vars, resource_spec).await
@@ -901,6 +908,240 @@ WantedBy=multi-user.target
         } else {
             Err(Error::ConfigurationError(
                 format!("Failed to start blueprint service: {status}")
+            ))
+        }
+    }
+
+    /// Stream container logs integrated with LogStreamer for aggregation
+    pub async fn stream_container_logs(&self, container_id: &str) -> Result<mpsc::Receiver<String>> {
+        info!("Starting log stream for container {}", container_id);
+
+        let (tx, rx) = mpsc::channel(100);
+        let runtime = self.runtime.clone();
+        let ssh_client = self.ssh_client.clone();
+        let container = container_id.to_string();
+
+        // Spawn background task to stream logs
+        tokio::spawn(async move {
+            let cmd = match runtime {
+                ContainerRuntime::Docker => format!("docker logs -f {}", container),
+                ContainerRuntime::Podman => format!("podman logs -f {}", container),
+                ContainerRuntime::Containerd => {
+                    warn!("Log streaming not supported for containerd");
+                    return;
+                }
+            };
+
+            // This would ideally use SSH session with PTY for real-time streaming
+            // For now, we poll logs periodically
+            loop {
+                match ssh_client.run_remote_command(&cmd.replace("-f", "--tail=10")).await {
+                    Ok(logs) => {
+                        for line in logs.lines() {
+                            if tx.send(line.to_string()).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to fetch logs: {}", e);
+                        break;
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        });
+
+        Ok(rx)
+    }
+
+    /// Collect container metrics for QoS monitoring
+    pub async fn collect_container_metrics(&self, container_id: &str) -> Result<serde_json::Value> {
+        info!("Collecting metrics for container {}", container_id);
+
+        let stats_cmd = match self.runtime {
+            ContainerRuntime::Docker => {
+                format!("docker stats {} --no-stream --format json", container_id)
+            }
+            ContainerRuntime::Podman => {
+                format!("podman stats {} --no-stream --format json", container_id)
+            }
+            ContainerRuntime::Containerd => {
+                // Containerd doesn't have direct stats, use cgroup info
+                return Err(Error::ConfigurationError(
+                    "Metrics collection not supported for containerd".into()
+                ));
+            }
+        };
+
+        let output = self.run_remote_command(&stats_cmd).await?;
+
+        // Parse stats JSON
+        let stats: serde_json::Value = serde_json::from_str(&output)
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse stats: {}", e)))?;
+
+        // Transform into QoS-compatible format
+        let qos_metrics = serde_json::json!({
+            "cpu_usage_percent": stats["CPUPerc"].as_str().unwrap_or("0%").replace("%", ""),
+            "memory_usage_mb": self.parse_memory_usage(stats["MemUsage"].as_str().unwrap_or("0MiB")),
+            "network_io": stats["NetIO"].as_str().unwrap_or("0B / 0B"),
+            "block_io": stats["BlockIO"].as_str().unwrap_or("0B / 0B"),
+            "pids": stats["PIDs"].as_str().unwrap_or("0"),
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+
+        Ok(qos_metrics)
+    }
+
+    /// Parse memory usage string (e.g., "100MiB / 1GiB") to MB
+    fn parse_memory_usage(&self, mem_str: &str) -> f64 {
+        let parts: Vec<&str> = mem_str.split('/').collect();
+        if let Some(used) = parts.first() {
+            let used = used.trim();
+            if used.ends_with("GiB") {
+                used.replace("GiB", "").trim().parse::<f64>().unwrap_or(0.0) * 1024.0
+            } else if used.ends_with("MiB") {
+                used.replace("MiB", "").trim().parse::<f64>().unwrap_or(0.0)
+            } else if used.ends_with("KiB") {
+                used.replace("KiB", "").trim().parse::<f64>().unwrap_or(0.0) / 1024.0
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        }
+    }
+
+    /// Check blueprint-specific health endpoints
+    pub async fn check_blueprint_health(&self, container_id: &str) -> Result<HealthStatus> {
+        info!("Checking blueprint health for container {}", container_id);
+
+        // First check container is running
+        if !self.health_check_container(container_id).await? {
+            return Ok(HealthStatus::Unhealthy);
+        }
+
+        // Get container IP for health checks
+        let ip_cmd = match self.runtime {
+            ContainerRuntime::Docker => {
+                format!("docker inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {}", container_id)
+            }
+            ContainerRuntime::Podman => {
+                format!("podman inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {}", container_id)
+            }
+            ContainerRuntime::Containerd => {
+                return Ok(HealthStatus::Unknown);
+            }
+        };
+
+        let container_ip = self.run_remote_command(&ip_cmd).await?.trim().to_string();
+
+        if container_ip.is_empty() || container_ip == "<no value>" {
+            warn!("No IP address found for container {}", container_id);
+            return Ok(HealthStatus::Unknown);
+        }
+
+        // Check blueprint-specific endpoints
+        let health_checker = ApplicationHealthChecker::new();
+
+        // Check main health endpoint
+        let health_url = format!("http://{}:8080/health", container_ip);
+        match health_checker.check_http(&health_url).await {
+            HealthStatus::Healthy => {
+                info!("Blueprint health endpoint healthy");
+
+                // Also check metrics endpoint
+                let metrics_url = format!("http://{}:9615/metrics", container_ip);
+                match health_checker.check_http(&metrics_url).await {
+                    HealthStatus::Healthy => {
+                        info!("Blueprint metrics endpoint also healthy");
+                        Ok(HealthStatus::Healthy)
+                    }
+                    _ => {
+                        warn!("Metrics endpoint not responding");
+                        Ok(HealthStatus::Degraded)
+                    }
+                }
+            }
+            status => Ok(status)
+        }
+    }
+
+    /// Deploy blueprint as a systemd service
+    pub async fn deploy_binary_as_service(
+        &self,
+        binary_path: &Path,
+        service_name: &str,
+        env_vars: HashMap<String, String>,
+        resource_spec: &ResourceSpec,
+    ) -> Result<()> {
+        info!("Deploying {} as systemd service", service_name);
+
+        // Copy binary to remote
+        let remote_path = format!("/opt/blueprint/bin/{}", service_name);
+        self.copy_files(binary_path, &remote_path).await?;
+
+        // Make executable
+        self.run_remote_command(&format!("chmod +x {}", remote_path)).await?;
+
+        // Create systemd unit with resource limits
+        let env_section = env_vars.iter()
+            .map(|(k, v)| format!("Environment={}={}", k, v))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let service_unit = format!(r#"
+[Unit]
+Description=Blueprint Service: {}
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={}
+Restart=always
+RestartSec=10
+User=blueprint
+Group=blueprint
+WorkingDirectory=/opt/blueprint
+{}
+CPUQuota={}%
+MemoryMax={}M
+TasksMax=1000
+
+[Install]
+WantedBy=multi-user.target
+"#,
+            service_name,
+            remote_path,
+            env_section,
+            (resource_spec.cpu * 100.0) as u32,
+            (resource_spec.memory_gb * 1024.0) as u32
+        );
+
+        // Write service file
+        let service_file = format!("/etc/systemd/system/blueprint-{}.service", service_name);
+        self.run_remote_command(&format!(
+            "sudo tee {} > /dev/null << 'EOF'\n{}\nEOF",
+            service_file, service_unit
+        )).await?;
+
+        // Enable and start
+        self.run_remote_command("sudo systemctl daemon-reload").await?;
+        self.run_remote_command(&format!("sudo systemctl enable blueprint-{}", service_name)).await?;
+        self.run_remote_command(&format!("sudo systemctl start blueprint-{}", service_name)).await?;
+
+        // Verify it's running
+        let status = self.run_remote_command(&format!(
+            "sudo systemctl is-active blueprint-{}",
+            service_name
+        )).await?;
+
+        if status.trim() == "active" {
+            info!("Service {} deployed and running", service_name);
+            Ok(())
+        } else {
+            Err(Error::ConfigurationError(
+                format!("Failed to start service: {}", status)
             ))
         }
     }

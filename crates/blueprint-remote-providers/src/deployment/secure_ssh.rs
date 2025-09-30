@@ -185,6 +185,7 @@ impl SecureSshConnection {
 }
 
 /// Secure SSH client with proper security controls
+#[derive(Clone)]
 pub struct SecureSshClient {
     connection: SecureSshConnection,
 }
