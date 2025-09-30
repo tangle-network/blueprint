@@ -166,7 +166,8 @@ impl DigitalOceanProvisioner {
         spec: &ResourceSpec,
         node_count: u32,
     ) -> Result<DOKSCluster> {
-        let _node_size = self.select_droplet_size(spec);
+        let node_size = self.select_droplet_size(spec);
+        info!("Selected droplet size {} for cluster nodes", node_size);
 
         let url = "https://api.digitalocean.com/v2/kubernetes/clusters";
 
@@ -393,6 +394,12 @@ impl DigitalOceanProvisioner {
         user_data.push_str("  - systemctl start docker\n");
 
         user_data
+    }
+
+    /// Get droplet status
+    pub async fn get_droplet_status(&self, droplet_id: u64) -> Result<String> {
+        let droplet = self.get_droplet_details(droplet_id).await?;
+        Ok(droplet.status)
     }
 
     /// Delete a droplet

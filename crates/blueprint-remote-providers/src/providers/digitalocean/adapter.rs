@@ -13,6 +13,7 @@ use tracing::{info, warn};
 #[derive(Debug)]
 pub struct DigitalOceanAdapter {
     provisioner: DigitalOceanProvisioner,
+    security_manager: Option<crate::shared::DigitalOceanFirewallManager>,
 }
 
 impl DigitalOceanAdapter {
@@ -23,8 +24,36 @@ impl DigitalOceanAdapter {
 
         let default_region = std::env::var("DO_REGION").unwrap_or_else(|_| "nyc3".to_string());
 
-        let provisioner = DigitalOceanProvisioner::new(api_token, default_region).await?;
-        Ok(Self { provisioner })
+        let provisioner = DigitalOceanProvisioner::new(api_token.clone(), default_region).await?;
+        let security_manager = Some(crate::shared::DigitalOceanFirewallManager::new(api_token));
+
+        Ok(Self {
+            provisioner,
+            security_manager,
+        })
+    }
+
+    /// Ensure firewall is configured
+    async fn ensure_firewall(&self) -> Result<Option<String>> {
+        if let Some(ref manager) = self.security_manager {
+            use crate::shared::{BlueprintSecurityConfig, SecurityGroupManager};
+
+            let config = BlueprintSecurityConfig::default();
+            let firewall_name = format!("blueprint-firewall-{}", uuid::Uuid::new_v4());
+
+            match manager.ensure_security_group(&firewall_name, &config).await {
+                Ok(firewall_id) => {
+                    info!("Created DigitalOcean firewall: {}", firewall_id);
+                    Ok(Some(firewall_id))
+                }
+                Err(e) => {
+                    warn!("Failed to create DigitalOcean firewall: {}", e);
+                    Ok(None)
+                }
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     /// Convert Droplet to ProvisionedInstance
@@ -94,8 +123,26 @@ impl CloudProviderAdapter for DigitalOceanAdapter {
     }
 
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        info!("Checking status for DigitalOcean droplet: {}", instance_id);
-        Ok(InstanceStatus::Running)
+        let droplet_id = instance_id
+            .parse::<u64>()
+            .map_err(|_| Error::Other("Invalid droplet ID".into()))?;
+
+        match self.provisioner.get_droplet_status(droplet_id).await {
+            Ok(status) => {
+                let instance_status = match status.as_str() {
+                    "active" => InstanceStatus::Running,
+                    "new" => InstanceStatus::Starting,
+                    "off" => InstanceStatus::Stopped,
+                    _ => InstanceStatus::Unknown,
+                };
+                info!("DigitalOcean droplet {} status: {}", instance_id, status);
+                Ok(instance_status)
+            }
+            Err(e) => {
+                warn!("Failed to get DigitalOcean droplet status: {}", e);
+                Ok(InstanceStatus::Unknown)
+            }
+        }
     }
 
     async fn deploy_blueprint_with_target(
@@ -169,29 +216,22 @@ impl DigitalOceanAdapter {
     /// Deploy to DigitalOcean Droplet via SSH
     async fn deploy_to_droplet(
         &self,
-        _blueprint_image: &str,
-        _resource_spec: &ResourceSpec,
-        _env_vars: HashMap<String, String>,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        use crate::shared::{SharedSshDeployment, SshDeploymentConfig};
+
         let instance = self.provision_instance("s-2vcpu-4gb", "nyc3").await?;
 
-        // SSH deployment not implemented for DigitalOcean - use K8s deployment target
-        warn!("DigitalOcean Droplet SSH deployment not fully implemented");
-
-        let mut port_mappings = HashMap::new();
-        port_mappings.insert(8080, 8080);
-        port_mappings.insert(9615, 9615);
-        port_mappings.insert(9944, 9944);
-
-        let mut metadata = HashMap::new();
-        metadata.insert("provider".to_string(), "digitalocean-droplet".to_string());
-
-        Ok(BlueprintDeploymentResult {
-            instance,
-            blueprint_id: format!("droplet-{}", uuid::Uuid::new_v4()),
-            port_mappings,
-            metadata,
-        })
+        // Use shared SSH deployment with DigitalOcean configuration
+        SharedSshDeployment::deploy_to_instance(
+            &instance,
+            blueprint_image,
+            resource_spec,
+            env_vars,
+            SshDeploymentConfig::digitalocean(),
+        ).await
     }
 
     /// Deploy to DOKS cluster

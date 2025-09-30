@@ -5,6 +5,7 @@
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
+use tracing::{debug, info, warn};
 
 /// Azure Resource Manager provisioner
 pub struct AzureProvisioner {
@@ -270,12 +271,15 @@ impl AzureProvisioner {
             self.subscription_id, self.resource_group, vnet_name
         );
 
-        let _ = self.client
+        match self.client
             .put(&url)
             .bearer_auth(token)
             .json(&vnet_body)
             .send()
-            .await;
+            .await {
+            Ok(_) => info!("Virtual network {} created successfully", vnet_name),
+            Err(e) => warn!("Failed to create virtual network {}: {}", vnet_name, e),
+        }
 
         Ok(())
     }
@@ -433,7 +437,9 @@ impl AzureProvisioner {
         }
 
         // Clean up associated resources
-        let _ = self.cleanup_vm_resources(vm_name, &token).await;
+        if let Err(e) = self.cleanup_vm_resources(vm_name, &token).await {
+            warn!("Failed to cleanup VM resources for {}: {}", vm_name, e);
+        }
 
         Ok(())
     }
@@ -446,7 +452,9 @@ impl AzureProvisioner {
             "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/networkInterfaces/{}?api-version=2023-09-01",
             self.subscription_id, self.resource_group, nic_name
         );
-        let _ = self.client.delete(&nic_url).bearer_auth(token).send().await;
+        if let Err(e) = self.client.delete(&nic_url).bearer_auth(token).send().await {
+            debug!("Failed to delete NIC (may not exist): {}", e);
+        }
 
         // Delete public IP
         let pip_name = format!("{vm_name}-nic-pip");
@@ -454,7 +462,9 @@ impl AzureProvisioner {
             "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/publicIPAddresses/{}?api-version=2023-09-01",
             self.subscription_id, self.resource_group, pip_name
         );
-        let _ = self.client.delete(&pip_url).bearer_auth(token).send().await;
+        if let Err(e) = self.client.delete(&pip_url).bearer_auth(token).send().await {
+            debug!("Failed to delete public IP (may not exist): {}", e);
+        }
 
         Ok(())
     }

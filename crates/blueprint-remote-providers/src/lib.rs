@@ -13,6 +13,7 @@ pub mod pricing;
 pub mod providers;
 pub mod secure_bridge;
 pub mod security;
+pub mod shared;
 
 pub mod deployment;
 

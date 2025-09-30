@@ -6,7 +6,7 @@ use crate::core::resources::ResourceSpec;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 #[cfg(feature = "aws")]
 use aws_sdk_ec2::types::{InstanceType, ResourceType, Tag, TagSpecification};
-use tracing::info;
+use tracing::{info, warn};
 
 /// AWS EC2 provisioner
 pub struct AwsProvisioner {
@@ -191,13 +191,16 @@ impl AwsProvisioner {
             .ip_ranges(IpRange::builder().cidr_ip("0.0.0.0/0").build())
             .build();
 
-        let _ = self.ec2_client
+        match self.ec2_client
             .authorize_security_group_ingress()
             .group_id(&sg_id)
             .ip_permissions(ssh_rule)
             .ip_permissions(qos_rule)
             .send()
-            .await;
+            .await {
+            Ok(_) => info!("Security group {} configured with ingress rules", sg_id),
+            Err(e) => warn!("Failed to configure security group rules: {}", e),
+        }
 
         Ok(sg_id)
     }

@@ -14,15 +14,52 @@ use tracing::{info, warn};
 /// Azure adapter for Blueprint deployment
 pub struct AzureAdapter {
     provisioner: std::sync::Arc<tokio::sync::Mutex<AzureProvisioner>>,
+    security_manager: Option<crate::shared::AzureNsgManager>,
 }
 
 impl AzureAdapter {
     /// Create new Azure adapter
     pub async fn new() -> Result<Self> {
         let provisioner = AzureProvisioner::new().await?;
+
+        // Initialize security manager if we have required environment variables
+        let security_manager = if let (Ok(subscription_id), Ok(resource_group)) = (
+            std::env::var("AZURE_SUBSCRIPTION_ID"),
+            std::env::var("AZURE_RESOURCE_GROUP")
+        ) {
+            Some(crate::shared::AzureNsgManager::new(subscription_id, resource_group))
+        } else {
+            None
+        };
+
         Ok(Self {
-            provisioner: std::sync::Arc::new(tokio::sync::Mutex::new(provisioner))
+            provisioner: std::sync::Arc::new(tokio::sync::Mutex::new(provisioner)),
+            security_manager,
         })
+    }
+
+    /// Ensure security group is configured
+    async fn ensure_security_group(&self) -> Result<Option<String>> {
+        if let Some(ref manager) = self.security_manager {
+            use crate::shared::{BlueprintSecurityConfig, SecurityGroupManager};
+
+            let config = BlueprintSecurityConfig::default();
+            let nsg_name = format!("blueprint-nsg-{}", uuid::Uuid::new_v4());
+
+            match manager.ensure_security_group(&nsg_name, &config).await {
+                Ok(nsg_id) => {
+                    info!("Created Azure NSG: {}", nsg_id);
+                    Ok(Some(nsg_id))
+                }
+                Err(e) => {
+                    warn!("Failed to create Azure NSG: {}", e);
+                    Ok(None)
+                }
+            }
+        } else {
+            info!("Azure security group creation skipped - missing environment variables");
+            Ok(None)
+        }
     }
 }
 
@@ -150,7 +187,7 @@ impl CloudProviderAdapter for AzureAdapter {
                 }
                 #[cfg(not(feature = "kubernetes"))]
                 {
-                    let _ = (cluster_id, namespace);
+                    warn!("Kubernetes deployment requested for cluster {} namespace {}, but feature not enabled", cluster_id, namespace);
                     Err(Error::Other("Kubernetes support not enabled".into()))
                 }
             }
@@ -161,7 +198,7 @@ impl CloudProviderAdapter for AzureAdapter {
                 }
                 #[cfg(not(feature = "kubernetes"))]
                 {
-                    let _ = namespace;
+                    warn!("Kubernetes deployment requested for namespace {}, but feature not enabled", namespace);
                     Err(Error::Other("Kubernetes support not enabled".into()))
                 }
             }

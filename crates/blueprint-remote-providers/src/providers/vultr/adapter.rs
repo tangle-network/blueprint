@@ -107,7 +107,7 @@ impl CloudProviderAdapter for VultrAdapter {
                 }
                 #[cfg(not(feature = "kubernetes"))]
                 {
-                    let _ = (cluster_id, namespace);
+                    warn!("Kubernetes deployment requested for cluster {} namespace {}, but feature not enabled", cluster_id, namespace);
                     Err(Error::Other("Kubernetes support not enabled".into()))
                 }
             }
@@ -118,7 +118,7 @@ impl CloudProviderAdapter for VultrAdapter {
                 }
                 #[cfg(not(feature = "kubernetes"))]
                 {
-                    let _ = namespace;
+                    warn!("Kubernetes deployment requested for namespace {}, but feature not enabled", namespace);
                     Err(Error::Other("Kubernetes support not enabled".into()))
                 }
             }

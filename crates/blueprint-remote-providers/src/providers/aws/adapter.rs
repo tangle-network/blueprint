@@ -2,9 +2,6 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
-use crate::deployment::ssh::{
-    ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient,
-};
 #[cfg(feature = "kubernetes")]
 use crate::deployment::KubernetesDeploymentClient;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
@@ -227,81 +224,19 @@ impl AwsAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        use crate::shared::{SharedSshDeployment, SshDeploymentConfig};
+
         // Get or provision EC2 instance
         let instance = self.provision_instance("t3.medium", "us-east-1").await?;
-        let public_ip = instance
-            .public_ip
-            .as_ref()
-            .ok_or_else(|| Error::Other("Instance has no public IP".into()))?;
 
-        // Secure SSH connection configuration
-        let connection = SshConnection {
-            host: public_ip.clone(),
-            user: self.get_ssh_username().to_string(),
-            key_path: None, // Use SSH agent or default AWS key
-            port: 22,
-            password: None,
-            jump_host: None,
-        };
-
-        // Hardened deployment configuration
-        let deployment_config = DeploymentConfig {
-            name: format!("blueprint-{}", uuid::Uuid::new_v4()),
-            namespace: "blueprint-remote".to_string(),
-            restart_policy: crate::deployment::ssh::RestartPolicy::OnFailure,
-            health_check: None,
-        };
-
-        let ssh_client =
-            SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
-                .await
-                .map_err(|e| {
-                    Error::Other(format!("Failed to establish secure SSH connection: {e}"))
-                })?;
-
-        // Deploy with QoS port exposure (8080, 9615, 9944)
-        let deployment = ssh_client
-            .deploy_blueprint(blueprint_image, resource_spec, env_vars)
-            .await
-            .map_err(|e| Error::Other(format!("Blueprint deployment failed: {e}")))?;
-
-        // Extract and validate port mappings
-        let mut port_mappings = HashMap::new();
-        for (internal_port_str, external_port_str) in &deployment.ports {
-            if let (Ok(internal), Ok(external)) = (
-                internal_port_str.trim_end_matches("/tcp").parse::<u16>(),
-                external_port_str.parse::<u16>(),
-            ) {
-                port_mappings.insert(internal, external);
-            }
-        }
-
-        // Verify QoS ports are exposed
-        if !port_mappings.contains_key(&9615) {
-            warn!("QoS metrics port 9615 not exposed in deployment");
-        }
-
-        let mut metadata = HashMap::new();
-        metadata.insert("provider".to_string(), "aws".to_string());
-        metadata.insert(
-            "container_runtime".to_string(),
-            format!("{:?}", deployment.runtime),
-        );
-        metadata.insert("container_id".to_string(), deployment.container_id.clone());
-        metadata.insert("ssh_host".to_string(), deployment.host.clone());
-        metadata.insert("security_hardened".to_string(), "true".to_string());
-
-        info!(
-            "Successfully deployed blueprint {} to AWS instance {}",
-            deployment.container_id, instance.id
-        );
-
-        Ok(BlueprintDeploymentResult {
-            instance: instance.clone(),
-            blueprint_id: deployment.container_id,
-            port_mappings,
-            metadata,
-        })
+        // Use shared SSH deployment with AWS configuration
+        SharedSshDeployment::deploy_to_instance(
+            &instance,
+            blueprint_image,
+            resource_spec,
+            env_vars,
+            SshDeploymentConfig::aws(),
+        ).await
     }
 
     /// Deploy to AWS EKS cluster

@@ -2,16 +2,13 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
-use crate::deployment::ssh::{
-    ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient,
-};
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 use crate::providers::gcp::GcpProvisioner;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Professional GCP adapter with security and performance optimizations
 pub struct GcpAdapter {
@@ -57,60 +54,91 @@ impl GcpAdapter {
 
     /// Create secure firewall rules for blueprint deployment
     async fn ensure_firewall_rules(&self) -> Result<()> {
-        // Create restrictive firewall rules for GCP instances
-        // These rules ensure only necessary ports are exposed
-        
-        let firewall_rules = vec![
-            serde_json::json!({
-                "name": format!("blueprint-ssh-{}", uuid::Uuid::new_v4().simple()),
-                "description": "Allow SSH access for Blueprint management",
-                "direction": "INGRESS",
-                "priority": 1000,
-                "targetTags": ["blueprint"],
-                "allowed": [{
-                    "IPProtocol": "tcp",
-                    "ports": ["22"]
-                }],
-                "sourceRanges": ["0.0.0.0/0"], // Open to all - restrict for production
-            }),
-            serde_json::json!({
-                "name": format!("blueprint-qos-{}", uuid::Uuid::new_v4().simple()),
-                "description": "Allow Blueprint QoS ports",
-                "direction": "INGRESS", 
-                "priority": 1000,
-                "targetTags": ["blueprint"],
-                "allowed": [{
-                    "IPProtocol": "tcp",
-                    "ports": ["8080", "9615", "9944"]
-                }],
-                "sourceRanges": ["0.0.0.0/0"], // Open to all - restrict for production
-            }),
-            serde_json::json!({
-                "name": format!("blueprint-outbound-{}", uuid::Uuid::new_v4().simple()),
-                "description": "Allow HTTPS for package downloads",
-                "direction": "EGRESS",
-                "priority": 1000,
-                "targetTags": ["blueprint"],
-                "allowed": [{
-                    "IPProtocol": "tcp",
-                    "ports": ["443", "80"]
-                }],
-                "destinationRanges": ["0.0.0.0/0"],
-            })
-        ];
+        #[cfg(feature = "gcp")]
+        {
+            let access_token = std::env::var("GCP_ACCESS_TOKEN")
+                .map_err(|_| Error::ConfigurationError("No GCP access token available. Set GCP_ACCESS_TOKEN".into()))?;
 
-        info!("Creating {} firewall rules for GCP Blueprint security", firewall_rules.len());
-        
-        // In production, these would be created via GCP Compute API
-        // Create firewall rules via GCP Compute API
-        for rule in &firewall_rules {
-            info!("Firewall rule configured: {} - {}", 
-                rule["name"].as_str().unwrap_or("unknown"),
-                rule["description"].as_str().unwrap_or(""));
+            let client = reqwest::Client::new();
+            let base_url = format!("https://compute.googleapis.com/compute/v1/projects/{}/global/firewalls", self.project_id);
+
+            let firewall_rules = vec![
+                serde_json::json!({
+                    "name": format!("blueprint-ssh-{}", uuid::Uuid::new_v4().simple()),
+                    "description": "Allow SSH access for Blueprint management",
+                    "direction": "INGRESS",
+                    "priority": 1000,
+                    "targetTags": ["blueprint"],
+                    "allowed": [{
+                        "IPProtocol": "tcp",
+                        "ports": ["22"]
+                    }],
+                    "sourceRanges": ["0.0.0.0/0"], // Open to all - restrict for production
+                }),
+                serde_json::json!({
+                    "name": format!("blueprint-qos-{}", uuid::Uuid::new_v4().simple()),
+                    "description": "Allow Blueprint QoS ports",
+                    "direction": "INGRESS",
+                    "priority": 1000,
+                    "targetTags": ["blueprint"],
+                    "allowed": [{
+                        "IPProtocol": "tcp",
+                        "ports": ["8080", "9615", "9944"]
+                    }],
+                    "sourceRanges": ["0.0.0.0/0"], // Open to all - restrict for production
+                })
+            ];
+
+            info!("Creating {} firewall rules for GCP Blueprint security", firewall_rules.len());
+
+            for rule in &firewall_rules {
+                let rule_name = rule["name"].as_str().unwrap_or("unknown");
+
+                // Check if rule already exists
+                let check_url = format!("{}/{}", base_url, rule_name);
+                let check_response = client
+                    .get(&check_url)
+                    .bearer_auth(&access_token)
+                    .send()
+                    .await;
+
+                if let Ok(resp) = check_response {
+                    if resp.status().is_success() {
+                        info!("Firewall rule {} already exists, skipping", rule_name);
+                        continue;
+                    }
+                }
+
+                // Create the firewall rule
+                match client
+                    .post(&base_url)
+                    .bearer_auth(&access_token)
+                    .json(rule)
+                    .send()
+                    .await
+                {
+                    Ok(response) if response.status().is_success() => {
+                        info!("Created firewall rule: {} - {}",
+                            rule_name,
+                            rule["description"].as_str().unwrap_or(""));
+                    }
+                    Ok(response) => {
+                        let error_text = response.text().await.unwrap_or_default();
+                        warn!("Failed to create firewall rule {}: {} - {}", rule_name, response.status(), error_text);
+                    }
+                    Err(e) => {
+                        warn!("Failed to create firewall rule {}: {}", rule_name, e);
+                    }
+                }
+            }
+
+            Ok(())
         }
-        
-        info!("Firewall rules would be created via GCP Compute API in production deployment");
-        Ok(())
+        #[cfg(not(feature = "gcp"))]
+        {
+            info!("GCP firewall rules skipped - gcp feature not enabled");
+            Ok(())
+        }
     }
 }
 
@@ -168,7 +196,7 @@ impl CloudProviderAdapter for GcpAdapter {
         self.provisioner.terminate_instance(instance_id, zone).await
     }
 
-    async fn get_instance_status(&self, _instance_id: &str) -> Result<InstanceStatus> {
+    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
         #[cfg(feature = "gcp")]
         {
             let zone = "us-central1-a"; // Default zone
@@ -177,13 +205,13 @@ impl CloudProviderAdapter for GcpAdapter {
                 self.project_id, zone, instance_id
             );
 
-            let access_token = self.provisioner.access_token
-                .as_ref()
-                .ok_or_else(|| Error::ConfigurationError("No GCP access token available".into()))?;
+            let access_token = std::env::var("GCP_ACCESS_TOKEN")
+                .map_err(|_| Error::ConfigurationError("No GCP access token available. Set GCP_ACCESS_TOKEN".into()))?;
 
-            match self.provisioner.client
+            let client = reqwest::Client::new();
+            match client
                 .get(&url)
-                .bearer_auth(access_token)
+                .bearer_auth(&access_token)
                 .send()
                 .await {
                 Ok(response) if response.status().is_success() => {
@@ -205,6 +233,7 @@ impl CloudProviderAdapter for GcpAdapter {
         }
         #[cfg(not(feature = "gcp"))]
         {
+            let _ = instance_id; // Suppress unused warning
             Err(Error::ConfigurationError(
                 "GCP support not enabled. Enable the 'gcp' feature".into(),
             ))
@@ -280,83 +309,18 @@ impl GcpAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        use crate::shared::{SharedSshDeployment, SshDeploymentConfig};
+
         let instance = self.provision_instance("e2-medium", "us-central1").await?;
-        let public_ip = instance
-            .public_ip
-            .as_ref()
-            .ok_or_else(|| Error::Other("Instance has no public IP".into()))?;
 
-        // Secure SSH connection configuration for GCP
-        let connection = SshConnection {
-            host: public_ip.clone(),
-            user: self.get_ssh_username().to_string(),
-            key_path: self.ssh_key_path.as_ref().map(|p| p.into()),
-            port: 22,
-            password: None,
-            jump_host: None,
-        };
-
-        // Security-hardened deployment configuration
-        let deployment_config = DeploymentConfig {
-            name: format!("blueprint-{}", uuid::Uuid::new_v4()),
-            namespace: "blueprint-gcp".to_string(),
-            restart_policy: crate::deployment::ssh::RestartPolicy::OnFailure,
-            health_check: None,
-        };
-
-        let ssh_client =
-            SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
-                .await
-                .map_err(|e| {
-                    Error::Other(format!(
-                        "Failed to establish secure SSH connection to GCP instance: {e}"
-                    ))
-                })?;
-
-        // Deploy with QoS port exposure (8080, 9615, 9944)
-        let deployment = ssh_client
-            .deploy_blueprint(blueprint_image, resource_spec, env_vars)
-            .await
-            .map_err(|e| Error::Other(format!("Blueprint deployment to GCP failed: {e}")))?;
-
-        // Extract and validate port mappings
-        let mut port_mappings = HashMap::new();
-        for (internal_port_str, external_port_str) in &deployment.ports {
-            if let (Ok(internal), Ok(external)) = (
-                internal_port_str.trim_end_matches("/tcp").parse::<u16>(),
-                external_port_str.parse::<u16>(),
-            ) {
-                port_mappings.insert(internal, external);
-            }
-        }
-
-        // Verify QoS ports are exposed
-        if !port_mappings.contains_key(&9615) {
-            warn!("QoS metrics port 9615 not exposed in GCP deployment");
-        }
-
-        let mut metadata = HashMap::new();
-        metadata.insert("provider".to_string(), "gcp".to_string());
-        metadata.insert("project_id".to_string(), self.project_id.clone());
-        metadata.insert(
-            "container_runtime".to_string(),
-            format!("{:?}", deployment.runtime),
-        );
-        metadata.insert("container_id".to_string(), deployment.container_id.clone());
-        metadata.insert("ssh_host".to_string(), deployment.host.clone());
-        metadata.insert("security_hardened".to_string(), "true".to_string());
-
-        info!(
-            "Successfully deployed blueprint {} to GCP instance {}",
-            deployment.container_id, instance.id
-        );
-
-        Ok(BlueprintDeploymentResult {
-            instance: instance.clone(),
-            blueprint_id: deployment.container_id,
-            port_mappings,
-            metadata,
-        })
+        // Use shared SSH deployment with GCP configuration
+        SharedSshDeployment::deploy_to_instance(
+            &instance,
+            blueprint_image,
+            resource_spec,
+            env_vars,
+            SshDeploymentConfig::gcp(&self.project_id),
+        ).await
     }
 
 
