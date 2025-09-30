@@ -3,9 +3,11 @@
 //! These tests verify end-to-end functionality across modules
 
 pub mod auth_integration;
+pub mod chaos_engineering_tests;
 pub mod core_functionality;
 pub mod critical_flows;
 pub mod manager_bridge;
 pub mod observability;
 pub mod property_tests;
 pub mod qos_integration;
+pub mod ssh_container_tests;
