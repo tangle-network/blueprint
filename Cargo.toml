@@ -259,7 +259,7 @@ nftables = { version = "0.6.3", default-features = false }
 
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }
-eigenlayer-contract-deployer = { version = "0.4.0", default-features = false, features = ['build-script'], git = "https://github.com/tangle-network/eigenlayer-contract-deployer", rev = "35839b0f79fcd531f461c2e754214c377e3b779c" }
+eigenlayer-contract-deployer = { version = "0.4.0", default-features = false }
 cargo_toml = { version = "0.21.0", default-features = false }
 docktopus = { version = "0.4.0-alpha.1", default-features = false }
 itertools = { version = "0.14.0", default-features = false }
