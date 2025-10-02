@@ -2,10 +2,9 @@ use alloy_primitives::{Address, U256, hex};
 use blueprint_evm_extra::util::{get_provider_http, wait_transaction};
 use eigensdk::client_elcontracts::{reader::ELChainReader, writer::ELChainWriter};
 use eigensdk::crypto_bls::BlsKeyPair;
-use eigensdk::logging::get_test_logger;
 use eigensdk::types::operator::Operator;
-use eigensdk::utils::slashing::core::allocationmanager::AllocationManager::{self, OperatorSet};
-use eigensdk::utils::slashing::core::allocationmanager::IAllocationManagerTypes::AllocateParams;
+use eigensdk::utils::slashing::core::allocation_manager::AllocationManager::{self, OperatorSet};
+use eigensdk::utils::slashing::core::allocation_manager::IAllocationManagerTypes::AllocateParams;
 
 use super::error::EigenlayerError;
 use crate::BlueprintConfig;
@@ -111,7 +110,6 @@ async fn register_bls_impl(
     let operator_private_key = hex::encode(ecdsa_secret.0.to_bytes());
 
     info!("Eigenlayer BLS Registration: Creating AVS Registry Writer");
-    let logger = get_test_logger();
 
     info!("Eigenlayer BLS Registration: Fetching BLS BN254 Keys");
     let bn254_public = env.keystore().iter_bls_bn254().next().unwrap();
@@ -126,7 +124,6 @@ async fn register_bls_impl(
 
     info!("Eigenlayer BLS Registration: Creating EL Chain Reader");
     let el_chain_reader = ELChainReader::new(
-        logger,
         Some(allocation_manager_address),
         delegation_manager_address,
         rewards_coordinator_address,
@@ -307,7 +304,6 @@ async fn is_operator_registered(env: &BlueprintEnvironment) -> Result<bool, Runn
         .map_err(|e| EigenlayerError::Crypto(e.into()))?;
 
     let avs_registry_reader = eigensdk::client_avsregistry::reader::AvsRegistryChainReader::new(
-        get_test_logger(),
         registry_coordinator_address,
         operator_state_retriever_address,
         env.http_rpc_endpoint.to_string(),

@@ -27,7 +27,7 @@ where
     <T as TryInto<Url>>::Error: std::fmt::Debug,
 {
     ProviderBuilder::new()
-        .on_http(http_endpoint.try_into().unwrap())
+        .connect_http(http_endpoint.try_into().unwrap())
         .root()
         .clone()
 }
@@ -49,7 +49,7 @@ where
 {
     ProviderBuilder::new()
         .wallet(wallet)
-        .on_http(http_endpoint.try_into().unwrap())
+        .connect_http(http_endpoint.try_into().unwrap())
         .root()
         .clone()
 }
@@ -64,7 +64,7 @@ where
 #[must_use]
 pub async fn get_provider_ws(ws_endpoint: &str) -> RootProvider {
     ProviderBuilder::new()
-        .on_ws(WsConnect::new(ws_endpoint))
+        .connect_ws(WsConnect::new(ws_endpoint))
         .await
         .unwrap()
         .root()
@@ -88,7 +88,7 @@ where
     let wallet = EthereumWallet::from(signer);
     ProviderBuilder::new()
         .wallet(wallet.clone())
-        .on_http(rpc_url.try_into().unwrap())
+        .connect_http(rpc_url.try_into().unwrap())
         .root()
         .clone()
 }
@@ -119,7 +119,7 @@ pub async fn wait_transaction(
         .map_err(|_| TransportErrorKind::custom_str("Invalid RPC URL"))?;
     let root_provider = ProviderBuilder::new()
         .disable_recommended_fillers()
-        .on_http(url);
+        .connect_http(url);
     let pending_tx = PendingTransactionBuilder::new(root_provider, tx_hash);
     pending_tx.get_receipt().await
 }

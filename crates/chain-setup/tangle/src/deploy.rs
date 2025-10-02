@@ -438,7 +438,7 @@ async fn deploy_contracts_to_tangle(
     let provider = alloy_provider::ProviderBuilder::new()
         .network::<AnyNetwork>()
         .wallet(wallet)
-        .on_ws(WsConnect::new(rpc_url))
+        .connect_ws(WsConnect::new(rpc_url))
         .await?;
 
     let chain_id = provider.get_chain_id().await?;

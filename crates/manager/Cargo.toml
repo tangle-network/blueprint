@@ -75,7 +75,7 @@ netdev = { workspace = true, features = ["gateway"], optional = true }
 nftables = { workspace = true, optional = true }
 
 [features]
-default = ["vm-sandbox"]
+default = []
 
 ## Enable the VM sandbox
 ##
