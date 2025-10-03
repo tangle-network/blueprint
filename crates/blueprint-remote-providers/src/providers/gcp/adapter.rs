@@ -47,10 +47,6 @@ impl GcpAdapter {
         }
     }
 
-    /// Get SSH username for Ubuntu instances
-    fn get_ssh_username(&self) -> &'static str {
-        "ubuntu"
-    }
 
     /// Create secure firewall rules for blueprint deployment
     async fn ensure_firewall_rules(&self) -> Result<()> {
@@ -327,54 +323,29 @@ impl GcpAdapter {
     /// Deploy to GKE cluster
     async fn deploy_to_gke(
         &self,
-        _cluster_id: &str,
-        _namespace: &str,
-        _blueprint_image: &str,
-        _resource_spec: &ResourceSpec,
+        cluster_id: &str,
+        namespace: &str,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
         _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
-            use crate::deployment::KubernetesDeploymentClient;
+            use crate::shared::{SharedKubernetesDeployment, ManagedK8sConfig};
 
-            info!("Deploying to GKE cluster: {}", cluster_id);
-
-            let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
-            let (deployment_id, exposed_ports) = k8s_client
-                .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
-                .await?;
-
-            let mut port_mappings = HashMap::new();
-            for port in exposed_ports {
-                port_mappings.insert(port, port);
-            }
-
-            let mut metadata = HashMap::new();
-            metadata.insert("provider".to_string(), "gcp-gke".to_string());
-            metadata.insert("project_id".to_string(), self.project_id.clone());
-            metadata.insert("cluster_id".to_string(), cluster_id.to_string());
-            metadata.insert("namespace".to_string(), namespace.to_string());
-
-            let instance = ProvisionedInstance {
-                id: format!("gke-{}", cluster_id),
-                public_ip: None,
-                private_ip: None,
-                status: InstanceStatus::Running,
-                provider: crate::core::remote::CloudProvider::GCP,
-                region: "us-central1".to_string(),
-                instance_type: "gke-cluster".to_string(),
-            };
-
-            Ok(BlueprintDeploymentResult {
-                instance,
-                blueprint_id: deployment_id,
-                port_mappings,
-                metadata,
-            })
+            let config = ManagedK8sConfig::gke(&self.project_id, "us-central1");
+            SharedKubernetesDeployment::deploy_to_managed_k8s(
+                cluster_id,
+                namespace,
+                blueprint_image,
+                resource_spec,
+                config,
+            ).await
         }
-        
+
         #[cfg(not(feature = "kubernetes"))]
         {
+            let _ = (cluster_id, namespace, blueprint_image, resource_spec); // Suppress unused warnings
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
@@ -384,51 +355,25 @@ impl GcpAdapter {
     /// Deploy to generic Kubernetes cluster
     async fn deploy_to_generic_k8s(
         &self,
-        _namespace: &str,
-        _blueprint_image: &str,
-        _resource_spec: &ResourceSpec,
+        namespace: &str,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
         _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
-            use crate::deployment::KubernetesDeploymentClient;
+            use crate::shared::SharedKubernetesDeployment;
 
-            info!("Deploying to generic Kubernetes namespace: {}", namespace);
-
-            let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
-            let (deployment_id, exposed_ports) = k8s_client
-                .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
-                .await?;
-
-            let mut port_mappings = HashMap::new();
-            for port in exposed_ports {
-                port_mappings.insert(port, port);
-            }
-
-            let mut metadata = HashMap::new();
-            metadata.insert("provider".to_string(), "generic-k8s".to_string());
-            metadata.insert("namespace".to_string(), namespace.to_string());
-
-            let instance = ProvisionedInstance {
-                id: format!("k8s-{}", namespace),
-                public_ip: None,
-                private_ip: None,
-                status: InstanceStatus::Running,
-                provider: crate::core::remote::CloudProvider::Generic,
-                region: "generic".to_string(),
-                instance_type: "kubernetes-cluster".to_string(),
-            };
-
-            Ok(BlueprintDeploymentResult {
-                instance,
-                blueprint_id: deployment_id,
-                port_mappings,
-                metadata,
-            })
+            SharedKubernetesDeployment::deploy_to_generic_k8s(
+                namespace,
+                blueprint_image,
+                resource_spec,
+            ).await
         }
-        
+
         #[cfg(not(feature = "kubernetes"))]
         {
+            let _ = (namespace, blueprint_image, resource_spec); // Suppress unused warnings
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))

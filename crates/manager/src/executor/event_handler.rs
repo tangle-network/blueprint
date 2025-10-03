@@ -16,7 +16,7 @@ use blueprint_std::fmt::Debug;
 use tangle_subxt::subxt::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{BlueprintSource, NativeFetcher};
 use tangle_subxt::tangle_testnet_runtime::api::services::events::{
-    JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
+    JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, ServiceTerminated, Unregistered,
 };
 use crate::rt::ResourceLimits;
 use crate::rt::service::Status;
@@ -210,6 +210,8 @@ pub struct EventPollResult {
     pub blueprint_registrations: Vec<u64>,
     #[cfg(feature = "remote-providers")]
     pub service_initiated: Vec<ServiceInitiated>,
+    #[cfg(feature = "remote-providers")]
+    pub service_terminated: Vec<ServiceTerminated>,
 }
 
 pub(crate) fn check_blueprint_events(
@@ -221,6 +223,7 @@ pub(crate) fn check_blueprint_events(
     let registered_events = event.events.find::<Registered>();
     let unregistered_events = event.events.find::<Unregistered>();
     let service_initiated_events = event.events.find::<ServiceInitiated>();
+    let service_terminated_events = event.events.find::<ServiceTerminated>();
     let job_called_events = event.events.find::<JobCalled>();
     let job_result_submitted_events = event.events.find::<JobResultSubmitted>();
 
@@ -291,6 +294,29 @@ pub(crate) fn check_blueprint_events(
             }
             Err(err) => {
                 warn!("Error handling service initiated event: {err:?}");
+            }
+        }
+    }
+
+    // Handle service terminated events
+    for evt in service_terminated_events {
+        match evt {
+            Ok(evt) => {
+                info!("Service terminated event: {evt:?}");
+                info!(
+                    "Service terminated - blueprint_id: {}, service_id: {}, owner: {:?}",
+                    evt.blueprint_id, evt.service_id, evt.owner
+                );
+                result.needs_update = true;
+
+                #[cfg(feature = "remote-providers")]
+                {
+                    // Store event data for remote provider handling
+                    result.service_terminated.push(evt);
+                }
+            }
+            Err(err) => {
+                warn!("Error handling service terminated event: {err:?}");
             }
         }
     }

@@ -1,9 +1,16 @@
 
+use crate::core::error::{Error, Result};
 #[cfg(feature = "kubernetes")]
 use kube::{Client, Config};
+#[cfg(feature = "kubernetes")]
+use kube::config::Kubeconfig;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::info;
 
 /// Manages remote Kubernetes clusters for Blueprint deployments
 #[cfg(feature = "kubernetes")]
@@ -45,7 +52,7 @@ impl RemoteClusterManager {
         };
 
         // If a specific context is requested, switch to it
-        let kube_config = if let Some(context_name) = config.context {
+        let kube_config = if let Some(ref context_name) = config.context {
             // Load the full kubeconfig to access all contexts
             let kubeconfig_yaml = if let Some(ref path) = config.kubeconfig_path {
                 std::fs::read_to_string(path)
@@ -61,10 +68,10 @@ impl RemoteClusterManager {
                 .map_err(|e| Error::Other(format!("Failed to parse kubeconfig: {}", e)))?;
 
             // Set the current context to the requested one
-            if !kubeconfig.contexts.iter().any(|c| c.name == context_name) {
+            if !kubeconfig.contexts.iter().any(|c| c.name == *context_name) {
                 return Err(Error::Other(format!("Context '{}' not found in kubeconfig", context_name)));
             }
-            kubeconfig.current_context = Some(context_name);
+            kubeconfig.current_context = Some(context_name.clone());
 
             Config::from_custom_kubeconfig(kubeconfig, &Default::default()).await?
         } else {
@@ -74,7 +81,6 @@ impl RemoteClusterManager {
         let client = Client::try_from(kube_config)?;
 
         let cluster = RemoteCluster {
-            name: name.clone(),
             config,
             client,
         };
@@ -144,7 +150,6 @@ impl RemoteClusterManager {
 
 #[cfg(feature = "kubernetes")]
 struct RemoteCluster {
-    name: String,
     config: KubernetesClusterConfig,
     client: Client,
 }

@@ -2,6 +2,7 @@
 
 pub mod error_recovery;
 pub mod manager_integration;
+pub mod qos_tunnel;
 pub mod secure_commands;
 pub mod secure_ssh;
 pub mod ssh;
@@ -13,6 +14,7 @@ pub mod kubernetes;
 
 pub use error_recovery::{ErrorRecovery, RecoveryStrategy, SshConnectionRecovery, CircuitBreaker, DeploymentTransaction};
 pub use manager_integration::{RemoteDeploymentConfig, RemoteDeploymentExtensions};
+pub use qos_tunnel::{QosTunnel, QosTunnelManager};
 pub use ssh::SshDeploymentClient;
 pub use tracker::{DeploymentRecord, DeploymentTracker, DeploymentType};
 pub use update_manager::{UpdateManager, UpdateStrategy, DeploymentVersion};

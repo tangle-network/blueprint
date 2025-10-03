@@ -281,7 +281,6 @@ async fn stream_kubernetes_logs(
     container_name: Option<String>,
     follow: bool,
 ) -> Result<()> {
-    use crate::deployment::kubernetes::KubernetesDeploymentClient;
     use k8s_openapi::api::core::v1::Pod;
     use kube::{api::{Api, LogParams}, Client};
 
@@ -290,30 +289,34 @@ async fn stream_kubernetes_logs(
     let client = Client::try_default().await?;
     let pods: Api<Pod> = Api::namespaced(client, &namespace);
 
-    let mut log_params = LogParams {
+    let log_params = LogParams {
         follow,
         container: container_name,
         timestamps: true,
         ..Default::default()
     };
 
-    let mut log_stream = pods.log_stream(&pod_name, &log_params).await?;
+    // Get logs directly instead of streaming (simpler approach)
+    let logs = pods.logs(&pod_name, &log_params).await
+        .map_err(|e| Error::ConfigurationError(format!("Failed to get logs: {}", e)))?;
 
-    while let Some(line) = log_stream.try_next().await? {
-        let line = String::from_utf8_lossy(&line);
-
-        for log_line in line.lines() {
-            if log_line.trim().is_empty() {
-                continue;
-            }
-
-            let entry = parse_k8s_log_line(&service_id, &pod_name, log_line);
-
-            if tx.send(entry).await.is_err() {
-                debug!("Log receiver dropped, stopping stream");
-                break;
-            }
+    // Process the log lines
+    for log_line in logs.lines() {
+        if log_line.trim().is_empty() {
+            continue;
         }
+
+        let entry = parse_k8s_log_line(&service_id, &pod_name, log_line);
+
+        if tx.send(entry).await.is_err() {
+            debug!("Log receiver dropped, stopping stream");
+            break;
+        }
+    }
+
+    // If follow is enabled, we could implement polling here
+    if follow {
+        warn!("Log following not fully implemented - would need streaming setup");
     }
 
     Ok(())

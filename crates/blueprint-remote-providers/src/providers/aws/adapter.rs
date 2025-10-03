@@ -2,8 +2,6 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
-#[cfg(feature = "kubernetes")]
-use crate::deployment::KubernetesDeploymentClient;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::aws::provisioner::AwsProvisioner;
@@ -48,10 +46,6 @@ impl AwsAdapter {
         }
     }
 
-    /// Get SSH username for Amazon Linux
-    fn get_ssh_username(&self) -> &'static str {
-        "ec2-user"
-    }
 
     /// Create restrictive security configuration
     async fn ensure_security_group(&self) -> Result<String> {
@@ -243,113 +237,56 @@ impl AwsAdapter {
     async fn deploy_to_eks(
         &self,
         cluster_id: &str,
-        _namespace: &str,
-        _blueprint_image: &str,
-        _resource_spec: &ResourceSpec,
+        namespace: &str,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
         _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
-        use crate::deployment::kubernetes::KubernetesDeploymentClient;
+        {
+            use crate::shared::{SharedKubernetesDeployment, ManagedK8sConfig};
 
-        // Configure kubectl context for EKS cluster
-        // In production, would run: aws eks update-kubeconfig --region {region} --name {cluster_id}
-        info!("Deploying to EKS cluster: {}", cluster_id);
+            let config = ManagedK8sConfig::eks("us-east-1"); // Use default region for now
+            SharedKubernetesDeployment::deploy_to_managed_k8s(
+                cluster_id,
+                namespace,
+                blueprint_image,
+                resource_spec,
+                config,
+            ).await
+        }
 
-        #[cfg(feature = "kubernetes")]
-        let (deployment_id, exposed_ports) = {
-            let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
-            k8s_client
-                .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
-                .await?
-        };
-        
         #[cfg(not(feature = "kubernetes"))]
         {
+            let _ = (cluster_id, namespace, blueprint_image, resource_spec); // Suppress unused warnings
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
-        }
-
-        #[cfg(feature = "kubernetes")]
-        {
-            let mut port_mappings = HashMap::new();
-            for port in exposed_ports {
-                port_mappings.insert(port, port); // K8s service ports
-            }
-
-            let mut metadata = HashMap::new();
-            metadata.insert("provider".to_string(), "aws-eks".to_string());
-            metadata.insert("cluster_id".to_string(), cluster_id.to_string());
-            metadata.insert("namespace".to_string(), namespace.to_string());
-
-            // Create mock instance for EKS deployment
-            let instance = ProvisionedInstance {
-                id: format!("eks-{}", cluster_id),
-                public_ip: None, // K8s service handles routing
-                private_ip: None,
-                status: InstanceStatus::Running,
-                provider: crate::core::remote::CloudProvider::AWS,
-                region: "us-east-1".to_string(),
-                instance_type: "eks-cluster".to_string(),
-            };
-
-            Ok(BlueprintDeploymentResult {
-                instance,
-                blueprint_id: deployment_id,
-                port_mappings,
-                metadata,
-            })
         }
     }
 
     /// Deploy to generic Kubernetes cluster
     async fn deploy_to_generic_k8s(
         &self,
-        _namespace: &str,
-        _blueprint_image: &str,
-        _resource_spec: &ResourceSpec,
+        namespace: &str,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
         _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
-            use crate::deployment::KubernetesDeploymentClient;
+            use crate::shared::SharedKubernetesDeployment;
 
-            info!("Deploying to generic Kubernetes namespace: {}", namespace);
-
-            let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
-            let (deployment_id, exposed_ports) = k8s_client
-                .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
-                .await?;
-
-            let mut port_mappings = HashMap::new();
-            for port in exposed_ports {
-                port_mappings.insert(port, port);
-            }
-
-            let mut metadata = HashMap::new();
-            metadata.insert("provider".to_string(), "generic-k8s".to_string());
-            metadata.insert("namespace".to_string(), namespace.to_string());
-
-            let instance = ProvisionedInstance {
-                id: format!("k8s-{}", namespace),
-                public_ip: None,
-                private_ip: None,
-                status: InstanceStatus::Running,
-                provider: crate::core::remote::CloudProvider::Generic,
-                region: "generic".to_string(),
-                instance_type: "kubernetes-cluster".to_string(),
-            };
-
-            Ok(BlueprintDeploymentResult {
-                instance,
-                blueprint_id: deployment_id,
-                port_mappings,
-                metadata,
-            })
+            SharedKubernetesDeployment::deploy_to_generic_k8s(
+                namespace,
+                blueprint_image,
+                resource_spec,
+            ).await
         }
-        
+
         #[cfg(not(feature = "kubernetes"))]
         {
+            let _ = (namespace, blueprint_image, resource_spec); // Suppress unused warnings
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))

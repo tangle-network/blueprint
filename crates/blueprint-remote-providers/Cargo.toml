@@ -85,6 +85,7 @@ http = "1.0"
 # Additional dependencies for integration tests
 chrono = { workspace = true, features = ["serde", "clock"] }
 rand = "0.8"
+tracing-subscriber.workspace = true
 # For regex in wiremock matchers
 regex = "1.10"
 # For container-based testing
@@ -106,9 +107,6 @@ docker = ["dep:bollard"]
 pricing = ["dep:blueprint-pricing-engine"]
 testing = []
 
-[[example]]
-name = "manager_integration"
-required-features = ["aws", "kubernetes"]
 
 [package.metadata.docs.rs]
 all-features = true

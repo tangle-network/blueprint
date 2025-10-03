@@ -7,7 +7,6 @@ use blueprint_remote_providers::{
     // providers::aws::provisioner::AwsProvisioner,
     // providers::gcp::provisioner::GcpProvisioner,
     core::{resources::ResourceSpec, remote::CloudProvider},
-    infra::provisioner::CloudProvisioner,
 };
 use std::time::Duration;
 use tokio::time::timeout;
@@ -169,10 +168,19 @@ mod aws_sdk_tests {
         spec: &ResourceSpec,
     ) -> Result<String, Box<dyn std::error::Error>> {
         // Use the real provisioning logic with test client
+        // Map ResourceSpec to appropriate instance type
+        let instance_type = if spec.cpu >= 4.0 {
+            aws_sdk_ec2::types::InstanceType::T3Large
+        } else if spec.cpu >= 2.0 {
+            aws_sdk_ec2::types::InstanceType::T3Medium
+        } else {
+            aws_sdk_ec2::types::InstanceType::T3Micro
+        };
+
         let run_result = client
             .run_instances()
             .image_id("ami-12345678")
-            .instance_type(aws_sdk_ec2::types::InstanceType::T3Micro)
+            .instance_type(instance_type)
             .min_count(1)
             .max_count(1)
             .send()
@@ -192,6 +200,12 @@ mod aws_sdk_tests {
             .instance_ids(instance_id)
             .send()
             .await?;
+
+        // Validate the describe response
+        let reservations = describe_result.reservations();
+        if reservations.is_empty() {
+            return Err("No reservations found in describe response".into());
+        }
 
         println!("✅ Instance provisioned and described successfully");
 
@@ -254,14 +268,6 @@ async fn test_multi_provider_real_sdk_integration() {
 
     use blueprint_remote_providers::pricing::fetcher::PricingFetcher;
     use blueprint_remote_providers::infra::mapper::InstanceTypeMapper;
-
-    let provisioner = match CloudProvisioner::new().await {
-        Ok(p) => p,
-        Err(e) => {
-            println!("⚠️  Could not create provisioner: {e}");
-            return;
-        }
-    };
 
     let spec = ResourceSpec::basic();
     let mut pricing_fetcher = PricingFetcher::new();

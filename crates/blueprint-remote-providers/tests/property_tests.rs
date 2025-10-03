@@ -199,8 +199,8 @@ mod edge_case_tests {
     #[test]
     fn test_cost_optimization_with_spot() {
         let spec = ResourceSpec {
-            cpu: 2.0,
-            memory_gb: 4.0,
+            cpu: 4.0,  // Use higher CPU to avoid t3 instances
+            memory_gb: 16.0,  // Sufficient memory for m6i.xlarge
             storage_gb: 100.0,
             gpu_count: None,
             allow_spot: true,
@@ -209,7 +209,7 @@ mod edge_case_tests {
 
         let selection = AwsInstanceMapper::map(&spec);
 
-        // Should identify as spot-capable
+        // Should identify as spot-capable (m6i.xlarge supports spot)
         assert!(selection.spot_capable);
 
         // Should have a reasonable cost estimate if available

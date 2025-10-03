@@ -56,6 +56,9 @@ impl AwsInstanceMapper {
             (_, _, Some(gpu_count)) if gpu_count >= 4 => "p3.8xlarge",
             (_, _, Some(gpu_count)) if gpu_count >= 1 => "g4dn.xlarge",
 
+            // Memory optimized - check this BEFORE general CPU/memory patterns
+            (cpu, mem, _) if mem > cpu * 8.0 => "r6i.2xlarge", // Memory optimized
+
             // CPU/Memory optimized - use modern instance types
             (cpu, mem, _) if cpu <= 1.0 && mem <= 2.0 => "t3.small",
             (cpu, mem, _) if cpu <= 2.0 && mem <= 4.0 => "t3.medium",
@@ -63,14 +66,21 @@ impl AwsInstanceMapper {
             (cpu, mem, _) if cpu <= 4.0 && mem <= 16.0 => "m6i.xlarge",
             (cpu, mem, _) if cpu <= 8.0 && mem <= 32.0 => "m6i.2xlarge",
             (cpu, mem, _) if cpu <= 16.0 && mem <= 64.0 => "m6i.4xlarge",
-            (cpu, mem, _) if mem > cpu * 8.0 => "r6i.2xlarge", // Memory optimized
             (cpu, _, _) if cpu > 48.0 => "c6i.12xlarge",       // Compute optimized
             _ => "m6i.large",
         };
 
+        // Spot capability logic:
+        // - No spot for GPU instances (any instance with GPU)
+        // - No spot for small instances (t3.small, t3.medium for reliability)
+        // - Only allow spot for larger instances when explicitly requested
+        let spot_capable = spec.allow_spot
+            && gpu_count.is_none() // No GPU instances
+            && !matches!(instance_type, "t3.small" | "t3.medium"); // No small instances
+
         InstanceSelection {
             instance_type: instance_type.to_string(),
-            spot_capable: spec.allow_spot && !instance_type.starts_with('p'),
+            spot_capable,
             estimated_hourly_cost: None, // Use map_async for real pricing
         }
     }

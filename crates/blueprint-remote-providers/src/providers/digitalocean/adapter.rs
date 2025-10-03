@@ -13,7 +13,6 @@ use tracing::{info, warn};
 #[derive(Debug)]
 pub struct DigitalOceanAdapter {
     provisioner: DigitalOceanProvisioner,
-    security_manager: Option<crate::shared::DigitalOceanFirewallManager>,
 }
 
 impl DigitalOceanAdapter {
@@ -24,37 +23,13 @@ impl DigitalOceanAdapter {
 
         let default_region = std::env::var("DO_REGION").unwrap_or_else(|_| "nyc3".to_string());
 
-        let provisioner = DigitalOceanProvisioner::new(api_token.clone(), default_region).await?;
-        let security_manager = Some(crate::shared::DigitalOceanFirewallManager::new(api_token));
+        let provisioner = DigitalOceanProvisioner::new(api_token, default_region).await?;
 
         Ok(Self {
             provisioner,
-            security_manager,
         })
     }
 
-    /// Ensure firewall is configured
-    async fn ensure_firewall(&self) -> Result<Option<String>> {
-        if let Some(ref manager) = self.security_manager {
-            use crate::shared::{BlueprintSecurityConfig, SecurityGroupManager};
-
-            let config = BlueprintSecurityConfig::default();
-            let firewall_name = format!("blueprint-firewall-{}", uuid::Uuid::new_v4());
-
-            match manager.ensure_security_group(&firewall_name, &config).await {
-                Ok(firewall_id) => {
-                    info!("Created DigitalOcean firewall: {}", firewall_id);
-                    Ok(Some(firewall_id))
-                }
-                Err(e) => {
-                    warn!("Failed to create DigitalOcean firewall: {}", e);
-                    Ok(None)
-                }
-            }
-        } else {
-            Ok(None)
-        }
-    }
 
     /// Convert Droplet to ProvisionedInstance
     fn droplet_to_instance(droplet: Droplet) -> ProvisionedInstance {
@@ -237,51 +212,26 @@ impl DigitalOceanAdapter {
     /// Deploy to DOKS cluster
     async fn deploy_to_doks(
         &self,
-        _cluster_id: &str,
-        _namespace: &str,
-        _blueprint_image: &str,
-        _resource_spec: &ResourceSpec,
+        cluster_id: &str,
+        namespace: &str,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
         _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
-            use crate::deployment::KubernetesDeploymentClient;
+            use crate::shared::{SharedKubernetesDeployment, ManagedK8sConfig};
 
-            info!("Deploying to DOKS cluster: {}", cluster_id);
-
-            let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
-            let (deployment_id, exposed_ports) = k8s_client
-                .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
-                .await?;
-
-            let mut port_mappings = HashMap::new();
-            for port in exposed_ports {
-                port_mappings.insert(port, port);
-            }
-
-            let mut metadata = HashMap::new();
-            metadata.insert("provider".to_string(), "digitalocean-doks".to_string());
-            metadata.insert("cluster_id".to_string(), cluster_id.to_string());
-            metadata.insert("namespace".to_string(), namespace.to_string());
-
-            let instance = ProvisionedInstance {
-                id: format!("doks-{}", cluster_id),
-                public_ip: None,
-                private_ip: None,
-                status: InstanceStatus::Running,
-                provider: crate::core::remote::CloudProvider::DigitalOcean,
-                region: "nyc3".to_string(),
-                instance_type: "doks-cluster".to_string(),
-            };
-
-            Ok(BlueprintDeploymentResult {
-                instance,
-                blueprint_id: deployment_id,
-                port_mappings,
-                metadata,
-            })
+            let config = ManagedK8sConfig::doks("nyc3");
+            SharedKubernetesDeployment::deploy_to_managed_k8s(
+                cluster_id,
+                namespace,
+                blueprint_image,
+                resource_spec,
+                config,
+            ).await
         }
-        
+
         #[cfg(not(feature = "kubernetes"))]
         {
             Err(Error::ConfigurationError(
@@ -293,49 +243,21 @@ impl DigitalOceanAdapter {
     /// Deploy to generic Kubernetes cluster
     async fn deploy_to_generic_k8s(
         &self,
-        _namespace: &str,
-        _blueprint_image: &str,
-        _resource_spec: &ResourceSpec,
+        namespace: &str,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
         _env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
-            use crate::deployment::KubernetesDeploymentClient;
-
-            info!("Deploying to generic Kubernetes namespace: {}", namespace);
-
-            let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
-            let (deployment_id, exposed_ports) = k8s_client
-                .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
-                .await?;
-
-            let mut port_mappings = HashMap::new();
-            for port in exposed_ports {
-                port_mappings.insert(port, port);
-            }
-
-            let mut metadata = HashMap::new();
-            metadata.insert("provider".to_string(), "generic-k8s".to_string());
-            metadata.insert("namespace".to_string(), namespace.to_string());
-
-            let instance = ProvisionedInstance {
-                id: format!("k8s-{}", namespace),
-                public_ip: None,
-                private_ip: None,
-                status: InstanceStatus::Running,
-                provider: crate::core::remote::CloudProvider::Generic,
-                region: "generic".to_string(),
-                instance_type: "kubernetes-cluster".to_string(),
-            };
-
-            Ok(BlueprintDeploymentResult {
-                instance,
-                blueprint_id: deployment_id,
-                port_mappings,
-                metadata,
-            })
+            use crate::shared::SharedKubernetesDeployment;
+            SharedKubernetesDeployment::deploy_to_generic_k8s(
+                namespace,
+                blueprint_image,
+                resource_spec,
+            ).await
         }
-        
+
         #[cfg(not(feature = "kubernetes"))]
         {
             Err(Error::ConfigurationError(
