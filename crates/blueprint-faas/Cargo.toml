@@ -39,6 +39,7 @@ aws-smithy-types = { version = "1.2", optional = true }
 [dev-dependencies]
 serial_test.workspace = true
 tokio = { workspace = true, features = ["full", "test-util"] }
+warp = "0.3"
 
 [features]
 default = []
