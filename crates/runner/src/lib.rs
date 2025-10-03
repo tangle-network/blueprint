@@ -902,7 +902,38 @@ where
                                 ?job_call,
                                 "Received a job call"
                             );
-                            pending_jobs.push(tokio::task::spawn(router.call(job_call)));
+
+                            // Check if this job should be delegated to FaaS
+                            let job_id: u32 = job_call.job_id().into();
+                            if faas_registry.is_faas_job(job_id) {
+                                let executor = faas_registry.get(job_id)
+                                    .expect("FaaS executor exists for registered job ID")
+                                    .clone();
+
+                                blueprint_core::info!(
+                                    target: "blueprint-runner",
+                                    job_id = %job_call.job_id(),
+                                    provider = executor.provider_name(),
+                                    "Delegating job to FaaS executor"
+                                );
+
+                                pending_jobs.push(tokio::task::spawn(async move {
+                                    match executor.invoke(job_call).await {
+                                        Ok(result) => Ok(Some(vec![result])),
+                                        Err(e) => {
+                                            blueprint_core::error!(
+                                                target: "blueprint-runner",
+                                                error = %e,
+                                                "FaaS invocation failed"
+                                            );
+                                            Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                                        }
+                                    }
+                                }));
+                            } else {
+                                // Normal local execution via router
+                                pending_jobs.push(tokio::task::spawn(router.call(job_call)));
+                            }
                         },
                         Some(Err(e)) => {
                             blueprint_core::error!(target: "blueprint-runner", "Producer error: {:?}", e);
