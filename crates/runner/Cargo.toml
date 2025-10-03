@@ -20,6 +20,7 @@ blueprint-keystore = { workspace = true }
 blueprint-crypto = { workspace = true }
 blueprint-qos = { workspace = true }
 blueprint-manager-bridge = { workspace = true, features = ["client"] }
+blueprint-faas = { workspace = true, optional = true }
 
 futures-core.workspace = true
 futures-util.workspace = true
@@ -113,6 +114,9 @@ eigenlayer = [
 ##
 ## [Symbiotic]: https://symbiotic.fi
 symbiotic = []
+
+## Enable FaaS (Function-as-a-Service) execution support
+faas = ["dep:blueprint-faas"]
 
 [package.metadata.docs.rs]
 all-features = true

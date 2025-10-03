@@ -12,7 +12,6 @@ rust-version.workspace = true
 [dependencies]
 # Core dependencies
 blueprint-core.workspace = true
-blueprint-runner.workspace = true
 
 async-trait.workspace = true
 serde.workspace = true
@@ -42,7 +41,8 @@ tokio = { workspace = true, features = ["full", "test-util"] }
 warp = "0.3"
 
 [features]
-default = []
+default = ["std"]
+std = ["serde_json/std"]
 aws = ["dep:aws-config", "dep:aws-sdk-lambda", "dep:aws-smithy-types"]
 gcp = []  # Stub implementation
 azure = []  # Stub implementation

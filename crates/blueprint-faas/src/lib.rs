@@ -33,9 +33,13 @@
 #![cfg_attr(not(test), warn(missing_docs))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-// Re-export the core FaaS types from blueprint-runner
-pub use blueprint_runner::faas::{
+// Core FaaS abstractions
+pub mod core;
+
+// Re-export core types for convenience
+pub use core::{
     FaasConfig, FaasDeployment, FaasError, FaasExecutor, FaasMetrics, FaasRegistry,
+    DynFaasExecutor,
 };
 
 #[cfg(feature = "aws")]
