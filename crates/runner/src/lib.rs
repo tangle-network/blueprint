@@ -11,6 +11,7 @@ extern crate alloc;
 
 pub mod config;
 pub mod error;
+pub mod faas;
 pub mod metrics_server;
 
 #[cfg(feature = "eigenlayer")]
@@ -130,6 +131,7 @@ pub struct BlueprintRunnerBuilder<F> {
     router: Option<Router>,
     background_services: Vec<Box<DynBackgroundService<'static>>>,
     shutdown_handler: F,
+    faas_registry: faas::FaasRegistry,
 }
 
 impl<F> BlueprintRunnerBuilder<F>
@@ -593,6 +595,32 @@ where
     ///     // ...
     /// }
     /// ```
+    #[must_use]
+    pub fn with_faas_executor(
+        mut self,
+        job_id: u32,
+        executor: impl faas::FaasExecutor + 'static,
+    ) -> Self {
+        self.faas_registry.register(job_id, Arc::new(executor));
+        self
+    }
+
+    /// Register multiple jobs to use FaaS execution
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use blueprint_runner::BlueprintRunner;
+    /// use blueprint_faas_lambda::LambdaExecutor;
+    ///
+    /// let lambda = LambdaExecutor::new("us-east-1").await?;
+    ///
+    /// BlueprintRunner::builder(config, env)
+    ///     .router(router)
+    ///     .with_faas_executor(0, lambda.clone())  // Job 0 runs on Lambda
+    ///     .with_faas_executor(3, lambda.clone())  // Job 3 runs on Lambda
+    ///     .run().await
+    /// ```
     pub fn with_shutdown_handler<F2>(self, handler: F2) -> BlueprintRunnerBuilder<F2>
     where
         F2: Future<Output = ()> + Send + 'static,
@@ -605,6 +633,7 @@ where
             router: self.router,
             background_services: self.background_services,
             shutdown_handler: handler,
+            faas_registry: self.faas_registry,
         }
     }
 
@@ -633,6 +662,7 @@ where
             env: self.env,
             background_services: self.background_services,
             shutdown_handler: self.shutdown_handler,
+            faas_registry: self.faas_registry,
         };
 
         runner.run().await
@@ -753,6 +783,7 @@ impl BlueprintRunner {
             router: None,
             background_services: Vec::new(),
             shutdown_handler: future::pending(),
+            faas_registry: faas::FaasRegistry::new(),
         }
     }
 }
@@ -765,6 +796,7 @@ struct FinalizedBlueprintRunner<F> {
     env: BlueprintEnvironment,
     background_services: Vec<Box<DynBackgroundService<'static>>>,
     shutdown_handler: F,
+    faas_registry: faas::FaasRegistry,
 }
 
 impl<F> FinalizedBlueprintRunner<F>
@@ -789,6 +821,7 @@ where
             env,
             background_services,
             shutdown_handler,
+            faas_registry,
         } = self;
 
         let mut router = router.as_service();

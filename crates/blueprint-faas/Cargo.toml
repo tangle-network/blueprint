@@ -1,0 +1,49 @@
+[package]
+name = "blueprint-faas"
+version = "0.1.0-alpha.1"
+description = "FaaS provider integrations for Blueprint SDK"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Core dependencies
+blueprint-core.workspace = true
+blueprint-runner.workspace = true
+
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+futures.workspace = true
+
+# HTTP client for custom FaaS
+reqwest = { version = "0.12", features = ["json"], optional = true }
+
+# For creating Lambda deployment packages
+zip = "2.2"
+
+# AWS SDK
+aws-config = { version = "1.5", optional = true }
+aws-sdk-lambda = { version = "1.52", optional = true }
+aws-smithy-types = { version = "1.2", optional = true }
+
+# GCP - stub implementation, no dependencies yet
+# Azure - stub implementation, no dependencies yet
+
+[dev-dependencies]
+serial_test.workspace = true
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[features]
+default = []
+aws = ["dep:aws-config", "dep:aws-sdk-lambda", "dep:aws-smithy-types"]
+gcp = []  # Stub implementation
+azure = []  # Stub implementation
+custom = ["dep:reqwest"]
+all = ["aws", "gcp", "azure", "custom"]

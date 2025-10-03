@@ -26,7 +26,9 @@ futures-util.workspace = true
 tower.workspace = true
 tokio = { workspace = true, features = ["full"] }
 serde.workspace = true
+serde_json.workspace = true
 tracing.workspace = true
+async-trait.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 futures.workspace = true
 thiserror.workspace = true

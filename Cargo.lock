@@ -1053,6 +1053,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arbitrary"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
+dependencies = [
+ "derive_arbitrary",
+]
+
+[[package]]
 name = "ark-bls12-377"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2147,6 +2156,29 @@ dependencies = [
  "aws-credential-types",
  "aws-runtime",
  "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand",
+ "http 0.2.12",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
+name = "aws-sdk-lambda"
+version = "1.96.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df0b8bfc758b26ffccb41273e61eed087556dc9db9cd693c6b64dbb5d301312d"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-eventstream",
  "aws-smithy-http",
  "aws-smithy-json",
  "aws-smithy-runtime",
@@ -3491,6 +3523,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "blueprint-faas"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "async-trait",
+ "aws-config",
+ "aws-sdk-lambda",
+ "aws-smithy-types",
+ "blueprint-core",
+ "blueprint-runner",
+ "futures",
+ "reqwest 0.12.23",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "thiserror 2.0.16",
+ "tokio",
+ "tracing",
+ "zip 2.4.2",
+]
+
+[[package]]
 name = "blueprint-keystore"
 version = "0.1.0-alpha.14"
 dependencies = [
@@ -3916,6 +3969,7 @@ dependencies = [
  "alloy-primitives 0.8.25",
  "alloy-signer",
  "alloy-signer-local",
+ "async-trait",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-evm-extra",
@@ -3939,6 +3993,7 @@ dependencies = [
  "libp2p",
  "sc-keystore",
  "serde",
+ "serde_json",
  "tangle-subxt",
  "thiserror 2.0.16",
  "tokio",
@@ -4503,6 +4558,15 @@ checksum = "bdb116a6ef3f6c3698828873ad02c3014b3c85cadb88496095628e3ef1e347f8"
 dependencies = [
  "bzip2-sys",
  "libc",
+]
+
+[[package]]
+name = "bzip2"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49ecfb22d906f800d4fe833b6282cf4dc1c298f5057ca0b5445e5c209735ca47"
+dependencies = [
+ "bzip2-sys",
 ]
 
 [[package]]
@@ -6142,6 +6206,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
 
 [[package]]
+name = "deflate64"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26bf8fc351c5ed29b5c2f0cbbac1b209b74f60ecd62e675a998df72c49af5204"
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6203,6 +6273,17 @@ name = "derive-where"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef941ded77d15ca19b40374869ac6000af1c9f2a4c0f3d4c70926287e6364a8f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
+]
+
+[[package]]
+name = "derive_arbitrary"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e567bd82dcff979e4b03460c307b3cdc9e96fde3d73bed1496d2bc75d9dd62a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -11460,6 +11541,16 @@ checksum = "6bd8c0d6c6ed0cd30b3652886bb8711dc4bb01d637a68105a3d5158039b418e6"
 dependencies = [
  "cc",
  "libc",
+]
+
+[[package]]
+name = "lzma-rs"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "297e814c836ae64db86b36cf2a557ba54368d03f6afcd7d947c266692f71115e"
+dependencies = [
+ "byteorder",
+ "crc",
 ]
 
 [[package]]
@@ -18505,6 +18596,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "simd-adler32"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
+
+[[package]]
 name = "similar"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20383,7 +20480,7 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 1.0.69",
  "url",
- "zip",
+ "zip 0.6.6",
 ]
 
 [[package]]
@@ -23317,7 +23414,7 @@ checksum = "760394e246e4c28189f19d488c058bf16f564016aefac5d32bb1f3b51d5e9261"
 dependencies = [
  "aes",
  "byteorder",
- "bzip2",
+ "bzip2 0.4.4",
  "constant_time_eq 0.1.5",
  "crc32fast",
  "crossbeam-utils",
@@ -23327,6 +23424,48 @@ dependencies = [
  "sha1",
  "time",
  "zstd 0.11.2+zstd.1.5.2",
+]
+
+[[package]]
+name = "zip"
+version = "2.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fabe6324e908f85a1c52063ce7aa26b68dcb7eb6dbc83a2d148403c9bc3eba50"
+dependencies = [
+ "aes",
+ "arbitrary",
+ "bzip2 0.5.2",
+ "constant_time_eq 0.3.1",
+ "crc32fast",
+ "crossbeam-utils",
+ "deflate64",
+ "displaydoc",
+ "flate2",
+ "getrandom 0.3.3",
+ "hmac 0.12.1",
+ "indexmap 2.11.0",
+ "lzma-rs",
+ "memchr",
+ "pbkdf2 0.12.2",
+ "sha1",
+ "thiserror 2.0.16",
+ "time",
+ "xz2",
+ "zeroize",
+ "zopfli",
+ "zstd 0.13.3",
+]
+
+[[package]]
+name = "zopfli"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edfc5ee405f504cd4984ecc6f14d02d55cfda60fa4b689434ef4102aae150cd7"
+dependencies = [
+ "bumpalo",
+ "crc32fast",
+ "log",
+ "simd-adler32",
 ]
 
 [[package]]
@@ -23348,6 +23487,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "zstd"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
+dependencies = [
+ "zstd-safe 7.2.4",
+]
+
+[[package]]
 name = "zstd-safe"
 version = "5.0.2+zstd.1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23364,6 +23512,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee98ffd0b48ee95e6c5168188e44a54550b1564d9d530ee21d5f0eaed1069581"
 dependencies = [
  "libc",
+ "zstd-sys",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "7.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f49c4d5f0abb602a93fb8736af2a4f4dd9512e36f7f570d66e65ff867ed3b9d"
+dependencies = [
  "zstd-sys",
 ]
 
