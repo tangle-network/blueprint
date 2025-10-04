@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+<<<<<<< Updated upstream
 ## [0.3.0-alpha.21](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.20...blueprint-manager-v0.3.0-alpha.21) - 2025-10-02
+=======
+## [0.3.0-alpha.21](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.20...blueprint-manager-v0.3.0-alpha.21) - 2025-10-04
+>>>>>>> Stashed changes
 
 ### Added
 

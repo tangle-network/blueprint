@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+<<<<<<< Updated upstream
 ## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-client-evm-v0.1.0-alpha.6...blueprint-client-evm-v0.1.0-alpha.7) - 2025-10-02
+=======
+## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-client-evm-v0.1.0-alpha.6...blueprint-client-evm-v0.1.0-alpha.7) - 2025-10-04
+>>>>>>> Stashed changes
 
 ### Other
 

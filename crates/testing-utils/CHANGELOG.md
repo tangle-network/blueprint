@@ -7,11 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+<<<<<<< Updated upstream
 ## [0.1.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-testing-utils-v0.1.0-alpha.19...blueprint-testing-utils-v0.1.0-alpha.20) - 2025-10-02
 
 ### Other
 
 - updated the following local packages: blueprint-anvil-testing-utils, blueprint-eigenlayer-testing-utils, blueprint-tangle-testing-utils, blueprint-core-testing-utils
+=======
+## [0.1.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-testing-utils-v0.1.0-alpha.19...blueprint-testing-utils-v0.1.0-alpha.20) - 2025-10-04
+
+### Other
+
+- updated the following local packages: blueprint-core-testing-utils, blueprint-anvil-testing-utils, blueprint-eigenlayer-testing-utils, blueprint-tangle-testing-utils
+>>>>>>> Stashed changes
 
 ## [0.1.0-alpha.19](https://github.com/tangle-network/blueprint/compare/blueprint-testing-utils-v0.1.0-alpha.18...blueprint-testing-utils-v0.1.0-alpha.19) - 2025-08-20
 
