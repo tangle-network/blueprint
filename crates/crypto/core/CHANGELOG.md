@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-crypto-core-v0.1.0-alpha.8...blueprint-crypto-core-v0.1.0-alpha.9) - 2025-10-02
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-crypto-core-v0.1.0-alpha.7...blueprint-crypto-core-v0.1.0-alpha.8) - 2025-08-06
 
 ### Other
