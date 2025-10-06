@@ -12,7 +12,7 @@ pub struct AwsInstanceMapper;
 impl AwsInstanceMapper {
     /// Map resource spec to optimal AWS instance type using real pricing data
     pub async fn map_async(spec: &ResourceSpec, region: &str) -> Result<InstanceSelection> {
-        let mut fetcher = PricingFetcher::new();
+        let mut fetcher = PricingFetcher::new_or_default();
 
         // Set reasonable max price based on requirements
         let max_price = if spec.gpu_count.is_some() {

@@ -109,13 +109,32 @@ impl SshDeploymentClient {
         }
     }
 
-    /// Install container runtime on remote host
+    /// Install container runtime on remote host using official package repositories.
+    ///
+    /// This uses OS package managers exclusively to avoid security risks from
+    /// downloading and executing arbitrary scripts from the internet.
     async fn install_runtime(&self) -> Result<()> {
         let install_script = match self.runtime {
             ContainerRuntime::Docker => {
+                // Use official Docker repository via package manager
+                // This is secure as it verifies package signatures and uses trusted repos
                 r#"
-                curl -fsSL https://get.docker.com -o get-docker.sh
-                sudo sh get-docker.sh
+                # Add Docker's official GPG key and repository
+                sudo apt-get update
+                sudo apt-get install -y ca-certificates curl gnupg
+                sudo install -m 0755 -d /etc/apt/keyrings
+                curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+                sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+                # Add Docker repository
+                echo \
+                  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+                  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+                  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+                # Install Docker from official repository
+                sudo apt-get update
+                sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
                 sudo usermod -aG docker $USER
                 sudo systemctl enable docker
                 sudo systemctl start docker

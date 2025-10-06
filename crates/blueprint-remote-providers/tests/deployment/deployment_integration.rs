@@ -261,7 +261,7 @@ async fn test_ttl_deployment_cleanup() {
 async fn test_cost_optimized_deployment() {
     use blueprint_remote_providers::pricing::fetcher::PricingFetcher;
     
-    let mut fetcher = PricingFetcher::new();
+    let mut fetcher = PricingFetcher::new_or_default();
     
     // Find cheapest instance for basic workload
     let spec = ResourceSpec::basic();

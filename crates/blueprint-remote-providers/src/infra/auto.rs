@@ -78,7 +78,7 @@ impl AutoDeploymentManager {
     pub fn new() -> Self {
         Self {
             enabled_providers: Arc::new(RwLock::new(Vec::new())),
-            pricing_fetcher: Arc::new(RwLock::new(PricingFetcher::new())),
+            pricing_fetcher: Arc::new(RwLock::new(PricingFetcher::new_or_default())),
             max_hourly_cost: 1.0,
             deployment_preferences: Arc::new(RwLock::new(DeploymentPreferences::default())),
         }

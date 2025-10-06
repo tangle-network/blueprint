@@ -270,7 +270,7 @@ async fn test_multi_provider_real_sdk_integration() {
     use blueprint_remote_providers::infra::mapper::InstanceTypeMapper;
 
     let spec = ResourceSpec::basic();
-    let mut pricing_fetcher = PricingFetcher::new();
+    let mut pricing_fetcher = PricingFetcher::new_or_default();
 
     // Test provider detection and SDK availability with REAL functionality
     let providers = [
@@ -440,7 +440,7 @@ async fn test_real_cost_estimation_with_blueprint_data() {
     use blueprint_remote_providers::pricing::fetcher::PricingFetcher;
     
 
-    let mut fetcher = PricingFetcher::new();
+    let mut fetcher = PricingFetcher::new_or_default();
 
     // Get real blueprint requirements
     let blueprint_binary = "../../examples/incredible-squaring/target/debug/incredible-squaring-blueprint-bin";
