@@ -318,7 +318,7 @@ alloy-provider = { version = "1.0.35", default-features = false, features = ["re
 alloy-pubsub = { version = "1.0.35", default-features = false }
 alloy-signer = { version = "1.0.35", default-features = false }
 alloy-signer-local = { version = "1.0.35", default-features = false }
-alloy-network = { version = "1.0.35", default-features = false }
+alloy-network = { version = "1.0.36", default-features = false }
 alloy-contract = { version = "1.0.35", default-features = false }
 alloy-consensus = { version = "1.0.35", default-features = false }
 alloy-transport = { version = "1.0.35", default-features = false }
