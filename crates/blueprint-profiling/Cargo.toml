@@ -1,0 +1,21 @@
+[package]
+name = "blueprint-profiling"
+version = "0.1.0"
+edition = "2021"
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+
+# Unix-specific for memory profiling
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3.8"

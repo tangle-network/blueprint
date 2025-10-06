@@ -38,8 +38,8 @@ pub mod core;
 
 // Re-export core types for convenience
 pub use core::{
-    FaasConfig, FaasDeployment, FaasError, FaasExecutor, FaasMetrics, FaasRegistry,
-    DynFaasExecutor,
+    DynFaasExecutor, FaasConfig, FaasDeployment, FaasError, FaasExecutor, FaasMetrics,
+    FaasPayload, FaasRegistry, FaasResponse,
 };
 
 #[cfg(feature = "aws")]
@@ -54,8 +54,90 @@ pub mod azure;
 #[cfg(feature = "custom")]
 pub mod custom;
 
+/// Factory for creating FaaS executors from provider configuration
+#[cfg(any(feature = "aws", feature = "gcp", feature = "azure", feature = "custom"))]
+pub mod factory {
+    use super::*;
+    use std::sync::Arc;
+
+    /// Provider-agnostic FaaS configuration
+    #[derive(Debug, Clone)]
+    pub struct FaasProviderConfig {
+        pub provider: FaasProvider,
+        pub default_memory_mb: u32,
+        pub default_timeout_secs: u32,
+    }
+
+    /// FaaS provider variants
+    #[derive(Debug, Clone)]
+    pub enum FaasProvider {
+        #[cfg(feature = "aws")]
+        AwsLambda { region: String, role_arn: String },
+        #[cfg(feature = "gcp")]
+        GcpFunctions { project_id: String, region: String },
+        #[cfg(feature = "azure")]
+        AzureFunctions {
+            subscription_id: String,
+            region: String,
+        },
+        #[cfg(feature = "custom")]
+        Custom { endpoint: String },
+    }
+
+    /// Create a FaaS executor from provider configuration
+    pub async fn create_executor(
+        provider_config: FaasProviderConfig,
+    ) -> Result<DynFaasExecutor, FaasError> {
+        match provider_config.provider {
+            #[cfg(feature = "aws")]
+            FaasProvider::AwsLambda { region, role_arn } => {
+                let executor = crate::aws::LambdaExecutor::new(&region, role_arn).await?;
+                Ok(Arc::new(executor) as DynFaasExecutor)
+            }
+            #[cfg(feature = "gcp")]
+            FaasProvider::GcpFunctions { project_id, region } => {
+                let executor =
+                    crate::gcp::CloudFunctionExecutor::new(project_id, region).await?;
+                Ok(Arc::new(executor) as DynFaasExecutor)
+            }
+            #[cfg(feature = "azure")]
+            FaasProvider::AzureFunctions {
+                subscription_id,
+                region,
+            } => {
+                let executor =
+                    crate::azure::AzureFunctionExecutor::new(subscription_id, region).await?;
+                Ok(Arc::new(executor) as DynFaasExecutor)
+            }
+            #[cfg(feature = "custom")]
+            FaasProvider::Custom { endpoint } => {
+                let executor = crate::custom::HttpFaasExecutor::new(endpoint);
+                Ok(Arc::new(executor) as DynFaasExecutor)
+            }
+        }
+    }
+
+    /// Deploy a job using provider configuration
+    pub async fn deploy_job(
+        provider_config: FaasProviderConfig,
+        job_id: u32,
+        binary: &[u8],
+    ) -> Result<FaasDeployment, FaasError> {
+        let executor = create_executor(provider_config.clone()).await?;
+
+        let faas_config = FaasConfig {
+            memory_mb: provider_config.default_memory_mb,
+            timeout_secs: provider_config.default_timeout_secs,
+            ..Default::default()
+        };
+
+        executor.deploy_job(job_id, binary, &faas_config).await
+    }
+}
+
 /// Common utilities shared across providers
 mod utils {
+    #[cfg(feature = "aws")]
     use super::*;
 
     /// Create a Lambda deployment package from a binary
@@ -84,6 +166,7 @@ mod utils {
     }
 
     /// Extract job ID from function name
+    #[allow(dead_code)]
     pub(crate) fn extract_job_id(function_name: &str, prefix: &str) -> Option<u32> {
         function_name
             .strip_prefix(&format!("{}-job-", prefix))

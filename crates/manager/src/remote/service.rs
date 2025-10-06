@@ -146,16 +146,47 @@ impl RemoteDeploymentService {
     ) -> Result<Service> {
         info!("Starting remote deployment for service: {}", service_name);
 
-        // 1. Convert Blueprint Manager ResourceLimits to ResourceSpec
+        // 1. Check if serverless deployment is enabled and recommended
+        if let Some(serverless_strategy) = self.should_use_serverless(blueprint_id).await? {
+            match serverless_strategy {
+                super::DeploymentStrategy::Serverless { job_ids } => {
+                    info!("Deploying service '{}' in serverless mode", service_name);
+                    return self
+                        .deploy_serverless_service(
+                            ctx,
+                            service_name,
+                            binary_path,
+                            env_vars,
+                            arguments,
+                            job_ids,
+                        )
+                        .await;
+                }
+                super::DeploymentStrategy::Hybrid { faas_jobs, local_jobs } => {
+                    info!(
+                        "Deploying service '{}' in hybrid mode ({} FaaS, {} local)",
+                        service_name,
+                        faas_jobs.len(),
+                        local_jobs.len()
+                    );
+                    // TODO: Implement hybrid deployment
+                    // For now, fall through to traditional deployment
+                    warn!("Hybrid deployment not yet implemented, using traditional deployment");
+                }
+                _ => {}
+            }
+        }
+
+        // 2. Convert Blueprint Manager ResourceLimits to ResourceSpec
         let resource_spec = self.convert_limits_to_spec(&limits)?;
 
-        // 2. Select deployment target
+        // 3. Select deployment target
         let target = self
             .selector
             .select_target(&resource_spec)
             .map_err(|e| Error::Other(format!("Provider selection failed: {}", e)))?;
 
-        // 3. Deploy based on target type
+        // 4. Deploy based on target type
         match target {
             DeploymentTarget::CloudInstance(provider) => {
                 self.deploy_to_cloud(
@@ -686,6 +717,72 @@ impl ServiceRemoteExt for Service {
             )
             .await
         }
+    }
+}
+
+impl RemoteDeploymentService {
+    /// Check if serverless deployment should be used for this blueprint.
+    async fn should_use_serverless(
+        &self,
+        blueprint_id: Option<u64>,
+    ) -> Result<Option<super::DeploymentStrategy>> {
+        let policy = super::load_policy();
+
+        if !policy.serverless.enable {
+            return Ok(None);
+        }
+
+        let blueprint_id = match blueprint_id {
+            Some(id) => id,
+            None => return Ok(None), // No blueprint ID, can't analyze
+        };
+
+        let metadata = super::fetch_blueprint_metadata(blueprint_id, None).await?;
+        let job_count = metadata.job_count;
+        let job_profiles = &metadata.job_profiles;
+
+        let limits = match &policy.serverless.provider {
+            super::policy_loader::FaasProviderDef::AwsLambda { .. } => {
+                super::FaasLimits::aws_lambda()
+            }
+            super::policy_loader::FaasProviderDef::GcpFunctions { .. } => {
+                super::FaasLimits::gcp_functions()
+            }
+            super::policy_loader::FaasProviderDef::AzureFunctions { .. } => {
+                super::FaasLimits::azure_functions()
+            }
+            super::policy_loader::FaasProviderDef::Custom { .. } => super::FaasLimits::custom(),
+        };
+
+        let analysis = super::analyze_blueprint(job_count, job_profiles, &limits, true);
+        Ok(Some(analysis.recommended_strategy))
+    }
+
+    /// Deploy service in pure serverless mode.
+    async fn deploy_serverless_service(
+        &self,
+        ctx: &BlueprintManagerContext,
+        service_name: &str,
+        binary_path: &Path,
+        env_vars: BlueprintEnvVars,
+        arguments: BlueprintArgs,
+        job_ids: Vec<u32>,
+    ) -> Result<Service> {
+        info!("Deploying serverless service: {}", service_name);
+
+        let policy = super::load_policy();
+        let config: super::ServerlessConfig = policy.serverless.into();
+
+        super::deploy_serverless(
+            ctx,
+            service_name,
+            binary_path,
+            env_vars,
+            arguments,
+            job_ids,
+            &config,
+        )
+        .await
     }
 }
 

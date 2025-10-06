@@ -3,6 +3,8 @@
 //! This module provides the fundamental abstractions for FaaS integration.
 
 use blueprint_core::{JobCall, JobResult};
+use bytes::Bytes;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
 use thiserror::Error;
@@ -78,6 +80,59 @@ pub struct FaasMetrics {
 
     /// Billable duration (provider-specific rounding)
     pub billed_duration_ms: u64,
+}
+
+/// Serializable payload for FaaS invocation
+///
+/// This type extracts the essential data from a `JobCall` for transmission to
+/// the FaaS endpoint. The FaaS runtime can reconstruct a JobCall from this data.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FaasPayload {
+    /// The job ID being invoked
+    pub job_id: u32,
+
+    /// The serialized job arguments (typically SCALE-encoded bytes)
+    #[serde(with = "serde_bytes")]
+    pub args: Vec<u8>,
+}
+
+impl From<JobCall> for FaasPayload {
+    fn from(job_call: JobCall) -> Self {
+        Self {
+            job_id: job_call.job_id().into(),
+            args: job_call.body().to_vec(),
+        }
+    }
+}
+
+/// Serializable response from FaaS invocation
+///
+/// This type represents the result returned from a FaaS endpoint, which can be
+/// converted back into a `JobResult`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FaasResponse {
+    /// The serialized job result (typically SCALE-encoded bytes)
+    #[serde(with = "serde_bytes")]
+    pub result: Vec<u8>,
+}
+
+impl From<FaasResponse> for JobResult {
+    fn from(response: FaasResponse) -> Self {
+        JobResult::new(Bytes::from(response.result))
+    }
+}
+
+impl From<JobResult> for FaasResponse {
+    fn from(job_result: JobResult) -> Self {
+        match job_result.into_parts() {
+            Ok((_parts, body)) => Self {
+                result: body.to_vec(),
+            },
+            Err(_) => Self {
+                result: Vec::new(),
+            },
+        }
+    }
 }
 
 /// Core trait for FaaS execution

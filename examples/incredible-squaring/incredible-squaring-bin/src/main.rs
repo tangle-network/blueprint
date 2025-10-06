@@ -12,7 +12,7 @@ use blueprint_sdk::tangle::consumer::TangleConsumer;
 use blueprint_sdk::tangle::filters::MatchesServiceId;
 use blueprint_sdk::tangle::layers::TangleLayer;
 use blueprint_sdk::tangle::producer::TangleProducer;
-use incredible_squaring_blueprint_lib::{FooBackgroundService, XSQUARE_JOB_ID, square};
+use incredible_squaring_blueprint_lib::{FooBackgroundService, XSQUARE_JOB_ID, XSQUARE_FAAS_JOB_ID, square, square_faas};
 use tower::filter::FilterLayer;
 
 #[tokio::main]
@@ -35,35 +35,44 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     let tangle_config = TangleConfig::default();
 
     let service_id = env.protocol_settings.tangle()?.service_id.unwrap();
-    let result = BlueprintRunner::builder(tangle_config, env)
+
+    // FaaS Executor Configuration
+    // For testing: Use custom HTTP FaaS executor (no AWS credentials needed)
+    // For production: Replace with LambdaExecutor::new("us-east-1", role_arn).await?
+    #[cfg(feature = "faas")]
+    let faas_executor = {
+        use blueprint_faas::custom::HttpFaasExecutor;
+
+        // In production, this would be your FaaS endpoint
+        // For local testing: run a test server on localhost:8080
+        HttpFaasExecutor::new("http://localhost:8080")
+            .with_job_endpoint(XSQUARE_FAAS_JOB_ID, "http://localhost:8080/square")
+    };
+
+    let mut runner_builder = BlueprintRunner::builder(tangle_config, env)
         .router(
-            // A router
-            //
-            // Each "route" is a job ID and the job function. We can also support arbitrary `Service`s from `tower`,
-            // which may make it easier for people to port over existing services to a blueprint.
             Router::new()
-                // The route defined here has a `TangleLayer`, which adds metadata to the
-                // produced `JobResult`s, making it visible to a `TangleConsumer`.
+                // Job 0: LOCAL execution - runs on this machine
                 .route(XSQUARE_JOB_ID, square.layer(TangleLayer))
-                // Add the `FilterLayer` to filter out job calls that don't match the service ID
+                // Job 1: FAAS execution - delegated to serverless
+                // CRITICAL: Also has TangleLayer so results go to TangleConsumer → onchain
+                .route(XSQUARE_FAAS_JOB_ID, square_faas.layer(TangleLayer))
                 .layer(FilterLayer::new(MatchesServiceId(service_id))),
         )
         .background_service(FooBackgroundService)
-        // Add potentially many producers
-        //
-        // A producer is simply a `Stream` that outputs `JobCall`s, which are passed down to the intended
-        // job functions.
         .producer(tangle_producer)
-        // Add potentially many consumers
-        //
-        // A consumer is simply a `Sink` that consumes `JobResult`s, which are the output of the job functions.
-        // Every result will be passed to every consumer. It is the responsibility of the consumer
-        // to determine whether or not to process a result.
-        .consumer(tangle_consumer)
-        // Custom shutdown handlers
-        //
-        // Now users can specify what to do when an error occurs and the runner is shutting down.
-        // That can be cleanup logic, finalizing database transactions, etc.
+        .consumer(tangle_consumer);
+
+    // Register FaaS executor for job 1
+    // This is THE critical line: job 1 will be delegated to FaaS instead of running locally
+    #[cfg(feature = "faas")]
+    {
+        runner_builder = runner_builder.with_faas_executor(XSQUARE_FAAS_JOB_ID, faas_executor);
+        info!("✅ Job {} registered for FaaS execution", XSQUARE_FAAS_JOB_ID);
+        info!("📊 Job {} will execute locally", XSQUARE_JOB_ID);
+    }
+
+    let result = runner_builder
         .with_shutdown_handler(async { println!("Shutting down!") })
         .run()
         .await;

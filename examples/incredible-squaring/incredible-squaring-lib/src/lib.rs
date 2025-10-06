@@ -4,19 +4,25 @@ use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Receiver;
 
-// The job ID (to be generated?)
-pub const XSQUARE_JOB_ID: u32 = 0;
+// Job IDs
+pub const XSQUARE_JOB_ID: u32 = 0;      // Local execution
+pub const XSQUARE_FAAS_JOB_ID: u32 = 1; // FaaS execution
 
-// The job function
+// Job 0: Local execution - runs on blueprint operator's machine
 //
 // The arguments are made up of "extractors", which take a portion of the `JobCall` to convert into the
 // target type.
-//
-// The context is passed in as a parameter, and can be used to store any shared state between job calls.
 pub async fn square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
     let result = x * x;
+    TangleResult(result)
+}
 
-    // The result is then converted into a `JobResult` to be sent back to the caller.
+// Job 1: FaaS execution - IDENTICAL logic but runs on Lambda/serverless
+//
+// This demonstrates the key property: same job logic, different execution location.
+// The result MUST flow through the same consumer pipeline to reach onchain.
+pub async fn square_faas(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
+    let result = x * x;
     TangleResult(result)
 }
 

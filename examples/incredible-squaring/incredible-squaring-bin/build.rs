@@ -1,6 +1,6 @@
 use blueprint_sdk::build;
 use blueprint_sdk::tangle::blueprint;
-use incredible_squaring_blueprint_lib::square;
+use incredible_squaring_blueprint_lib::{square, square_faas};
 use std::path::Path;
 use std::process;
 
@@ -16,7 +16,7 @@ fn main() {
         name: "experiment",
         master_manager_revision: "Latest",
         manager: { Evm = "ExperimentalBlueprint" },
-        jobs: [square]
+        jobs: [square, square_faas]
     };
 
     match blueprint {

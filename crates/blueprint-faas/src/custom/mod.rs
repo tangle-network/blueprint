@@ -74,20 +74,24 @@ impl HttpFaasExecutor {
 #[async_trait::async_trait]
 impl FaasExecutor for HttpFaasExecutor {
     async fn invoke(&self, job_call: JobCall) -> Result<JobResult, FaasError> {
-        let endpoint = self.endpoint(job_call.job_id);
+        let job_id: u32 = job_call.job_id().into();
+        let endpoint = self.endpoint(job_id);
 
         debug!(
-            job_id = job_call.job_id,
+            job_id = job_id,
             endpoint = %endpoint,
             "Invoking HTTP FaaS function"
         );
+
+        // Convert JobCall to serializable payload
+        let payload: super::FaasPayload = job_call.into();
 
         let start = Instant::now();
 
         let response = self
             .client
             .post(&endpoint)
-            .json(&job_call)
+            .json(&payload)
             .send()
             .await
             .map_err(|e| {
@@ -104,7 +108,7 @@ impl FaasExecutor for HttpFaasExecutor {
             )));
         }
 
-        let result: JobResult = response
+        let faas_response: super::FaasResponse = response
             .json()
             .await
             .map_err(|e| FaasError::SerializationError(e.to_string()))?;
@@ -112,12 +116,12 @@ impl FaasExecutor for HttpFaasExecutor {
         let duration = start.elapsed();
 
         info!(
-            job_id = job_call.job_id,
+            job_id = job_id,
             duration_ms = duration.as_millis(),
             "HTTP FaaS invocation successful"
         );
 
-        Ok(result)
+        Ok(faas_response.into())
     }
 
     async fn deploy_job(

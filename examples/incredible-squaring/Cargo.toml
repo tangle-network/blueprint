@@ -12,7 +12,16 @@ rust-version = "1.85"
 incredible-squaring-blueprint-lib = { path = "incredible-squaring-lib" }
 
 blueprint-sdk = { path = "../../crates/sdk", default-features = false }
+blueprint-faas = { path = "../../crates/blueprint-faas", default-features = false }
+blueprint-profiling = { path = "../../crates/blueprint-profiling", default-features = false }
 tokio = { version = "^1", default-features = false }
 color-eyre = "0.6"
 tower = { version = "0.5.2", default-features = false }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Test dependencies
+axum = { version = "0.8", default-features = false }
+serial_test = "3.2"
+reqwest = { version = "0.12", default-features = false }
+serde = { version = "1.0", default-features = false }
+serde_json = { version = "1.0", default-features = false }

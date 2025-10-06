@@ -70,6 +70,7 @@ blueprint-build-utils = { version = "0.1.0-alpha.3", path = "./crates/build-util
 blueprint-auth = { version = "0.1.0-alpha.9", path = "./crates/auth", default-features = false }
 blueprint-remote-providers = { version = "0.1.0-alpha.1", path = "./crates/blueprint-remote-providers", default-features = false }
 blueprint-faas = { version = "0.1.0-alpha.1", path = "./crates/blueprint-faas", default-features = false }
+blueprint-profiling = { version = "0.1.0-alpha.1", path = "./crates/blueprint-profiling", default-features = false }
 
 # Chain Setup
 blueprint-chain-setup = { version = "0.1.0-alpha.19", path = "./crates/chain-setup", default-features = false }
