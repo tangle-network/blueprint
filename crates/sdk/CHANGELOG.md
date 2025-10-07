@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.19...blueprint-sdk-v0.1.0-alpha.20) - 2025-10-02
+
+### Added
+
+- add oauth and example blueprints (#1140)
+
 ## [0.1.0-alpha.19](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.18...blueprint-sdk-v0.1.0-alpha.19) - 2025-08-20
 
 ### Other

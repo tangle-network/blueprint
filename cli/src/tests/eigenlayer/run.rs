@@ -134,17 +134,17 @@ edition = "2024"
 blueprint-sdk = {{ path = "{}", default-features = false, features = ["std", "eigenlayer", "evm", "macros", "build"] }}
 tokio = {{ version = "1.44", features = ["full"] }}
 color-eyre = "0.6"
-alloy-primitives = {{ version = "0.8" }}
-alloy-sol-types = {{ version = "0.8" }}
-alloy-transport = {{ version = "0.12" }}
-alloy-transport-http = {{ version = "0.12" }}
-alloy-json-rpc = {{ version = "0.12" }}
-alloy-provider = {{ version = "0.12", features = ["reqwest", "ws"] }}
-alloy-rpc-client = {{ version = "0.12" }}
-alloy-json-abi = {{ version = "0.8" }}
-alloy-dyn-abi = {{ version = "0.8" }}
-alloy-contract = {{ version = "0.12" }}
-alloy-network = {{ version = "0.12" }}
+alloy-primitives = {{ version = "1.2.1" }}
+alloy-sol-types = {{ version = "1.2.1" }}
+alloy-transport = {{ version = "1.0.35" }}
+alloy-transport-http = {{ version = "1.0.35" }}
+alloy-json-rpc = {{ version = "1.0.35" }}
+alloy-provider = {{ version = "1.0.35", features = ["reqwest", "ws"] }}
+alloy-rpc-client = {{ version = "1.0.35" }}
+alloy-json-abi = {{ version = "1.2.1" }}
+alloy-dyn-abi = {{ version = "1.2.1" }}
+alloy-contract = {{ version = "1.0.35" }}
+alloy-network = {{ version = "1.0.35" }}
 serde = {{ version = "1.0", features = ["derive"] }}
 serde_json = "1.0"
 "#,
@@ -251,7 +251,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
         if !output.status.success() {
             info!("Cargo build output: {:?}", output.status);
             std::io::stderr().write_all(&output.stderr)?;
-            eprintln!();
+            println!();
 
             panic!("Failed to build binary")
         }

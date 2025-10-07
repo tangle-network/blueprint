@@ -1,18 +1,17 @@
-use crate::error::{Error, Result};
+use crate::error::Result;
 use blueprint_auth::proxy::DEFAULT_AUTH_PROXY_PORT;
-use blueprint_core::{error, info};
+use blueprint_core::info;
 use clap::{Args, Parser};
 use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
 
 mod ctx;
 pub use ctx::*;
 
 #[cfg(feature = "vm-sandbox")]
-pub static DEFAULT_ADDRESS_POOL: LazyLock<ipnet::Ipv4Net> =
-    LazyLock::new(|| "172.30.0.0/16".parse().unwrap());
+pub static DEFAULT_ADDRESS_POOL: std::sync::LazyLock<ipnet::Ipv4Net> =
+    std::sync::LazyLock::new(|| "172.30.0.0/16".parse().unwrap());
 
 #[derive(Debug, Parser)]
 #[command(
@@ -295,10 +294,10 @@ impl BlueprintManagerConfig {
         }
 
         let Ok(interface) = netdev::interface::get_default_interface().map(|i| i.name) else {
-            error!(
+            blueprint_core::error!(
                 "Unable to determine the default network interface, you must specify it manually with --network-interface"
             );
-            return Err(Error::Other(String::from(
+            return Err(crate::error::Error::Other(String::from(
                 "Failed to determine default network interface",
             )));
         };

@@ -118,6 +118,7 @@ async fn setup_grpc_proxy_context() -> GrpcProxyTestContext {
         api_key_prefix: "grpc_".to_string(),
         owners: vec![],
         upstream_url: format!("http://{backend_addr}"),
+        tls_profile: None,
     };
     service.add_owner(KeyType::Ecdsa, public_key.to_vec());
     service.save(service_id, &db).expect("save service");

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.21](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.20...blueprint-manager-v0.3.0-alpha.21) - 2025-10-02
+
+### Added
+
+- *(auth)* add mTLS support for authenticated proxy (#1156)
+
+### Other
+
+- bump eigensdk & alloy version (#1164)
+- logging import cleanup (#1153)
+
 ## [0.3.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.19...blueprint-manager-v0.3.0-alpha.20) - 2025-08-20
 
 ### Added

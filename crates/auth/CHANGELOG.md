@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-auth-v0.1.0-alpha.9...blueprint-auth-v0.1.0-alpha.10) - 2025-10-02
+
+### Added
+
+- *(auth)* add mTLS support for authenticated proxy (#1156)
+- *(auth)* add grpc proxy (#1155)
+- add oauth and example blueprints (#1140)
+
+### Other
+
+- logging import cleanup (#1153)
+
 ## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-auth-v0.1.0-alpha.8...blueprint-auth-v0.1.0-alpha.9) - 2025-08-20
 
 ### Added
