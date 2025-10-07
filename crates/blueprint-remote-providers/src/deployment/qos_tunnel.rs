@@ -217,7 +217,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tunnel_manager() {
-        let mut manager = QosTunnelManager::new(20000);
+        let manager = QosTunnelManager::new(20000);
 
         assert_eq!(manager.active_count(), 0);
         assert_eq!(manager.next_local_port, 20000);

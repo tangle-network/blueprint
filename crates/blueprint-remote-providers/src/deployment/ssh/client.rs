@@ -1,8 +1,6 @@
-//! SSH-based deployment for bare metal servers and remote Docker hosts
-//!
-//! Provides direct SSH deployment capabilities for Blueprint instances
-//! to bare metal servers or any SSH-accessible host with Docker/Podman.
+//! SSH deployment client implementation
 
+use super::types::*;
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::deployment::secure_commands::{SecureConfigManager, SecureContainerCommands};
@@ -10,9 +8,8 @@ use crate::deployment::secure_ssh::{SecureSshClient, SecureSshConnection};
 #[allow(unused_imports)]
 use crate::monitoring::logs::LogStreamer;
 use crate::monitoring::health::{ApplicationHealthChecker, HealthStatus};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -20,7 +17,7 @@ use tracing::{debug, info, warn};
 pub struct SshDeploymentClient {
     /// Secure SSH connection
     ssh_client: SecureSshClient,
-    /// SSH connection parameters  
+    /// SSH connection parameters
     connection: SshConnection,
     /// Remote runtime type (Docker, Podman, Containerd)
     runtime: ContainerRuntime,
@@ -96,10 +93,8 @@ impl SshDeploymentClient {
 
         match self.run_remote_command(cmd).await {
             Ok(output) => {
-                info!(
-                    "Container runtime verified: {}",
-                    output.lines().next().unwrap_or("")
-                );
+                let first_line = output.lines().next().unwrap_or("unknown");
+                info!("Container runtime verified: {}", first_line);
                 Ok(())
             }
             Err(_) => {
@@ -422,13 +417,13 @@ impl SshDeploymentClient {
         curl -L https://github.com/tangle-network/blueprint/releases/latest/download/blueprint-runtime -o /tmp/blueprint-runtime
         chmod +x /tmp/blueprint-runtime
         sudo mv /tmp/blueprint-runtime /opt/blueprint/bin/
-        
+
         # Create systemd service
         sudo tee /etc/systemd/system/blueprint-runtime.service > /dev/null <<EOF
         [Unit]
         Description=Blueprint Runtime
         After=network.target
-        
+
         [Service]
         Type=simple
         User=blueprint
@@ -436,15 +431,15 @@ impl SshDeploymentClient {
         ExecStart=/opt/blueprint/bin/blueprint-runtime
         Restart=always
         RestartSec=10
-        
+
         [Install]
         WantedBy=multi-user.target
         EOF
-        
+
         # Create blueprint user
         sudo useradd -r -s /bin/false blueprint || true
         sudo chown -R blueprint:blueprint /opt/blueprint
-        
+
         # Enable and start service
         sudo systemctl daemon-reload
         sudo systemctl enable blueprint-runtime
@@ -901,8 +896,8 @@ WorkingDirectory=/opt/blueprint
 
 [Install]
 WantedBy=multi-user.target
-"#, 
-            service_name, 
+"#,
+            service_name,
             remote_binary_path,
             service_env.iter()
                 .map(|(k, v)| format!("Environment={k}={v}"))
@@ -1195,270 +1190,5 @@ WantedBy=multi-user.target
                 health_check: None,
             },
         }
-    }
-}
-
-/// SSH authentication method
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SshAuth {
-    /// SSH key authentication
-    Key(String),
-    /// Password authentication
-    Password(String),
-}
-
-/// SSH connection parameters
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SshConnection {
-    /// Hostname or IP address
-    pub host: String,
-    /// SSH port (default: 22)
-    pub port: u16,
-    /// SSH username
-    pub user: String,
-    /// Path to SSH private key
-    pub key_path: Option<PathBuf>,
-    /// SSH password (not recommended)
-    pub password: Option<String>,
-    /// Jump host for bastion access
-    pub jump_host: Option<String>,
-}
-
-impl Default for SshConnection {
-    fn default() -> Self {
-        Self {
-            host: "localhost".to_string(),
-            port: 22,
-            user: "root".to_string(),
-            key_path: None,
-            password: None,
-            jump_host: None,
-        }
-    }
-}
-
-/// Container runtime type on remote host
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ContainerRuntime {
-    Docker,
-    Podman,
-    Containerd,
-}
-
-/// Deployment configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeploymentConfig {
-    /// Deployment name
-    pub name: String,
-    /// Deployment namespace/project
-    pub namespace: String,
-    /// Auto-restart policy
-    pub restart_policy: RestartPolicy,
-    /// Health check configuration
-    pub health_check: Option<HealthCheck>,
-}
-
-/// Container restart policy
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
-pub enum RestartPolicy {
-    Always,
-    #[default]
-    OnFailure,
-    Never,
-}
-
-
-impl Default for DeploymentConfig {
-    fn default() -> Self {
-        Self {
-            name: "blueprint-deployment".to_string(),
-            namespace: "default".to_string(),
-            restart_policy: RestartPolicy::default(),
-            health_check: None,
-        }
-    }
-}
-
-/// Health check configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HealthCheck {
-    pub command: String,
-    pub interval: u32,
-    pub timeout: u32,
-    pub retries: u32,
-}
-
-/// Resource limits for container
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceLimits {
-    pub cpu_cores: Option<f64>,
-    pub memory_mb: Option<u64>,
-    pub disk_gb: Option<f64>,
-    pub network_bandwidth_mbps: Option<u32>,
-}
-
-impl ResourceLimits {
-    fn from_spec(spec: &ResourceSpec) -> Self {
-        Self {
-            cpu_cores: Some(spec.cpu as f64),
-            memory_mb: Some((spec.memory_gb * 1024.0) as u64),
-            disk_gb: Some(spec.storage_gb as f64),
-            network_bandwidth_mbps: Some(1000), // Default 1Gbps
-        }
-    }
-}
-
-/// Container details
-struct ContainerDetails {
-    status: String,
-    ports: HashMap<String, String>,
-}
-
-/// Remote deployment information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemoteDeployment {
-    pub host: String,
-    pub container_id: String,
-    pub runtime: ContainerRuntime,
-    pub status: String,
-    pub ports: HashMap<String, String>,
-    pub resource_limits: ResourceLimits,
-}
-
-/// Native (non-containerized) deployment information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NativeDeployment {
-    pub host: String,
-    pub service_name: String,
-    pub config_path: String,
-    pub status: String,
-}
-
-/// Batch deployment to multiple hosts
-pub struct BareMetalFleet {
-    hosts: Vec<SshConnection>,
-    deployments: Vec<RemoteDeployment>,
-}
-
-impl BareMetalFleet {
-    /// Create a new bare metal fleet
-    pub fn new(hosts: Vec<SshConnection>) -> Self {
-        Self {
-            hosts,
-            deployments: Vec::new(),
-        }
-    }
-
-    /// Deploy to all hosts in parallel
-    pub async fn deploy_to_fleet(
-        &mut self,
-        blueprint_image: &str,
-        spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-        runtime: ContainerRuntime,
-    ) -> Result<Vec<RemoteDeployment>> {
-        use futures::future::join_all;
-
-        let deployment_futures: Vec<_> = self
-            .hosts
-            .iter()
-            .map(|host| {
-                let connection = host.clone();
-                let image = blueprint_image.to_string();
-                let spec = spec.clone();
-                let env = env_vars.clone();
-                let rt = runtime.clone();
-
-                async move {
-                    let client = SshDeploymentClient::new(
-                        connection,
-                        rt,
-                        DeploymentConfig {
-                            name: "blueprint".to_string(),
-                            namespace: "default".to_string(),
-                            restart_policy: RestartPolicy::Always,
-                            health_check: None,
-                        },
-                    )
-                    .await?;
-
-                    client.deploy_blueprint(&image, &spec, env).await
-                }
-            })
-            .collect();
-
-        let results = join_all(deployment_futures).await;
-
-        for result in results {
-            match result {
-                Ok(deployment) => {
-                    info!("Successfully deployed to {}", deployment.host);
-                    self.deployments.push(deployment);
-                }
-                Err(e) => {
-                    warn!("Failed to deploy to host: {}", e);
-                }
-            }
-        }
-
-        Ok(self.deployments.clone())
-    }
-
-    /// Get status of all deployments
-    pub fn get_fleet_status(&self) -> HashMap<String, String> {
-        self.deployments
-            .iter()
-            .map(|d| (d.host.clone(), d.status.clone()))
-            .collect()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_secure_ssh_integration() {
-        let connection = SshConnection {
-            host: "localhost".to_string(),
-            port: 22,
-            user: "testuser".to_string(),
-            key_path: None,
-            password: None,
-            jump_host: None,
-        };
-
-        // Test that secure SSH connection is properly configured
-        let secure_conn = SecureSshConnection::new(
-            connection.host.clone(),
-            connection.user.clone(),
-        ).unwrap()
-        .with_port(connection.port).unwrap()
-        .with_strict_host_checking(false);
-
-        let ssh_client = SecureSshClient::new(secure_conn);
-        
-        // This would fail in a real environment without SSH access,
-        // but we're testing the integration structure
-        assert!(ssh_client.run_remote_command("echo test").await.is_err());
-    }
-
-    #[test]
-    fn test_resource_limits_conversion() {
-        let spec = ResourceSpec {
-            cpu: 4.0,
-            memory_gb: 8.0,
-            storage_gb: 100.0,
-            gpu_count: None,
-            allow_spot: false,
-            qos: Default::default(),
-        };
-
-        let limits = ResourceLimits::from_spec(&spec);
-        assert_eq!(limits.cpu_cores, Some(4.0));
-        assert_eq!(limits.memory_mb, Some(8192));
-        assert_eq!(limits.disk_gb, Some(100.0));
-        assert_eq!(limits.network_bandwidth_mbps, Some(1000)); // Default 1Gbps
     }
 }

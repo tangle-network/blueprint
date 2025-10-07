@@ -138,10 +138,14 @@ impl GcpProvisioner {
             self.project_id, zone
         );
 
+        let access_token = self.access_token.as_ref().ok_or_else(|| {
+            Error::ConfigurationError("GCP access token not available".to_string())
+        })?;
+
         let response = self
             .client
             .post(&url)
-            .bearer_auth(self.access_token.as_ref().unwrap())
+            .bearer_auth(access_token)
             .json(&instance_config)
             .send()
             .await
@@ -180,7 +184,7 @@ impl GcpProvisioner {
         let instance_response = self
             .client
             .get(&instance_url)
-            .bearer_auth(self.access_token.as_ref().unwrap())
+            .bearer_auth(access_token)
             .send()
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to get instance: {}", e)))?;
@@ -231,13 +235,17 @@ impl GcpProvisioner {
         let max_attempts = 60;
         let mut attempts = 0;
 
+        let access_token = self.access_token.as_ref().ok_or_else(|| {
+            Error::ConfigurationError("GCP access token not available".to_string())
+        })?;
+
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
             let response = self
                 .client
                 .get(operation_url)
-                .bearer_auth(self.access_token.as_ref().unwrap())
+                .bearer_auth(access_token)
                 .send()
                 .await
                 .map_err(|e| {
@@ -378,10 +386,14 @@ impl GcpProvisioner {
             self.project_id, zone, instance_name
         );
 
+        let access_token = self.access_token.as_ref().ok_or_else(|| {
+            Error::ConfigurationError("GCP access token not available".to_string())
+        })?;
+
         let response = self
             .client
             .delete(&url)
-            .bearer_auth(self.access_token.as_ref().unwrap())
+            .bearer_auth(access_token)
             .send()
             .await
             .map_err(|e| {

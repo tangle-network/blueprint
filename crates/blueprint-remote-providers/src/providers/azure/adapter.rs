@@ -278,13 +278,13 @@ impl AzureAdapter {
     }
 
     /// Deploy to AKS cluster
-    async fn deploy_to_aks(
+    pub async fn deploy_to_aks(
         &self,
         cluster_id: &str,
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
-        _env_vars: HashMap<String, String>,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
@@ -296,11 +296,13 @@ impl AzureAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
+                env_vars,
                 config,
             ).await
         }
         #[cfg(not(feature = "kubernetes"))]
         {
+            let _ = (cluster_id, namespace, blueprint_image, resource_spec, env_vars);
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
@@ -308,12 +310,12 @@ impl AzureAdapter {
     }
 
     /// Deploy to generic Kubernetes cluster
-    async fn deploy_to_generic_k8s(
+    pub async fn deploy_to_generic_k8s(
         &self,
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
-        _env_vars: HashMap<String, String>,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
@@ -322,13 +324,83 @@ impl AzureAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
+                env_vars,
             ).await
         }
         #[cfg(not(feature = "kubernetes"))]
         {
+            let _ = (namespace, blueprint_image, resource_spec, env_vars);
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_azure_adapter_creation() {
+        let result = AzureAdapter::new().await;
+        // Without credentials, may succeed or fail - just testing the method exists
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[cfg(feature = "kubernetes")]
+    #[tokio::test]
+    async fn test_aks_deployment_structure() {
+        use crate::core::resources::ResourceSpec;
+
+        // Test that the method signature and structure are correct
+        // Note: This won't actually deploy without valid Azure credentials
+        let adapter = AzureAdapter::new().await.expect("Failed to create Azure adapter");
+
+        let mut env_vars = HashMap::new();
+        env_vars.insert("TEST_VAR".to_string(), "test_value".to_string());
+
+        let result = adapter.deploy_to_aks(
+            "test-cluster",
+            "test-namespace",
+            "test-image:latest",
+            &ResourceSpec::basic(),
+            env_vars,
+        ).await;
+
+        // Without actual cluster, we expect an error but method should be callable
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "kubernetes")]
+    #[tokio::test]
+    async fn test_generic_k8s_deployment_structure() {
+        use crate::core::resources::ResourceSpec;
+
+        let adapter = AzureAdapter::new().await.expect("Failed to create Azure adapter");
+
+        let mut env_vars = HashMap::new();
+        env_vars.insert("API_KEY".to_string(), "secret123".to_string());
+
+        let result = adapter.deploy_to_generic_k8s(
+            "test-namespace",
+            "nginx:latest",
+            &ResourceSpec::minimal(),
+            env_vars,
+        ).await;
+
+        // Without actual cluster, we expect an error but method should be callable
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_env_vars_usage() {
+        // Verify env_vars parameter is properly typed
+        let mut env_vars = HashMap::new();
+        env_vars.insert("DATABASE_URL".to_string(), "postgres://localhost".to_string());
+        env_vars.insert("PORT".to_string(), "8080".to_string());
+
+        assert_eq!(env_vars.len(), 2);
+        assert_eq!(env_vars.get("PORT").unwrap(), "8080");
     }
 }

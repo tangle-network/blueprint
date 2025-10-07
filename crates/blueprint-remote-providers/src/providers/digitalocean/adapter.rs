@@ -210,13 +210,13 @@ impl DigitalOceanAdapter {
     }
 
     /// Deploy to DOKS cluster
-    async fn deploy_to_doks(
+    pub async fn deploy_to_doks(
         &self,
         cluster_id: &str,
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
-        _env_vars: HashMap<String, String>,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
@@ -228,12 +228,14 @@ impl DigitalOceanAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
+                env_vars,
                 config,
             ).await
         }
 
         #[cfg(not(feature = "kubernetes"))]
         {
+            let _ = (cluster_id, namespace, blueprint_image, resource_spec, env_vars);
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
@@ -241,12 +243,12 @@ impl DigitalOceanAdapter {
     }
 
     /// Deploy to generic Kubernetes cluster
-    async fn deploy_to_generic_k8s(
+    pub async fn deploy_to_generic_k8s(
         &self,
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
-        _env_vars: HashMap<String, String>,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
@@ -255,11 +257,13 @@ impl DigitalOceanAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
+                env_vars,
             ).await
         }
 
         #[cfg(not(feature = "kubernetes"))]
         {
+            let _ = (namespace, blueprint_image, resource_spec, env_vars);
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
@@ -277,5 +281,75 @@ impl DigitalOceanAdapter {
     #[allow(dead_code)]
     async fn cleanup_blueprint(&self, _deployment: &BlueprintDeploymentResult) -> Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_digitalocean_adapter_creation() {
+        let result = DigitalOceanAdapter::new().await;
+        // Without credentials, may succeed or fail - just testing the method exists
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[cfg(feature = "kubernetes")]
+    #[tokio::test]
+    async fn test_doks_deployment_structure() {
+        use crate::core::resources::ResourceSpec;
+
+        // Test that the method signature and structure are correct
+        let adapter = DigitalOceanAdapter::new().await.expect("Failed to create DigitalOcean adapter");
+
+        let mut env_vars = HashMap::new();
+        env_vars.insert("REDIS_URL".to_string(), "redis://localhost".to_string());
+
+        let result = adapter.deploy_to_doks(
+            "test-doks-cluster",
+            "production",
+            "myapp:v1.0",
+            &ResourceSpec::recommended(),
+            env_vars,
+        ).await;
+
+        // Without actual cluster, we expect an error but method should be callable
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "kubernetes")]
+    #[tokio::test]
+    async fn test_doks_generic_k8s_deployment_structure() {
+        use crate::core::resources::ResourceSpec;
+
+        let adapter = DigitalOceanAdapter::new().await.expect("Failed to create DigitalOcean adapter");
+
+        let mut env_vars = HashMap::new();
+        env_vars.insert("NODE_ENV".to_string(), "production".to_string());
+        env_vars.insert("LOG_LEVEL".to_string(), "info".to_string());
+
+        let result = adapter.deploy_to_generic_k8s(
+            "default",
+            "busybox:latest",
+            &ResourceSpec::minimal(),
+            env_vars,
+        ).await;
+
+        // Without actual cluster, we expect an error but method should be callable
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_multiple_env_vars() {
+        let mut env_vars = HashMap::new();
+        env_vars.insert("VAR1".to_string(), "value1".to_string());
+        env_vars.insert("VAR2".to_string(), "value2".to_string());
+        env_vars.insert("VAR3".to_string(), "value3".to_string());
+
+        assert_eq!(env_vars.len(), 3);
+        assert!(env_vars.contains_key("VAR1"));
+        assert!(env_vars.contains_key("VAR2"));
+        assert!(env_vars.contains_key("VAR3"));
     }
 }

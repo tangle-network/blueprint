@@ -297,8 +297,11 @@ impl SecureConfigManager {
             })?;
 
         // Use secure file operations instead of shell commands
+        let target_path_str = target_path.as_ref().to_str().ok_or_else(|| {
+            Error::ConfigurationError("Target path contains invalid UTF-8".to_string())
+        })?;
         let mut cmd = AsyncCommand::new("sudo");
-        cmd.args(["cp", temp_path, target_path.as_ref().to_str().unwrap()]);
+        cmd.args(["cp", temp_path, target_path_str]);
 
         let output = cmd
             .output()

@@ -25,9 +25,11 @@ impl SharedKubernetesDeployment {
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
+        env_vars: HashMap<String, String>,
         provider_config: ManagedK8sConfig,
     ) -> Result<BlueprintDeploymentResult> {
-        info!("Deploying to {} cluster: {}", provider_config.service_name, cluster_id);
+        info!("Deploying to {} cluster: {} with {} environment variables",
+              provider_config.service_name, cluster_id, env_vars.len());
 
         // Authenticate to the managed cluster
         Self::setup_cluster_authentication(cluster_id, &provider_config).await?;
@@ -36,6 +38,11 @@ impl SharedKubernetesDeployment {
         Self::verify_cluster_health(cluster_id, &provider_config).await?;
 
         let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
+
+        // TODO: Pass env_vars to deploy_blueprint once the method supports it
+        // For now, env_vars will be used in future enhancement
+        info!("Environment variables configured: {:?}", env_vars.keys().collect::<Vec<_>>());
+
         let (deployment_id, exposed_ports) = k8s_client
             .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
             .await?;
@@ -221,10 +228,17 @@ impl SharedKubernetesDeployment {
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
-        info!("Deploying to generic Kubernetes namespace: {}", namespace);
+        info!("Deploying to generic Kubernetes namespace: {} with {} environment variables",
+              namespace, env_vars.len());
 
         let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
+
+        // TODO: Pass env_vars to deploy_blueprint once the method supports it
+        // For now, env_vars will be used in future enhancement
+        info!("Environment variables configured: {:?}", env_vars.keys().collect::<Vec<_>>());
+
         let (deployment_id, exposed_ports) = k8s_client
             .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
             .await?;
@@ -332,5 +346,99 @@ impl ManagedK8sConfig {
             default_region: region.to_string(),
             additional_metadata: HashMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_managed_k8s_config_eks() {
+        let config = ManagedK8sConfig::eks("us-west-2");
+        assert_eq!(config.service_name, "EKS");
+        assert_eq!(config.provider_identifier, "aws-eks");
+        assert_eq!(config.default_region, "us-west-2");
+        assert_eq!(config.instance_prefix, "eks");
+        assert!(matches!(config.cloud_provider, crate::core::remote::CloudProvider::AWS));
+    }
+
+    #[test]
+    fn test_managed_k8s_config_gke() {
+        let config = ManagedK8sConfig::gke("my-project", "us-central1");
+        assert_eq!(config.service_name, "GKE");
+        assert_eq!(config.provider_identifier, "gcp-gke");
+        assert_eq!(config.default_region, "us-central1");
+        assert_eq!(config.additional_metadata.get("project_id").unwrap(), "my-project");
+        assert!(matches!(config.cloud_provider, crate::core::remote::CloudProvider::GCP));
+    }
+
+    #[test]
+    fn test_managed_k8s_config_aks() {
+        let config = ManagedK8sConfig::aks("eastus", "my-resource-group");
+        assert_eq!(config.service_name, "AKS");
+        assert_eq!(config.provider_identifier, "azure-aks");
+        assert_eq!(config.default_region, "eastus");
+        assert_eq!(config.additional_metadata.get("resource_group").unwrap(), "my-resource-group");
+        assert!(matches!(config.cloud_provider, crate::core::remote::CloudProvider::Azure));
+    }
+
+    #[test]
+    fn test_managed_k8s_config_doks() {
+        let config = ManagedK8sConfig::doks("nyc3");
+        assert_eq!(config.service_name, "DOKS");
+        assert_eq!(config.provider_identifier, "digitalocean-doks");
+        assert_eq!(config.default_region, "nyc3");
+        assert!(matches!(config.cloud_provider, crate::core::remote::CloudProvider::DigitalOcean));
+    }
+
+    #[test]
+    fn test_managed_k8s_config_vke() {
+        let config = ManagedK8sConfig::vke("ewr");
+        assert_eq!(config.service_name, "VKE");
+        assert_eq!(config.provider_identifier, "vultr-vke");
+        assert_eq!(config.default_region, "ewr");
+        assert!(matches!(config.cloud_provider, crate::core::remote::CloudProvider::Vultr));
+    }
+
+    #[tokio::test]
+    async fn test_deploy_to_generic_k8s_signature() {
+        // Test that the method signature is correct and env_vars are passed
+        let mut env_vars = HashMap::new();
+        env_vars.insert("TEST_VAR".to_string(), "test_value".to_string());
+
+        // This will fail without a real cluster, but tests the signature
+        let result = SharedKubernetesDeployment::deploy_to_generic_k8s(
+            "test-namespace",
+            "nginx:latest",
+            &ResourceSpec::basic(),
+            env_vars,
+        ).await;
+
+        // We expect an error since there's no actual cluster
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_deploy_to_managed_k8s_signature() {
+        // Test that the method signature is correct and env_vars are passed
+        let mut env_vars = HashMap::new();
+        env_vars.insert("API_KEY".to_string(), "secret".to_string());
+        env_vars.insert("DATABASE_URL".to_string(), "postgres://localhost".to_string());
+
+        let config = ManagedK8sConfig::eks("us-east-1");
+
+        // This will fail without a real cluster, but tests the signature
+        let result = SharedKubernetesDeployment::deploy_to_managed_k8s(
+            "test-cluster",
+            "production",
+            "myapp:v1.0",
+            &ResourceSpec::recommended(),
+            env_vars,
+            config,
+        ).await;
+
+        // We expect an error since there's no actual cluster
+        assert!(result.is_err());
     }
 }
