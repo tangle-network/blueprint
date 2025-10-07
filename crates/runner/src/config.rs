@@ -272,7 +272,7 @@ impl Default for BlueprintEnvironment {
             http_rpc_endpoint: default_http_rpc_url(),
             ws_rpc_endpoint: default_ws_rpc_url(),
             keystore_uri: String::default(),
-            data_dir: PathBuf::default(),
+            data_dir: PathBuf::from("./data"),
             protocol_settings: ProtocolSettings::default(),
             test_mode: false,
             bridge_socket_path: None,
@@ -662,6 +662,8 @@ impl ContextConfig {
             _ => None,
         };
         #[cfg(feature = "eigenlayer")]
+        let pause_registry = eigenlayer_settings.map(|s| s.pause_registry_address);
+        #[cfg(feature = "eigenlayer")]
         let allocation_manager = eigenlayer_settings.map(|s| s.allocation_manager_address);
         #[cfg(feature = "eigenlayer")]
         let registry_coordinator = eigenlayer_settings.map(|s| s.registry_coordinator_address);
@@ -730,6 +732,8 @@ impl ContextConfig {
                 blueprint_id,
                 #[cfg(feature = "tangle")]
                 service_id,
+                #[cfg(feature = "eigenlayer")]
+                pause_registry,
                 #[cfg(feature = "eigenlayer")]
                 allocation_manager,
                 #[cfg(feature = "eigenlayer")]
@@ -982,6 +986,15 @@ pub struct BlueprintSettings {
     #[arg(
         long,
         value_name = "ADDR",
+        env = "PAUSE_REGISTRY_ADDRESS",
+        required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
+    )]
+    pub pause_registry: Option<alloy_primitives::Address>,
+    /// The address of the allocation manager
+    #[cfg(feature = "eigenlayer")]
+    #[arg(
+        long,
+        value_name = "ADDR",
         env = "ALLOCATION_MANAGER_ADDRESS",
         required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
     )]
@@ -1171,6 +1184,8 @@ impl Default for BlueprintSettings {
             // ========
             // EIGENLAYER
             // ========
+            #[cfg(feature = "eigenlayer")]
+            pause_registry: None,
             #[cfg(feature = "eigenlayer")]
             allocation_manager: None,
             #[cfg(feature = "eigenlayer")]

@@ -1,6 +1,8 @@
 use blueprint_core::info;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
+// use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
+// use blueprint_manager::executor::run_blueprint_manager;
 use blueprint_std::fs;
 use blueprint_std::path::PathBuf;
 use color_eyre::eyre::{Result, eyre};
@@ -52,7 +54,7 @@ pub async fn run_eigenlayer_avs(
         target_dir.join(&binary_name)
     };
 
-    println!(
+    info!(
         "Attempting to run Eigenlayer AVS binary at: {}",
         binary_path.display()
     );
@@ -71,6 +73,64 @@ pub async fn run_eigenlayer_avs(
         }
     }
 
+    // info!(
+    //     "{}",
+    //     style("Preparing Blueprint to run, this may take a few minutes...").cyan()
+    // );
+
+    // let blueprint_manager_config = BlueprintManagerConfig {
+    //     paths: Paths {
+    //         keystore_uri: config.keystore_uri.clone(),
+    //         data_dir: config.data_dir.clone(),
+    //         ..Default::default()
+    //     },
+    //     verbose: 2,
+    //     pretty: true,
+    //     instance_id: Some(format!("Eigenlayer-Blueprint-{}", blueprint_id)),
+    //     allow_unchecked_attestations: opts.allow_unchecked_attestations,
+    //     ..Default::default()
+    // };
+
+    // let ctx = BlueprintManagerContext::new(blueprint_manager_config).await?;
+
+    // info!(
+    //     "{}",
+    //     style(format!(
+    //         "Starting blueprint manager for blueprint ID: {}",
+    //         blueprint_id
+    //     ))
+    //     .cyan()
+    //     .bold()
+    // );
+
+    // let shutdown_signal = async move {
+    //     let _ = signal::ctrl_c().await;
+    //     info!(
+    //         "{}",
+    //         style("Received shutdown signal, stopping blueprint manager")
+    //             .yellow()
+    //             .bold()
+    //     );
+    // };
+
+    // let mut handle = run_blueprint_manager(ctx, config, shutdown_signal).await?;
+
+    // info!(
+    //     "{}",
+    //     style("Starting blueprint execution...").green().bold()
+    // );
+    // handle.start()?;
+
+    // info!(
+    //     "{}",
+    //     style("Blueprint is running. Press Ctrl+C to stop.").cyan()
+    // );
+    // handle.await?;
+
+    // info!("{}", style("Blueprint manager has stopped").green());
+
+    // ///////////
+
     // Get contract addresses
     let contract_addresses = config
         .protocol_settings
@@ -78,7 +138,7 @@ pub async fn run_eigenlayer_avs(
         .map_err(|_| eyre!("Missing Eigenlayer contract addresses"))?;
 
     // Run the AVS binary with the provided options
-    println!("Starting AVS...");
+    info!("Starting AVS...");
     let mut command = Command::new(&binary_path);
 
     let env = BlueprintEnvVars {
@@ -139,7 +199,9 @@ pub async fn run_eigenlayer_avs(
         .arg("--permission-controller")
         .arg(contract_addresses.permission_controller_address.to_string())
         .arg("--strategy")
-        .arg(contract_addresses.strategy_address.to_string());
+        .arg(contract_addresses.strategy_address.to_string())
+        .arg("--pause-registry")
+        .arg(contract_addresses.pause_registry_address.to_string());
 
     assert!(binary_path.exists(), "Binary path does not exist");
 
@@ -180,7 +242,7 @@ pub async fn run_eigenlayer_avs(
     // Wait for both tasks to complete
     let _ = tokio::join!(stdout_task, stderr_task);
 
-    println!(
+    info!(
         "AVS is running with PID: {}",
         child.id().unwrap_or_default()
     );

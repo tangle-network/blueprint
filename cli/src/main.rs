@@ -903,6 +903,10 @@ fn load_protocol_settings(
     match protocol {
         Protocol::Eigenlayer => {
             let addresses = EigenlayerProtocolSettings {
+                pause_registry_address: env::var("PAUSE_REGISTRY_ADDRESS")
+                    .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
+                    .parse()
+                    .map_err(|_| ConfigError::Other("Invalid PAUSE_REGISTRY_ADDRESS".into()))?,
                 allocation_manager_address: env::var("ALLOCATION_MANAGER_ADDRESS")
                     .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
                     .parse()
