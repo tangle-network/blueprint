@@ -412,11 +412,24 @@ impl SshDeploymentClient {
         self.run_remote_command("mkdir -p /opt/blueprint/{bin,config,data,logs}")
             .await?;
 
-        // Download and install Blueprint runtime binary
+        // Download and install Blueprint runtime binary with checksum verification
         let install_script = r#"
+        # Download binary and checksum
         curl -L https://github.com/tangle-network/blueprint/releases/latest/download/blueprint-runtime -o /tmp/blueprint-runtime
+        curl -L https://github.com/tangle-network/blueprint/releases/latest/download/blueprint-runtime.sha256 -o /tmp/blueprint-runtime.sha256
+
+        # Verify SHA256 checksum
+        cd /tmp
+        if ! sha256sum -c blueprint-runtime.sha256 2>/dev/null; then
+            echo "ERROR: Checksum verification failed for blueprint-runtime" >&2
+            rm -f blueprint-runtime blueprint-runtime.sha256
+            exit 1
+        fi
+
+        # Install verified binary
         chmod +x /tmp/blueprint-runtime
         sudo mv /tmp/blueprint-runtime /opt/blueprint/bin/
+        rm -f /tmp/blueprint-runtime.sha256
 
         # Create systemd service
         sudo tee /etc/systemd/system/blueprint-runtime.service > /dev/null <<EOF

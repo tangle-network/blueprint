@@ -75,31 +75,6 @@ impl EncryptedCloudCredentials {
         })
     }
 
-    /// Create new encrypted credentials (generates random key - for testing only)
-    pub fn encrypt(provider: &str, credentials: PlaintextCredentials) -> Result<Self> {
-        // Generate encryption key (in production, derive from master key or HSM)
-        let key = Aes256Gcm::generate_key(&mut OsRng);
-        let cipher = Aes256Gcm::new(&key);
-
-        // Generate random nonce
-        let nonce_bytes = Self::generate_nonce();
-        let nonce = Nonce::from_slice(&nonce_bytes);
-
-        // Serialize and encrypt credentials
-        let plaintext = serde_json::to_vec(&credentials)
-            .map_err(|e| Error::ConfigurationError(format!("Serialization failed: {e}")))?;
-
-        let encrypted_data = cipher
-            .encrypt(nonce, plaintext.as_ref())
-            .map_err(|e| Error::ConfigurationError(format!("Encryption failed: {e}")))?;
-
-        Ok(Self {
-            provider: provider.to_string(),
-            encrypted_data,
-            nonce: nonce.to_vec(),
-            metadata: HashMap::new(),
-        })
-    }
 
     /// Decrypt credentials (temporarily exposes plaintext)
     pub fn decrypt(&self, key: &[u8; 32]) -> Result<PlaintextCredentials> {
@@ -245,22 +220,26 @@ mod tests {
 
     #[test]
     fn test_credential_encryption_decryption() {
-        // Create credentials directly for encryption
-        // Note: We need to avoid moving out of ZeroizeOnDrop struct
+        // Use proper encryption with known key (production pattern)
+        let test_key: [u8; 32] = [0x42; 32]; // Test key
+
         let mut credentials = PlaintextCredentials::default();
         credentials.aws_access_key = Some("AKIATEST123".to_string());
         credentials.aws_secret_key = Some("secretkey123".to_string());
         credentials.gcp_project_id = Some("test-project".to_string());
 
-        // Encrypt credentials
-        let encrypted = EncryptedCloudCredentials::encrypt("aws", credentials).unwrap();
+        // Encrypt credentials with known key
+        let encrypted = EncryptedCloudCredentials::encrypt_with_key("aws", credentials, &test_key).unwrap();
         assert!(encrypted.is_encrypted());
         assert_eq!(encrypted.provider(), "aws");
 
-        // Verify plaintext is zeroized (automatic on drop)
-        // drop(credentials); // Already consumed in encrypt call
+        // Successful decryption with correct key
+        let decrypted = encrypted.decrypt(&test_key).unwrap();
+        assert_eq!(decrypted.aws_access_key, Some("AKIATEST123".to_string()));
+        assert_eq!(decrypted.aws_secret_key, Some("secretkey123".to_string()));
+        assert_eq!(decrypted.gcp_project_id, Some("test-project".to_string()));
 
-        // Cannot decrypt without proper key
+        // Decryption fails with wrong key
         let wrong_key = [0u8; 32];
         assert!(encrypted.decrypt(&wrong_key).is_err());
     }
