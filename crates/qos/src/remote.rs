@@ -1,6 +1,6 @@
-//! Remote instance monitoring for QoS
+//! Remote instance monitoring for `QoS`
 //!
-//! This module extends the QoS system to monitor remote Blueprint instances
+//! This module extends the `QoS` system to monitor remote Blueprint instances
 //! deployed on cloud providers through the blueprint-remote-providers system.
 
 use crate::error::Error;
@@ -8,7 +8,6 @@ use crate::metrics::MetricsProvider;
 use crate::metrics::types::{BlueprintMetrics, BlueprintStatus, SystemMetrics};
 use std::collections::HashMap;
 use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -19,7 +18,7 @@ use blueprint_remote_providers::observability::MetricsCollector as RemoteMetrics
 pub struct RemoteMetricsProvider {
     #[cfg(feature = "remote")]
     remote_collector: Arc<RemoteMetricsCollector>,
-    /// Remote endpoints for connecting to QoS gRPC services
+    /// Remote endpoints for connecting to `QoS` gRPC services
     remote_endpoints: Arc<RwLock<HashMap<String, String>>>, // instance_id -> grpc_endpoint
     metrics_cache: Arc<RwLock<HashMap<u64, SystemMetrics>>>,
     blueprint_metrics: Arc<RwLock<BlueprintMetrics>>,
