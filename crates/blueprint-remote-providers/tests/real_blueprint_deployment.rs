@@ -26,6 +26,7 @@ struct TestConfig {
     skip_cleanup: bool,
     parallel: bool,
     verify_qos: bool,
+    #[allow(dead_code)]
     test_kubernetes: bool,
 }
 
@@ -67,6 +68,7 @@ struct TestResult {
 /// Main test orchestrator
 struct RealBlueprintTest {
     config: TestConfig,
+    #[allow(dead_code)]
     tracker: DeploymentTracker,
     qos_tunnel_manager: QosTunnelManager,
     results: Vec<TestResult>,
@@ -318,7 +320,7 @@ impl RealBlueprintTest {
                         .create_tunnel(
                             ip.clone(),
                             ssh_user.to_string(),
-                            std::env::var(format!("{:?}_SSH_KEY_PATH", provider)).ok(),
+                            std::env::var(format!("{provider:?}_SSH_KEY_PATH")).ok(),
                         )
                         .await
                     {
@@ -452,17 +454,17 @@ impl RealBlueprintTest {
             println!("\n{} {:?}", status, result.provider);
             println!("  Provision: {:.2}s", result.provision_time.as_secs_f32());
             println!("  Deploy: {:.2}s", result.deploy_time.as_secs_f32());
-            println!("  QoS: {}", qos);
+            println!("  QoS: {qos}");
 
             if let Some(ref deployment) = result.deployment {
                 println!("  Instance: {}", deployment.instance.id);
                 if let Some(ref ip) = deployment.instance.public_ip {
-                    println!("  IP: {}", ip);
+                    println!("  IP: {ip}");
                 }
             }
 
             if let Some(ref error) = result.error {
-                println!("  Error: {}", error);
+                println!("  Error: {error}");
             }
         }
 
@@ -471,7 +473,7 @@ impl RealBlueprintTest {
             * 100.0;
 
         println!("\n═══════════════════════════════════════════════════");
-        println!("Success Rate: {:.0}%", success_rate);
+        println!("Success Rate: {success_rate:.0}%");
         println!("═══════════════════════════════════════════════════");
     }
 }
@@ -570,7 +572,7 @@ async fn test_continuous_deployment_reliability() {
     if !failure_reasons.is_empty() {
         println!("\nFailure Reasons:");
         for (reason, count) in failure_reasons {
-            println!("  {}: {} times", reason, count);
+            println!("  {reason}: {count} times");
         }
     }
 

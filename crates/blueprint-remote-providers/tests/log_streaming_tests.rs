@@ -104,10 +104,12 @@ async fn test_log_aggregator_filters() {
     let mut aggregator = LogAggregator::new();
 
     // Set filters - we can only test that the API works, not internal state
-    let mut filters = LogFilters::default();
-    filters.level_min = Some(LogLevel::Warn);
-    filters.service_ids = Some(vec!["service-1".to_string(), "service-2".to_string()]);
-    filters.search_text = Some("error".to_string());
+    let filters = LogFilters {
+        level_min: Some(LogLevel::Warn),
+        service_ids: Some(vec!["service-1".to_string(), "service-2".to_string()]),
+        search_text: Some("error".to_string()),
+        ..Default::default()
+    };
 
     // This should not panic
     aggregator.set_filters(filters);

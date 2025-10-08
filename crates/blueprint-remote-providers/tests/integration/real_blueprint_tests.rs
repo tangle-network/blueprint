@@ -52,8 +52,7 @@ async fn test_actual_log_streaming_capability() {
         }
         Err(e) => {
             println!(
-                "  ⚠️  Streaming failed as expected in test environment: {}",
-                e
+                "  ⚠️  Streaming failed as expected in test environment: {e}"
             );
         }
     }
@@ -104,7 +103,7 @@ async fn test_actual_monitoring_integration() {
 
     for (name, host, port) in services {
         let status = checker.check_tcp(host, port).await;
-        println!("Service {} ({}:{}) status: {:?}", name, host, port, status);
+        println!("Service {name} ({host}:{port}) status: {status:?}");
     }
 
     println!("✅ Health monitoring integration tested with real endpoints");
@@ -139,7 +138,6 @@ async fn test_what_update_manager_can_do() {
 /// 4. Deployment Verification:
 ///    - Add wait_for_ready() with proper health checks
 ///    - Add verify_deployment() to check all services are up
-
 #[cfg(test)]
 mod missing_features_that_should_exist {
 
@@ -267,7 +265,7 @@ WantedBy=multi-user.target
             binary_path,
             env_vars
                 .iter()
-                .map(|(k, v)| format!("Environment={}={}", k, v))
+                .map(|(k, v)| format!("Environment={k}={v}"))
                 .collect::<Vec<_>>()
                 .join("\n")
         );

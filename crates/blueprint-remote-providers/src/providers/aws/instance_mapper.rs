@@ -120,8 +120,7 @@ mod tests {
             let result = AwsInstanceMapper::map(&spec);
             assert_eq!(
                 result.instance_type, expected,
-                "GPU count {} should map to {}",
-                gpu_count, expected
+                "GPU count {gpu_count} should map to {expected}"
             );
             assert!(!result.spot_capable); // GPU instances typically not spot
         }

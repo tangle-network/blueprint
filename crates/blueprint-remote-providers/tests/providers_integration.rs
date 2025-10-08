@@ -24,8 +24,7 @@ mod aws_tests {
             }
             Err(e) => {
                 println!(
-                    "⚠️  AWS adapter initialization failed (expected without credentials): {}",
-                    e
+                    "⚠️  AWS adapter initialization failed (expected without credentials): {e}"
                 );
             }
         }
@@ -113,12 +112,12 @@ mod aws_tests {
 
             match provisioner.create_security_group(&sg_name).await {
                 Ok(sg_id) => {
-                    println!("✅ Created security group: {}", sg_id);
+                    println!("✅ Created security group: {sg_id}");
                     assert!(!sg_id.is_empty());
                     assert!(sg_id.starts_with("sg-"));
                 }
                 Err(e) => {
-                    println!("⚠️  Security group creation failed: {}", e);
+                    println!("⚠️  Security group creation failed: {e}");
                 }
             }
         } else {
@@ -143,8 +142,7 @@ mod gcp_tests {
             }
             Err(e) => {
                 println!(
-                    "⚠️  GCP adapter initialization failed (expected without credentials): {}",
-                    e
+                    "⚠️  GCP adapter initialization failed (expected without credentials): {e}"
                 );
             }
         }
@@ -163,8 +161,7 @@ mod gcp_tests {
         for (spec, expected_prefix) in specs {
             // Would call GCP instance mapper here
             println!(
-                "Testing GCP machine type for {:?} -> {}",
-                spec, expected_prefix
+                "Testing GCP machine type for {spec:?} -> {expected_prefix}"
             );
         }
     }
@@ -188,8 +185,7 @@ mod azure_tests {
             }
             Err(e) => {
                 println!(
-                    "⚠️  Azure adapter initialization failed (expected without credentials): {}",
-                    e
+                    "⚠️  Azure adapter initialization failed (expected without credentials): {e}"
                 );
             }
         }
@@ -206,7 +202,7 @@ mod azure_tests {
 
         for (spec, expected_size) in specs {
             // Would use Azure VM size mapper
-            println!("Azure VM size for {:?} -> {}", spec, expected_size);
+            println!("Azure VM size for {spec:?} -> {expected_size}");
         }
     }
 
@@ -218,7 +214,7 @@ mod azure_tests {
             // Test getting access token
             match provisioner.get_access_token().await {
                 Ok(_) => println!("✅ Azure access token obtained"),
-                Err(e) => println!("⚠️  Azure access token failed: {}", e),
+                Err(e) => println!("⚠️  Azure access token failed: {e}"),
             }
         } else {
             println!("⏭️  Skipping Azure networking test - no credentials");
@@ -240,8 +236,7 @@ mod digitalocean_tests {
         match provisioner {
             Ok(_) => println!("✅ DigitalOcean provisioner initialized"),
             Err(e) => println!(
-                "⚠️  DigitalOcean provisioner failed (expected without real token): {}",
-                e
+                "⚠️  DigitalOcean provisioner failed (expected without real token): {e}"
             ),
         }
     }
@@ -257,7 +252,7 @@ mod digitalocean_tests {
 
         for (spec, expected_size) in specs {
             // Would use DO droplet size mapper
-            println!("DO droplet size for {:?} -> {}", spec, expected_size);
+            println!("DO droplet size for {spec:?} -> {expected_size}");
         }
     }
 
@@ -275,7 +270,7 @@ mod digitalocean_tests {
                     println!("✅ DigitalOcean provisioner created successfully");
                     println!("    Default region: nyc3");
                 }
-                Err(e) => println!("⚠️  Failed to list DO regions: {}", e),
+                Err(e) => println!("⚠️  Failed to list DO regions: {e}"),
             }
         } else {
             println!("⏭️  Skipping DO region test - no token");
@@ -300,8 +295,7 @@ mod vultr_tests {
             }
             Err(e) => {
                 println!(
-                    "⚠️  Vultr adapter initialization failed (expected without API key): {}",
-                    e
+                    "⚠️  Vultr adapter initialization failed (expected without API key): {e}"
                 );
             }
         }
@@ -317,7 +311,7 @@ mod vultr_tests {
         ];
 
         for (spec, expected_type) in specs {
-            println!("Vultr instance type for {:?} -> {}", spec, expected_type);
+            println!("Vultr instance type for {spec:?} -> {expected_type}");
         }
     }
 
@@ -419,7 +413,7 @@ mod security_tests {
 
         // In a real test, we'd scan source files
         for pattern in dangerous_patterns {
-            println!("Checking for pattern: {} - ✅ Not found", pattern);
+            println!("Checking for pattern: {pattern} - ✅ Not found");
         }
     }
 

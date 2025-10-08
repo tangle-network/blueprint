@@ -31,7 +31,7 @@ fn init_crypto() {
 /// Check if kubectl is configured and working
 async fn kubectl_working() -> bool {
     AsyncCommand::new("kubectl")
-        .args(&["cluster-info", "--request-timeout=5s"])
+        .args(["cluster-info", "--request-timeout=5s"])
         .output()
         .await
         .map(|output| output.status.success())
@@ -67,7 +67,7 @@ async fn ensure_test_cluster(cluster_name: &str) {
     // Wait a bit longer after cleanup to ensure resources are freed
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-    println!("Creating test cluster '{}'...", cluster_name);
+    println!("Creating test cluster '{cluster_name}'...");
 
     // Try to create cluster with retries
     let mut attempts = 0;
@@ -75,20 +75,20 @@ async fn ensure_test_cluster(cluster_name: &str) {
 
     while attempts < max_attempts {
         let create = AsyncCommand::new("kind")
-            .args(&["create", "cluster", "--name", cluster_name, "--wait", "60s"])
+            .args(["create", "cluster", "--name", cluster_name, "--wait", "60s"])
             .output()
             .await
             .expect("Failed to run kind create cluster");
 
         if create.status.success() {
-            println!("✓ Test cluster '{}' created successfully", cluster_name);
+            println!("✓ Test cluster '{cluster_name}' created successfully");
             break;
         }
 
         attempts += 1;
         if attempts < max_attempts {
             let stderr = String::from_utf8_lossy(&create.stderr);
-            println!("Attempt {} failed: {}", attempts, stderr);
+            println!("Attempt {attempts} failed: {stderr}");
 
             // If it failed due to existing cluster/container, clean up and retry
             if stderr.contains("already in use") || stderr.contains("already exists") {
@@ -97,19 +97,18 @@ async fn ensure_test_cluster(cluster_name: &str) {
                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;
             } else {
                 // For other errors, fail immediately
-                panic!("Failed to create test cluster: {}", stderr);
+                panic!("Failed to create test cluster: {stderr}");
             }
         } else {
             panic!(
-                "Failed to create test cluster after {} attempts",
-                max_attempts
+                "Failed to create test cluster after {max_attempts} attempts"
             );
         }
     }
 
     // Export kubeconfig
     let export = AsyncCommand::new("kind")
-        .args(&["export", "kubeconfig", "--name", cluster_name])
+        .args(["export", "kubeconfig", "--name", cluster_name])
         .output()
         .await
         .expect("Failed to export kubeconfig");
@@ -124,30 +123,30 @@ async fn ensure_test_cluster(cluster_name: &str) {
 
 /// Clean up the test cluster
 async fn cleanup_test_cluster(cluster_name: &str) {
-    println!("Cleaning up test cluster '{}'...", cluster_name);
+    println!("Cleaning up test cluster '{cluster_name}'...");
 
     // Delete the kind cluster
     let _ = AsyncCommand::new("kind")
-        .args(&["delete", "cluster", "--name", cluster_name])
+        .args(["delete", "cluster", "--name", cluster_name])
         .output()
         .await;
 
     // Clean up any lingering Docker containers with force
-    let control_plane_name = format!("{}-control-plane", cluster_name);
+    let control_plane_name = format!("{cluster_name}-control-plane");
     let _ = AsyncCommand::new("docker")
-        .args(&["rm", "-f", &control_plane_name])
+        .args(["rm", "-f", &control_plane_name])
         .output()
         .await;
 
     // Also try to clean up any docker networks
     let _ = AsyncCommand::new("docker")
-        .args(&["network", "rm", "kind"])
+        .args(["network", "rm", "kind"])
         .output()
         .await;
 
     // Clean up any remaining containers that might match
     let containers = AsyncCommand::new("docker")
-        .args(&["ps", "-a", "--format", "{{.Names}}"])
+        .args(["ps", "-a", "--format", "{{.Names}}"])
         .output()
         .await;
 
@@ -156,7 +155,7 @@ async fn cleanup_test_cluster(cluster_name: &str) {
         for name in container_names.lines() {
             if name.contains(cluster_name) {
                 let _ = AsyncCommand::new("docker")
-                    .args(&["rm", "-f", name])
+                    .args(["rm", "-f", name])
                     .output()
                     .await;
             }
@@ -250,13 +249,13 @@ async fn test_aws_adapter_kubernetes_routing() {
                         {
                             println!("    ✓ {name} failed as expected (authentication required)");
                         } else {
-                            println!("    ⚠️  {name} failed: {}", e);
+                            println!("    ⚠️  {name} failed: {e}");
                         }
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  AWS adapter creation failed: {}", e);
+                println!("    ⚠️  AWS adapter creation failed: {e}");
                 println!("    This may be expected if AWS credentials are not configured");
             }
         }
@@ -356,7 +355,7 @@ async fn test_gcp_adapter_kubernetes_routing() {
                                 "    ✓ {name} failed as expected (GCP authentication required)"
                             );
                         } else {
-                            println!("    ⚠️  {name} failed: {}", e);
+                            println!("    ⚠️  {name} failed: {e}");
                         }
                     }
                 }
@@ -368,7 +367,7 @@ async fn test_gcp_adapter_kubernetes_routing() {
                         "    ✓ GCP adapter creation failed as expected (GCP_PROJECT_ID not set)"
                     );
                 } else {
-                    println!("    ⚠️  GCP adapter creation failed: {}", e);
+                    println!("    ⚠️  GCP adapter creation failed: {e}");
                 }
             }
         }
@@ -461,13 +460,13 @@ async fn test_azure_adapter_kubernetes_routing() {
                                 "    ✓ {name} failed as expected (Azure authentication required)"
                             );
                         } else {
-                            println!("    ⚠️  {name} failed: {}", e);
+                            println!("    ⚠️  {name} failed: {e}");
                         }
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  Azure adapter creation failed: {}", e);
+                println!("    ⚠️  Azure adapter creation failed: {e}");
                 println!("    This may be expected if Azure credentials are not configured");
             }
         }
@@ -559,7 +558,7 @@ async fn test_digitalocean_adapter_kubernetes_routing() {
                                 "    ✓ {name} failed as expected (DigitalOcean authentication required)"
                             );
                         } else {
-                            println!("    ⚠️  {name} failed: {}", e);
+                            println!("    ⚠️  {name} failed: {e}");
                         }
                     }
                 }
@@ -571,7 +570,7 @@ async fn test_digitalocean_adapter_kubernetes_routing() {
                         "    ✓ DigitalOcean adapter creation failed as expected (DO_API_TOKEN not set)"
                     );
                 } else {
-                    println!("    ⚠️  DigitalOcean adapter creation failed: {}", e);
+                    println!("    ⚠️  DigitalOcean adapter creation failed: {e}");
                 }
             }
         }
@@ -663,7 +662,7 @@ async fn test_vultr_adapter_kubernetes_routing() {
                                 "    ✓ {name} failed as expected (Vultr authentication required)"
                             );
                         } else {
-                            println!("    ⚠️  {name} failed: {}", e);
+                            println!("    ⚠️  {name} failed: {e}");
                         }
                     }
                 }
@@ -675,7 +674,7 @@ async fn test_vultr_adapter_kubernetes_routing() {
                         "    ✓ Vultr adapter creation failed as expected (VULTR_API_KEY not set)"
                     );
                 } else {
-                    println!("    ⚠️  Vultr adapter creation failed: {}", e);
+                    println!("    ⚠️  Vultr adapter creation failed: {e}");
                 }
             }
         }
@@ -736,13 +735,13 @@ async fn test_kubernetes_feature_flag_compliance() {
                         {
                             println!("    ✓ {name} failed at authentication (feature enabled)");
                         } else {
-                            println!("    ⚠️  {name} unexpected error: {}", e);
+                            println!("    ⚠️  {name} unexpected error: {e}");
                         }
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  {name} adapter creation failed: {}", e);
+                println!("    ⚠️  {name} adapter creation failed: {e}");
             }
         }
     }
@@ -780,13 +779,13 @@ async fn test_kubernetes_feature_flag_compliance() {
                         {
                             println!("    ✓ {name} failed at authentication (feature enabled)");
                         } else {
-                            println!("    ⚠️  {name} unexpected error: {}", e);
+                            println!("    ⚠️  {name} unexpected error: {e}");
                         }
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  {name} adapter creation failed: {}", e);
+                println!("    ⚠️  {name} adapter creation failed: {e}");
             }
         }
     }
@@ -824,13 +823,13 @@ async fn test_kubernetes_feature_flag_compliance() {
                         {
                             println!("    ✓ {name} failed at authentication (feature enabled)");
                         } else {
-                            println!("    ⚠️  {name} unexpected error: {}", e);
+                            println!("    ⚠️  {name} unexpected error: {e}");
                         }
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  {name} adapter creation failed: {}", e);
+                println!("    ⚠️  {name} adapter creation failed: {e}");
             }
         }
     }
@@ -868,13 +867,13 @@ async fn test_kubernetes_feature_flag_compliance() {
                         {
                             println!("    ✓ {name} failed at authentication (feature enabled)");
                         } else {
-                            println!("    ⚠️  {name} unexpected error: {}", e);
+                            println!("    ⚠️  {name} unexpected error: {e}");
                         }
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  {name} adapter creation failed: {}", e);
+                println!("    ⚠️  {name} adapter creation failed: {e}");
             }
         }
     }
@@ -912,13 +911,13 @@ async fn test_kubernetes_feature_flag_compliance() {
                         {
                             println!("    ✓ {name} failed at authentication (feature enabled)");
                         } else {
-                            println!("    ⚠️  {name} unexpected error: {}", e);
+                            println!("    ⚠️  {name} unexpected error: {e}");
                         }
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  {name} adapter creation failed: {}", e);
+                println!("    ⚠️  {name} adapter creation failed: {e}");
             }
         }
     }
@@ -946,7 +945,7 @@ async fn test_deployment_target_validation() {
     // Test with one provider (AWS) - others should behave similarly
     if let Ok(adapter) = AwsAdapter::new().await {
         for target in invalid_targets {
-            println!("  Testing invalid target: {:?}", target);
+            println!("  Testing invalid target: {target:?}");
 
             let result = adapter
                 .deploy_blueprint_with_target(
@@ -966,7 +965,7 @@ async fn test_deployment_target_validation() {
                     if error_msg.contains("not implemented") || error_msg.contains("serverless") {
                         println!("    ✓ Correctly rejected unsupported target");
                     } else {
-                        println!("    ⚠️  Unexpected error: {}", e);
+                        println!("    ⚠️  Unexpected error: {e}");
                     }
                 }
             }
@@ -980,11 +979,11 @@ async fn test_deployment_target_validation() {
 
 // Helper function to cleanup deployments
 async fn cleanup_deployment(deployment_name: &str) {
-    let service_name = format!("{}-service", deployment_name);
+    let service_name = format!("{deployment_name}-service");
 
     // Cleanup deployment
     let _ = AsyncCommand::new("kubectl")
-        .args(&[
+        .args([
             "delete",
             "deployment",
             deployment_name,
@@ -995,11 +994,11 @@ async fn cleanup_deployment(deployment_name: &str) {
 
     // Cleanup service
     let _ = AsyncCommand::new("kubectl")
-        .args(&["delete", "service", &service_name, "--ignore-not-found"])
+        .args(["delete", "service", &service_name, "--ignore-not-found"])
         .status()
         .await;
 
-    println!("    ✓ Cleaned up {}", deployment_name);
+    println!("    ✓ Cleaned up {deployment_name}");
 }
 
 // Comprehensive integration test
@@ -1064,12 +1063,12 @@ async fn test_comprehensive_k8s_provider_integration() {
                         cleanup_deployment(&deployment.blueprint_id).await;
                     }
                     Err(e) => {
-                        println!("    ⚠️  {name} generic K8s deployment failed: {}", e);
+                        println!("    ⚠️  {name} generic K8s deployment failed: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  {name} adapter creation failed: {}", e);
+                println!("    ⚠️  {name} adapter creation failed: {e}");
                 failed_adapters += 1;
             }
         }
@@ -1109,12 +1108,12 @@ async fn test_comprehensive_k8s_provider_integration() {
                         cleanup_deployment(&deployment.blueprint_id).await;
                     }
                     Err(e) => {
-                        println!("    ⚠️  {name} generic K8s deployment failed: {}", e);
+                        println!("    ⚠️  {name} generic K8s deployment failed: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  {name} adapter creation failed: {}", e);
+                println!("    ⚠️  {name} adapter creation failed: {e}");
                 failed_adapters += 1;
             }
         }
@@ -1154,12 +1153,12 @@ async fn test_comprehensive_k8s_provider_integration() {
                         cleanup_deployment(&deployment.blueprint_id).await;
                     }
                     Err(e) => {
-                        println!("    ⚠️  {name} generic K8s deployment failed: {}", e);
+                        println!("    ⚠️  {name} generic K8s deployment failed: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  {name} adapter creation failed: {}", e);
+                println!("    ⚠️  {name} adapter creation failed: {e}");
                 failed_adapters += 1;
             }
         }
@@ -1199,12 +1198,12 @@ async fn test_comprehensive_k8s_provider_integration() {
                         cleanup_deployment(&deployment.blueprint_id).await;
                     }
                     Err(e) => {
-                        println!("    ⚠️  {name} generic K8s deployment failed: {}", e);
+                        println!("    ⚠️  {name} generic K8s deployment failed: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  {name} adapter creation failed: {}", e);
+                println!("    ⚠️  {name} adapter creation failed: {e}");
                 failed_adapters += 1;
             }
         }
@@ -1244,20 +1243,20 @@ async fn test_comprehensive_k8s_provider_integration() {
                         cleanup_deployment(&deployment.blueprint_id).await;
                     }
                     Err(e) => {
-                        println!("    ⚠️  {name} generic K8s deployment failed: {}", e);
+                        println!("    ⚠️  {name} generic K8s deployment failed: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("    ⚠️  {name} adapter creation failed: {}", e);
+                println!("    ⚠️  {name} adapter creation failed: {e}");
                 failed_adapters += 1;
             }
         }
     }
 
     println!("✓ Comprehensive integration test completed");
-    println!("  Successful deployments: {}", successful_deployments);
-    println!("  Failed adapter creations: {}", failed_adapters);
+    println!("  Successful deployments: {successful_deployments}");
+    println!("  Failed adapter creations: {failed_adapters}");
 
     // At least some providers should work with generic K8s even without cloud credentials
     if successful_deployments == 0 && failed_adapters < 5 {

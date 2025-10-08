@@ -142,12 +142,12 @@ proptest! {
             "docker run -d --name test --cpus={} --memory={}g{}",
             cpu,
             memory_gb,
-            gpu_count.map(|g| format!(" --gpus={}", g)).unwrap_or_default()
+            gpu_count.map(|g| format!(" --gpus={g}")).unwrap_or_default()
         );
 
         // Verify the command contains the resource limits
-        let cpu_arg = format!("--cpus={}", cpu);
-        let mem_arg = format!("--memory={}g", memory_gb);
+        let cpu_arg = format!("--cpus={cpu}");
+        let mem_arg = format!("--memory={memory_gb}g");
 
         prop_assert!(docker_cmd.contains(&cpu_arg),
             "Docker command should contain CPU limit: {}", cpu_arg);
@@ -155,7 +155,7 @@ proptest! {
             "Docker command should contain memory limit: {}", mem_arg);
 
         if let Some(gpus) = gpu_count {
-            let gpu_arg = format!("--gpus={}", gpus);
+            let gpu_arg = format!("--gpus={gpus}");
             prop_assert!(docker_cmd.contains(&gpu_arg),
                 "Docker command should contain GPU limit: {}", gpu_arg);
         }

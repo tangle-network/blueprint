@@ -10,109 +10,116 @@ use blueprint_remote_providers::{
     infra::types::InstanceStatus,
     shared::{ManagedK8sConfig, SharedKubernetesDeployment},
 };
-use std::sync::Once;
 use tokio::process::Command as AsyncCommand;
 
-// Initialize rustls crypto provider once
-static INIT: Once = Once::new();
+// These helper functions are available for manual testing but not used in automated tests
+#[allow(dead_code)]
+mod test_helpers {
+    use std::sync::Once;
+    use tokio::process::Command as AsyncCommand;
 
-fn init_crypto() {
-    INIT.call_once(|| {
-        rustls::crypto::ring::default_provider()
-            .install_default()
-            .ok();
-    });
-}
+    // Initialize rustls crypto provider once
+    static INIT: Once = Once::new();
 
-/// Check if a CLI tool is available
-async fn cli_available(tool: &str) -> bool {
-    AsyncCommand::new(tool)
-        .arg("--version")
-        .output()
-        .await
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-}
+    pub(crate) fn init_crypto() {
+        INIT.call_once(|| {
+            rustls::crypto::ring::default_provider()
+                .install_default()
+                .ok();
+        });
+    }
 
-/// Check if kubectl is configured and working
-async fn kubectl_working() -> bool {
-    AsyncCommand::new("kubectl")
-        .args(&["cluster-info", "--request-timeout=5s"])
-        .output()
-        .await
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-}
+    /// Check if a CLI tool is available
+    pub(crate) async fn cli_available(tool: &str) -> bool {
+        AsyncCommand::new(tool)
+            .arg("--version")
+            .output()
+            .await
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    }
 
-/// Skip test if kind not available, otherwise ensure test cluster exists
-macro_rules! require_kind {
-    ($cluster_name:ident) => {
-        if !cli_available("kind").await {
-            eprintln!("⚠️  Skipping test - kind not installed. Install with: brew install kind");
-            return;
-        }
-        let $cluster_name = ensure_test_cluster().await;
-    };
-}
+    /// Check if kubectl is configured and working
+    pub(crate) async fn kubectl_working() -> bool {
+        AsyncCommand::new("kubectl")
+            .args(["cluster-info", "--request-timeout=5s"])
+            .output()
+            .await
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    }
 
-/// Create a unique test cluster name for each test
-fn get_test_cluster_name() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    /// Skip test if kind not available, otherwise ensure test cluster exists
+    #[allow(unused_macros)]
+    macro_rules! require_kind {
+        ($cluster_name:ident) => {
+            if !cli_available("kind").await {
+                eprintln!("⚠️  Skipping test - kind not installed. Install with: brew install kind");
+                return;
+            }
+            let $cluster_name = ensure_test_cluster().await;
+        };
+    }
 
-    let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    format!("bp-test-{}-{}", timestamp, counter)
-}
+    /// Create a unique test cluster name for each test
+    pub(crate) fn get_test_cluster_name() -> String {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Ensure test cluster exists with unique name
-async fn ensure_test_cluster() -> String {
-    let cluster_name = get_test_cluster_name();
+        let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        format!("bp-test-{timestamp}-{counter}")
+    }
 
-    // Clean up any existing cluster with this name (shouldn't happen, but safety first)
-    let _ = AsyncCommand::new("kind")
-        .args(&["delete", "cluster", "--name", &cluster_name])
-        .output()
-        .await;
+    /// Ensure test cluster exists with unique name
+    pub(crate) async fn ensure_test_cluster() -> String {
+        let cluster_name = get_test_cluster_name();
 
-    println!("Creating test cluster '{}'...", cluster_name);
-    let create = AsyncCommand::new("kind")
-        .args(&[
-            "create",
-            "cluster",
-            "--name",
-            &cluster_name,
-            "--wait",
-            "60s",
-        ])
-        .status()
-        .await
-        .expect("Failed to create kind cluster");
+        // Clean up any existing cluster with this name (shouldn't happen, but safety first)
+        let _ = AsyncCommand::new("kind")
+            .args(["delete", "cluster", "--name", &cluster_name])
+            .output()
+            .await;
 
-    assert!(create.success(), "Failed to create test cluster");
+        println!("Creating test cluster '{cluster_name}'...");
+        let create = AsyncCommand::new("kind")
+            .args([
+                "create",
+                "cluster",
+                "--name",
+                &cluster_name,
+                "--wait",
+                "60s",
+            ])
+            .status()
+            .await
+            .expect("Failed to create kind cluster");
 
-    // Set kubeconfig
-    let export = AsyncCommand::new("kind")
-        .args(&["export", "kubeconfig", "--name", &cluster_name])
-        .status()
-        .await
-        .expect("Failed to export kubeconfig");
+        assert!(create.success(), "Failed to create test cluster");
 
-    assert!(export.success(), "Failed to export kubeconfig");
+        // Set kubeconfig
+        let export = AsyncCommand::new("kind")
+            .args(["export", "kubeconfig", "--name", &cluster_name])
+            .status()
+            .await
+            .expect("Failed to export kubeconfig");
 
-    cluster_name
-}
+        assert!(export.success(), "Failed to export kubeconfig");
 
-/// Cleanup test cluster
-async fn cleanup_test_cluster(cluster_name: &str) {
-    println!("Cleaning up test cluster '{}'...", cluster_name);
-    let _ = AsyncCommand::new("kind")
-        .args(&["delete", "cluster", "--name", cluster_name])
-        .status()
-        .await;
+        cluster_name
+    }
+
+    /// Cleanup test cluster
+    pub(crate) async fn cleanup_test_cluster(cluster_name: &str) {
+        println!("Cleaning up test cluster '{cluster_name}'...");
+        let _ = AsyncCommand::new("kind")
+            .args(["delete", "cluster", "--name", cluster_name])
+            .status()
+            .await;
+    }
 }
 
 #[tokio::test]
@@ -627,10 +634,11 @@ async fn test_k8s_deployment_metadata_consistency() {
 }
 
 // Helper function to delete K8s deployment for cleanup
+#[allow(dead_code)]
 async fn delete_k8s_deployment(deployment_name: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Delete deployment
     let deployment_result = AsyncCommand::new("kubectl")
-        .args(&[
+        .args([
             "delete",
             "deployment",
             deployment_name,
@@ -640,16 +648,15 @@ async fn delete_k8s_deployment(deployment_name: &str) -> Result<(), Box<dyn std:
         .await?;
 
     // Delete service
-    let service_name = format!("{}-service", deployment_name);
+    let service_name = format!("{deployment_name}-service");
     let service_result = AsyncCommand::new("kubectl")
-        .args(&["delete", "service", &service_name, "--ignore-not-found"])
+        .args(["delete", "service", &service_name, "--ignore-not-found"])
         .status()
         .await?;
 
     if deployment_result.success() && service_result.success() {
         println!(
-            "  ✓ Cleaned up deployment and service for {}",
-            deployment_name
+            "  ✓ Cleaned up deployment and service for {deployment_name}"
         );
     }
 

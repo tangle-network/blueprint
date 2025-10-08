@@ -466,6 +466,15 @@ pub struct DOKSCluster {
     pub node_count: u32,
 }
 
+impl fmt::Debug for DigitalOceanProvisioner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DigitalOceanProvisioner")
+            .field("api_token", &"[REDACTED]")
+            .field("default_region", &self.default_region)
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -524,14 +533,5 @@ mod tests {
         assert!(user_data.contains("docker.io"));
         assert!(user_data.contains("CPUQuota=200%"));
         assert!(user_data.contains("MemoryMax=4096M"));
-    }
-}
-
-impl fmt::Debug for DigitalOceanProvisioner {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DigitalOceanProvisioner")
-            .field("api_token", &"[REDACTED]")
-            .field("default_region", &self.default_region)
-            .finish()
     }
 }
