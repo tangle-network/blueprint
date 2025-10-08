@@ -15,7 +15,7 @@ use blueprint_remote_providers::{
 };
 use std::{collections::HashMap, time::Duration};
 use tokio::time::{sleep, timeout};
-use tracing::{debug, error, info, warn};
+use blueprint_core::{debug, error, info, warn};
 
 const BLUEPRINT_IMAGE: &str = "ghcr.io/tangle-network/incredible-squaring:latest";
 const TEST_TIMEOUT: Duration = Duration::from_secs(600); // 10 min max per provider
