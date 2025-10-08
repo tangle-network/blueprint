@@ -20,7 +20,7 @@ impl AzureProvisioner {
     pub async fn new() -> Result<Self> {
         let subscription_id = std::env::var("AZURE_SUBSCRIPTION_ID")
             .map_err(|_| Error::ConfigurationError("AZURE_SUBSCRIPTION_ID not set".into()))?;
-        
+
         let resource_group = std::env::var("AZURE_RESOURCE_GROUP")
             .unwrap_or_else(|_| "blueprint-resources".to_string());
 
@@ -47,7 +47,8 @@ impl AzureProvisioner {
             ("resource", "https://management.azure.com/"),
         ];
 
-        let response = self.client
+        let response = self
+            .client
             .get(token_url)
             .header("Metadata", "true")
             .query(&params)
@@ -56,8 +57,9 @@ impl AzureProvisioner {
 
         if let Ok(resp) = response {
             if resp.status().is_success() {
-                let json: serde_json::Value = resp.json().await
-                    .map_err(|e| Error::ConfigurationError(format!("Failed to parse token: {e}")))?;
+                let json: serde_json::Value = resp.json().await.map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to parse token: {e}"))
+                })?;
                 if let Some(token) = json["access_token"].as_str() {
                     self.access_token = Some(token.to_string());
                     return Ok(token.to_string());
@@ -68,12 +70,23 @@ impl AzureProvisioner {
         // Fall back to Azure CLI
         use std::process::Command;
         let output = Command::new("az")
-            .args(["account", "get-access-token", "--query", "accessToken", "-o", "tsv"])
+            .args([
+                "account",
+                "get-access-token",
+                "--query",
+                "accessToken",
+                "-o",
+                "tsv",
+            ])
             .output()
-            .map_err(|e| Error::ConfigurationError(format!("Failed to get Azure token via CLI: {e}")))?;
+            .map_err(|e| {
+                Error::ConfigurationError(format!("Failed to get Azure token via CLI: {e}"))
+            })?;
 
         if !output.status.success() {
-            return Err(Error::ConfigurationError("Failed to get Azure access token".into()));
+            return Err(Error::ConfigurationError(
+                "Failed to get Azure access token".into(),
+            ));
         }
 
         let token = String::from_utf8(output.stdout)
@@ -101,7 +114,9 @@ impl AzureProvisioner {
 
         // Create network interface first
         let nic_name = format!("{vm_name}-nic");
-        let nic_id = self.create_network_interface(&nic_name, location, &token).await?;
+        let nic_id = self
+            .create_network_interface(&nic_name, location, &token)
+            .await?;
 
         // Determine VM size based on spec
         let vm_size = self.select_vm_size(spec);
@@ -157,7 +172,8 @@ impl AzureProvisioner {
             self.subscription_id, self.resource_group, vm_name
         );
 
-        let response = self.client
+        let response = self
+            .client
             .put(&url)
             .bearer_auth(&token)
             .json(&vm_body)
@@ -167,7 +183,9 @@ impl AzureProvisioner {
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Azure API error: {error_text}")));
+            return Err(Error::ConfigurationError(format!(
+                "Azure API error: {error_text}"
+            )));
         }
 
         // Wait for VM to be ready and get IP
@@ -180,8 +198,10 @@ impl AzureProvisioner {
 
         Ok(ProvisionedInfrastructure {
             provider: crate::core::remote::CloudProvider::Azure,
-            instance_id: format!("/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Compute/virtualMachines/{}",
-                               self.subscription_id, self.resource_group, vm_name),
+            instance_id: format!(
+                "/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Compute/virtualMachines/{}",
+                self.subscription_id, self.resource_group, vm_name
+            ),
             public_ip: Some(public_ip),
             private_ip: None,
             region: location.to_string(),
@@ -191,11 +211,17 @@ impl AzureProvisioner {
     }
 
     /// Create network interface
-    async fn create_network_interface(&self, nic_name: &str, location: &str, token: &str) -> Result<String> {
+    async fn create_network_interface(
+        &self,
+        nic_name: &str,
+        location: &str,
+        token: &str,
+    ) -> Result<String> {
         // First ensure we have a virtual network
         let vnet_name = "blueprint-vnet";
         let subnet_name = "default";
-        self.ensure_virtual_network(vnet_name, subnet_name, location, token).await?;
+        self.ensure_virtual_network(vnet_name, subnet_name, location, token)
+            .await?;
 
         // Create public IP
         let pip_name = format!("{nic_name}-pip");
@@ -230,7 +256,8 @@ impl AzureProvisioner {
             self.subscription_id, self.resource_group, nic_name
         );
 
-        let response = self.client
+        let response = self
+            .client
             .put(&url)
             .bearer_auth(token)
             .json(&nic_body)
@@ -240,7 +267,9 @@ impl AzureProvisioner {
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Failed to create NIC: {error_text}")));
+            return Err(Error::ConfigurationError(format!(
+                "Failed to create NIC: {error_text}"
+            )));
         }
 
         Ok(format!(
@@ -250,7 +279,13 @@ impl AzureProvisioner {
     }
 
     /// Ensure virtual network exists
-    async fn ensure_virtual_network(&self, vnet_name: &str, subnet_name: &str, location: &str, token: &str) -> Result<()> {
+    async fn ensure_virtual_network(
+        &self,
+        vnet_name: &str,
+        subnet_name: &str,
+        location: &str,
+        token: &str,
+    ) -> Result<()> {
         let vnet_body = serde_json::json!({
             "location": location,
             "properties": {
@@ -271,12 +306,14 @@ impl AzureProvisioner {
             self.subscription_id, self.resource_group, vnet_name
         );
 
-        match self.client
+        match self
+            .client
             .put(&url)
             .bearer_auth(token)
             .json(&vnet_body)
             .send()
-            .await {
+            .await
+        {
             Ok(_) => info!("Virtual network {} created successfully", vnet_name),
             Err(e) => warn!("Failed to create virtual network {}: {}", vnet_name, e),
         }
@@ -285,7 +322,12 @@ impl AzureProvisioner {
     }
 
     /// Create public IP
-    async fn create_public_ip(&self, pip_name: &str, location: &str, token: &str) -> Result<String> {
+    async fn create_public_ip(
+        &self,
+        pip_name: &str,
+        location: &str,
+        token: &str,
+    ) -> Result<String> {
         let pip_body = serde_json::json!({
             "location": location,
             "properties": {
@@ -302,7 +344,8 @@ impl AzureProvisioner {
             self.subscription_id, self.resource_group, pip_name
         );
 
-        let response = self.client
+        let response = self
+            .client
             .put(&url)
             .bearer_auth(token)
             .json(&pip_body)
@@ -311,7 +354,9 @@ impl AzureProvisioner {
             .map_err(|e| Error::ConfigurationError(format!("Failed to create public IP: {e}")))?;
 
         if !response.status().is_success() {
-            return Err(Error::ConfigurationError("Failed to create public IP".into()));
+            return Err(Error::ConfigurationError(
+                "Failed to create public IP".into(),
+            ));
         }
 
         Ok(format!(
@@ -336,21 +381,18 @@ impl AzureProvisioner {
                 self.subscription_id, self.resource_group, vm_name
             );
 
-            let response = self.client
-                .get(&url)
-                .bearer_auth(token)
-                .send()
-                .await;
+            let response = self.client.get(&url).bearer_auth(token).send().await;
 
             if let Ok(resp) = response {
                 if resp.status().is_success() {
-                    let json: serde_json::Value = resp.json().await
-                        .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
+                    let json: serde_json::Value = resp.json().await.map_err(|e| {
+                        Error::ConfigurationError(format!("Failed to parse response: {e}"))
+                    })?;
 
                     if let Some(statuses) = json["statuses"].as_array() {
-                        let is_running = statuses.iter().any(|s|
-                            s["code"].as_str() == Some("PowerState/running")
-                        );
+                        let is_running = statuses
+                            .iter()
+                            .any(|s| s["code"].as_str() == Some("PowerState/running"));
 
                         if is_running {
                             // Get public IP
@@ -360,16 +402,25 @@ impl AzureProvisioner {
                                 self.subscription_id, self.resource_group, pip_name
                             );
 
-                            let pip_response = self.client
+                            let pip_response = self
+                                .client
                                 .get(&pip_url)
                                 .bearer_auth(token)
                                 .send()
                                 .await
-                                .map_err(|e| Error::ConfigurationError(format!("Failed to get public IP: {e}")))?;
+                                .map_err(|e| {
+                                    Error::ConfigurationError(format!(
+                                        "Failed to get public IP: {e}"
+                                    ))
+                                })?;
 
                             if pip_response.status().is_success() {
-                                let pip_json: serde_json::Value = pip_response.json().await
-                                    .map_err(|e| Error::ConfigurationError(format!("Failed to parse IP response: {e}")))?;
+                                let pip_json: serde_json::Value =
+                                    pip_response.json().await.map_err(|e| {
+                                        Error::ConfigurationError(format!(
+                                            "Failed to parse IP response: {e}"
+                                        ))
+                                    })?;
 
                                 if let Some(ip) = pip_json["properties"]["ipAddress"].as_str() {
                                     return Ok(ip.to_string());
@@ -395,10 +446,15 @@ impl AzureProvisioner {
 
             // High memory
             (cpu, mem, _) if mem > cpu * 8.0 => {
-                if mem <= 16.0 { "Standard_E2as_v5" }
-                else if mem <= 32.0 { "Standard_E4as_v5" }
-                else if mem <= 64.0 { "Standard_E8as_v5" }
-                else { "Standard_E16as_v5" }
+                if mem <= 16.0 {
+                    "Standard_E2as_v5"
+                } else if mem <= 32.0 {
+                    "Standard_E4as_v5"
+                } else if mem <= 64.0 {
+                    "Standard_E8as_v5"
+                } else {
+                    "Standard_E16as_v5"
+                }
             }
 
             // High CPU
@@ -424,7 +480,8 @@ impl AzureProvisioner {
             self.subscription_id, self.resource_group, vm_name
         );
 
-        let response = self.client
+        let response = self
+            .client
             .delete(&url)
             .bearer_auth(&token)
             .send()
@@ -433,7 +490,9 @@ impl AzureProvisioner {
 
         if !response.status().is_success() && response.status() != 404 {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Failed to terminate VM: {error_text}")));
+            return Err(Error::ConfigurationError(format!(
+                "Failed to terminate VM: {error_text}"
+            )));
         }
 
         // Clean up associated resources

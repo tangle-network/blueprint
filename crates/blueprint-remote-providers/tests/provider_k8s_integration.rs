@@ -4,21 +4,15 @@
 //! deployment components. Tests real provider configurations and
 //! deployment target routing without mocks.
 
-use serial_test::serial;
 use blueprint_remote_providers::{
-    core::{
-        deployment_target::DeploymentTarget,
-        resources::ResourceSpec,
-    },
-    providers::{
-        aws::AwsAdapter,
-        azure::AzureAdapter,
-        digitalocean::adapter::DigitalOceanAdapter,
-        gcp::GcpAdapter,
-        vultr::VultrAdapter,
-    },
+    core::{deployment_target::DeploymentTarget, resources::ResourceSpec},
     infra::traits::CloudProviderAdapter,
+    providers::{
+        aws::AwsAdapter, azure::AzureAdapter, digitalocean::adapter::DigitalOceanAdapter,
+        gcp::GcpAdapter, vultr::VultrAdapter,
+    },
 };
+use serial_test::serial;
 use std::collections::HashMap;
 use std::sync::Once;
 use tokio::process::Command as AsyncCommand;
@@ -106,7 +100,10 @@ async fn ensure_test_cluster(cluster_name: &str) {
                 panic!("Failed to create test cluster: {}", stderr);
             }
         } else {
-            panic!("Failed to create test cluster after {} attempts", max_attempts);
+            panic!(
+                "Failed to create test cluster after {} attempts",
+                max_attempts
+            );
         }
     }
 
@@ -118,7 +115,10 @@ async fn ensure_test_cluster(cluster_name: &str) {
         .expect("Failed to export kubeconfig");
 
     if !export.status.success() {
-        panic!("Failed to export kubeconfig: {}", String::from_utf8_lossy(&export.stderr));
+        panic!(
+            "Failed to export kubeconfig: {}",
+            String::from_utf8_lossy(&export.stderr)
+        );
     }
 }
 
@@ -214,16 +214,21 @@ async fn test_aws_adapter_kubernetes_routing() {
                 println!("    ✓ AWS adapter created successfully");
 
                 // Test deployment routing (will fail at authentication for EKS, succeed for generic)
-                let deployment_result = adapter.deploy_blueprint_with_target(
-                    &target,
-                    "nginx:alpine",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await;
+                let deployment_result = adapter
+                    .deploy_blueprint_with_target(
+                        &target,
+                        "nginx:alpine",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await;
 
                 match deployment_result {
                     Ok(deployment) => {
-                        println!("    ✓ {name} deployment succeeded: {}", deployment.blueprint_id);
+                        println!(
+                            "    ✓ {name} deployment succeeded: {}",
+                            deployment.blueprint_id
+                        );
 
                         // Verify deployment structure
                         assert!(!deployment.blueprint_id.is_empty());
@@ -237,12 +242,12 @@ async fn test_aws_adapter_kubernetes_routing() {
                     }
                     Err(e) => {
                         let error_msg = e.to_string().to_lowercase();
-                        if name == "EKS Managed" && (
-                            error_msg.contains("aws") ||
-                            error_msg.contains("authentication") ||
-                            error_msg.contains("credentials") ||
-                            error_msg.contains("kubeconfig")
-                        ) {
+                        if name == "EKS Managed"
+                            && (error_msg.contains("aws")
+                                || error_msg.contains("authentication")
+                                || error_msg.contains("credentials")
+                                || error_msg.contains("kubeconfig"))
+                        {
                             println!("    ✓ {name} failed as expected (authentication required)");
                         } else {
                             println!("    ⚠️  {name} failed: {}", e);
@@ -309,21 +314,29 @@ async fn test_gcp_adapter_kubernetes_routing() {
                 println!("    ✓ GCP adapter created successfully");
 
                 // Test deployment routing
-                let deployment_result = adapter.deploy_blueprint_with_target(
-                    &target,
-                    "nginx:alpine",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await;
+                let deployment_result = adapter
+                    .deploy_blueprint_with_target(
+                        &target,
+                        "nginx:alpine",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await;
 
                 match deployment_result {
                     Ok(deployment) => {
-                        println!("    ✓ {name} deployment succeeded: {}", deployment.blueprint_id);
+                        println!(
+                            "    ✓ {name} deployment succeeded: {}",
+                            deployment.blueprint_id
+                        );
 
                         // Verify GCP-specific metadata
                         if name == "GKE Managed" {
                             assert!(deployment.metadata.contains_key("project_id"));
-                            assert_eq!(deployment.metadata.get("provider"), Some(&"gcp-gke".to_string()));
+                            assert_eq!(
+                                deployment.metadata.get("provider"),
+                                Some(&"gcp-gke".to_string())
+                            );
                         }
 
                         // Cleanup real deployments
@@ -333,13 +346,15 @@ async fn test_gcp_adapter_kubernetes_routing() {
                     }
                     Err(e) => {
                         let error_msg = e.to_string().to_lowercase();
-                        if name == "GKE Managed" && (
-                            error_msg.contains("gcp") ||
-                            error_msg.contains("gcloud") ||
-                            error_msg.contains("project") ||
-                            error_msg.contains("authentication")
-                        ) {
-                            println!("    ✓ {name} failed as expected (GCP authentication required)");
+                        if name == "GKE Managed"
+                            && (error_msg.contains("gcp")
+                                || error_msg.contains("gcloud")
+                                || error_msg.contains("project")
+                                || error_msg.contains("authentication"))
+                        {
+                            println!(
+                                "    ✓ {name} failed as expected (GCP authentication required)"
+                            );
                         } else {
                             println!("    ⚠️  {name} failed: {}", e);
                         }
@@ -349,7 +364,9 @@ async fn test_gcp_adapter_kubernetes_routing() {
             Err(e) => {
                 let error_msg = e.to_string().to_lowercase();
                 if error_msg.contains("gcp_project_id") {
-                    println!("    ✓ GCP adapter creation failed as expected (GCP_PROJECT_ID not set)");
+                    println!(
+                        "    ✓ GCP adapter creation failed as expected (GCP_PROJECT_ID not set)"
+                    );
                 } else {
                     println!("    ⚠️  GCP adapter creation failed: {}", e);
                 }
@@ -402,21 +419,29 @@ async fn test_azure_adapter_kubernetes_routing() {
                 println!("    ✓ Azure adapter created successfully");
 
                 // Test deployment routing
-                let deployment_result = adapter.deploy_blueprint_with_target(
-                    &target,
-                    "nginx:alpine",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await;
+                let deployment_result = adapter
+                    .deploy_blueprint_with_target(
+                        &target,
+                        "nginx:alpine",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await;
 
                 match deployment_result {
                     Ok(deployment) => {
-                        println!("    ✓ {name} deployment succeeded: {}", deployment.blueprint_id);
+                        println!(
+                            "    ✓ {name} deployment succeeded: {}",
+                            deployment.blueprint_id
+                        );
 
                         // Verify Azure-specific metadata
                         if name == "AKS Managed" {
                             assert!(deployment.metadata.contains_key("resource_group"));
-                            assert_eq!(deployment.metadata.get("provider"), Some(&"azure-aks".to_string()));
+                            assert_eq!(
+                                deployment.metadata.get("provider"),
+                                Some(&"azure-aks".to_string())
+                            );
                         }
 
                         // Cleanup real deployments
@@ -426,13 +451,15 @@ async fn test_azure_adapter_kubernetes_routing() {
                     }
                     Err(e) => {
                         let error_msg = e.to_string().to_lowercase();
-                        if name == "AKS Managed" && (
-                            error_msg.contains("azure") ||
-                            error_msg.contains("az ") ||
-                            error_msg.contains("subscription") ||
-                            error_msg.contains("authentication")
-                        ) {
-                            println!("    ✓ {name} failed as expected (Azure authentication required)");
+                        if name == "AKS Managed"
+                            && (error_msg.contains("azure")
+                                || error_msg.contains("az ")
+                                || error_msg.contains("subscription")
+                                || error_msg.contains("authentication"))
+                        {
+                            println!(
+                                "    ✓ {name} failed as expected (Azure authentication required)"
+                            );
                         } else {
                             println!("    ⚠️  {name} failed: {}", e);
                         }
@@ -491,20 +518,28 @@ async fn test_digitalocean_adapter_kubernetes_routing() {
                 println!("    ✓ DigitalOcean adapter created successfully");
 
                 // Test deployment routing
-                let deployment_result = adapter.deploy_blueprint_with_target(
-                    &target,
-                    "nginx:alpine",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await;
+                let deployment_result = adapter
+                    .deploy_blueprint_with_target(
+                        &target,
+                        "nginx:alpine",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await;
 
                 match deployment_result {
                     Ok(deployment) => {
-                        println!("    ✓ {name} deployment succeeded: {}", deployment.blueprint_id);
+                        println!(
+                            "    ✓ {name} deployment succeeded: {}",
+                            deployment.blueprint_id
+                        );
 
                         // Verify DigitalOcean-specific metadata
                         if name == "DOKS Managed" {
-                            assert_eq!(deployment.metadata.get("provider"), Some(&"digitalocean-doks".to_string()));
+                            assert_eq!(
+                                deployment.metadata.get("provider"),
+                                Some(&"digitalocean-doks".to_string())
+                            );
                         }
 
                         // Cleanup real deployments
@@ -514,13 +549,15 @@ async fn test_digitalocean_adapter_kubernetes_routing() {
                     }
                     Err(e) => {
                         let error_msg = e.to_string().to_lowercase();
-                        if name == "DOKS Managed" && (
-                            error_msg.contains("digitalocean") ||
-                            error_msg.contains("doctl") ||
-                            error_msg.contains("api_token") ||
-                            error_msg.contains("authentication")
-                        ) {
-                            println!("    ✓ {name} failed as expected (DigitalOcean authentication required)");
+                        if name == "DOKS Managed"
+                            && (error_msg.contains("digitalocean")
+                                || error_msg.contains("doctl")
+                                || error_msg.contains("api_token")
+                                || error_msg.contains("authentication"))
+                        {
+                            println!(
+                                "    ✓ {name} failed as expected (DigitalOcean authentication required)"
+                            );
                         } else {
                             println!("    ⚠️  {name} failed: {}", e);
                         }
@@ -530,7 +567,9 @@ async fn test_digitalocean_adapter_kubernetes_routing() {
             Err(e) => {
                 let error_msg = e.to_string().to_lowercase();
                 if error_msg.contains("do_api_token") {
-                    println!("    ✓ DigitalOcean adapter creation failed as expected (DO_API_TOKEN not set)");
+                    println!(
+                        "    ✓ DigitalOcean adapter creation failed as expected (DO_API_TOKEN not set)"
+                    );
                 } else {
                     println!("    ⚠️  DigitalOcean adapter creation failed: {}", e);
                 }
@@ -583,20 +622,28 @@ async fn test_vultr_adapter_kubernetes_routing() {
                 println!("    ✓ Vultr adapter created successfully");
 
                 // Test deployment routing
-                let deployment_result = adapter.deploy_blueprint_with_target(
-                    &target,
-                    "nginx:alpine",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await;
+                let deployment_result = adapter
+                    .deploy_blueprint_with_target(
+                        &target,
+                        "nginx:alpine",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await;
 
                 match deployment_result {
                     Ok(deployment) => {
-                        println!("    ✓ {name} deployment succeeded: {}", deployment.blueprint_id);
+                        println!(
+                            "    ✓ {name} deployment succeeded: {}",
+                            deployment.blueprint_id
+                        );
 
                         // Verify Vultr-specific metadata
                         if name == "VKE Managed" {
-                            assert_eq!(deployment.metadata.get("provider"), Some(&"vultr-vke".to_string()));
+                            assert_eq!(
+                                deployment.metadata.get("provider"),
+                                Some(&"vultr-vke".to_string())
+                            );
                         }
 
                         // Cleanup real deployments
@@ -606,13 +653,15 @@ async fn test_vultr_adapter_kubernetes_routing() {
                     }
                     Err(e) => {
                         let error_msg = e.to_string().to_lowercase();
-                        if name == "VKE Managed" && (
-                            error_msg.contains("vultr") ||
-                            error_msg.contains("api_key") ||
-                            error_msg.contains("authentication") ||
-                            error_msg.contains("kubeconfig")
-                        ) {
-                            println!("    ✓ {name} failed as expected (Vultr authentication required)");
+                        if name == "VKE Managed"
+                            && (error_msg.contains("vultr")
+                                || error_msg.contains("api_key")
+                                || error_msg.contains("authentication")
+                                || error_msg.contains("kubeconfig"))
+                        {
+                            println!(
+                                "    ✓ {name} failed as expected (Vultr authentication required)"
+                            );
                         } else {
                             println!("    ⚠️  {name} failed: {}", e);
                         }
@@ -622,7 +671,9 @@ async fn test_vultr_adapter_kubernetes_routing() {
             Err(e) => {
                 let error_msg = e.to_string().to_lowercase();
                 if error_msg.contains("vultr_api_key") {
-                    println!("    ✓ Vultr adapter creation failed as expected (VULTR_API_KEY not set)");
+                    println!(
+                        "    ✓ Vultr adapter creation failed as expected (VULTR_API_KEY not set)"
+                    );
                 } else {
                     println!("    ⚠️  Vultr adapter creation failed: {}", e);
                 }
@@ -659,12 +710,14 @@ async fn test_kubernetes_feature_flag_compliance() {
         match AwsAdapter::new().await {
             Ok(adapter) => {
                 // Try K8s deployment - should either work or fail gracefully
-                let result = adapter.deploy_blueprint_with_target(
-                    &k8s_target,
-                    "nginx:alpine",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await;
+                let result = adapter
+                    .deploy_blueprint_with_target(
+                        &k8s_target,
+                        "nginx:alpine",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await;
 
                 match result {
                     Ok(_) => {
@@ -672,13 +725,15 @@ async fn test_kubernetes_feature_flag_compliance() {
                     }
                     Err(e) => {
                         let error_msg = e.to_string().to_lowercase();
-                        if error_msg.contains("kubernetes") &&
-                           (error_msg.contains("feature") || error_msg.contains("enabled")) {
+                        if error_msg.contains("kubernetes")
+                            && (error_msg.contains("feature") || error_msg.contains("enabled"))
+                        {
                             println!("    ✓ {name} correctly reports Kubernetes feature disabled");
-                        } else if error_msg.contains("authentication") ||
-                                  error_msg.contains("credentials") ||
-                                  error_msg.contains("token") ||
-                                  error_msg.contains("project") {
+                        } else if error_msg.contains("authentication")
+                            || error_msg.contains("credentials")
+                            || error_msg.contains("token")
+                            || error_msg.contains("project")
+                        {
                             println!("    ✓ {name} failed at authentication (feature enabled)");
                         } else {
                             println!("    ⚠️  {name} unexpected error: {}", e);
@@ -699,12 +754,14 @@ async fn test_kubernetes_feature_flag_compliance() {
         match GcpAdapter::new().await {
             Ok(adapter) => {
                 // Try K8s deployment - should either work or fail gracefully
-                let result = adapter.deploy_blueprint_with_target(
-                    &k8s_target,
-                    "nginx:alpine",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await;
+                let result = adapter
+                    .deploy_blueprint_with_target(
+                        &k8s_target,
+                        "nginx:alpine",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await;
 
                 match result {
                     Ok(_) => {
@@ -712,13 +769,15 @@ async fn test_kubernetes_feature_flag_compliance() {
                     }
                     Err(e) => {
                         let error_msg = e.to_string().to_lowercase();
-                        if error_msg.contains("kubernetes") &&
-                           (error_msg.contains("feature") || error_msg.contains("enabled")) {
+                        if error_msg.contains("kubernetes")
+                            && (error_msg.contains("feature") || error_msg.contains("enabled"))
+                        {
                             println!("    ✓ {name} correctly reports Kubernetes feature disabled");
-                        } else if error_msg.contains("authentication") ||
-                                  error_msg.contains("credentials") ||
-                                  error_msg.contains("token") ||
-                                  error_msg.contains("project") {
+                        } else if error_msg.contains("authentication")
+                            || error_msg.contains("credentials")
+                            || error_msg.contains("token")
+                            || error_msg.contains("project")
+                        {
                             println!("    ✓ {name} failed at authentication (feature enabled)");
                         } else {
                             println!("    ⚠️  {name} unexpected error: {}", e);
@@ -739,12 +798,14 @@ async fn test_kubernetes_feature_flag_compliance() {
         match AzureAdapter::new().await {
             Ok(adapter) => {
                 // Try K8s deployment - should either work or fail gracefully
-                let result = adapter.deploy_blueprint_with_target(
-                    &k8s_target,
-                    "nginx:alpine",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await;
+                let result = adapter
+                    .deploy_blueprint_with_target(
+                        &k8s_target,
+                        "nginx:alpine",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await;
 
                 match result {
                     Ok(_) => {
@@ -752,13 +813,15 @@ async fn test_kubernetes_feature_flag_compliance() {
                     }
                     Err(e) => {
                         let error_msg = e.to_string().to_lowercase();
-                        if error_msg.contains("kubernetes") &&
-                           (error_msg.contains("feature") || error_msg.contains("enabled")) {
+                        if error_msg.contains("kubernetes")
+                            && (error_msg.contains("feature") || error_msg.contains("enabled"))
+                        {
                             println!("    ✓ {name} correctly reports Kubernetes feature disabled");
-                        } else if error_msg.contains("authentication") ||
-                                  error_msg.contains("credentials") ||
-                                  error_msg.contains("token") ||
-                                  error_msg.contains("project") {
+                        } else if error_msg.contains("authentication")
+                            || error_msg.contains("credentials")
+                            || error_msg.contains("token")
+                            || error_msg.contains("project")
+                        {
                             println!("    ✓ {name} failed at authentication (feature enabled)");
                         } else {
                             println!("    ⚠️  {name} unexpected error: {}", e);
@@ -779,12 +842,14 @@ async fn test_kubernetes_feature_flag_compliance() {
         match DigitalOceanAdapter::new().await {
             Ok(adapter) => {
                 // Try K8s deployment - should either work or fail gracefully
-                let result = adapter.deploy_blueprint_with_target(
-                    &k8s_target,
-                    "nginx:alpine",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await;
+                let result = adapter
+                    .deploy_blueprint_with_target(
+                        &k8s_target,
+                        "nginx:alpine",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await;
 
                 match result {
                     Ok(_) => {
@@ -792,13 +857,15 @@ async fn test_kubernetes_feature_flag_compliance() {
                     }
                     Err(e) => {
                         let error_msg = e.to_string().to_lowercase();
-                        if error_msg.contains("kubernetes") &&
-                           (error_msg.contains("feature") || error_msg.contains("enabled")) {
+                        if error_msg.contains("kubernetes")
+                            && (error_msg.contains("feature") || error_msg.contains("enabled"))
+                        {
                             println!("    ✓ {name} correctly reports Kubernetes feature disabled");
-                        } else if error_msg.contains("authentication") ||
-                                  error_msg.contains("credentials") ||
-                                  error_msg.contains("token") ||
-                                  error_msg.contains("project") {
+                        } else if error_msg.contains("authentication")
+                            || error_msg.contains("credentials")
+                            || error_msg.contains("token")
+                            || error_msg.contains("project")
+                        {
                             println!("    ✓ {name} failed at authentication (feature enabled)");
                         } else {
                             println!("    ⚠️  {name} unexpected error: {}", e);
@@ -819,12 +886,14 @@ async fn test_kubernetes_feature_flag_compliance() {
         match VultrAdapter::new().await {
             Ok(adapter) => {
                 // Try K8s deployment - should either work or fail gracefully
-                let result = adapter.deploy_blueprint_with_target(
-                    &k8s_target,
-                    "nginx:alpine",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await;
+                let result = adapter
+                    .deploy_blueprint_with_target(
+                        &k8s_target,
+                        "nginx:alpine",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await;
 
                 match result {
                     Ok(_) => {
@@ -832,13 +901,15 @@ async fn test_kubernetes_feature_flag_compliance() {
                     }
                     Err(e) => {
                         let error_msg = e.to_string().to_lowercase();
-                        if error_msg.contains("kubernetes") &&
-                           (error_msg.contains("feature") || error_msg.contains("enabled")) {
+                        if error_msg.contains("kubernetes")
+                            && (error_msg.contains("feature") || error_msg.contains("enabled"))
+                        {
                             println!("    ✓ {name} correctly reports Kubernetes feature disabled");
-                        } else if error_msg.contains("authentication") ||
-                                  error_msg.contains("credentials") ||
-                                  error_msg.contains("token") ||
-                                  error_msg.contains("project") {
+                        } else if error_msg.contains("authentication")
+                            || error_msg.contains("credentials")
+                            || error_msg.contains("token")
+                            || error_msg.contains("project")
+                        {
                             println!("    ✓ {name} failed at authentication (feature enabled)");
                         } else {
                             println!("    ⚠️  {name} unexpected error: {}", e);
@@ -862,29 +933,29 @@ async fn test_deployment_target_validation() {
     let resource_spec = ResourceSpec::default();
 
     // Test invalid deployment targets
-    let invalid_targets = vec![
-        DeploymentTarget::Serverless {
-            config: {
-                let mut config = std::collections::HashMap::new();
-                config.insert("runtime".to_string(), "lambda".to_string());
-                config.insert("memory_mb".to_string(), "512".to_string());
-                config.insert("timeout_seconds".to_string(), "30".to_string());
-                config
-            },
+    let invalid_targets = vec![DeploymentTarget::Serverless {
+        config: {
+            let mut config = std::collections::HashMap::new();
+            config.insert("runtime".to_string(), "lambda".to_string());
+            config.insert("memory_mb".to_string(), "512".to_string());
+            config.insert("timeout_seconds".to_string(), "30".to_string());
+            config
         },
-    ];
+    }];
 
     // Test with one provider (AWS) - others should behave similarly
     if let Ok(adapter) = AwsAdapter::new().await {
         for target in invalid_targets {
             println!("  Testing invalid target: {:?}", target);
 
-            let result = adapter.deploy_blueprint_with_target(
-                &target,
-                "nginx:alpine",
-                &resource_spec,
-                HashMap::new(),
-            ).await;
+            let result = adapter
+                .deploy_blueprint_with_target(
+                    &target,
+                    "nginx:alpine",
+                    &resource_spec,
+                    HashMap::new(),
+                )
+                .await;
 
             match result {
                 Ok(_) => {
@@ -892,8 +963,7 @@ async fn test_deployment_target_validation() {
                 }
                 Err(e) => {
                     let error_msg = e.to_string().to_lowercase();
-                    if error_msg.contains("not implemented") ||
-                       error_msg.contains("serverless") {
+                    if error_msg.contains("not implemented") || error_msg.contains("serverless") {
                         println!("    ✓ Correctly rejected unsupported target");
                     } else {
                         println!("    ⚠️  Unexpected error: {}", e);
@@ -914,7 +984,12 @@ async fn cleanup_deployment(deployment_name: &str) {
 
     // Cleanup deployment
     let _ = AsyncCommand::new("kubectl")
-        .args(&["delete", "deployment", deployment_name, "--ignore-not-found"])
+        .args(&[
+            "delete",
+            "deployment",
+            deployment_name,
+            "--ignore-not-found",
+        ])
         .status()
         .await;
 
@@ -967,12 +1042,15 @@ async fn test_comprehensive_k8s_provider_integration() {
                     namespace: "default".to_string(),
                 };
 
-                match adapter.deploy_blueprint_with_target(
-                    &target,
-                    "alpine:latest",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await {
+                match adapter
+                    .deploy_blueprint_with_target(
+                        &target,
+                        "alpine:latest",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await
+                {
                     Ok(deployment) => {
                         println!("    ✓ {name} generic K8s deployment successful");
                         successful_deployments += 1;
@@ -1009,12 +1087,15 @@ async fn test_comprehensive_k8s_provider_integration() {
                     namespace: "default".to_string(),
                 };
 
-                match adapter.deploy_blueprint_with_target(
-                    &target,
-                    "alpine:latest",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await {
+                match adapter
+                    .deploy_blueprint_with_target(
+                        &target,
+                        "alpine:latest",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await
+                {
                     Ok(deployment) => {
                         println!("    ✓ {name} generic K8s deployment successful");
                         successful_deployments += 1;
@@ -1051,12 +1132,15 @@ async fn test_comprehensive_k8s_provider_integration() {
                     namespace: "default".to_string(),
                 };
 
-                match adapter.deploy_blueprint_with_target(
-                    &target,
-                    "alpine:latest",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await {
+                match adapter
+                    .deploy_blueprint_with_target(
+                        &target,
+                        "alpine:latest",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await
+                {
                     Ok(deployment) => {
                         println!("    ✓ {name} generic K8s deployment successful");
                         successful_deployments += 1;
@@ -1093,12 +1177,15 @@ async fn test_comprehensive_k8s_provider_integration() {
                     namespace: "default".to_string(),
                 };
 
-                match adapter.deploy_blueprint_with_target(
-                    &target,
-                    "alpine:latest",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await {
+                match adapter
+                    .deploy_blueprint_with_target(
+                        &target,
+                        "alpine:latest",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await
+                {
                     Ok(deployment) => {
                         println!("    ✓ {name} generic K8s deployment successful");
                         successful_deployments += 1;
@@ -1135,12 +1222,15 @@ async fn test_comprehensive_k8s_provider_integration() {
                     namespace: "default".to_string(),
                 };
 
-                match adapter.deploy_blueprint_with_target(
-                    &target,
-                    "alpine:latest",
-                    &resource_spec,
-                    HashMap::new(),
-                ).await {
+                match adapter
+                    .deploy_blueprint_with_target(
+                        &target,
+                        "alpine:latest",
+                        &resource_spec,
+                        HashMap::new(),
+                    )
+                    .await
+                {
                     Ok(deployment) => {
                         println!("    ✓ {name} generic K8s deployment successful");
                         successful_deployments += 1;
@@ -1171,7 +1261,9 @@ async fn test_comprehensive_k8s_provider_integration() {
 
     // At least some providers should work with generic K8s even without cloud credentials
     if successful_deployments == 0 && failed_adapters < 5 {
-        println!("⚠️  No successful deployments but some adapters created - may indicate cluster issues");
+        println!(
+            "⚠️  No successful deployments but some adapters created - may indicate cluster issues"
+        );
     }
 
     // Cleanup after test

@@ -7,8 +7,8 @@
 #[cfg(feature = "kubernetes")]
 use blueprint_remote_providers::{
     core::resources::ResourceSpec,
-    shared::{SharedKubernetesDeployment, ManagedK8sConfig},
     infra::types::InstanceStatus,
+    shared::{ManagedK8sConfig, SharedKubernetesDeployment},
 };
 use std::sync::Once;
 use tokio::process::Command as AsyncCommand;
@@ -80,7 +80,14 @@ async fn ensure_test_cluster() -> String {
 
     println!("Creating test cluster '{}'...", cluster_name);
     let create = AsyncCommand::new("kind")
-        .args(&["create", "cluster", "--name", &cluster_name, "--wait", "60s"])
+        .args(&[
+            "create",
+            "cluster",
+            "--name",
+            &cluster_name,
+            "--wait",
+            "60s",
+        ])
         .status()
         .await
         .expect("Failed to create kind cluster");
@@ -116,7 +123,10 @@ async fn test_managed_k8s_config_creation() {
     // Test all provider configurations
     let configs = vec![
         ("AWS EKS", ManagedK8sConfig::eks("us-east-1")),
-        ("GCP GKE", ManagedK8sConfig::gke("my-project", "us-central1")),
+        (
+            "GCP GKE",
+            ManagedK8sConfig::gke("my-project", "us-central1"),
+        ),
         ("Azure AKS", ManagedK8sConfig::aks("eastus", "rg-blueprint")),
         ("DigitalOcean DOKS", ManagedK8sConfig::doks("nyc3")),
         ("Vultr VKE", ManagedK8sConfig::vke("ewr")),
@@ -126,23 +136,42 @@ async fn test_managed_k8s_config_creation() {
         println!("✓ Testing {name} configuration");
 
         // Verify basic fields
-        assert!(!config.service_name.is_empty(), "{name} service_name should not be empty");
-        assert!(!config.provider_identifier.is_empty(), "{name} provider_identifier should not be empty");
-        assert!(!config.instance_prefix.is_empty(), "{name} instance_prefix should not be empty");
-        assert!(!config.default_region.is_empty(), "{name} default_region should not be empty");
+        assert!(
+            !config.service_name.is_empty(),
+            "{name} service_name should not be empty"
+        );
+        assert!(
+            !config.provider_identifier.is_empty(),
+            "{name} provider_identifier should not be empty"
+        );
+        assert!(
+            !config.instance_prefix.is_empty(),
+            "{name} instance_prefix should not be empty"
+        );
+        assert!(
+            !config.default_region.is_empty(),
+            "{name} default_region should not be empty"
+        );
 
         // Test provider-specific metadata
         match name {
             "GCP GKE" => {
-                assert!(config.additional_metadata.contains_key("project_id"), "GKE should have project_id");
+                assert!(
+                    config.additional_metadata.contains_key("project_id"),
+                    "GKE should have project_id"
+                );
             }
             "Azure AKS" => {
-                assert!(config.additional_metadata.contains_key("resource_group"), "AKS should have resource_group");
+                assert!(
+                    config.additional_metadata.contains_key("resource_group"),
+                    "AKS should have resource_group"
+                );
             }
             _ => {}
         }
 
-        println!("  ✓ {name}: service={}, region={}, metadata_keys={}",
+        println!(
+            "  ✓ {name}: service={}, region={}, metadata_keys={}",
             config.service_name,
             config.default_region,
             config.additional_metadata.len()
@@ -173,10 +202,16 @@ async fn test_kubectl_cluster_health_check() {
         .await
         .expect("Failed to run kubectl cluster-info");
 
-    assert!(output.status.success(), "kubectl cluster-info should succeed");
+    assert!(
+        output.status.success(),
+        "kubectl cluster-info should succeed"
+    );
 
     let info = String::from_utf8_lossy(&output.stdout);
-    assert!(info.contains("running at"), "Cluster info should contain 'running at'");
+    assert!(
+        info.contains("running at"),
+        "Cluster info should contain 'running at'"
+    );
 
     println!("✓ Cluster health check passed");
     println!("  Cluster info: {}", info.lines().next().unwrap_or(""));
@@ -208,7 +243,8 @@ async fn test_shared_kubernetes_deployment_generic() {
         namespace,
         blueprint_image,
         &resource_spec,
-    ).await;
+    )
+    .await;
 
     match result {
         Ok(deployment) => {
@@ -219,25 +255,52 @@ async fn test_shared_kubernetes_deployment_generic() {
             println!("  Exposed ports: {:?}", deployment.port_mappings);
 
             // Verify deployment result structure
-            assert!(deployment.blueprint_id.starts_with("blueprint"), "Blueprint ID should start with 'blueprint'");
-            assert!(deployment.instance.id.starts_with("k8s-"), "Instance ID should start with 'k8s-'");
+            assert!(
+                deployment.blueprint_id.starts_with("blueprint"),
+                "Blueprint ID should start with 'blueprint'"
+            );
+            assert!(
+                deployment.instance.id.starts_with("k8s-"),
+                "Instance ID should start with 'k8s-'"
+            );
             assert_eq!(deployment.instance.status, InstanceStatus::Running);
-            assert!(deployment.port_mappings.contains_key(&8080), "Should expose port 8080");
-            assert!(deployment.port_mappings.contains_key(&9615), "Should expose QoS port 9615");
-            assert!(deployment.port_mappings.contains_key(&9944), "Should expose RPC port 9944");
+            assert!(
+                deployment.port_mappings.contains_key(&8080),
+                "Should expose port 8080"
+            );
+            assert!(
+                deployment.port_mappings.contains_key(&9615),
+                "Should expose QoS port 9615"
+            );
+            assert!(
+                deployment.port_mappings.contains_key(&9944),
+                "Should expose RPC port 9944"
+            );
 
             // Verify metadata
-            assert_eq!(deployment.metadata.get("provider"), Some(&"generic-k8s".to_string()));
-            assert_eq!(deployment.metadata.get("namespace"), Some(&namespace.to_string()));
+            assert_eq!(
+                deployment.metadata.get("provider"),
+                Some(&"generic-k8s".to_string())
+            );
+            assert_eq!(
+                deployment.metadata.get("namespace"),
+                Some(&namespace.to_string())
+            );
 
             // Cleanup: Delete the deployment
             if let Err(e) = delete_k8s_deployment(&deployment.blueprint_id).await {
-                eprintln!("Warning: Failed to cleanup deployment {}: {}", deployment.blueprint_id, e);
+                eprintln!(
+                    "Warning: Failed to cleanup deployment {}: {}",
+                    deployment.blueprint_id, e
+                );
             }
         }
         Err(e) => {
             // If deployment fails, it could be due to resource constraints or cluster issues
-            eprintln!("Generic K8s deployment failed (this may be expected in CI): {}", e);
+            eprintln!(
+                "Generic K8s deployment failed (this may be expected in CI): {}",
+                e
+            );
             println!("✓ Deployment function executed (failure may be due to cluster constraints)");
         }
     }
@@ -266,10 +329,21 @@ async fn test_managed_k8s_authentication_commands() {
 
         // Test the command that would be generated (but don't execute without credentials)
         let expected_commands = match provider {
-            "AWS EKS" => format!("aws eks update-kubeconfig --region {} --name {}", region, cluster_id),
-            "GCP GKE" => format!("gcloud container clusters get-credentials {} --region {} --project test-project", cluster_id, region),
-            "Azure AKS" => format!("az aks get-credentials --resource-group test-rg --name {}", cluster_id),
-            "DigitalOcean DOKS" => format!("doctl kubernetes cluster kubeconfig save {}", cluster_id),
+            "AWS EKS" => format!(
+                "aws eks update-kubeconfig --region {} --name {}",
+                region, cluster_id
+            ),
+            "GCP GKE" => format!(
+                "gcloud container clusters get-credentials {} --region {} --project test-project",
+                cluster_id, region
+            ),
+            "Azure AKS" => format!(
+                "az aks get-credentials --resource-group test-rg --name {}",
+                cluster_id
+            ),
+            "DigitalOcean DOKS" => {
+                format!("doctl kubernetes cluster kubeconfig save {}", cluster_id)
+            }
             "Vultr VKE" => format!("# VKE requires manual kubeconfig for {}", cluster_id),
             _ => continue,
         };
@@ -330,7 +404,8 @@ async fn test_managed_k8s_deployment_with_mock_auth() {
         blueprint_image,
         &resource_spec,
         config,
-    ).await;
+    )
+    .await;
 
     match result {
         Ok(deployment) => {
@@ -344,14 +419,20 @@ async fn test_managed_k8s_deployment_with_mock_auth() {
         }
         Err(e) => {
             let error_msg = e.to_string().to_lowercase();
-            if error_msg.contains("aws") ||
-               error_msg.contains("authentication") ||
-               error_msg.contains("credentials") ||
-               error_msg.contains("kubeconfig") {
-                println!("✓ Managed K8s deployment failed as expected (authentication/credentials)");
+            if error_msg.contains("aws")
+                || error_msg.contains("authentication")
+                || error_msg.contains("credentials")
+                || error_msg.contains("kubeconfig")
+            {
+                println!(
+                    "✓ Managed K8s deployment failed as expected (authentication/credentials)"
+                );
                 println!("  Error (expected): {}", e);
             } else {
-                println!("⚠️  Managed K8s deployment failed with unexpected error: {}", e);
+                println!(
+                    "⚠️  Managed K8s deployment failed with unexpected error: {}",
+                    e
+                );
             }
         }
     }
@@ -398,14 +479,17 @@ async fn test_k8s_deployment_resource_allocation() {
     ];
 
     for (i, spec) in resource_specs.iter().enumerate() {
-        println!("Testing resource spec {}: CPU={}, Memory={}GB, Storage={}GB",
-            i + 1, spec.cpu, spec.memory_gb, spec.storage_gb);
+        println!(
+            "Testing resource spec {}: CPU={}, Memory={}GB, Storage={}GB",
+            i + 1,
+            spec.cpu,
+            spec.memory_gb,
+            spec.storage_gb
+        );
 
-        let result = SharedKubernetesDeployment::deploy_to_generic_k8s(
-            "default",
-            "alpine:latest",
-            spec,
-        ).await;
+        let result =
+            SharedKubernetesDeployment::deploy_to_generic_k8s("default", "alpine:latest", spec)
+                .await;
 
         match result {
             Ok(deployment) => {
@@ -417,7 +501,10 @@ async fn test_k8s_deployment_resource_allocation() {
                 }
             }
             Err(e) => {
-                println!("  ⚠️  Deployment failed (may be due to resource constraints): {}", e);
+                println!(
+                    "  ⚠️  Deployment failed (may be due to resource constraints): {}",
+                    e
+                );
             }
         }
     }
@@ -439,7 +526,8 @@ async fn test_k8s_deployment_port_exposure() {
         "default",
         "nginx:alpine",
         &ResourceSpec::default(),
-    ).await;
+    )
+    .await;
 
     match result {
         Ok(deployment) => {
@@ -450,7 +538,8 @@ async fn test_k8s_deployment_port_exposure() {
             for port in required_ports {
                 assert!(
                     deployment.port_mappings.contains_key(&port),
-                    "Port {} should be exposed", port
+                    "Port {} should be exposed",
+                    port
                 );
                 println!("  ✓ Port {} exposed", port);
             }
@@ -462,9 +551,13 @@ async fn test_k8s_deployment_port_exposure() {
             if let Ok(output) = AsyncCommand::new("kubectl")
                 .args(&["get", "service", &service_name, "-o", "json"])
                 .output()
-                .await {
+                .await
+            {
                 if output.status.success() {
-                    println!("  ✓ Kubernetes service {} created successfully", service_name);
+                    println!(
+                        "  ✓ Kubernetes service {} created successfully",
+                        service_name
+                    );
                 } else {
                     println!("  ⚠️  Service {} not found in cluster", service_name);
                 }
@@ -503,19 +596,31 @@ async fn test_k8s_deployment_metadata_consistency() {
         println!("✓ Testing {name} metadata consistency");
 
         // Verify provider-specific metadata structure
-        assert!(config.service_name.len() >= 3, "{name} service_name too short");
-        assert!(config.provider_identifier.contains(&name.to_lowercase()),
-            "{name} provider_identifier should contain service name");
-        assert!(config.instance_prefix.len() >= 3, "{name} instance_prefix too short");
+        assert!(
+            config.service_name.len() >= 3,
+            "{name} service_name too short"
+        );
+        assert!(
+            config.provider_identifier.contains(&name.to_lowercase()),
+            "{name} provider_identifier should contain service name"
+        );
+        assert!(
+            config.instance_prefix.len() >= 3,
+            "{name} instance_prefix too short"
+        );
 
         // Test instance ID generation pattern
         let test_cluster = "test-cluster-123";
         let expected_instance_id = format!("{}-{}", config.instance_prefix, test_cluster);
-        assert!(expected_instance_id.contains(test_cluster),
-            "{name} instance ID should contain cluster name");
+        assert!(
+            expected_instance_id.contains(test_cluster),
+            "{name} instance ID should contain cluster name"
+        );
 
-        println!("  ✓ {name}: prefix={}, identifier={}",
-            config.instance_prefix, config.provider_identifier);
+        println!(
+            "  ✓ {name}: prefix={}, identifier={}",
+            config.instance_prefix, config.provider_identifier
+        );
     }
 
     println!("✓ Metadata consistency tests completed");
@@ -525,7 +630,12 @@ async fn test_k8s_deployment_metadata_consistency() {
 async fn delete_k8s_deployment(deployment_name: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Delete deployment
     let deployment_result = AsyncCommand::new("kubectl")
-        .args(&["delete", "deployment", deployment_name, "--ignore-not-found"])
+        .args(&[
+            "delete",
+            "deployment",
+            deployment_name,
+            "--ignore-not-found",
+        ])
         .status()
         .await?;
 
@@ -537,7 +647,10 @@ async fn delete_k8s_deployment(deployment_name: &str) -> Result<(), Box<dyn std:
         .await?;
 
     if deployment_result.success() && service_result.success() {
-        println!("  ✓ Cleaned up deployment and service for {}", deployment_name);
+        println!(
+            "  ✓ Cleaned up deployment and service for {}",
+            deployment_name
+        );
     }
 
     Ok(())
@@ -568,7 +681,8 @@ async fn test_end_to_end_managed_k8s_workflow() {
             allow_spot: false,
             qos: Default::default(),
         },
-    ).await;
+    )
+    .await;
 
     match deployment {
         Ok(result) => {
@@ -583,7 +697,8 @@ async fn test_end_to_end_managed_k8s_workflow() {
             if let Ok(output) = pod_check {
                 if output.status.success() {
                     let pods = String::from_utf8_lossy(&output.stdout);
-                    if pods.lines().count() > 1 { // Header + pod lines
+                    if pods.lines().count() > 1 {
+                        // Header + pod lines
                         println!("  ✓ 3. Pods verified in cluster");
                     } else {
                         println!("  ⚠️  3. No pods found (may still be starting)");
@@ -593,7 +708,11 @@ async fn test_end_to_end_managed_k8s_workflow() {
 
             // 4. Test service exposure
             let service_check = AsyncCommand::new("kubectl")
-                .args(&["get", "service", &format!("{}-service", result.blueprint_id)])
+                .args(&[
+                    "get",
+                    "service",
+                    &format!("{}-service", result.blueprint_id),
+                ])
                 .output()
                 .await;
 

@@ -5,6 +5,7 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
+use blueprint_core::{debug, info};
 use k8s_openapi::api::{
     apps::v1::{Deployment, DeploymentSpec},
     core::v1::{
@@ -16,7 +17,6 @@ use kube::{
     api::{Api, PostParams},
 };
 use std::collections::BTreeMap;
-use blueprint_core::{debug, info};
 
 /// Kubernetes deployment client for Blueprint services
 pub struct KubernetesDeploymentClient {

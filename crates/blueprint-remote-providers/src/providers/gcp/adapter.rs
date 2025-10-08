@@ -7,8 +7,8 @@ use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 use crate::providers::gcp::GcpProvisioner;
 use async_trait::async_trait;
-use std::collections::HashMap;
 use blueprint_core::info;
+use std::collections::HashMap;
 
 /// Professional GCP adapter with security and performance optimizations
 pub struct GcpAdapter {
@@ -47,16 +47,21 @@ impl GcpAdapter {
         }
     }
 
-
     /// Create secure firewall rules for blueprint deployment
     async fn ensure_firewall_rules(&self) -> Result<()> {
         #[cfg(feature = "gcp")]
         {
-            let access_token = std::env::var("GCP_ACCESS_TOKEN")
-                .map_err(|_| Error::ConfigurationError("No GCP access token available. Set GCP_ACCESS_TOKEN".into()))?;
+            let access_token = std::env::var("GCP_ACCESS_TOKEN").map_err(|_| {
+                Error::ConfigurationError(
+                    "No GCP access token available. Set GCP_ACCESS_TOKEN".into(),
+                )
+            })?;
 
             let client = reqwest::Client::new();
-            let base_url = format!("https://compute.googleapis.com/compute/v1/projects/{}/global/firewalls", self.project_id);
+            let base_url = format!(
+                "https://compute.googleapis.com/compute/v1/projects/{}/global/firewalls",
+                self.project_id
+            );
 
             let firewall_rules = vec![
                 serde_json::json!({
@@ -82,10 +87,13 @@ impl GcpAdapter {
                         "ports": ["8080", "9615", "9944"]
                     }],
                     "sourceRanges": ["0.0.0.0/0"], // Open to all - restrict for production
-                })
+                }),
             ];
 
-            info!("Creating {} firewall rules for GCP Blueprint security", firewall_rules.len());
+            info!(
+                "Creating {} firewall rules for GCP Blueprint security",
+                firewall_rules.len()
+            );
 
             for rule in &firewall_rules {
                 let rule_name = rule["name"].as_str().unwrap_or("unknown");
@@ -114,13 +122,20 @@ impl GcpAdapter {
                     .await
                 {
                     Ok(response) if response.status().is_success() => {
-                        info!("Created firewall rule: {} - {}",
+                        info!(
+                            "Created firewall rule: {} - {}",
                             rule_name,
-                            rule["description"].as_str().unwrap_or(""));
+                            rule["description"].as_str().unwrap_or("")
+                        );
                     }
                     Ok(response) => {
                         let error_text = response.text().await.unwrap_or_default();
-                        warn!("Failed to create firewall rule {}: {} - {}", rule_name, response.status(), error_text);
+                        warn!(
+                            "Failed to create firewall rule {}: {} - {}",
+                            rule_name,
+                            response.status(),
+                            error_text
+                        );
                     }
                     Err(e) => {
                         warn!("Failed to create firewall rule {}: {}", rule_name, e);
@@ -201,15 +216,14 @@ impl CloudProviderAdapter for GcpAdapter {
                 self.project_id, zone, instance_id
             );
 
-            let access_token = std::env::var("GCP_ACCESS_TOKEN")
-                .map_err(|_| Error::ConfigurationError("No GCP access token available. Set GCP_ACCESS_TOKEN".into()))?;
+            let access_token = std::env::var("GCP_ACCESS_TOKEN").map_err(|_| {
+                Error::ConfigurationError(
+                    "No GCP access token available. Set GCP_ACCESS_TOKEN".into(),
+                )
+            })?;
 
             let client = reqwest::Client::new();
-            match client
-                .get(&url)
-                .bearer_auth(&access_token)
-                .send()
-                .await {
+            match client.get(&url).bearer_auth(&access_token).send().await {
                 Ok(response) if response.status().is_success() => {
                     if let Ok(instance) = response.json::<serde_json::Value>().await {
                         match instance["status"].as_str() {
@@ -316,9 +330,9 @@ impl GcpAdapter {
             resource_spec,
             env_vars,
             SshDeploymentConfig::gcp(&self.project_id),
-        ).await
+        )
+        .await
     }
-
 
     /// Deploy to GKE cluster
     async fn deploy_to_gke(
@@ -331,7 +345,7 @@ impl GcpAdapter {
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
-            use crate::shared::{SharedKubernetesDeployment, ManagedK8sConfig};
+            use crate::shared::{ManagedK8sConfig, SharedKubernetesDeployment};
 
             let config = ManagedK8sConfig::gke(&self.project_id, "us-central1");
             SharedKubernetesDeployment::deploy_to_managed_k8s(
@@ -340,7 +354,8 @@ impl GcpAdapter {
                 blueprint_image,
                 resource_spec,
                 config,
-            ).await
+            )
+            .await
         }
 
         #[cfg(not(feature = "kubernetes"))]
@@ -368,7 +383,8 @@ impl GcpAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
-            ).await
+            )
+            .await
         }
 
         #[cfg(not(feature = "kubernetes"))]

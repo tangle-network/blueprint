@@ -8,9 +8,9 @@ pub mod adapter;
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::security::{ApiAuthentication, SecureHttpClient};
+use blueprint_core::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use blueprint_core::{info, warn};
 
 /// DigitalOcean infrastructure provisioner
 pub struct DigitalOceanProvisioner {
@@ -231,11 +231,10 @@ impl DigitalOceanProvisioner {
     async fn get_latest_k8s_version(&self) -> Result<String> {
         let url = "https://api.digitalocean.com/v2/kubernetes/options".to_string();
 
-        let response = self
-            .client
-            .get(&url, &self.auth)
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to get K8s versions: {e}")))?;
+        let response =
+            self.client.get(&url, &self.auth).await.map_err(|e| {
+                Error::ConfigurationError(format!("Failed to get K8s versions: {e}"))
+            })?;
 
         let json: serde_json::Value = response
             .json()
@@ -273,9 +272,7 @@ impl DigitalOceanProvisioner {
 
     /// Get cluster details
     async fn get_cluster_details(&self, cluster_id: &str) -> Result<DOKSCluster> {
-        let url = format!(
-            "https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}"
-        );
+        let url = format!("https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}");
 
         let response = self
             .client
@@ -312,9 +309,8 @@ impl DigitalOceanProvisioner {
 
     /// Get kubeconfig for a cluster
     pub async fn get_kubeconfig(&self, cluster_id: &str) -> Result<String> {
-        let url = format!(
-            "https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}/kubeconfig"
-        );
+        let url =
+            format!("https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}/kubeconfig");
 
         let response = self
             .client
@@ -425,9 +421,7 @@ impl DigitalOceanProvisioner {
 
     /// Delete a Kubernetes cluster
     pub async fn delete_kubernetes_cluster(&self, cluster_id: &str) -> Result<()> {
-        let url = format!(
-            "https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}"
-        );
+        let url = format!("https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}");
 
         let response = self
             .client
@@ -479,10 +473,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_droplet_size_selection() {
-        let provisioner = DigitalOceanProvisioner::new(
-            "test_token".to_string(),
-            "nyc3".to_string(),
-        ).await.unwrap();
+        let provisioner =
+            DigitalOceanProvisioner::new("test_token".to_string(), "nyc3".to_string())
+                .await
+                .unwrap();
 
         // Test small instance
         let spec = ResourceSpec {
@@ -511,10 +505,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_user_data_generation() {
-        let provisioner = DigitalOceanProvisioner::new(
-            "test_token".to_string(),
-            "nyc3".to_string(),
-        ).await.unwrap();
+        let provisioner =
+            DigitalOceanProvisioner::new("test_token".to_string(), "nyc3".to_string())
+                .await
+                .unwrap();
 
         let spec = ResourceSpec {
             cpu: 2.0,

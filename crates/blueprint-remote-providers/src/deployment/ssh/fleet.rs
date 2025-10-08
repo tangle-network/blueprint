@@ -1,11 +1,13 @@
 //! Batch deployment to multiple SSH hosts
 
 use super::client::SshDeploymentClient;
-use super::types::{ContainerRuntime, DeploymentConfig, RemoteDeployment, RestartPolicy, SshConnection};
+use super::types::{
+    ContainerRuntime, DeploymentConfig, RemoteDeployment, RestartPolicy, SshConnection,
+};
 use crate::core::error::Result;
 use crate::core::resources::ResourceSpec;
-use std::collections::HashMap;
 use blueprint_core::{info, warn};
+use std::collections::HashMap;
 
 /// Batch deployment to multiple hosts
 pub struct BareMetalFleet {

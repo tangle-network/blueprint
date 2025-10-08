@@ -3,8 +3,8 @@
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
+use blueprint_core::{debug, info};
 use serde::{Deserialize, Serialize};
-use blueprint_core::{info, debug};
 use std::collections::HashMap;
 
 /// Vultr API instance representation
@@ -36,10 +36,7 @@ impl VultrProvisioner {
             .build()
             .map_err(|e| Error::ConfigurationError(format!("Failed to create HTTP client: {e}")))?;
 
-        Ok(Self {
-            api_key,
-            client,
-        })
+        Ok(Self { api_key, client })
     }
 
     /// Provision a Vultr instance
@@ -55,7 +52,10 @@ impl VultrProvisioner {
             &config.region
         };
 
-        info!("Provisioning Vultr instance with plan {} in region {}", plan, region);
+        info!(
+            "Provisioning Vultr instance with plan {} in region {}",
+            plan, region
+        );
 
         // Create instance via Vultr API
         let create_payload = serde_json::json!({
@@ -72,7 +72,8 @@ impl VultrProvisioner {
             "user_data": self.generate_user_data(spec),
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.vultr.com/v2/instances")
             .bearer_auth(&self.api_key)
             .json(&create_payload)
@@ -82,10 +83,14 @@ impl VultrProvisioner {
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Vultr API error: {error_text}")));
+            return Err(Error::ConfigurationError(format!(
+                "Vultr API error: {error_text}"
+            )));
         }
 
-        let response_json: serde_json::Value = response.json().await
+        let response_json: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
         let instance_id = response_json["instance"]["id"]
@@ -119,7 +124,9 @@ impl VultrProvisioner {
 
         loop {
             if attempts >= max_attempts {
-                return Err(Error::ConfigurationError("Instance provisioning timeout".into()));
+                return Err(Error::ConfigurationError(
+                    "Instance provisioning timeout".into(),
+                ));
             }
 
             let instance = self.get_instance(instance_id).await?;
@@ -129,8 +136,10 @@ impl VultrProvisioner {
                 return Ok(instance);
             }
 
-            debug!("Instance {} status: {}, power: {}",
-                   instance_id, instance.status, instance.power_status);
+            debug!(
+                "Instance {} status: {}, power: {}",
+                instance_id, instance.status, instance.power_status
+            );
 
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             attempts += 1;
@@ -141,7 +150,8 @@ impl VultrProvisioner {
     async fn get_instance(&self, instance_id: &str) -> Result<VultrInstance> {
         let url = format!("https://api.vultr.com/v2/instances/{instance_id}");
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .bearer_auth(&self.api_key)
             .send()
@@ -149,10 +159,14 @@ impl VultrProvisioner {
             .map_err(|e| Error::ConfigurationError(format!("Failed to get instance: {e}")))?;
 
         if !response.status().is_success() {
-            return Err(Error::ConfigurationError("Failed to get instance details".into()));
+            return Err(Error::ConfigurationError(
+                "Failed to get instance details".into(),
+            ));
         }
 
-        let json: serde_json::Value = response.json().await
+        let json: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
         let instance = &json["instance"];
@@ -175,7 +189,8 @@ impl VultrProvisioner {
     pub async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
         let url = format!("https://api.vultr.com/v2/instances/{instance_id}");
 
-        let response = self.client
+        let response = self
+            .client
             .delete(&url)
             .bearer_auth(&self.api_key)
             .send()
@@ -184,7 +199,9 @@ impl VultrProvisioner {
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Failed to terminate: {error_text}")));
+            return Err(Error::ConfigurationError(format!(
+                "Failed to terminate: {error_text}"
+            )));
         }
 
         info!("Terminated Vultr instance: {}", instance_id);
@@ -192,16 +209,17 @@ impl VultrProvisioner {
     }
 
     /// Get instance status
-    pub async fn get_instance_status(&self, instance_id: &str) -> Result<crate::infra::types::InstanceStatus> {
+    pub async fn get_instance_status(
+        &self,
+        instance_id: &str,
+    ) -> Result<crate::infra::types::InstanceStatus> {
         match self.get_instance(instance_id).await {
-            Ok(instance) => {
-                match (instance.status.as_str(), instance.power_status.as_str()) {
-                    ("active", "running") => Ok(crate::infra::types::InstanceStatus::Running),
-                    ("active", "stopped") => Ok(crate::infra::types::InstanceStatus::Stopped),
-                    ("pending", _) => Ok(crate::infra::types::InstanceStatus::Starting),
-                    _ => Ok(crate::infra::types::InstanceStatus::Unknown),
-                }
-            }
+            Ok(instance) => match (instance.status.as_str(), instance.power_status.as_str()) {
+                ("active", "running") => Ok(crate::infra::types::InstanceStatus::Running),
+                ("active", "stopped") => Ok(crate::infra::types::InstanceStatus::Stopped),
+                ("pending", _) => Ok(crate::infra::types::InstanceStatus::Starting),
+                _ => Ok(crate::infra::types::InstanceStatus::Unknown),
+            },
             Err(_) => Ok(crate::infra::types::InstanceStatus::Terminated),
         }
     }
@@ -215,11 +233,17 @@ impl VultrProvisioner {
 
             // High memory
             (cpu, mem, _) if mem > cpu * 4.0 => {
-                if mem <= 2.0 { "vc2-1c-2gb" }
-                else if mem <= 4.0 { "vc2-2c-4gb" }
-                else if mem <= 8.0 { "vc2-4c-8gb" }
-                else if mem <= 16.0 { "vc2-6c-16gb" }
-                else { "vc2-8c-32gb" }
+                if mem <= 2.0 {
+                    "vc2-1c-2gb"
+                } else if mem <= 4.0 {
+                    "vc2-2c-4gb"
+                } else if mem <= 8.0 {
+                    "vc2-4c-8gb"
+                } else if mem <= 16.0 {
+                    "vc2-6c-16gb"
+                } else {
+                    "vc2-8c-32gb"
+                }
             }
 
             // High CPU

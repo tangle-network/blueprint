@@ -5,6 +5,7 @@
 
 use crate::core::error::{Error, Result};
 use crate::deployment::ssh::SshDeploymentClient;
+use blueprint_core::{debug, error, info, warn};
 use futures::stream::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -12,7 +13,6 @@ use std::pin::Pin;
 use std::time::SystemTime;
 use tokio::sync::mpsc;
 use tokio::time::Duration;
-use blueprint_core::{debug, error, info, warn};
 
 /// Log entry from a remote deployment
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,9 +51,7 @@ impl From<&str> for LogLevel {
 #[derive(Debug, Clone)]
 pub enum LogSource {
     /// Local Docker container logs
-    LocalDocker {
-        container_id: String,
-    },
+    LocalDocker { container_id: String },
     /// Local Kubernetes pod logs
     LocalKubernetes {
         namespace: String,
@@ -88,10 +86,7 @@ pub enum LogSource {
         resource_id: String,
     },
     /// Generic file-based logs
-    File {
-        host: String,
-        file_path: String,
-    },
+    File { host: String, file_path: String },
 }
 
 /// Log streaming manager
@@ -149,10 +144,7 @@ impl LogStreamer {
     }
 
     /// Stream logs for a specific duration
-    pub async fn stream_for_duration(
-        &self,
-        duration: Duration,
-    ) -> Result<Vec<LogEntry>> {
+    pub async fn stream_for_duration(&self, duration: Duration) -> Result<Vec<LogEntry>> {
         let stream = self.stream().await?;
         let mut entries = Vec::new();
 
@@ -183,12 +175,31 @@ async fn stream_from_source(
         LogSource::LocalDocker { container_id } => {
             stream_local_docker_logs(tx, service_id, container_id, follow).await
         }
-        LogSource::LocalKubernetes { namespace, pod_name, container_name } => {
-            stream_local_kubernetes_logs(tx, service_id, namespace, pod_name, container_name, follow).await
+        LogSource::LocalKubernetes {
+            namespace,
+            pod_name,
+            container_name,
+        } => {
+            stream_local_kubernetes_logs(
+                tx,
+                service_id,
+                namespace,
+                pod_name,
+                container_name,
+                follow,
+            )
+            .await
         }
-        LogSource::SshContainer { host, port, user, container_id } => {
+        LogSource::SshContainer {
+            host,
+            port,
+            user,
+            container_id,
+        } => {
             // Create SSH client from connection details
-            use crate::deployment::ssh::{SshConnection, SshDeploymentClient, ContainerRuntime, DeploymentConfig};
+            use crate::deployment::ssh::{
+                ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient,
+            };
 
             let connection = SshConnection {
                 host,
@@ -206,8 +217,12 @@ async fn stream_from_source(
                 health_check: None,
             };
 
-            match SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config).await {
-                Ok(ssh_client) => stream_ssh_logs(tx, service_id, ssh_client, container_id, follow).await,
+            match SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
+                .await
+            {
+                Ok(ssh_client) => {
+                    stream_ssh_logs(tx, service_id, ssh_client, container_id, follow).await
+                }
                 Err(e) => {
                     error!("Failed to create SSH client for log streaming: {}", e);
                     Err(e)
@@ -215,16 +230,34 @@ async fn stream_from_source(
             }
         }
         #[cfg(feature = "kubernetes")]
-        LogSource::Kubernetes { namespace, pod_name, container_name } => {
-            stream_kubernetes_logs(tx, service_id, namespace, pod_name, container_name, follow).await
+        LogSource::Kubernetes {
+            namespace,
+            pod_name,
+            container_name,
+        } => {
+            stream_kubernetes_logs(tx, service_id, namespace, pod_name, container_name, follow)
+                .await
         }
         #[cfg(feature = "aws")]
-        LogSource::CloudWatch { log_group, log_stream } => {
-            stream_cloudwatch_logs(tx, service_id, log_group, log_stream, follow).await
-        }
+        LogSource::CloudWatch {
+            log_group,
+            log_stream,
+        } => stream_cloudwatch_logs(tx, service_id, log_group, log_stream, follow).await,
         #[cfg(feature = "gcp")]
-        LogSource::CloudLogging { project_id, resource_type, resource_id } => {
-            stream_cloud_logging(tx, service_id, project_id, resource_type, resource_id, follow).await
+        LogSource::CloudLogging {
+            project_id,
+            resource_type,
+            resource_id,
+        } => {
+            stream_cloud_logging(
+                tx,
+                service_id,
+                project_id,
+                resource_type,
+                resource_id,
+                follow,
+            )
+            .await
         }
         LogSource::File { host, file_path } => {
             stream_file_logs(tx, service_id, host, file_path, follow).await
@@ -282,9 +315,15 @@ async fn stream_kubernetes_logs(
     follow: bool,
 ) -> Result<()> {
     use k8s_openapi::api::core::v1::Pod;
-    use kube::{api::{Api, LogParams}, Client};
+    use kube::{
+        Client,
+        api::{Api, LogParams},
+    };
 
-    info!("Streaming Kubernetes logs for pod: {}/{}", namespace, pod_name);
+    info!(
+        "Streaming Kubernetes logs for pod: {}/{}",
+        namespace, pod_name
+    );
 
     let client = Client::try_default().await?;
     let pods: Api<Pod> = Api::namespaced(client, &namespace);
@@ -297,7 +336,9 @@ async fn stream_kubernetes_logs(
     };
 
     // Get logs directly instead of streaming (simpler approach)
-    let logs = pods.logs(&pod_name, &log_params).await
+    let logs = pods
+        .logs(&pod_name, &log_params)
+        .await
         .map_err(|e| Error::ConfigurationError(format!("Failed to get logs: {}", e)))?;
 
     // Process the log lines
@@ -331,8 +372,8 @@ async fn stream_cloudwatch_logs(
     log_stream: String,
     follow: bool,
 ) -> Result<()> {
-    use aws_sdk_cloudwatchlogs::Client;
     use aws_config;
+    use aws_sdk_cloudwatchlogs::Client;
 
     info!("Streaming CloudWatch logs: {}/{}", log_group, log_stream);
 
@@ -418,7 +459,7 @@ async fn stream_file_logs(
         stream_local_file_logs(tx, service_id, file_path, follow).await
     } else {
         // Remote file - use SSH
-        use crate::deployment::ssh::{SshConnection, DeploymentConfig};
+        use crate::deployment::ssh::{DeploymentConfig, SshConnection};
 
         let _connection = SshConnection {
             host,
@@ -450,7 +491,10 @@ async fn stream_local_docker_logs(
     container_id: String,
     follow: bool,
 ) -> Result<()> {
-    info!("Streaming local Docker logs for container: {}", container_id);
+    info!(
+        "Streaming local Docker logs for container: {}",
+        container_id
+    );
 
     let mut cmd = tokio::process::Command::new("docker");
     cmd.arg("logs");
@@ -465,10 +509,12 @@ async fn stream_local_docker_logs(
         .spawn()
         .map_err(|e| Error::Other(format!("Failed to start docker logs: {e}")))?;
 
-    let stdout = child.stdout.take()
+    let stdout = child
+        .stdout
+        .take()
         .ok_or_else(|| Error::Other("Failed to capture stdout".into()))?;
 
-    use tokio::io::{BufReader, AsyncBufReadExt};
+    use tokio::io::{AsyncBufReadExt, BufReader};
     let mut reader = BufReader::new(stdout);
     let mut line = String::new();
 
@@ -502,12 +548,13 @@ async fn stream_local_kubernetes_logs(
     container_name: Option<String>,
     follow: bool,
 ) -> Result<()> {
-    info!("Streaming local Kubernetes logs for pod: {}/{}", namespace, pod_name);
+    info!(
+        "Streaming local Kubernetes logs for pod: {}/{}",
+        namespace, pod_name
+    );
 
     let mut cmd = tokio::process::Command::new("kubectl");
-    cmd.arg("logs")
-        .arg("-n")
-        .arg(&namespace);
+    cmd.arg("logs").arg("-n").arg(&namespace);
 
     if follow {
         cmd.arg("-f");
@@ -525,10 +572,12 @@ async fn stream_local_kubernetes_logs(
         .spawn()
         .map_err(|e| Error::Other(format!("Failed to start kubectl logs: {e}")))?;
 
-    let stdout = child.stdout.take()
+    let stdout = child
+        .stdout
+        .take()
         .ok_or_else(|| Error::Other("Failed to capture stdout".into()))?;
 
-    use tokio::io::{BufReader, AsyncBufReadExt};
+    use tokio::io::{AsyncBufReadExt, BufReader};
     let mut reader = BufReader::new(stdout);
     let mut line = String::new();
 
@@ -575,10 +624,12 @@ async fn stream_local_file_logs(
         .spawn()
         .map_err(|e| Error::Other(format!("Failed to start tail: {e}")))?;
 
-    let stdout = child.stdout.take()
+    let stdout = child
+        .stdout
+        .take()
         .ok_or_else(|| Error::Other("Failed to capture stdout".into()))?;
 
-    use tokio::io::{BufReader, AsyncBufReadExt};
+    use tokio::io::{AsyncBufReadExt, BufReader};
     let mut reader = BufReader::new(stdout);
     let mut line = String::new();
 
@@ -612,10 +663,7 @@ fn parse_log_line(service_id: &str, container_id: &str, line: &str) -> LogEntry 
             .map(LogLevel::from)
             .unwrap_or(LogLevel::Info);
 
-        let message = json["message"]
-            .as_str()
-            .unwrap_or(line)
-            .to_string();
+        let message = json["message"].as_str().unwrap_or(line).to_string();
 
         let mut metadata = HashMap::new();
         if let Some(obj) = json.as_object() {
@@ -834,7 +882,10 @@ mod tests {
 
     #[test]
     fn test_log_level_detection() {
-        assert_eq!(detect_log_level("ERROR: Something went wrong"), LogLevel::Error);
+        assert_eq!(
+            detect_log_level("ERROR: Something went wrong"),
+            LogLevel::Error
+        );
         assert_eq!(detect_log_level("WARN: Low memory"), LogLevel::Warn);
         assert_eq!(detect_log_level("Debug: Variable x = 5"), LogLevel::Debug);
         assert_eq!(detect_log_level("Info: Server started"), LogLevel::Info);
@@ -843,7 +894,11 @@ mod tests {
 
     #[test]
     fn test_parse_log_line() {
-        let entry = parse_log_line("deploy-1", "container-1", "ERROR: Database connection failed");
+        let entry = parse_log_line(
+            "deploy-1",
+            "container-1",
+            "ERROR: Database connection failed",
+        );
 
         assert_eq!(entry.service_id, "deploy-1");
         assert_eq!(entry.container_id, Some("container-1".to_string()));
@@ -853,11 +908,15 @@ mod tests {
 
     #[test]
     fn test_json_log_parsing() {
-        let json_log = r#"{"level":"error","message":"Connection timeout","host":"db.example.com"}"#;
+        let json_log =
+            r#"{"level":"error","message":"Connection timeout","host":"db.example.com"}"#;
         let entry = parse_log_line("deploy-1", "container-1", json_log);
 
         assert_eq!(entry.level, LogLevel::Error);
         assert_eq!(entry.message, "Connection timeout");
-        assert_eq!(entry.metadata.get("host"), Some(&"\"db.example.com\"".to_string()));
+        assert_eq!(
+            entry.metadata.get("host"),
+            Some(&"\"db.example.com\"".to_string())
+        );
     }
 }

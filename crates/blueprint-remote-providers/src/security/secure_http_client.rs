@@ -4,10 +4,10 @@
 //! certificate pinning, AWS Signature v4, and request validation.
 
 use crate::core::error::{Error, Result};
+use blueprint_core::{debug, warn};
 use reqwest::{Client, ClientBuilder, Request, Response, header};
 use std::collections::HashMap;
 use std::time::Duration;
-use blueprint_core::{debug, warn};
 use url::Url;
 
 /// Secure HTTP client with comprehensive security controls
@@ -32,9 +32,7 @@ impl SecureHttpClient {
             .tcp_keepalive(Duration::from_secs(60))
             .connection_verbose(false) // Disable verbose logging in production
             .build()
-            .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to create HTTP client: {e}"))
-            })?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to create HTTP client: {e}")))?;
 
         let mut certificate_pins = HashMap::new();
 
@@ -131,8 +129,8 @@ impl SecureHttpClient {
 
     /// Validate URL for security
     fn validate_url(&self, url: &str) -> Result<Url> {
-        let parsed = Url::parse(url)
-            .map_err(|e| Error::ConfigurationError(format!("Invalid URL: {e}")))?;
+        let parsed =
+            Url::parse(url).map_err(|e| Error::ConfigurationError(format!("Invalid URL: {e}")))?;
 
         // Must be HTTPS
         if parsed.scheme() != "https" {
@@ -315,20 +313,27 @@ impl SecureHttpClient {
 
     /// Validate certificate pinning for enhanced security
     fn validate_certificate_pinning(&self, url: &str, _response: &Response) -> Result<()> {
-        let parsed = Url::parse(url)
-            .map_err(|e| Error::ConfigurationError(format!("Invalid URL for certificate pinning: {e}")))?;
+        let parsed = Url::parse(url).map_err(|e| {
+            Error::ConfigurationError(format!("Invalid URL for certificate pinning: {e}"))
+        })?;
         if let Some(host) = parsed.host_str() {
             if let Some(expected_pins) = self.certificate_pins.get(host) {
                 // Certificate pinning configured - would validate fingerprint in production
-                debug!("Certificate pinning configured for {}: {} pins", host, expected_pins.len());
-                
+                debug!(
+                    "Certificate pinning configured for {}: {} pins",
+                    host,
+                    expected_pins.len()
+                );
+
                 // In production, this would:
                 // 1. Extract the certificate chain from the TLS connection
-                // 2. Compute SHA256 fingerprints  
+                // 2. Compute SHA256 fingerprints
                 // 3. Verify at least one matches expected_pins
                 // 4. Fail the request if no match found
-                
-                warn!("Certificate pinning validation not fully implemented - using trust-on-first-use");
+
+                warn!(
+                    "Certificate pinning validation not fully implemented - using trust-on-first-use"
+                );
             }
         }
         Ok(())

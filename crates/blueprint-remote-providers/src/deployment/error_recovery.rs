@@ -5,9 +5,9 @@
 
 use crate::core::error::{Error, Result};
 use crate::deployment::ssh::SshDeploymentClient;
+use blueprint_core::{debug, error, info, warn};
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
-use blueprint_core::{debug, error, info, warn};
 
 /// Recovery strategy for deployment failures
 #[derive(Debug, Clone)]
@@ -20,15 +20,11 @@ pub enum RecoveryStrategy {
         exponential_base: f64,
     },
     /// Attempt rollback to previous state
-    Rollback {
-        checkpoint: DeploymentCheckpoint,
-    },
+    Rollback { checkpoint: DeploymentCheckpoint },
     /// Fail immediately without recovery
     FailFast,
     /// Try alternative deployment method
-    Fallback {
-        alternative: Box<RecoveryStrategy>,
-    },
+    Fallback { alternative: Box<RecoveryStrategy> },
 }
 
 impl Default for RecoveryStrategy {
@@ -103,26 +99,22 @@ impl ErrorRecovery {
                 .await
             }
             RecoveryStrategy::FailFast => operation().await,
-            RecoveryStrategy::Rollback { checkpoint } => {
-                match operation().await {
-                    Ok(result) => Ok(result),
-                    Err(e) => {
-                        warn!("Operation failed, attempting rollback: {}", e);
-                        self.rollback_to_checkpoint(checkpoint).await?;
-                        Err(e)
-                    }
+            RecoveryStrategy::Rollback { checkpoint } => match operation().await {
+                Ok(result) => Ok(result),
+                Err(e) => {
+                    warn!("Operation failed, attempting rollback: {}", e);
+                    self.rollback_to_checkpoint(checkpoint).await?;
+                    Err(e)
                 }
-            }
-            RecoveryStrategy::Fallback { alternative } => {
-                match operation().await {
-                    Ok(result) => Ok(result),
-                    Err(_) => {
-                        warn!("Primary strategy failed, trying fallback");
-                        let fallback_recovery = Self::new((**alternative).clone());
-                        fallback_recovery.execute_with_recovery(operation).await
-                    }
+            },
+            RecoveryStrategy::Fallback { alternative } => match operation().await {
+                Ok(result) => Ok(result),
+                Err(_) => {
+                    warn!("Primary strategy failed, trying fallback");
+                    let fallback_recovery = Self::new((**alternative).clone());
+                    fallback_recovery.execute_with_recovery(operation).await
                 }
-            }
+            },
         }
     }
 
@@ -181,7 +173,10 @@ impl ErrorRecovery {
                 }
             }
             _ => {
-                debug!("No rollback action needed for state: {:?}", checkpoint.state);
+                debug!(
+                    "No rollback action needed for state: {:?}",
+                    checkpoint.state
+                );
             }
         }
 
@@ -209,11 +204,7 @@ impl Default for SshConnectionRecovery {
 
 impl SshConnectionRecovery {
     /// Verify SSH connection is alive
-    pub async fn verify_connection(
-        &self,
-        host: &str,
-        port: u16,
-    ) -> Result<bool> {
+    pub async fn verify_connection(&self, host: &str, port: u16) -> Result<bool> {
         use tokio::net::TcpStream;
 
         match timeout(
@@ -235,10 +226,7 @@ impl SshConnectionRecovery {
     }
 
     /// Reconnect with retry logic
-    pub async fn reconnect(
-        &self,
-        client: &mut SshDeploymentClient,
-    ) -> Result<()> {
+    pub async fn reconnect(&self, client: &mut SshDeploymentClient) -> Result<()> {
         let mut attempts = 0;
 
         while attempts < self.max_reconnect_attempts {
@@ -296,23 +284,11 @@ pub struct DeploymentTransaction {
 
 #[derive(Clone)]
 pub enum DeploymentOperation {
-    CreateContainer {
-        image: String,
-        name: String,
-    },
-    StartContainer {
-        container_id: String,
-    },
-    StopContainer {
-        container_id: String,
-    },
-    RemoveContainer {
-        container_id: String,
-    },
-    ExecuteCommand {
-        command: String,
-        critical: bool,
-    },
+    CreateContainer { image: String, name: String },
+    StartContainer { container_id: String },
+    StopContainer { container_id: String },
+    RemoveContainer { container_id: String },
+    ExecuteCommand { command: String, critical: bool },
 }
 
 impl DeploymentTransaction {
@@ -330,10 +306,7 @@ impl DeploymentTransaction {
     }
 
     /// Execute all operations with automatic rollback on failure
-    pub async fn execute(
-        &mut self,
-        client: &SshDeploymentClient,
-    ) -> Result<()> {
+    pub async fn execute(&mut self, client: &SshDeploymentClient) -> Result<()> {
         for (index, operation) in self.operations.iter().enumerate() {
             match self.execute_operation(client, operation).await {
                 Ok(()) => {
@@ -372,7 +345,10 @@ impl DeploymentTransaction {
                 // client.start_container(container_id).await
                 Ok(())
             }
-            DeploymentOperation::ExecuteCommand { command, critical: _ } => {
+            DeploymentOperation::ExecuteCommand {
+                command,
+                critical: _,
+            } => {
                 info!("Executing command: {}", command);
                 // let result = client.execute_command(command).await;
                 // if *critical { result } else { Ok(()) }
@@ -470,21 +446,17 @@ impl CircuitBreaker {
         }
 
         match self.state {
-            CircuitState::Open => {
-                Err(Error::Other("Circuit breaker is open".into()))
-            }
-            CircuitState::Closed | CircuitState::HalfOpen => {
-                match operation.await {
-                    Ok(result) => {
-                        self.on_success();
-                        Ok(result)
-                    }
-                    Err(e) => {
-                        self.on_failure();
-                        Err(e)
-                    }
+            CircuitState::Open => Err(Error::Other("Circuit breaker is open".into())),
+            CircuitState::Closed | CircuitState::HalfOpen => match operation.await {
+                Ok(result) => {
+                    self.on_success();
+                    Ok(result)
                 }
-            }
+                Err(e) => {
+                    self.on_failure();
+                    Err(e)
+                }
+            },
         }
     }
 
@@ -510,7 +482,10 @@ impl CircuitBreaker {
             self.state = CircuitState::Open;
             self.success_count = 0;
         } else if self.failure_count >= self.failure_threshold {
-            error!("Circuit breaker opening after {} failures", self.failure_count);
+            error!(
+                "Circuit breaker opening after {} failures",
+                self.failure_count
+            );
             self.state = CircuitState::Open;
         }
     }

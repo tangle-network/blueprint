@@ -9,13 +9,13 @@ use crate::core::resources::ResourceSpec;
 use crate::deployment::manager_integration::RemoteDeploymentConfig;
 use crate::deployment::tracker::DeploymentType;
 use crate::pricing::fetcher::PricingFetcher;
+use blueprint_core::{debug, info, warn};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use blueprint_core::{debug, info, warn};
 
 /// Deployment preferences configured by operators
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,9 +168,7 @@ impl AutoDeploymentManager {
         for provider in enabled.iter() {
             info!(
                 "  - {} in region {} (priority {})",
-                provider.provider,
-                provider.region,
-                provider.priority
+                provider.provider, provider.region, provider.priority
             );
         }
     }
@@ -217,8 +215,7 @@ impl AutoDeploymentManager {
                     Err(e) => {
                         debug!(
                             "No suitable instance for {:?}: {}",
-                            provider_config.provider,
-                            e
+                            provider_config.provider, e
                         );
                     }
                     _ => {}
@@ -241,8 +238,7 @@ impl AutoDeploymentManager {
     ) -> Result<RemoteDeploymentConfig> {
         info!(
             "Auto-deploying service blueprint:{} service:{}",
-            blueprint_id,
-            service_id
+            blueprint_id, service_id
         );
 
         // Find cheapest provider with real pricing
@@ -250,9 +246,7 @@ impl AutoDeploymentManager {
 
         info!(
             "Deploying to {} in {} (${:.4}/hour)",
-            provider,
-            region,
-            price
+            provider, region, price
         );
 
         // Actually provision infrastructure and deploy Blueprint
@@ -424,7 +418,8 @@ impl AutoDeploymentManager {
         let _config_toml = toml::to_string_pretty(&example_config)
             .map_err(|e| Error::ConfigurationError(format!("Failed to serialize config: {e}")))?;
 
-        let config_with_comments = r#"# Blueprint Remote Providers - Deployment Preferences Configuration
+        let config_with_comments =
+            r#"# Blueprint Remote Providers - Deployment Preferences Configuration
 # 
 # This file configures how the auto-deployment manager selects deployment types
 # when deploying Blueprints to remote cloud providers.
@@ -461,11 +456,11 @@ allow_fallback = true
 #     { type = "AwsEc2" },    # Fallback to VMs
 #     { type = "GcpGce" },
 # ]
-"#.to_string();
+"#
+            .to_string();
 
-        std::fs::write(output_path, config_with_comments).map_err(|e| {
-            Error::ConfigurationError(format!("Failed to write config file: {e}"))
-        })?;
+        std::fs::write(output_path, config_with_comments)
+            .map_err(|e| Error::ConfigurationError(format!("Failed to write config file: {e}")))?;
 
         info!(
             "Generated example deployment preferences config at: {:?}",
@@ -490,11 +485,17 @@ allow_fallback = true
 
                 // Set supported credential environment variables
                 match key {
-                    "AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY" | "AWS_REGION" |
-                    "GOOGLE_APPLICATION_CREDENTIALS" | "GOOGLE_CLOUD_PROJECT" |
-                    "AZURE_CLIENT_ID" | "AZURE_CLIENT_SECRET" | "AZURE_TENANT_ID" |
-                    "DIGITALOCEAN_TOKEN" | "DO_TOKEN" |
-                    "VULTR_API_KEY" => {
+                    "AWS_ACCESS_KEY_ID"
+                    | "AWS_SECRET_ACCESS_KEY"
+                    | "AWS_REGION"
+                    | "GOOGLE_APPLICATION_CREDENTIALS"
+                    | "GOOGLE_CLOUD_PROJECT"
+                    | "AZURE_CLIENT_ID"
+                    | "AZURE_CLIENT_SECRET"
+                    | "AZURE_TENANT_ID"
+                    | "DIGITALOCEAN_TOKEN"
+                    | "DO_TOKEN"
+                    | "VULTR_API_KEY" => {
                         // SAFETY: We're only setting environment variables during initialization
                         // before any threads are spawned that might read them
                         unsafe {

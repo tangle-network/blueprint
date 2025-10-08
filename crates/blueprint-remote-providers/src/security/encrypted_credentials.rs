@@ -25,8 +25,7 @@ pub struct EncryptedCloudCredentials {
 }
 
 /// Plaintext credential data (only exists during encryption/decryption)
-#[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop, Default)]
 pub struct PlaintextCredentials {
     // AWS
     pub aws_access_key: Option<String>,
@@ -51,7 +50,11 @@ pub struct PlaintextCredentials {
 
 impl EncryptedCloudCredentials {
     /// Create new encrypted credentials with provided key
-    pub fn encrypt_with_key(provider: &str, credentials: PlaintextCredentials, key: &[u8; 32]) -> Result<Self> {
+    pub fn encrypt_with_key(
+        provider: &str,
+        credentials: PlaintextCredentials,
+        key: &[u8; 32],
+    ) -> Result<Self> {
         let cipher = Aes256Gcm::new_from_slice(key)
             .map_err(|e| Error::ConfigurationError(format!("Invalid key: {e}")))?;
 
@@ -74,7 +77,6 @@ impl EncryptedCloudCredentials {
             metadata: HashMap::new(),
         })
     }
-
 
     /// Decrypt credentials (temporarily exposes plaintext)
     pub fn decrypt(&self, key: &[u8; 32]) -> Result<PlaintextCredentials> {
@@ -141,7 +143,8 @@ impl SecureCredentialManager {
         provider: &str,
         credentials: PlaintextCredentials,
     ) -> Result<EncryptedCloudCredentials> {
-        let mut encrypted = EncryptedCloudCredentials::encrypt_with_key(provider, credentials, &self.master_key)?;
+        let mut encrypted =
+            EncryptedCloudCredentials::encrypt_with_key(provider, credentials, &self.master_key)?;
         encrypted.add_metadata("created_at".to_string(), chrono::Utc::now().to_rfc3339());
         encrypted.add_metadata("version".to_string(), "1.0".to_string());
         Ok(encrypted)
@@ -229,7 +232,8 @@ mod tests {
         credentials.gcp_project_id = Some("test-project".to_string());
 
         // Encrypt credentials with known key
-        let encrypted = EncryptedCloudCredentials::encrypt_with_key("aws", credentials, &test_key).unwrap();
+        let encrypted =
+            EncryptedCloudCredentials::encrypt_with_key("aws", credentials, &test_key).unwrap();
         assert!(encrypted.is_encrypted());
         assert_eq!(encrypted.provider(), "aws");
 
@@ -276,5 +280,3 @@ mod tests {
         );
     }
 }
-
-

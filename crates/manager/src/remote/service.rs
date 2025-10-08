@@ -10,9 +10,7 @@ use crate::rt::service::Service;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 
 #[cfg(feature = "remote-deployer")]
-use blueprint_remote_providers::{
-    CloudProvisioner, DeploymentTracker, HealthMonitor,
-};
+use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker, HealthMonitor};
 
 use blueprint_std::collections::HashMap;
 use blueprint_std::path::Path;
@@ -246,7 +244,9 @@ impl RemoteDeploymentService {
         {
             // Use real cloud provider SDK
             use blueprint_remote_providers::CloudProvisioner;
-            use blueprint_remote_providers::core::deployment_target::{DeploymentTarget, ContainerRuntime};
+            use blueprint_remote_providers::core::deployment_target::{
+                ContainerRuntime, DeploymentTarget,
+            };
 
             let provisioner = CloudProvisioner::new()
                 .await
@@ -276,11 +276,7 @@ impl RemoteDeploymentService {
 
             // Provision the actual instance using the remote providers resource spec directly
             let instance = provisioner
-                .provision(
-                    provider,
-                    &convert_resource_spec(&resource_spec),
-                    &region,
-                )
+                .provision(provider, &convert_resource_spec(&resource_spec), &region)
                 .await
                 .map_err(|e| Error::Other(format!("Failed to provision instance: {}", e)))?;
 
@@ -328,11 +324,13 @@ impl RemoteDeploymentService {
                         // This allows the QoS system to collect metrics from the remote instance
                         #[cfg(feature = "qos")]
                         if let Some(ref qos_provider) = self.qos_provider {
-                            qos_provider.register_remote_instance(
-                                instance.instance_id.clone(),
-                                host.to_string(),
-                                port,
-                            ).await;
+                            qos_provider
+                                .register_remote_instance(
+                                    instance.instance_id.clone(),
+                                    host.to_string(),
+                                    port,
+                                )
+                                .await;
                             info!("✅ QoS endpoint registered: {}:{}", host, port);
                             info!("   Instance: {}", instance.instance_id);
                             info!("   Blueprint metrics will be collected from port {}", port);
@@ -340,7 +338,10 @@ impl RemoteDeploymentService {
 
                         #[cfg(not(feature = "qos"))]
                         {
-                            info!("📊 QoS endpoint ready: {}:{} (QoS feature disabled)", host, port);
+                            info!(
+                                "📊 QoS endpoint ready: {}:{} (QoS feature disabled)",
+                                host, port
+                            );
                         }
                     }
                 }
@@ -409,7 +410,10 @@ impl RemoteDeploymentService {
 
         #[cfg(feature = "remote-deployer")]
         {
-            use blueprint_remote_providers::{CloudProvisioner, core::deployment_target::{DeploymentTarget, ContainerRuntime}};
+            use blueprint_remote_providers::{
+                CloudProvisioner,
+                core::deployment_target::{ContainerRuntime, DeploymentTarget},
+            };
 
             // Create provisioner
             let provisioner = CloudProvisioner::new()
@@ -470,7 +474,10 @@ impl RemoteDeploymentService {
 
             {
                 let mut deployments = self.deployments.write().await;
-                deployments.insert(deployment_result.blueprint_id.clone(), deployment_info.clone());
+                deployments.insert(
+                    deployment_result.blueprint_id.clone(),
+                    deployment_info.clone(),
+                );
             }
 
             info!("✅ Kubernetes deployment registered");
@@ -545,7 +552,10 @@ impl RemoteDeploymentService {
                     .await
                     .map_err(|e| Error::Other(format!("Failed to terminate instance: {}", e)))?;
 
-                info!("✅ Instance {} terminated successfully", deployment_info.instance_id);
+                info!(
+                    "✅ Instance {} terminated successfully",
+                    deployment_info.instance_id
+                );
             }
 
             #[cfg(not(feature = "remote-deployer"))]
@@ -596,7 +606,10 @@ impl RemoteDeploymentService {
         #[cfg(feature = "remote-deployer")]
         {
             if let Some(ref health_monitor) = self.health_monitor {
-                health_monitor.is_healthy(instance_id).await.map_err(|e| Error::Other(format!("Health check failed: {}", e)))
+                health_monitor
+                    .is_healthy(instance_id)
+                    .await
+                    .map_err(|e| Error::Other(format!("Health check failed: {}", e)))
             } else {
                 warn!("Health monitor not available, assuming healthy");
                 Ok(true)
@@ -616,7 +629,10 @@ impl RemoteDeploymentService {
 
         let deployments = self.deployments.read().await;
         for (instance_id, _) in deployments.iter() {
-            let is_healthy = self.check_deployment_health(instance_id).await.unwrap_or(false);
+            let is_healthy = self
+                .check_deployment_health(instance_id)
+                .await
+                .unwrap_or(false);
             health_status.insert(instance_id.clone(), is_healthy);
         }
 

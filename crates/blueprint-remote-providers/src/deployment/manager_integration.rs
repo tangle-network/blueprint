@@ -4,11 +4,11 @@ use crate::core::error::Result;
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::deployment::tracker::{DeploymentTracker, DeploymentType};
+use blueprint_core::{error, info, warn};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use blueprint_core::{error, info, warn};
 
 /// Type alias for TTL registry mapping (blueprint_id, service_id) to expiry time
 type TtlRegistry = Arc<RwLock<HashMap<(u64, u64), DateTime<Utc>>>>;
@@ -138,8 +138,7 @@ impl TtlManager {
             if let Some(deployment_config) = self.registry.get(blueprint_id, service_id).await {
                 info!(
                     "Cleaning up expired deployment: {} (provider: {:?})",
-                    deployment_config.instance_id,
-                    deployment_config.provider
+                    deployment_config.instance_id, deployment_config.provider
                 );
 
                 // Trigger cleanup using the deployment registry
@@ -168,7 +167,12 @@ impl TtlManager {
 
         // Cross-reference TTL entries with actual deployments in registry
         for (blueprint_id, service_id) in ttl_registry.keys() {
-            if self.registry.get(*blueprint_id, *service_id).await.is_some() {
+            if self
+                .registry
+                .get(*blueprint_id, *service_id)
+                .await
+                .is_some()
+            {
                 active_count += 1;
             }
         }

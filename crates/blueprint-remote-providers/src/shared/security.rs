@@ -100,7 +100,11 @@ impl BlueprintSecurityConfig {
 /// Provider-specific security group manager
 pub trait SecurityGroupManager {
     /// Create or update security group with Blueprint rules
-    async fn ensure_security_group(&self, name: &str, config: &BlueprintSecurityConfig) -> Result<String>;
+    async fn ensure_security_group(
+        &self,
+        name: &str,
+        config: &BlueprintSecurityConfig,
+    ) -> Result<String>;
 
     /// Delete security group
     async fn delete_security_group(&self, group_id: &str) -> Result<()>;
@@ -123,7 +127,11 @@ impl AzureNsgManager {
 }
 
 impl SecurityGroupManager for AzureNsgManager {
-    async fn ensure_security_group(&self, name: &str, config: &BlueprintSecurityConfig) -> Result<String> {
+    async fn ensure_security_group(
+        &self,
+        name: &str,
+        config: &BlueprintSecurityConfig,
+    ) -> Result<String> {
         let access_token = std::env::var("AZURE_ACCESS_TOKEN")
             .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
 
@@ -151,7 +159,11 @@ impl SecurityGroupManager for AzureNsgManager {
             let port_ranges = if rule.ports.len() == 1 {
                 rule.ports[0].to_string()
             } else {
-                rule.ports.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(",")
+                rule.ports
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
             };
 
             security_rules.push(serde_json::json!({
@@ -189,11 +201,15 @@ impl SecurityGroupManager for AzureNsgManager {
             }
             Ok(response) => {
                 let error_text = response.text().await.unwrap_or_default();
-                Err(Error::ConfigurationError(format!("Failed to create Azure NSG: {}", error_text)))
+                Err(Error::ConfigurationError(format!(
+                    "Failed to create Azure NSG: {}",
+                    error_text
+                )))
             }
-            Err(e) => {
-                Err(Error::ConfigurationError(format!("Failed to create Azure NSG: {}", e)))
-            }
+            Err(e) => Err(Error::ConfigurationError(format!(
+                "Failed to create Azure NSG: {}",
+                e
+            ))),
         }
     }
 
@@ -213,7 +229,10 @@ impl SecurityGroupManager for AzureNsgManager {
                 Ok(())
             }
             Ok(_) => Ok(()), // NSG already deleted
-            Err(e) => Err(Error::ConfigurationError(format!("Failed to delete Azure NSG: {}", e)))
+            Err(e) => Err(Error::ConfigurationError(format!(
+                "Failed to delete Azure NSG: {}",
+                e
+            ))),
         }
     }
 }
@@ -231,7 +250,11 @@ impl DigitalOceanFirewallManager {
 }
 
 impl SecurityGroupManager for DigitalOceanFirewallManager {
-    async fn ensure_security_group(&self, name: &str, config: &BlueprintSecurityConfig) -> Result<String> {
+    async fn ensure_security_group(
+        &self,
+        name: &str,
+        config: &BlueprintSecurityConfig,
+    ) -> Result<String> {
         let client = reqwest::Client::new();
         let url = "https://api.digitalocean.com/v2/firewalls";
 
@@ -240,7 +263,12 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
         let mut outbound_rules = Vec::new();
 
         for rule in rules {
-            let ports = rule.ports.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(",");
+            let ports = rule
+                .ports
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
 
             let protocol = match rule.protocol {
                 Protocol::Tcp => "tcp",
@@ -260,7 +288,8 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
                 Direction::Ingress => inbound_rules.push(rule_json),
                 Direction::Egress => {
                     let mut egress_rule = rule_json;
-                    egress_rule["destinations"] = serde_json::json!({"addresses": rule.destination_cidrs});
+                    egress_rule["destinations"] =
+                        serde_json::json!({"addresses": rule.destination_cidrs});
                     egress_rule.as_object_mut().unwrap().remove("sources");
                     outbound_rules.push(egress_rule);
                 }
@@ -282,22 +311,28 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
             .await
         {
             Ok(response) if response.status().is_success() => {
-                let json: serde_json::Value = response.json().await
-                    .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+                let json: serde_json::Value = response.json().await.map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to parse response: {}", e))
+                })?;
 
-                let firewall_id = json["firewall"]["id"].as_str()
-                    .ok_or_else(|| Error::ConfigurationError("No firewall ID in response".into()))?;
+                let firewall_id = json["firewall"]["id"].as_str().ok_or_else(|| {
+                    Error::ConfigurationError("No firewall ID in response".into())
+                })?;
 
                 info!("Created DigitalOcean firewall: {} ({})", name, firewall_id);
                 Ok(firewall_id.to_string())
             }
             Ok(response) => {
                 let error_text = response.text().await.unwrap_or_default();
-                Err(Error::ConfigurationError(format!("Failed to create DO firewall: {}", error_text)))
+                Err(Error::ConfigurationError(format!(
+                    "Failed to create DO firewall: {}",
+                    error_text
+                )))
             }
-            Err(e) => {
-                Err(Error::ConfigurationError(format!("Failed to create DO firewall: {}", e)))
-            }
+            Err(e) => Err(Error::ConfigurationError(format!(
+                "Failed to create DO firewall: {}",
+                e
+            ))),
         }
     }
 
@@ -305,13 +340,21 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
         let client = reqwest::Client::new();
         let url = format!("https://api.digitalocean.com/v2/firewalls/{}", group_id);
 
-        match client.delete(&url).bearer_auth(&self.api_token).send().await {
+        match client
+            .delete(&url)
+            .bearer_auth(&self.api_token)
+            .send()
+            .await
+        {
             Ok(response) if response.status().is_success() => {
                 info!("Deleted DigitalOcean firewall: {}", group_id);
                 Ok(())
             }
             Ok(_) => Ok(()), // Firewall already deleted
-            Err(e) => Err(Error::ConfigurationError(format!("Failed to delete DO firewall: {}", e)))
+            Err(e) => Err(Error::ConfigurationError(format!(
+                "Failed to delete DO firewall: {}",
+                e
+            ))),
         }
     }
 }
@@ -329,7 +372,11 @@ impl VultrFirewallManager {
 }
 
 impl SecurityGroupManager for VultrFirewallManager {
-    async fn ensure_security_group(&self, name: &str, config: &BlueprintSecurityConfig) -> Result<String> {
+    async fn ensure_security_group(
+        &self,
+        name: &str,
+        config: &BlueprintSecurityConfig,
+    ) -> Result<String> {
         let client = reqwest::Client::new();
         let url = "https://api.vultr.com/v2/firewalls";
 
@@ -344,17 +391,25 @@ impl SecurityGroupManager for VultrFirewallManager {
             .json(&firewall_body)
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create Vultr firewall: {}", e)))?;
+            .map_err(|e| {
+                Error::ConfigurationError(format!("Failed to create Vultr firewall: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Failed to create Vultr firewall: {}", error_text)));
+            return Err(Error::ConfigurationError(format!(
+                "Failed to create Vultr firewall: {}",
+                error_text
+            )));
         }
 
-        let json: serde_json::Value = response.json().await
+        let json: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
 
-        let firewall_id = json["firewall_group"]["id"].as_str()
+        let firewall_id = json["firewall_group"]["id"]
+            .as_str()
             .ok_or_else(|| Error::ConfigurationError("No firewall ID in response".into()))?;
 
         // Add rules to the firewall group
@@ -365,7 +420,11 @@ impl SecurityGroupManager for VultrFirewallManager {
             let port_range = if rule.ports.len() == 1 {
                 format!("{}", rule.ports[0])
             } else {
-                format!("{}:{}", rule.ports.iter().min().unwrap(), rule.ports.iter().max().unwrap())
+                format!(
+                    "{}:{}",
+                    rule.ports.iter().min().unwrap(),
+                    rule.ports.iter().max().unwrap()
+                )
             };
 
             let protocol = match rule.protocol {
@@ -410,7 +469,10 @@ impl SecurityGroupManager for VultrFirewallManager {
                 Ok(())
             }
             Ok(_) => Ok(()), // Firewall already deleted
-            Err(e) => Err(Error::ConfigurationError(format!("Failed to delete Vultr firewall: {}", e)))
+            Err(e) => Err(Error::ConfigurationError(format!(
+                "Failed to delete Vultr firewall: {}",
+                e
+            ))),
         }
     }
 }

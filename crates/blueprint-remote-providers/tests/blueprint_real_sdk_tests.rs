@@ -6,11 +6,11 @@
 use blueprint_remote_providers::{
     // providers::aws::provisioner::AwsProvisioner,
     // providers::gcp::provisioner::GcpProvisioner,
-    core::{resources::ResourceSpec, remote::CloudProvider},
+    core::{remote::CloudProvider, resources::ResourceSpec},
 };
+use serial_test::serial;
 use std::time::Duration;
 use tokio::time::timeout;
-use serial_test::serial;
 
 // AWS SDK Testing with official test utilities
 #[cfg(feature = "aws")]
@@ -153,7 +153,12 @@ mod aws_sdk_tests {
         let spec = ResourceSpec::basic();
 
         // This tests the real provisioning logic with SDK test harness
-        match timeout(Duration::from_secs(10), test_aws_provision_with_client(client, &spec)).await {
+        match timeout(
+            Duration::from_secs(10),
+            test_aws_provision_with_client(client, &spec),
+        )
+        .await
+        {
             Ok(Ok(instance_id)) => {
                 println!("✅ AWS SDK test successful: {instance_id}");
                 assert_eq!(instance_id, "i-1234567890abcdef0");
@@ -191,8 +196,7 @@ mod aws_sdk_tests {
             .first()
             .ok_or("No instances returned")?;
 
-        let instance_id = instance.instance_id()
-            .ok_or("No instance ID")?;
+        let instance_id = instance.instance_id().ok_or("No instance ID")?;
 
         // Test describe instances
         let describe_result = client
@@ -266,8 +270,8 @@ mod gcp_sdk_tests {
 async fn test_multi_provider_real_sdk_integration() {
     println!("🌐 Testing multi-provider integration with real SDKs");
 
-    use blueprint_remote_providers::pricing::fetcher::PricingFetcher;
     use blueprint_remote_providers::infra::mapper::InstanceTypeMapper;
+    use blueprint_remote_providers::pricing::fetcher::PricingFetcher;
 
     let spec = ResourceSpec::basic();
     let mut pricing_fetcher = PricingFetcher::new_or_default();
@@ -284,7 +288,10 @@ async fn test_multi_provider_real_sdk_integration() {
 
         // Test real instance type mapping
         let instance_selection = InstanceTypeMapper::map_to_instance_type(&spec, provider);
-        println!("  ✅ Mapped to instance type: {}", instance_selection.instance_type);
+        println!(
+            "  ✅ Mapped to instance type: {}",
+            instance_selection.instance_type
+        );
 
         // Test real pricing lookup
         let region = match provider {
@@ -294,14 +301,18 @@ async fn test_multi_provider_real_sdk_integration() {
             _ => "default",
         };
 
-        match timeout(Duration::from_secs(45),
+        match timeout(
+            Duration::from_secs(45),
             pricing_fetcher.find_best_instance(
                 provider.clone(),
                 region,
                 spec.cpu,
                 spec.memory_gb,
-                10.0  // max $10/hour for testing
-            )).await {
+                10.0, // max $10/hour for testing
+            ),
+        )
+        .await
+        {
             Ok(Ok(instance)) => {
                 println!("  ✅ Found optimal instance: {}", instance.name);
                 println!("     - vCPUs: {}", instance.vcpus);
@@ -352,7 +363,8 @@ async fn test_blueprint_with_real_sdk_provisioning() {
     println!("🚀 Testing blueprint deployment with real SDK provisioning");
 
     // Use the blueprint-centric approach with real SDKs
-    let blueprint_binary = "../../examples/incredible-squaring/target/debug/incredible-squaring-blueprint-bin";
+    let blueprint_binary =
+        "../../examples/incredible-squaring/target/debug/incredible-squaring-blueprint-bin";
 
     if !std::path::Path::new(blueprint_binary).exists() {
         println!("⚠️  Blueprint binary not found - building...");
@@ -368,7 +380,10 @@ async fn test_blueprint_with_real_sdk_provisioning() {
                 println!("✅ Blueprint built successfully");
             }
             Ok(output) => {
-                println!("❌ Blueprint build failed: {}", String::from_utf8_lossy(&output.stderr));
+                println!(
+                    "❌ Blueprint build failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
                 return;
             }
             Err(e) => {
@@ -383,7 +398,10 @@ async fn test_blueprint_with_real_sdk_provisioning() {
 
     println!("📊 Real blueprint resource requirements:");
     println!("  Binary size: {:.2} MB", resource_usage.binary_size_mb);
-    println!("  Estimated memory: {:.2} MB", resource_usage.estimated_memory_mb);
+    println!(
+        "  Estimated memory: {:.2} MB",
+        resource_usage.estimated_memory_mb
+    );
     println!("  Network ports: {:?}", resource_usage.required_ports);
 
     // Create resource spec based on actual requirements
@@ -438,12 +456,12 @@ async fn test_real_cost_estimation_with_blueprint_data() {
     println!("💰 Testing real cost estimation using blueprint requirements");
 
     use blueprint_remote_providers::pricing::fetcher::PricingFetcher;
-    
 
     let mut fetcher = PricingFetcher::new_or_default();
 
     // Get real blueprint requirements
-    let blueprint_binary = "../../examples/incredible-squaring/target/debug/incredible-squaring-blueprint-bin";
+    let blueprint_binary =
+        "../../examples/incredible-squaring/target/debug/incredible-squaring-blueprint-bin";
     let resource_usage = get_blueprint_resource_requirements(blueprint_binary).await;
 
     let spec = ResourceSpec {
@@ -470,27 +488,40 @@ async fn test_real_cost_estimation_with_blueprint_data() {
         let region = match provider {
             CloudProvider::AWS => "us-east-1",
             CloudProvider::DigitalOcean => "nyc3",
-            _ => "default"
+            _ => "default",
         };
 
-        match timeout(Duration::from_secs(45),
+        match timeout(
+            Duration::from_secs(45),
             fetcher.find_best_instance(
                 provider.clone(),
                 region,
                 spec.cpu,
                 spec.memory_gb,
-                1.0  // max $1/hour
-            )).await {
+                1.0, // max $1/hour
+            ),
+        )
+        .await
+        {
             Ok(Ok(instance)) => {
                 println!("  ✅ Found instance: {}", instance.name);
                 println!("  💰 Hourly cost: ${:.4}", instance.hourly_price);
                 println!("  📅 Daily cost: ${:.2}", instance.hourly_price * 24.0);
-                println!("  📅 Monthly cost: ${:.2}", instance.hourly_price * 24.0 * 30.0);
-                println!("  🖥️ Specs: {} vCPUs, {:.1} GB RAM", instance.vcpus, instance.memory_gb);
+                println!(
+                    "  📅 Monthly cost: ${:.2}",
+                    instance.hourly_price * 24.0 * 30.0
+                );
+                println!(
+                    "  🖥️ Specs: {} vCPUs, {:.1} GB RAM",
+                    instance.vcpus, instance.memory_gb
+                );
 
                 // Verify cost is reasonable for a small blueprint
                 assert!(instance.hourly_price > 0.0);
-                assert!(instance.hourly_price < 1.0, "Blueprint should cost less than $1/hour");
+                assert!(
+                    instance.hourly_price < 1.0,
+                    "Blueprint should cost less than $1/hour"
+                );
             }
             Ok(Err(e)) => {
                 panic!("Pricing API must work: {e}");
@@ -499,4 +530,3 @@ async fn test_real_cost_estimation_with_blueprint_data() {
         }
     }
 }
-

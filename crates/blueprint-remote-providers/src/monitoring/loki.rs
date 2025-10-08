@@ -5,9 +5,9 @@
 
 use crate::core::error::{Error, Result};
 use crate::monitoring::logs::{LogEntry, LogLevel};
+use blueprint_core::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use blueprint_core::{debug, error, info};
 
 /// Loki client for pushing and querying logs
 pub struct LokiClient {
@@ -47,7 +47,8 @@ impl LokiClient {
 
         let url = format!("{}/loki/api/v1/push", self.base_url);
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&push_request)
             .send()
@@ -85,7 +86,8 @@ impl LokiClient {
             params.push(("end".to_string(), end.to_string()));
         }
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .query(&params)
             .send()
@@ -97,7 +99,9 @@ impl LokiClient {
             return Err(Error::Other(format!("Loki query failed: {error_text}")));
         }
 
-        let query_response: QueryResponse = response.json().await
+        let query_response: QueryResponse = response
+            .json()
+            .await
             .map_err(|e| Error::Other(format!("Failed to parse Loki response: {e}")))?;
 
         Ok(self.parse_query_response(query_response))
@@ -110,7 +114,10 @@ impl LokiClient {
         for entry in entries {
             let mut labels = self.labels.clone();
             labels.insert("service_id".to_string(), entry.service_id.clone());
-            labels.insert("level".to_string(), format!("{:?}", entry.level).to_lowercase());
+            labels.insert(
+                "level".to_string(),
+                format!("{:?}", entry.level).to_lowercase(),
+            );
 
             if let Some(container_id) = &entry.container_id {
                 labels.insert("container_id".to_string(), container_id.clone());
@@ -122,7 +129,8 @@ impl LokiClient {
             }
 
             let labels_str = format_labels(&labels);
-            let timestamp = entry.timestamp
+            let timestamp = entry
+                .timestamp
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos()
@@ -150,8 +158,8 @@ impl LokiClient {
                     let timestamp_ns: i64 = value[0].parse().unwrap_or(0);
                     let message = value[1].clone();
 
-                    let timestamp = std::time::UNIX_EPOCH +
-                        std::time::Duration::from_nanos(timestamp_ns as u64);
+                    let timestamp = std::time::UNIX_EPOCH
+                        + std::time::Duration::from_nanos(timestamp_ns as u64);
 
                     let mut metadata = HashMap::new();
                     for (key, value) in &result.stream {
@@ -162,11 +170,15 @@ impl LokiClient {
 
                     entries.push(LogEntry {
                         timestamp,
-                        service_id: result.stream.get("service_id")
+                        service_id: result
+                            .stream
+                            .get("service_id")
                             .cloned()
                             .unwrap_or_else(|| "unknown".to_string()),
                         container_id: result.stream.get("container_id").cloned(),
-                        level: result.stream.get("level")
+                        level: result
+                            .stream
+                            .get("level")
                             .map(|s| LogLevel::from(s.as_str()))
                             .unwrap_or(LogLevel::Info),
                         message,
@@ -198,10 +210,14 @@ impl LokiClient {
         // Start Loki container
         let output = tokio::process::Command::new("docker")
             .args([
-                "run", "-d",
-                "--name", "loki",
-                "-p", "3100:3100",
-                "-v", "/tmp/loki:/loki",
+                "run",
+                "-d",
+                "--name",
+                "loki",
+                "-p",
+                "3100:3100",
+                "-v",
+                "/tmp/loki:/loki",
                 "grafana/loki:latest",
                 "-config.file=/etc/loki/local-config.yaml",
             ])
@@ -221,10 +237,14 @@ impl LokiClient {
         // Optional: Start Grafana for visualization
         let _ = tokio::process::Command::new("docker")
             .args([
-                "run", "-d",
-                "--name", "grafana",
-                "-p", "3000:3000",
-                "--link", "loki:loki",
+                "run",
+                "-d",
+                "--name",
+                "grafana",
+                "-p",
+                "3000:3000",
+                "--link",
+                "loki:loki",
                 "grafana/grafana:latest",
             ])
             .output()

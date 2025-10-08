@@ -8,7 +8,7 @@ mod core;
 mod types;
 
 // Re-export public API
-pub use self::core::{ttl_checker_task, DeploymentTracker};
+pub use self::core::{DeploymentTracker, ttl_checker_task};
 pub use types::{CleanupHandler, DeploymentRecord, DeploymentStatus, DeploymentType};
 
 #[cfg(test)]

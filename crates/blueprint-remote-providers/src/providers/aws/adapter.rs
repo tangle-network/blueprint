@@ -7,8 +7,8 @@ use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::aws::provisioner::AwsProvisioner;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 use async_trait::async_trait;
-use std::collections::HashMap;
 use blueprint_core::{debug, info, warn};
+use std::collections::HashMap;
 
 /// Professional AWS adapter with security and performance optimizations
 pub struct AwsAdapter {
@@ -46,7 +46,6 @@ impl AwsAdapter {
         }
     }
 
-
     /// Create restrictive security configuration
     async fn ensure_security_group(&self) -> Result<String> {
         // Check if we already have a cached security group
@@ -60,15 +59,21 @@ impl AwsAdapter {
         // - Blueprint QoS ports (8080, 9615, 9944) from authenticated sources
         // - Outbound HTTPS for package downloads only
         info!("Creating restrictive security group for Blueprint instances");
-        
+
         let sg_name = format!("blueprint-remote-{}", uuid::Uuid::new_v4());
-        
-        let security_group_id = self.provisioner.create_security_group(&sg_name).await
+
+        let security_group_id = self
+            .provisioner
+            .create_security_group(&sg_name)
+            .await
             .unwrap_or_else(|_| "default".to_string());
-        
-        info!("Created security group: {} ({})", sg_name, security_group_id);
+
+        info!(
+            "Created security group: {} ({})",
+            sg_name, security_group_id
+        );
         info!("Security group rules: SSH(22), QoS(8080,9615,9944), HTTPS outbound only");
-        
+
         Ok(security_group_id)
     }
 }
@@ -207,7 +212,6 @@ impl CloudProviderAdapter for AwsAdapter {
             )),
         }
     }
-
 }
 
 impl AwsAdapter {
@@ -230,7 +234,8 @@ impl AwsAdapter {
             resource_spec,
             env_vars,
             SshDeploymentConfig::aws(),
-        ).await
+        )
+        .await
     }
 
     /// Deploy to AWS EKS cluster
@@ -244,7 +249,7 @@ impl AwsAdapter {
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
-            use crate::shared::{SharedKubernetesDeployment, ManagedK8sConfig};
+            use crate::shared::{ManagedK8sConfig, SharedKubernetesDeployment};
 
             let config = ManagedK8sConfig::eks("us-east-1"); // Use default region for now
             SharedKubernetesDeployment::deploy_to_managed_k8s(
@@ -253,7 +258,8 @@ impl AwsAdapter {
                 blueprint_image,
                 resource_spec,
                 config,
-            ).await
+            )
+            .await
         }
 
         #[cfg(not(feature = "kubernetes"))]
@@ -281,7 +287,8 @@ impl AwsAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
-            ).await
+            )
+            .await
         }
 
         #[cfg(not(feature = "kubernetes"))]

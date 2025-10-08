@@ -8,11 +8,11 @@ use crate::secure_bridge::{RemoteEndpoint, SecureBridge};
 use crate::security::encrypted_credentials::{
     EncryptedCloudCredentials, PlaintextCredentials, SecureCredentialManager,
 };
+use blueprint_core::{debug, info, warn};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use blueprint_core::{debug, info, warn};
 
 /// JWT claims for access tokens
 #[derive(Debug, Serialize, Deserialize)]
@@ -262,9 +262,7 @@ impl AuthProxyRemoteExtension {
 
         debug!(
             "JWT token validated for service {} (expires: {}, jti: {})",
-            service_id,
-            claims.exp,
-            claims.jti
+            service_id, claims.exp, claims.jti
         );
 
         // Add authentication headers

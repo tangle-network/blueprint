@@ -6,8 +6,8 @@ use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::digitalocean::{DigitalOceanProvisioner, Droplet};
 use async_trait::async_trait;
-use std::collections::HashMap;
 use blueprint_core::{info, warn};
+use std::collections::HashMap;
 
 /// DigitalOcean adapter for Blueprint deployment
 #[derive(Debug)]
@@ -25,11 +25,8 @@ impl DigitalOceanAdapter {
 
         let provisioner = DigitalOceanProvisioner::new(api_token, default_region).await?;
 
-        Ok(Self {
-            provisioner,
-        })
+        Ok(Self { provisioner })
     }
-
 
     /// Convert Droplet to ProvisionedInstance
     fn droplet_to_instance(droplet: Droplet) -> ProvisionedInstance {
@@ -206,7 +203,8 @@ impl DigitalOceanAdapter {
             resource_spec,
             env_vars,
             SshDeploymentConfig::digitalocean(),
-        ).await
+        )
+        .await
     }
 
     /// Deploy to DOKS cluster
@@ -220,7 +218,7 @@ impl DigitalOceanAdapter {
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
-            use crate::shared::{SharedKubernetesDeployment, ManagedK8sConfig};
+            use crate::shared::{ManagedK8sConfig, SharedKubernetesDeployment};
 
             let config = ManagedK8sConfig::doks("nyc3");
             SharedKubernetesDeployment::deploy_to_managed_k8s(
@@ -230,12 +228,19 @@ impl DigitalOceanAdapter {
                 resource_spec,
                 env_vars,
                 config,
-            ).await
+            )
+            .await
         }
 
         #[cfg(not(feature = "kubernetes"))]
         {
-            let _ = (cluster_id, namespace, blueprint_image, resource_spec, env_vars);
+            let _ = (
+                cluster_id,
+                namespace,
+                blueprint_image,
+                resource_spec,
+                env_vars,
+            );
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
@@ -258,7 +263,8 @@ impl DigitalOceanAdapter {
                 blueprint_image,
                 resource_spec,
                 env_vars,
-            ).await
+            )
+            .await
         }
 
         #[cfg(not(feature = "kubernetes"))]
@@ -301,18 +307,22 @@ mod tests {
         use crate::core::resources::ResourceSpec;
 
         // Test that the method signature and structure are correct
-        let adapter = DigitalOceanAdapter::new().await.expect("Failed to create DigitalOcean adapter");
+        let adapter = DigitalOceanAdapter::new()
+            .await
+            .expect("Failed to create DigitalOcean adapter");
 
         let mut env_vars = HashMap::new();
         env_vars.insert("REDIS_URL".to_string(), "redis://localhost".to_string());
 
-        let result = adapter.deploy_to_doks(
-            "test-doks-cluster",
-            "production",
-            "myapp:v1.0",
-            &ResourceSpec::recommended(),
-            env_vars,
-        ).await;
+        let result = adapter
+            .deploy_to_doks(
+                "test-doks-cluster",
+                "production",
+                "myapp:v1.0",
+                &ResourceSpec::recommended(),
+                env_vars,
+            )
+            .await;
 
         // Without actual cluster, we expect an error but method should be callable
         assert!(result.is_err());
@@ -323,18 +333,22 @@ mod tests {
     async fn test_doks_generic_k8s_deployment_structure() {
         use crate::core::resources::ResourceSpec;
 
-        let adapter = DigitalOceanAdapter::new().await.expect("Failed to create DigitalOcean adapter");
+        let adapter = DigitalOceanAdapter::new()
+            .await
+            .expect("Failed to create DigitalOcean adapter");
 
         let mut env_vars = HashMap::new();
         env_vars.insert("NODE_ENV".to_string(), "production".to_string());
         env_vars.insert("LOG_LEVEL".to_string(), "info".to_string());
 
-        let result = adapter.deploy_to_generic_k8s(
-            "default",
-            "busybox:latest",
-            &ResourceSpec::minimal(),
-            env_vars,
-        ).await;
+        let result = adapter
+            .deploy_to_generic_k8s(
+                "default",
+                "busybox:latest",
+                &ResourceSpec::minimal(),
+                env_vars,
+            )
+            .await;
 
         // Without actual cluster, we expect an error but method should be callable
         assert!(result.is_err());

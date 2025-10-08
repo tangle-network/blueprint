@@ -2,14 +2,16 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
+use crate::deployment::ssh::{
+    ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient,
+};
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::azure::provisioner::AzureProvisioner;
 use crate::providers::common::ProvisioningConfig;
-use crate::deployment::ssh::{ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient};
 use async_trait::async_trait;
-use std::collections::HashMap;
 use blueprint_core::{info, warn};
+use std::collections::HashMap;
 
 /// Azure adapter for Blueprint deployment
 pub struct AzureAdapter {
@@ -25,7 +27,6 @@ impl AzureAdapter {
             provisioner: std::sync::Arc::new(tokio::sync::Mutex::new(provisioner)),
         })
     }
-
 }
 
 #[async_trait]
@@ -107,10 +108,15 @@ impl CloudProviderAdapter for AzureAdapter {
         }
 
         if !response.status().is_success() {
-            return Err(Error::Other(format!("Failed to get instance status: {}", response.status())));
+            return Err(Error::Other(format!(
+                "Failed to get instance status: {}",
+                response.status()
+            )));
         }
 
-        let json: serde_json::Value = response.json().await
+        let json: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| Error::Other(format!("Failed to parse response: {e}")))?;
 
         if let Some(statuses) = json["statuses"].as_array() {
@@ -120,8 +126,12 @@ impl CloudProviderAdapter for AzureAdapter {
                         return match code {
                             "PowerState/running" => Ok(InstanceStatus::Running),
                             "PowerState/starting" => Ok(InstanceStatus::Starting),
-                            "PowerState/stopped" | "PowerState/deallocated" => Ok(InstanceStatus::Stopped),
-                            "PowerState/stopping" | "PowerState/deallocating" => Ok(InstanceStatus::Stopping),
+                            "PowerState/stopped" | "PowerState/deallocated" => {
+                                Ok(InstanceStatus::Stopped)
+                            }
+                            "PowerState/stopping" | "PowerState/deallocating" => {
+                                Ok(InstanceStatus::Stopping)
+                            }
                             _ => Ok(InstanceStatus::Unknown),
                         };
                     }
@@ -140,44 +150,59 @@ impl CloudProviderAdapter for AzureAdapter {
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         use crate::core::deployment_target::DeploymentTarget;
-        
+
         match target {
             DeploymentTarget::VirtualMachine { runtime: _ } => {
-                self.deploy_to_vm(blueprint_image, resource_spec, env_vars).await
+                self.deploy_to_vm(blueprint_image, resource_spec, env_vars)
+                    .await
             }
-            DeploymentTarget::ManagedKubernetes { cluster_id, namespace } => {
+            DeploymentTarget::ManagedKubernetes {
+                cluster_id,
+                namespace,
+            } => {
                 #[cfg(feature = "kubernetes")]
                 {
-                    self.deploy_to_aks(cluster_id, namespace, blueprint_image, resource_spec, env_vars).await
+                    self.deploy_to_aks(
+                        cluster_id,
+                        namespace,
+                        blueprint_image,
+                        resource_spec,
+                        env_vars,
+                    )
+                    .await
                 }
                 #[cfg(not(feature = "kubernetes"))]
                 {
-                    warn!("Kubernetes deployment requested for cluster {} namespace {}, but feature not enabled", cluster_id, namespace);
+                    warn!(
+                        "Kubernetes deployment requested for cluster {} namespace {}, but feature not enabled",
+                        cluster_id, namespace
+                    );
                     Err(Error::Other("Kubernetes support not enabled".into()))
                 }
             }
-            DeploymentTarget::GenericKubernetes { context: _, namespace } => {
+            DeploymentTarget::GenericKubernetes {
+                context: _,
+                namespace,
+            } => {
                 #[cfg(feature = "kubernetes")]
                 {
-                    self.deploy_to_generic_k8s(namespace, blueprint_image, resource_spec, env_vars).await
+                    self.deploy_to_generic_k8s(namespace, blueprint_image, resource_spec, env_vars)
+                        .await
                 }
                 #[cfg(not(feature = "kubernetes"))]
                 {
-                    warn!("Kubernetes deployment requested for namespace {}, but feature not enabled", namespace);
+                    warn!(
+                        "Kubernetes deployment requested for namespace {}, but feature not enabled",
+                        namespace
+                    );
                     Err(Error::Other("Kubernetes support not enabled".into()))
                 }
             }
-            DeploymentTarget::Serverless { .. } => {
-                Err(Error::Other("Azure Container Instances deployment not implemented".into()))
-            }
+            DeploymentTarget::Serverless { .. } => Err(Error::Other(
+                "Azure Container Instances deployment not implemented".into(),
+            )),
         }
     }
-
-
-
-
-
-
 
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
         if let Some(endpoint) = deployment.qos_grpc_endpoint() {
@@ -190,7 +215,10 @@ impl CloudProviderAdapter for AzureAdapter {
                 Ok(response) => {
                     let healthy = response.status().is_success();
                     if healthy {
-                        info!("Azure blueprint {} health check passed", deployment.blueprint_id);
+                        info!(
+                            "Azure blueprint {} health check passed",
+                            deployment.blueprint_id
+                        );
                     }
                     Ok(healthy)
                 }
@@ -205,7 +233,10 @@ impl CloudProviderAdapter for AzureAdapter {
     }
 
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
-        info!("Cleaning up Azure blueprint deployment: {}", deployment.blueprint_id);
+        info!(
+            "Cleaning up Azure blueprint deployment: {}",
+            deployment.blueprint_id
+        );
         self.terminate_instance(&deployment.instance.id).await
     }
 }
@@ -220,7 +251,9 @@ impl AzureAdapter {
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         let instance = self.provision_instance("Standard_B2ms", "eastus").await?;
-        let public_ip = instance.public_ip.as_ref()
+        let public_ip = instance
+            .public_ip
+            .as_ref()
             .ok_or_else(|| Error::Other("Instance has no public IP".into()))?;
 
         // SSH connection configuration
@@ -240,9 +273,10 @@ impl AzureAdapter {
             health_check: None,
         };
 
-        let ssh_client = SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
-            .await
-            .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {e}")))?;
+        let ssh_client =
+            SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
+                .await
+                .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {e}")))?;
 
         let deployment = ssh_client
             .deploy_blueprint(blueprint_image, resource_spec, env_vars)
@@ -288,7 +322,7 @@ impl AzureAdapter {
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
-            use crate::shared::{SharedKubernetesDeployment, ManagedK8sConfig};
+            use crate::shared::{ManagedK8sConfig, SharedKubernetesDeployment};
 
             let config = ManagedK8sConfig::aks("eastus", "blueprint-resources");
             SharedKubernetesDeployment::deploy_to_managed_k8s(
@@ -298,11 +332,18 @@ impl AzureAdapter {
                 resource_spec,
                 env_vars,
                 config,
-            ).await
+            )
+            .await
         }
         #[cfg(not(feature = "kubernetes"))]
         {
-            let _ = (cluster_id, namespace, blueprint_image, resource_spec, env_vars);
+            let _ = (
+                cluster_id,
+                namespace,
+                blueprint_image,
+                resource_spec,
+                env_vars,
+            );
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
@@ -325,7 +366,8 @@ impl AzureAdapter {
                 blueprint_image,
                 resource_spec,
                 env_vars,
-            ).await
+            )
+            .await
         }
         #[cfg(not(feature = "kubernetes"))]
         {
@@ -355,18 +397,22 @@ mod tests {
 
         // Test that the method signature and structure are correct
         // Note: This won't actually deploy without valid Azure credentials
-        let adapter = AzureAdapter::new().await.expect("Failed to create Azure adapter");
+        let adapter = AzureAdapter::new()
+            .await
+            .expect("Failed to create Azure adapter");
 
         let mut env_vars = HashMap::new();
         env_vars.insert("TEST_VAR".to_string(), "test_value".to_string());
 
-        let result = adapter.deploy_to_aks(
-            "test-cluster",
-            "test-namespace",
-            "test-image:latest",
-            &ResourceSpec::basic(),
-            env_vars,
-        ).await;
+        let result = adapter
+            .deploy_to_aks(
+                "test-cluster",
+                "test-namespace",
+                "test-image:latest",
+                &ResourceSpec::basic(),
+                env_vars,
+            )
+            .await;
 
         // Without actual cluster, we expect an error but method should be callable
         assert!(result.is_err());
@@ -377,17 +423,21 @@ mod tests {
     async fn test_generic_k8s_deployment_structure() {
         use crate::core::resources::ResourceSpec;
 
-        let adapter = AzureAdapter::new().await.expect("Failed to create Azure adapter");
+        let adapter = AzureAdapter::new()
+            .await
+            .expect("Failed to create Azure adapter");
 
         let mut env_vars = HashMap::new();
         env_vars.insert("API_KEY".to_string(), "secret123".to_string());
 
-        let result = adapter.deploy_to_generic_k8s(
-            "test-namespace",
-            "nginx:latest",
-            &ResourceSpec::minimal(),
-            env_vars,
-        ).await;
+        let result = adapter
+            .deploy_to_generic_k8s(
+                "test-namespace",
+                "nginx:latest",
+                &ResourceSpec::minimal(),
+                env_vars,
+            )
+            .await;
 
         // Without actual cluster, we expect an error but method should be callable
         assert!(result.is_err());
@@ -397,7 +447,10 @@ mod tests {
     fn test_env_vars_usage() {
         // Verify env_vars parameter is properly typed
         let mut env_vars = HashMap::new();
-        env_vars.insert("DATABASE_URL".to_string(), "postgres://localhost".to_string());
+        env_vars.insert(
+            "DATABASE_URL".to_string(),
+            "postgres://localhost".to_string(),
+        );
         env_vars.insert("PORT".to_string(), "8080".to_string());
 
         assert_eq!(env_vars.len(), 2);

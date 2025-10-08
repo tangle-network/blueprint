@@ -206,7 +206,7 @@ impl GcpProvisioner {
         let mut metadata = HashMap::new();
         metadata.insert("zone".to_string(), zone.clone());
         metadata.insert("project_id".to_string(), self.project_id.clone());
-        
+
         Ok(ProvisionedInfrastructure {
             provider: CloudProvider::GCP,
             instance_id: instance["id"].as_str().unwrap_or("").to_string(),

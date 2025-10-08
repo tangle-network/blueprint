@@ -1,11 +1,11 @@
 //! Update and rollback commands for cloud deployments
 
 use blueprint_remote_providers::{
-    deployment::{UpdateManager, UpdateStrategy, DeploymentVersion},
+    deployment::{DeploymentVersion, UpdateManager, UpdateStrategy},
     infra::provisioner::CloudProvisioner,
 };
-use color_eyre::{eyre::eyre, Result};
-use dialoguer::{theme::ColorfulTheme, Confirm, Select};
+use color_eyre::{Result, eyre::eyre};
+use dialoguer::{Confirm, Select, theme::ColorfulTheme};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -44,7 +44,7 @@ pub async fn update(
         _ => {
             return Err(eyre!(
                 "Invalid update strategy. Choose: blue-green, rolling, canary, or recreate"
-            ))
+            ));
         }
     };
 
@@ -62,7 +62,13 @@ pub async fn update(
 
     // Show update plan
     println!("\n📋 Update Plan:");
-    println!("  Current Image: {}", current.metadata.get("image").unwrap_or(&"unknown".to_string()));
+    println!(
+        "  Current Image: {}",
+        current
+            .metadata
+            .get("image")
+            .unwrap_or(&"unknown".to_string())
+    );
     println!("  New Image: {}", image);
     println!("  Strategy: {}", strategy);
     println!("  Environment Variables: {} configured", env_vars.len());
@@ -92,21 +98,30 @@ pub async fn update(
 
     // Extract resource spec from current deployment
     let resource_spec = blueprint_remote_providers::core::resources::ResourceSpec {
-        cpu: current.metadata.get("cpu").and_then(|v| v.parse().ok()).unwrap_or(1.0),
-        memory_gb: current.metadata.get("memory_gb").and_then(|v| v.parse().ok()).unwrap_or(1.0),
-        storage_gb: current.metadata.get("storage_gb").and_then(|v| v.parse().ok()).unwrap_or(10.0),
+        cpu: current
+            .metadata
+            .get("cpu")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1.0),
+        memory_gb: current
+            .metadata
+            .get("memory_gb")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1.0),
+        storage_gb: current
+            .metadata
+            .get("storage_gb")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(10.0),
         gpu_count: None,
         allow_spot: false,
         qos: Default::default(),
     };
 
-    match update_manager.update_blueprint(
-        adapter.as_ref(),
-        &image,
-        &resource_spec,
-        env_vars,
-        current,
-    ).await {
+    match update_manager
+        .update_blueprint(adapter.as_ref(), &image, &resource_spec, env_vars, current)
+        .await
+    {
         Ok(new_deployment) => {
             pb.finish_with_message("✅ Update completed successfully!");
 
@@ -146,11 +161,7 @@ pub async fn update(
 }
 
 /// Rollback a deployment to a previous version
-pub async fn rollback(
-    service_id: String,
-    version: Option<String>,
-    yes: bool,
-) -> Result<()> {
+pub async fn rollback(service_id: String, version: Option<String>, yes: bool) -> Result<()> {
     println!("⏪ Rolling back service {}", service_id);
 
     let mut update_manager = UpdateManager::new(UpdateStrategy::default());
@@ -233,11 +244,10 @@ pub async fn rollback(
     let provider = current.instance.provider.clone();
     let adapter = provisioner.get_adapter(&provider)?;
 
-    match update_manager.rollback(
-        adapter.as_ref(),
-        &target_version,
-        current,
-    ).await {
+    match update_manager
+        .rollback(adapter.as_ref(), &target_version, current)
+        .await
+    {
         Ok(rollback_deployment) => {
             pb.finish_with_message("✅ Rollback completed successfully!");
 
@@ -270,7 +280,10 @@ pub async fn history(service_id: String, limit: usize) -> Result<()> {
     }
 
     // Display history in table format
-    println!("{:<15} {:<30} {:<20} {:<10}", "Version", "Image", "Deployed", "Status");
+    println!(
+        "{:<15} {:<30} {:<20} {:<10}",
+        "Version", "Image", "Deployed", "Status"
+    );
     println!("{}", "-".repeat(80));
 
     for version in history {
@@ -281,11 +294,21 @@ pub async fn history(service_id: String, limit: usize) -> Result<()> {
         };
 
         let status = match version.status {
-            blueprint_remote_providers::deployment::update_manager::VersionStatus::Active => "✅ Active",
-            blueprint_remote_providers::deployment::update_manager::VersionStatus::Inactive => "⭕ Inactive",
-            blueprint_remote_providers::deployment::update_manager::VersionStatus::Failed => "❌ Failed",
-            blueprint_remote_providers::deployment::update_manager::VersionStatus::RolledBack => "⏪ Rolled Back",
-            blueprint_remote_providers::deployment::update_manager::VersionStatus::Staging => "🔄 Staging",
+            blueprint_remote_providers::deployment::update_manager::VersionStatus::Active => {
+                "✅ Active"
+            }
+            blueprint_remote_providers::deployment::update_manager::VersionStatus::Inactive => {
+                "⭕ Inactive"
+            }
+            blueprint_remote_providers::deployment::update_manager::VersionStatus::Failed => {
+                "❌ Failed"
+            }
+            blueprint_remote_providers::deployment::update_manager::VersionStatus::RolledBack => {
+                "⏪ Rolled Back"
+            }
+            blueprint_remote_providers::deployment::update_manager::VersionStatus::Staging => {
+                "🔄 Staging"
+            }
         };
 
         println!(
@@ -306,7 +329,10 @@ fn parse_env_vars(env: Vec<String>) -> Result<HashMap<String, String>> {
     for e in env {
         let parts: Vec<&str> = e.splitn(2, '=').collect();
         if parts.len() != 2 {
-            return Err(eyre!("Invalid environment variable format: {}. Use KEY=VALUE", e));
+            return Err(eyre!(
+                "Invalid environment variable format: {}. Use KEY=VALUE",
+                e
+            ));
         }
         vars.insert(parts[0].to_string(), parts[1].to_string());
     }

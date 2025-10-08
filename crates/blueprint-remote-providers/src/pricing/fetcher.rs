@@ -2,9 +2,9 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
+use blueprint_core::debug;
 use serde::Deserialize;
 use std::collections::HashMap;
-use blueprint_core::debug;
 
 /// Instance information with specs and pricing
 #[derive(Clone, Debug)]
@@ -72,7 +72,8 @@ impl PricingFetcher {
                 && instance.memory_gb >= min_memory_gb
                 && instance.hourly_price <= max_price
             {
-                let is_better = best.as_ref()
+                let is_better = best
+                    .as_ref()
                     .map(|current| instance.hourly_price < current.hourly_price)
                     .unwrap_or(true);
 
@@ -177,9 +178,11 @@ impl PricingFetcher {
 
         let mut instances = Vec::new();
 
-        for price in pricing_data.prices.into_iter().take(100) { // Limit for performance
+        for price in pricing_data.prices.into_iter().take(100) {
+            // Limit for performance
             // Parse memory string like "1 GiB" or "0.5 GiB"
-            let memory_gb = price.memory
+            let memory_gb = price
+                .memory
                 .split_whitespace()
                 .next()
                 .and_then(|s| s.parse::<f32>().ok())
@@ -196,10 +199,15 @@ impl PricingFetcher {
         }
 
         if instances.is_empty() {
-            return Err(Error::Other("No AWS instances found in ec2.shop data".to_string()));
+            return Err(Error::Other(
+                "No AWS instances found in ec2.shop data".to_string(),
+            ));
         }
 
-        debug!("Fetched {} AWS instances from ec2.shop API", instances.len());
+        debug!(
+            "Fetched {} AWS instances from ec2.shop API",
+            instances.len()
+        );
         Ok(instances)
     }
 

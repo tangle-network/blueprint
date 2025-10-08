@@ -4,9 +4,9 @@
 //! QoS metrics from remote deployments without exposing ports publicly.
 
 use crate::core::error::{Error, Result};
+use blueprint_core::{info, warn};
 use std::process::Stdio;
 use tokio::process::{Child, Command};
-use blueprint_core::{info, warn};
 
 /// SSH tunnel for QoS metrics collection
 pub struct QosTunnel {
@@ -89,7 +89,10 @@ impl QosTunnel {
         // Verify tunnel is working by checking if local port is open
         match tokio::net::TcpStream::connect(format!("127.0.0.1:{}", self.local_port)).await {
             Ok(_) => {
-                info!("QoS tunnel established successfully on localhost:{}", self.local_port);
+                info!(
+                    "QoS tunnel established successfully on localhost:{}",
+                    self.local_port
+                );
                 Ok(())
             }
             Err(e) => {

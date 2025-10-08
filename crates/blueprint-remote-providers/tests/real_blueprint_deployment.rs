@@ -5,21 +5,17 @@
 
 use blueprint_remote_providers::{
     core::{
-        deployment_target::{DeploymentTarget, ContainerRuntime},
-        resources::ResourceSpec,
+        deployment_target::{ContainerRuntime, DeploymentTarget},
         remote::CloudProvider,
+        resources::ResourceSpec,
     },
-    deployment::{QosTunnelManager, DeploymentTracker},
-    infra::traits::{CloudProviderAdapter, BlueprintDeploymentResult},
-    providers::{
-        aws::AwsAdapter,
-        gcp::GcpAdapter,
-        digitalocean::adapter::DigitalOceanAdapter,
-    },
+    deployment::{DeploymentTracker, QosTunnelManager},
+    infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter},
+    providers::{aws::AwsAdapter, digitalocean::adapter::DigitalOceanAdapter, gcp::GcpAdapter},
 };
 use std::{collections::HashMap, time::Duration};
-use tokio::time::{timeout, sleep};
-use tracing::{info, warn, error, debug};
+use tokio::time::{sleep, timeout};
+use tracing::{debug, error, info, warn};
 
 const BLUEPRINT_IMAGE: &str = "ghcr.io/tangle-network/incredible-squaring:latest";
 const TEST_TIMEOUT: Duration = Duration::from_secs(600); // 10 min max per provider
@@ -80,9 +76,9 @@ impl RealBlueprintTest {
     async fn new() -> Self {
         let tracker_path = std::env::var("TEST_TRACKER_PATH")
             .unwrap_or_else(|_| "/tmp/blueprint_test_tracker".to_string());
-        let tracker = DeploymentTracker::new(
-            std::path::Path::new(&tracker_path)
-        ).await.expect("Failed to create tracker");
+        let tracker = DeploymentTracker::new(std::path::Path::new(&tracker_path))
+            .await
+            .expect("Failed to create tracker");
 
         Self {
             config: TestConfig::from_env(),
@@ -96,7 +92,10 @@ impl RealBlueprintTest {
     async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         info!("Starting real blueprint deployment test");
         info!("Testing providers: {:?}", self.config.providers);
-        info!("Parallel: {}, Verify QoS: {}", self.config.parallel, self.config.verify_qos);
+        info!(
+            "Parallel: {}, Verify QoS: {}",
+            self.config.parallel, self.config.verify_qos
+        );
 
         if self.config.providers.is_empty() {
             error!("No cloud credentials configured. Set:");
@@ -128,7 +127,8 @@ impl RealBlueprintTest {
     async fn run_sequential_tests(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         for provider in self.config.providers.clone() {
             let provider_copy = provider.clone();
-            let result = timeout(TEST_TIMEOUT, self.test_provider(provider)).await
+            let result = timeout(TEST_TIMEOUT, self.test_provider(provider))
+                .await
                 .unwrap_or_else(move |_| TestResult {
                     provider: provider_copy,
                     deployment: None,
@@ -158,9 +158,10 @@ impl RealBlueprintTest {
         self.test_provider_with_target(
             provider,
             DeploymentTarget::VirtualMachine {
-                runtime: ContainerRuntime::Docker
-            }
-        ).await
+                runtime: ContainerRuntime::Docker,
+            },
+        )
+        .await
     }
 
     /// Test provider with specific deployment target
@@ -175,52 +176,54 @@ impl RealBlueprintTest {
 
         // Create adapter
         let adapter: Box<dyn CloudProviderAdapter> = match provider {
-            CloudProvider::AWS => {
-                match AwsAdapter::new().await {
-                    Ok(a) => Box::new(a),
-                    Err(e) => return TestResult {
+            CloudProvider::AWS => match AwsAdapter::new().await {
+                Ok(a) => Box::new(a),
+                Err(e) => {
+                    return TestResult {
                         provider,
                         deployment: None,
                         provision_time: Duration::ZERO,
                         deploy_time: Duration::ZERO,
                         qos_verified: false,
                         error: Some(format!("Adapter creation failed: {e}")),
-                    }
+                    };
                 }
-            }
-            CloudProvider::GCP => {
-                match GcpAdapter::new().await {
-                    Ok(a) => Box::new(a),
-                    Err(e) => return TestResult {
+            },
+            CloudProvider::GCP => match GcpAdapter::new().await {
+                Ok(a) => Box::new(a),
+                Err(e) => {
+                    return TestResult {
                         provider,
                         deployment: None,
                         provision_time: Duration::ZERO,
                         deploy_time: Duration::ZERO,
                         qos_verified: false,
                         error: Some(format!("Adapter creation failed: {e}")),
-                    }
+                    };
                 }
-            }
-            CloudProvider::DigitalOcean => {
-                match DigitalOceanAdapter::new().await {
-                    Ok(a) => Box::new(a),
-                    Err(e) => return TestResult {
+            },
+            CloudProvider::DigitalOcean => match DigitalOceanAdapter::new().await {
+                Ok(a) => Box::new(a),
+                Err(e) => {
+                    return TestResult {
                         provider,
                         deployment: None,
                         provision_time: Duration::ZERO,
                         deploy_time: Duration::ZERO,
                         qos_verified: false,
                         error: Some(format!("Adapter creation failed: {e}")),
-                    }
+                    };
                 }
-            }
-            _ => return TestResult {
-                provider,
-                deployment: None,
-                provision_time: Duration::ZERO,
-                deploy_time: Duration::ZERO,
-                qos_verified: false,
-                error: Some("Provider not implemented".to_string()),
+            },
+            _ => {
+                return TestResult {
+                    provider,
+                    deployment: None,
+                    provision_time: Duration::ZERO,
+                    deploy_time: Duration::ZERO,
+                    qos_verified: false,
+                    error: Some("Provider not implemented".to_string()),
+                };
             }
         };
 
@@ -242,27 +245,30 @@ impl RealBlueprintTest {
         env_vars.insert("RUST_LOG".to_string(), "info".to_string());
         env_vars.insert("SERVICE_ID".to_string(), "test-service".to_string());
 
-        let deployment = match adapter.deploy_blueprint_with_target(
-            &target,
-            BLUEPRINT_IMAGE,
-            &resource_spec,
-            env_vars,
-        ).await {
+        let deployment = match adapter
+            .deploy_blueprint_with_target(&target, BLUEPRINT_IMAGE, &resource_spec, env_vars)
+            .await
+        {
             Ok(d) => d,
-            Err(e) => return TestResult {
-                provider,
-                deployment: None,
-                provision_time,
-                deploy_time: Duration::ZERO,
-                qos_verified: false,
-                error: Some(format!("Deployment failed: {e}")),
+            Err(e) => {
+                return TestResult {
+                    provider,
+                    deployment: None,
+                    provision_time,
+                    deploy_time: Duration::ZERO,
+                    qos_verified: false,
+                    error: Some(format!("Deployment failed: {e}")),
+                };
             }
         };
 
         let deploy_time = deploy_start.elapsed();
 
         // Track deployment
-        debug!("Tracking deployment for {provider:?}: {}", deployment.instance.id);
+        debug!(
+            "Tracking deployment for {provider:?}: {}",
+            deployment.instance.id
+        );
 
         // Verify QoS if enabled
         let qos_verified = if self.config.verify_qos {
@@ -282,7 +288,11 @@ impl RealBlueprintTest {
     }
 
     /// Verify QoS metrics are accessible
-    async fn verify_qos(&mut self, deployment: &BlueprintDeploymentResult, provider: &CloudProvider) -> bool {
+    async fn verify_qos(
+        &mut self,
+        deployment: &BlueprintDeploymentResult,
+        provider: &CloudProvider,
+    ) -> bool {
         info!("Verifying QoS for {provider:?} deployment...");
 
         // Wait for service startup
@@ -290,7 +300,10 @@ impl RealBlueprintTest {
 
         if let Some(qos_endpoint) = deployment.qos_grpc_endpoint() {
             // For VMs, create SSH tunnel
-            let endpoint = if matches!(provider, CloudProvider::AWS | CloudProvider::GCP | CloudProvider::DigitalOcean) {
+            let endpoint = if matches!(
+                provider,
+                CloudProvider::AWS | CloudProvider::GCP | CloudProvider::DigitalOcean
+            ) {
                 if let Some(ref ip) = deployment.instance.public_ip {
                     // Create SSH tunnel
                     let ssh_user = match provider {
@@ -300,11 +313,15 @@ impl RealBlueprintTest {
                         _ => "ubuntu",
                     };
 
-                    match self.qos_tunnel_manager.create_tunnel(
-                        ip.clone(),
-                        ssh_user.to_string(),
-                        std::env::var(format!("{:?}_SSH_KEY_PATH", provider)).ok(),
-                    ).await {
+                    match self
+                        .qos_tunnel_manager
+                        .create_tunnel(
+                            ip.clone(),
+                            ssh_user.to_string(),
+                            std::env::var(format!("{:?}_SSH_KEY_PATH", provider)).ok(),
+                        )
+                        .await
+                    {
                         Ok(tunnel_endpoint) => {
                             info!("Created QoS tunnel: {tunnel_endpoint}");
                             tunnel_endpoint
@@ -350,7 +367,10 @@ impl RealBlueprintTest {
 
         for result in &self.results {
             if let Some(ref deployment) = result.deployment {
-                info!("Cleaning up {:?} deployment: {}", result.provider, deployment.blueprint_id);
+                info!(
+                    "Cleaning up {:?} deployment: {}",
+                    result.provider, deployment.blueprint_id
+                );
 
                 // Create adapter with error handling
                 let adapter: Box<dyn CloudProviderAdapter> = match result.provider {
@@ -386,12 +406,17 @@ impl RealBlueprintTest {
                             break;
                         }
                         Err(e) if attempt < 3 => {
-                            warn!("Cleanup attempt {} failed for {:?}: {e}, retrying...",
-                                attempt, result.provider);
+                            warn!(
+                                "Cleanup attempt {} failed for {:?}: {e}, retrying...",
+                                attempt, result.provider
+                            );
                             tokio::time::sleep(Duration::from_secs(2 * attempt as u64)).await;
                         }
                         Err(e) => {
-                            error!("Cleanup failed for {:?} after 3 attempts: {e}", result.provider);
+                            error!(
+                                "Cleanup failed for {:?} after 3 attempts: {e}",
+                                result.provider
+                            );
                             cleanup_errors.push(format!("{:?}: {e}", result.provider));
                         }
                     }
@@ -441,9 +466,9 @@ impl RealBlueprintTest {
             }
         }
 
-        let success_rate = self.results.iter()
-            .filter(|r| r.error.is_none())
-            .count() as f32 / self.results.len() as f32 * 100.0;
+        let success_rate = self.results.iter().filter(|r| r.error.is_none()).count() as f32
+            / self.results.len() as f32
+            * 100.0;
 
         println!("\n═══════════════════════════════════════════════════");
         println!("Success Rate: {:.0}%", success_rate);
@@ -460,9 +485,7 @@ async fn test_real_incredible_squaring_deployment() {
     }
 
     // Initialize logging if not already done
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .try_init();
+    let _ = tracing_subscriber::fmt().with_env_filter("info").try_init();
 
     let mut test = RealBlueprintTest::new().await;
 
@@ -489,7 +512,9 @@ async fn test_single_provider_quick() {
 
     let mut test = RealBlueprintTest {
         config,
-        tracker: DeploymentTracker::new(std::path::Path::new("/tmp/test")).await.unwrap(),
+        tracker: DeploymentTracker::new(std::path::Path::new("/tmp/test"))
+            .await
+            .unwrap(),
         qos_tunnel_manager: QosTunnelManager::new(30000),
         results: Vec::new(),
     };
@@ -535,9 +560,12 @@ async fn test_continuous_deployment_reliability() {
     }
 
     println!("\nReliability Test Results:");
-    println!("Success Rate: {}/{} ({:.1}%)",
-        success_count, iterations,
-        success_count as f32 / iterations as f32 * 100.0);
+    println!(
+        "Success Rate: {}/{} ({:.1}%)",
+        success_count,
+        iterations,
+        success_count as f32 / iterations as f32 * 100.0
+    );
 
     if !failure_reasons.is_empty() {
         println!("\nFailure Reasons:");
@@ -546,6 +574,8 @@ async fn test_continuous_deployment_reliability() {
         }
     }
 
-    assert!(success_count as f32 / iterations as f32 > 0.8,
-        "Reliability should be >80%");
+    assert!(
+        success_count as f32 / iterations as f32 > 0.8,
+        "Reliability should be >80%"
+    );
 }

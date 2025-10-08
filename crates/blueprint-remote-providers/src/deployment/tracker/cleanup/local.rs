@@ -141,9 +141,10 @@ impl LocalHypervisorCleanup {
     async fn safe_terminate_process(pid: i32) -> Result<()> {
         // Validate PID is positive (defensive programming)
         if pid <= 0 {
-            return Err(crate::core::error::Error::ConfigurationError(
-                format!("Invalid PID: {}", pid),
-            ));
+            return Err(crate::core::error::Error::ConfigurationError(format!(
+                "Invalid PID: {}",
+                pid
+            )));
         }
 
         // Check if process exists by sending signal 0 (no-op signal for process existence check)
@@ -162,9 +163,10 @@ impl LocalHypervisorCleanup {
         let result = unsafe { libc::kill(pid, libc::SIGTERM) };
 
         if result != 0 {
-            return Err(crate::core::error::Error::ConfigurationError(
-                format!("Failed to send SIGTERM to process {}", pid),
-            ));
+            return Err(crate::core::error::Error::ConfigurationError(format!(
+                "Failed to send SIGTERM to process {}",
+                pid
+            )));
         }
 
         // Wait for graceful shutdown
@@ -174,16 +176,20 @@ impl LocalHypervisorCleanup {
         let still_running = unsafe { libc::kill(pid, 0) == 0 };
 
         if still_running {
-            info!("Process {} did not terminate gracefully, sending SIGKILL", pid);
+            info!(
+                "Process {} did not terminate gracefully, sending SIGKILL",
+                pid
+            );
 
             // Force kill if still running
             // SAFETY: Same safety considerations as above
             let result = unsafe { libc::kill(pid, libc::SIGKILL) };
 
             if result != 0 {
-                return Err(crate::core::error::Error::ConfigurationError(
-                    format!("Failed to send SIGKILL to process {}", pid),
-                ));
+                return Err(crate::core::error::Error::ConfigurationError(format!(
+                    "Failed to send SIGKILL to process {}",
+                    pid
+                )));
             }
         }
 

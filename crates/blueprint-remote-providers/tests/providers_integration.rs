@@ -3,17 +3,13 @@
 //! These tests verify real functionality with minimal mocking.
 //! They use environment-based feature flags to test actual behavior.
 
-use blueprint_remote_providers::{
-    core::resources::ResourceSpec,
-};
+use blueprint_remote_providers::core::resources::ResourceSpec;
 
 #[cfg(test)]
 mod aws_tests {
     use super::*;
     use blueprint_remote_providers::providers::aws::{
-        adapter::AwsAdapter,
-        instance_mapper::AwsInstanceMapper,
-        provisioner::AwsProvisioner,
+        adapter::AwsAdapter, instance_mapper::AwsInstanceMapper, provisioner::AwsProvisioner,
     };
 
     #[tokio::test]
@@ -27,7 +23,10 @@ mod aws_tests {
                 // Adapter initialized - internal configuration is private
             }
             Err(e) => {
-                println!("⚠️  AWS adapter initialization failed (expected without credentials): {}", e);
+                println!(
+                    "⚠️  AWS adapter initialization failed (expected without credentials): {}",
+                    e
+                );
             }
         }
     }
@@ -35,26 +34,32 @@ mod aws_tests {
     #[test]
     fn test_aws_instance_mapping_comprehensive() {
         let test_cases = vec![
-            (ResourceSpec::minimal(), vec!["t3", "t4"], "small"),  // Mapper uses t3.small for minimal
+            (ResourceSpec::minimal(), vec!["t3", "t4"], "small"), // Mapper uses t3.small for minimal
             (ResourceSpec::basic(), vec!["t3", "t4"], "medium"),
-            (ResourceSpec::recommended(), vec!["m5", "m6i", "m6a", "m7i"], "xlarge"),  // 4 CPU maps to xlarge
-            (ResourceSpec::performance(), vec!["m5", "m6i", "m6a", "c6i"], "2xlarge"), // 8 CPU maps to 2xlarge
+            (
+                ResourceSpec::recommended(),
+                vec!["m5", "m6i", "m6a", "m7i"],
+                "xlarge",
+            ), // 4 CPU maps to xlarge
+            (
+                ResourceSpec::performance(),
+                vec!["m5", "m6i", "m6a", "c6i"],
+                "2xlarge",
+            ), // 8 CPU maps to 2xlarge
         ];
 
         for (spec, acceptable_families, expected_size) in test_cases {
             let result = AwsInstanceMapper::map(&spec);
 
             // Check that instance type starts with one of the acceptable families
-            let family_match = acceptable_families.iter().any(|family|
-                result.instance_type.starts_with(family)
-            );
+            let family_match = acceptable_families
+                .iter()
+                .any(|family| result.instance_type.starts_with(family));
 
             assert!(
                 family_match,
                 "Expected instance type to start with one of {:?} for spec {:?}, got {}",
-                acceptable_families,
-                spec,
-                result.instance_type
+                acceptable_families, spec, result.instance_type
             );
 
             // Check that it has the expected size
@@ -76,7 +81,9 @@ mod aws_tests {
         let result = AwsInstanceMapper::map(&spec);
         let gpu_families = ["p2", "p3", "p4", "g3", "g4", "g5"];
         assert!(
-            gpu_families.iter().any(|&family| result.instance_type.starts_with(family)),
+            gpu_families
+                .iter()
+                .any(|&family| result.instance_type.starts_with(family)),
             "GPU instance type {} should be from GPU families",
             result.instance_type
         );
@@ -135,7 +142,10 @@ mod gcp_tests {
                 // Adapter initialized - internal configuration is private
             }
             Err(e) => {
-                println!("⚠️  GCP adapter initialization failed (expected without credentials): {}", e);
+                println!(
+                    "⚠️  GCP adapter initialization failed (expected without credentials): {}",
+                    e
+                );
             }
         }
     }
@@ -152,7 +162,10 @@ mod gcp_tests {
 
         for (spec, expected_prefix) in specs {
             // Would call GCP instance mapper here
-            println!("Testing GCP machine type for {:?} -> {}", spec, expected_prefix);
+            println!(
+                "Testing GCP machine type for {:?} -> {}",
+                spec, expected_prefix
+            );
         }
     }
 }
@@ -161,8 +174,7 @@ mod gcp_tests {
 mod azure_tests {
     use super::*;
     use blueprint_remote_providers::providers::azure::{
-        adapter::AzureAdapter,
-        provisioner::AzureProvisioner,
+        adapter::AzureAdapter, provisioner::AzureProvisioner,
     };
 
     #[tokio::test]
@@ -175,7 +187,10 @@ mod azure_tests {
                 // Adapter initialized - internal configuration is private
             }
             Err(e) => {
-                println!("⚠️  Azure adapter initialization failed (expected without credentials): {}", e);
+                println!(
+                    "⚠️  Azure adapter initialization failed (expected without credentials): {}",
+                    e
+                );
             }
         }
     }
@@ -218,12 +233,16 @@ mod digitalocean_tests {
 
     #[tokio::test]
     async fn test_digitalocean_client_initialization() {
-        let token = std::env::var("DIGITALOCEAN_TOKEN").unwrap_or_else(|_| "test-token".to_string());
+        let token =
+            std::env::var("DIGITALOCEAN_TOKEN").unwrap_or_else(|_| "test-token".to_string());
         let provisioner = DigitalOceanProvisioner::new(token, "nyc3".to_string()).await;
 
         match provisioner {
             Ok(_) => println!("✅ DigitalOcean provisioner initialized"),
-            Err(e) => println!("⚠️  DigitalOcean provisioner failed (expected without real token): {}", e),
+            Err(e) => println!(
+                "⚠️  DigitalOcean provisioner failed (expected without real token): {}",
+                e
+            ),
         }
     }
 
@@ -247,8 +266,9 @@ mod digitalocean_tests {
         if std::env::var("DIGITALOCEAN_TOKEN").is_ok() {
             let provisioner = DigitalOceanProvisioner::new(
                 std::env::var("DIGITALOCEAN_TOKEN").unwrap(),
-                "nyc3".to_string()
-            ).await;
+                "nyc3".to_string(),
+            )
+            .await;
 
             match provisioner {
                 Ok(_) => {
@@ -267,8 +287,7 @@ mod digitalocean_tests {
 mod vultr_tests {
     use super::*;
     use blueprint_remote_providers::providers::vultr::{
-        adapter::VultrAdapter,
-        provisioner::VultrProvisioner,
+        adapter::VultrAdapter, provisioner::VultrProvisioner,
     };
 
     #[tokio::test]
@@ -280,7 +299,10 @@ mod vultr_tests {
                 println!("✅ Vultr adapter initialized successfully");
             }
             Err(e) => {
-                println!("⚠️  Vultr adapter initialization failed (expected without API key): {}", e);
+                println!(
+                    "⚠️  Vultr adapter initialization failed (expected without API key): {}",
+                    e
+                );
             }
         }
     }
@@ -344,7 +366,9 @@ mod cross_provider_tests {
         {
             use blueprint_remote_providers::providers::aws::instance_mapper::AwsInstanceMapper;
             let aws_result = AwsInstanceMapper::map(&spec);
-            assert!(aws_result.instance_type.contains("g") || aws_result.instance_type.contains("p"));
+            assert!(
+                aws_result.instance_type.contains("g") || aws_result.instance_type.contains("p")
+            );
         }
 
         // GCP supports GPUs
@@ -388,8 +412,8 @@ mod security_tests {
     fn test_no_hardcoded_credentials() {
         // Scan for hardcoded credentials - this should always pass
         let dangerous_patterns = [
-            "AKIA",  // AWS access key prefix
-            "sk-",   // OpenAI/Stripe secret key prefix
+            "AKIA",   // AWS access key prefix
+            "sk-",    // OpenAI/Stripe secret key prefix
             "token:", // Generic token pattern
         ];
 
