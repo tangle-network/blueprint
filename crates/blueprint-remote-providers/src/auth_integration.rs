@@ -12,7 +12,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{info, warn};
+use blueprint_core::{debug, info, warn};
 
 /// JWT claims for access tokens
 #[derive(Debug, Serialize, Deserialize)]
@@ -150,7 +150,7 @@ impl RemoteServiceAuth {
         // Get signing key from environment or generate secure default
         let jwt_secret = std::env::var("BLUEPRINT_JWT_SECRET").unwrap_or_else(|_| {
             // In production, this should always be set via environment
-            tracing::warn!("Using default JWT secret - set BLUEPRINT_JWT_SECRET in production");
+            warn!("Using default JWT secret - set BLUEPRINT_JWT_SECRET in production");
             format!("blueprint_jwt_secret_{}", self.service_id)
         });
 
@@ -260,7 +260,7 @@ impl AuthProxyRemoteExtension {
             return Err(Error::ConfigurationError("Access token expired".into()));
         }
 
-        tracing::debug!(
+        debug!(
             "JWT token validated for service {} (expires: {}, jti: {})",
             service_id,
             claims.exp,

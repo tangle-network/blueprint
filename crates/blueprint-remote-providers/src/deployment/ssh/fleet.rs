@@ -5,7 +5,7 @@ use super::types::{ContainerRuntime, DeploymentConfig, RemoteDeployment, Restart
 use crate::core::error::Result;
 use crate::core::resources::ResourceSpec;
 use std::collections::HashMap;
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// Batch deployment to multiple hosts
 pub struct BareMetalFleet {

@@ -9,7 +9,7 @@ use crate::providers::common::ProvisioningConfig;
 use crate::deployment::ssh::{ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient};
 use async_trait::async_trait;
 use std::collections::HashMap;
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// Azure adapter for Blueprint deployment
 pub struct AzureAdapter {

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, SystemTime};
 use tokio::time::{sleep, timeout};
-use tracing::{debug, error, info, warn};
+use blueprint_core::{debug, error, info, warn};
 
 /// Maximum number of deployment versions to keep
 const MAX_VERSION_HISTORY: usize = 10;

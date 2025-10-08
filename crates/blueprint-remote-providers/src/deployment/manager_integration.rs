@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use blueprint_core::{error, info, warn};
 
 /// Type alias for TTL registry mapping (blueprint_id, service_id) to expiry time
 type TtlRegistry = Arc<RwLock<HashMap<(u64, u64), DateTime<Utc>>>>;

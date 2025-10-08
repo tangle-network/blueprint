@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use blueprint_core::{debug, info, warn};
 
 /// Deployment preferences configured by operators
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,7 +102,7 @@ impl AutoDeploymentManager {
         // Validate that deployment types are available with current feature flags
         for deployment_type in &preferences.allowed_types {
             if !Self::is_deployment_type_compiled(*deployment_type) {
-                tracing::warn!(
+                warn!(
                     "Deployment type {:?} is not available (missing feature flag), will be skipped",
                     deployment_type
                 );
@@ -114,7 +114,7 @@ impl AutoDeploymentManager {
             *manager_preferences.write().await = preferences;
         });
 
-        tracing::info!("Loaded deployment preferences from config file");
+        info!("Loaded deployment preferences from config file");
         Ok(())
     }
 
@@ -164,9 +164,9 @@ impl AutoDeploymentManager {
         let mut enabled = self.enabled_providers.write().await;
         *enabled = providers.into_iter().filter(|p| p.enabled).collect();
 
-        tracing::info!("Configured {} enabled cloud providers", enabled.len());
+        info!("Configured {} enabled cloud providers", enabled.len());
         for provider in enabled.iter() {
-            tracing::info!(
+            info!(
                 "  - {} in region {} (priority {})",
                 provider.provider,
                 provider.region,
@@ -215,7 +215,7 @@ impl AutoDeploymentManager {
                         ));
                     }
                     Err(e) => {
-                        tracing::debug!(
+                        debug!(
                             "No suitable instance for {:?}: {}",
                             provider_config.provider,
                             e
@@ -239,7 +239,7 @@ impl AutoDeploymentManager {
         spec: ResourceSpec,
         ttl_seconds: Option<u64>,
     ) -> Result<RemoteDeploymentConfig> {
-        tracing::info!(
+        info!(
             "Auto-deploying service blueprint:{} service:{}",
             blueprint_id,
             service_id
@@ -248,7 +248,7 @@ impl AutoDeploymentManager {
         // Find cheapest provider with real pricing
         let (provider, region, price) = self.find_cheapest_provider(&spec).await?;
 
-        tracing::info!(
+        info!(
             "Deploying to {} in {} (${:.4}/hour)",
             provider,
             region,
@@ -259,7 +259,7 @@ impl AutoDeploymentManager {
         let provisioner = crate::infra::provisioner::CloudProvisioner::new().await?;
 
         // Step 1: Provision cloud instance
-        tracing::info!("Provisioning {} instance in {}", provider, region);
+        info!("Provisioning {} instance in {}", provider, region);
         let instance = provisioner
             .provision(provider.clone(), &spec, &region)
             .await?;
@@ -288,7 +288,7 @@ impl AutoDeploymentManager {
                     continue;
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to check instance status: {}", e);
+                    warn!("Failed to check instance status: {}", e);
                     attempts += 1;
                 }
             }
@@ -301,7 +301,7 @@ impl AutoDeploymentManager {
         }
 
         // Step 3: Deploy Blueprint to the instance
-        tracing::info!("Deploying Blueprint to provisioned instance");
+        info!("Deploying Blueprint to provisioned instance");
         let blueprint_image = format!("blueprint:{blueprint_id}-{service_id}");
         let env_vars = std::collections::HashMap::new();
 
@@ -315,7 +315,7 @@ impl AutoDeploymentManager {
             )
             .await?;
 
-        tracing::info!(
+        info!(
             "Successfully deployed Blueprint with QoS endpoint: {:?}",
             deployment_result.qos_grpc_endpoint()
         );
@@ -467,7 +467,7 @@ allow_fallback = true
             Error::ConfigurationError(format!("Failed to write config file: {e}"))
         })?;
 
-        tracing::info!(
+        info!(
             "Generated example deployment preferences config at: {:?}",
             output_path
         );

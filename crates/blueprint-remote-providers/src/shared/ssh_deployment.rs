@@ -9,7 +9,7 @@ use crate::deployment::ssh::{ContainerRuntime, DeploymentConfig, SshConnection, 
 use crate::infra::traits::BlueprintDeploymentResult;
 use crate::infra::types::ProvisionedInstance;
 use std::collections::HashMap;
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// Shared SSH deployment implementation
 pub struct SharedSshDeployment;

@@ -17,7 +17,7 @@ use crate::infra::traits::CloudProviderAdapter;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance, RetryPolicy};
 use crate::monitoring::discovery::{MachineTypeDiscovery, CloudCredentials};
 use std::collections::HashMap;
-use tracing::{error, info, warn};
+use blueprint_core::{error, info, warn};
 
 /// Multi-cloud provisioner that handles deployments across all supported providers
 pub struct CloudProvisioner {

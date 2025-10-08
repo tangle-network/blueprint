@@ -4,7 +4,7 @@ use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 use serde::{Deserialize, Serialize};
-use tracing::{info, debug};
+use blueprint_core::{info, debug};
 use std::collections::HashMap;
 
 /// Vultr API instance representation

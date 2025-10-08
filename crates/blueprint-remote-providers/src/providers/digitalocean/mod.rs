@@ -10,7 +10,7 @@ use crate::core::resources::ResourceSpec;
 use crate::security::{ApiAuthentication, SecureHttpClient};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// DigitalOcean infrastructure provisioner
 pub struct DigitalOceanProvisioner {

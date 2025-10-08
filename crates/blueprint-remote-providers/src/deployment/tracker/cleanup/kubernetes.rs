@@ -2,7 +2,7 @@
 
 use super::super::types::{CleanupHandler, DeploymentRecord};
 use crate::core::error::Result;
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// EKS cleanup
 pub(crate) struct EksCleanup;

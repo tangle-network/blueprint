@@ -2,7 +2,7 @@
 
 use super::super::types::{CleanupHandler, DeploymentRecord};
 use crate::core::error::{Error, Result};
-use tracing::info;
+use blueprint_core::info;
 
 /// AWS cleanup
 pub(crate) struct AwsCleanup;

@@ -6,7 +6,7 @@
 use crate::core::error::{Error, Result};
 use std::process::Stdio;
 use tokio::process::{Child, Command};
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// SSH tunnel for QoS metrics collection
 pub struct QosTunnel {

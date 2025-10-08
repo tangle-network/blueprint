@@ -3,7 +3,7 @@
 use super::super::types::{CleanupHandler, DeploymentRecord};
 use crate::core::error::Result;
 use std::path::PathBuf;
-use tracing::info;
+use blueprint_core::info;
 
 /// SSH remote cleanup
 pub(crate) struct SshCleanup;

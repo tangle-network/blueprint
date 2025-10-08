@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use blueprint_core::{debug, error, info, warn};
 
 /// Global deployment tracker for mapping Blueprint instances to infrastructure
 pub struct DeploymentTracker {

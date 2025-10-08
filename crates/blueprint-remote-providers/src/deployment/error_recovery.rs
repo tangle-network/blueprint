@@ -7,7 +7,7 @@ use crate::core::error::{Error, Result};
 use crate::deployment::ssh::SshDeploymentClient;
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
-use tracing::{debug, error, info, warn};
+use blueprint_core::{debug, error, info, warn};
 
 /// Recovery strategy for deployment failures
 #[derive(Debug, Clone)]

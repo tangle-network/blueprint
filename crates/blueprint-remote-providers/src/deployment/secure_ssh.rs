@@ -6,7 +6,7 @@ use crate::core::error::{Error, Result};
 use shell_escape::escape;
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
-use tracing::{debug, info, warn};
+use blueprint_core::{debug, info, warn};
 
 /// Secure SSH connection configuration with validation
 #[derive(Debug, Clone)]

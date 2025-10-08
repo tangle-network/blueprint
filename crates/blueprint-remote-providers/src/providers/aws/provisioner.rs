@@ -6,7 +6,7 @@ use crate::core::resources::ResourceSpec;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 #[cfg(feature = "aws")]
 use aws_sdk_ec2::types::{InstanceType, ResourceType, Tag, TagSpecification};
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// AWS EC2 provisioner
 pub struct AwsProvisioner {

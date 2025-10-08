@@ -7,7 +7,7 @@ use crate::core::error::{Error, Result};
 use reqwest::{Client, ClientBuilder, Request, Response, header};
 use std::collections::HashMap;
 use std::time::Duration;
-use tracing::{debug, warn};
+use blueprint_core::{debug, warn};
 use url::Url;
 
 /// Secure HTTP client with comprehensive security controls

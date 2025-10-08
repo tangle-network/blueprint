@@ -4,7 +4,7 @@
 //! that work consistently across all cloud providers.
 
 use crate::core::error::{Error, Result};
-use tracing::info;
+use blueprint_core::info;
 
 /// Standard Blueprint security configuration
 #[derive(Debug, Clone)]

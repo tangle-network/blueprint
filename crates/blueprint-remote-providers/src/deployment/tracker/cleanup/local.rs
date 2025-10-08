@@ -2,7 +2,7 @@
 
 use super::super::types::{CleanupHandler, DeploymentRecord};
 use crate::core::error::{Error, Result};
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// Local Docker cleanup
 pub(crate) struct LocalDockerCleanup;

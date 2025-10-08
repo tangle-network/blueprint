@@ -10,7 +10,7 @@ use crate::infra::types::InstanceStatus;
 use blueprint_std::time::Duration;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use blueprint_core::{error, info, warn};
 
 /// Health status of a deployment
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

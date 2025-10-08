@@ -11,7 +11,7 @@ use crate::monitoring::health::{ApplicationHealthChecker, HealthStatus};
 use std::collections::HashMap;
 use std::path::Path;
 use tokio::sync::mpsc;
-use tracing::{debug, info, warn};
+use blueprint_core::{debug, info, warn};
 
 /// SSH deployment client for bare metal servers
 pub struct SshDeploymentClient {

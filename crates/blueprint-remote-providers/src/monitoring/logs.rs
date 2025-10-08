@@ -12,7 +12,7 @@ use std::pin::Pin;
 use std::time::SystemTime;
 use tokio::sync::mpsc;
 use tokio::time::Duration;
-use tracing::{debug, error, info, warn};
+use blueprint_core::{debug, error, info, warn};
 
 /// Log entry from a remote deployment
 #[derive(Debug, Clone, Serialize, Deserialize)]

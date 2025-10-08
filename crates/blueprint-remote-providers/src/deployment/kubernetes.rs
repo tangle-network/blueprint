@@ -16,7 +16,7 @@ use kube::{
     api::{Api, PostParams},
 };
 use std::collections::BTreeMap;
-use tracing::{debug, info};
+use blueprint_core::{debug, info};
 
 /// Kubernetes deployment client for Blueprint services
 pub struct KubernetesDeploymentClient {

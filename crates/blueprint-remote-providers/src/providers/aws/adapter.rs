@@ -8,7 +8,7 @@ use crate::providers::aws::provisioner::AwsProvisioner;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 use async_trait::async_trait;
 use std::collections::HashMap;
-use tracing::{debug, info, warn};
+use blueprint_core::{debug, info, warn};
 
 /// Professional AWS adapter with security and performance optimizations
 pub struct AwsAdapter {

@@ -8,7 +8,7 @@ use crate::deployment::tracker::DeploymentRecord;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// Configuration for secure bridge
 #[derive(Debug, Clone)]

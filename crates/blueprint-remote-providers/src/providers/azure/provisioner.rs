@@ -5,7 +5,7 @@
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
-use tracing::{debug, info, warn};
+use blueprint_core::{debug, info, warn};
 
 /// Azure Resource Manager provisioner
 pub struct AzureProvisioner {

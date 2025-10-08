@@ -8,7 +8,7 @@ use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 use crate::providers::gcp::GcpProvisioner;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use tracing::info;
+use blueprint_core::info;
 
 /// Professional GCP adapter with security and performance optimizations
 pub struct GcpAdapter {

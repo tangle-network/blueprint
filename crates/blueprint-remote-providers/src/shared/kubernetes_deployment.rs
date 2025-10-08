@@ -13,7 +13,7 @@ use crate::infra::traits::BlueprintDeploymentResult;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use std::collections::HashMap;
 use std::process::Command;
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// Shared Kubernetes deployment implementation
 pub struct SharedKubernetesDeployment;
