@@ -54,7 +54,7 @@ blueprint-router = { version = "0.1.0-alpha.6", path = "crates/router", default-
 blueprint-runner = { version = "0.1.0-alpha.19", path = "crates/runner", default-features = false }
 
 # Extras
-blueprint-tangle-extra = { version = "0.1.0-alpha.11", path = "crates/tangle-extra", default-features = false }
+blueprint-tangle-extra = { version = "0.1.0-alpha.12", path = "crates/tangle-extra", default-features = false }
 blueprint-evm-extra = { version = "0.1.0-alpha.8", path = "crates/evm-extra", default-features = false }
 blueprint-eigenlayer-extra = { version = "0.1.0-alpha.13", path = "crates/eigenlayer-extra", default-features = false }
 blueprint-producers-extra = { version = "0.1.0-alpha.6", path = "crates/producers-extra", default-features = false }
@@ -66,7 +66,7 @@ incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./exampl
 # Blueprint utils
 blueprint-manager = { version = "0.3.0-alpha.21", path = "./crates/manager", default-features = false }
 blueprint-manager-bridge = { version = "0.1.0-alpha.8", path = "./crates/manager/bridge", default-features = false }
-blueprint-build-utils = { version = "0.1.0-alpha.3", path = "./crates/build-utils", default-features = false }
+blueprint-build-utils = { version = "0.1.0-alpha.4", path = "./crates/build-utils", default-features = false }
 blueprint-auth = { version = "0.1.0-alpha.10", path = "./crates/auth", default-features = false }
 
 # Chain Setup
@@ -80,7 +80,7 @@ blueprint-crypto-core = { version = "0.1.0-alpha.9", path = "./crates/crypto/cor
 blueprint-crypto-k256 = { version = "0.1.0-alpha.10", path = "./crates/crypto/k256", default-features = false }
 blueprint-crypto-sr25519 = { version = "0.1.0-alpha.10", path = "./crates/crypto/sr25519", default-features = false }
 blueprint-crypto-ed25519 = { version = "0.1.0-alpha.10", path = "./crates/crypto/ed25519", default-features = false }
-blueprint-crypto-hashing = { version = "0.1.0-alpha.4", path = "./crates/crypto/hashing", default-features = false }
+blueprint-crypto-hashing = { version = "0.1.0-alpha.5", path = "./crates/crypto/hashing", default-features = false }
 blueprint-crypto-bls = { version = "0.1.0-alpha.9", path = "./crates/crypto/bls", default-features = false }
 blueprint-crypto-bn254 = { version = "0.1.0-alpha.9", path = "./crates/crypto/bn254", default-features = false }
 blueprint-crypto-sp-core = { version = "0.1.0-alpha.9", path = "./crates/crypto/sp-core", default-features = false }
@@ -89,7 +89,7 @@ blueprint-crypto-tangle-pair-signer = { version = "0.1.0-alpha.14", path = "./cr
 
 # Clients
 blueprint-clients = { version = "0.1.0-alpha.20", path = "./crates/clients", default-features = false }
-blueprint-client-core = { version = "0.1.0-alpha.3", path = "./crates/clients/core", default-features = false }
+blueprint-client-core = { version = "0.1.0-alpha.4", path = "./crates/clients/core", default-features = false }
 blueprint-client-eigenlayer = { version = "0.1.0-alpha.19", path = "./crates/clients/eigenlayer", default-features = false }
 blueprint-client-evm = { version = "0.1.0-alpha.7", path = "./crates/clients/evm", default-features = false }
 blueprint-client-tangle = { version = "0.1.0-alpha.20", path = "./crates/clients/tangle", default-features = false }
@@ -106,13 +106,13 @@ blueprint-context-derive = { version = "0.1.0-alpha.11", path = "./crates/macros
 blueprint-qos = { version = "0.1.0-alpha.6", path = "./crates/qos", default-features = false }
 
 # Stores
-blueprint-stores = { version = "0.1.0-alpha.5", path = "./crates/stores", default-features = false }
-blueprint-store-local-database = { version = "0.1.0-alpha.4", path = "./crates/stores/local-database", default-features = false }
+blueprint-stores = { version = "0.1.0-alpha.6", path = "./crates/stores", default-features = false }
+blueprint-store-local-database = { version = "0.1.0-alpha.5", path = "./crates/stores/local-database", default-features = false }
 rocksdb = { version = "0.21.0", default-features = false }
 
 # SDK
 blueprint-keystore = { version = "0.1.0-alpha.15", path = "./crates/keystore", default-features = false }
-blueprint-std = { version = "0.1.0-alpha.3", path = "./crates/std", default-features = false }
+blueprint-std = { version = "0.1.0-alpha.4", path = "./crates/std", default-features = false }
 
 # P2P
 blueprint-networking = { version = "0.1.0-alpha.15", path = "./crates/networking", default-features = false }
