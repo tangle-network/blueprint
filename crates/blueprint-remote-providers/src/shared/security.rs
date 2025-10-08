@@ -100,14 +100,14 @@ impl BlueprintSecurityConfig {
 /// Provider-specific security group manager
 pub trait SecurityGroupManager {
     /// Create or update security group with Blueprint rules
-    async fn ensure_security_group(
+    fn ensure_security_group(
         &self,
         name: &str,
         config: &BlueprintSecurityConfig,
-    ) -> Result<String>;
+    ) -> impl std::future::Future<Output = Result<String>> + Send;
 
     /// Delete security group
-    async fn delete_security_group(&self, group_id: &str) -> Result<()>;
+    fn delete_security_group(&self, group_id: &str) -> impl std::future::Future<Output = Result<()>> + Send;
 }
 
 /// Azure Network Security Group implementation
@@ -127,18 +127,23 @@ impl AzureNsgManager {
 }
 
 impl SecurityGroupManager for AzureNsgManager {
-    async fn ensure_security_group(
+    fn ensure_security_group(
         &self,
         name: &str,
         config: &BlueprintSecurityConfig,
-    ) -> Result<String> {
+    ) -> impl std::future::Future<Output = Result<String>> + Send {
+        let name = name.to_string();
+        let config = config.clone();
+        let subscription_id = self.subscription_id.clone();
+        let resource_group = self.resource_group.clone();
+
+        async move {
         let access_token = std::env::var("AZURE_ACCESS_TOKEN")
             .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
 
         let client = reqwest::Client::new();
         let url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/networkSecurityGroups/{}?api-version=2023-09-01",
-            self.subscription_id, self.resource_group, name
+            "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Network/networkSecurityGroups/{name}?api-version=2023-09-01"
         );
 
         let rules = config.standard_rules();
@@ -172,7 +177,7 @@ impl SecurityGroupManager for AzureNsgManager {
                     "protocol": protocol,
                     "sourcePortRange": "*",
                     "destinationPortRange": port_ranges,
-                    "sourceAddressPrefix": rule.source_cidrs.get(0).unwrap_or(&"*".to_string()),
+                    "sourceAddressPrefix": rule.source_cidrs.first().unwrap_or(&"*".to_string()),
                     "destinationAddressPrefix": "*",
                     "access": "Allow",
                     "priority": rule.priority + index as u16,
@@ -202,25 +207,28 @@ impl SecurityGroupManager for AzureNsgManager {
             Ok(response) => {
                 let error_text = response.text().await.unwrap_or_default();
                 Err(Error::ConfigurationError(format!(
-                    "Failed to create Azure NSG: {}",
-                    error_text
+                    "Failed to create Azure NSG: {error_text}"
                 )))
             }
             Err(e) => Err(Error::ConfigurationError(format!(
-                "Failed to create Azure NSG: {}",
-                e
+                "Failed to create Azure NSG: {e}"
             ))),
+        }
         }
     }
 
-    async fn delete_security_group(&self, group_id: &str) -> Result<()> {
+    fn delete_security_group(&self, group_id: &str) -> impl std::future::Future<Output = Result<()>> + Send {
+        let group_id = group_id.to_string();
+        let subscription_id = self.subscription_id.clone();
+        let resource_group = self.resource_group.clone();
+
+        async move {
         let access_token = std::env::var("AZURE_ACCESS_TOKEN")
             .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
 
         let client = reqwest::Client::new();
         let url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/networkSecurityGroups/{}?api-version=2023-09-01",
-            self.subscription_id, self.resource_group, group_id
+            "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Network/networkSecurityGroups/{group_id}?api-version=2023-09-01"
         );
 
         match client.delete(&url).bearer_auth(&access_token).send().await {
@@ -230,9 +238,9 @@ impl SecurityGroupManager for AzureNsgManager {
             }
             Ok(_) => Ok(()), // NSG already deleted
             Err(e) => Err(Error::ConfigurationError(format!(
-                "Failed to delete Azure NSG: {}",
-                e
+                "Failed to delete Azure NSG: {e}"
             ))),
+        }
         }
     }
 }
@@ -312,7 +320,7 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
         {
             Ok(response) if response.status().is_success() => {
                 let json: serde_json::Value = response.json().await.map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to parse response: {}", e))
+                    Error::ConfigurationError(format!("Failed to parse response: {e}"))
                 })?;
 
                 let firewall_id = json["firewall"]["id"].as_str().ok_or_else(|| {
@@ -325,20 +333,18 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
             Ok(response) => {
                 let error_text = response.text().await.unwrap_or_default();
                 Err(Error::ConfigurationError(format!(
-                    "Failed to create DO firewall: {}",
-                    error_text
+                    "Failed to create DO firewall: {error_text}"
                 )))
             }
             Err(e) => Err(Error::ConfigurationError(format!(
-                "Failed to create DO firewall: {}",
-                e
+                "Failed to create DO firewall: {e}"
             ))),
         }
     }
 
     async fn delete_security_group(&self, group_id: &str) -> Result<()> {
         let client = reqwest::Client::new();
-        let url = format!("https://api.digitalocean.com/v2/firewalls/{}", group_id);
+        let url = format!("https://api.digitalocean.com/v2/firewalls/{group_id}");
 
         match client
             .delete(&url)
@@ -352,8 +358,7 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
             }
             Ok(_) => Ok(()), // Firewall already deleted
             Err(e) => Err(Error::ConfigurationError(format!(
-                "Failed to delete DO firewall: {}",
-                e
+                "Failed to delete DO firewall: {e}"
             ))),
         }
     }
@@ -392,21 +397,20 @@ impl SecurityGroupManager for VultrFirewallManager {
             .send()
             .await
             .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to create Vultr firewall: {}", e))
+                Error::ConfigurationError(format!("Failed to create Vultr firewall: {e}"))
             })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::ConfigurationError(format!(
-                "Failed to create Vultr firewall: {}",
-                error_text
+                "Failed to create Vultr firewall: {error_text}"
             )));
         }
 
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
         let firewall_id = json["firewall_group"]["id"]
             .as_str()
@@ -414,7 +418,7 @@ impl SecurityGroupManager for VultrFirewallManager {
 
         // Add rules to the firewall group
         let rules = config.standard_rules();
-        let rules_url = format!("https://api.vultr.com/v2/firewalls/{}/rules", firewall_id);
+        let rules_url = format!("https://api.vultr.com/v2/firewalls/{firewall_id}/rules");
 
         for rule in rules {
             let port_range = if rule.ports.len() == 1 {
@@ -441,7 +445,7 @@ impl SecurityGroupManager for VultrFirewallManager {
             let rule_body = serde_json::json!({
                 "ip_type": "v4",
                 "protocol": protocol,
-                "subnet": rule.source_cidrs.get(0).unwrap_or(&"0.0.0.0/0".to_string()),
+                "subnet": rule.source_cidrs.first().unwrap_or(&"0.0.0.0/0".to_string()),
                 "subnet_size": 0,
                 "port": port_range,
                 "action": action
@@ -461,7 +465,7 @@ impl SecurityGroupManager for VultrFirewallManager {
 
     async fn delete_security_group(&self, group_id: &str) -> Result<()> {
         let client = reqwest::Client::new();
-        let url = format!("https://api.vultr.com/v2/firewalls/{}", group_id);
+        let url = format!("https://api.vultr.com/v2/firewalls/{group_id}");
 
         match client.delete(&url).bearer_auth(&self.api_key).send().await {
             Ok(response) if response.status().is_success() => {
@@ -470,8 +474,7 @@ impl SecurityGroupManager for VultrFirewallManager {
             }
             Ok(_) => Ok(()), // Firewall already deleted
             Err(e) => Err(Error::ConfigurationError(format!(
-                "Failed to delete Vultr firewall: {}",
-                e
+                "Failed to delete Vultr firewall: {e}"
             ))),
         }
     }

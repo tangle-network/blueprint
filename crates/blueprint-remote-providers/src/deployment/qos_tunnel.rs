@@ -79,7 +79,7 @@ impl QosTunnel {
 
         let child = cmd
             .spawn()
-            .map_err(|e| Error::ConfigurationError(format!("Failed to start SSH tunnel: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to start SSH tunnel: {e}")))?;
 
         self.process = Some(child);
 

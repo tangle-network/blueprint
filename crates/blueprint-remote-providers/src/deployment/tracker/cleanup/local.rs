@@ -142,8 +142,7 @@ impl LocalHypervisorCleanup {
         // Validate PID is positive (defensive programming)
         if pid <= 0 {
             return Err(crate::core::error::Error::ConfigurationError(format!(
-                "Invalid PID: {}",
-                pid
+                "Invalid PID: {pid}"
             )));
         }
 
@@ -164,8 +163,7 @@ impl LocalHypervisorCleanup {
 
         if result != 0 {
             return Err(crate::core::error::Error::ConfigurationError(format!(
-                "Failed to send SIGTERM to process {}",
-                pid
+                "Failed to send SIGTERM to process {pid}"
             )));
         }
 
@@ -187,8 +185,7 @@ impl LocalHypervisorCleanup {
 
             if result != 0 {
                 return Err(crate::core::error::Error::ConfigurationError(format!(
-                    "Failed to send SIGKILL to process {}",
-                    pid
+                    "Failed to send SIGKILL to process {pid}"
                 )));
             }
         }

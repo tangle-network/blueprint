@@ -38,7 +38,7 @@ impl PricingFetcher {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .map_err(|e| Error::Other(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to create HTTP client: {e}")))?;
 
         Ok(Self {
             client,

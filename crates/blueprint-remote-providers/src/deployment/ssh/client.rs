@@ -692,7 +692,7 @@ impl SshDeploymentClient {
                     // GPU support if requested
                     if let Some(gpu_count) = spec.gpu_count {
                         if gpu_count > 0 {
-                            cmd.push_str(&format!(" --gpus={}", gpu_count));
+                            cmd.push_str(&format!(" --gpus={gpu_count}"));
                         }
                     }
                 }
@@ -1018,8 +1018,8 @@ WantedBy=multi-user.target
         // Spawn background task to stream logs
         tokio::spawn(async move {
             let cmd = match runtime {
-                ContainerRuntime::Docker => format!("docker logs -f {}", container),
-                ContainerRuntime::Podman => format!("podman logs -f {}", container),
+                ContainerRuntime::Docker => format!("docker logs -f {container}"),
+                ContainerRuntime::Podman => format!("podman logs -f {container}"),
                 ContainerRuntime::Containerd => {
                     warn!("Log streaming not supported for containerd");
                     return;
@@ -1058,10 +1058,10 @@ WantedBy=multi-user.target
 
         let stats_cmd = match self.runtime {
             ContainerRuntime::Docker => {
-                format!("docker stats {} --no-stream --format json", container_id)
+                format!("docker stats {container_id} --no-stream --format json")
             }
             ContainerRuntime::Podman => {
-                format!("podman stats {} --no-stream --format json", container_id)
+                format!("podman stats {container_id} --no-stream --format json")
             }
             ContainerRuntime::Containerd => {
                 // Containerd doesn't have direct stats, use cgroup info
@@ -1075,7 +1075,7 @@ WantedBy=multi-user.target
 
         // Parse stats JSON
         let stats: serde_json::Value = serde_json::from_str(&output)
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse stats: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse stats: {e}")))?;
 
         // Transform into QoS-compatible format
         let qos_metrics = serde_json::json!({
@@ -1122,14 +1122,12 @@ WantedBy=multi-user.target
         let ip_cmd = match self.runtime {
             ContainerRuntime::Docker => {
                 format!(
-                    "docker inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {}",
-                    container_id
+                    "docker inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {container_id}"
                 )
             }
             ContainerRuntime::Podman => {
                 format!(
-                    "podman inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {}",
-                    container_id
+                    "podman inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {container_id}"
                 )
             }
             ContainerRuntime::Containerd => {
@@ -1148,13 +1146,13 @@ WantedBy=multi-user.target
         let health_checker = ApplicationHealthChecker::new();
 
         // Check main health endpoint
-        let health_url = format!("http://{}:8080/health", container_ip);
+        let health_url = format!("http://{container_ip}:8080/health");
         match health_checker.check_http(&health_url).await {
             HealthStatus::Healthy => {
                 info!("Blueprint health endpoint healthy");
 
                 // Also check metrics endpoint
-                let metrics_url = format!("http://{}:9615/metrics", container_ip);
+                let metrics_url = format!("http://{container_ip}:9615/metrics");
                 match health_checker.check_http(&metrics_url).await {
                     HealthStatus::Healthy => {
                         info!("Blueprint metrics endpoint also healthy");
@@ -1181,17 +1179,17 @@ WantedBy=multi-user.target
         info!("Deploying {} as systemd service", service_name);
 
         // Copy binary to remote
-        let remote_path = format!("/opt/blueprint/bin/{}", service_name);
+        let remote_path = format!("/opt/blueprint/bin/{service_name}");
         self.copy_files(binary_path, &remote_path).await?;
 
         // Make executable
-        self.run_remote_command(&format!("chmod +x {}", remote_path))
+        self.run_remote_command(&format!("chmod +x {remote_path}"))
             .await?;
 
         // Create systemd unit with resource limits
         let env_section = env_vars
             .iter()
-            .map(|(k, v)| format!("Environment={}={}", k, v))
+            .map(|(k, v)| format!("Environment={k}={v}"))
             .collect::<Vec<_>>()
             .join("\n");
 
@@ -1225,26 +1223,24 @@ WantedBy=multi-user.target
         );
 
         // Write service file
-        let service_file = format!("/etc/systemd/system/blueprint-{}.service", service_name);
+        let service_file = format!("/etc/systemd/system/blueprint-{service_name}.service");
         self.run_remote_command(&format!(
-            "sudo tee {} > /dev/null << 'EOF'\n{}\nEOF",
-            service_file, service_unit
+            "sudo tee {service_file} > /dev/null << 'EOF'\n{service_unit}\nEOF"
         ))
         .await?;
 
         // Enable and start
         self.run_remote_command("sudo systemctl daemon-reload")
             .await?;
-        self.run_remote_command(&format!("sudo systemctl enable blueprint-{}", service_name))
+        self.run_remote_command(&format!("sudo systemctl enable blueprint-{service_name}"))
             .await?;
-        self.run_remote_command(&format!("sudo systemctl start blueprint-{}", service_name))
+        self.run_remote_command(&format!("sudo systemctl start blueprint-{service_name}"))
             .await?;
 
         // Verify it's running
         let status = self
             .run_remote_command(&format!(
-                "sudo systemctl is-active blueprint-{}",
-                service_name
+                "sudo systemctl is-active blueprint-{service_name}"
             ))
             .await?;
 
@@ -1253,8 +1249,7 @@ WantedBy=multi-user.target
             Ok(())
         } else {
             Err(Error::ConfigurationError(format!(
-                "Failed to start service: {}",
-                status
+                "Failed to start service: {status}"
             )))
         }
     }
