@@ -33,7 +33,6 @@ mod policy;
 mod status;
 mod update;
 
-use config::CloudConfig;
 pub use config::CloudProvider;
 pub use policy::{CostOptimization, RemoteDeploymentPolicy};
 

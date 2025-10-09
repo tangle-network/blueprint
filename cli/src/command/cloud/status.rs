@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::CloudProvider;
 
-#[cfg(feature = "remote-deployer")]
+#[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker, HealthMonitor};
 
 #[derive(Debug)]
@@ -121,7 +121,7 @@ async fn show_deployment_details(id: &str) -> Result<()> {
 }
 
 async fn show_all_deployments() -> Result<()> {
-    #[cfg(feature = "remote-deployer")]
+    #[cfg(feature = "remote-providers")]
     let deployments = {
         match load_real_deployments().await {
             Ok(deployments) => deployments,
@@ -132,7 +132,7 @@ async fn show_all_deployments() -> Result<()> {
         }
     };
 
-    #[cfg(not(feature = "remote-deployer"))]
+    #[cfg(not(feature = "remote-providers"))]
     let deployments = get_mock_deployments();
 
     if deployments.is_empty() {
@@ -249,7 +249,7 @@ pub async fn terminate(deployment_id: Option<String>, all: bool, yes: bool) -> R
         let spinner = indicatif::ProgressBar::new_spinner();
         spinner.set_style(indicatif::ProgressStyle::default_spinner().template("{spinner} {msg}")?);
 
-        #[cfg(feature = "remote-deployer")]
+        #[cfg(feature = "remote-providers")]
         {
             spinner.set_message("Initializing cloud provisioner...");
             match CloudProvisioner::new().await {
@@ -271,7 +271,7 @@ pub async fn terminate(deployment_id: Option<String>, all: bool, yes: bool) -> R
             }
         }
 
-        #[cfg(not(feature = "remote-deployer"))]
+        #[cfg(not(feature = "remote-providers"))]
         {
             spinner.set_message("Stopping services...");
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -294,7 +294,7 @@ pub async fn terminate(deployment_id: Option<String>, all: bool, yes: bool) -> R
     Ok(())
 }
 
-#[cfg(feature = "remote-deployer")]
+#[cfg(feature = "remote-providers")]
 async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
     use std::path::PathBuf;
 
@@ -379,7 +379,7 @@ async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
     Ok(deployments)
 }
 
-#[cfg(feature = "remote-deployer")]
+#[cfg(feature = "remote-providers")]
 async fn terminate_real_deployment(
     provisioner: &CloudProvisioner,
     instance_id: &str,

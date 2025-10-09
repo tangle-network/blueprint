@@ -9,8 +9,7 @@ use dialoguer::{Confirm, Select, theme::ColorfulTheme};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::time::sleep;
-use tracing::{error, info, warn};
+use tracing::error;
 
 /// Update a deployed blueprint to a new version
 pub async fn update(

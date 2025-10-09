@@ -160,11 +160,11 @@ fn print_log_entry(entry: &blueprint_remote_providers::monitoring::logs::LogEntr
     let timestamp = format_timestamp(entry.timestamp);
 
     let level_str = match entry.level {
-        LogLevel::Debug => "DEBUG".bright_black(),
-        LogLevel::Info => "INFO ".green(),
-        LogLevel::Warn => "WARN ".yellow(),
-        LogLevel::Error => "ERROR".red(),
-        LogLevel::Fatal => "FATAL".bright_red().bold(),
+        LogLevel::Debug => format!("{}", "DEBUG".bright_black()),
+        LogLevel::Info => format!("{}", "INFO ".green()),
+        LogLevel::Warn => format!("{}", "WARN ".yellow()),
+        LogLevel::Error => format!("{}", "ERROR".red()),
+        LogLevel::Fatal => format!("{}", "FATAL".bright_red().bold()),
     };
 
     let container_id = entry

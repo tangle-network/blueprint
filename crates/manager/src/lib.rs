@@ -9,6 +9,13 @@
     html_logo_url = "https://cdn.prod.website-files.com/6494562b44a28080aafcbad4/65aaf8b0818b1d504cbdf81b_Tnt%20Logo.png"
 )]
 #![allow(clippy::module_name_repetitions)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::unused_async)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::unnecessary_wraps)]
+#![allow(dead_code)]
+#![allow(unused_variables)]
 
 pub mod blueprint;
 pub mod config;
