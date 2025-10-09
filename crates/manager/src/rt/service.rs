@@ -408,7 +408,7 @@ impl Service {
     ///
     /// * [`HypervisorInstance::shutdown()`]
     /// * [`BridgeHandle::shutdown()`]
-    pub async fn shutdown(mut self) -> Result<()> {
+    pub async fn shutdown(self) -> Result<()> {
         match self.runtime {
             #[cfg(feature = "vm-sandbox")]
             Runtime::Hypervisor(hypervisor) => {

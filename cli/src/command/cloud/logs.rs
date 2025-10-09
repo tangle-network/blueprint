@@ -7,6 +7,7 @@ use blueprint_remote_providers::{
 };
 use color_eyre::{Result, eyre::eyre};
 use colored::Colorize;
+use color_eyre::owo_colors::OwoColorize;
 use futures::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::{Duration, SystemTime};
