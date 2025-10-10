@@ -272,10 +272,32 @@ impl AutoDeploymentManager {
                 .await
             {
                 Ok(crate::infra::types::InstanceStatus::Running) => {
-                    // Try to get the instance details with public IP
-                    // Placeholder IP - real deployment provides actual instance IP
-                    updated_instance.public_ip = Some("pending".to_string());
-                    break;
+                    // Get full instance details including public IP
+                    match provisioner
+                        .get_instance_details(&provider, &updated_instance.id)
+                        .await
+                    {
+                        Ok(details) if details.public_ip.is_some() => {
+                            updated_instance = details;
+                            info!(
+                                "Instance {} received public IP: {}",
+                                updated_instance.id,
+                                updated_instance.public_ip.as_ref().unwrap()
+                            );
+                            break;
+                        }
+                        Ok(_) => {
+                            debug!("Instance running but public IP not yet assigned");
+                            attempts += 1;
+                            continue;
+                        }
+                        Err(e) => {
+                            // Provider doesn't support get_instance_details, fallback to polling
+                            debug!("get_instance_details not supported: {}, will retry", e);
+                            attempts += 1;
+                            continue;
+                        }
+                    }
                 }
                 Ok(_) => {
                     attempts += 1;

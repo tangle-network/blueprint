@@ -55,6 +55,14 @@ pub trait CloudProviderAdapter: Send + Sync {
     /// Get the current status of an instance
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus>;
 
+    /// Get full instance details including public IP (may not be implemented by all providers)
+    async fn get_instance_details(&self, instance_id: &str) -> Result<ProvisionedInstance> {
+        // Default implementation returns error - providers should override if they support this
+        Err(crate::core::error::Error::Other(
+            "get_instance_details not implemented for this provider".into(),
+        ))
+    }
+
     /// Deploy a Blueprint service with QoS port exposure
     ///
     /// Routes to appropriate deployment method based on target:

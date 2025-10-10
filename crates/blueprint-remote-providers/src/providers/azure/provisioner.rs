@@ -112,6 +112,14 @@ impl AzureProvisioner {
             &config.region
         };
 
+        // Validate SSH public key is provided
+        let ssh_public_key = std::env::var("AZURE_SSH_PUBLIC_KEY").map_err(|_| {
+            Error::ConfigurationError(
+                "AZURE_SSH_PUBLIC_KEY environment variable is required for Azure VM provisioning. \
+                 Generate a key with: ssh-keygen -t rsa -b 4096 -f ~/.ssh/azure_key".into(),
+            )
+        })?;
+
         // Create network interface first
         let nic_name = format!("{vm_name}-nic");
         let nic_id = self
@@ -150,8 +158,7 @@ impl AzureProvisioner {
                         "ssh": {
                             "publicKeys": [{
                                 "path": "/home/azureuser/.ssh/authorized_keys",
-                                "keyData": std::env::var("AZURE_SSH_PUBLIC_KEY")
-                                    .unwrap_or_else(|_| "ssh-rsa PLACEHOLDER".to_string())
+                                "keyData": ssh_public_key
                             }]
                         }
                     }

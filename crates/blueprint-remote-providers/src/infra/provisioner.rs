@@ -248,6 +248,20 @@ impl CloudProvisioner {
         self.get_status(provider.clone(), instance_id).await
     }
 
+    /// Get full instance details including public IP
+    pub async fn get_instance_details(
+        &self,
+        provider: &CloudProvider,
+        instance_id: &str,
+    ) -> Result<ProvisionedInstance> {
+        let adapter = self
+            .providers
+            .get(provider)
+            .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
+
+        adapter.get_instance_details(instance_id).await
+    }
+
     /// Use discovery service to find optimal instance type for requirements
     pub async fn discover_optimal_instance(
         &mut self,
