@@ -21,6 +21,10 @@
 //! cargo tangle blueprint deploy tangle --remote
 //! ```
 
+#![allow(unexpected_cfgs)]
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use clap::Subcommand;
 use color_eyre::Result;
 use std::path::PathBuf;
