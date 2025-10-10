@@ -1,5 +1,6 @@
 //! Update and rollback commands for cloud deployments
 
+#[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::{
     deployment::{DeploymentVersion, UpdateManager, UpdateStrategy},
     infra::provisioner::CloudProvisioner,

@@ -1,5 +1,6 @@
 //! Log streaming command for cloud deployments
 
+#[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::{
     deployment::ssh::SshDeploymentClient,
     infra::provisioner::CloudProvisioner,
