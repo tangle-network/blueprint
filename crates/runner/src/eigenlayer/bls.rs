@@ -233,6 +233,7 @@ async fn register_bls_impl(
         .into());
     }
 
+    // TODO(daniel): fix these
     // // Stake tokens to the quorum
     // let stake_amount = 1_000_000_000_000_000_000u64;
     // let operator_sets = vec![0u32];

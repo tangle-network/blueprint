@@ -1,11 +1,12 @@
 use blueprint_core::info;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
-// use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
+use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, SourceType, Paths};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
-// use blueprint_manager::executor::run_blueprint_manager;
+use blueprint_manager::executor::run_blueprint_manager;
 use blueprint_std::fs;
 use blueprint_std::path::PathBuf;
 use color_eyre::eyre::{Result, eyre};
+use tokio::signal;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::process::{Child, Command};
@@ -73,63 +74,30 @@ pub async fn run_eigenlayer_avs(
         }
     }
 
-    // info!(
-    //     "{}",
-    //     style("Preparing Blueprint to run, this may take a few minutes...").cyan()
-    // );
+    info!("Preparing Blueprint to run, this may take a few minutes...");
 
-    // let blueprint_manager_config = BlueprintManagerConfig {
-    //     paths: Paths {
-    //         keystore_uri: config.keystore_uri.clone(),
-    //         data_dir: config.data_dir.clone(),
-    //         ..Default::default()
-    //     },
-    //     verbose: 2,
-    //     pretty: true,
-    //     instance_id: Some(format!("Eigenlayer-Blueprint-{}", blueprint_id)),
-    //     allow_unchecked_attestations: opts.allow_unchecked_attestations,
-    //     ..Default::default()
-    // };
-
-    // let ctx = BlueprintManagerContext::new(blueprint_manager_config).await?;
-
-    // info!(
-    //     "{}",
-    //     style(format!(
-    //         "Starting blueprint manager for blueprint ID: {}",
-    //         blueprint_id
-    //     ))
-    //     .cyan()
-    //     .bold()
-    // );
-
-    // let shutdown_signal = async move {
-    //     let _ = signal::ctrl_c().await;
-    //     info!(
-    //         "{}",
-    //         style("Received shutdown signal, stopping blueprint manager")
-    //             .yellow()
-    //             .bold()
-    //     );
-    // };
-
-    // let mut handle = run_blueprint_manager(ctx, config, shutdown_signal).await?;
-
-    // info!(
-    //     "{}",
-    //     style("Starting blueprint execution...").green().bold()
-    // );
-    // handle.start()?;
-
-    // info!(
-    //     "{}",
-    //     style("Blueprint is running. Press Ctrl+C to stop.").cyan()
-    // );
-    // handle.await?;
-
-    // info!("{}", style("Blueprint manager has stopped").green());
-
-    // ///////////
+    let blueprint_manager_config = BlueprintManagerConfig {
+        paths: Paths {
+            keystore_uri: config.keystore_uri.clone(),
+            data_dir: config.data_dir.clone(),
+            cache_dir: "./blueprint-manager/cache".into(),
+            runtime_dir: "./blueprint-manager/runtime".into(),
+            ..Default::default()
+        },
+        verbose: 2,
+        pretty: true,
+        allow_unchecked_attestations: true,
+        test_mode: true,
+        instance_id: Some("Eigenlayer".into()),
+        preferred_source: SourceType::Native,
+        ..Default::default()
+    };
+    let manager_ctx = BlueprintManagerContext::new(blueprint_manager_config).await?;
+    let shutdown_signal = async move {
+        let _ = signal::ctrl_c().await;
+        info!("Received shutdown signal, stopping blueprint manager");
+    };
+    let mut manager_handle = run_blueprint_manager(manager_ctx, config.clone(), shutdown_signal).await?;
 
     // Get contract addresses
     let contract_addresses = config
@@ -144,6 +112,7 @@ pub async fn run_eigenlayer_avs(
     let env = BlueprintEnvVars {
         http_rpc_endpoint: config.http_rpc_endpoint,
         ws_rpc_endpoint: config.ws_rpc_endpoint,
+        #[cfg(feature = "tee")]
         kms_endpoint: config.kms_url,
         keystore_uri: config.keystore_uri,
         data_dir: config.data_dir,
@@ -201,9 +170,14 @@ pub async fn run_eigenlayer_avs(
         .arg("--strategy")
         .arg(contract_addresses.strategy_address.to_string())
         .arg("--pause-registry")
-        .arg(contract_addresses.pause_registry_address.to_string());
+        .arg(contract_addresses.pause_registry_address.to_string())
+        .arg("--slasher",
+            contract_addresses.slasher_address.to_string());
 
     assert!(binary_path.exists(), "Binary path does not exist");
+
+    info!("Starting Blueprint manager...");
+    manager_handle.start()?;
 
     let mut child = command
         .stdout(std::process::Stdio::piped())
@@ -246,5 +220,11 @@ pub async fn run_eigenlayer_avs(
         "AVS is running with PID: {}",
         child.id().unwrap_or_default()
     );
+
+    info!("Blueprint Manager is running. Press Ctrl+C to stop.");
+    manager_handle.await?;
+
+    info!("Blueprint manager has stopped");
+
     Ok(child)
 }

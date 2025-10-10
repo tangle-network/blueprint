@@ -3,6 +3,7 @@ use blueprint_manager::rt::ResourceLimits;
 use blueprint_manager::rt::service::Service;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
 
+#[cfg(feature = "containers")]
 pub async fn setup_with_container(
     ctx: &BlueprintManagerContext,
     limits: ResourceLimits,

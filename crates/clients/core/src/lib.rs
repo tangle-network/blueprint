@@ -2,6 +2,7 @@ pub mod error;
 use error::Error;
 
 use blueprint_std::hash::Hash;
+use auto_impl::auto_impl;
 
 pub type OperatorSet<K, V> = std::collections::BTreeMap<K, V>;
 
@@ -65,4 +66,14 @@ pub trait BlueprintServicesClient: Send + Sync + 'static {
             .map_err(|err| Error::GetOperatorIndex(err.to_string()))?;
         Ok(index)
     }
+}
+
+#[auto_impl(Arc)]
+pub trait EventsClient<Event>: Clone + Send + Sync {
+    /// Fetch the next event from the client.
+    async fn next_event(&self) -> Option<Event>;
+    /// Fetch the latest event from the client.
+    ///
+    /// If no event has yet been fetched, the client will call [`next_event`](Self::next_event).
+    async fn latest_event(&self) -> Option<Event>;
 }

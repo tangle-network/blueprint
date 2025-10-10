@@ -9,6 +9,8 @@ use std::error::Error;
 /// The default values of these contracts are the addresses for our testing environment.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct EigenlayerProtocolSettings {
+    /// The address of the slasher contract
+    pub slasher_address: Address,
     /// The address of the pause registry contract
     pub pause_registry_address: Address,
     /// The address of the allocation manager contract
@@ -38,6 +40,9 @@ pub struct EigenlayerProtocolSettings {
 impl ProtocolSettingsT for EigenlayerProtocolSettings {
     fn load(settings: BlueprintSettings) -> Result<Self, Box<dyn Error + Send + Sync>> {
         Ok(EigenlayerProtocolSettings {
+            slasher_address: settings
+                .slasher
+                .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
             pause_registry_address: settings
                 .pause_registry
                 .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
@@ -89,6 +94,7 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
 impl Default for EigenlayerProtocolSettings {
     fn default() -> Self {
         Self {
+            slasher_address: address!("12699471dF8dca329C76D72823B1b79d55709384"),
             pause_registry_address: address!("9a9f2ccfde556a7e9ff0848998aa4a0cfd8863ae"),
             allocation_manager_address: address!("8a791620dd6260079bf849dc5567adc3f2fdc318"),
             registry_coordinator_address: address!("fd471836031dc5108809d173a067e8486b9047a3"),
@@ -100,7 +106,7 @@ impl Default for EigenlayerProtocolSettings {
             avs_directory_address: address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e"),
             rewards_coordinator_address: address!("0dcd1bf9a1b36ce34237eeafef220932846bcd82"),
             permission_controller_address: address!("322813fd9a801c5507c9de605d63cea4f2ce6c44"),
-            strategy_address: address!("1613beb3b2c4f22ee086b2b38c1476a3ce7f78e8"),
+            strategy_address: address!("ec4cfde48eadca2bc63e94bb437bbeace1371bf3"),
         }
     }
 }

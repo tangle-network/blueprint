@@ -1,6 +1,10 @@
 use crate::error::Result;
+use blueprint_client_core::EventsClient;
 use alloy_primitives::{Address, Bytes, U256};
 use alloy_provider::{Provider, RootProvider};
+use alloy_rpc_types::{Block, Log, Filter};
+use alloy_pubsub::{PubSubFrontend, Subscription};
+use futures_util::StreamExt;
 use blueprint_evm_extra::util::{get_provider_http, get_wallet_provider_http};
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_std::collections::HashMap;
@@ -14,18 +18,27 @@ use eigensdk::utils::slashing::core::allocation_manager::{
 use eigensdk::utils::slashing::core::delegation_manager::DelegationManager;
 use eigensdk::utils::slashing::middleware::operator_state_retriever::OperatorStateRetriever;
 use num_bigint::BigInt;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::time::Duration;
 
 /// Client that provides access to EigenLayer utility functions through the use of the [`BlueprintEnvironment`].
 #[derive(Clone)]
 pub struct EigenlayerClient {
     pub config: BlueprintEnvironment,
+    log_stream: Arc<Mutex<Option<futures_util::stream::BoxStream<'static, Log>>>>,
+    latest_event: Arc<Mutex<Option<Log>>>,
 }
 
 impl EigenlayerClient {
     /// Creates a new [`EigenlayerClient`].
     #[must_use]
     pub fn new(config: BlueprintEnvironment) -> Self {
-        Self { config }
+        Self { 
+            config,
+            log_stream: Arc::new(Mutex::new(None)),
+            latest_event: Arc::new(Mutex::new(None)),
+        }
     }
 
     /// Get the [`BlueprintEnvironment`] for this client
@@ -66,6 +79,19 @@ impl EigenlayerClient {
         get_ws_provider(self.config.ws_rpc_endpoint.as_str())
             .await
             .map_err(Into::into)
+    }
+
+    /// Initialize the event streaming by subscribing to logs.
+    ///
+    /// This method must be called before using the EventsClient functionality.
+    async fn initialize(&self) -> Result<()> {
+        let contract_addresses = self.config.protocol_settings.eigenlayer()?;
+        let provider = self.get_provider_ws().await?;
+        let filter = Filter::new().address(contract_addresses.service_manager_address);
+        let subscription = provider.subscribe_logs(&filter).await?;
+        let stream = subscription.into_stream().boxed();
+        *self.log_stream.lock().await = Some(stream);
+        Ok(())
     }
 
     // TODO: Slashing contracts equivalent
@@ -724,5 +750,54 @@ impl EigenlayerClient {
         }
 
         Ok(result)
+    }
+}
+
+impl EventsClient<Log> for EigenlayerClient {
+    async fn next_event(&self) -> Option<Log> {
+        let mut stream = tokio::time::timeout(
+            Duration::from_millis(500),
+            self.log_stream.lock(),
+        )
+        .await
+        .ok()?;
+        
+        match stream.as_mut() {
+            Some(stream) => {
+                let log = stream.next().await?;
+                
+                let mut latest_event = tokio::time::timeout(
+                    Duration::from_millis(500),
+                    self.latest_event.lock(),
+                )
+                .await
+                .ok()?;
+                *latest_event = Some(log.clone());
+                Some(log)
+            }
+            None => {
+                drop(stream);
+                self.initialize().await.ok()?;
+                // Next time, the stream should be initialized.
+                Box::pin(async { self.next_event().await }).await
+            }
+        }
+    }
+
+    async fn latest_event(&self) -> Option<Log> {
+        let latest_event = tokio::time::timeout(
+            Duration::from_millis(500),
+            self.latest_event.lock(),
+        )
+        .await
+        .ok()?;
+        
+        match &*latest_event {
+            Some(event) => Some(event.clone()),
+            None => {
+                drop(latest_event);
+                self.next_event().await
+            }
+        }
     }
 }

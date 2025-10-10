@@ -11,8 +11,6 @@ use eigensdk::utils::slashing::middleware::registry_coordinator::RegistryCoordin
 use url::Url;
 
 // ================= Core Eigenlayer Deployment Addresses =================
-// daniel: TODO
-// question: are these from tangle or eigenlayer?
 /// The default Allocation Manager address on our testnet
 pub const ALLOCATION_MANAGER_ADDR: Address = address!("8a791620dd6260079bf849dc5567adc3f2fdc318");
 /// The default AVS Directory address on our testnet
@@ -130,6 +128,7 @@ where
         ws_endpoint: ws_endpoint.to_string(),
         accounts,
         eigenlayer_contract_addresses: EigenlayerProtocolSettings {
+            slasher_address: SLASHER_ADDR,
             pause_registry_address: PAUSER_REGISTRY_ADDR,
             allocation_manager_address: ALLOCATION_MANAGER_ADDR,
             registry_coordinator_address: REGISTRY_COORDINATOR_ADDR,

@@ -142,7 +142,6 @@ pub fn initialize_test_keystore() -> Result<()> {
     }
     config = config.fs_root(keystore_path);
     let _keystore = Keystore::new(config)?;
-    // TODO: Add support for Tangle here, taking the protocol as an input and controlling the key type and key input(s)
     import_key(
         Protocol::Eigenlayer,
         KeyTypeId::Ecdsa,

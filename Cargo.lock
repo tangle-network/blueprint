@@ -2855,7 +2855,10 @@ dependencies = [
  "alloy-network",
  "alloy-primitives 1.2.1",
  "alloy-provider",
+ "alloy-pubsub",
+ "alloy-rpc-types",
  "alloy-transport",
+ "auto_impl",
  "blueprint-chain-setup-anvil",
  "blueprint-client-core",
  "blueprint-core",
@@ -2866,6 +2869,7 @@ dependencies = [
  "blueprint-std",
  "eigenlayer-contract-deployer",
  "eigensdk",
+ "futures-util",
  "num-bigint 0.4.6",
  "tempfile",
  "thiserror 2.0.16",
@@ -3306,6 +3310,7 @@ dependencies = [
 name = "blueprint-manager"
 version = "0.3.0-alpha.20"
 dependencies = [
+ "alloy-rpc-types",
  "auto_impl",
  "axum",
  "blueprint-auth",

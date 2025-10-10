@@ -903,6 +903,10 @@ fn load_protocol_settings(
     match protocol {
         Protocol::Eigenlayer => {
             let addresses = EigenlayerProtocolSettings {
+                slasher_address: env::var("SLASHER_ADDRESS")
+                    .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
+                    .parse()
+                    .map_err(|_| ConfigError::Other("Invalid SLASHER_ADDRESS".into()))?,    
                 pause_registry_address: env::var("PAUSE_REGISTRY_ADDRESS")
                     .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
                     .parse()

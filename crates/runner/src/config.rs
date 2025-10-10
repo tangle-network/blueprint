@@ -686,6 +686,8 @@ impl ContextConfig {
         let permission_controller = eigenlayer_settings.map(|s| s.permission_controller_address);
         #[cfg(feature = "eigenlayer")]
         let strategy = eigenlayer_settings.map(|s| s.strategy_address);
+        #[cfg(feature = "eigenlayer")]
+        let slasher = eigenlayer_settings.map(|s| s.slasher_address);
 
         // Tangle settings
         #[cfg(feature = "tangle")]
@@ -732,6 +734,8 @@ impl ContextConfig {
                 blueprint_id,
                 #[cfg(feature = "tangle")]
                 service_id,
+                #[cfg(feature = "eigenlayer")]
+                slasher,
                 #[cfg(feature = "eigenlayer")]
                 pause_registry,
                 #[cfg(feature = "eigenlayer")]
@@ -981,6 +985,15 @@ pub struct BlueprintSettings {
     // ========
     // EIGENLAYER
     // ========
+    /// The address of the slasher
+    #[cfg(feature = "eigenlayer")]
+    #[arg(
+        long,
+        value_name = "ADDR",
+        env = "SLASHER_ADDRESS",
+        required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
+    )]
+    pub slasher: Option<alloy_primitives::Address>,
     /// The address of the allocation manager
     #[cfg(feature = "eigenlayer")]
     #[arg(
@@ -1184,6 +1197,8 @@ impl Default for BlueprintSettings {
             // ========
             // EIGENLAYER
             // ========
+            #[cfg(feature = "eigenlayer")]
+            slasher: None,
             #[cfg(feature = "eigenlayer")]
             pause_registry: None,
             #[cfg(feature = "eigenlayer")]
