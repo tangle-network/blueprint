@@ -116,7 +116,8 @@ impl AzureProvisioner {
         let ssh_public_key = std::env::var("AZURE_SSH_PUBLIC_KEY").map_err(|_| {
             Error::ConfigurationError(
                 "AZURE_SSH_PUBLIC_KEY environment variable is required for Azure VM provisioning. \
-                 Generate a key with: ssh-keygen -t rsa -b 4096 -f ~/.ssh/azure_key".into(),
+                 Generate a key with: ssh-keygen -t rsa -b 4096 -f ~/.ssh/azure_key"
+                    .into(),
             )
         })?;
 
