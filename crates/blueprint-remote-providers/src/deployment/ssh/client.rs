@@ -1121,14 +1121,10 @@ WantedBy=multi-user.target
         // Get container IP for health checks
         let ip_cmd = match self.runtime {
             ContainerRuntime::Docker => {
-                format!(
-                    "docker inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {container_id}"
-                )
+                format!("docker inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {container_id}")
             }
             ContainerRuntime::Podman => {
-                format!(
-                    "podman inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {container_id}"
-                )
+                format!("podman inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {container_id}")
             }
             ContainerRuntime::Containerd => {
                 return Ok(HealthStatus::Unknown);

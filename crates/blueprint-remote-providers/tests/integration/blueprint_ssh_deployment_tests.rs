@@ -273,9 +273,7 @@ async fn test_blueprint_log_streaming(ssh_client: &SshDeploymentClient, containe
     assert!(!collected_logs.is_empty(), "Failed to collect any logs");
 
     // Verify log streaming worked
-    println!(
-        "  ✅ Log streaming working: {log_count} logs collected from container"
-    );
+    println!("  ✅ Log streaming working: {log_count} logs collected from container");
 
     // Verify error handling
     if has_error_logs {
@@ -393,9 +391,7 @@ async fn test_blueprint_update(
 
     match update_result {
         Ok(new_container_id) => {
-            println!(
-                "  ✅ Successfully updated to new version: {new_container_id}"
-            );
+            println!("  ✅ Successfully updated to new version: {new_container_id}");
 
             // Verify old container stopped
             let old_running = ssh_client.health_check_container(container_id).await;
@@ -434,9 +430,7 @@ async fn test_resource_limit_enforcement(
         if let Some(mem_mb) = metrics["memory_usage_mb"].as_f64() {
             let mem_limit_mb = spec.memory_gb * 1024.0;
             if mem_mb <= mem_limit_mb as f64 {
-                println!(
-                    "  ✓ Memory usage {mem_mb}MB within limit {mem_limit_mb}MB"
-                );
+                println!("  ✓ Memory usage {mem_mb}MB within limit {mem_limit_mb}MB");
             }
         }
     }

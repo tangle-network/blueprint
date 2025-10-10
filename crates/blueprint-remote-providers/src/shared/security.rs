@@ -107,7 +107,10 @@ pub trait SecurityGroupManager {
     ) -> impl std::future::Future<Output = Result<String>> + Send;
 
     /// Delete security group
-    fn delete_security_group(&self, group_id: &str) -> impl std::future::Future<Output = Result<()>> + Send;
+    fn delete_security_group(
+        &self,
+        group_id: &str,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 }
 
 /// Azure Network Security Group implementation
@@ -138,40 +141,40 @@ impl SecurityGroupManager for AzureNsgManager {
         let resource_group = self.resource_group.clone();
 
         async move {
-        let access_token = std::env::var("AZURE_ACCESS_TOKEN")
-            .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
+            let access_token = std::env::var("AZURE_ACCESS_TOKEN")
+                .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
 
-        let client = reqwest::Client::new();
-        let url = format!(
-            "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Network/networkSecurityGroups/{name}?api-version=2023-09-01"
-        );
+            let client = reqwest::Client::new();
+            let url = format!(
+                "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Network/networkSecurityGroups/{name}?api-version=2023-09-01"
+            );
 
-        let rules = config.standard_rules();
-        let mut security_rules = Vec::new();
+            let rules = config.standard_rules();
+            let mut security_rules = Vec::new();
 
-        for (index, rule) in rules.iter().enumerate() {
-            let direction = match rule.direction {
-                Direction::Ingress => "Inbound",
-                Direction::Egress => "Outbound",
-            };
+            for (index, rule) in rules.iter().enumerate() {
+                let direction = match rule.direction {
+                    Direction::Ingress => "Inbound",
+                    Direction::Egress => "Outbound",
+                };
 
-            let protocol = match rule.protocol {
-                Protocol::Tcp => "Tcp",
-                Protocol::Udp => "Udp",
-                Protocol::Icmp => "Icmp",
-            };
+                let protocol = match rule.protocol {
+                    Protocol::Tcp => "Tcp",
+                    Protocol::Udp => "Udp",
+                    Protocol::Icmp => "Icmp",
+                };
 
-            let port_ranges = if rule.ports.len() == 1 {
-                rule.ports[0].to_string()
-            } else {
-                rule.ports
-                    .iter()
-                    .map(|p| p.to_string())
-                    .collect::<Vec<_>>()
-                    .join(",")
-            };
+                let port_ranges = if rule.ports.len() == 1 {
+                    rule.ports[0].to_string()
+                } else {
+                    rule.ports
+                        .iter()
+                        .map(|p| p.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                };
 
-            security_rules.push(serde_json::json!({
+                security_rules.push(serde_json::json!({
                 "name": format!("{}-{}", rule.name, index),
                 "properties": {
                     "protocol": protocol,
@@ -184,63 +187,66 @@ impl SecurityGroupManager for AzureNsgManager {
                     "direction": direction
                 }
             }));
-        }
+            }
 
-        let nsg_body = serde_json::json!({
-            "location": "eastus",
-            "properties": {
-                "securityRules": security_rules
-            }
-        });
+            let nsg_body = serde_json::json!({
+                "location": "eastus",
+                "properties": {
+                    "securityRules": security_rules
+                }
+            });
 
-        match client
-            .put(&url)
-            .bearer_auth(&access_token)
-            .json(&nsg_body)
-            .send()
-            .await
-        {
-            Ok(response) if response.status().is_success() => {
-                info!("Created Azure NSG: {}", name);
-                Ok(name.to_string())
+            match client
+                .put(&url)
+                .bearer_auth(&access_token)
+                .json(&nsg_body)
+                .send()
+                .await
+            {
+                Ok(response) if response.status().is_success() => {
+                    info!("Created Azure NSG: {}", name);
+                    Ok(name.to_string())
+                }
+                Ok(response) => {
+                    let error_text = response.text().await.unwrap_or_default();
+                    Err(Error::ConfigurationError(format!(
+                        "Failed to create Azure NSG: {error_text}"
+                    )))
+                }
+                Err(e) => Err(Error::ConfigurationError(format!(
+                    "Failed to create Azure NSG: {e}"
+                ))),
             }
-            Ok(response) => {
-                let error_text = response.text().await.unwrap_or_default();
-                Err(Error::ConfigurationError(format!(
-                    "Failed to create Azure NSG: {error_text}"
-                )))
-            }
-            Err(e) => Err(Error::ConfigurationError(format!(
-                "Failed to create Azure NSG: {e}"
-            ))),
-        }
         }
     }
 
-    fn delete_security_group(&self, group_id: &str) -> impl std::future::Future<Output = Result<()>> + Send {
+    fn delete_security_group(
+        &self,
+        group_id: &str,
+    ) -> impl std::future::Future<Output = Result<()>> + Send {
         let group_id = group_id.to_string();
         let subscription_id = self.subscription_id.clone();
         let resource_group = self.resource_group.clone();
 
         async move {
-        let access_token = std::env::var("AZURE_ACCESS_TOKEN")
-            .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
+            let access_token = std::env::var("AZURE_ACCESS_TOKEN")
+                .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
 
-        let client = reqwest::Client::new();
-        let url = format!(
-            "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Network/networkSecurityGroups/{group_id}?api-version=2023-09-01"
-        );
+            let client = reqwest::Client::new();
+            let url = format!(
+                "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Network/networkSecurityGroups/{group_id}?api-version=2023-09-01"
+            );
 
-        match client.delete(&url).bearer_auth(&access_token).send().await {
-            Ok(response) if response.status().is_success() => {
-                info!("Deleted Azure NSG: {}", group_id);
-                Ok(())
+            match client.delete(&url).bearer_auth(&access_token).send().await {
+                Ok(response) if response.status().is_success() => {
+                    info!("Deleted Azure NSG: {}", group_id);
+                    Ok(())
+                }
+                Ok(_) => Ok(()), // NSG already deleted
+                Err(e) => Err(Error::ConfigurationError(format!(
+                    "Failed to delete Azure NSG: {e}"
+                ))),
             }
-            Ok(_) => Ok(()), // NSG already deleted
-            Err(e) => Err(Error::ConfigurationError(format!(
-                "Failed to delete Azure NSG: {e}"
-            ))),
-        }
         }
     }
 }

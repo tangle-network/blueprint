@@ -6,9 +6,9 @@ use blueprint_remote_providers::{
     infra::provisioner::CloudProvisioner,
     monitoring::logs::{LogAggregator, LogFilters, LogLevel, LogSource, LogStreamer},
 };
+use color_eyre::owo_colors::OwoColorize;
 use color_eyre::{Result, eyre::eyre};
 use colored::Colorize;
-use color_eyre::owo_colors::OwoColorize;
 use futures::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::{Duration, SystemTime};

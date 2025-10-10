@@ -51,9 +51,7 @@ async fn test_actual_log_streaming_capability() {
             println!("  ✅ Stream for duration returned {} logs", logs.len());
         }
         Err(e) => {
-            println!(
-                "  ⚠️  Streaming failed as expected in test environment: {e}"
-            );
+            println!("  ⚠️  Streaming failed as expected in test environment: {e}");
         }
     }
 

@@ -100,9 +100,7 @@ async fn ensure_test_cluster(cluster_name: &str) {
                 panic!("Failed to create test cluster: {stderr}");
             }
         } else {
-            panic!(
-                "Failed to create test cluster after {max_attempts} attempts"
-            );
+            panic!("Failed to create test cluster after {max_attempts} attempts");
         }
     }
 

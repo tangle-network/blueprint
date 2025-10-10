@@ -201,11 +201,7 @@ impl MetricsProvider for RemoteMetricsProvider {
             .as_secs();
     }
 
-    async fn set_blueprint_status(
-        &self,
-        status_code: u32,
-        status_message: Option<String>,
-    ) {
+    async fn set_blueprint_status(&self, status_code: u32, status_message: Option<String>) {
         let mut status = self.status.write().await;
         status.status_code = status_code;
         status.status_message = status_message;

@@ -54,7 +54,9 @@ mod test_helpers {
     macro_rules! require_kind {
         ($cluster_name:ident) => {
             if !cli_available("kind").await {
-                eprintln!("⚠️  Skipping test - kind not installed. Install with: brew install kind");
+                eprintln!(
+                    "⚠️  Skipping test - kind not installed. Install with: brew install kind"
+                );
                 return;
             }
             let $cluster_name = ensure_test_cluster().await;
@@ -655,9 +657,7 @@ async fn delete_k8s_deployment(deployment_name: &str) -> Result<(), Box<dyn std:
         .await?;
 
     if deployment_result.success() && service_result.success() {
-        println!(
-            "  ✓ Cleaned up deployment and service for {deployment_name}"
-        );
+        println!("  ✓ Cleaned up deployment and service for {deployment_name}");
     }
 
     Ok(())

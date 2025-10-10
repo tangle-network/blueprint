@@ -499,7 +499,8 @@ impl RemoteDeploymentService {
         #[cfg(not(feature = "remote-providers"))]
         {
             Err(Error::Other(
-                "Kubernetes deployment requires the 'remote-providers' feature to be enabled".into(),
+                "Kubernetes deployment requires the 'remote-providers' feature to be enabled"
+                    .into(),
             ))
         }
     }

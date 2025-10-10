@@ -520,11 +520,11 @@ async fn main() -> color_eyre::Result<()> {
                     #[cfg(feature = "remote-providers")]
                     provider,
                     #[cfg(not(feature = "remote-providers"))]
-                    provider: _,
+                        provider: _,
                     #[cfg(feature = "remote-providers")]
                     region,
                     #[cfg(not(feature = "remote-providers"))]
-                    region: _,
+                        region: _,
                 } => {
                     let manifest_path = cli
                         .manifest
@@ -558,7 +558,9 @@ async fn main() -> color_eyre::Result<()> {
                     if remote {
                         eprintln!("❌ Remote deployment requires the 'remote-providers' feature.");
                         eprintln!("   Build with: cargo build --features remote-providers");
-                        return Err(color_eyre::eyre::eyre!("Remote deployment feature not enabled"));
+                        return Err(color_eyre::eyre::eyre!(
+                            "Remote deployment feature not enabled"
+                        ));
                     }
 
                     Box::pin(deploy_tangle(

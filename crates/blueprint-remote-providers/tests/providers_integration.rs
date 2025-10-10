@@ -160,9 +160,7 @@ mod gcp_tests {
 
         for (spec, expected_prefix) in specs {
             // Would call GCP instance mapper here
-            println!(
-                "Testing GCP machine type for {spec:?} -> {expected_prefix}"
-            );
+            println!("Testing GCP machine type for {spec:?} -> {expected_prefix}");
         }
     }
 }
@@ -235,9 +233,9 @@ mod digitalocean_tests {
 
         match provisioner {
             Ok(_) => println!("✅ DigitalOcean provisioner initialized"),
-            Err(e) => println!(
-                "⚠️  DigitalOcean provisioner failed (expected without real token): {e}"
-            ),
+            Err(e) => {
+                println!("⚠️  DigitalOcean provisioner failed (expected without real token): {e}")
+            }
         }
     }
 
@@ -294,9 +292,7 @@ mod vultr_tests {
                 println!("✅ Vultr adapter initialized successfully");
             }
             Err(e) => {
-                println!(
-                    "⚠️  Vultr adapter initialization failed (expected without API key): {e}"
-                );
+                println!("⚠️  Vultr adapter initialization failed (expected without API key): {e}");
             }
         }
     }

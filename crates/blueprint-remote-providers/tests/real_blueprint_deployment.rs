@@ -3,6 +3,7 @@
 //! Requires actual cloud credentials and Docker/k8s infrastructure.
 //! Run with: REAL_TEST=1 cargo test --test real_blueprint_deployment -- --nocapture
 
+use blueprint_core::{debug, error, info, warn};
 use blueprint_remote_providers::{
     core::{
         deployment_target::{ContainerRuntime, DeploymentTarget},
@@ -15,7 +16,6 @@ use blueprint_remote_providers::{
 };
 use std::{collections::HashMap, time::Duration};
 use tokio::time::{sleep, timeout};
-use blueprint_core::{debug, error, info, warn};
 
 const BLUEPRINT_IMAGE: &str = "ghcr.io/tangle-network/incredible-squaring:latest";
 const TEST_TIMEOUT: Duration = Duration::from_secs(600); // 10 min max per provider
