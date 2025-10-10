@@ -275,19 +275,6 @@ impl DigitalOceanAdapter {
             ))
         }
     }
-
-    #[allow(dead_code)]
-    async fn health_check_blueprint(
-        &self,
-        _deployment: &BlueprintDeploymentResult,
-    ) -> Result<bool> {
-        Ok(false)
-    }
-
-    #[allow(dead_code)]
-    async fn cleanup_blueprint(&self, _deployment: &BlueprintDeploymentResult) -> Result<()> {
-        Ok(())
-    }
 }
 
 #[cfg(test)]

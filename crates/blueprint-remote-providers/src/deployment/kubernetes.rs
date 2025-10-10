@@ -47,14 +47,17 @@ impl KubernetesDeploymentClient {
         image: &str,
         spec: &ResourceSpec,
         replicas: i32,
+        env_vars: std::collections::HashMap<String, String>,
     ) -> Result<(String, Vec<u16>)> {
         info!(
-            "Deploying Blueprint {} to Kubernetes namespace {}",
-            name, self.namespace
+            "Deploying Blueprint {} to Kubernetes namespace {} with {} env vars",
+            name,
+            self.namespace,
+            env_vars.len()
         );
 
         // Create deployment with QoS port exposure
-        let deployment = self.create_blueprint_deployment(name, image, spec, replicas);
+        let deployment = self.create_blueprint_deployment(name, image, spec, replicas, env_vars);
         let deployments: Api<Deployment> = Api::namespaced(self.client.clone(), &self.namespace);
 
         let deployment_result = deployments
@@ -93,6 +96,7 @@ impl KubernetesDeploymentClient {
         image: &str,
         spec: &ResourceSpec,
         replicas: i32,
+        env_vars: std::collections::HashMap<String, String>,
     ) -> Deployment {
         let container_ports = vec![
             ContainerPort {
@@ -115,10 +119,27 @@ impl KubernetesDeploymentClient {
             },
         ];
 
+        // Convert env_vars to Kubernetes EnvVar format
+        let env = if !env_vars.is_empty() {
+            Some(
+                env_vars
+                    .into_iter()
+                    .map(|(k, v)| k8s_openapi::api::core::v1::EnvVar {
+                        name: k,
+                        value: Some(v),
+                        ..Default::default()
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
         let mut container = Container {
             name: name.to_string(),
             image: Some(image.to_string()),
             ports: Some(container_ports),
+            env,
             ..Default::default()
         };
 

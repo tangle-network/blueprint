@@ -43,15 +43,8 @@ impl SharedKubernetesDeployment {
 
         let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
 
-        // TODO: Pass env_vars to deploy_blueprint once the method supports it
-        // For now, env_vars will be used in future enhancement
-        info!(
-            "Environment variables configured: {:?}",
-            env_vars.keys().collect::<Vec<_>>()
-        );
-
         let (deployment_id, exposed_ports) = k8s_client
-            .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
+            .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1, env_vars)
             .await?;
 
         let mut port_mappings = HashMap::new();
@@ -333,15 +326,8 @@ impl SharedKubernetesDeployment {
 
         let k8s_client = KubernetesDeploymentClient::new(Some(namespace.to_string())).await?;
 
-        // TODO: Pass env_vars to deploy_blueprint once the method supports it
-        // For now, env_vars will be used in future enhancement
-        info!(
-            "Environment variables configured: {:?}",
-            env_vars.keys().collect::<Vec<_>>()
-        );
-
         let (deployment_id, exposed_ports) = k8s_client
-            .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1)
+            .deploy_blueprint("blueprint", blueprint_image, resource_spec, 1, env_vars)
             .await?;
 
         let mut port_mappings = HashMap::new();

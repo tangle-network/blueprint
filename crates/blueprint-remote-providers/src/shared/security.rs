@@ -38,13 +38,13 @@ pub struct SecurityRule {
     pub priority: u16,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Direction {
     Ingress,
     Egress,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Protocol {
     Tcp,
     Udp,
@@ -52,9 +52,19 @@ pub enum Protocol {
 }
 
 impl BlueprintSecurityConfig {
-    /// Get standard Blueprint security rules
+    /// Get standard Blueprint security rules with configurable source CIDRs
+    ///
+    /// Source CIDRs can be restricted via environment variables:
+    /// - BLUEPRINT_ALLOWED_SSH_CIDRS: Comma-separated CIDRs for SSH access
+    /// - BLUEPRINT_ALLOWED_QOS_CIDRS: Comma-separated CIDRs for QoS metrics access
+    ///
+    /// Default: 0.0.0.0/0 (all internet) for development convenience
     pub fn standard_rules(&self) -> Vec<SecurityRule> {
         let mut rules = Vec::new();
+
+        // Get allowed source CIDRs from environment or use default
+        let ssh_cidrs = Self::get_allowed_cidrs("BLUEPRINT_ALLOWED_SSH_CIDRS");
+        let qos_cidrs = Self::get_allowed_cidrs("BLUEPRINT_ALLOWED_QOS_CIDRS");
 
         if self.ssh_access {
             rules.push(SecurityRule {
@@ -62,7 +72,7 @@ impl BlueprintSecurityConfig {
                 direction: Direction::Ingress,
                 protocol: Protocol::Tcp,
                 ports: vec![22],
-                source_cidrs: vec!["0.0.0.0/0".to_string()], // TODO: Restrict in production
+                source_cidrs: ssh_cidrs,
                 destination_cidrs: vec![],
                 priority: 1000,
             });
@@ -74,7 +84,7 @@ impl BlueprintSecurityConfig {
                 direction: Direction::Ingress,
                 protocol: Protocol::Tcp,
                 ports: vec![8080, 9615, 9944],
-                source_cidrs: vec!["0.0.0.0/0".to_string()], // TODO: Restrict in production
+                source_cidrs: qos_cidrs,
                 destination_cidrs: vec![],
                 priority: 1000,
             });
@@ -94,6 +104,21 @@ impl BlueprintSecurityConfig {
 
         rules.extend(self.custom_rules.clone());
         rules
+    }
+
+    /// Get allowed CIDRs from environment variable or default to 0.0.0.0/0
+    fn get_allowed_cidrs(env_var: &str) -> Vec<String> {
+        std::env::var(env_var)
+            .ok()
+            .map(|cidrs| {
+                cidrs
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            })
+            .filter(|v: &Vec<String>| !v.is_empty())
+            .unwrap_or_else(|| vec!["0.0.0.0/0".to_string()])
     }
 }
 
@@ -483,5 +508,163 @@ impl SecurityGroupManager for VultrFirewallManager {
                 "Failed to delete Vultr firewall: {e}"
             ))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_cidr_configuration() {
+        // Without environment variables, should default to 0.0.0.0/0
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
+
+        let config = BlueprintSecurityConfig::default();
+        let rules = config.standard_rules();
+
+        // Should have SSH, QoS, and HTTPS rules
+        assert_eq!(rules.len(), 3);
+
+        // SSH rule should have default CIDR
+        let ssh_rule = rules.iter().find(|r| r.name == "blueprint-ssh").unwrap();
+        assert_eq!(ssh_rule.source_cidrs, vec!["0.0.0.0/0"]);
+        assert_eq!(ssh_rule.ports, vec![22]);
+        assert!(matches!(ssh_rule.direction, Direction::Ingress));
+        assert!(matches!(ssh_rule.protocol, Protocol::Tcp));
+
+        // QoS rule should have default CIDR
+        let qos_rule = rules.iter().find(|r| r.name == "blueprint-qos").unwrap();
+        assert_eq!(qos_rule.source_cidrs, vec!["0.0.0.0/0"]);
+        assert_eq!(qos_rule.ports, vec![8080, 9615, 9944]);
+    }
+
+    #[test]
+    fn test_custom_ssh_cidr_configuration() {
+        // Set custom SSH CIDR
+        unsafe {
+            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "10.0.0.0/8");
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
+
+        let config = BlueprintSecurityConfig::default();
+        let rules = config.standard_rules();
+
+        let ssh_rule = rules.iter().find(|r| r.name == "blueprint-ssh").unwrap();
+        assert_eq!(ssh_rule.source_cidrs, vec!["10.0.0.0/8"]);
+
+        // QoS should still use default
+        let qos_rule = rules.iter().find(|r| r.name == "blueprint-qos").unwrap();
+        assert_eq!(qos_rule.source_cidrs, vec!["0.0.0.0/0"]);
+
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+        }
+    }
+
+    #[test]
+    fn test_multiple_cidrs_configuration() {
+        // Set multiple CIDRs comma-separated
+        unsafe {
+            std::env::set_var(
+                "BLUEPRINT_ALLOWED_SSH_CIDRS",
+                "10.0.0.0/8, 192.168.1.0/24, 172.16.0.0/12",
+            );
+        }
+
+        let config = BlueprintSecurityConfig::default();
+        let rules = config.standard_rules();
+
+        let ssh_rule = rules.iter().find(|r| r.name == "blueprint-ssh").unwrap();
+        assert_eq!(
+            ssh_rule.source_cidrs,
+            vec!["10.0.0.0/8", "192.168.1.0/24", "172.16.0.0/12"]
+        );
+
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+        }
+    }
+
+    #[test]
+    fn test_empty_cidr_fallback() {
+        // Empty string should fall back to default
+        unsafe {
+            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "");
+        }
+
+        let config = BlueprintSecurityConfig::default();
+        let rules = config.standard_rules();
+
+        let ssh_rule = rules.iter().find(|r| r.name == "blueprint-ssh").unwrap();
+        assert_eq!(ssh_rule.source_cidrs, vec!["0.0.0.0/0"]);
+
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+        }
+    }
+
+    #[test]
+    fn test_whitespace_trimming() {
+        // Should trim whitespace from CIDRs
+        unsafe {
+            std::env::set_var(
+                "BLUEPRINT_ALLOWED_QOS_CIDRS",
+                "  10.0.0.0/8  ,   192.168.1.0/24  ",
+            );
+        }
+
+        let config = BlueprintSecurityConfig::default();
+        let rules = config.standard_rules();
+
+        let qos_rule = rules.iter().find(|r| r.name == "blueprint-qos").unwrap();
+        assert_eq!(qos_rule.source_cidrs, vec!["10.0.0.0/8", "192.168.1.0/24"]);
+
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
+    }
+
+    #[test]
+    fn test_custom_rules() {
+        let mut config = BlueprintSecurityConfig::default();
+        config.custom_rules.push(SecurityRule {
+            name: "custom-app".to_string(),
+            direction: Direction::Ingress,
+            protocol: Protocol::Tcp,
+            ports: vec![3000],
+            source_cidrs: vec!["192.168.1.0/24".to_string()],
+            destination_cidrs: vec![],
+            priority: 2000,
+        });
+
+        let rules = config.standard_rules();
+
+        // Should have SSH, QoS, HTTPS, and custom rule
+        assert_eq!(rules.len(), 4);
+
+        let custom_rule = rules.iter().find(|r| r.name == "custom-app").unwrap();
+        assert_eq!(custom_rule.ports, vec![3000]);
+        assert_eq!(custom_rule.source_cidrs, vec!["192.168.1.0/24"]);
+    }
+
+    #[test]
+    fn test_disabled_rules() {
+        let config = BlueprintSecurityConfig {
+            ssh_access: false,
+            qos_ports: false,
+            https_outbound: true,
+            custom_rules: Vec::new(),
+        };
+
+        let rules = config.standard_rules();
+
+        // Should only have HTTPS rule
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].name, "blueprint-https-outbound");
+        assert!(matches!(rules[0].direction, Direction::Egress));
     }
 }

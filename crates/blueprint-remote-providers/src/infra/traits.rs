@@ -56,7 +56,7 @@ pub trait CloudProviderAdapter: Send + Sync {
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus>;
 
     /// Get full instance details including public IP (may not be implemented by all providers)
-    async fn get_instance_details(&self, instance_id: &str) -> Result<ProvisionedInstance> {
+    async fn get_instance_details(&self, _instance_id: &str) -> Result<ProvisionedInstance> {
         // Default implementation returns error - providers should override if they support this
         Err(crate::core::error::Error::Other(
             "get_instance_details not implemented for this provider".into(),
