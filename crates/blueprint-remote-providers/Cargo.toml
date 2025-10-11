@@ -69,7 +69,6 @@ libc = "0.2"
 rand = "0.8"
 
 [dev-dependencies]
-blueprint-core-testing-utils.workspace = true
 mockall = "0.13"
 tempfile.workspace = true
 tokio-test = "0.4"
