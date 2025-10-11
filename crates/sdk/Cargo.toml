@@ -69,6 +69,9 @@ tempfile = { workspace = true, optional = true }
 # Optional dependencies for build
 blueprint-build-utils = { workspace = true, optional = true }
 
+# Remote cloud deployments
+blueprint-remote-providers = { workspace = true, optional = true }
+
 openssl-sys = { workspace = true, features = ["vendored"] }
 
 [features]
@@ -195,6 +198,9 @@ testing = [
 
 ## Enable the cron job producer
 cronjob = ["blueprint-producers-extra/cron"]
+
+## Enable remote cloud deployment providers
+remote-providers = ["dep:blueprint-remote-providers"]
 
 [package.metadata.docs.rs]
 features = ["tangle", "evm", "eigenlayer", "networking", "round-based-compat", "local-store", "macros", "build", "testing", "cronjob"]

@@ -16,10 +16,12 @@ use blueprint_std::fmt::Debug;
 use tangle_subxt::subxt::utils::AccountId32;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{BlueprintSource, NativeFetcher};
 use tangle_subxt::tangle_testnet_runtime::api::services::events::{
-    JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, Unregistered,
+    JobCalled, JobResultSubmitted, PreRegistration, Registered, ServiceInitiated, ServiceTerminated, Unregistered,
 };
 use crate::rt::ResourceLimits;
 use crate::rt::service::Status;
+#[cfg(feature = "remote-providers")]
+use crate::rt::Service;
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
 
@@ -95,6 +97,63 @@ impl VerifiedBlueprint {
                 // TODO: Actually configure resource limits
                 let limits = ResourceLimits::default();
 
+                // Check if remote deployment is enabled and should be used
+                #[cfg(feature = "remote-providers")]
+                let mut service = {
+                    if ctx.config.remote_deployment_opts.enable_remote_deployments {
+                        info!("Remote deployments enabled, checking deployment strategy...");
+
+                        // Try remote deployment first if enabled
+                        match try_remote_deployment(
+                            ctx,
+                            blueprint_id,
+                            *service_id,
+                            limits.clone(),
+                            &sub_service_str,
+                        )
+                        .await
+                        {
+                            Ok(remote_service) => {
+                                info!("Successfully deployed service remotely");
+                                remote_service
+                            }
+                            Err(e) => {
+                                warn!("Remote deployment failed: {}, falling back to local", e);
+                                // Fall back to local deployment
+                                source
+                                    .spawn(
+                                        ctx,
+                                        limits,
+                                        blueprint_config,
+                                        id,
+                                        env,
+                                        args,
+                                        &sub_service_str,
+                                        &cache_dir,
+                                        &runtime_dir,
+                                    )
+                                    .await?
+                            }
+                        }
+                    } else {
+                        // Local deployment
+                        source
+                            .spawn(
+                                ctx,
+                                limits,
+                                blueprint_config,
+                                id,
+                                env,
+                                args,
+                                &sub_service_str,
+                                &cache_dir,
+                                &runtime_dir,
+                            )
+                            .await?
+                    }
+                };
+
+                #[cfg(not(feature = "remote-providers"))]
                 let mut service = source
                     .spawn(
                         ctx,
@@ -149,6 +208,10 @@ pub struct EventPollResult {
     pub needs_update: bool,
     // A vec of blueprints we have not yet become registered to
     pub blueprint_registrations: Vec<u64>,
+    #[cfg(feature = "remote-providers")]
+    pub service_initiated: Vec<ServiceInitiated>,
+    #[cfg(feature = "remote-providers")]
+    pub service_terminated: Vec<ServiceTerminated>,
 }
 
 pub(crate) fn check_blueprint_events(
@@ -160,6 +223,7 @@ pub(crate) fn check_blueprint_events(
     let registered_events = event.events.find::<Registered>();
     let unregistered_events = event.events.find::<Unregistered>();
     let service_initiated_events = event.events.find::<ServiceInitiated>();
+    let service_terminated_events = event.events.find::<ServiceTerminated>();
     let job_called_events = event.events.find::<JobCalled>();
     let job_result_submitted_events = event.events.find::<JobResultSubmitted>();
 
@@ -216,10 +280,43 @@ pub(crate) fn check_blueprint_events(
         match evt {
             Ok(evt) => {
                 info!("Service initiated event: {evt:?}");
+                info!(
+                    "Available event fields - blueprint_id: {}, service_id: {}, request_id: {}, owner: {:?}",
+                    evt.blueprint_id, evt.service_id, evt.request_id, evt.owner
+                );
                 result.needs_update = true;
+
+                #[cfg(feature = "remote-providers")]
+                {
+                    // Store event data for remote provider handling
+                    result.service_initiated.push(evt);
+                }
             }
             Err(err) => {
                 warn!("Error handling service initiated event: {err:?}");
+            }
+        }
+    }
+
+    // Handle service terminated events
+    for evt in service_terminated_events {
+        match evt {
+            Ok(evt) => {
+                info!("Service terminated event: {evt:?}");
+                info!(
+                    "Service terminated - blueprint_id: {}, service_id: {}, owner: {:?}",
+                    evt.blueprint_id, evt.service_id, evt.owner
+                );
+                result.needs_update = true;
+
+                #[cfg(feature = "remote-providers")]
+                {
+                    // Store event data for remote provider handling
+                    result.service_terminated.push(evt);
+                }
+            }
+            Err(err) => {
+                warn!("Error handling service terminated event: {err:?}");
             }
         }
     }
@@ -470,4 +567,72 @@ fn get_fetcher_candidates(
     }
 
     Ok(fetcher_candidates)
+}
+
+/// Try to deploy a service remotely using cloud providers
+#[cfg(feature = "remote-providers")]
+async fn try_remote_deployment(
+    ctx: &BlueprintManagerContext,
+    blueprint_id: u64,
+    service_id: u64,
+    limits: ResourceLimits,
+    service_name: &str,
+) -> Result<Service> {
+    use blueprint_remote_providers::{
+        auto_deployment::AutoDeploymentManager, resources::ResourceSpec,
+    };
+
+    info!("Attempting remote deployment for service: {}", service_name);
+
+    // Convert ResourceLimits to ResourceSpec - use actual CPU count from limits
+    let resource_spec = ResourceSpec {
+        cpu: limits.cpu_count.map(|c| c as f64).unwrap_or(2.0), // Use actual CPU count or default to 2
+        memory_gb: (limits.memory_size / (1024 * 1024 * 1024)) as f64,
+        storage_gb: (limits.storage_space / (1024 * 1024 * 1024)) as f64,
+        gpu_count: limits.gpu_count.map(|c| c as u32),
+        network_bandwidth_mbps: limits.network_bandwidth.map(|b| b as f64),
+    };
+
+    // Load credentials if provided
+    let credentials_path = ctx
+        .config
+        .remote_deployment_opts
+        .cloud_credentials_path
+        .as_ref()
+        .ok_or_else(|| Error::Other("Cloud credentials path not configured".into()))?;
+
+    // Create auto-deployment manager
+    let mut manager = AutoDeploymentManager::new();
+    manager.load_credentials_from_file(credentials_path)?;
+
+    // Set max cost limit
+    manager.set_max_hourly_cost(ctx.config.remote_deployment_opts.max_hourly_cost);
+
+    // Deploy to cheapest provider
+    let deployment_config = manager
+        .auto_deploy_service(blueprint_id, service_id, resource_spec, None)
+        .await
+        .map_err(|e| Error::Other(format!("Remote deployment failed: {}", e)))?;
+
+    info!(
+        "Successfully deployed to {} in region {} (instance: {})",
+        deployment_config.provider, deployment_config.region, deployment_config.instance_id
+    );
+
+    // Create DeploymentTracker with proper path configuration
+    let tracker_path = ctx.data_dir().join("remote_deployments");
+    let tracker = std::sync::Arc::new(
+        blueprint_remote_providers::deployment::tracker::DeploymentTracker::new(&tracker_path)
+            .await?,
+    );
+
+    // Create the remote service instance
+    let remote_instance = crate::rt::remote::RemoteServiceInstance::new(deployment_config, tracker);
+
+    // Create runtime directory for this service
+    let runtime_dir = ctx.runtime_dir().join(format!("remote-{}", service_id));
+    std::fs::create_dir_all(&runtime_dir)?;
+
+    // Return the Service wrapped around the remote instance
+    Service::new_remote(ctx, runtime_dir, service_name, remote_instance).await
 }
