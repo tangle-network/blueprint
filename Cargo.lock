@@ -3815,7 +3815,6 @@ dependencies = [
  "base64 0.22.1",
  "blake3",
  "blueprint-core",
- "blueprint-core-testing-utils",
  "blueprint-keystore",
  "blueprint-pricing-engine",
  "blueprint-std",
