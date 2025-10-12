@@ -42,6 +42,31 @@ To install the Tangle CLI, run the following command:
 cargo install cargo-tangle --git https://github.com/tangle-network/blueprint --force
 ```
 
+### Feature flags
+
+The CLI supports optional features that can be enabled at build time:
+
+**`remote-providers`** - Enables cloud deployment functionality
+
+Adds support for deploying blueprints to AWS, GCP, Azure, DigitalOcean, and Vultr. This enables the `cargo tangle cloud` subcommand and the `--remote` flag for blueprint deployment.
+
+```bash
+cargo install cargo-tangle --git https://github.com/tangle-network/blueprint \
+  --features remote-providers --force
+```
+
+Without this feature, cloud commands are not available and using `--remote` will show:
+```
+❌ Remote deployment requires the 'remote-providers' feature.
+   Build with: cargo build --features remote-providers
+```
+
+**`vm-debug`** - Enables VM sandbox debugging (Linux only)
+
+```bash
+cargo build --features vm-debug
+```
+
 ## Creating a New Tangle Blueprint
 
 To create a new blueprint using the Tangle CLI, use the following command:
@@ -114,6 +139,8 @@ export EVM_SIGNER="0xcb6df9de1efca7a3998a8ead4e02159d5fa99c3e0d4fd6432667390bb47
 ```
 
 ## Cloud Deployment
+
+> **Note:** Cloud deployment requires the `remote-providers` feature flag. See [Feature flags](#feature-flags) for installation instructions.
 
 The Tangle CLI supports deploying blueprints to cloud providers for scalable, distributed execution:
 

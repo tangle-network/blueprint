@@ -64,6 +64,7 @@ enum Commands {
     },
 
     /// Cloud deployment
+    #[cfg(feature = "remote-providers")]
     #[command(visible_alias = "c")]
     Cloud {
         #[command(subcommand)]
@@ -516,14 +517,21 @@ async fn main() -> color_eyre::Result<()> {
                     devnet,
                     keystore_path,
                     remote,
+                    #[cfg(feature = "remote-providers")]
                     provider,
+                    #[cfg(not(feature = "remote-providers"))]
+                        provider: _,
+                    #[cfg(feature = "remote-providers")]
                     region,
+                    #[cfg(not(feature = "remote-providers"))]
+                        region: _,
                 } => {
                     let manifest_path = cli
                         .manifest
                         .manifest_path
                         .unwrap_or_else(|| PathBuf::from("Cargo.toml"));
 
+                    #[cfg(feature = "remote-providers")]
                     if remote {
                         // Load deployment policy and configure Blueprint Manager for remote deployment
                         let policy = cargo_tangle::command::cloud::RemoteDeploymentPolicy::load()?;
@@ -544,6 +552,15 @@ async fn main() -> color_eyre::Result<()> {
                         println!(
                             "   Falling back to local deployment. Integration coming in Phase 2."
                         );
+                    }
+
+                    #[cfg(not(feature = "remote-providers"))]
+                    if remote {
+                        eprintln!("❌ Remote deployment requires the 'remote-providers' feature.");
+                        eprintln!("   Build with: cargo build --features remote-providers");
+                        return Err(color_eyre::eyre::eyre!(
+                            "Remote deployment feature not enabled"
+                        ));
                     }
 
                     Box::pin(deploy_tangle(
@@ -864,6 +881,7 @@ async fn main() -> color_eyre::Result<()> {
                 );
             }
         },
+        #[cfg(feature = "remote-providers")]
         Commands::Cloud { command } => {
             cargo_tangle::command::cloud::execute(command).await?;
         }

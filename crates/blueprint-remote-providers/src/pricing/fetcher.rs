@@ -2,9 +2,9 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
+use blueprint_core::debug;
 use serde::Deserialize;
 use std::collections::HashMap;
-use tracing::debug;
 
 /// Instance information with specs and pricing
 #[derive(Clone, Debug)]
@@ -29,21 +29,29 @@ struct CachedPricing {
 
 impl Default for PricingFetcher {
     fn default() -> Self {
-        Self::new()
+        Self::new_or_default()
     }
 }
 
 impl PricingFetcher {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+            .map_err(|e| Error::Other(format!("Failed to create HTTP client: {e}")))?;
 
-        Self {
+        Ok(Self {
             client,
             cache: HashMap::new(),
-        }
+        })
+    }
+
+    /// Create a PricingFetcher with default configuration, falling back to basic client
+    pub fn new_or_default() -> Self {
+        Self::new().unwrap_or_else(|_| Self {
+            client: reqwest::Client::new(),
+            cache: HashMap::new(),
+        })
     }
 
     /// Find the best instance type for given resource requirements
@@ -63,9 +71,16 @@ impl PricingFetcher {
             if instance.vcpus >= min_cpu
                 && instance.memory_gb >= min_memory_gb
                 && instance.hourly_price <= max_price
-                && (best.is_none() || instance.hourly_price < best.as_ref().unwrap().hourly_price) {
+            {
+                let is_better = best
+                    .as_ref()
+                    .map(|current| instance.hourly_price < current.hourly_price)
+                    .unwrap_or(true);
+
+                if is_better {
                     best = Some(instance);
                 }
+            }
         }
 
         best.ok_or_else(|| {
@@ -163,9 +178,11 @@ impl PricingFetcher {
 
         let mut instances = Vec::new();
 
-        for price in pricing_data.prices.into_iter().take(100) { // Limit for performance
+        for price in pricing_data.prices.into_iter().take(100) {
+            // Limit for performance
             // Parse memory string like "1 GiB" or "0.5 GiB"
-            let memory_gb = price.memory
+            let memory_gb = price
+                .memory
                 .split_whitespace()
                 .next()
                 .and_then(|s| s.parse::<f32>().ok())
@@ -182,10 +199,15 @@ impl PricingFetcher {
         }
 
         if instances.is_empty() {
-            return Err(Error::Other("No AWS instances found in ec2.shop data".to_string()));
+            return Err(Error::Other(
+                "No AWS instances found in ec2.shop data".to_string(),
+            ));
         }
 
-        debug!("Fetched {} AWS instances from ec2.shop API", instances.len());
+        debug!(
+            "Fetched {} AWS instances from ec2.shop API",
+            instances.len()
+        );
         Ok(instances)
     }
 
@@ -404,7 +426,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_azure_pricing_api() {
-        let mut fetcher = PricingFetcher::new();
+        let mut fetcher = PricingFetcher::new_or_default();
 
         // Azure should work with public API
         let result = fetcher
@@ -422,7 +444,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_aws_pricing_works() {
-        let fetcher = PricingFetcher::new();
+        let fetcher = PricingFetcher::new_or_default();
 
         // AWS should work with Vantage API
         let result = fetcher.fetch_aws_instances("us-east-1").await;

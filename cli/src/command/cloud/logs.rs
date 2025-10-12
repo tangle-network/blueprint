@@ -1,11 +1,13 @@
 //! Log streaming command for cloud deployments
 
+#[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::{
-    monitoring::logs::{LogStreamer, LogSource, LogLevel, LogFilters, LogAggregator},
     deployment::ssh::SshDeploymentClient,
     infra::provisioner::CloudProvisioner,
+    monitoring::logs::{LogAggregator, LogFilters, LogLevel, LogSource, LogStreamer},
 };
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::owo_colors::OwoColorize;
+use color_eyre::{Result, eyre::eyre};
 use colored::Colorize;
 use futures::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -35,7 +37,8 @@ pub async fn stream_logs(
     });
 
     // Parse since duration
-    let since_time = since.map(|s| parse_duration(&s))
+    let since_time = since
+        .map(|s| parse_duration(&s))
         .transpose()?
         .map(|d| SystemTime::now() - d);
 
@@ -106,9 +109,7 @@ pub async fn stream_logs(
         pb.enable_steady_tick(Duration::from_millis(100));
 
         // Stream for a short duration to collect logs
-        let entries = streamer
-            .stream_for_duration(Duration::from_secs(5))
-            .await?;
+        let entries = streamer.stream_for_duration(Duration::from_secs(5)).await?;
 
         pb.finish_and_clear();
 
@@ -144,7 +145,11 @@ pub async fn stream_logs(
                 print_log_entry(entry);
             }
 
-            println!("\n📊 Displayed {} of {} total log entries", filtered.len(), lines);
+            println!(
+                "\n📊 Displayed {} of {} total log entries",
+                filtered.len(),
+                lines
+            );
         }
     }
 
@@ -156,23 +161,17 @@ fn print_log_entry(entry: &blueprint_remote_providers::monitoring::logs::LogEntr
     let timestamp = format_timestamp(entry.timestamp);
 
     let level_str = match entry.level {
-        LogLevel::Debug => "DEBUG".bright_black(),
-        LogLevel::Info => "INFO ".green(),
-        LogLevel::Warn => "WARN ".yellow(),
-        LogLevel::Error => "ERROR".red(),
-        LogLevel::Fatal => "FATAL".bright_red().bold(),
+        LogLevel::Debug => format!("{}", "DEBUG".bright_black()),
+        LogLevel::Info => format!("{}", "INFO ".green()),
+        LogLevel::Warn => format!("{}", "WARN ".yellow()),
+        LogLevel::Error => format!("{}", "ERROR".red()),
+        LogLevel::Fatal => format!("{}", "FATAL".bright_red().bold()),
     };
 
     let container_id = entry
         .container_id
         .as_ref()
-        .map(|id| {
-            if id.len() > 12 {
-                &id[..12]
-            } else {
-                id
-            }
-        })
+        .map(|id| if id.len() > 12 { &id[..12] } else { id })
         .unwrap_or("unknown");
 
     println!(
@@ -202,10 +201,14 @@ async fn determine_log_source(
         match deployment_type.as_str() {
             "ssh" => {
                 // SSH deployment
-                let host = deployment.metadata.get("ssh_host")
+                let host = deployment
+                    .metadata
+                    .get("ssh_host")
                     .ok_or_else(|| eyre!("SSH host not found in metadata"))?;
 
-                let container_id = deployment.metadata.get("container_id")
+                let container_id = deployment
+                    .metadata
+                    .get("container_id")
                     .ok_or_else(|| eyre!("Container ID not found in metadata"))?;
 
                 // Create SSH client (would need proper connection details)
@@ -219,11 +222,15 @@ async fn determine_log_source(
             #[cfg(feature = "kubernetes")]
             "kubernetes" => {
                 // Kubernetes deployment
-                let namespace = deployment.metadata.get("namespace")
+                let namespace = deployment
+                    .metadata
+                    .get("namespace")
                     .unwrap_or(&"default".to_string())
                     .clone();
 
-                let pod_name = deployment.metadata.get("pod_name")
+                let pod_name = deployment
+                    .metadata
+                    .get("pod_name")
                     .or_else(|| deployment.metadata.get("deployment_name"))
                     .ok_or_else(|| eyre!("Pod name not found in metadata"))?
                     .clone();
@@ -264,7 +271,9 @@ fn determine_provider_log_source(
         CloudProvider::GCP => {
             // GCP Cloud Logging
             Ok(LogSource::CloudLogging {
-                project_id: deployment.metadata.get("project_id")
+                project_id: deployment
+                    .metadata
+                    .get("project_id")
                     .unwrap_or(&"default-project".to_string())
                     .clone(),
                 resource_type: "gce_instance".to_string(),
@@ -273,7 +282,10 @@ fn determine_provider_log_source(
         }
         _ => {
             // Default to file-based logs
-            let host = deployment.instance.public_ip.as_ref()
+            let host = deployment
+                .instance
+                .public_ip
+                .as_ref()
                 .or(deployment.instance.private_ip.as_ref())
                 .ok_or_else(|| eyre!("No IP address found for deployment"))?
                 .clone();
@@ -293,10 +305,11 @@ fn parse_duration(s: &str) -> Result<Duration> {
     // Extract number and unit
     let (num_str, unit) = s.split_at(
         s.find(|c: char| c.is_alphabetic())
-            .ok_or_else(|| eyre!("Invalid duration format: {}", s))?
+            .ok_or_else(|| eyre!("Invalid duration format: {}", s))?,
     );
 
-    let num: u64 = num_str.parse()
+    let num: u64 = num_str
+        .parse()
         .map_err(|_| eyre!("Invalid number in duration: {}", num_str))?;
 
     let duration = match unit {

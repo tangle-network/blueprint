@@ -5,10 +5,10 @@
 
 use crate::core::error::{Error, Result};
 use crate::deployment::tracker::DeploymentRecord;
+use blueprint_core::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use tracing::{info, warn};
 
 /// Configuration for secure bridge
 #[derive(Debug, Clone)]
@@ -194,9 +194,9 @@ impl SecureBridge {
             warn!("mTLS disabled - DEVELOPMENT ONLY");
         }
 
-        let client = client_builder.build().map_err(|e| {
-            Error::ConfigurationError(format!("Failed to create HTTP client: {e}"))
-        })?;
+        let client = client_builder
+            .build()
+            .map_err(|e| Error::ConfigurationError(format!("Failed to create HTTP client: {e}")))?;
 
         Ok(Self {
             config,
@@ -239,9 +239,7 @@ impl SecureBridge {
 
         // Validate port range (u16 max is 65535, so only check minimum)
         if endpoint.port < 1024 {
-            return Err(Error::ConfigurationError(
-                "Port must be >= 1024".into(),
-            ));
+            return Err(Error::ConfigurationError("Port must be >= 1024".into()));
         }
 
         Ok(())
@@ -298,7 +296,9 @@ impl SecureBridge {
         let health_request = self
             .client
             .get(&url)
-            .timeout(std::time::Duration::from_secs(self.config.connect_timeout_secs));
+            .timeout(std::time::Duration::from_secs(
+                self.config.connect_timeout_secs,
+            ));
 
         match health_request.send().await {
             Ok(response) => Ok(response.status().is_success()),
@@ -362,7 +362,9 @@ impl SecureBridge {
 
         // Apply config-based timeout for requests
         let response = request
-            .timeout(std::time::Duration::from_secs(self.config.connect_timeout_secs))
+            .timeout(std::time::Duration::from_secs(
+                self.config.connect_timeout_secs,
+            ))
             .send()
             .await
             .map_err(|e| Error::ConfigurationError(format!("Request failed: {e}")))?;

@@ -6,7 +6,7 @@ use crate::core::resources::ResourceSpec;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 #[cfg(feature = "aws")]
 use aws_sdk_ec2::types::{InstanceType, ResourceType, Tag, TagSpecification};
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// AWS EC2 provisioner
 pub struct AwsProvisioner {
@@ -30,7 +30,6 @@ impl AwsProvisioner {
             eks_client,
         })
     }
-
 
     /// Provision an EC2 instance
     pub async fn provision_instance(
@@ -119,7 +118,6 @@ impl AwsProvisioner {
         })
     }
 
-
     /// Terminate an EC2 instance
     pub async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
         self.ec2_client
@@ -132,10 +130,13 @@ impl AwsProvisioner {
         Ok(())
     }
 
-
     /// Get instance status
-    pub async fn get_instance_status(&self, instance_id: &str) -> Result<crate::infra::types::InstanceStatus> {
-        let describe_result = self.ec2_client
+    pub async fn get_instance_status(
+        &self,
+        instance_id: &str,
+    ) -> Result<crate::infra::types::InstanceStatus> {
+        let describe_result = self
+            .ec2_client
             .describe_instances()
             .instance_ids(instance_id)
             .send()
@@ -148,7 +149,8 @@ impl AwsProvisioner {
             .and_then(|r| r.instances().first())
             .ok_or_else(|| Error::ConfigurationError("Instance not found".into()))?;
 
-        let state_name = instance.state()
+        let state_name = instance
+            .state()
             .and_then(|s| s.name())
             .map(|n| format!("{n:?}"))
             .unwrap_or_else(|| "unknown".to_string());
@@ -156,23 +158,27 @@ impl AwsProvisioner {
         match state_name.to_lowercase().as_str() {
             "running" => Ok(crate::infra::types::InstanceStatus::Running),
             "pending" => Ok(crate::infra::types::InstanceStatus::Starting),
-            "stopping" | "stopped" | "terminated" => Ok(crate::infra::types::InstanceStatus::Terminated),
+            "stopping" | "stopped" | "terminated" => {
+                Ok(crate::infra::types::InstanceStatus::Terminated)
+            }
             _ => Ok(crate::infra::types::InstanceStatus::Unknown),
         }
     }
-
 
     /// Create security group
     pub async fn create_security_group(&self, sg_name: &str) -> Result<String> {
         use aws_sdk_ec2::types::{IpPermission, IpRange};
 
-        let create_result = self.ec2_client
+        let create_result = self
+            .ec2_client
             .create_security_group()
             .group_name(sg_name)
             .description("Blueprint remote providers security group - SSH and QoS ports")
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create security group: {e}")))?;
+            .map_err(|e| {
+                Error::ConfigurationError(format!("Failed to create security group: {e}"))
+            })?;
 
         let sg_id = create_result.group_id().unwrap_or("").to_string();
 
@@ -191,18 +197,19 @@ impl AwsProvisioner {
             .ip_ranges(IpRange::builder().cidr_ip("0.0.0.0/0").build())
             .build();
 
-        match self.ec2_client
+        match self
+            .ec2_client
             .authorize_security_group_ingress()
             .group_id(&sg_id)
             .ip_permissions(ssh_rule)
             .ip_permissions(qos_rule)
             .send()
-            .await {
+            .await
+        {
             Ok(_) => info!("Security group {} configured with ingress rules", sg_id),
             Err(e) => warn!("Failed to configure security group rules: {}", e),
         }
 
         Ok(sg_id)
     }
-
 }

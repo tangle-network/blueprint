@@ -46,7 +46,7 @@ jobs:
           kubectl get nodes
       
       - name: Run Kubernetes tests
-        run: cargo test -p blueprint-remote-providers --test kubernetes_real -- --ignored
+        run: cargo test -p blueprint-remote-providers --test managed_kubernetes_e2e -- --ignored
 
   docker-ssh-tests:
     name: Docker SSH Tests
@@ -83,7 +83,7 @@ jobs:
           sshpass -p testpass ssh -o StrictHostKeyChecking=no -p 2222 blueprint@localhost echo "SSH works"
       
       - name: Run SSH deployment tests
-        run: cargo test -p blueprint-remote-providers --test ssh_deployment
+        run: echo "SSH deployment tests moved to lib tests" && cargo test -p blueprint-remote-providers --lib test_ssh
 
   mock-integration-tests:
     name: Mock Integration Tests
@@ -94,8 +94,8 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       
-      - name: Run mock cloud provider tests
-        run: cargo test -p blueprint-remote-providers --test deployment_integration
+      - name: Run integration tests
+        run: cargo test -p blueprint-remote-providers --lib
       
       - name: Run property tests
         run: cargo test -p blueprint-remote-providers --test property_tests

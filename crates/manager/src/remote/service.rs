@@ -9,10 +9,8 @@ use crate::rt::ResourceLimits;
 use crate::rt::service::Service;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 
-#[cfg(feature = "remote-deployer")]
-use blueprint_remote_providers::{
-    CloudProvisioner, DeploymentTracker, HealthMonitor,
-};
+#[cfg(feature = "remote-providers")]
+use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker, HealthMonitor};
 
 use blueprint_std::collections::HashMap;
 use blueprint_std::path::Path;
@@ -49,12 +47,12 @@ pub struct RemoteDeploymentService {
     /// Deployment policy
     policy: RemoteDeploymentPolicy,
     /// Health monitor for deployment health checks
-    #[cfg(feature = "remote-deployer")]
+    #[cfg(feature = "remote-providers")]
     health_monitor: Option<HealthMonitor>,
     /// Deployment tracker for persistence
-    #[cfg(feature = "remote-deployer")]
+    #[cfg(feature = "remote-providers")]
     deployment_tracker: Option<Arc<DeploymentTracker>>,
-    /// QoS remote metrics provider for collecting metrics from remote instances
+    /// `QoS` remote metrics provider for collecting metrics from remote instances
     #[cfg(feature = "qos")]
     qos_provider: Option<Arc<blueprint_qos::remote::RemoteMetricsProvider>>,
 }
@@ -83,7 +81,7 @@ impl RemoteDeploymentService {
             Some(Arc::new(provider))
         };
 
-        #[cfg(feature = "remote-deployer")]
+        #[cfg(feature = "remote-providers")]
         let (health_monitor, deployment_tracker) = {
             // Initialize health monitor and deployment tracker if remote deployer is enabled
             use blueprint_std::env;
@@ -119,9 +117,9 @@ impl RemoteDeploymentService {
             selector,
             deployments: Arc::new(RwLock::new(HashMap::new())),
             policy,
-            #[cfg(feature = "remote-deployer")]
+            #[cfg(feature = "remote-providers")]
             health_monitor,
-            #[cfg(feature = "remote-deployer")]
+            #[cfg(feature = "remote-providers")]
             deployment_tracker,
             #[cfg(feature = "qos")]
             qos_provider,
@@ -273,11 +271,13 @@ impl RemoteDeploymentService {
             resource_spec.cpu, resource_spec.memory_gb
         );
 
-        #[cfg(feature = "remote-deployer")]
+        #[cfg(feature = "remote-providers")]
         {
             // Use real cloud provider SDK
             use blueprint_remote_providers::CloudProvisioner;
-            use blueprint_remote_providers::core::deployment_target::{DeploymentTarget, ContainerRuntime};
+            use blueprint_remote_providers::core::deployment_target::{
+                ContainerRuntime, DeploymentTarget,
+            };
 
             let provisioner = CloudProvisioner::new()
                 .await
@@ -307,11 +307,7 @@ impl RemoteDeploymentService {
 
             // Provision the actual instance using the remote providers resource spec directly
             let instance = provisioner
-                .provision(
-                    provider,
-                    &convert_resource_spec(&resource_spec),
-                    &region,
-                )
+                .provision(provider, &convert_resource_spec(&resource_spec), &region)
                 .await
                 .map_err(|e| Error::Other(format!("Failed to provision instance: {}", e)))?;
 
@@ -359,11 +355,13 @@ impl RemoteDeploymentService {
                         // This allows the QoS system to collect metrics from the remote instance
                         #[cfg(feature = "qos")]
                         if let Some(ref qos_provider) = self.qos_provider {
-                            qos_provider.register_remote_instance(
-                                instance.instance_id.clone(),
-                                host.to_string(),
-                                port,
-                            ).await;
+                            qos_provider
+                                .register_remote_instance(
+                                    instance.instance_id.clone(),
+                                    host.to_string(),
+                                    port,
+                                )
+                                .await;
                             info!("✅ QoS endpoint registered: {}:{}", host, port);
                             info!("   Instance: {}", instance.instance_id);
                             info!("   Blueprint metrics will be collected from port {}", port);
@@ -371,7 +369,10 @@ impl RemoteDeploymentService {
 
                         #[cfg(not(feature = "qos"))]
                         {
-                            info!("📊 QoS endpoint ready: {}:{} (QoS feature disabled)", host, port);
+                            info!(
+                                "📊 QoS endpoint ready: {}:{} (QoS feature disabled)",
+                                host, port
+                            );
                         }
                     }
                 }
@@ -413,12 +414,12 @@ impl RemoteDeploymentService {
             .await
         }
 
-        #[cfg(not(feature = "remote-deployer"))]
+        #[cfg(not(feature = "remote-providers"))]
         {
-            return Err(Error::Other(
-                "Remote cloud deployment requires the 'remote-deployer' feature to be enabled"
+            Err(Error::Other(
+                "Remote cloud deployment requires the 'remote-providers' feature to be enabled"
                     .into(),
-            ));
+            ))
         }
     }
 
@@ -438,9 +439,12 @@ impl RemoteDeploymentService {
         info!("   Namespace: {}", namespace);
         info!("   Service: {}", service_name);
 
-        #[cfg(feature = "remote-deployer")]
+        #[cfg(feature = "remote-providers")]
         {
-            use blueprint_remote_providers::{CloudProvisioner, core::deployment_target::{DeploymentTarget, ContainerRuntime}};
+            use blueprint_remote_providers::{
+                CloudProvisioner,
+                core::deployment_target::{ContainerRuntime, DeploymentTarget},
+            };
 
             // Create provisioner
             let provisioner = CloudProvisioner::new()
@@ -501,7 +505,10 @@ impl RemoteDeploymentService {
 
             {
                 let mut deployments = self.deployments.write().await;
-                deployments.insert(deployment_result.blueprint_id.clone(), deployment_info.clone());
+                deployments.insert(
+                    deployment_result.blueprint_id.clone(),
+                    deployment_info.clone(),
+                );
             }
 
             info!("✅ Kubernetes deployment registered");
@@ -520,21 +527,22 @@ impl RemoteDeploymentService {
             .await
         }
 
-        #[cfg(not(feature = "remote-deployer"))]
+        #[cfg(not(feature = "remote-providers"))]
         {
             Err(Error::Other(
-                "Kubernetes deployment requires the 'remote-deployer' feature to be enabled".into(),
+                "Kubernetes deployment requires the 'remote-providers' feature to be enabled"
+                    .into(),
             ))
         }
     }
 
-    /// Convert Blueprint Manager ResourceLimits to ResourceSpec.
+    /// Convert Blueprint Manager `ResourceLimits` to `ResourceSpec`.
     fn convert_limits_to_spec(&self, limits: &ResourceLimits) -> Result<ResourceSpec> {
         Ok(ResourceSpec {
-            cpu: limits.cpu_count.map(|c| c as f32).unwrap_or(2.0), // Use actual CPU count or default to 2
+            cpu: limits.cpu_count.map_or(2.0, f32::from), // Use actual CPU count or default to 2
             memory_gb: (limits.memory_size as f32) / (1024.0 * 1024.0 * 1024.0), // Convert bytes to GB
             storage_gb: (limits.storage_space as f32) / (1024.0 * 1024.0 * 1024.0), // Convert bytes to GB
-            gpu_count: limits.gpu_count.map(|g| g as u32), // Use actual GPU count if specified
+            gpu_count: limits.gpu_count.map(u32::from), // Use actual GPU count if specified
             allow_spot: self.policy.prefer_spot,
         })
     }
@@ -556,7 +564,7 @@ impl RemoteDeploymentService {
         };
 
         if let Some(deployment_info) = deployment {
-            #[cfg(feature = "remote-deployer")]
+            #[cfg(feature = "remote-providers")]
             {
                 // Use real cloud provider termination
                 use blueprint_remote_providers::CloudProvisioner;
@@ -576,13 +584,16 @@ impl RemoteDeploymentService {
                     .await
                     .map_err(|e| Error::Other(format!("Failed to terminate instance: {}", e)))?;
 
-                info!("✅ Instance {} terminated successfully", deployment_info.instance_id);
+                info!(
+                    "✅ Instance {} terminated successfully",
+                    deployment_info.instance_id
+                );
             }
 
-            #[cfg(not(feature = "remote-deployer"))]
+            #[cfg(not(feature = "remote-providers"))]
             {
                 warn!(
-                    "Remote deployment termination requires 'remote-deployer' feature. Instance {} not terminated.",
+                    "Remote deployment termination requires 'remote-providers' feature. Instance {} not terminated.",
                     deployment_info.instance_id
                 );
             }
@@ -624,19 +635,22 @@ impl RemoteDeploymentService {
 
     /// Check health of a specific deployment.
     pub async fn check_deployment_health(&self, instance_id: &str) -> Result<bool> {
-        #[cfg(feature = "remote-deployer")]
+        #[cfg(feature = "remote-providers")]
         {
             if let Some(ref health_monitor) = self.health_monitor {
-                health_monitor.is_healthy(instance_id).await.map_err(|e| Error::Other(format!("Health check failed: {}", e)))
+                health_monitor
+                    .is_healthy(instance_id)
+                    .await
+                    .map_err(|e| Error::Other(format!("Health check failed: {}", e)))
             } else {
                 warn!("Health monitor not available, assuming healthy");
                 Ok(true)
             }
         }
 
-        #[cfg(not(feature = "remote-deployer"))]
+        #[cfg(not(feature = "remote-providers"))]
         {
-            warn!("Health monitoring requires the 'remote-deployer' feature");
+            warn!("Health monitoring requires the 'remote-providers' feature");
             Ok(true)
         }
     }
@@ -647,7 +661,10 @@ impl RemoteDeploymentService {
 
         let deployments = self.deployments.read().await;
         for (instance_id, _) in deployments.iter() {
-            let is_healthy = self.check_deployment_health(instance_id).await.unwrap_or(false);
+            let is_healthy = self
+                .check_deployment_health(instance_id)
+                .await
+                .unwrap_or(false);
             health_status.insert(instance_id.clone(), is_healthy);
         }
 
@@ -786,7 +803,7 @@ impl RemoteDeploymentService {
     }
 }
 
-#[cfg(feature = "remote-deployer")]
+#[cfg(feature = "remote-providers")]
 fn convert_resource_spec(
     spec: &ResourceSpec,
 ) -> blueprint_remote_providers::resources::ResourceSpec {

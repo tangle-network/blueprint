@@ -85,7 +85,7 @@ async fn test_azure_pricing_api() {
 async fn test_pricing_fetcher_integration() {
     println!("\n🔍 Testing PricingFetcher with real APIs...");
     
-    let mut fetcher = PricingFetcher::new();
+    let mut fetcher = PricingFetcher::new_or_default();
     
     // Test AWS pricing
     println!("\n📦 Testing AWS instance selection:");
@@ -152,7 +152,7 @@ async fn test_pricing_fetcher_integration() {
 async fn test_cheapest_provider_selection() {
     println!("\n💰 Testing cheapest provider selection...");
     
-    let mut fetcher = PricingFetcher::new();
+    let mut fetcher = PricingFetcher::new_or_default();
     let mut results = Vec::new();
     
     for provider in [CloudProvider::AWS, CloudProvider::Azure, CloudProvider::GCP, CloudProvider::DigitalOcean] {

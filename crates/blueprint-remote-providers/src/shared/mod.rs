@@ -3,14 +3,17 @@
 //! This module contains common patterns and utilities used by multiple
 //! cloud provider implementations to reduce code duplication.
 
-pub mod ssh_deployment;
 pub mod security;
+pub mod ssh_deployment;
 
 #[cfg(feature = "kubernetes")]
 pub mod kubernetes_deployment;
 
+pub use security::{
+    AzureNsgManager, BlueprintSecurityConfig, DigitalOceanFirewallManager, SecurityGroupManager,
+    VultrFirewallManager,
+};
 pub use ssh_deployment::{SharedSshDeployment, SshDeploymentConfig};
-pub use security::{BlueprintSecurityConfig, SecurityGroupManager, AzureNsgManager, DigitalOceanFirewallManager, VultrFirewallManager};
 
 #[cfg(feature = "kubernetes")]
-pub use kubernetes_deployment::{SharedKubernetesDeployment, ManagedK8sConfig};
+pub use kubernetes_deployment::{ManagedK8sConfig, SharedKubernetesDeployment};

@@ -161,7 +161,7 @@ fn test_gpu_instance_selection() {
 async fn test_pricing_api_integration() {
     use blueprint_remote_providers::pricing::fetcher::PricingFetcher;
     
-    let mut fetcher = PricingFetcher::new();
+    let mut fetcher = PricingFetcher::new_or_default();
     
     // Try to fetch real pricing (may fail without network)
     let result = fetcher.find_best_instance(

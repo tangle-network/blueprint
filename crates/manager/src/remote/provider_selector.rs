@@ -85,11 +85,13 @@ pub struct ProviderSelector {
 
 impl ProviderSelector {
     /// Create new provider selector with preferences.
+    #[must_use]
     pub fn new(preferences: ProviderPreferences) -> Self {
         Self { preferences }
     }
 
     /// Create provider selector with default preferences.
+    #[must_use]
     pub fn with_defaults() -> Self {
         Self::new(ProviderPreferences::default())
     }

@@ -25,8 +25,7 @@ pub struct EncryptedCloudCredentials {
 }
 
 /// Plaintext credential data (only exists during encryption/decryption)
-#[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop, Default)]
 pub struct PlaintextCredentials {
     // AWS
     pub aws_access_key: Option<String>,
@@ -51,35 +50,13 @@ pub struct PlaintextCredentials {
 
 impl EncryptedCloudCredentials {
     /// Create new encrypted credentials with provided key
-    pub fn encrypt_with_key(provider: &str, credentials: PlaintextCredentials, key: &[u8; 32]) -> Result<Self> {
+    pub fn encrypt_with_key(
+        provider: &str,
+        credentials: PlaintextCredentials,
+        key: &[u8; 32],
+    ) -> Result<Self> {
         let cipher = Aes256Gcm::new_from_slice(key)
             .map_err(|e| Error::ConfigurationError(format!("Invalid key: {e}")))?;
-
-        // Generate random nonce
-        let nonce_bytes = Self::generate_nonce();
-        let nonce = Nonce::from_slice(&nonce_bytes);
-
-        // Serialize and encrypt credentials
-        let plaintext = serde_json::to_vec(&credentials)
-            .map_err(|e| Error::ConfigurationError(format!("Serialization failed: {e}")))?;
-
-        let encrypted_data = cipher
-            .encrypt(nonce, plaintext.as_ref())
-            .map_err(|e| Error::ConfigurationError(format!("Encryption failed: {e}")))?;
-
-        Ok(Self {
-            provider: provider.to_string(),
-            encrypted_data,
-            nonce: nonce.to_vec(),
-            metadata: HashMap::new(),
-        })
-    }
-
-    /// Create new encrypted credentials (generates random key - for testing only)
-    pub fn encrypt(provider: &str, credentials: PlaintextCredentials) -> Result<Self> {
-        // Generate encryption key (in production, derive from master key or HSM)
-        let key = Aes256Gcm::generate_key(&mut OsRng);
-        let cipher = Aes256Gcm::new(&key);
 
         // Generate random nonce
         let nonce_bytes = Self::generate_nonce();
@@ -166,7 +143,8 @@ impl SecureCredentialManager {
         provider: &str,
         credentials: PlaintextCredentials,
     ) -> Result<EncryptedCloudCredentials> {
-        let mut encrypted = EncryptedCloudCredentials::encrypt_with_key(provider, credentials, &self.master_key)?;
+        let mut encrypted =
+            EncryptedCloudCredentials::encrypt_with_key(provider, credentials, &self.master_key)?;
         encrypted.add_metadata("created_at".to_string(), chrono::Utc::now().to_rfc3339());
         encrypted.add_metadata("version".to_string(), "1.0".to_string());
         Ok(encrypted)
@@ -245,22 +223,27 @@ mod tests {
 
     #[test]
     fn test_credential_encryption_decryption() {
-        // Create credentials directly for encryption
-        // Note: We need to avoid moving out of ZeroizeOnDrop struct
+        // Use proper encryption with known key (production pattern)
+        let test_key: [u8; 32] = [0x42; 32]; // Test key
+
         let mut credentials = PlaintextCredentials::default();
         credentials.aws_access_key = Some("AKIATEST123".to_string());
         credentials.aws_secret_key = Some("secretkey123".to_string());
         credentials.gcp_project_id = Some("test-project".to_string());
 
-        // Encrypt credentials
-        let encrypted = EncryptedCloudCredentials::encrypt("aws", credentials).unwrap();
+        // Encrypt credentials with known key
+        let encrypted =
+            EncryptedCloudCredentials::encrypt_with_key("aws", credentials, &test_key).unwrap();
         assert!(encrypted.is_encrypted());
         assert_eq!(encrypted.provider(), "aws");
 
-        // Verify plaintext is zeroized (automatic on drop)
-        // drop(credentials); // Already consumed in encrypt call
+        // Successful decryption with correct key
+        let decrypted = encrypted.decrypt(&test_key).unwrap();
+        assert_eq!(decrypted.aws_access_key, Some("AKIATEST123".to_string()));
+        assert_eq!(decrypted.aws_secret_key, Some("secretkey123".to_string()));
+        assert_eq!(decrypted.gcp_project_id, Some("test-project".to_string()));
 
-        // Cannot decrypt without proper key
+        // Decryption fails with wrong key
         let wrong_key = [0u8; 32];
         assert!(encrypted.decrypt(&wrong_key).is_err());
     }
@@ -297,5 +280,3 @@ mod tests {
         );
     }
 }
-
-

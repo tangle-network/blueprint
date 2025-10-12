@@ -2,8 +2,8 @@
 //!
 //! After auditing the code, here's what we can REALLY test:
 
-use blueprint_remote_providers::monitoring::logs::LogStreamer;
 use blueprint_remote_providers::monitoring::health::ApplicationHealthChecker;
+use blueprint_remote_providers::monitoring::logs::LogStreamer;
 
 #[tokio::test]
 async fn test_what_ssh_client_actually_does() {
@@ -51,7 +51,7 @@ async fn test_actual_log_streaming_capability() {
             println!("  ✅ Stream for duration returned {} logs", logs.len());
         }
         Err(e) => {
-            println!("  ⚠️  Streaming failed as expected in test environment: {}", e);
+            println!("  ⚠️  Streaming failed as expected in test environment: {e}");
         }
     }
 
@@ -101,7 +101,7 @@ async fn test_actual_monitoring_integration() {
 
     for (name, host, port) in services {
         let status = checker.check_tcp(host, port).await;
-        println!("Service {} ({}:{}) status: {:?}", name, host, port, status);
+        println!("Service {name} ({host}:{port}) status: {status:?}");
     }
 
     println!("✅ Health monitoring integration tested with real endpoints");
@@ -136,7 +136,6 @@ async fn test_what_update_manager_can_do() {
 /// 4. Deployment Verification:
 ///    - Add wait_for_ready() with proper health checks
 ///    - Add verify_deployment() to check all services are up
-
 #[cfg(test)]
 mod missing_features_that_should_exist {
 
@@ -189,13 +188,15 @@ mod actual_working_tests {
         assert!(spec.storage_gb > 0.0, "Storage must be positive");
 
         // Test that resource limits would be enforced
-        let docker_flags = format!(
-            "--cpus={} --memory={}g",
-            spec.cpu,
-            spec.memory_gb
+        let docker_flags = format!("--cpus={} --memory={}g", spec.cpu, spec.memory_gb);
+        assert!(
+            docker_flags.contains("--cpus=1"),
+            "CPU limit not set correctly"
         );
-        assert!(docker_flags.contains("--cpus=1"), "CPU limit not set correctly");
-        assert!(docker_flags.contains("--memory=2g"), "Memory limit not set correctly");
+        assert!(
+            docker_flags.contains("--memory=2g"),
+            "Memory limit not set correctly"
+        );
 
         println!("✅ Container resource limits properly configured");
     }
@@ -213,10 +214,19 @@ mod actual_working_tests {
         };
 
         // Verify health check parameters are reasonable
-        assert!(health_check.interval > 0, "Health check interval must be positive");
-        assert!(health_check.timeout > 0, "Health check timeout must be positive");
+        assert!(
+            health_check.interval > 0,
+            "Health check interval must be positive"
+        );
+        assert!(
+            health_check.timeout > 0,
+            "Health check timeout must be positive"
+        );
         assert!(health_check.retries > 0, "Health check must have retries");
-        assert!(!health_check.command.is_empty(), "Health check command cannot be empty");
+        assert!(
+            !health_check.command.is_empty(),
+            "Health check command cannot be empty"
+        );
 
         println!("✅ Health check configuration validated");
     }
@@ -233,7 +243,8 @@ mod actual_working_tests {
         env_vars.insert("BLUEPRINT_ID".to_string(), "123".to_string());
 
         // Build systemd unit content
-        let unit_content = format!(r#"
+        let unit_content = format!(
+            r#"
 [Unit]
 Description=Blueprint Service: {}
 After=network.target
@@ -250,18 +261,28 @@ WantedBy=multi-user.target
 "#,
             service_name,
             binary_path,
-            env_vars.iter()
-                .map(|(k, v)| format!("Environment={}={}", k, v))
+            env_vars
+                .iter()
+                .map(|(k, v)| format!("Environment={k}={v}"))
                 .collect::<Vec<_>>()
                 .join("\n")
         );
 
         // Verify systemd unit is valid
         assert!(unit_content.contains("[Unit]"), "Missing Unit section");
-        assert!(unit_content.contains("[Service]"), "Missing Service section");
+        assert!(
+            unit_content.contains("[Service]"),
+            "Missing Service section"
+        );
         assert!(unit_content.contains("ExecStart="), "Missing ExecStart");
-        assert!(unit_content.contains("Restart=always"), "Missing restart policy");
-        assert!(unit_content.contains("Environment="), "Missing environment variables");
+        assert!(
+            unit_content.contains("Restart=always"),
+            "Missing restart policy"
+        );
+        assert!(
+            unit_content.contains("Environment="),
+            "Missing environment variables"
+        );
 
         println!("✅ Systemd service deployment configuration validated");
     }

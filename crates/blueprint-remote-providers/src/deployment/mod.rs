@@ -12,12 +12,14 @@ pub mod update_manager;
 #[cfg(feature = "kubernetes")]
 pub mod kubernetes;
 
-pub use error_recovery::{ErrorRecovery, RecoveryStrategy, SshConnectionRecovery, CircuitBreaker, DeploymentTransaction};
+pub use error_recovery::{
+    CircuitBreaker, DeploymentTransaction, ErrorRecovery, RecoveryStrategy, SshConnectionRecovery,
+};
 pub use manager_integration::{RemoteDeploymentConfig, RemoteDeploymentExtensions};
 pub use qos_tunnel::{QosTunnel, QosTunnelManager};
 pub use ssh::SshDeploymentClient;
 pub use tracker::{DeploymentRecord, DeploymentTracker, DeploymentType};
-pub use update_manager::{UpdateManager, UpdateStrategy, DeploymentVersion};
+pub use update_manager::{DeploymentVersion, UpdateManager, UpdateStrategy};
 
 #[cfg(feature = "kubernetes")]
 pub use kubernetes::KubernetesDeploymentClient;

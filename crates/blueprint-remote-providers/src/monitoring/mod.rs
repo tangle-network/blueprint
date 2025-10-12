@@ -7,5 +7,5 @@ pub mod loki;
 
 pub use discovery::{MachineType, MachineTypeDiscovery};
 pub use health::{HealthCheckResult, HealthMonitor, HealthStatus};
-pub use logs::{LogStreamer, LogEntry, LogLevel, LogSource, LogAggregator};
-pub use loki::{LokiClient, LogAggregationPipeline};
+pub use logs::{LogAggregator, LogEntry, LogLevel, LogSource, LogStreamer};
+pub use loki::{LogAggregationPipeline, LokiClient};

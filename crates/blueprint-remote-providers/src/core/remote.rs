@@ -1,16 +1,10 @@
-
-use crate::core::error::{Error, Result};
-#[cfg(feature = "kubernetes")]
-use kube::{Client, Config};
 #[cfg(feature = "kubernetes")]
 use kube::config::Kubeconfig;
+#[cfg(feature = "kubernetes")]
+use kube::{Client, Config};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::info;
 
 /// Manages remote Kubernetes clusters for Blueprint deployments
 #[cfg(feature = "kubernetes")]
@@ -58,7 +52,8 @@ impl RemoteClusterManager {
                 std::fs::read_to_string(path)
                     .map_err(|e| Error::Other(format!("Failed to read kubeconfig: {}", e)))?
             } else {
-                let home = std::env::var("HOME").map_err(|_| Error::Other("HOME not set".into()))?;
+                let home =
+                    std::env::var("HOME").map_err(|_| Error::Other("HOME not set".into()))?;
                 let default_path = format!("{}/.kube/config", home);
                 std::fs::read_to_string(&default_path)
                     .map_err(|e| Error::Other(format!("Failed to read kubeconfig: {}", e)))?
@@ -69,7 +64,10 @@ impl RemoteClusterManager {
 
             // Set the current context to the requested one
             if !kubeconfig.contexts.iter().any(|c| c.name == *context_name) {
-                return Err(Error::Other(format!("Context '{}' not found in kubeconfig", context_name)));
+                return Err(Error::Other(format!(
+                    "Context '{}' not found in kubeconfig",
+                    context_name
+                )));
             }
             kubeconfig.current_context = Some(context_name.clone());
 
@@ -80,10 +78,7 @@ impl RemoteClusterManager {
 
         let client = Client::try_from(kube_config)?;
 
-        let cluster = RemoteCluster {
-            config,
-            client,
-        };
+        let cluster = RemoteCluster { config, client };
 
         self.clusters.write().await.insert(name.clone(), cluster);
 
@@ -95,7 +90,6 @@ impl RemoteClusterManager {
 
         Ok(())
     }
-
 
     /// Switch active cluster for deployments
     pub async fn set_active_cluster(&self, name: &str) -> Result<()> {
@@ -244,7 +238,6 @@ impl fmt::Display for CloudProvider {
         }
     }
 }
-
 
 // #[cfg(feature = "kubernetes")]
 // impl RemoteContainerRuntimeExt for ContainerRuntime {

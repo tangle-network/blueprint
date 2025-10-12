@@ -13,7 +13,7 @@ use blueprint_remote_providers::{
 use blueprint_auth::db::{RocksDb, RocksDbConfig};
 use std::sync::Arc;
 use tempfile::TempDir;
-use tracing::{info, debug};
+use blueprint_core::{info, debug};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// Initialize tracing for tests

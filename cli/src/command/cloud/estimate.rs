@@ -8,8 +8,8 @@ use color_eyre::Result;
 
 use super::CloudProvider;
 
-#[cfg(feature = "remote-deployer")]
-use blueprint_remote_providers::monitoring::discovery::{MachineTypeDiscovery, CloudCredentials};
+#[cfg(feature = "remote-providers")]
+use blueprint_remote_providers::monitoring::discovery::{CloudCredentials, MachineTypeDiscovery};
 
 #[derive(Debug, Args)]
 pub struct EstimateOptions {
@@ -95,14 +95,14 @@ pub async fn estimate(opts: EstimateOptions) -> Result<()> {
     }
     println!();
 
-    #[cfg(feature = "remote-deployer")]
+    #[cfg(feature = "remote-providers")]
     let discovery_result = {
         let mut discovery = MachineTypeDiscovery::new();
         let credentials = CloudCredentials::default(); // TODO: Load real credentials
         Some((discovery, credentials))
     };
 
-    #[cfg(not(feature = "remote-deployer"))]
+    #[cfg(not(feature = "remote-providers"))]
     let discovery_result: Option<()> = None;
 
     if opts.compare {
@@ -347,7 +347,7 @@ fn calculate_costs(
     (final_hourly, daily, monthly, total)
 }
 
-#[cfg(feature = "remote-deployer")]
+#[cfg(feature = "remote-providers")]
 async fn get_best_instance_and_price(
     provider: CloudProvider,
     cpu: f32,
@@ -377,7 +377,9 @@ async fn get_best_instance_and_price(
             None, // No price limit for estimation
         ) {
             let price = if spot {
-                machine.spot_price.unwrap_or(machine.hourly_price.unwrap_or(0.0) * 0.7)
+                machine
+                    .spot_price
+                    .unwrap_or(machine.hourly_price.unwrap_or(0.0) * 0.7)
             } else {
                 machine.hourly_price.unwrap_or(0.0)
             };
@@ -387,12 +389,11 @@ async fn get_best_instance_and_price(
 
     // Fallback to hardcoded values
     let instance_type = get_instance_type(provider, cpu, memory, gpu);
-    let (hourly, _daily, _monthly, _total) =
-        calculate_costs(provider, cpu, memory, gpu, spot, 1.0);
+    let (hourly, _daily, _monthly, _total) = calculate_costs(provider, cpu, memory, gpu, spot, 1.0);
     (instance_type, hourly)
 }
 
-#[cfg(not(feature = "remote-deployer"))]
+#[cfg(not(feature = "remote-providers"))]
 async fn get_best_instance_and_price(
     provider: CloudProvider,
     cpu: f32,
@@ -402,8 +403,7 @@ async fn get_best_instance_and_price(
     _discovery_result: &Option<()>,
 ) -> (String, f32) {
     let instance_type = get_instance_type(provider, cpu, memory, gpu);
-    let (hourly, _daily, _monthly, _total) =
-        calculate_costs(provider, cpu, memory, gpu, spot, 1.0);
+    let (hourly, _daily, _monthly, _total) = calculate_costs(provider, cpu, memory, gpu, spot, 1.0);
     (instance_type, hourly)
 }
 

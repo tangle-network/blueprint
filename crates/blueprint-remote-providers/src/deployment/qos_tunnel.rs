@@ -4,9 +4,9 @@
 //! QoS metrics from remote deployments without exposing ports publicly.
 
 use crate::core::error::{Error, Result};
+use blueprint_core::{info, warn};
 use std::process::Stdio;
 use tokio::process::{Child, Command};
-use tracing::{info, warn};
 
 /// SSH tunnel for QoS metrics collection
 pub struct QosTunnel {
@@ -79,7 +79,7 @@ impl QosTunnel {
 
         let child = cmd
             .spawn()
-            .map_err(|e| Error::ConfigurationError(format!("Failed to start SSH tunnel: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to start SSH tunnel: {e}")))?;
 
         self.process = Some(child);
 
@@ -89,7 +89,10 @@ impl QosTunnel {
         // Verify tunnel is working by checking if local port is open
         match tokio::net::TcpStream::connect(format!("127.0.0.1:{}", self.local_port)).await {
             Ok(_) => {
-                info!("QoS tunnel established successfully on localhost:{}", self.local_port);
+                info!(
+                    "QoS tunnel established successfully on localhost:{}",
+                    self.local_port
+                );
                 Ok(())
             }
             Err(e) => {
@@ -217,7 +220,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tunnel_manager() {
-        let mut manager = QosTunnelManager::new(20000);
+        let manager = QosTunnelManager::new(20000);
 
         assert_eq!(manager.active_count(), 0);
         assert_eq!(manager.next_local_port, 20000);

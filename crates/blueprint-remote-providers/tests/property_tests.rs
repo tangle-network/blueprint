@@ -1,7 +1,7 @@
 //! Property-based tests that verify ACTUAL logic, not mocked behavior
 
-use blueprint_remote_providers::core::resources::ResourceSpec;
 use blueprint_remote_providers::AwsInstanceMapper;
+use blueprint_remote_providers::core::resources::ResourceSpec;
 use proptest::prelude::*;
 
 // Test that instance mapping is deterministic
@@ -142,12 +142,12 @@ proptest! {
             "docker run -d --name test --cpus={} --memory={}g{}",
             cpu,
             memory_gb,
-            gpu_count.map(|g| format!(" --gpus={}", g)).unwrap_or_default()
+            gpu_count.map(|g| format!(" --gpus={g}")).unwrap_or_default()
         );
 
         // Verify the command contains the resource limits
-        let cpu_arg = format!("--cpus={}", cpu);
-        let mem_arg = format!("--memory={}g", memory_gb);
+        let cpu_arg = format!("--cpus={cpu}");
+        let mem_arg = format!("--memory={memory_gb}g");
 
         prop_assert!(docker_cmd.contains(&cpu_arg),
             "Docker command should contain CPU limit: {}", cpu_arg);
@@ -155,7 +155,7 @@ proptest! {
             "Docker command should contain memory limit: {}", mem_arg);
 
         if let Some(gpus) = gpu_count {
-            let gpu_arg = format!("--gpus={}", gpus);
+            let gpu_arg = format!("--gpus={gpus}");
             prop_assert!(docker_cmd.contains(&gpu_arg),
                 "Docker command should contain GPU limit: {}", gpu_arg);
         }
@@ -199,8 +199,8 @@ mod edge_case_tests {
     #[test]
     fn test_cost_optimization_with_spot() {
         let spec = ResourceSpec {
-            cpu: 4.0,  // Use higher CPU to avoid t3 instances
-            memory_gb: 16.0,  // Sufficient memory for m6i.xlarge
+            cpu: 4.0,        // Use higher CPU to avoid t3 instances
+            memory_gb: 16.0, // Sufficient memory for m6i.xlarge
             storage_gb: 100.0,
             gpu_count: None,
             allow_spot: true,

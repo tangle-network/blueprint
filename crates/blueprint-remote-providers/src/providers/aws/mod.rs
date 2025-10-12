@@ -69,7 +69,10 @@ pub mod adapter {
             ))
         }
 
-        async fn health_check_blueprint(&self, _deployment: &BlueprintDeploymentResult) -> Result<bool> {
+        async fn health_check_blueprint(
+            &self,
+            _deployment: &BlueprintDeploymentResult,
+        ) -> Result<bool> {
             Ok(false)
         }
 

@@ -33,7 +33,7 @@ jsonwebtoken = "9.3"
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 toml = "0.8"
-tracing.workspace = true
+blueprint-core = { workspace = true, features = ["tracing"] }
 
 # Blueprint dependencies (removed blueprint-manager and blueprint-qos to avoid cyclic dependency)
 # blueprint-auth.workspace = true
@@ -69,7 +69,6 @@ libc = "0.2"
 rand = "0.8"
 
 [dev-dependencies]
-blueprint-core-testing-utils.workspace = true
 mockall = "0.13"
 tempfile.workspace = true
 tokio-test = "0.4"

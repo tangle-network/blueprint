@@ -11,8 +11,11 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 // Import security-hardened components
+#[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::security::SecureCloudCredentials;
+#[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::auth_integration::RemoteServiceAuth;
+#[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::core::remote::CloudProvider as RemoteCloudProvider;
 
 /// Supported cloud providers for Blueprint deployment (maps to secure providers).

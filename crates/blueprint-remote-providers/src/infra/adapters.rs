@@ -9,9 +9,9 @@ use crate::core::remote::CloudProvider;
 use crate::infra::traits::CloudProviderAdapter;
 #[cfg(feature = "aws")]
 pub use crate::providers::aws::AwsAdapter;
-pub use crate::providers::gcp::GcpAdapter;
 pub use crate::providers::azure::adapter::AzureAdapter;
 pub use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
+pub use crate::providers::gcp::GcpAdapter;
 pub use crate::providers::vultr::adapter::VultrAdapter;
 use std::sync::Arc;
 
@@ -63,7 +63,11 @@ impl AdapterFactory {
     pub fn is_supported(provider: &CloudProvider) -> bool {
         matches!(
             provider,
-            CloudProvider::AWS | CloudProvider::GCP | CloudProvider::Azure | CloudProvider::DigitalOcean | CloudProvider::Vultr
+            CloudProvider::AWS
+                | CloudProvider::GCP
+                | CloudProvider::Azure
+                | CloudProvider::DigitalOcean
+                | CloudProvider::Vultr
         )
     }
 }

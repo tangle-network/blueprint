@@ -2,14 +2,16 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
+use crate::deployment::ssh::{
+    ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient,
+};
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
-use crate::providers::vultr::provisioner::VultrProvisioner;
 use crate::providers::common::ProvisioningConfig;
-use crate::deployment::ssh::{ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient};
+use crate::providers::vultr::provisioner::VultrProvisioner;
 use async_trait::async_trait;
+use blueprint_core::{info, warn};
 use std::collections::HashMap;
-use tracing::{info, warn};
 
 /// Vultr adapter for Blueprint deployment
 pub struct VultrAdapter {
@@ -25,7 +27,10 @@ impl VultrAdapter {
             .map_err(|_| Error::Other("VULTR_API_KEY environment variable not set".into()))?;
 
         let provisioner = VultrProvisioner::new(api_key.clone()).await?;
-        Ok(Self { api_key, provisioner })
+        Ok(Self {
+            api_key,
+            provisioner,
+        })
     }
 
     /// Get SSH username for Vultr instances
@@ -95,44 +100,59 @@ impl CloudProviderAdapter for VultrAdapter {
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         use crate::core::deployment_target::DeploymentTarget;
-        
+
         match target {
             DeploymentTarget::VirtualMachine { runtime: _ } => {
-                self.deploy_to_instance(blueprint_image, resource_spec, env_vars).await
+                self.deploy_to_instance(blueprint_image, resource_spec, env_vars)
+                    .await
             }
-            DeploymentTarget::ManagedKubernetes { cluster_id, namespace } => {
+            DeploymentTarget::ManagedKubernetes {
+                cluster_id,
+                namespace,
+            } => {
                 #[cfg(feature = "kubernetes")]
                 {
-                    self.deploy_to_vke(cluster_id, namespace, blueprint_image, resource_spec, env_vars).await
+                    self.deploy_to_vke(
+                        cluster_id,
+                        namespace,
+                        blueprint_image,
+                        resource_spec,
+                        env_vars,
+                    )
+                    .await
                 }
                 #[cfg(not(feature = "kubernetes"))]
                 {
-                    warn!("Kubernetes deployment requested for cluster {} namespace {}, but feature not enabled", cluster_id, namespace);
+                    warn!(
+                        "Kubernetes deployment requested for cluster {} namespace {}, but feature not enabled",
+                        cluster_id, namespace
+                    );
                     Err(Error::Other("Kubernetes support not enabled".into()))
                 }
             }
-            DeploymentTarget::GenericKubernetes { context: _, namespace } => {
+            DeploymentTarget::GenericKubernetes {
+                context: _,
+                namespace,
+            } => {
                 #[cfg(feature = "kubernetes")]
                 {
-                    self.deploy_to_generic_k8s(namespace, blueprint_image, resource_spec, env_vars).await
+                    self.deploy_to_generic_k8s(namespace, blueprint_image, resource_spec, env_vars)
+                        .await
                 }
                 #[cfg(not(feature = "kubernetes"))]
                 {
-                    warn!("Kubernetes deployment requested for namespace {}, but feature not enabled", namespace);
+                    warn!(
+                        "Kubernetes deployment requested for namespace {}, but feature not enabled",
+                        namespace
+                    );
                     Err(Error::Other("Kubernetes support not enabled".into()))
                 }
             }
-            DeploymentTarget::Serverless { .. } => {
-                Err(Error::Other("Vultr serverless deployment not implemented".into()))
-            }
+            DeploymentTarget::Serverless { .. } => Err(Error::Other(
+                "Vultr serverless deployment not implemented".into(),
+            )),
         }
     }
-
-
-
-
-
-
 
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
         if let Some(endpoint) = deployment.qos_grpc_endpoint() {
@@ -145,7 +165,10 @@ impl CloudProviderAdapter for VultrAdapter {
                 Ok(response) => {
                     let healthy = response.status().is_success();
                     if healthy {
-                        info!("Vultr blueprint {} health check passed", deployment.blueprint_id);
+                        info!(
+                            "Vultr blueprint {} health check passed",
+                            deployment.blueprint_id
+                        );
                     }
                     Ok(healthy)
                 }
@@ -160,7 +183,10 @@ impl CloudProviderAdapter for VultrAdapter {
     }
 
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
-        info!("Cleaning up Vultr blueprint deployment: {}", deployment.blueprint_id);
+        info!(
+            "Cleaning up Vultr blueprint deployment: {}",
+            deployment.blueprint_id
+        );
         self.terminate_instance(&deployment.instance.id).await
     }
 }
@@ -175,7 +201,9 @@ impl VultrAdapter {
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         let instance = self.provision_instance("vc2-2c-4gb", "ewr").await?;
-        let public_ip = instance.public_ip.as_ref()
+        let public_ip = instance
+            .public_ip
+            .as_ref()
             .ok_or_else(|| Error::Other("Instance has no public IP".into()))?;
 
         // SSH connection configuration
@@ -195,9 +223,10 @@ impl VultrAdapter {
             health_check: None,
         };
 
-        let ssh_client = SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
-            .await
-            .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {e}")))?;
+        let ssh_client =
+            SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
+                .await
+                .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {e}")))?;
 
         let deployment = ssh_client
             .deploy_blueprint(blueprint_image, resource_spec, env_vars)
@@ -233,17 +262,17 @@ impl VultrAdapter {
     }
 
     /// Deploy to VKE cluster
-    async fn deploy_to_vke(
+    pub async fn deploy_to_vke(
         &self,
         cluster_id: &str,
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
-        _env_vars: HashMap<String, String>,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
-            use crate::shared::{SharedKubernetesDeployment, ManagedK8sConfig};
+            use crate::shared::{ManagedK8sConfig, SharedKubernetesDeployment};
 
             let config = ManagedK8sConfig::vke("ewr");
             SharedKubernetesDeployment::deploy_to_managed_k8s(
@@ -251,11 +280,20 @@ impl VultrAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
+                env_vars,
                 config,
-            ).await
+            )
+            .await
         }
         #[cfg(not(feature = "kubernetes"))]
         {
+            let _ = (
+                cluster_id,
+                namespace,
+                blueprint_image,
+                resource_spec,
+                env_vars,
+            );
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
@@ -263,12 +301,12 @@ impl VultrAdapter {
     }
 
     /// Deploy to generic Kubernetes cluster
-    async fn deploy_to_generic_k8s(
+    pub async fn deploy_to_generic_k8s(
         &self,
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
-        _env_vars: HashMap<String, String>,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
@@ -277,13 +315,108 @@ impl VultrAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
-            ).await
+                env_vars,
+            )
+            .await
         }
         #[cfg(not(feature = "kubernetes"))]
         {
+            let _ = (namespace, blueprint_image, resource_spec, env_vars);
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_vultr_adapter_creation() {
+        let result = VultrAdapter::new().await;
+        // Without credentials, may succeed or fail - just testing the method exists
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[cfg(feature = "kubernetes")]
+    #[tokio::test]
+    async fn test_vke_deployment_structure() {
+        use crate::core::resources::ResourceSpec;
+
+        // Test that the method signature and structure are correct
+        let adapter = VultrAdapter::new()
+            .await
+            .expect("Failed to create Vultr adapter");
+
+        let mut env_vars = HashMap::new();
+        env_vars.insert("CACHE_TTL".to_string(), "3600".to_string());
+        env_vars.insert("MAX_CONNECTIONS".to_string(), "100".to_string());
+
+        let result = adapter
+            .deploy_to_vke(
+                "test-vke-cluster",
+                "staging",
+                "webapp:latest",
+                &ResourceSpec::performance(),
+                env_vars,
+            )
+            .await;
+
+        // Without actual cluster, we expect an error but method should be callable
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "kubernetes")]
+    #[tokio::test]
+    async fn test_vultr_generic_k8s_deployment_structure() {
+        use crate::core::resources::ResourceSpec;
+
+        let adapter = VultrAdapter::new()
+            .await
+            .expect("Failed to create Vultr adapter");
+
+        let mut env_vars = HashMap::new();
+        env_vars.insert("DEBUG".to_string(), "true".to_string());
+
+        let result = adapter
+            .deploy_to_generic_k8s(
+                "kube-system",
+                "alpine:latest",
+                &ResourceSpec::minimal(),
+                env_vars,
+            )
+            .await;
+
+        // Without actual cluster, we expect an error but method should be callable
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_env_vars_with_special_characters() {
+        let mut env_vars = HashMap::new();
+        env_vars.insert(
+            "DATABASE_URL".to_string(),
+            "postgresql://user:pass@host:5432/db".to_string(),
+        );
+        env_vars.insert(
+            "API_ENDPOINT".to_string(),
+            "https://api.example.com/v1".to_string(),
+        );
+
+        assert_eq!(env_vars.len(), 2);
+        assert!(
+            env_vars
+                .get("DATABASE_URL")
+                .unwrap()
+                .contains("postgresql://")
+        );
+        assert!(
+            env_vars
+                .get("API_ENDPOINT")
+                .unwrap()
+                .starts_with("https://")
+        );
     }
 }

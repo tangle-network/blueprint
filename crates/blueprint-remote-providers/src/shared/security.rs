@@ -4,7 +4,7 @@
 //! that work consistently across all cloud providers.
 
 use crate::core::error::{Error, Result};
-use tracing::info;
+use blueprint_core::info;
 
 /// Standard Blueprint security configuration
 #[derive(Debug, Clone)]
@@ -38,13 +38,13 @@ pub struct SecurityRule {
     pub priority: u16,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Direction {
     Ingress,
     Egress,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Protocol {
     Tcp,
     Udp,
@@ -52,9 +52,19 @@ pub enum Protocol {
 }
 
 impl BlueprintSecurityConfig {
-    /// Get standard Blueprint security rules
+    /// Get standard Blueprint security rules with configurable source CIDRs
+    ///
+    /// Source CIDRs can be restricted via environment variables:
+    /// - BLUEPRINT_ALLOWED_SSH_CIDRS: Comma-separated CIDRs for SSH access
+    /// - BLUEPRINT_ALLOWED_QOS_CIDRS: Comma-separated CIDRs for QoS metrics access
+    ///
+    /// Default: 0.0.0.0/0 (all internet) for development convenience
     pub fn standard_rules(&self) -> Vec<SecurityRule> {
         let mut rules = Vec::new();
+
+        // Get allowed source CIDRs from environment or use default
+        let ssh_cidrs = Self::get_allowed_cidrs("BLUEPRINT_ALLOWED_SSH_CIDRS");
+        let qos_cidrs = Self::get_allowed_cidrs("BLUEPRINT_ALLOWED_QOS_CIDRS");
 
         if self.ssh_access {
             rules.push(SecurityRule {
@@ -62,7 +72,7 @@ impl BlueprintSecurityConfig {
                 direction: Direction::Ingress,
                 protocol: Protocol::Tcp,
                 ports: vec![22],
-                source_cidrs: vec!["0.0.0.0/0".to_string()], // TODO: Restrict in production
+                source_cidrs: ssh_cidrs,
                 destination_cidrs: vec![],
                 priority: 1000,
             });
@@ -74,7 +84,7 @@ impl BlueprintSecurityConfig {
                 direction: Direction::Ingress,
                 protocol: Protocol::Tcp,
                 ports: vec![8080, 9615, 9944],
-                source_cidrs: vec!["0.0.0.0/0".to_string()], // TODO: Restrict in production
+                source_cidrs: qos_cidrs,
                 destination_cidrs: vec![],
                 priority: 1000,
             });
@@ -95,15 +105,37 @@ impl BlueprintSecurityConfig {
         rules.extend(self.custom_rules.clone());
         rules
     }
+
+    /// Get allowed CIDRs from environment variable or default to 0.0.0.0/0
+    fn get_allowed_cidrs(env_var: &str) -> Vec<String> {
+        std::env::var(env_var)
+            .ok()
+            .map(|cidrs| {
+                cidrs
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            })
+            .filter(|v: &Vec<String>| !v.is_empty())
+            .unwrap_or_else(|| vec!["0.0.0.0/0".to_string()])
+    }
 }
 
 /// Provider-specific security group manager
 pub trait SecurityGroupManager {
     /// Create or update security group with Blueprint rules
-    async fn ensure_security_group(&self, name: &str, config: &BlueprintSecurityConfig) -> Result<String>;
+    fn ensure_security_group(
+        &self,
+        name: &str,
+        config: &BlueprintSecurityConfig,
+    ) -> impl std::future::Future<Output = Result<String>> + Send;
 
     /// Delete security group
-    async fn delete_security_group(&self, group_id: &str) -> Result<()>;
+    fn delete_security_group(
+        &self,
+        group_id: &str,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 }
 
 /// Azure Network Security Group implementation
@@ -123,97 +155,123 @@ impl AzureNsgManager {
 }
 
 impl SecurityGroupManager for AzureNsgManager {
-    async fn ensure_security_group(&self, name: &str, config: &BlueprintSecurityConfig) -> Result<String> {
-        let access_token = std::env::var("AZURE_ACCESS_TOKEN")
-            .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
+    fn ensure_security_group(
+        &self,
+        name: &str,
+        config: &BlueprintSecurityConfig,
+    ) -> impl std::future::Future<Output = Result<String>> + Send {
+        let name = name.to_string();
+        let config = config.clone();
+        let subscription_id = self.subscription_id.clone();
+        let resource_group = self.resource_group.clone();
 
-        let client = reqwest::Client::new();
-        let url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/networkSecurityGroups/{}?api-version=2023-09-01",
-            self.subscription_id, self.resource_group, name
-        );
+        async move {
+            let access_token = std::env::var("AZURE_ACCESS_TOKEN")
+                .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
 
-        let rules = config.standard_rules();
-        let mut security_rules = Vec::new();
+            let client = reqwest::Client::new();
+            let url = format!(
+                "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Network/networkSecurityGroups/{name}?api-version=2023-09-01"
+            );
 
-        for (index, rule) in rules.iter().enumerate() {
-            let direction = match rule.direction {
-                Direction::Ingress => "Inbound",
-                Direction::Egress => "Outbound",
-            };
+            let rules = config.standard_rules();
+            let mut security_rules = Vec::new();
 
-            let protocol = match rule.protocol {
-                Protocol::Tcp => "Tcp",
-                Protocol::Udp => "Udp",
-                Protocol::Icmp => "Icmp",
-            };
+            for (index, rule) in rules.iter().enumerate() {
+                let direction = match rule.direction {
+                    Direction::Ingress => "Inbound",
+                    Direction::Egress => "Outbound",
+                };
 
-            let port_ranges = if rule.ports.len() == 1 {
-                rule.ports[0].to_string()
-            } else {
-                rule.ports.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(",")
-            };
+                let protocol = match rule.protocol {
+                    Protocol::Tcp => "Tcp",
+                    Protocol::Udp => "Udp",
+                    Protocol::Icmp => "Icmp",
+                };
 
-            security_rules.push(serde_json::json!({
+                let port_ranges = if rule.ports.len() == 1 {
+                    rule.ports[0].to_string()
+                } else {
+                    rule.ports
+                        .iter()
+                        .map(|p| p.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                };
+
+                security_rules.push(serde_json::json!({
                 "name": format!("{}-{}", rule.name, index),
                 "properties": {
                     "protocol": protocol,
                     "sourcePortRange": "*",
                     "destinationPortRange": port_ranges,
-                    "sourceAddressPrefix": rule.source_cidrs.get(0).unwrap_or(&"*".to_string()),
+                    "sourceAddressPrefix": rule.source_cidrs.first().unwrap_or(&"*".to_string()),
                     "destinationAddressPrefix": "*",
                     "access": "Allow",
                     "priority": rule.priority + index as u16,
                     "direction": direction
                 }
             }));
-        }
+            }
 
-        let nsg_body = serde_json::json!({
-            "location": "eastus",
-            "properties": {
-                "securityRules": security_rules
-            }
-        });
+            let nsg_body = serde_json::json!({
+                "location": "eastus",
+                "properties": {
+                    "securityRules": security_rules
+                }
+            });
 
-        match client
-            .put(&url)
-            .bearer_auth(&access_token)
-            .json(&nsg_body)
-            .send()
-            .await
-        {
-            Ok(response) if response.status().is_success() => {
-                info!("Created Azure NSG: {}", name);
-                Ok(name.to_string())
-            }
-            Ok(response) => {
-                let error_text = response.text().await.unwrap_or_default();
-                Err(Error::ConfigurationError(format!("Failed to create Azure NSG: {}", error_text)))
-            }
-            Err(e) => {
-                Err(Error::ConfigurationError(format!("Failed to create Azure NSG: {}", e)))
+            match client
+                .put(&url)
+                .bearer_auth(&access_token)
+                .json(&nsg_body)
+                .send()
+                .await
+            {
+                Ok(response) if response.status().is_success() => {
+                    info!("Created Azure NSG: {}", name);
+                    Ok(name.to_string())
+                }
+                Ok(response) => {
+                    let error_text = response.text().await.unwrap_or_default();
+                    Err(Error::ConfigurationError(format!(
+                        "Failed to create Azure NSG: {error_text}"
+                    )))
+                }
+                Err(e) => Err(Error::ConfigurationError(format!(
+                    "Failed to create Azure NSG: {e}"
+                ))),
             }
         }
     }
 
-    async fn delete_security_group(&self, group_id: &str) -> Result<()> {
-        let access_token = std::env::var("AZURE_ACCESS_TOKEN")
-            .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
+    fn delete_security_group(
+        &self,
+        group_id: &str,
+    ) -> impl std::future::Future<Output = Result<()>> + Send {
+        let group_id = group_id.to_string();
+        let subscription_id = self.subscription_id.clone();
+        let resource_group = self.resource_group.clone();
 
-        let client = reqwest::Client::new();
-        let url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/networkSecurityGroups/{}?api-version=2023-09-01",
-            self.subscription_id, self.resource_group, group_id
-        );
+        async move {
+            let access_token = std::env::var("AZURE_ACCESS_TOKEN")
+                .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
 
-        match client.delete(&url).bearer_auth(&access_token).send().await {
-            Ok(response) if response.status().is_success() => {
-                info!("Deleted Azure NSG: {}", group_id);
-                Ok(())
+            let client = reqwest::Client::new();
+            let url = format!(
+                "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Network/networkSecurityGroups/{group_id}?api-version=2023-09-01"
+            );
+
+            match client.delete(&url).bearer_auth(&access_token).send().await {
+                Ok(response) if response.status().is_success() => {
+                    info!("Deleted Azure NSG: {}", group_id);
+                    Ok(())
+                }
+                Ok(_) => Ok(()), // NSG already deleted
+                Err(e) => Err(Error::ConfigurationError(format!(
+                    "Failed to delete Azure NSG: {e}"
+                ))),
             }
-            Ok(_) => Ok(()), // NSG already deleted
-            Err(e) => Err(Error::ConfigurationError(format!("Failed to delete Azure NSG: {}", e)))
         }
     }
 }
@@ -231,7 +289,11 @@ impl DigitalOceanFirewallManager {
 }
 
 impl SecurityGroupManager for DigitalOceanFirewallManager {
-    async fn ensure_security_group(&self, name: &str, config: &BlueprintSecurityConfig) -> Result<String> {
+    async fn ensure_security_group(
+        &self,
+        name: &str,
+        config: &BlueprintSecurityConfig,
+    ) -> Result<String> {
         let client = reqwest::Client::new();
         let url = "https://api.digitalocean.com/v2/firewalls";
 
@@ -240,7 +302,12 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
         let mut outbound_rules = Vec::new();
 
         for rule in rules {
-            let ports = rule.ports.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(",");
+            let ports = rule
+                .ports
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
 
             let protocol = match rule.protocol {
                 Protocol::Tcp => "tcp",
@@ -260,7 +327,8 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
                 Direction::Ingress => inbound_rules.push(rule_json),
                 Direction::Egress => {
                     let mut egress_rule = rule_json;
-                    egress_rule["destinations"] = serde_json::json!({"addresses": rule.destination_cidrs});
+                    egress_rule["destinations"] =
+                        serde_json::json!({"addresses": rule.destination_cidrs});
                     egress_rule.as_object_mut().unwrap().remove("sources");
                     outbound_rules.push(egress_rule);
                 }
@@ -282,36 +350,47 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
             .await
         {
             Ok(response) if response.status().is_success() => {
-                let json: serde_json::Value = response.json().await
-                    .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+                let json: serde_json::Value = response.json().await.map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to parse response: {e}"))
+                })?;
 
-                let firewall_id = json["firewall"]["id"].as_str()
-                    .ok_or_else(|| Error::ConfigurationError("No firewall ID in response".into()))?;
+                let firewall_id = json["firewall"]["id"].as_str().ok_or_else(|| {
+                    Error::ConfigurationError("No firewall ID in response".into())
+                })?;
 
                 info!("Created DigitalOcean firewall: {} ({})", name, firewall_id);
                 Ok(firewall_id.to_string())
             }
             Ok(response) => {
                 let error_text = response.text().await.unwrap_or_default();
-                Err(Error::ConfigurationError(format!("Failed to create DO firewall: {}", error_text)))
+                Err(Error::ConfigurationError(format!(
+                    "Failed to create DO firewall: {error_text}"
+                )))
             }
-            Err(e) => {
-                Err(Error::ConfigurationError(format!("Failed to create DO firewall: {}", e)))
-            }
+            Err(e) => Err(Error::ConfigurationError(format!(
+                "Failed to create DO firewall: {e}"
+            ))),
         }
     }
 
     async fn delete_security_group(&self, group_id: &str) -> Result<()> {
         let client = reqwest::Client::new();
-        let url = format!("https://api.digitalocean.com/v2/firewalls/{}", group_id);
+        let url = format!("https://api.digitalocean.com/v2/firewalls/{group_id}");
 
-        match client.delete(&url).bearer_auth(&self.api_token).send().await {
+        match client
+            .delete(&url)
+            .bearer_auth(&self.api_token)
+            .send()
+            .await
+        {
             Ok(response) if response.status().is_success() => {
                 info!("Deleted DigitalOcean firewall: {}", group_id);
                 Ok(())
             }
             Ok(_) => Ok(()), // Firewall already deleted
-            Err(e) => Err(Error::ConfigurationError(format!("Failed to delete DO firewall: {}", e)))
+            Err(e) => Err(Error::ConfigurationError(format!(
+                "Failed to delete DO firewall: {e}"
+            ))),
         }
     }
 }
@@ -329,7 +408,11 @@ impl VultrFirewallManager {
 }
 
 impl SecurityGroupManager for VultrFirewallManager {
-    async fn ensure_security_group(&self, name: &str, config: &BlueprintSecurityConfig) -> Result<String> {
+    async fn ensure_security_group(
+        &self,
+        name: &str,
+        config: &BlueprintSecurityConfig,
+    ) -> Result<String> {
         let client = reqwest::Client::new();
         let url = "https://api.vultr.com/v2/firewalls";
 
@@ -344,28 +427,39 @@ impl SecurityGroupManager for VultrFirewallManager {
             .json(&firewall_body)
             .send()
             .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create Vultr firewall: {}", e)))?;
+            .map_err(|e| {
+                Error::ConfigurationError(format!("Failed to create Vultr firewall: {e}"))
+            })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!("Failed to create Vultr firewall: {}", error_text)));
+            return Err(Error::ConfigurationError(format!(
+                "Failed to create Vultr firewall: {error_text}"
+            )));
         }
 
-        let json: serde_json::Value = response.json().await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {e}")))?;
 
-        let firewall_id = json["firewall_group"]["id"].as_str()
+        let firewall_id = json["firewall_group"]["id"]
+            .as_str()
             .ok_or_else(|| Error::ConfigurationError("No firewall ID in response".into()))?;
 
         // Add rules to the firewall group
         let rules = config.standard_rules();
-        let rules_url = format!("https://api.vultr.com/v2/firewalls/{}/rules", firewall_id);
+        let rules_url = format!("https://api.vultr.com/v2/firewalls/{firewall_id}/rules");
 
         for rule in rules {
             let port_range = if rule.ports.len() == 1 {
                 format!("{}", rule.ports[0])
             } else {
-                format!("{}:{}", rule.ports.iter().min().unwrap(), rule.ports.iter().max().unwrap())
+                format!(
+                    "{}:{}",
+                    rule.ports.iter().min().unwrap(),
+                    rule.ports.iter().max().unwrap()
+                )
             };
 
             let protocol = match rule.protocol {
@@ -382,7 +476,7 @@ impl SecurityGroupManager for VultrFirewallManager {
             let rule_body = serde_json::json!({
                 "ip_type": "v4",
                 "protocol": protocol,
-                "subnet": rule.source_cidrs.get(0).unwrap_or(&"0.0.0.0/0".to_string()),
+                "subnet": rule.source_cidrs.first().unwrap_or(&"0.0.0.0/0".to_string()),
                 "subnet_size": 0,
                 "port": port_range,
                 "action": action
@@ -402,7 +496,7 @@ impl SecurityGroupManager for VultrFirewallManager {
 
     async fn delete_security_group(&self, group_id: &str) -> Result<()> {
         let client = reqwest::Client::new();
-        let url = format!("https://api.vultr.com/v2/firewalls/{}", group_id);
+        let url = format!("https://api.vultr.com/v2/firewalls/{group_id}");
 
         match client.delete(&url).bearer_auth(&self.api_key).send().await {
             Ok(response) if response.status().is_success() => {
@@ -410,7 +504,167 @@ impl SecurityGroupManager for VultrFirewallManager {
                 Ok(())
             }
             Ok(_) => Ok(()), // Firewall already deleted
-            Err(e) => Err(Error::ConfigurationError(format!("Failed to delete Vultr firewall: {}", e)))
+            Err(e) => Err(Error::ConfigurationError(format!(
+                "Failed to delete Vultr firewall: {e}"
+            ))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_cidr_configuration() {
+        // Without environment variables, should default to 0.0.0.0/0
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
+
+        let config = BlueprintSecurityConfig::default();
+        let rules = config.standard_rules();
+
+        // Should have SSH, QoS, and HTTPS rules
+        assert_eq!(rules.len(), 3);
+
+        // SSH rule should have default CIDR
+        let ssh_rule = rules.iter().find(|r| r.name == "blueprint-ssh").unwrap();
+        assert_eq!(ssh_rule.source_cidrs, vec!["0.0.0.0/0"]);
+        assert_eq!(ssh_rule.ports, vec![22]);
+        assert!(matches!(ssh_rule.direction, Direction::Ingress));
+        assert!(matches!(ssh_rule.protocol, Protocol::Tcp));
+
+        // QoS rule should have default CIDR
+        let qos_rule = rules.iter().find(|r| r.name == "blueprint-qos").unwrap();
+        assert_eq!(qos_rule.source_cidrs, vec!["0.0.0.0/0"]);
+        assert_eq!(qos_rule.ports, vec![8080, 9615, 9944]);
+    }
+
+    #[test]
+    fn test_custom_ssh_cidr_configuration() {
+        // Set custom SSH CIDR
+        unsafe {
+            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "10.0.0.0/8");
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
+
+        let config = BlueprintSecurityConfig::default();
+        let rules = config.standard_rules();
+
+        let ssh_rule = rules.iter().find(|r| r.name == "blueprint-ssh").unwrap();
+        assert_eq!(ssh_rule.source_cidrs, vec!["10.0.0.0/8"]);
+
+        // QoS should still use default
+        let qos_rule = rules.iter().find(|r| r.name == "blueprint-qos").unwrap();
+        assert_eq!(qos_rule.source_cidrs, vec!["0.0.0.0/0"]);
+
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+        }
+    }
+
+    #[test]
+    fn test_multiple_cidrs_configuration() {
+        // Set multiple CIDRs comma-separated
+        unsafe {
+            std::env::set_var(
+                "BLUEPRINT_ALLOWED_SSH_CIDRS",
+                "10.0.0.0/8, 192.168.1.0/24, 172.16.0.0/12",
+            );
+        }
+
+        let config = BlueprintSecurityConfig::default();
+        let rules = config.standard_rules();
+
+        let ssh_rule = rules.iter().find(|r| r.name == "blueprint-ssh").unwrap();
+        assert_eq!(
+            ssh_rule.source_cidrs,
+            vec!["10.0.0.0/8", "192.168.1.0/24", "172.16.0.0/12"]
+        );
+
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+        }
+    }
+
+    #[test]
+    fn test_empty_cidr_fallback() {
+        // Empty string should fall back to default
+        unsafe {
+            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "");
+        }
+
+        let config = BlueprintSecurityConfig::default();
+        let rules = config.standard_rules();
+
+        let ssh_rule = rules.iter().find(|r| r.name == "blueprint-ssh").unwrap();
+        assert_eq!(ssh_rule.source_cidrs, vec!["0.0.0.0/0"]);
+
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+        }
+    }
+
+    #[test]
+    fn test_whitespace_trimming() {
+        // Should trim whitespace from CIDRs
+        unsafe {
+            std::env::set_var(
+                "BLUEPRINT_ALLOWED_QOS_CIDRS",
+                "  10.0.0.0/8  ,   192.168.1.0/24  ",
+            );
+        }
+
+        let config = BlueprintSecurityConfig::default();
+        let rules = config.standard_rules();
+
+        let qos_rule = rules.iter().find(|r| r.name == "blueprint-qos").unwrap();
+        assert_eq!(qos_rule.source_cidrs, vec!["10.0.0.0/8", "192.168.1.0/24"]);
+
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
+    }
+
+    #[test]
+    fn test_custom_rules() {
+        let mut config = BlueprintSecurityConfig::default();
+        config.custom_rules.push(SecurityRule {
+            name: "custom-app".to_string(),
+            direction: Direction::Ingress,
+            protocol: Protocol::Tcp,
+            ports: vec![3000],
+            source_cidrs: vec!["192.168.1.0/24".to_string()],
+            destination_cidrs: vec![],
+            priority: 2000,
+        });
+
+        let rules = config.standard_rules();
+
+        // Should have SSH, QoS, HTTPS, and custom rule
+        assert_eq!(rules.len(), 4);
+
+        let custom_rule = rules.iter().find(|r| r.name == "custom-app").unwrap();
+        assert_eq!(custom_rule.ports, vec![3000]);
+        assert_eq!(custom_rule.source_cidrs, vec!["192.168.1.0/24"]);
+    }
+
+    #[test]
+    fn test_disabled_rules() {
+        let config = BlueprintSecurityConfig {
+            ssh_access: false,
+            qos_ports: false,
+            https_outbound: true,
+            custom_rules: Vec::new(),
+        };
+
+        let rules = config.standard_rules();
+
+        // Should only have HTTPS rule
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].name, "blueprint-https-outbound");
+        assert!(matches!(rules[0].direction, Direction::Egress));
     }
 }

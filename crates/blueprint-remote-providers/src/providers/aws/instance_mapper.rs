@@ -12,7 +12,7 @@ pub struct AwsInstanceMapper;
 impl AwsInstanceMapper {
     /// Map resource spec to optimal AWS instance type using real pricing data
     pub async fn map_async(spec: &ResourceSpec, region: &str) -> Result<InstanceSelection> {
-        let mut fetcher = PricingFetcher::new();
+        let mut fetcher = PricingFetcher::new_or_default();
 
         // Set reasonable max price based on requirements
         let max_price = if spec.gpu_count.is_some() {
@@ -66,7 +66,7 @@ impl AwsInstanceMapper {
             (cpu, mem, _) if cpu <= 4.0 && mem <= 16.0 => "m6i.xlarge",
             (cpu, mem, _) if cpu <= 8.0 && mem <= 32.0 => "m6i.2xlarge",
             (cpu, mem, _) if cpu <= 16.0 && mem <= 64.0 => "m6i.4xlarge",
-            (cpu, _, _) if cpu > 48.0 => "c6i.12xlarge",       // Compute optimized
+            (cpu, _, _) if cpu > 48.0 => "c6i.12xlarge", // Compute optimized
             _ => "m6i.large",
         };
 
@@ -111,11 +111,7 @@ mod tests {
 
     #[test]
     fn test_gpu_instance_selection() {
-        let test_cases = vec![
-            (1, "g4dn.xlarge"),
-            (4, "p3.8xlarge"),
-            (8, "p4d.24xlarge"),
-        ];
+        let test_cases = vec![(1, "g4dn.xlarge"), (4, "p3.8xlarge"), (8, "p4d.24xlarge")];
 
         for (gpu_count, expected) in test_cases {
             let mut spec = ResourceSpec::performance();
@@ -124,8 +120,7 @@ mod tests {
             let result = AwsInstanceMapper::map(&spec);
             assert_eq!(
                 result.instance_type, expected,
-                "GPU count {} should map to {}",
-                gpu_count, expected
+                "GPU count {gpu_count} should map to {expected}"
             );
             assert!(!result.spot_capable); // GPU instances typically not spot
         }
@@ -176,7 +171,10 @@ mod tests {
         // Test GPU instances never allow spot
         spec.gpu_count = Some(1);
         let result = AwsInstanceMapper::map(&spec);
-        assert!(!result.spot_capable, "GPU instances should not be spot-capable");
+        assert!(
+            !result.spot_capable,
+            "GPU instances should not be spot-capable"
+        );
     }
 
     #[tokio::test]

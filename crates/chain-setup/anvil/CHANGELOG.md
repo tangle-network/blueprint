@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-anvil-v0.1.0-alpha.19...blueprint-chain-setup-anvil-v0.1.0-alpha.20) - 2025-10-02
+
+### Other
+
+- bump eigensdk & alloy version (#1164)
+
 ## [0.1.0-alpha.19](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-anvil-v0.1.0-alpha.18...blueprint-chain-setup-anvil-v0.1.0-alpha.19) - 2025-08-20
 
 ### Other

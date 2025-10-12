@@ -75,12 +75,15 @@ impl ProvisionedInfrastructure {
 
     /// Check if a port is open on the given host
     async fn check_port_open(&self, host: &str, port: u16) -> bool {
+        use std::time::Duration;
         use tokio::net::TcpStream;
         use tokio::time::timeout;
-        use std::time::Duration;
 
         let addr = format!("{host}:{port}");
-        matches!(timeout(Duration::from_secs(5), TcpStream::connect(&addr)).await, Ok(Ok(_)))
+        matches!(
+            timeout(Duration::from_secs(5), TcpStream::connect(&addr)).await,
+            Ok(Ok(_))
+        )
     }
 
     /// Get connection endpoint for this infrastructure

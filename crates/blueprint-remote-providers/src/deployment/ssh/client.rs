@@ -1,26 +1,23 @@
-//! SSH-based deployment for bare metal servers and remote Docker hosts
-//!
-//! Provides direct SSH deployment capabilities for Blueprint instances
-//! to bare metal servers or any SSH-accessible host with Docker/Podman.
+//! SSH deployment client implementation
 
+use super::types::*;
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::deployment::secure_commands::{SecureConfigManager, SecureContainerCommands};
 use crate::deployment::secure_ssh::{SecureSshClient, SecureSshConnection};
+use crate::monitoring::health::{ApplicationHealthChecker, HealthStatus};
 #[allow(unused_imports)]
 use crate::monitoring::logs::LogStreamer;
-use crate::monitoring::health::{ApplicationHealthChecker, HealthStatus};
-use serde::{Deserialize, Serialize};
+use blueprint_core::{debug, info, warn};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tokio::sync::mpsc;
-use tracing::{debug, info, warn};
 
 /// SSH deployment client for bare metal servers
 pub struct SshDeploymentClient {
     /// Secure SSH connection
     ssh_client: SecureSshClient,
-    /// SSH connection parameters  
+    /// SSH connection parameters
     connection: SshConnection,
     /// Remote runtime type (Docker, Podman, Containerd)
     runtime: ContainerRuntime,
@@ -36,12 +33,10 @@ impl SshDeploymentClient {
         deployment_config: DeploymentConfig,
     ) -> Result<Self> {
         // Create secure SSH connection with validation
-        let secure_connection = SecureSshConnection::new(
-            connection.host.clone(),
-            connection.user.clone(),
-        )?
-        .with_port(connection.port)?
-        .with_strict_host_checking(false); // Disabled for dynamic cloud instances
+        let secure_connection =
+            SecureSshConnection::new(connection.host.clone(), connection.user.clone())?
+                .with_port(connection.port)?
+                .with_strict_host_checking(false); // Disabled for dynamic cloud instances
 
         let secure_connection = if let Some(ref key_path) = connection.key_path {
             secure_connection.with_key_path(key_path)?
@@ -96,10 +91,8 @@ impl SshDeploymentClient {
 
         match self.run_remote_command(cmd).await {
             Ok(output) => {
-                info!(
-                    "Container runtime verified: {}",
-                    output.lines().next().unwrap_or("")
-                );
+                let first_line = output.lines().next().unwrap_or("unknown");
+                info!("Container runtime verified: {}", first_line);
                 Ok(())
             }
             Err(_) => {
@@ -109,13 +102,32 @@ impl SshDeploymentClient {
         }
     }
 
-    /// Install container runtime on remote host
+    /// Install container runtime on remote host using official package repositories.
+    ///
+    /// This uses OS package managers exclusively to avoid security risks from
+    /// downloading and executing arbitrary scripts from the internet.
     async fn install_runtime(&self) -> Result<()> {
         let install_script = match self.runtime {
             ContainerRuntime::Docker => {
+                // Use official Docker repository via package manager
+                // This is secure as it verifies package signatures and uses trusted repos
                 r#"
-                curl -fsSL https://get.docker.com -o get-docker.sh
-                sudo sh get-docker.sh
+                # Add Docker's official GPG key and repository
+                sudo apt-get update
+                sudo apt-get install -y ca-certificates curl gnupg
+                sudo install -m 0755 -d /etc/apt/keyrings
+                curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+                sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+                # Add Docker repository
+                echo \
+                  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+                  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+                  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+                # Install Docker from official repository
+                sudo apt-get update
+                sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
                 sudo usermod -aG docker $USER
                 sudo systemctl enable docker
                 sudo systemctl start docker
@@ -151,7 +163,10 @@ impl SshDeploymentClient {
     ) -> Result<RemoteDeployment> {
         info!(
             "Deploying Blueprint {} to {} (deployment: {}, namespace: {})",
-            blueprint_image, self.connection.host, self.deployment_config.name, self.deployment_config.namespace
+            blueprint_image,
+            self.connection.host,
+            self.deployment_config.name,
+            self.deployment_config.namespace
         );
 
         // Pull the Blueprint image
@@ -254,9 +269,18 @@ impl SshDeploymentClient {
         let limits = ResourceLimits::from_spec(spec);
 
         // Add deployment config variables to environment
-        env_vars.insert("BLUEPRINT_DEPLOYMENT_NAME".to_string(), self.deployment_config.name.clone());
-        env_vars.insert("BLUEPRINT_NAMESPACE".to_string(), self.deployment_config.namespace.clone());
-        env_vars.insert("BLUEPRINT_RESTART_POLICY".to_string(), format!("{:?}", self.deployment_config.restart_policy));
+        env_vars.insert(
+            "BLUEPRINT_DEPLOYMENT_NAME".to_string(),
+            self.deployment_config.name.clone(),
+        );
+        env_vars.insert(
+            "BLUEPRINT_NAMESPACE".to_string(),
+            self.deployment_config.namespace.clone(),
+        );
+        env_vars.insert(
+            "BLUEPRINT_RESTART_POLICY".to_string(),
+            format!("{:?}", self.deployment_config.restart_policy),
+        );
 
         let runtime_str = match self.runtime {
             ContainerRuntime::Docker => "docker",
@@ -265,7 +289,10 @@ impl SshDeploymentClient {
         };
 
         // Build container name based on deployment config
-        let container_name = format!("{}-{}", self.deployment_config.name, self.deployment_config.namespace);
+        let container_name = format!(
+            "{}-{}",
+            self.deployment_config.name, self.deployment_config.namespace
+        );
 
         // Use secure command building to prevent injection attacks
         let mut cmd = SecureContainerCommands::build_create_command(
@@ -286,14 +313,22 @@ impl SshDeploymentClient {
 
         // Insert restart policy and name into command
         if runtime_str != "ctr" {
-            cmd = cmd.replace("run -d", &format!("run -d --name {container_name} {restart_policy_flag}"));
+            cmd = cmd.replace(
+                "run -d",
+                &format!("run -d --name {container_name} {restart_policy_flag}"),
+            );
         }
 
         // Add health check if configured
         if let Some(ref health_check) = self.deployment_config.health_check {
             if runtime_str == "docker" {
-                let health_cmd = format!("--health-cmd='{}' --health-interval={}s --health-timeout={}s --health-retries={}",
-                    health_check.command, health_check.interval, health_check.timeout, health_check.retries);
+                let health_cmd = format!(
+                    "--health-cmd='{}' --health-interval={}s --health-timeout={}s --health-retries={}",
+                    health_check.command,
+                    health_check.interval,
+                    health_check.timeout,
+                    health_check.retries
+                );
                 cmd = cmd.replace("run -d", &format!("run -d {health_cmd}"));
             }
         }
@@ -383,10 +418,13 @@ impl SshDeploymentClient {
         self.ssh_client.run_remote_command(command).await
     }
 
-
     /// Copy files to remote host via secure SCP
     pub async fn copy_files(&self, local_path: &Path, remote_path: &str) -> Result<()> {
-        info!("Copying files via secure SCP: {} -> {}", local_path.display(), remote_path);
+        info!(
+            "Copying files via secure SCP: {} -> {}",
+            local_path.display(),
+            remote_path
+        );
         self.ssh_client.copy_files(local_path, remote_path).await
     }
 
@@ -398,18 +436,31 @@ impl SshDeploymentClient {
         self.run_remote_command("mkdir -p /opt/blueprint/{bin,config,data,logs}")
             .await?;
 
-        // Download and install Blueprint runtime binary
+        // Download and install Blueprint runtime binary with checksum verification
         let install_script = r#"
+        # Download binary and checksum
         curl -L https://github.com/tangle-network/blueprint/releases/latest/download/blueprint-runtime -o /tmp/blueprint-runtime
+        curl -L https://github.com/tangle-network/blueprint/releases/latest/download/blueprint-runtime.sha256 -o /tmp/blueprint-runtime.sha256
+
+        # Verify SHA256 checksum
+        cd /tmp
+        if ! sha256sum -c blueprint-runtime.sha256 2>/dev/null; then
+            echo "ERROR: Checksum verification failed for blueprint-runtime" >&2
+            rm -f blueprint-runtime blueprint-runtime.sha256
+            exit 1
+        fi
+
+        # Install verified binary
         chmod +x /tmp/blueprint-runtime
         sudo mv /tmp/blueprint-runtime /opt/blueprint/bin/
-        
+        rm -f /tmp/blueprint-runtime.sha256
+
         # Create systemd service
         sudo tee /etc/systemd/system/blueprint-runtime.service > /dev/null <<EOF
         [Unit]
         Description=Blueprint Runtime
         After=network.target
-        
+
         [Service]
         Type=simple
         User=blueprint
@@ -417,15 +468,15 @@ impl SshDeploymentClient {
         ExecStart=/opt/blueprint/bin/blueprint-runtime
         Restart=always
         RestartSec=10
-        
+
         [Install]
         WantedBy=multi-user.target
         EOF
-        
+
         # Create blueprint user
         sudo useradd -r -s /bin/false blueprint || true
         sudo chown -R blueprint:blueprint /opt/blueprint
-        
+
         # Enable and start service
         sudo systemctl daemon-reload
         sudo systemctl enable blueprint-runtime
@@ -536,12 +587,12 @@ impl SshDeploymentClient {
     /// Get container status
     pub async fn get_container_status(&self, container_id: &str) -> Result<String> {
         let cmd = match self.runtime {
-            ContainerRuntime::Docker => format!(
-                "docker ps -a --filter id={container_id} --format '{{{{.Status}}}}'"
-            ),
-            ContainerRuntime::Podman => format!(
-                "podman ps -a --filter id={container_id} --format '{{{{.Status}}}}'"
-            ),
+            ContainerRuntime::Docker => {
+                format!("docker ps -a --filter id={container_id} --format '{{{{.Status}}}}'")
+            }
+            ContainerRuntime::Podman => {
+                format!("podman ps -a --filter id={container_id} --format '{{{{.Status}}}}'")
+            }
             ContainerRuntime::Containerd => {
                 format!("ctr container info {container_id} | grep Status")
             }
@@ -578,9 +629,9 @@ impl SshDeploymentClient {
             ContainerRuntime::Podman => {
                 format!("podman stop {container_id} && podman rm {container_id}")
             }
-            ContainerRuntime::Containerd => format!(
-                "ctr task kill {container_id} && ctr container rm {container_id}"
-            ),
+            ContainerRuntime::Containerd => {
+                format!("ctr task kill {container_id} && ctr container rm {container_id}")
+            }
         };
 
         self.run_remote_command(&stop_cmd).await?;
@@ -595,7 +646,8 @@ impl SshDeploymentClient {
         env_vars: HashMap<String, String>,
     ) -> Result<String> {
         let spec = ResourceSpec::basic();
-        self.create_container_with_config(image, &spec, env_vars).await
+        self.create_container_with_config(image, &spec, env_vars)
+            .await
     }
 
     /// Deploy a container with a specific name
@@ -606,7 +658,8 @@ impl SshDeploymentClient {
         env_vars: HashMap<String, String>,
     ) -> Result<String> {
         // Use default resource limits if not specified
-        self.deploy_container_with_resources(image, name, env_vars, None).await
+        self.deploy_container_with_resources(image, name, env_vars, None)
+            .await
     }
 
     /// Deploy a container with specific name and resource limits
@@ -639,7 +692,7 @@ impl SshDeploymentClient {
                     // GPU support if requested
                     if let Some(gpu_count) = spec.gpu_count {
                         if gpu_count > 0 {
-                            cmd.push_str(&format!(" --gpus={}", gpu_count));
+                            cmd.push_str(&format!(" --gpus={gpu_count}"));
                         }
                     }
                 }
@@ -672,8 +725,10 @@ impl SshDeploymentClient {
             .trim()
             .to_string();
 
-        info!("Created container {} with name {} and resource limits: {:?}",
-              container_id, name, resource_spec);
+        info!(
+            "Created container {} with name {} and resource limits: {:?}",
+            container_id, name, resource_spec
+        );
         Ok(container_id)
     }
 
@@ -684,7 +739,8 @@ impl SshDeploymentClient {
         env_vars: HashMap<String, String>,
     ) -> Result<String> {
         // Use default resource limits if not specified
-        self.update_container_with_resources(new_image, env_vars, None).await
+        self.update_container_with_resources(new_image, env_vars, None)
+            .await
     }
 
     /// Update a container with specific resource limits
@@ -695,23 +751,39 @@ impl SshDeploymentClient {
         resource_spec: Option<&ResourceSpec>,
     ) -> Result<String> {
         // Get current container name from deployment config
-        let container_name = format!("{}-{}", self.deployment_config.name, self.deployment_config.namespace);
+        let container_name = format!(
+            "{}-{}",
+            self.deployment_config.name, self.deployment_config.namespace
+        );
 
         // Stop and remove old container
         let stop_cmd = match self.runtime {
-            ContainerRuntime::Docker => format!("docker stop {container_name} && docker rm {container_name}"),
-            ContainerRuntime::Podman => format!("podman stop {container_name} && podman rm {container_name}"),
-            ContainerRuntime::Containerd => format!("ctr task kill {container_name} && ctr container rm {container_name}"),
+            ContainerRuntime::Docker => {
+                format!("docker stop {container_name} && docker rm {container_name}")
+            }
+            ContainerRuntime::Podman => {
+                format!("podman stop {container_name} && podman rm {container_name}")
+            }
+            ContainerRuntime::Containerd => {
+                format!("ctr task kill {container_name} && ctr container rm {container_name}")
+            }
         };
 
         // Try to stop and remove old container (might not exist)
         match self.run_remote_command(&stop_cmd).await {
-            Ok(_) => info!("Successfully stopped and removed old container: {}", container_name),
-            Err(e) => debug!("Old container cleanup failed (expected if not exists): {}", e),
+            Ok(_) => info!(
+                "Successfully stopped and removed old container: {}",
+                container_name
+            ),
+            Err(e) => debug!(
+                "Old container cleanup failed (expected if not exists): {}",
+                e
+            ),
         }
 
         // Deploy new container with same name and resource limits
-        self.deploy_container_with_resources(new_image, &container_name, env_vars, resource_spec).await
+        self.deploy_container_with_resources(new_image, &container_name, env_vars, resource_spec)
+            .await
     }
 
     /// Remove a container
@@ -737,7 +809,8 @@ impl SshDeploymentClient {
 
         // Check container health status if available (Docker only)
         if self.runtime == ContainerRuntime::Docker {
-            let cmd = format!("docker inspect --format='{{{{.State.Health.Status}}}}' {container_id}");
+            let cmd =
+                format!("docker inspect --format='{{{{.State.Health.Status}}}}' {container_id}");
             match self.run_remote_command(&cmd).await {
                 Ok(health) => {
                     let health = health.trim();
@@ -772,7 +845,8 @@ impl SshDeploymentClient {
         // This would typically update nginx/haproxy/envoy configuration
         // For now, we'll implement a basic nginx config update
 
-        let nginx_config = format!(r#"
+        let nginx_config = format!(
+            r#"
 upstream backend {{
     server {new_container_name}:8080;
 }}
@@ -785,12 +859,14 @@ server {{
         proxy_set_header X-Real-IP $remote_addr;
     }}
 }}
-"#);
+"#
+        );
 
         // Write new nginx config
         self.run_remote_command(&format!(
             "echo '{nginx_config}' | sudo tee /etc/nginx/sites-available/blueprint"
-        )).await?;
+        ))
+        .await?;
 
         // Reload nginx
         self.run_remote_command("sudo nginx -s reload").await?;
@@ -804,12 +880,10 @@ server {{
         info!("Reconnecting SSH to {}", self.connection.host);
 
         // Create new secure connection
-        let secure_connection = SecureSshConnection::new(
-            self.connection.host.clone(),
-            self.connection.user.clone(),
-        )?
-        .with_port(self.connection.port)?
-        .with_strict_host_checking(false);
+        let secure_connection =
+            SecureSshConnection::new(self.connection.host.clone(), self.connection.user.clone())?
+                .with_port(self.connection.port)?
+                .with_strict_host_checking(false);
 
         let secure_connection = if let Some(ref key_path) = self.connection.key_path {
             secure_connection.with_key_path(key_path)?
@@ -846,9 +920,10 @@ server {{
 
         // Ensure we're connected to the right host
         if self.connection.host != host_ip {
-            return Err(Error::ConfigurationError(
-                format!("Host mismatch: expected {}, got {}", self.connection.host, host_ip)
-            ));
+            return Err(Error::ConfigurationError(format!(
+                "Host mismatch: expected {}, got {}",
+                self.connection.host, host_ip
+            )));
         }
 
         // Copy binary to remote host
@@ -856,7 +931,8 @@ server {{
         self.copy_files(binary_path, &remote_binary_path).await?;
 
         // Make binary executable
-        self.run_remote_command(&format!("chmod +x {remote_binary_path}")).await?;
+        self.run_remote_command(&format!("chmod +x {remote_binary_path}"))
+            .await?;
 
         // Create service configuration
         let mut service_env = env_vars;
@@ -865,7 +941,8 @@ server {{
         }
 
         // Create systemd service unit for the blueprint
-        let service_unit = format!(r#"
+        let service_unit = format!(
+            r#"
 [Unit]
 Description=Blueprint Service: {}
 After=network.target
@@ -882,10 +959,11 @@ WorkingDirectory=/opt/blueprint
 
 [Install]
 WantedBy=multi-user.target
-"#, 
-            service_name, 
+"#,
+            service_name,
             remote_binary_path,
-            service_env.iter()
+            service_env
+                .iter()
                 .map(|(k, v)| format!("Environment={k}={v}"))
                 .collect::<Vec<_>>()
                 .join("\n")
@@ -893,27 +971,43 @@ WantedBy=multi-user.target
 
         // Write service file
         let service_file = format!("/etc/systemd/system/blueprint-{service_name}.service");
-        self.run_remote_command(&format!("sudo tee {service_file} > /dev/null << 'EOF'\n{service_unit}\nEOF")).await?;
+        self.run_remote_command(&format!(
+            "sudo tee {service_file} > /dev/null << 'EOF'\n{service_unit}\nEOF"
+        ))
+        .await?;
 
         // Enable and start service
-        self.run_remote_command("sudo systemctl daemon-reload").await?;
-        self.run_remote_command(&format!("sudo systemctl enable blueprint-{service_name}")).await?;
-        self.run_remote_command(&format!("sudo systemctl start blueprint-{service_name}")).await?;
+        self.run_remote_command("sudo systemctl daemon-reload")
+            .await?;
+        self.run_remote_command(&format!("sudo systemctl enable blueprint-{service_name}"))
+            .await?;
+        self.run_remote_command(&format!("sudo systemctl start blueprint-{service_name}"))
+            .await?;
 
         // Verify service is running
-        let status = self.run_remote_command(&format!("sudo systemctl is-active blueprint-{service_name}")).await?;
+        let status = self
+            .run_remote_command(&format!(
+                "sudo systemctl is-active blueprint-{service_name}"
+            ))
+            .await?;
         if status.trim() == "active" {
-            info!("✅ Blueprint service '{}' deployed and running", service_name);
+            info!(
+                "✅ Blueprint service '{}' deployed and running",
+                service_name
+            );
             Ok(())
         } else {
-            Err(Error::ConfigurationError(
-                format!("Failed to start blueprint service: {status}")
-            ))
+            Err(Error::ConfigurationError(format!(
+                "Failed to start blueprint service: {status}"
+            )))
         }
     }
 
     /// Stream container logs integrated with LogStreamer for aggregation
-    pub async fn stream_container_logs(&self, container_id: &str) -> Result<mpsc::Receiver<String>> {
+    pub async fn stream_container_logs(
+        &self,
+        container_id: &str,
+    ) -> Result<mpsc::Receiver<String>> {
         info!("Starting log stream for container {}", container_id);
 
         let (tx, rx) = mpsc::channel(100);
@@ -924,8 +1018,8 @@ WantedBy=multi-user.target
         // Spawn background task to stream logs
         tokio::spawn(async move {
             let cmd = match runtime {
-                ContainerRuntime::Docker => format!("docker logs -f {}", container),
-                ContainerRuntime::Podman => format!("podman logs -f {}", container),
+                ContainerRuntime::Docker => format!("docker logs -f {container}"),
+                ContainerRuntime::Podman => format!("podman logs -f {container}"),
                 ContainerRuntime::Containerd => {
                     warn!("Log streaming not supported for containerd");
                     return;
@@ -935,7 +1029,10 @@ WantedBy=multi-user.target
             // This would ideally use SSH session with PTY for real-time streaming
             // For now, we poll logs periodically
             loop {
-                match ssh_client.run_remote_command(&cmd.replace("-f", "--tail=10")).await {
+                match ssh_client
+                    .run_remote_command(&cmd.replace("-f", "--tail=10"))
+                    .await
+                {
                     Ok(logs) => {
                         for line in logs.lines() {
                             if tx.send(line.to_string()).await.is_err() {
@@ -961,15 +1058,15 @@ WantedBy=multi-user.target
 
         let stats_cmd = match self.runtime {
             ContainerRuntime::Docker => {
-                format!("docker stats {} --no-stream --format json", container_id)
+                format!("docker stats {container_id} --no-stream --format json")
             }
             ContainerRuntime::Podman => {
-                format!("podman stats {} --no-stream --format json", container_id)
+                format!("podman stats {container_id} --no-stream --format json")
             }
             ContainerRuntime::Containerd => {
                 // Containerd doesn't have direct stats, use cgroup info
                 return Err(Error::ConfigurationError(
-                    "Metrics collection not supported for containerd".into()
+                    "Metrics collection not supported for containerd".into(),
                 ));
             }
         };
@@ -978,7 +1075,7 @@ WantedBy=multi-user.target
 
         // Parse stats JSON
         let stats: serde_json::Value = serde_json::from_str(&output)
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse stats: {}", e)))?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse stats: {e}")))?;
 
         // Transform into QoS-compatible format
         let qos_metrics = serde_json::json!({
@@ -1024,10 +1121,10 @@ WantedBy=multi-user.target
         // Get container IP for health checks
         let ip_cmd = match self.runtime {
             ContainerRuntime::Docker => {
-                format!("docker inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {}", container_id)
+                format!("docker inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {container_id}")
             }
             ContainerRuntime::Podman => {
-                format!("podman inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {}", container_id)
+                format!("podman inspect -f '{{{{.NetworkSettings.IPAddress}}}}' {container_id}")
             }
             ContainerRuntime::Containerd => {
                 return Ok(HealthStatus::Unknown);
@@ -1045,13 +1142,13 @@ WantedBy=multi-user.target
         let health_checker = ApplicationHealthChecker::new();
 
         // Check main health endpoint
-        let health_url = format!("http://{}:8080/health", container_ip);
+        let health_url = format!("http://{container_ip}:8080/health");
         match health_checker.check_http(&health_url).await {
             HealthStatus::Healthy => {
                 info!("Blueprint health endpoint healthy");
 
                 // Also check metrics endpoint
-                let metrics_url = format!("http://{}:9615/metrics", container_ip);
+                let metrics_url = format!("http://{container_ip}:9615/metrics");
                 match health_checker.check_http(&metrics_url).await {
                     HealthStatus::Healthy => {
                         info!("Blueprint metrics endpoint also healthy");
@@ -1063,7 +1160,7 @@ WantedBy=multi-user.target
                     }
                 }
             }
-            status => Ok(status)
+            status => Ok(status),
         }
     }
 
@@ -1078,19 +1175,22 @@ WantedBy=multi-user.target
         info!("Deploying {} as systemd service", service_name);
 
         // Copy binary to remote
-        let remote_path = format!("/opt/blueprint/bin/{}", service_name);
+        let remote_path = format!("/opt/blueprint/bin/{service_name}");
         self.copy_files(binary_path, &remote_path).await?;
 
         // Make executable
-        self.run_remote_command(&format!("chmod +x {}", remote_path)).await?;
+        self.run_remote_command(&format!("chmod +x {remote_path}"))
+            .await?;
 
         // Create systemd unit with resource limits
-        let env_section = env_vars.iter()
-            .map(|(k, v)| format!("Environment={}={}", k, v))
+        let env_section = env_vars
+            .iter()
+            .map(|(k, v)| format!("Environment={k}={v}"))
             .collect::<Vec<_>>()
             .join("\n");
 
-        let service_unit = format!(r#"
+        let service_unit = format!(
+            r#"
 [Unit]
 Description=Blueprint Service: {}
 After=network.target
@@ -1119,30 +1219,34 @@ WantedBy=multi-user.target
         );
 
         // Write service file
-        let service_file = format!("/etc/systemd/system/blueprint-{}.service", service_name);
+        let service_file = format!("/etc/systemd/system/blueprint-{service_name}.service");
         self.run_remote_command(&format!(
-            "sudo tee {} > /dev/null << 'EOF'\n{}\nEOF",
-            service_file, service_unit
-        )).await?;
+            "sudo tee {service_file} > /dev/null << 'EOF'\n{service_unit}\nEOF"
+        ))
+        .await?;
 
         // Enable and start
-        self.run_remote_command("sudo systemctl daemon-reload").await?;
-        self.run_remote_command(&format!("sudo systemctl enable blueprint-{}", service_name)).await?;
-        self.run_remote_command(&format!("sudo systemctl start blueprint-{}", service_name)).await?;
+        self.run_remote_command("sudo systemctl daemon-reload")
+            .await?;
+        self.run_remote_command(&format!("sudo systemctl enable blueprint-{service_name}"))
+            .await?;
+        self.run_remote_command(&format!("sudo systemctl start blueprint-{service_name}"))
+            .await?;
 
         // Verify it's running
-        let status = self.run_remote_command(&format!(
-            "sudo systemctl is-active blueprint-{}",
-            service_name
-        )).await?;
+        let status = self
+            .run_remote_command(&format!(
+                "sudo systemctl is-active blueprint-{service_name}"
+            ))
+            .await?;
 
         if status.trim() == "active" {
             info!("Service {} deployed and running", service_name);
             Ok(())
         } else {
-            Err(Error::ConfigurationError(
-                format!("Failed to start service: {}", status)
-            ))
+            Err(Error::ConfigurationError(format!(
+                "Failed to start service: {status}"
+            )))
         }
     }
 
@@ -1176,270 +1280,5 @@ WantedBy=multi-user.target
                 health_check: None,
             },
         }
-    }
-}
-
-/// SSH authentication method
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SshAuth {
-    /// SSH key authentication
-    Key(String),
-    /// Password authentication
-    Password(String),
-}
-
-/// SSH connection parameters
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SshConnection {
-    /// Hostname or IP address
-    pub host: String,
-    /// SSH port (default: 22)
-    pub port: u16,
-    /// SSH username
-    pub user: String,
-    /// Path to SSH private key
-    pub key_path: Option<PathBuf>,
-    /// SSH password (not recommended)
-    pub password: Option<String>,
-    /// Jump host for bastion access
-    pub jump_host: Option<String>,
-}
-
-impl Default for SshConnection {
-    fn default() -> Self {
-        Self {
-            host: "localhost".to_string(),
-            port: 22,
-            user: "root".to_string(),
-            key_path: None,
-            password: None,
-            jump_host: None,
-        }
-    }
-}
-
-/// Container runtime type on remote host
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ContainerRuntime {
-    Docker,
-    Podman,
-    Containerd,
-}
-
-/// Deployment configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeploymentConfig {
-    /// Deployment name
-    pub name: String,
-    /// Deployment namespace/project
-    pub namespace: String,
-    /// Auto-restart policy
-    pub restart_policy: RestartPolicy,
-    /// Health check configuration
-    pub health_check: Option<HealthCheck>,
-}
-
-/// Container restart policy
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
-pub enum RestartPolicy {
-    Always,
-    #[default]
-    OnFailure,
-    Never,
-}
-
-
-impl Default for DeploymentConfig {
-    fn default() -> Self {
-        Self {
-            name: "blueprint-deployment".to_string(),
-            namespace: "default".to_string(),
-            restart_policy: RestartPolicy::default(),
-            health_check: None,
-        }
-    }
-}
-
-/// Health check configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HealthCheck {
-    pub command: String,
-    pub interval: u32,
-    pub timeout: u32,
-    pub retries: u32,
-}
-
-/// Resource limits for container
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceLimits {
-    pub cpu_cores: Option<f64>,
-    pub memory_mb: Option<u64>,
-    pub disk_gb: Option<f64>,
-    pub network_bandwidth_mbps: Option<u32>,
-}
-
-impl ResourceLimits {
-    fn from_spec(spec: &ResourceSpec) -> Self {
-        Self {
-            cpu_cores: Some(spec.cpu as f64),
-            memory_mb: Some((spec.memory_gb * 1024.0) as u64),
-            disk_gb: Some(spec.storage_gb as f64),
-            network_bandwidth_mbps: Some(1000), // Default 1Gbps
-        }
-    }
-}
-
-/// Container details
-struct ContainerDetails {
-    status: String,
-    ports: HashMap<String, String>,
-}
-
-/// Remote deployment information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemoteDeployment {
-    pub host: String,
-    pub container_id: String,
-    pub runtime: ContainerRuntime,
-    pub status: String,
-    pub ports: HashMap<String, String>,
-    pub resource_limits: ResourceLimits,
-}
-
-/// Native (non-containerized) deployment information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NativeDeployment {
-    pub host: String,
-    pub service_name: String,
-    pub config_path: String,
-    pub status: String,
-}
-
-/// Batch deployment to multiple hosts
-pub struct BareMetalFleet {
-    hosts: Vec<SshConnection>,
-    deployments: Vec<RemoteDeployment>,
-}
-
-impl BareMetalFleet {
-    /// Create a new bare metal fleet
-    pub fn new(hosts: Vec<SshConnection>) -> Self {
-        Self {
-            hosts,
-            deployments: Vec::new(),
-        }
-    }
-
-    /// Deploy to all hosts in parallel
-    pub async fn deploy_to_fleet(
-        &mut self,
-        blueprint_image: &str,
-        spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-        runtime: ContainerRuntime,
-    ) -> Result<Vec<RemoteDeployment>> {
-        use futures::future::join_all;
-
-        let deployment_futures: Vec<_> = self
-            .hosts
-            .iter()
-            .map(|host| {
-                let connection = host.clone();
-                let image = blueprint_image.to_string();
-                let spec = spec.clone();
-                let env = env_vars.clone();
-                let rt = runtime.clone();
-
-                async move {
-                    let client = SshDeploymentClient::new(
-                        connection,
-                        rt,
-                        DeploymentConfig {
-                            name: "blueprint".to_string(),
-                            namespace: "default".to_string(),
-                            restart_policy: RestartPolicy::Always,
-                            health_check: None,
-                        },
-                    )
-                    .await?;
-
-                    client.deploy_blueprint(&image, &spec, env).await
-                }
-            })
-            .collect();
-
-        let results = join_all(deployment_futures).await;
-
-        for result in results {
-            match result {
-                Ok(deployment) => {
-                    info!("Successfully deployed to {}", deployment.host);
-                    self.deployments.push(deployment);
-                }
-                Err(e) => {
-                    warn!("Failed to deploy to host: {}", e);
-                }
-            }
-        }
-
-        Ok(self.deployments.clone())
-    }
-
-    /// Get status of all deployments
-    pub fn get_fleet_status(&self) -> HashMap<String, String> {
-        self.deployments
-            .iter()
-            .map(|d| (d.host.clone(), d.status.clone()))
-            .collect()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_secure_ssh_integration() {
-        let connection = SshConnection {
-            host: "localhost".to_string(),
-            port: 22,
-            user: "testuser".to_string(),
-            key_path: None,
-            password: None,
-            jump_host: None,
-        };
-
-        // Test that secure SSH connection is properly configured
-        let secure_conn = SecureSshConnection::new(
-            connection.host.clone(),
-            connection.user.clone(),
-        ).unwrap()
-        .with_port(connection.port).unwrap()
-        .with_strict_host_checking(false);
-
-        let ssh_client = SecureSshClient::new(secure_conn);
-        
-        // This would fail in a real environment without SSH access,
-        // but we're testing the integration structure
-        assert!(ssh_client.run_remote_command("echo test").await.is_err());
-    }
-
-    #[test]
-    fn test_resource_limits_conversion() {
-        let spec = ResourceSpec {
-            cpu: 4.0,
-            memory_gb: 8.0,
-            storage_gb: 100.0,
-            gpu_count: None,
-            allow_spot: false,
-            qos: Default::default(),
-        };
-
-        let limits = ResourceLimits::from_spec(&spec);
-        assert_eq!(limits.cpu_cores, Some(4.0));
-        assert_eq!(limits.memory_mb, Some(8192));
-        assert_eq!(limits.disk_gb, Some(100.0));
-        assert_eq!(limits.network_bandwidth_mbps, Some(1000)); // Default 1Gbps
     }
 }

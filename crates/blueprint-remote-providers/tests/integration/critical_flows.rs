@@ -148,7 +148,7 @@ async fn test_deployment_ttl_tracking() {
 /// Test AWS and Azure pricing via Vantage.sh API
 #[tokio::test]
 async fn test_pricing_apis_available() {
-    let mut fetcher = PricingFetcher::new();
+    let mut fetcher = PricingFetcher::new_or_default();
     
     let aws_result = fetcher.find_best_instance(
         CloudProvider::AWS,
@@ -187,7 +187,7 @@ async fn test_pricing_apis_available() {
 #[tokio::test]
 async fn test_multi_provider_cost_optimization() {
     let spec = ResourceSpec::basic();
-    let mut fetcher = PricingFetcher::new();
+    let mut fetcher = PricingFetcher::new_or_default();
     
     let mut results = vec![];
     

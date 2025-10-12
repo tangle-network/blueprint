@@ -3,10 +3,10 @@
 //! Replaces the insecure SSH implementation with proper security controls
 
 use crate::core::error::{Error, Result};
+use blueprint_core::{debug, info, warn};
 use shell_escape::escape;
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
-use tracing::{debug, info, warn};
 
 /// Secure SSH connection configuration with validation
 #[derive(Debug, Clone)]
@@ -232,9 +232,12 @@ impl SecureSshClient {
 
             // Use known hosts file if provided, otherwise use default
             if let Some(ref known_hosts) = self.connection.known_hosts_file {
+                let known_hosts_str = known_hosts.to_str().ok_or_else(|| {
+                    Error::ConfigurationError("Known hosts path contains invalid UTF-8".to_string())
+                })?;
                 ssh_cmd.push_str(&format!(
                     " -o UserKnownHostsFile={}",
-                    escape(known_hosts.to_str().unwrap().into())
+                    escape(known_hosts_str.into())
                 ));
             }
         } else {
@@ -257,7 +260,10 @@ impl SecureSshClient {
 
         // Add identity file if provided (with validation and escaping)
         if let Some(ref key_path) = self.connection.key_path {
-            let escaped_path = escape(key_path.to_str().unwrap().into());
+            let key_path_str = key_path.to_str().ok_or_else(|| {
+                Error::ConfigurationError("SSH key path contains invalid UTF-8".to_string())
+            })?;
+            let escaped_path = escape(key_path_str.into());
             ssh_cmd.push_str(&format!(" -i {escaped_path}"));
         }
 
@@ -352,9 +358,12 @@ impl SecureSshClient {
         if self.connection.strict_host_checking {
             scp_cmd.push_str(" -o StrictHostKeyChecking=yes");
             if let Some(ref known_hosts) = self.connection.known_hosts_file {
+                let known_hosts_str = known_hosts.to_str().ok_or_else(|| {
+                    Error::ConfigurationError("Known hosts path contains invalid UTF-8".to_string())
+                })?;
                 scp_cmd.push_str(&format!(
                     " -o UserKnownHostsFile={}",
-                    escape(known_hosts.to_str().unwrap().into())
+                    escape(known_hosts_str.into())
                 ));
             }
         } else {
@@ -370,12 +379,18 @@ impl SecureSshClient {
 
         // Add identity file if provided
         if let Some(ref key_path) = self.connection.key_path {
-            let escaped_path = escape(key_path.to_str().unwrap().into());
+            let key_path_str = key_path.to_str().ok_or_else(|| {
+                Error::ConfigurationError("SSH key path contains invalid UTF-8".to_string())
+            })?;
+            let escaped_path = escape(key_path_str.into());
             scp_cmd.push_str(&format!(" -i {escaped_path}"));
         }
 
         // Add source and destination with proper escaping
-        let escaped_local = escape(local_path.to_str().unwrap().into());
+        let local_path_str = local_path.to_str().ok_or_else(|| {
+            Error::ConfigurationError("Local path contains invalid UTF-8".to_string())
+        })?;
+        let escaped_local = escape(local_path_str.into());
         let escaped_user = escape(self.connection.user.as_str().into());
         let escaped_host = escape(self.connection.host.as_str().into());
         let escaped_remote = escape(remote_path.into());

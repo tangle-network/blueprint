@@ -101,13 +101,13 @@ impl Service {
     pub async fn from_binary(
         ctx: &BlueprintManagerContext,
         limits: ResourceLimits,
-        blueprint_config: &BlueprintEnvironment,
-        id: u32,
+        _blueprint_config: &BlueprintEnvironment,
+        _id: u32,
         env: BlueprintEnvVars,
         args: BlueprintArgs,
         binary_path: &Path,
         sub_service_str: &str,
-        cache_dir: &Path,
+        _cache_dir: &Path,
         runtime_dir: &Path,
     ) -> Result<Service> {
         #[cfg(feature = "vm-sandbox")]
@@ -117,12 +117,12 @@ impl Service {
                 limits,
                 // TODO: !!! Actually configure the VM with resource limits
                 ServiceVmConfig {
-                    id,
+                    _id,
                     ..Default::default()
                 },
-                &blueprint_config.data_dir,
-                &blueprint_config.keystore_uri,
-                cache_dir,
+                &_blueprint_config.data_dir,
+                &_blueprint_config.keystore_uri,
+                _cache_dir,
                 runtime_dir,
                 sub_service_str,
                 binary_path,
@@ -408,7 +408,7 @@ impl Service {
     ///
     /// * [`HypervisorInstance::shutdown()`]
     /// * [`BridgeHandle::shutdown()`]
-    pub async fn shutdown(mut self) -> Result<()> {
+    pub async fn shutdown(self) -> Result<()> {
         match self.runtime {
             #[cfg(feature = "vm-sandbox")]
             Runtime::Hypervisor(hypervisor) => {

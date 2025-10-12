@@ -7,17 +7,17 @@ use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 #[cfg(feature = "aws")]
 use crate::infra::adapters::AwsAdapter;
-use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
-#[cfg(feature = "gcp")]
-use crate::providers::gcp::GcpAdapter;
-use crate::providers::azure::adapter::AzureAdapter;
-use crate::providers::vultr::adapter::VultrAdapter;
 use crate::infra::mapper::InstanceTypeMapper;
 use crate::infra::traits::CloudProviderAdapter;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance, RetryPolicy};
-use crate::monitoring::discovery::{MachineTypeDiscovery, CloudCredentials};
+use crate::monitoring::discovery::{CloudCredentials, MachineTypeDiscovery};
+use crate::providers::azure::adapter::AzureAdapter;
+use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
+#[cfg(feature = "gcp")]
+use crate::providers::gcp::GcpAdapter;
+use crate::providers::vultr::adapter::VultrAdapter;
+use blueprint_core::{error, info, warn};
 use std::collections::HashMap;
-use tracing::{error, info, warn};
 
 /// Multi-cloud provisioner that handles deployments across all supported providers
 pub struct CloudProvisioner {
@@ -209,26 +209,29 @@ impl CloudProvisioner {
             DeploymentTarget::GenericKubernetes { .. } => {
                 // For generic K8s, we need a provider that supports kubectl
                 // Use the first available provider that has K8s support
-                self.providers.keys()
-                    .next()
-                    .ok_or_else(|| Error::Other("No providers configured for Kubernetes deployment".into()))?
+                self.providers.keys().next().ok_or_else(|| {
+                    Error::Other("No providers configured for Kubernetes deployment".into())
+                })?
             }
             DeploymentTarget::ManagedKubernetes { .. } => {
                 // For managed K8s, determine provider from cluster context
                 // Use first available provider for managed K8s
-                self.providers.keys()
-                    .next()
-                    .ok_or_else(|| Error::Other("No providers configured for managed Kubernetes".into()))?
+                self.providers.keys().next().ok_or_else(|| {
+                    Error::Other("No providers configured for managed Kubernetes".into())
+                })?
             }
             _ => {
                 // For other targets, use first available provider
-                self.providers.keys()
+                self.providers
+                    .keys()
                     .next()
                     .ok_or_else(|| Error::Other("No providers configured".into()))?
             }
         };
 
-        let adapter = self.providers.get(provider)
+        let adapter = self
+            .providers
+            .get(provider)
             .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
 
         adapter
@@ -245,6 +248,20 @@ impl CloudProvisioner {
         self.get_status(provider.clone(), instance_id).await
     }
 
+    /// Get full instance details including public IP
+    pub async fn get_instance_details(
+        &self,
+        provider: &CloudProvider,
+        instance_id: &str,
+    ) -> Result<ProvisionedInstance> {
+        let adapter = self
+            .providers
+            .get(provider)
+            .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
+
+        adapter.get_instance_details(instance_id).await
+    }
+
     /// Use discovery service to find optimal instance type for requirements
     pub async fn discover_optimal_instance(
         &mut self,
@@ -255,8 +272,12 @@ impl CloudProvisioner {
     ) -> Result<String> {
         // Load credentials from environment variables
         let credentials = CloudCredentials::from_env();
-        
-        match self.discovery.discover_machine_types(provider, region, &credentials).await {
+
+        match self
+            .discovery
+            .discover_machine_types(provider, region, &credentials)
+            .await
+        {
             Ok(_machines) => {
                 // Use discovery service to find best match
                 if let Some(machine) = self.discovery.find_best_match(
@@ -266,13 +287,19 @@ impl CloudProvisioner {
                     resource_spec.gpu_count.unwrap_or(0) > 0,
                     max_hourly_cost,
                 ) {
-                    info!("Discovery found optimal instance: {} (${:.2}/hr)", 
-                          machine.name, machine.hourly_price.unwrap_or(0.0));
+                    info!(
+                        "Discovery found optimal instance: {} (${:.2}/hr)",
+                        machine.name,
+                        machine.hourly_price.unwrap_or(0.0)
+                    );
                     return Ok(machine.name);
                 }
             }
             Err(e) => {
-                warn!("Discovery failed for {:?}: {}, falling back to mapper", provider, e);
+                warn!(
+                    "Discovery failed for {:?}: {}, falling back to mapper",
+                    provider, e
+                );
             }
         }
 

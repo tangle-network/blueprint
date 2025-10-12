@@ -32,6 +32,10 @@
 //! cargo tangle blueprint deploy tangle --remote
 //! ```
 
+#![allow(unexpected_cfgs)]
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use clap::Subcommand;
 use color_eyre::Result;
 use std::path::PathBuf;
@@ -44,7 +48,6 @@ mod policy;
 mod status;
 mod update;
 
-use config::CloudConfig;
 pub use config::CloudProvider;
 pub use policy::{CostOptimization, RemoteDeploymentPolicy};
 
@@ -263,10 +266,7 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
             .await
         }
 
-        CloudCommands::Status {
-            service_id,
-            watch,
-        } => status::show_status(service_id, watch).await,
+        CloudCommands::Status { service_id, watch } => status::show_status(service_id, watch).await,
 
         CloudCommands::Terminate {
             service_id,
@@ -288,10 +288,7 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
             yes,
         } => update::rollback(service_id, version, yes).await,
 
-        CloudCommands::History {
-            service_id,
-            limit,
-        } => update::history(service_id, limit).await,
+        CloudCommands::History { service_id, limit } => update::history(service_id, limit).await,
 
         CloudCommands::Logs {
             service_id,

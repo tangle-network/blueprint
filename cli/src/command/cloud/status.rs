@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use super::CloudProvider;
 
-#[cfg(feature = "remote-deployer")]
-use blueprint_remote_providers::{DeploymentTracker, CloudProvisioner, HealthMonitor};
+#[cfg(feature = "remote-providers")]
+use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker, HealthMonitor};
 
 #[derive(Debug)]
 struct DeploymentStatus {
@@ -121,7 +121,7 @@ async fn show_deployment_details(id: &str) -> Result<()> {
 }
 
 async fn show_all_deployments() -> Result<()> {
-    #[cfg(feature = "remote-deployer")]
+    #[cfg(feature = "remote-providers")]
     let deployments = {
         match load_real_deployments().await {
             Ok(deployments) => deployments,
@@ -132,7 +132,7 @@ async fn show_all_deployments() -> Result<()> {
         }
     };
 
-    #[cfg(not(feature = "remote-deployer"))]
+    #[cfg(not(feature = "remote-providers"))]
     let deployments = get_mock_deployments();
 
     if deployments.is_empty() {
@@ -249,7 +249,7 @@ pub async fn terminate(deployment_id: Option<String>, all: bool, yes: bool) -> R
         let spinner = indicatif::ProgressBar::new_spinner();
         spinner.set_style(indicatif::ProgressStyle::default_spinner().template("{spinner} {msg}")?);
 
-        #[cfg(feature = "remote-deployer")]
+        #[cfg(feature = "remote-providers")]
         {
             spinner.set_message("Initializing cloud provisioner...");
             match CloudProvisioner::new().await {
@@ -258,18 +258,20 @@ pub async fn terminate(deployment_id: Option<String>, all: bool, yes: bool) -> R
                     // TODO: Get provider from deployment tracker
                     // For now, we need to load deployment info to get the provider
                     if let Err(e) = terminate_real_deployment(&provisioner, id).await {
-                        spinner.finish_with_message(format!("❌ Failed to terminate {}: {}", id, e));
+                        spinner
+                            .finish_with_message(format!("❌ Failed to terminate {}: {}", id, e));
                         return Ok(());
                     }
                 }
                 Err(e) => {
-                    spinner.finish_with_message(format!("❌ Failed to initialize provisioner: {}", e));
+                    spinner
+                        .finish_with_message(format!("❌ Failed to initialize provisioner: {}", e));
                     return Ok(());
                 }
             }
         }
 
-        #[cfg(not(feature = "remote-deployer"))]
+        #[cfg(not(feature = "remote-providers"))]
         {
             spinner.set_message("Stopping services...");
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -292,7 +294,7 @@ pub async fn terminate(deployment_id: Option<String>, all: bool, yes: bool) -> R
     Ok(())
 }
 
-#[cfg(feature = "remote-deployer")]
+#[cfg(feature = "remote-providers")]
 async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
     use std::path::PathBuf;
 
@@ -306,17 +308,23 @@ async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
         return Ok(Vec::new());
     }
 
-    let tracker = DeploymentTracker::new(&tracker_path).await
+    let tracker = DeploymentTracker::new(&tracker_path)
+        .await
         .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize deployment tracker: {}", e))?;
 
     // Initialize health monitor for real-time health checks
-    let provisioner = std::sync::Arc::new(CloudProvisioner::new().await
-        .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize provisioner: {}", e))?);
+    let provisioner = std::sync::Arc::new(
+        CloudProvisioner::new()
+            .await
+            .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize provisioner: {}", e))?,
+    );
     let tracker_arc = std::sync::Arc::new(tracker);
     let health_monitor = HealthMonitor::new(provisioner, tracker_arc.clone());
 
     let mut deployments = Vec::new();
-    let all_deployments = tracker_arc.list_all().await
+    let all_deployments = tracker_arc
+        .list_all()
+        .await
         .map_err(|e| color_eyre::eyre::eyre!("Failed to load deployments: {}", e))?;
 
     for deployment in all_deployments {
@@ -334,7 +342,8 @@ async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
             _ => "⚪",
         };
 
-        let uptime = format!("{}h {}m", 
+        let uptime = format!(
+            "{}h {}m",
             deployment.created_at.elapsed().as_secs() / 3600,
             (deployment.created_at.elapsed().as_secs() % 3600) / 60
         );
@@ -345,13 +354,20 @@ async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
             region: deployment.region,
             status: format!("{} {}", status_icon, deployment.status),
             health: health_status,
-            ip: deployment.public_ip.unwrap_or_else(|| "Pending".to_string()),
+            ip: deployment
+                .public_ip
+                .unwrap_or_else(|| "Pending".to_string()),
             uptime,
-            ttl: deployment.ttl_expires_at
+            ttl: deployment
+                .ttl_expires_at
                 .map(|expires| {
                     let remaining = expires.signed_duration_since(chrono::Utc::now());
                     if remaining.num_seconds() > 0 {
-                        format!("{}h {}m", remaining.num_hours(), (remaining.num_minutes() % 60))
+                        format!(
+                            "{}h {}m",
+                            remaining.num_hours(),
+                            (remaining.num_minutes() % 60)
+                        )
                     } else {
                         "Expired".to_string()
                     }
@@ -363,8 +379,11 @@ async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
     Ok(deployments)
 }
 
-#[cfg(feature = "remote-deployer")]
-async fn terminate_real_deployment(provisioner: &CloudProvisioner, instance_id: &str) -> Result<()> {
+#[cfg(feature = "remote-providers")]
+async fn terminate_real_deployment(
+    provisioner: &CloudProvisioner,
+    instance_id: &str,
+) -> Result<()> {
     use std::path::PathBuf;
 
     // Load deployment tracker to get the provider info
@@ -377,19 +396,26 @@ async fn terminate_real_deployment(provisioner: &CloudProvisioner, instance_id: 
         return Err(color_eyre::eyre::eyre!("No deployment tracker found"));
     }
 
-    let tracker = DeploymentTracker::new(&tracker_path).await
+    let tracker = DeploymentTracker::new(&tracker_path)
+        .await
         .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize deployment tracker: {}", e))?;
 
-    let deployment = tracker.get_by_instance_id(instance_id).await
+    let deployment = tracker
+        .get_by_instance_id(instance_id)
+        .await
         .map_err(|e| color_eyre::eyre::eyre!("Failed to find deployment: {}", e))?
         .ok_or_else(|| color_eyre::eyre::eyre!("Deployment {} not found", instance_id))?;
 
     // Terminate the instance
-    provisioner.terminate(deployment.provider, instance_id).await
+    provisioner
+        .terminate(deployment.provider, instance_id)
+        .await
         .map_err(|e| color_eyre::eyre::eyre!("Failed to terminate instance: {}", e))?;
 
     // Remove from tracker
-    tracker.remove_by_instance_id(instance_id).await
+    tracker
+        .remove_by_instance_id(instance_id)
+        .await
         .map_err(|e| color_eyre::eyre::eyre!("Failed to remove from tracker: {}", e))?;
 
     Ok(())

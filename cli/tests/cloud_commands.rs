@@ -1,5 +1,7 @@
 //! Integration tests for cloud deployment commands.
 
+#![cfg(feature = "remote-providers")]
+
 #[cfg(test)]
 mod cloud_tests {
     use std::process::Command;

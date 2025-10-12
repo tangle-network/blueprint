@@ -7,36 +7,44 @@
 //! - Updates/rollbacks
 //! - Resource enforcement
 
-use blueprint_remote_providers::deployment::ssh::{
-    ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient, RestartPolicy, HealthCheck,
-};
 use blueprint_remote_providers::core::resources::ResourceSpec;
-use blueprint_remote_providers::monitoring::logs::LogStreamer;
-use blueprint_remote_providers::monitoring::health::{ApplicationHealthChecker, HealthStatus};
+use blueprint_remote_providers::deployment::ssh::{
+    ContainerRuntime, DeploymentConfig, HealthCheck, RestartPolicy, SshConnection,
+    SshDeploymentClient,
+};
 use blueprint_remote_providers::deployment::update_manager::{UpdateManager, UpdateStrategy};
+use blueprint_remote_providers::monitoring::health::{ApplicationHealthChecker, HealthStatus};
+use blueprint_remote_providers::monitoring::logs::LogStreamer;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::time::Duration;
 
-const BLUEPRINT_BINARY_PATH: &str = "../../examples/incredible-squaring/target/debug/incredible-squaring-blueprint-bin";
+const BLUEPRINT_BINARY_PATH: &str =
+    "../../examples/incredible-squaring/target/debug/incredible-squaring-blueprint-bin";
 
 /// Build the actual blueprint binary
 async fn build_blueprint() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let output = tokio::process::Command::new("cargo")
-        .args(&["build", "--package", "incredible-squaring-blueprint-bin"])
+        .args(["build", "--package", "incredible-squaring-blueprint-bin"])
         .current_dir("../../examples/incredible-squaring")
         .output()
         .await?;
 
     if !output.status.success() {
-        return Err(format!("Failed to build blueprint: {}", String::from_utf8_lossy(&output.stderr)).into());
+        return Err(format!(
+            "Failed to build blueprint: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
     }
 
     Ok(PathBuf::from(BLUEPRINT_BINARY_PATH))
 }
 
 /// Create a Docker image with the blueprint binary
-async fn create_blueprint_image(binary_path: &PathBuf) -> Result<String, Box<dyn std::error::Error>> {
+async fn create_blueprint_image(
+    binary_path: &PathBuf,
+) -> Result<String, Box<dyn std::error::Error>> {
     // Create Dockerfile
     let dockerfile_content = r#"
 FROM ubuntu:22.04
@@ -78,7 +86,11 @@ ENTRYPOINT ["/app/blueprint"]
     tokio::fs::remove_dir_all(temp_dir).await?;
 
     if !output.status.success() {
-        return Err(format!("Docker build failed: {}", String::from_utf8_lossy(&output.stderr)).into());
+        return Err(format!(
+            "Docker build failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
     }
 
     Ok(image_tag)
@@ -91,7 +103,7 @@ async fn test_real_blueprint_deployment_with_all_features() {
     let binary_path = match build_blueprint().await {
         Ok(path) => path,
         Err(e) => {
-            println!("⚠️  Skipping test - blueprint build failed: {}", e);
+            println!("⚠️  Skipping test - blueprint build failed: {e}");
             return;
         }
     };
@@ -100,7 +112,7 @@ async fn test_real_blueprint_deployment_with_all_features() {
     let image_tag = match create_blueprint_image(&binary_path).await {
         Ok(tag) => tag,
         Err(e) => {
-            println!("⚠️  Skipping test - image creation failed: {}", e);
+            println!("⚠️  Skipping test - image creation failed: {e}");
             return;
         }
     };
@@ -127,13 +139,16 @@ async fn test_real_blueprint_deployment_with_all_features() {
         }),
     };
 
-    let ssh_client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config).await {
-        Ok(client) => client,
-        Err(e) => {
-            println!("⚠️  Skipping test - SSH client creation failed: {}", e);
-            return;
-        }
-    };
+    let ssh_client =
+        match SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
+            .await
+        {
+            Ok(client) => client,
+            Err(e) => {
+                println!("⚠️  Skipping test - SSH client creation failed: {e}");
+                return;
+            }
+        };
 
     // 4. Deploy blueprint with resource limits
     let resource_spec = ResourceSpec {
@@ -152,16 +167,22 @@ async fn test_real_blueprint_deployment_with_all_features() {
 
     // Deploy the actual blueprint
     let container_id = match ssh_client
-        .deploy_container_with_resources(&image_tag, "test-blueprint", env_vars, Some(&resource_spec))
-        .await {
+        .deploy_container_with_resources(
+            &image_tag,
+            "test-blueprint",
+            env_vars,
+            Some(&resource_spec),
+        )
+        .await
+    {
         Ok(id) => id,
         Err(e) => {
-            println!("⚠️  Skipping test - container deployment failed: {}", e);
+            println!("⚠️  Skipping test - container deployment failed: {e}");
             return;
         }
     };
 
-    println!("✅ Deployed blueprint container: {}", container_id);
+    println!("✅ Deployed blueprint container: {container_id}");
 
     // 5. Test log streaming
     test_blueprint_log_streaming(&ssh_client, &container_id).await;
@@ -180,15 +201,12 @@ async fn test_real_blueprint_deployment_with_all_features() {
 
     // Cleanup
     match ssh_client.remove_container(&container_id).await {
-        Ok(_) => println!("✅ Cleaned up container {}", container_id),
-        Err(e) => println!("⚠️  Failed to cleanup container: {}", e),
+        Ok(_) => println!("✅ Cleaned up container {container_id}"),
+        Err(e) => println!("⚠️  Failed to cleanup container: {e}"),
     }
 }
 
-async fn test_blueprint_log_streaming(
-    ssh_client: &SshDeploymentClient,
-    container_id: &str,
-) {
+async fn test_blueprint_log_streaming(ssh_client: &SshDeploymentClient, container_id: &str) {
     println!("📊 Testing log streaming...");
 
     // Create log streamer and integrate with SSH logs
@@ -206,7 +224,7 @@ async fn test_blueprint_log_streaming(
     let mut log_stream = match ssh_client.stream_container_logs(container_id).await {
         Ok(stream) => stream,
         Err(e) => {
-            println!("  ⚠️  Log streaming not available: {}", e);
+            println!("  ⚠️  Log streaming not available: {e}");
             return;
         }
     };
@@ -233,10 +251,11 @@ async fn test_blueprint_log_streaming(
                 // Collect and verify blueprint-specific logs
                 collected_logs.push(log_line.clone());
 
-                if log_line.contains("Blueprint initialized") ||
-                   log_line.contains("Starting job") ||
-                   log_line.contains("job-manager") {
-                    println!("  ✓ Found blueprint log: {}", log_line);
+                if log_line.contains("Blueprint initialized")
+                    || log_line.contains("Starting job")
+                    || log_line.contains("job-manager")
+                {
+                    println!("  ✓ Found blueprint log: {log_line}");
 
                     // Track that we found blueprint-specific logs
                     // In production, these would be sent to the aggregation service
@@ -254,46 +273,61 @@ async fn test_blueprint_log_streaming(
     assert!(!collected_logs.is_empty(), "Failed to collect any logs");
 
     // Verify log streaming worked
-    println!("  ✅ Log streaming working: {} logs collected from container", log_count);
+    println!("  ✅ Log streaming working: {log_count} logs collected from container");
 
     // Verify error handling
     if has_error_logs {
         println!("  ⚠️  Errors detected in logs - investigating...");
-        for log in collected_logs.iter().filter(|l| l.contains("ERROR") || l.contains("error")) {
-            println!("    ERROR: {}", log);
+        for log in collected_logs
+            .iter()
+            .filter(|l| l.contains("ERROR") || l.contains("error"))
+        {
+            println!("    ERROR: {log}");
         }
     }
 }
 
-async fn test_qos_metrics_collection(
-    ssh_client: &SshDeploymentClient,
-    container_id: &str,
-) {
+async fn test_qos_metrics_collection(ssh_client: &SshDeploymentClient, container_id: &str) {
     println!("📈 Testing QoS metrics...");
 
     // Get container metrics via new method
     match ssh_client.collect_container_metrics(container_id).await {
         Ok(metrics) => {
             // Verify we're collecting metrics
-            assert!(metrics["cpu_usage_percent"].as_str().is_some(), "CPU metrics missing");
-            assert!(metrics["memory_usage_mb"].as_f64().is_some(), "Memory metrics missing");
-            assert!(metrics["network_io"].as_str().is_some(), "Network metrics missing");
+            assert!(
+                metrics["cpu_usage_percent"].as_str().is_some(),
+                "CPU metrics missing"
+            );
+            assert!(
+                metrics["memory_usage_mb"].as_f64().is_some(),
+                "Memory metrics missing"
+            );
+            assert!(
+                metrics["network_io"].as_str().is_some(),
+                "Network metrics missing"
+            );
 
-            println!("  ✓ CPU: {}%", metrics["cpu_usage_percent"].as_str().unwrap_or("N/A"));
-            println!("  ✓ Memory: {} MB", metrics["memory_usage_mb"].as_f64().unwrap_or(0.0));
-            println!("  ✓ Network: {}", metrics["network_io"].as_str().unwrap_or("N/A"));
+            println!(
+                "  ✓ CPU: {}%",
+                metrics["cpu_usage_percent"].as_str().unwrap_or("N/A")
+            );
+            println!(
+                "  ✓ Memory: {} MB",
+                metrics["memory_usage_mb"].as_f64().unwrap_or(0.0)
+            );
+            println!(
+                "  ✓ Network: {}",
+                metrics["network_io"].as_str().unwrap_or("N/A")
+            );
             println!("  ✅ QoS metrics collection working");
         }
         Err(e) => {
-            println!("  ⚠️  Metrics collection failed: {}", e);
+            println!("  ⚠️  Metrics collection failed: {e}");
         }
     }
 }
 
-async fn test_blueprint_health_monitoring(
-    ssh_client: &SshDeploymentClient,
-    container_id: &str,
-) {
+async fn test_blueprint_health_monitoring(ssh_client: &SshDeploymentClient, container_id: &str) {
     println!("🏥 Testing health monitoring...");
 
     // Use new integrated health check method
@@ -316,8 +350,8 @@ async fn test_blueprint_health_monitoring(
     let health_checker = ApplicationHealthChecker::new();
     for (port, service) in [(9944, "RPC"), (9615, "Prometheus"), (30333, "P2P")] {
         match health_checker.check_tcp("localhost", port).await {
-            HealthStatus::Healthy => println!("  ✓ Port {} ({}) responding", port, service),
-            _ => println!("  ✗ Port {} ({}) not responding", port, service),
+            HealthStatus::Healthy => println!("  ✓ Port {port} ({service}) responding"),
+            _ => println!("  ✗ Port {port} ({service}) not responding"),
         }
     }
 }
@@ -330,15 +364,13 @@ async fn test_blueprint_update(
     println!("🔄 Testing blueprint update...");
 
     // Create update manager
-    let mut update_manager = UpdateManager::new(
-        UpdateStrategy::BlueGreen {
-            switch_timeout: Duration::from_secs(30),
-            health_check_duration: Duration::from_secs(10),
-        }
-    );
+    let mut update_manager = UpdateManager::new(UpdateStrategy::BlueGreen {
+        switch_timeout: Duration::from_secs(30),
+        health_check_duration: Duration::from_secs(10),
+    });
 
     // Simulate updating to a new version
-    let new_version_tag = format!("{}-v2", image_tag);
+    let new_version_tag = format!("{image_tag}-v2");
 
     let resource_spec = ResourceSpec {
         cpu: 1.0,
@@ -354,20 +386,22 @@ async fn test_blueprint_update(
 
     // Perform blue-green update
     let update_result = update_manager
-        .update_via_ssh(&ssh_client, &new_version_tag, &resource_spec, env_vars)
+        .update_via_ssh(ssh_client, &new_version_tag, &resource_spec, env_vars)
         .await;
 
     match update_result {
         Ok(new_container_id) => {
-            println!("  ✅ Successfully updated to new version: {}", new_container_id);
+            println!("  ✅ Successfully updated to new version: {new_container_id}");
 
             // Verify old container stopped
             let old_running = ssh_client.health_check_container(container_id).await;
-            assert!(old_running.is_err() || !old_running.unwrap(),
-                "Old container should be stopped after update");
+            assert!(
+                old_running.is_err() || !old_running.unwrap(),
+                "Old container should be stopped after update"
+            );
         }
         Err(e) => {
-            println!("  ⚠️  Update failed (expected in test env): {}", e);
+            println!("  ⚠️  Update failed (expected in test env): {e}");
         }
     }
 }
@@ -381,25 +415,24 @@ async fn test_resource_limit_enforcement(
 
     // Resource limits are already enforced via deploy_container_with_resources
     // We can verify by checking the metrics don't exceed limits
-    match ssh_client.collect_container_metrics(container_id).await {
-        Ok(metrics) => {
-            if let Some(cpu) = metrics["cpu_usage_percent"].as_str()
-                .and_then(|s| s.parse::<f64>().ok()) {
-                // CPU usage should not exceed the limit (with some tolerance)
-                let cpu_limit = spec.cpu * 100.0;
-                if cpu <= (cpu_limit * 1.1) as f64 {
-                    println!("  ✓ CPU usage {} within limit {}%", cpu, cpu_limit);
-                }
-            }
-
-            if let Some(mem_mb) = metrics["memory_usage_mb"].as_f64() {
-                let mem_limit_mb = spec.memory_gb * 1024.0;
-                if mem_mb <= mem_limit_mb as f64 {
-                    println!("  ✓ Memory usage {}MB within limit {}MB", mem_mb, mem_limit_mb);
-                }
+    if let Ok(metrics) = ssh_client.collect_container_metrics(container_id).await {
+        if let Some(cpu) = metrics["cpu_usage_percent"]
+            .as_str()
+            .and_then(|s| s.parse::<f64>().ok())
+        {
+            // CPU usage should not exceed the limit (with some tolerance)
+            let cpu_limit = spec.cpu * 100.0;
+            if cpu <= (cpu_limit * 1.1) as f64 {
+                println!("  ✓ CPU usage {cpu} within limit {cpu_limit}%");
             }
         }
-        Err(_) => {}
+
+        if let Some(mem_mb) = metrics["memory_usage_mb"].as_f64() {
+            let mem_limit_mb = spec.memory_gb * 1024.0;
+            if mem_mb <= mem_limit_mb as f64 {
+                println!("  ✓ Memory usage {mem_mb}MB within limit {mem_limit_mb}MB");
+            }
+        }
     }
 
     // Test that limits are actually enforced by trying to exceed them

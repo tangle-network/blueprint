@@ -9,13 +9,13 @@ use crate::core::resources::ResourceSpec;
 use crate::deployment::manager_integration::RemoteDeploymentConfig;
 use crate::deployment::tracker::DeploymentType;
 use crate::pricing::fetcher::PricingFetcher;
+use blueprint_core::{debug, info, warn};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
 
 /// Deployment preferences configured by operators
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,7 +78,7 @@ impl AutoDeploymentManager {
     pub fn new() -> Self {
         Self {
             enabled_providers: Arc::new(RwLock::new(Vec::new())),
-            pricing_fetcher: Arc::new(RwLock::new(PricingFetcher::new())),
+            pricing_fetcher: Arc::new(RwLock::new(PricingFetcher::new_or_default())),
             max_hourly_cost: 1.0,
             deployment_preferences: Arc::new(RwLock::new(DeploymentPreferences::default())),
         }
@@ -102,7 +102,7 @@ impl AutoDeploymentManager {
         // Validate that deployment types are available with current feature flags
         for deployment_type in &preferences.allowed_types {
             if !Self::is_deployment_type_compiled(*deployment_type) {
-                tracing::warn!(
+                warn!(
                     "Deployment type {:?} is not available (missing feature flag), will be skipped",
                     deployment_type
                 );
@@ -114,7 +114,7 @@ impl AutoDeploymentManager {
             *manager_preferences.write().await = preferences;
         });
 
-        tracing::info!("Loaded deployment preferences from config file");
+        info!("Loaded deployment preferences from config file");
         Ok(())
     }
 
@@ -164,13 +164,11 @@ impl AutoDeploymentManager {
         let mut enabled = self.enabled_providers.write().await;
         *enabled = providers.into_iter().filter(|p| p.enabled).collect();
 
-        tracing::info!("Configured {} enabled cloud providers", enabled.len());
+        info!("Configured {} enabled cloud providers", enabled.len());
         for provider in enabled.iter() {
-            tracing::info!(
+            info!(
                 "  - {} in region {} (priority {})",
-                provider.provider,
-                provider.region,
-                provider.priority
+                provider.provider, provider.region, provider.priority
             );
         }
     }
@@ -215,10 +213,9 @@ impl AutoDeploymentManager {
                         ));
                     }
                     Err(e) => {
-                        tracing::debug!(
+                        debug!(
                             "No suitable instance for {:?}: {}",
-                            provider_config.provider,
-                            e
+                            provider_config.provider, e
                         );
                     }
                     _ => {}
@@ -239,27 +236,24 @@ impl AutoDeploymentManager {
         spec: ResourceSpec,
         ttl_seconds: Option<u64>,
     ) -> Result<RemoteDeploymentConfig> {
-        tracing::info!(
+        info!(
             "Auto-deploying service blueprint:{} service:{}",
-            blueprint_id,
-            service_id
+            blueprint_id, service_id
         );
 
         // Find cheapest provider with real pricing
         let (provider, region, price) = self.find_cheapest_provider(&spec).await?;
 
-        tracing::info!(
+        info!(
             "Deploying to {} in {} (${:.4}/hour)",
-            provider,
-            region,
-            price
+            provider, region, price
         );
 
         // Actually provision infrastructure and deploy Blueprint
         let provisioner = crate::infra::provisioner::CloudProvisioner::new().await?;
 
         // Step 1: Provision cloud instance
-        tracing::info!("Provisioning {} instance in {}", provider, region);
+        info!("Provisioning {} instance in {}", provider, region);
         let instance = provisioner
             .provision(provider.clone(), &spec, &region)
             .await?;
@@ -278,17 +272,39 @@ impl AutoDeploymentManager {
                 .await
             {
                 Ok(crate::infra::types::InstanceStatus::Running) => {
-                    // Try to get the instance details with public IP
-                    // Placeholder IP - real deployment provides actual instance IP
-                    updated_instance.public_ip = Some("pending".to_string());
-                    break;
+                    // Get full instance details including public IP
+                    match provisioner
+                        .get_instance_details(&provider, &updated_instance.id)
+                        .await
+                    {
+                        Ok(details) if details.public_ip.is_some() => {
+                            updated_instance = details;
+                            info!(
+                                "Instance {} received public IP: {}",
+                                updated_instance.id,
+                                updated_instance.public_ip.as_ref().unwrap()
+                            );
+                            break;
+                        }
+                        Ok(_) => {
+                            debug!("Instance running but public IP not yet assigned");
+                            attempts += 1;
+                            continue;
+                        }
+                        Err(e) => {
+                            // Provider doesn't support get_instance_details, fallback to polling
+                            debug!("get_instance_details not supported: {}, will retry", e);
+                            attempts += 1;
+                            continue;
+                        }
+                    }
                 }
                 Ok(_) => {
                     attempts += 1;
                     continue;
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to check instance status: {}", e);
+                    warn!("Failed to check instance status: {}", e);
                     attempts += 1;
                 }
             }
@@ -301,7 +317,7 @@ impl AutoDeploymentManager {
         }
 
         // Step 3: Deploy Blueprint to the instance
-        tracing::info!("Deploying Blueprint to provisioned instance");
+        info!("Deploying Blueprint to provisioned instance");
         let blueprint_image = format!("blueprint:{blueprint_id}-{service_id}");
         let env_vars = std::collections::HashMap::new();
 
@@ -315,7 +331,7 @@ impl AutoDeploymentManager {
             )
             .await?;
 
-        tracing::info!(
+        info!(
             "Successfully deployed Blueprint with QoS endpoint: {:?}",
             deployment_result.qos_grpc_endpoint()
         );
@@ -424,7 +440,8 @@ impl AutoDeploymentManager {
         let _config_toml = toml::to_string_pretty(&example_config)
             .map_err(|e| Error::ConfigurationError(format!("Failed to serialize config: {e}")))?;
 
-        let config_with_comments = r#"# Blueprint Remote Providers - Deployment Preferences Configuration
+        let config_with_comments =
+            r#"# Blueprint Remote Providers - Deployment Preferences Configuration
 # 
 # This file configures how the auto-deployment manager selects deployment types
 # when deploying Blueprints to remote cloud providers.
@@ -461,13 +478,13 @@ allow_fallback = true
 #     { type = "AwsEc2" },    # Fallback to VMs
 #     { type = "GcpGce" },
 # ]
-"#.to_string();
+"#
+            .to_string();
 
-        std::fs::write(output_path, config_with_comments).map_err(|e| {
-            Error::ConfigurationError(format!("Failed to write config file: {e}"))
-        })?;
+        std::fs::write(output_path, config_with_comments)
+            .map_err(|e| Error::ConfigurationError(format!("Failed to write config file: {e}")))?;
 
-        tracing::info!(
+        info!(
             "Generated example deployment preferences config at: {:?}",
             output_path
         );
@@ -490,11 +507,17 @@ allow_fallback = true
 
                 // Set supported credential environment variables
                 match key {
-                    "AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY" | "AWS_REGION" |
-                    "GOOGLE_APPLICATION_CREDENTIALS" | "GOOGLE_CLOUD_PROJECT" |
-                    "AZURE_CLIENT_ID" | "AZURE_CLIENT_SECRET" | "AZURE_TENANT_ID" |
-                    "DIGITALOCEAN_TOKEN" | "DO_TOKEN" |
-                    "VULTR_API_KEY" => {
+                    "AWS_ACCESS_KEY_ID"
+                    | "AWS_SECRET_ACCESS_KEY"
+                    | "AWS_REGION"
+                    | "GOOGLE_APPLICATION_CREDENTIALS"
+                    | "GOOGLE_CLOUD_PROJECT"
+                    | "AZURE_CLIENT_ID"
+                    | "AZURE_CLIENT_SECRET"
+                    | "AZURE_TENANT_ID"
+                    | "DIGITALOCEAN_TOKEN"
+                    | "DO_TOKEN"
+                    | "VULTR_API_KEY" => {
                         // SAFETY: We're only setting environment variables during initialization
                         // before any threads are spawned that might read them
                         unsafe {

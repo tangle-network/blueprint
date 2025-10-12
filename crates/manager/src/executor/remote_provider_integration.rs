@@ -8,11 +8,11 @@ use blueprint_core::{error, info};
 use blueprint_remote_providers::deployment::manager_integration::{
     RemoteDeploymentRegistry, RemoteEventHandler, TtlManager,
 };
-use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker};
 use blueprint_remote_providers::{
     AwsConfig, AzureConfig, CloudConfig, CloudProvider, DigitalOceanConfig, GcpConfig,
     ResourceSpec, VultrConfig,
 };
+use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker};
 use blueprint_std::collections::HashMap;
 use blueprint_std::sync::Arc;
 use tokio::sync::RwLock;
@@ -109,12 +109,13 @@ impl RemoteProviderManager {
             Ok(instance) => {
                 info!(
                     "Service deployed to {}: instance={}",
-                    provider,
-                    instance.instance_id
+                    provider, instance.instance_id
                 );
-                
+
                 // Register with TTL manager for automatic cleanup
-                self.ttl_manager.register_ttl(blueprint_id, service_id, 3600).await; // 1 hour default
+                self.ttl_manager
+                    .register_ttl(blueprint_id, service_id, 3600)
+                    .await; // 1 hour default
             }
             Err(e) => {
                 error!("Failed to deploy service: {}", e);
@@ -136,7 +137,9 @@ impl RemoteProviderManager {
         );
 
         // Remove TTL registration for the terminated service
-        self.ttl_manager.unregister_ttl(blueprint_id, service_id).await;
+        self.ttl_manager
+            .unregister_ttl(blueprint_id, service_id)
+            .await;
 
         // Clean up deployment from registry
         if let Err(e) = self.registry.cleanup(blueprint_id, service_id).await {
@@ -145,7 +148,6 @@ impl RemoteProviderManager {
 
         Ok(())
     }
-
 }
 
 // Cloud configuration types are now imported from blueprint_remote_providers

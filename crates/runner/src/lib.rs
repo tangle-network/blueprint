@@ -79,6 +79,20 @@ unsafe impl Sync for DynBlueprintConfig<'_> {}
 
 impl BlueprintConfig for () {}
 
+#[cfg(feature = "tls")]
+fn resolve_service_id(env: &BlueprintEnvironment) -> Result<u64, crate::error::ConfigError> {
+    #[cfg(feature = "tangle")]
+    use config::ProtocolSettings;
+    #[allow(unreachable_patterns)]
+    match &env.protocol_settings {
+        #[cfg(feature = "tangle")]
+        ProtocolSettings::Tangle(settings) => settings
+            .service_id
+            .ok_or(crate::error::ConfigError::MissingServiceId),
+        _ => Err(crate::error::ConfigError::MissingServiceId),
+    }
+}
+
 /// A background service to be handled by a [`BlueprintRunner`]
 ///
 /// # Usage
@@ -890,6 +904,41 @@ where
             );
             e
         })?;
+
+        // Update TLS configuration if enabled
+        #[cfg(feature = "tls")]
+        if let Some(tls_profile) = &env.tls_profile {
+            blueprint_core::info!(
+                target: "blueprint-runner",
+                "Updating service TLS profile"
+            );
+
+            let service_id = resolve_service_id(&env).inspect_err(|err| {
+                blueprint_core::error!(
+                    target: "blueprint-runner",
+                    error = ?err,
+                    "TLS profile provided but service ID is missing from configuration"
+                );
+            })?;
+
+            bridge
+                .update_blueprint_service_tls_profile(service_id, Some(tls_profile.clone()))
+                .await
+                .map_err(|e| {
+                    blueprint_core::error!(
+                        target: "blueprint-runner",
+                        service_id,
+                        "[FATAL] Failed to update TLS profile for service {service_id}: {e}"
+                    );
+                    e
+                })?;
+
+            blueprint_core::info!(
+                target: "blueprint-runner",
+                service_id,
+                "TLS profile updated successfully"
+            );
+        }
 
         loop {
             tokio::select! {

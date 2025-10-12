@@ -6,7 +6,7 @@ use crate::core::error::{Error, Result};
 use blake3::Hasher;
 use std::path::Path;
 use tokio::process::Command;
-use tracing::{info, warn};
+use blueprint_core::{info, warn};
 
 /// Secure binary installer with cryptographic verification
 pub struct SecureBinaryInstaller {

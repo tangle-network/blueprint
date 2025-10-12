@@ -5,9 +5,9 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
+use blueprint_core::debug;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::debug;
 
 /// Machine type discovery service
 pub struct MachineTypeDiscovery {
@@ -49,51 +49,41 @@ impl MachineTypeDiscovery {
         }
 
         let machines = match provider {
-            CloudProvider::AWS => {
-                match self.discover_aws_instances(region, credentials).await {
-                    Ok(discovered) => discovered,
-                    Err(e) => {
-                        debug!("AWS discovery failed: {}, using fallback", e);
-                        self.get_common_aws_instances()
-                    }
+            CloudProvider::AWS => match self.discover_aws_instances(region, credentials).await {
+                Ok(discovered) => discovered,
+                Err(e) => {
+                    debug!("AWS discovery failed: {}, using fallback", e);
+                    self.get_common_aws_instances()
                 }
-            }
-            CloudProvider::GCP => {
-                match self.discover_gcp_machines(region, credentials).await {
-                    Ok(discovered) => discovered,
-                    Err(e) => {
-                        debug!("GCP discovery failed: {}, using fallback", e);
-                        self.get_common_gcp_machines()
-                    }
+            },
+            CloudProvider::GCP => match self.discover_gcp_machines(region, credentials).await {
+                Ok(discovered) => discovered,
+                Err(e) => {
+                    debug!("GCP discovery failed: {}, using fallback", e);
+                    self.get_common_gcp_machines()
                 }
-            }
-            CloudProvider::Azure => {
-                match self.discover_azure_vms(region, credentials).await {
-                    Ok(discovered) => discovered,
-                    Err(e) => {
-                        debug!("Azure discovery failed: {}, using fallback", e);
-                        self.get_common_azure_vms()
-                    }
+            },
+            CloudProvider::Azure => match self.discover_azure_vms(region, credentials).await {
+                Ok(discovered) => discovered,
+                Err(e) => {
+                    debug!("Azure discovery failed: {}, using fallback", e);
+                    self.get_common_azure_vms()
                 }
-            }
-            CloudProvider::DigitalOcean => {
-                match self.discover_do_droplets(credentials).await {
-                    Ok(discovered) => discovered,
-                    Err(e) => {
-                        debug!("DigitalOcean discovery failed: {}, using fallback", e);
-                        self.get_common_do_droplets()
-                    }
+            },
+            CloudProvider::DigitalOcean => match self.discover_do_droplets(credentials).await {
+                Ok(discovered) => discovered,
+                Err(e) => {
+                    debug!("DigitalOcean discovery failed: {}, using fallback", e);
+                    self.get_common_do_droplets()
                 }
-            }
-            CloudProvider::Vultr => {
-                match self.discover_vultr_plans(credentials).await {
-                    Ok(discovered) => discovered,
-                    Err(e) => {
-                        debug!("Vultr discovery failed: {}, using fallback", e);
-                        self.get_common_vultr_plans()
-                    }
+            },
+            CloudProvider::Vultr => match self.discover_vultr_plans(credentials).await {
+                Ok(discovered) => discovered,
+                Err(e) => {
+                    debug!("Vultr discovery failed: {}, using fallback", e);
+                    self.get_common_vultr_plans()
                 }
-            }
+            },
             _ => vec![],
         };
 
@@ -219,9 +209,10 @@ impl MachineTypeDiscovery {
             return Ok(self.get_common_gcp_machines());
         }
 
-        let json: serde_json::Value = response.json().await.map_err(|e| {
-            Error::ConfigurationError(format!("Failed to parse GCP response: {e}"))
-        })?;
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse GCP response: {e}")))?;
 
         let mut machines = Vec::new();
         if let Some(items) = json["items"].as_array() {
@@ -391,17 +382,16 @@ impl MachineTypeDiscovery {
             .bearer_auth(credentials.api_token.as_ref().unwrap_or(&String::new()))
             .send()
             .await
-            .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to query DigitalOcean: {e}"))
-            })?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to query DigitalOcean: {e}")))?;
 
         if !response.status().is_success() {
             return Ok(self.get_common_do_droplets());
         }
 
-        let json: serde_json::Value = response.json().await.map_err(|e| {
-            Error::ConfigurationError(format!("Failed to parse DO response: {e}"))
-        })?;
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| Error::ConfigurationError(format!("Failed to parse DO response: {e}")))?;
 
         let mut machines = Vec::new();
         if let Some(sizes) = json["sizes"].as_array() {
@@ -582,9 +572,8 @@ impl MachineTypeDiscovery {
                 .filter(|m| m.memory_gb >= min_memory_gb)
                 .filter(|m| !needs_gpu || m.gpu_count > 0)
                 .filter(|m| {
-                    max_price_per_hour.is_none_or(|max| {
-                        m.hourly_price.is_none_or(|price| price <= max)
-                    })
+                    max_price_per_hour
+                        .is_none_or(|max| m.hourly_price.is_none_or(|price| price <= max))
                 })
                 .min_by(|a, b| {
                     // Sort by price, then by excess resources
@@ -634,7 +623,8 @@ impl CloudCredentials {
             subscription_id: env::var("AZURE_SUBSCRIPTION_ID").ok(),
 
             // DigitalOcean
-            access_token: env::var("DIGITALOCEAN_TOKEN").ok()
+            access_token: env::var("DIGITALOCEAN_TOKEN")
+                .ok()
                 .or_else(|| env::var("DO_TOKEN").ok()),
 
             // Vultr

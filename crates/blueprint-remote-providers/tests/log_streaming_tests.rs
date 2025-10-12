@@ -3,9 +3,9 @@
 //! Tests the log streaming, parsing, and aggregation features.
 
 use blueprint_remote_providers::monitoring::logs::{
-    LogStreamer, LogEntry, LogLevel, LogSource, LogAggregator, LogFilters,
+    LogAggregator, LogEntry, LogFilters, LogLevel, LogSource, LogStreamer,
 };
-use std::{time::SystemTime, collections::HashMap};
+use std::{collections::HashMap, time::SystemTime};
 
 #[tokio::test]
 async fn test_log_entry_creation_and_fields() {
@@ -104,10 +104,12 @@ async fn test_log_aggregator_filters() {
     let mut aggregator = LogAggregator::new();
 
     // Set filters - we can only test that the API works, not internal state
-    let mut filters = LogFilters::default();
-    filters.level_min = Some(LogLevel::Warn);
-    filters.service_ids = Some(vec!["service-1".to_string(), "service-2".to_string()]);
-    filters.search_text = Some("error".to_string());
+    let filters = LogFilters {
+        level_min: Some(LogLevel::Warn),
+        service_ids: Some(vec!["service-1".to_string(), "service-2".to_string()]),
+        search_text: Some("error".to_string()),
+        ..Default::default()
+    };
 
     // This should not panic
     aggregator.set_filters(filters);
@@ -140,7 +142,11 @@ async fn test_log_source_variants() {
         };
 
         match k8s_source {
-            LogSource::Kubernetes { namespace, pod_name, container_name } => {
+            LogSource::Kubernetes {
+                namespace,
+                pod_name,
+                container_name,
+            } => {
                 assert_eq!(namespace, "default");
                 assert_eq!(pod_name, "my-pod-abc123");
                 assert_eq!(container_name, Some("app-container".to_string()));
@@ -157,7 +163,10 @@ async fn test_log_source_variants() {
         };
 
         match cloudwatch_source {
-            LogSource::CloudWatch { log_group, log_stream } => {
+            LogSource::CloudWatch {
+                log_group,
+                log_stream,
+            } => {
                 assert_eq!(log_group, "/aws/lambda/my-function");
                 assert_eq!(log_stream, "2024/01/01/[123]abc");
             }
@@ -184,8 +193,8 @@ async fn test_log_streamer_follow_setting() {
 #[tokio::test]
 async fn test_deployment_record_compatibility() {
     // Test that log streaming integrates with deployment tracking
-    use blueprint_remote_providers::deployment::tracker::{DeploymentRecord, DeploymentType};
     use blueprint_remote_providers::core::remote::CloudProvider;
+    use blueprint_remote_providers::deployment::tracker::{DeploymentRecord, DeploymentType};
     use chrono::Utc;
 
     let mut resource_ids = HashMap::new();

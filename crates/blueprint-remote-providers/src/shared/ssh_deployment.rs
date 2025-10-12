@@ -5,11 +5,13 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
-use crate::deployment::ssh::{ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient};
+use crate::deployment::ssh::{
+    ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient,
+};
 use crate::infra::traits::BlueprintDeploymentResult;
 use crate::infra::types::ProvisionedInstance;
+use blueprint_core::{info, warn};
 use std::collections::HashMap;
-use tracing::{info, warn};
 
 /// Shared SSH deployment implementation
 pub struct SharedSshDeployment;
@@ -23,7 +25,9 @@ impl SharedSshDeployment {
         env_vars: HashMap<String, String>,
         ssh_config: SshDeploymentConfig,
     ) -> Result<BlueprintDeploymentResult> {
-        let public_ip = instance.public_ip.as_ref()
+        let public_ip = instance
+            .public_ip
+            .as_ref()
             .ok_or_else(|| Error::Other("Instance has no public IP".into()))?;
 
         // SSH connection configuration
@@ -43,9 +47,10 @@ impl SharedSshDeployment {
             health_check: None,
         };
 
-        let ssh_client = SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
-            .await
-            .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {e}")))?;
+        let ssh_client =
+            SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
+                .await
+                .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {e}")))?;
 
         let deployment = ssh_client
             .deploy_blueprint(blueprint_image, resource_spec, env_vars)
@@ -65,7 +70,10 @@ impl SharedSshDeployment {
 
         // Verify QoS ports are exposed
         if !port_mappings.contains_key(&9615) {
-            warn!("QoS metrics port 9615 not exposed in {} deployment", ssh_config.provider_name);
+            warn!(
+                "QoS metrics port 9615 not exposed in {} deployment",
+                ssh_config.provider_name
+            );
         }
 
         let mut metadata = HashMap::new();

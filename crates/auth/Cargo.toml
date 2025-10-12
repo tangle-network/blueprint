@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-auth"
-version = "0.1.0-alpha.9"
+version = "0.1.0-alpha.10"
 description = "Blueprint HTTP/WS Authentication"
 authors.workspace = true
 edition.workspace = true
@@ -31,16 +31,26 @@ pasetors = { workspace = true, default-features = false, features = ["v4", "serd
 uuid = { workspace = true, features = ["v4", "serde"] }
 jsonwebtoken = { workspace = true, default-features = false }
 pem = { workspace = true, default-features = false }
+chacha20poly1305 = { workspace = true, features = ["alloc", "getrandom"] }
+time = { workspace = true }
 
-axum = { workspace = true, default-features = false, features = ["json", "form"] }
-hyper-util = { workspace = true, features = ["client", "client-legacy", "tokio", "http2"] }
+axum = { workspace = true, default-features = false, features = ["json", "form", "http1", "http2", "tokio"] }
+hyper-util = { workspace = true, features = ["client", "client-legacy", "tokio", "http2", "server"] }
+hyper = { workspace = true, features = ["full"] }
+hyper-rustls = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tokio-rustls = { workspace = true, features = ["default"] }
+rustls = { workspace = true, features = ["default"] }
+rustls-pemfile = { workspace = true, features = ["std"] }
+rcgen = { workspace = true, features = ["crypto", "ring", "pem", "x509-parser"] }
+once_cell = { workspace = true }
+x509-parser = { workspace = true }
 
 # Database
 rocksdb = { workspace = true, features = ["lz4"] }
 prost = { workspace = true, features = ["derive"] }
 
 # Standalone Binary
-tokio = { workspace = true, features = ["full"], optional = true }
 tempfile = { workspace = true, optional = true }
 
 
@@ -59,14 +69,20 @@ tracing-subscriber = { workspace = true, features = ["fmt", "env-filter", "regis
 openssl = { version = "0.10", features = ["vendored"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true, features = ["codegen", "prost", "transport"] }
+tokio-rustls = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+rcgen = { workspace = true }
+hyper-rustls = { workspace = true }
 
 [build-dependencies]
-tonic-build = { workspace = true, features = ["prost"] }
+tonic-build = { workspace = true, features = ["prost", "transport"] }
+protobuf-src = "2.1"
 
 [features]
 default = ["std", "tracing"]
 std = ["blueprint-std/std", "crc32fast/std", "k256/std", "schnorrkel/std", "base64/std", "prost/std"]
-standalone = ["tokio", "tempfile", "axum/http1", "axum/http2", "axum/tokio"]
+standalone = ["tempfile", "axum/http1", "axum/http2", "axum/tokio"]
 tracing = []
 
 [[bin]]

@@ -291,8 +291,6 @@ mod tests {
 
     #[test]
     fn test_cost_aware_selection() {
-        
-
         let spec = ResourceSpec {
             cpu: 0.5,
             memory_gb: 1.0,

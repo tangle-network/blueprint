@@ -3,10 +3,13 @@
 //! These tests verify the new update manager works correctly with different strategies.
 
 use blueprint_remote_providers::{
-    deployment::{UpdateManager, UpdateStrategy, DeploymentVersion, update_manager::VersionStatus},
     core::resources::ResourceSpec,
+    deployment::{DeploymentVersion, UpdateManager, UpdateStrategy, update_manager::VersionStatus},
 };
-use std::{time::{Duration, SystemTime}, collections::HashMap};
+use std::{
+    collections::HashMap,
+    time::{Duration, SystemTime},
+};
 use tokio::time::sleep;
 
 #[tokio::test]
@@ -82,7 +85,10 @@ async fn test_update_strategy_serialization() {
     }
 
     match rolling {
-        UpdateStrategy::RollingUpdate { max_unavailable, max_surge } => {
+        UpdateStrategy::RollingUpdate {
+            max_unavailable,
+            max_surge,
+        } => {
             assert_eq!(max_unavailable, 1);
             assert_eq!(max_surge, 1);
         }
@@ -90,7 +96,11 @@ async fn test_update_strategy_serialization() {
     }
 
     match canary {
-        UpdateStrategy::Canary { initial_percentage, increment, .. } => {
+        UpdateStrategy::Canary {
+            initial_percentage,
+            increment,
+            ..
+        } => {
             assert_eq!(initial_percentage, 10);
             assert_eq!(increment, 20);
         }

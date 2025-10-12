@@ -88,9 +88,7 @@ impl SecureContainerCommands {
         // Add container name and image with timestamp
         let timestamp = chrono::Utc::now().timestamp();
         let escaped_image = escape(image.into());
-        cmd.push_str(&format!(
-            " --name blueprint-{timestamp} {escaped_image}"
-        ));
+        cmd.push_str(&format!(" --name blueprint-{timestamp} {escaped_image}"));
 
         Ok(cmd)
     }
@@ -292,13 +290,14 @@ impl SecureConfigManager {
         let temp_path = "/tmp/blueprint_config_temp.json";
         tokio::fs::write(temp_path, config_content)
             .await
-            .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to write temp config: {e}"))
-            })?;
+            .map_err(|e| Error::ConfigurationError(format!("Failed to write temp config: {e}")))?;
 
         // Use secure file operations instead of shell commands
+        let target_path_str = target_path.as_ref().to_str().ok_or_else(|| {
+            Error::ConfigurationError("Target path contains invalid UTF-8".to_string())
+        })?;
         let mut cmd = AsyncCommand::new("sudo");
-        cmd.args(["cp", temp_path, target_path.as_ref().to_str().unwrap()]);
+        cmd.args(["cp", temp_path, target_path_str]);
 
         let output = cmd
             .output()
