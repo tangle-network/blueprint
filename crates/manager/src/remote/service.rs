@@ -814,5 +814,6 @@ fn convert_resource_spec(
         storage_gb: spec.storage_gb,
         gpu_count: spec.gpu_count,
         allow_spot: spec.allow_spot,
+        qos: blueprint_remote_providers::resources::QosParameters::default(),
     }
 }
