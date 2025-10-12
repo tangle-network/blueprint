@@ -104,6 +104,15 @@ async fn ensure_test_cluster(cluster_name: &str) {
         }
     }
 
+    // Remove stale lock file if it exists (common in CI)
+    if let Ok(home) = std::env::var("HOME") {
+        let lock_path = format!("{home}/.kube/config.lock");
+        let _ = AsyncCommand::new("rm")
+            .args(["-f", &lock_path])
+            .output()
+            .await;
+    }
+
     // Export kubeconfig
     let export = AsyncCommand::new("kind")
         .args(["export", "kubeconfig", "--name", cluster_name])
