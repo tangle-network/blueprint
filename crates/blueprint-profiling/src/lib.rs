@@ -12,7 +12,6 @@
 /// let profile = ProfileRunner::profile_job(job_fn, config).await?;
 /// println!("Job profile: {:?}", profile);
 /// ```
-
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use thiserror::Error;
