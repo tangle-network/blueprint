@@ -37,6 +37,14 @@ pub enum FaasProviderDef {
     Custom { endpoint: String },
 }
 
+impl Default for FaasProviderDef {
+    fn default() -> Self {
+        Self::AwsLambda {
+            region: "us-east-1".to_string(),
+        }
+    }
+}
+
 fn default_memory() -> u32 {
     512
 }

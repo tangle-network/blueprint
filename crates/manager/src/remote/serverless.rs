@@ -85,11 +85,21 @@ pub async fn deploy_serverless(
     }
 
     // Step 3: Create service handle
-    Ok(Service {
-        name: service_name.to_string(),
-        // TODO: populate with actual deployment info
-        ..Default::default()
-    })
+    // For serverless, we return a lightweight native service that runs the orchestrator locally
+    // The orchestrator itself just coordinates FaaS invocations
+    let runtime_dir = ctx.runtime_dir().join(format!("serverless-{}", service_name));
+    std::fs::create_dir_all(&runtime_dir)?;
+
+    Service::new_native(
+        ctx,
+        crate::rt::ResourceLimits::default(), // Minimal resources for orchestrator
+        runtime_dir,
+        service_name,
+        binary_path,
+        env_vars,
+        arguments,
+    )
+    .await
 }
 
 /// Deploy the minimal orchestrator.
