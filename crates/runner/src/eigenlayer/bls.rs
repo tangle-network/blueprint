@@ -323,7 +323,7 @@ async fn is_operator_registered(env: &BlueprintEnvironment) -> Result<bool, Runn
     )
     .await
     .map_err(EigenlayerError::AvsRegistry)?;
-    println!("AVS registry reader: {:?}", avs_registry_reader);
+
     // Check if the operator has already registered for the service
     match avs_registry_reader
         .is_operator_registered(operator_address)

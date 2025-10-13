@@ -8,9 +8,7 @@ use crate::sdk::entry::SendFuture;
 use blueprint_auth::db::RocksDb;
 use blueprint_clients::EventsClient;
 #[cfg(feature = "tangle")]
-use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
-#[cfg(feature = "tangle")]
-use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
+use blueprint_clients::tangle::client::TangleClient;
 #[cfg(feature = "eigenlayer")]
 use blueprint_clients::eigenlayer::client::EigenlayerClient;
 use blueprint_core::{error, info, warn};
@@ -215,7 +213,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         // Handle initialization logic
         // NOTE: The node running this code should be registered as an operator for the blueprints, otherwise, this
         // code will fail
-        let mut operator_subscribed_blueprints = handle_init_tangle_blueprint(
+        let mut operator_subscribed_blueprints = tangle_event_handler::handle_init(
             &tangle_client,
             services_client,
             &sub_account_id,
@@ -258,6 +256,13 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     #[cfg(feature = "eigenlayer")]
     let manager_eigenlayer_task = async move {
         let eigenlayer_client = EigenlayerClient::new(env.clone());
+        eigen_event_handler::handle_init(
+            &eigenlayer_client,
+            &env,
+            &ctx,
+        )
+        .await?;
+
         while let Some(event) = eigenlayer_client.next_event().await {
             eigen_event_handler::handle_eigen_event(
                 &event,
@@ -388,62 +393,6 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
         shutdown_cmd,
     )
     .await
-}
-
-/// * Query to get Vec<RpcServicesWithBlueprint>
-/// * For each `RpcServicesWithBlueprint`, fetch the associated blueprint binary (fetch/download)
-///   -> If the services field is empty, just emit and log inside the executed binary "that states a new service instance got created by one of these blueprints"
-///   -> If the services field is not empty, for each service in RpcServicesWithBlueprint.services, spawn the blueprint binary, using params to set the job type to listen to (in terms of our old language, each spawned service represents a single "`RoleType`")
-#[cfg(feature = "tangle")]
-#[allow(clippy::too_many_arguments)]
-async fn handle_init_tangle_blueprint(
-    tangle_runtime: &TangleClient,
-    services_client: &TangleServicesClient<TangleConfig>,
-    sub_account_id: &AccountId32,
-    active_blueprints: &mut ActiveBlueprints,
-    blueprint_env: &BlueprintEnvironment,
-    ctx: &BlueprintManagerContext,
-) -> Result<Vec<RpcServicesWithBlueprint>> {
-    info!("Beginning initialization of Blueprint Manager");
-
-    let Some(init_event) = tangle_runtime.next_event().await else {
-        return Err(Error::InitialBlock);
-    };
-
-    let maybe_operator_subscribed_blueprints = services_client
-        .query_operator_blueprints(init_event.hash, sub_account_id.clone())
-        .await;
-
-    let operator_subscribed_blueprints =
-        maybe_operator_subscribed_blueprints.unwrap_or_else(|err| {
-            warn!(
-                "Failed to query operator blueprints: {}, did you register as an operator?",
-                err
-            );
-            Vec::new()
-        });
-
-    info!(
-        "Received {} initial blueprints this operator is registered to",
-        operator_subscribed_blueprints.len()
-    );
-
-    // Immediately poll, handling the initial state
-    let poll_result =
-        tangle_event_handler::check_blueprint_events(&init_event, active_blueprints, sub_account_id);
-
-    tangle_event_handler::handle_tangle_event(
-        &init_event,
-        &operator_subscribed_blueprints,
-        blueprint_env,
-        ctx,
-        active_blueprints,
-        poll_result,
-        services_client,
-    )
-    .await?;
-
-    Ok(operator_subscribed_blueprints)
 }
 
 /// Runs the authentication proxy server.

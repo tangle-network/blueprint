@@ -1,5 +1,6 @@
 use crate::error::Result;
 use blueprint_auth::proxy::DEFAULT_AUTH_PROXY_PORT;
+use blueprint_runner::config::SupportedChains;
 use blueprint_core::info;
 use clap::{Args, Parser};
 use std::fmt::Display;
@@ -25,6 +26,10 @@ pub struct BlueprintManagerCli {
 
 #[derive(Debug, Args, Default)]
 pub struct BlueprintManagerConfig {
+    /// The target blockchain runtime for eigenlayer blueprint
+    #[arg(long, short = 'c')]
+    pub chain: Option<SupportedChains>,
+
     #[command(flatten)]
     pub paths: Paths,
     /// The verbosity level, can be used multiple times to increase verbosity
@@ -69,8 +74,20 @@ pub struct BlueprintManagerConfig {
 impl BlueprintManagerConfig {
     #[inline]
     #[must_use]
+    pub fn runtime_chain(&self) -> Option<SupportedChains> {
+        self.chain
+    }
+
+    #[inline]
+    #[must_use]
     pub fn blueprint_config_path(&self) -> Option<&Path> {
         self.paths.blueprint_config.as_deref()
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn eigen_blueprint_binary_path(&self) -> Option<&Path> {
+        self.paths.eigen_blueprint_binary_path.as_deref()
     }
 
     #[inline]
@@ -122,6 +139,9 @@ pub struct Paths {
     /// The runtime directory for manager-to-blueprint sockets
     #[arg(long, short, default_value_os_t = default_runtime_dir())]
     pub runtime_dir: PathBuf,
+    /// The path to the Eigenlayer blueprint binary
+    #[arg(long)]
+    pub eigen_blueprint_binary_path: Option<PathBuf>,
 }
 
 impl Default for Paths {
@@ -132,6 +152,7 @@ impl Default for Paths {
             data_dir: PathBuf::from("./data"),
             cache_dir: default_cache_dir(),
             runtime_dir: default_runtime_dir(),
+            eigen_blueprint_binary_path: None,
         }
     }
 }

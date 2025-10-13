@@ -26,6 +26,7 @@ blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
+blueprint-tangle-extra = { workspace = true, features = ["metadata-types"] }
 
 document-features.workspace = true
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }

@@ -1,15 +1,11 @@
 use blueprint_core::info;
-use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, SourceType, Paths};
-use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
+use blueprint_runner::config::{BlueprintEnvironment, SupportedChains};
 use blueprint_manager::executor::run_blueprint_manager;
 use blueprint_std::fs;
 use blueprint_std::path::PathBuf;
 use color_eyre::eyre::{Result, eyre};
 use tokio::signal;
-use tokio::io::AsyncBufReadExt;
-use tokio::io::BufReader;
-use tokio::process::{Child, Command};
 use toml::Value;
 
 fn get_binary_name() -> Result<String> {
@@ -46,7 +42,7 @@ pub async fn run_eigenlayer_avs(
     config: BlueprintEnvironment,
     chain: SupportedChains,
     binary_path: Option<PathBuf>,
-) -> Result<Child> {
+) -> Result<()> {
     let binary_path = if let Some(path) = binary_path {
         path
     } else {
@@ -60,21 +56,11 @@ pub async fn run_eigenlayer_avs(
         binary_path.display()
     );
 
-    // Build only if binary doesn't exist or no path was provided
-    if !binary_path.exists() {
-        info!("Binary not found at {}, building...", binary_path.display());
-        let status = Command::new("cargo")
-            .arg("build")
-            .arg("--release")
-            .status()
-            .await?;
-
-        if !status.success() {
-            return Err(eyre!("Failed to build AVS binary"));
-        }
-    }
-
     info!("Preparing Blueprint to run, this may take a few minutes...");
+
+    let default_blueprint_name = "Eigenlayer";
+    let default_blueprint_id: u64 = 0;
+    let default_instance_id = format!("{}-{}", default_blueprint_name, default_blueprint_id);
 
     let blueprint_manager_config = BlueprintManagerConfig {
         paths: Paths {
@@ -82,149 +68,33 @@ pub async fn run_eigenlayer_avs(
             data_dir: config.data_dir.clone(),
             cache_dir: "./blueprint-manager/cache".into(),
             runtime_dir: "./blueprint-manager/runtime".into(),
+            eigen_blueprint_binary_path: Some(binary_path),
             ..Default::default()
         },
+        chain: Some(chain),
         verbose: 2,
         pretty: true,
         allow_unchecked_attestations: true,
         test_mode: true,
-        instance_id: Some("Eigenlayer".into()),
+        instance_id: Some(default_instance_id.clone()),
         preferred_source: SourceType::Native,
         ..Default::default()
     };
     let manager_ctx = BlueprintManagerContext::new(blueprint_manager_config).await?;
+
     let shutdown_signal = async move {
         let _ = signal::ctrl_c().await;
         info!("Received shutdown signal, stopping blueprint manager");
     };
     let mut manager_handle = run_blueprint_manager(manager_ctx, config.clone(), shutdown_signal).await?;
 
-    // Get contract addresses
-    let contract_addresses = config
-        .protocol_settings
-        .eigenlayer()
-        .map_err(|_| eyre!("Missing Eigenlayer contract addresses"))?;
-
-    // Run the AVS binary with the provided options
-    info!("Starting AVS...");
-    let mut command = Command::new(&binary_path);
-
-    let env = BlueprintEnvVars {
-        http_rpc_endpoint: config.http_rpc_endpoint,
-        ws_rpc_endpoint: config.ws_rpc_endpoint,
-        #[cfg(feature = "tee")]
-        kms_endpoint: config.kms_url,
-        keystore_uri: config.keystore_uri,
-        data_dir: config.data_dir,
-        blueprint_id: 0,
-        service_id: 0,
-        protocol: Protocol::Eigenlayer,
-        chain: Some(chain),
-        bootnodes: String::new(),
-        registration_mode: false,
-        bridge_socket_path: None,
-    };
-
-    command.envs(env.encode());
-
-    let args = BlueprintArgs {
-        test_mode: false,
-        pretty: false,
-        verbose: 0,
-    };
-
-    command.args(args.encode(true));
-
-    // Optional arguments
-    // TODO: Implement Keystore Password
-    // if let Some(password) = &config.keystore_password {
-    //     command.arg("--keystore-password").arg(password);
-    // }
-
-    // Contract addresses
-    command
-        .arg("--registry-coordinator")
-        .arg(contract_addresses.registry_coordinator_address.to_string())
-        .arg("--operator-state-retriever")
-        .arg(
-            contract_addresses
-                .operator_state_retriever_address
-                .to_string(),
-        )
-        .arg("--delegation-manager")
-        .arg(contract_addresses.delegation_manager_address.to_string())
-        .arg("--strategy-manager")
-        .arg(contract_addresses.strategy_manager_address.to_string())
-        .arg("--service-manager")
-        .arg(contract_addresses.service_manager_address.to_string())
-        .arg("--stake-registry")
-        .arg(contract_addresses.stake_registry_address.to_string())
-        .arg("--avs-directory")
-        .arg(contract_addresses.avs_directory_address.to_string())
-        .arg("--rewards-coordinator")
-        .arg(contract_addresses.rewards_coordinator_address.to_string())
-        .arg("--allocation-manager")
-        .arg(contract_addresses.allocation_manager_address.to_string())
-        .arg("--permission-controller")
-        .arg(contract_addresses.permission_controller_address.to_string())
-        .arg("--strategy")
-        .arg(contract_addresses.strategy_address.to_string())
-        .arg("--pause-registry")
-        .arg(contract_addresses.pause_registry_address.to_string())
-        .arg("--slasher",
-            contract_addresses.slasher_address.to_string());
-
-    assert!(binary_path.exists(), "Binary path does not exist");
-
     info!("Starting Blueprint manager...");
     manager_handle.start()?;
-
-    let mut child = command
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()?;
-
-    // Handle stdout
-    let stdout = child.stdout.take().expect("Failed to capture stdout");
-    let mut stdout_reader = BufReader::new(stdout).lines();
-
-    // Handle stderr
-    let stderr = child.stderr.take().expect("Failed to capture stderr");
-    let mut stderr_reader = BufReader::new(stderr).lines();
-
-    // Spawn tasks to handle stdout and stderr
-    let stdout_task = tokio::spawn(async move {
-        while let Some(line) = stdout_reader
-            .next_line()
-            .await
-            .expect("Failed to read stdout")
-        {
-            println!("{}", line);
-        }
-    });
-
-    let stderr_task = tokio::spawn(async move {
-        while let Some(line) = stderr_reader
-            .next_line()
-            .await
-            .expect("Failed to read stderr")
-        {
-            eprintln!("{}", line);
-        }
-    });
-
-    // Wait for both tasks to complete
-    let _ = tokio::join!(stdout_task, stderr_task);
-
-    info!(
-        "AVS is running with PID: {}",
-        child.id().unwrap_or_default()
-    );
 
     info!("Blueprint Manager is running. Press Ctrl+C to stop.");
     manager_handle.await?;
 
     info!("Blueprint manager has stopped");
 
-    Ok(child)
+    Ok(())
 }

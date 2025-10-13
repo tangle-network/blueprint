@@ -1,4 +1,5 @@
 use std::fs;
+
 use crate::config::{BlueprintManagerConfig, BlueprintManagerContext};
 use crate::error::{Error, Result};
 use crate::blueprint::native::FilteredBlueprint;
@@ -7,7 +8,8 @@ use crate::sdk::utils::bounded_string_to_string;
 use crate::sources::github::GithubBinaryFetcher;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler, DynBlueprintSource};
 use crate::sources::testing::TestSourceFetcher;
-use blueprint_clients::tangle::client::{TangleConfig, TangleEvent};
+use blueprint_clients::EventsClient;
+use blueprint_clients::tangle::client::{TangleClient, TangleConfig, TangleEvent};
 use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
 use blueprint_runner::config::Protocol;
 use blueprint_runner::config::BlueprintEnvironment;
@@ -22,6 +24,63 @@ use crate::rt::ResourceLimits;
 use crate::rt::service::Status;
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
+
+
+/// * Query to get Vec<RpcServicesWithBlueprint>
+/// * For each `RpcServicesWithBlueprint`, fetch the associated blueprint binary (fetch/download)
+///   -> If the services field is empty, just emit and log inside the executed binary "that states a new service instance got created by one of these blueprints"
+///   -> If the services field is not empty, for each service in RpcServicesWithBlueprint.services, spawn the blueprint binary, using params to set the job type to listen to (in terms of our old language, each spawned service represents a single "`RoleType`")
+#[cfg(feature = "tangle")]
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn handle_init(
+    tangle_runtime: &TangleClient,
+    services_client: &TangleServicesClient<TangleConfig>,
+    sub_account_id: &AccountId32,
+    active_blueprints: &mut ActiveBlueprints,
+    blueprint_env: &BlueprintEnvironment,
+    ctx: &BlueprintManagerContext,
+) -> Result<Vec<RpcServicesWithBlueprint>> {
+    info!("Beginning initialization of Blueprint Manager");
+
+    let Some(init_event) = tangle_runtime.next_event().await else {
+        return Err(Error::InitialBlock);
+    };
+
+    let maybe_operator_subscribed_blueprints = services_client
+        .query_operator_blueprints(init_event.hash, sub_account_id.clone())
+        .await;
+
+    let operator_subscribed_blueprints =
+        maybe_operator_subscribed_blueprints.unwrap_or_else(|err| {
+            warn!(
+                "Failed to query operator blueprints: {}, did you register as an operator?",
+                err
+            );
+            Vec::new()
+        });
+
+    info!(
+        "Received {} initial blueprints this operator is registered to",
+        operator_subscribed_blueprints.len()
+    );
+
+    // Immediately poll, handling the initial state
+    let poll_result =
+        check_blueprint_events(&init_event, active_blueprints, sub_account_id);
+
+    handle_tangle_event(
+        &init_event,
+        &operator_subscribed_blueprints,
+        blueprint_env,
+        ctx,
+        active_blueprints,
+        poll_result,
+        services_client,
+    )
+    .await?;
+
+    Ok(operator_subscribed_blueprints)
+}
 
 pub struct VerifiedBlueprint {
     pub(crate) fetchers: Vec<Box<DynBlueprintSource<'static>>>,
@@ -38,7 +97,7 @@ impl VerifiedBlueprint {
     ) -> Result<()> {
         let cache_dir = ctx.cache_dir().join(format!(
             "{}-{}",
-            self.blueprint.blueprint_id, self.blueprint.name
+            self.blueprint.name, self.blueprint.blueprint_id
         ));
         if let Err(e) = std::fs::create_dir_all(&cache_dir) {
             error!(

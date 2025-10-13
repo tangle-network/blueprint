@@ -3,6 +3,7 @@ use crate::config::{BlueprintManagerConfig, BlueprintManagerContext};
 use crate::rt::ResourceLimits;
 use crate::rt::service::Service;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
+use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use std::path::{Path, PathBuf};
 use url::Url;
 
@@ -42,6 +43,40 @@ pub struct BlueprintArgs {
     pub test_mode: bool,
     pub pretty: bool,
     pub verbose: u8,
+
+    // Eigenlayer config
+
+    /// The address of the slasher contract
+    pub slasher_address: Option<String>,
+    /// The address of the pause registry contract
+    pub pause_registry_address: Option<String>,
+    /// The address of the allocation manager contract
+    pub allocation_manager_address: Option<String>,
+    /// The address of the registry coordinator contract
+    pub registry_coordinator_address: Option<String>,
+    /// The address of the operator state retriever contract
+    pub operator_state_retriever_address: Option<String>,
+    /// The address of the operator registry contract
+    pub delegation_manager_address: Option<String>,
+    /// The address of the Service Manager contract
+    pub service_manager_address: Option<String>,
+    /// The address of the Stake Registry contract
+    pub stake_registry_address: Option<String>,
+    /// The address of the strategy manager contract
+    pub strategy_manager_address: Option<String>,
+    /// The address of the avs registry contract
+    pub avs_directory_address: Option<String>,
+    /// The address of the rewards coordinator contract
+    pub rewards_coordinator_address: Option<String>,
+    /// The address of the permission controller contract
+    pub permission_controller_address: Option<String>,
+    /// The address of the strategy contract
+    pub strategy_address: Option<String>,
+
+    // TODO(daniel): Implement Keystore Password
+    // #[cfg(feature = "eigenlayer")]
+    // /// The keystore password to reveal config
+    // pub keystore_password: Option<String>,
 }
 
 impl BlueprintArgs {
@@ -51,15 +86,30 @@ impl BlueprintArgs {
             blueprint_core::warn!("Test mode is enabled");
         }
 
-        // TODO: Add support for keystore password
+        // TODO(daniel): Add support for keystore password
         // if let Some(keystore_password) = &env.keystore_password {
         //     arguments.push(format!("--keystore-password={}", keystore_password));
         // }
+
+        let default_contract_address = EigenlayerProtocolSettings::default();
 
         Self {
             test_mode: manager_config.test_mode,
             pretty: manager_config.pretty,
             verbose: manager_config.verbose,
+            slasher_address: Some(default_contract_address.slasher_address.to_string()),
+            pause_registry_address: Some(default_contract_address.pause_registry_address.to_string()),
+            allocation_manager_address: Some(default_contract_address.allocation_manager_address.to_string()),
+            registry_coordinator_address: Some(default_contract_address.registry_coordinator_address.to_string()),
+            operator_state_retriever_address: Some(default_contract_address.operator_state_retriever_address.to_string()),
+            delegation_manager_address: Some(default_contract_address.delegation_manager_address.to_string()),
+            service_manager_address: Some(default_contract_address.service_manager_address.to_string()),
+            stake_registry_address: Some(default_contract_address.stake_registry_address.to_string()),
+            strategy_manager_address: Some(default_contract_address.strategy_manager_address.to_string()),
+            avs_directory_address: Some(default_contract_address.avs_directory_address.to_string()),
+            rewards_coordinator_address: Some(default_contract_address.rewards_coordinator_address.to_string()),
+            permission_controller_address: Some(default_contract_address.permission_controller_address.to_string()),
+            strategy_address: Some(default_contract_address.strategy_address.to_string())
         }
     }
 
@@ -81,6 +131,47 @@ impl BlueprintArgs {
         // Uses occurrences of clap short -v
         if self.verbose > 0 {
             arguments.push(format!("-{}", "v".repeat(self.verbose as usize)));
+        }
+
+        // Eigenlayer config
+        if let Some(slasher_addr) = &self.slasher_address {
+            arguments.push(format!("--slasher-address={}", slasher_addr));
+        }
+        if let Some(pause_registry_addr) = &self.pause_registry_address {
+            arguments.push(format!("--pause-registry-address={}", pause_registry_addr));
+        }
+        if let Some(allocation_manager_addr) = &self.allocation_manager_address {
+            arguments.push(format!("--allocation-manager-address={}", allocation_manager_addr));
+        }
+        if let Some(registry_coordinator_addr) = &self.registry_coordinator_address {
+            arguments.push(format!("--registry-coordinator-address={}", registry_coordinator_addr));
+        }
+        if let Some(operator_state_retriever_addr) = &self.operator_state_retriever_address {
+            arguments.push(format!("--operator-state-retriever-address={}", operator_state_retriever_addr));
+        }
+        if let Some(delegation_manager_addr) = &self.delegation_manager_address {
+            arguments.push(format!("--delegation-manager-address={}", delegation_manager_addr));
+        }
+        if let Some(service_manager_addr) = &self.service_manager_address {
+            arguments.push(format!("--service-manager-address={}", service_manager_addr));
+        }
+        if let Some(stake_registry_addr) = &self.stake_registry_address {
+            arguments.push(format!("--stake-registry-address={}", stake_registry_addr));
+        }
+        if let Some(strategy_manager_addr) = &self.strategy_manager_address {
+            arguments.push(format!("--strategy-manager-address={}", strategy_manager_addr));
+        }
+        if let Some(avs_directory_addr) = &self.avs_directory_address {
+            arguments.push(format!("--avs-directory-address={}", avs_directory_addr));
+        }
+        if let Some(rewards_coordinator_addr) = &self.rewards_coordinator_address {
+            arguments.push(format!("--rewards-coordinator-address={}", rewards_coordinator_addr));
+        }
+        if let Some(permission_controller_addr) = &self.permission_controller_address {
+            arguments.push(format!("--permission-controller-address={}", permission_controller_addr));
+        }
+        if let Some(strategy_addr) = &self.strategy_address {
+            arguments.push(format!("--strategy-address={}", strategy_addr));
         }
 
         arguments

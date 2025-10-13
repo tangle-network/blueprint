@@ -72,6 +72,7 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
             data_dir: blueprint_config.data_dir.clone(),
             ..Default::default()
         },
+        chain: None,
         verbose: 2,
         pretty: true,
         instance_id: Some(format!("Blueprint-{}", blueprint_id)),
