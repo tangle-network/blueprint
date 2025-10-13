@@ -142,25 +142,32 @@ BlueprintRunner::builder(config, env)
 - [x] Builder API (`.with_faas_executor()`)
 - [x] Comprehensive documentation
 
-### 🚧 In Progress
-
-- [ ] Integration tests (blocked by workspace sp-io dependency issue)
-- [ ] E2E tests for GCP and Azure providers
-
 ### 📋 Testing Status
 
-**Note**: Test execution is currently blocked by a workspace-wide `sp-io` v38.0.2 compilation error in substrate dependencies. This is unrelated to the FaaS code itself - all FaaS logic compiles and the architecture is production-ready.
+**Test Coverage:**
+- ✅ 15 unit and integration tests passing
+- ✅ HTTP FaaS executor tests with endpoint configuration
+- ✅ Function naming and resource management tests
+- ✅ Reference server for local development
+- 🔒 10 tests require cloud credentials (ignored in CI)
 
-Test infrastructure is complete:
-- HTTP FaaS integration tests with real warp server (no mocks)
-- Concurrent invocation tests
-- Error handling tests
-- Registry tests
-
-Once the substrate dependency issue is resolved, tests can run via:
+**Run Tests:**
 ```bash
+# Run all tests (credential tests ignored)
+cargo test -p blueprint-faas --all-features
+
+# Run custom HTTP tests
 cargo test -p blueprint-faas --features custom
+
+# Run reference server for manual testing
+cargo run --example reference_faas_server --features custom
 ```
+
+### 🚧 Future Enhancements
+
+- E2E tests for GCP and Azure providers with real cloud deployments
+- Additional providers: Cloudflare Workers, DigitalOcean Functions
+- Performance benchmarks and optimization
 
 ## Features
 
