@@ -6,6 +6,7 @@
 //! - **AWS Lambda** - `aws` module
 //! - **GCP Cloud Functions** - `gcp` module
 //! - **Azure Functions** - `azure` module
+//! - **DigitalOcean Functions** - `digitalocean` module
 //! - **Custom HTTP-based FaaS** - `custom` module
 //!
 //! ## Features
@@ -13,6 +14,7 @@
 //! - `aws` - Enable AWS Lambda integration
 //! - `gcp` - Enable Google Cloud Functions integration
 //! - `azure` - Enable Azure Functions integration
+//! - `digitalocean` - Enable DigitalOcean Functions integration
 //! - `custom` - Enable custom HTTP-based FaaS integration
 //! - `all` - Enable all providers
 //!
@@ -54,8 +56,17 @@ pub mod azure;
 #[cfg(feature = "custom")]
 pub mod custom;
 
+#[cfg(feature = "digitalocean")]
+pub mod digitalocean;
+
 /// Factory for creating FaaS executors from provider configuration
-#[cfg(any(feature = "aws", feature = "gcp", feature = "azure", feature = "custom"))]
+#[cfg(any(
+    feature = "aws",
+    feature = "gcp",
+    feature = "azure",
+    feature = "custom",
+    feature = "digitalocean"
+))]
 pub mod factory {
     use super::*;
     use std::sync::Arc;
@@ -109,6 +120,14 @@ pub mod factory {
             /// Base endpoint URL of the custom FaaS platform
             endpoint: String,
         },
+        /// DigitalOcean Functions configuration
+        #[cfg(feature = "digitalocean")]
+        DigitalOcean {
+            /// DigitalOcean API token
+            api_token: String,
+            /// DigitalOcean region (e.g., "nyc1", "sfo3")
+            region: String,
+        },
     }
 
     /// Create a FaaS executor from provider configuration
@@ -141,6 +160,11 @@ pub mod factory {
                 let executor = crate::custom::HttpFaasExecutor::new(endpoint);
                 Ok(Arc::new(executor) as DynFaasExecutor)
             }
+            #[cfg(feature = "digitalocean")]
+            FaasProvider::DigitalOcean { api_token, region } => {
+                let executor = crate::digitalocean::DigitalOceanExecutor::new(api_token, region).await?;
+                Ok(Arc::new(executor) as DynFaasExecutor)
+            }
         }
     }
 
@@ -164,14 +188,14 @@ pub mod factory {
 
 /// Common utilities shared across providers
 mod utils {
-    #[cfg(any(feature = "aws", feature = "gcp", feature = "azure"))]
+    #[cfg(any(feature = "aws", feature = "gcp", feature = "azure", feature = "digitalocean"))]
     use super::FaasError;
 
     /// Create a deployment package from a binary (zip format)
     ///
-    /// This creates a zip package suitable for AWS Lambda, GCP Cloud Functions, and Azure Functions.
-    /// The binary is packaged as "bootstrap" with executable permissions.
-    #[cfg(any(feature = "aws", feature = "gcp", feature = "azure"))]
+    /// This creates a zip package suitable for AWS Lambda, GCP Cloud Functions, Azure Functions,
+    /// and DigitalOcean Functions. The binary is packaged as "bootstrap" with executable permissions.
+    #[cfg(any(feature = "aws", feature = "gcp", feature = "azure", feature = "digitalocean"))]
     pub(crate) fn create_lambda_package(binary: &[u8]) -> Result<Vec<u8>, FaasError> {
         use std::io::Cursor;
         use std::io::Write;

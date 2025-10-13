@@ -11,6 +11,7 @@ This crate provides trait-based integration with serverless platforms, allowing 
 - **AWS Lambda** (`aws` feature) - Full implementation with deployment
 - **GCP Cloud Functions** (`gcp` feature) - Full implementation with Cloud Functions v2 API
 - **Azure Functions** (`azure` feature) - Full implementation with ARM API and ZipDeploy
+- **DigitalOcean Functions** (`digitalocean` feature) - Full implementation with namespace management
 - **Custom HTTP** (`custom` feature) - HTTP-based integration for any platform (see [Custom FaaS Spec](../../docs/custom-faas-platform-spec.md))
 
 ## Architecture
@@ -96,6 +97,21 @@ BlueprintRunner::builder(config, env)
     .run().await?;
 ```
 
+### DigitalOcean Functions
+
+```rust
+use blueprint_faas::digitalocean::DigitalOceanExecutor;
+
+let do_executor = DigitalOceanExecutor::new(
+    "your-digitalocean-api-token".to_string(),
+    "nyc1".to_string()  // Region: nyc1, sfo3, ams3, etc.
+).await?;
+
+BlueprintRunner::builder(config, env)
+    .with_faas_executor(0, do_executor)
+    .run().await?;
+```
+
 ### Custom HTTP FaaS
 
 For custom serverless platforms, implement the [Custom FaaS Platform Spec](../../docs/custom-faas-platform-spec.md) and use:
@@ -139,17 +155,22 @@ BlueprintRunner::builder(config, env)
   - [x] Configurable endpoints per job
   - [x] JSON serialization of JobCall/JobResult
   - [x] Custom FaaS Platform Specification
+- [x] DigitalOcean Functions full implementation
+  - [x] Namespace management and function deployment
+  - [x] Binary packaging with base64 encoding
+  - [x] Function lifecycle management
+  - [x] Health checks and warming
 - [x] Builder API (`.with_faas_executor()`)
 - [x] Comprehensive documentation
 
 ### 📋 Testing Status
 
 **Test Coverage:**
-- ✅ 15 unit and integration tests passing
+- ✅ 14 unit and integration tests passing
 - ✅ HTTP FaaS executor tests with endpoint configuration
 - ✅ Function naming and resource management tests
 - ✅ Reference server for local development
-- 🔒 10 tests require cloud credentials (ignored in CI)
+- 🔒 11 tests require cloud credentials (ignored in CI)
 
 **Run Tests:**
 ```bash
@@ -165,8 +186,8 @@ cargo run --example reference_faas_server --features custom
 
 ### 🚧 Future Enhancements
 
-- E2E tests for GCP and Azure providers with real cloud deployments
-- Additional providers: Cloudflare Workers, DigitalOcean Functions
+- E2E tests for GCP, Azure, and DigitalOcean providers with real cloud deployments
+- Additional providers: Vercel Functions, Netlify Functions, Cloudflare Workers (with WASM support)
 - Performance benchmarks and optimization
 
 ## Features
@@ -180,6 +201,7 @@ Available features:
 - `aws` - AWS Lambda integration
 - `gcp` - Google Cloud Functions integration
 - `azure` - Azure Functions integration
+- `digitalocean` - DigitalOcean Functions integration
 - `custom` - Custom HTTP FaaS
 - `all` - All providers
 
@@ -242,6 +264,22 @@ export AZURE_CLIENT_ID=your-client-id
 export AZURE_CLIENT_SECRET=your-client-secret
 export AZURE_TENANT_ID=your-tenant-id
 ```
+
+### DigitalOcean Functions
+
+**Authentication**: Uses DigitalOcean API token
+
+**Requirements**:
+- DigitalOcean account with Functions access
+- API token with read/write permissions
+- Namespace is automatically created if not exists
+
+**Setup**:
+```bash
+export DIGITALOCEAN_TOKEN=your-api-token
+```
+
+**Supported Regions**: `nyc1`, `nyc3`, `sfo3`, `ams3`, `sgp1`, `fra1`, `tor1`, `blr1`, `syd1`
 
 ### Custom HTTP FaaS
 
@@ -354,10 +392,10 @@ The server runs on `http://localhost:8080` and implements all endpoints from the
 
 ## Contributing
 
-All major cloud providers (AWS, GCP, Azure) are now fully implemented! Contributions welcome for:
+All major cloud providers (AWS, GCP, Azure, DigitalOcean) are now fully implemented! Contributions welcome for:
 
-- **E2E Tests**: Integration tests for GCP and Azure providers
-- **Additional Providers**: Cloudflare Workers, DigitalOcean Functions, etc.
+- **E2E Tests**: Integration tests for GCP, Azure, and DigitalOcean providers
+- **Additional Providers**: Vercel Functions, Netlify Functions, Cloudflare Workers (with WASM), Deno Deploy, etc.
 - **Performance Optimizations**: Token caching, connection pooling
 - **Documentation**: More examples and tutorials
 - **Custom FaaS Platforms**: Build your own using the [specification](../../docs/custom-faas-platform-spec.md)

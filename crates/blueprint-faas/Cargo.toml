@@ -26,8 +26,9 @@ futures.workspace = true
 # HTTP client for custom FaaS
 reqwest = { version = "0.12", features = ["json"], optional = true }
 
-# For creating Lambda deployment packages
+# For creating Lambda deployment packages and DigitalOcean binary encoding
 zip = "2.2"
+base64 = { version = "0.22", optional = true }
 
 # AWS SDK
 aws-config = { version = "1.5", optional = true }
@@ -56,4 +57,5 @@ aws = ["dep:aws-config", "dep:aws-sdk-lambda", "dep:aws-smithy-types"]
 gcp = ["dep:gcp_auth", "dep:reqwest"]
 azure = ["dep:azure_core", "dep:azure_identity", "dep:reqwest"]
 custom = ["dep:reqwest"]
-all = ["aws", "gcp", "azure", "custom"]
+digitalocean = ["dep:reqwest", "dep:base64"]
+all = ["aws", "gcp", "azure", "custom", "digitalocean"]
