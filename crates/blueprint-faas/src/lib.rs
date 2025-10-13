@@ -61,27 +61,54 @@ pub mod factory {
     use std::sync::Arc;
 
     /// Provider-agnostic FaaS configuration
+    ///
+    /// Encapsulates the provider type and default resource limits for FaaS function deployment.
     #[derive(Debug, Clone)]
     pub struct FaasProviderConfig {
+        /// The FaaS provider to use (AWS Lambda, GCP Cloud Functions, Azure Functions, or Custom)
         pub provider: FaasProvider,
+        /// Default memory allocation in megabytes for deployed functions
         pub default_memory_mb: u32,
+        /// Default execution timeout in seconds for deployed functions
         pub default_timeout_secs: u32,
     }
 
     /// FaaS provider variants
+    ///
+    /// Represents the different serverless platforms supported by the Blueprint SDK.
+    /// Each variant contains the configuration needed to authenticate and deploy to that platform.
     #[derive(Debug, Clone)]
     pub enum FaasProvider {
+        /// AWS Lambda configuration
         #[cfg(feature = "aws")]
-        AwsLambda { region: String, role_arn: String },
+        AwsLambda {
+            /// AWS region (e.g., "us-east-1")
+            region: String,
+            /// IAM role ARN for Lambda execution
+            role_arn: String,
+        },
+        /// Google Cloud Functions configuration
         #[cfg(feature = "gcp")]
-        GcpFunctions { project_id: String, region: String },
-        #[cfg(feature = "azure")]
-        AzureFunctions {
-            subscription_id: String,
+        GcpFunctions {
+            /// GCP project ID
+            project_id: String,
+            /// GCP region (e.g., "us-central1")
             region: String,
         },
+        /// Azure Functions configuration
+        #[cfg(feature = "azure")]
+        AzureFunctions {
+            /// Azure subscription ID
+            subscription_id: String,
+            /// Azure region (e.g., "eastus")
+            region: String,
+        },
+        /// Custom HTTP-based FaaS platform
         #[cfg(feature = "custom")]
-        Custom { endpoint: String },
+        Custom {
+            /// Base endpoint URL of the custom FaaS platform
+            endpoint: String,
+        },
     }
 
     /// Create a FaaS executor from provider configuration
@@ -137,17 +164,20 @@ pub mod factory {
 
 /// Common utilities shared across providers
 mod utils {
-    #[cfg(feature = "aws")]
-    use super::*;
+    #[cfg(any(feature = "aws", feature = "gcp", feature = "azure"))]
+    use super::FaasError;
 
-    /// Create a Lambda deployment package from a binary
-    #[cfg(feature = "aws")]
+    /// Create a deployment package from a binary (zip format)
+    ///
+    /// This creates a zip package suitable for AWS Lambda, GCP Cloud Functions, and Azure Functions.
+    /// The binary is packaged as "bootstrap" with executable permissions.
+    #[cfg(any(feature = "aws", feature = "gcp", feature = "azure"))]
     pub(crate) fn create_lambda_package(binary: &[u8]) -> Result<Vec<u8>, FaasError> {
         use std::io::Cursor;
         use std::io::Write;
 
         let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
-        let options = zip::write::FileOptions::default()
+        let options: zip::write::FileOptions<()> = zip::write::FileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
             .unix_permissions(0o755);
 

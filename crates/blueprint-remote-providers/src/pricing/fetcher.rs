@@ -112,6 +112,7 @@ impl PricingFetcher {
             CloudProvider::Azure => self.fetch_azure_instances(region).await?,
             CloudProvider::GCP => self.fetch_gcp_instances(region).await?,
             CloudProvider::DigitalOcean => self.fetch_digitalocean_instances(region).await?,
+            CloudProvider::Vultr => self.fetch_vultr_instances(region).await?,
             _ => {
                 return Err(Error::Other(format!(
                     "No pricing API available for provider: {provider:?}"
@@ -281,54 +282,107 @@ impl PricingFetcher {
         }
     }
 
-    async fn fetch_gcp_instances(&self, region: &str) -> Result<Vec<InstanceInfo>> {
-        debug!("Fetching GCP instances from pricing page");
+    async fn fetch_gcp_instances(&self, _region: &str) -> Result<Vec<InstanceInfo>> {
+        debug!("Fetching GCP instances from Cloud Billing Catalog API");
 
-        // GCP publishes pricing at https://cloud.google.com/compute/all-pricing
-        // This is a large HTML page with embedded pricing data
-        // Uses simplified pricing model with common instance types
+        // GCP Cloud Billing Catalog API requires API key
+        // https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus (Compute Engine)
 
-        // Map GCP regions to their pricing multipliers (us-central1 is baseline)
-        let region_multiplier = match region {
-            "us-central1" => 1.0,
-            "us-east1" => 1.0,
-            "us-west1" => 1.05,
-            "europe-west1" => 1.05,
-            "asia-northeast1" => 1.15,
-            _ => 1.0,
-        };
+        let api_key = std::env::var("GCP_API_KEY").map_err(|_| {
+            Error::ConfigurationError(
+                "GCP_API_KEY environment variable required for GCP pricing. \
+                Get API key from: https://console.cloud.google.com/apis/credentials".to_string()
+            )
+        })?;
 
-        // Common GCP instance types with baseline pricing (us-central1)
-        let base_instances = vec![
-            ("e2-micro", 0.25, 1.0, 0.00838),
-            ("e2-small", 0.5, 2.0, 0.01677),
-            ("e2-medium", 1.0, 4.0, 0.03354),
-            ("e2-standard-2", 2.0, 8.0, 0.06708),
-            ("e2-standard-4", 4.0, 16.0, 0.13416),
-            ("e2-standard-8", 8.0, 32.0, 0.26832),
-            ("n2-standard-2", 2.0, 8.0, 0.0971),
-            ("n2-standard-4", 4.0, 16.0, 0.1942),
-            ("n2-standard-8", 8.0, 32.0, 0.3884),
-            ("n2d-standard-2", 2.0, 8.0, 0.0849),
-            ("n2d-standard-4", 4.0, 16.0, 0.1698),
-            ("n2d-standard-8", 8.0, 32.0, 0.3396),
-        ];
+        // Compute Engine service ID
+        let service_id = "services/6F81-5844-456A";
+        let url = format!(
+            "https://cloudbilling.googleapis.com/v1/{}/skus?key={}",
+            service_id, api_key
+        );
 
-        let mut result = Vec::new();
-        for (name, vcpus, memory, base_price) in base_instances {
-            result.push(InstanceInfo {
-                name: name.to_string(),
-                vcpus,
-                memory_gb: memory,
-                hourly_price: base_price * region_multiplier,
-            });
+        #[derive(Deserialize, Debug)]
+        struct GcpBillingResponse {
+            skus: Vec<GcpSku>,
         }
 
-        if result.is_empty() {
-            Err(Error::Other("No GCP instances found".to_string()))
-        } else {
-            Ok(result)
+        #[derive(Deserialize, Debug)]
+        struct GcpSku {
+            description: String,
+            category: GcpCategory,
+            #[serde(rename = "pricingInfo")]
+            pricing_info: Vec<GcpPricingInfo>,
         }
+
+        #[derive(Deserialize, Debug)]
+        struct GcpCategory {
+            #[serde(rename = "resourceFamily")]
+            resource_family: String,
+        }
+
+        #[derive(Deserialize, Debug)]
+        struct GcpPricingInfo {
+            #[serde(rename = "pricingExpression")]
+            pricing_expression: GcpPricingExpression,
+        }
+
+        #[derive(Deserialize, Debug)]
+        struct GcpPricingExpression {
+            #[serde(rename = "tieredRates")]
+            tiered_rates: Vec<GcpTieredRate>,
+        }
+
+        #[derive(Deserialize, Debug)]
+        struct GcpTieredRate {
+            #[serde(rename = "unitPrice")]
+            unit_price: GcpMoney,
+        }
+
+        #[derive(Deserialize, Debug)]
+        struct GcpMoney {
+            units: String,
+            nanos: i64,
+        }
+
+        let response = self
+            .client
+            .get(&url)
+            .timeout(std::time::Duration::from_secs(30))
+            .send()
+            .await
+            .map_err(|e| Error::HttpError(format!("Failed to fetch GCP pricing: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(Error::HttpError(format!(
+                "GCP Cloud Billing API returned status: {}. Check API key is valid.",
+                response.status()
+            )));
+        }
+
+        let billing_data: GcpBillingResponse = response
+            .json()
+            .await
+            .map_err(|e| Error::HttpError(format!("Failed to parse GCP pricing: {}", e)))?;
+
+        // Parse instance pricing from SKUs
+        // GCP pricing is complex - this is simplified to extract compute pricing
+        let mut result: Vec<InstanceInfo> = Vec::new();
+
+        for sku in billing_data.skus.iter().take(100) {
+            if sku.category.resource_family == "Compute" && sku.description.contains("Instance Core") {
+                // This is a simplification - real implementation would need to:
+                // 1. Match cores to memory for specific machine types
+                // 2. Calculate per-instance pricing from per-core pricing
+                // For now, return error to force use of real GCP Compute API
+            }
+        }
+
+        Err(Error::ConfigurationError(
+            "GCP pricing requires using GCP Compute API with service account credentials. \
+            Cloud Billing Catalog API does not provide ready-to-use instance pricing. \
+            Consider using gcloud CLI or Compute Engine API directly.".to_string()
+        ))
     }
 
     async fn fetch_digitalocean_instances(&self, _region: &str) -> Result<Vec<InstanceInfo>> {
@@ -399,6 +453,85 @@ impl PricingFetcher {
         if result.is_empty() {
             Err(Error::Other("No DigitalOcean instances found".to_string()))
         } else {
+            Ok(result)
+        }
+    }
+
+    async fn fetch_vultr_instances(&self, _region: &str) -> Result<Vec<InstanceInfo>> {
+        debug!("Fetching Vultr instances from Vultr API v2");
+
+        // Vultr API requires API key
+        let api_key = std::env::var("VULTR_API_KEY").map_err(|_| {
+            Error::ConfigurationError(
+                "VULTR_API_KEY environment variable required for Vultr pricing. \
+                Get API key from: https://my.vultr.com/settings/#settingsapi".to_string()
+            )
+        })?;
+
+        let url = "https://api.vultr.com/v2/plans";
+
+        #[derive(Deserialize, Debug)]
+        struct VultrPlansResponse {
+            plans: Vec<VultrPlan>,
+        }
+
+        #[derive(Deserialize, Debug)]
+        struct VultrPlan {
+            id: String,
+            vcpu_count: i32,
+            ram: i64, // RAM in MB
+            disk: i64, // Disk in GB
+            monthly_cost: f64,
+            #[serde(rename = "type")]
+            plan_type: String,
+        }
+
+        let response = self
+            .client
+            .get(url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .timeout(std::time::Duration::from_secs(30))
+            .send()
+            .await
+            .map_err(|e| Error::HttpError(format!("Failed to fetch Vultr pricing: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(Error::HttpError(format!(
+                "Vultr API returned status: {}. Check API key is valid.",
+                response.status()
+            )));
+        }
+
+        let plans_data: VultrPlansResponse = response
+            .json()
+            .await
+            .map_err(|e| Error::HttpError(format!("Failed to parse Vultr pricing: {}", e)))?;
+
+        let mut result = Vec::new();
+
+        for plan in plans_data.plans {
+            // Only include regular compute plans (exclude bare metal, etc.)
+            if plan.plan_type == "vc2" || plan.plan_type == "vhf" || plan.plan_type == "vhp" {
+                let memory_gb = plan.ram as f32 / 1024.0; // Convert MB to GB
+
+                // Convert monthly to hourly (730 hours/month standard)
+                let hourly_price = plan.monthly_cost / 730.0;
+
+                if plan.vcpu_count > 0 && memory_gb > 0.0 && hourly_price > 0.0 {
+                    result.push(InstanceInfo {
+                        name: plan.id,
+                        vcpus: plan.vcpu_count as f32,
+                        memory_gb,
+                        hourly_price,
+                    });
+                }
+            }
+        }
+
+        if result.is_empty() {
+            Err(Error::Other("No Vultr instances found in API response".to_string()))
+        } else {
+            debug!("Fetched {} Vultr instances from API", result.len());
             Ok(result)
         }
     }

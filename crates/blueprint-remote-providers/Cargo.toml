@@ -67,6 +67,7 @@ chacha20poly1305 = "0.10"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 libc = "0.2"
 rand = "0.8"
+urlencoding = "2.1"
 
 [dev-dependencies]
 mockall = "0.13"

@@ -66,15 +66,18 @@ impl LambdaExecutor {
 #[async_trait::async_trait]
 impl FaasExecutor for LambdaExecutor {
     async fn invoke(&self, job_call: JobCall) -> Result<JobResult, FaasError> {
-        let function_name = self.function_name(job_call.job_id);
+        let job_id: u32 = job_call.job_id().into();
+        let function_name = self.function_name(job_id);
 
         debug!(
-            job_id = job_call.job_id,
+            job_id = job_id,
             function = %function_name,
             "Invoking Lambda function"
         );
 
-        let payload = serde_json::to_vec(&job_call)
+        // Convert JobCall to serializable payload
+        let faas_payload: super::FaasPayload = job_call.into();
+        let payload = serde_json::to_vec(&faas_payload)
             .map_err(|e| FaasError::SerializationError(e.to_string()))?;
 
         let start = Instant::now();
@@ -102,25 +105,28 @@ impl FaasExecutor for LambdaExecutor {
             .payload
             .ok_or_else(|| FaasError::FunctionError("No payload returned".into()))?;
 
-        let result: JobResult = serde_json::from_slice(payload.as_ref())
+        let faas_response: super::FaasResponse = serde_json::from_slice(payload.as_ref())
             .map_err(|e| FaasError::SerializationError(e.to_string()))?;
 
         info!(
-            job_id = job_call.job_id,
+            job_id = job_id,
             duration_ms = duration.as_millis(),
             "Lambda invocation successful"
         );
 
-        Ok(result)
+        Ok(faas_response.into())
     }
 
     async fn invoke_with_metrics(
         &self,
         job_call: JobCall,
     ) -> Result<(JobResult, FaasMetrics), FaasError> {
-        let function_name = self.function_name(job_call.job_id);
+        let job_id: u32 = job_call.job_id().into();
+        let function_name = self.function_name(job_id);
 
-        let payload = serde_json::to_vec(&job_call)
+        // Convert JobCall to serializable payload
+        let faas_payload: super::FaasPayload = job_call.into();
+        let payload = serde_json::to_vec(&faas_payload)
             .map_err(|e| FaasError::SerializationError(e.to_string()))?;
 
         let start = Instant::now();
@@ -144,7 +150,7 @@ impl FaasExecutor for LambdaExecutor {
             .payload
             .ok_or_else(|| FaasError::FunctionError("No payload returned".into()))?;
 
-        let result: JobResult = serde_json::from_slice(payload.as_ref())
+        let faas_response: super::FaasResponse = serde_json::from_slice(payload.as_ref())
             .map_err(|e| FaasError::SerializationError(e.to_string()))?;
 
         // Extract Lambda-specific metrics
@@ -158,7 +164,7 @@ impl FaasExecutor for LambdaExecutor {
             billed_duration_ms: total_duration.as_millis() as u64,
         };
 
-        Ok((result, metrics))
+        Ok((faas_response.into(), metrics))
     }
 
     async fn deploy_job(
@@ -198,7 +204,7 @@ impl FaasExecutor for LambdaExecutor {
             self.client
                 .create_function()
                 .function_name(&function_name)
-                .runtime(Runtime::ProvidedAl2023)
+                .runtime(Runtime::Providedal2023)
                 .role(&self.role_arn)
                 .handler("bootstrap")
                 .code(
