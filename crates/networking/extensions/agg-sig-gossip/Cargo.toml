@@ -53,7 +53,7 @@ blueprint-crypto-core = { path = "../../../crypto/core", features = ["tangle", "
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 sha2 = { workspace = true }
-rand_dev = "0.1"
+rand_dev = "0.2"
 rand = { workspace = true }
 hex = { workspace = true }
 # We don't use it directly, but we need to enable `serde` feature
