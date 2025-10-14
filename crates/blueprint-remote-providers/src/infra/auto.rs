@@ -8,13 +8,11 @@ use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::deployment::manager_integration::RemoteDeploymentConfig;
 use crate::deployment::tracker::DeploymentType;
-use crate::pricing::fetcher::PricingFetcher;
+use crate::pricing::PricingFetcher;
 use blueprint_core::{debug, info, warn};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
-use std::sync::Arc;
+use blueprint_std::{collections::HashMap, path::Path, sync::Arc};
 use tokio::sync::RwLock;
 
 /// Deployment preferences configured by operators

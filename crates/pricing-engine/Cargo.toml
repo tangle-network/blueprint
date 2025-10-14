@@ -21,7 +21,7 @@ path = "src/main.rs"
 blueprint-core = { workspace = true, features = ["tracing"] }
 blueprint-crypto = { workspace = true, features = ["tangle-pair-signer"] }
 blueprint-crypto-core = { workspace = true }
-blueprint-keystore = { workspace = true, features = ["sp-core"] }
+blueprint-keystore = { workspace = true, default-features = false, features = ["std", "sp-core"] }
 blueprint-networking = { workspace = true }
 blueprint-std = { workspace = true }
 blueprint-tangle-extra = { workspace = true, features = ["std"] }
@@ -43,10 +43,6 @@ tiny-keccak = { workspace = true }
 # Substrate RPC and runtime API dependencies
 jsonrpsee = { workspace = true, features = ["server", "macros", "http-client"] }
 tangle-subxt = { workspace = true, features = ["std"] }
-
-# Substrate chain
-sp-core = { workspace = true, features = ["serde"] }
-sp-io = { workspace = true }
 
 # Async
 futures = { workspace = true, features = ["thread-pool"] }
@@ -74,6 +70,9 @@ chrono = { workspace = true, features = ["serde", "clock"] }
 libc = { workspace = true }
 rust_decimal = { workspace = true, features = ["serde"] }
 
+# HTTP client for cloud pricing APIs
+reqwest = { workspace = true, features = ["json"] }
+urlencoding = "2.1"
 
 # gRPC
 tonic = { workspace = true, features = ["transport", "codegen", "prost", "router"] }
@@ -94,6 +93,7 @@ tonic = { workspace = true }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
+protobuf-src = "2.1"
 
 [features]
 default = []

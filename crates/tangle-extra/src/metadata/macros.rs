@@ -128,6 +128,7 @@ impl PartialBlueprintJson {
                     .license
                     .or_else(|| std::env::var("CARGO_PKG_LICENSE").ok())
                     .map(Into::into),
+                profiling_data: None, // Added in build.rs if profiling data exists
             },
             jobs,
             registration_params: self.registration_params.unwrap_or_default(),
@@ -441,6 +442,7 @@ mod tests {
                 logo: Some("https://example.com/logo".into()),
                 website: Some("https://example.com".into()),
                 license: Some("MIT".into()),
+                profiling_data: None,
             }
         );
         assert_eq!(

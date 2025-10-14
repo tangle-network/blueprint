@@ -13,7 +13,7 @@ pub use crate::providers::azure::adapter::AzureAdapter;
 pub use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
 pub use crate::providers::gcp::GcpAdapter;
 pub use crate::providers::vultr::adapter::VultrAdapter;
-use std::sync::Arc;
+use blueprint_std::sync::Arc;
 
 /// Factory for creating cloud provider adapters
 pub struct AdapterFactory;

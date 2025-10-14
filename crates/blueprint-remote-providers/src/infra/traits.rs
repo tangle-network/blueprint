@@ -4,7 +4,7 @@ use crate::core::error::Result;
 use crate::core::resources::ResourceSpec;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use async_trait::async_trait;
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Blueprint deployment result containing connection information and exposed ports
 #[derive(Debug, Clone)]

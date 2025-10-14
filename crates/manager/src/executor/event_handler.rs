@@ -586,11 +586,12 @@ async fn try_remote_deployment(
 
     // Convert ResourceLimits to ResourceSpec - use actual CPU count from limits
     let resource_spec = ResourceSpec {
-        cpu: limits.cpu_count.map(|c| c as f64).unwrap_or(2.0), // Use actual CPU count or default to 2
-        memory_gb: (limits.memory_size / (1024 * 1024 * 1024)) as f64,
-        storage_gb: (limits.storage_space / (1024 * 1024 * 1024)) as f64,
+        cpu: limits.cpu_count.map(|c| c as f32).unwrap_or(2.0), // Use actual CPU count or default to 2
+        memory_gb: (limits.memory_size / (1024 * 1024 * 1024)) as f32,
+        storage_gb: (limits.storage_space / (1024 * 1024 * 1024)) as f32,
         gpu_count: limits.gpu_count.map(|c| c as u32),
-        network_bandwidth_mbps: limits.network_bandwidth.map(|b| b as f64),
+        allow_spot: false,
+        qos: blueprint_remote_providers::resources::QosParameters::default(),
     };
 
     // Load credentials if provided

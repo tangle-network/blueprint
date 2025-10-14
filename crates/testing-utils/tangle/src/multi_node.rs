@@ -190,6 +190,36 @@ where
         }
     }
 
+    /// Register a job to use FaaS execution in tests
+    ///
+    /// This registers the FaaS executor for a specific job ID on all nodes.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use blueprint_faas::custom::HttpFaasExecutor;
+    ///
+    /// let faas_executor = HttpFaasExecutor::new("http://localhost:8080");
+    ///
+    /// test_env
+    ///     .with_faas_executor(1, faas_executor)
+    ///     .await;
+    /// ```
+    #[cfg(feature = "faas")]
+    pub async fn with_faas_executor(
+        &mut self,
+        job_id: u32,
+        executor: impl blueprint_runner::faas::FaasExecutor + Clone + 'static,
+    ) {
+        let mut nodes = self.nodes.write().await;
+        for node in nodes.iter_mut() {
+            if let NodeSlot::Occupied(node) = node {
+                let mut test_env = node.test_env.write().await;
+                test_env.with_faas_executor(job_id, executor.clone());
+            }
+        }
+    }
+
     /// Send a start command to all nodes
     ///
     /// This will clone `context` to all nodes. If your context is node-specific (for example, in a

@@ -8,7 +8,7 @@ use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Encrypted storage for cloud provider credentials

@@ -134,3 +134,45 @@ impl ResourceRequirement {
         Self { unit, quantity }
     }
 }
+
+/// Cloud provider types for cost tracking and pricing
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum CloudProvider {
+    /// AWS (Amazon Web Services)
+    AWS,
+    /// Google Cloud Platform
+    GCP,
+    /// Microsoft Azure
+    Azure,
+    /// DigitalOcean
+    DigitalOcean,
+    /// Vultr
+    Vultr,
+    /// Linode
+    Linode,
+    /// Generic cloud provider
+    Generic,
+    /// Local Docker
+    DockerLocal,
+    /// Remote Docker host
+    DockerRemote(String),
+    /// Bare metal with SSH
+    BareMetal(Vec<String>),
+}
+
+impl core::fmt::Display for CloudProvider {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            CloudProvider::AWS => write!(f, "AWS"),
+            CloudProvider::GCP => write!(f, "GCP"),
+            CloudProvider::Azure => write!(f, "Azure"),
+            CloudProvider::DigitalOcean => write!(f, "DigitalOcean"),
+            CloudProvider::Vultr => write!(f, "Vultr"),
+            CloudProvider::Linode => write!(f, "Linode"),
+            CloudProvider::Generic => write!(f, "Generic"),
+            CloudProvider::DockerLocal => write!(f, "Docker (Local)"),
+            CloudProvider::DockerRemote(host) => write!(f, "Docker (Remote: {host})"),
+            CloudProvider::BareMetal(hosts) => write!(f, "Bare Metal ({} hosts)", hosts.len()),
+        }
+    }
+}

@@ -16,6 +16,17 @@
 //! cargo tangle cloud policy --gpu-providers gcp,aws --cost-providers vultr,do
 //! ```
 //!
+//! Configure serverless FaaS settings:
+//! ```bash
+//! cargo tangle cloud policy --serverless true --faas-provider aws-lambda
+//! cargo tangle cloud policy --faas-memory 1024 --faas-timeout 600
+//! ```
+//!
+//! View current policy:
+//! ```bash
+//! cargo tangle cloud show
+//! ```
+//!
 //! Deploy a blueprint (uses configured policy):
 //! ```bash
 //! cargo tangle blueprint deploy tangle --remote

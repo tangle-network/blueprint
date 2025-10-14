@@ -37,8 +37,8 @@ blueprint-core = { workspace = true, features = ["tracing"] }
 
 # Blueprint dependencies (removed blueprint-manager and blueprint-qos to avoid cyclic dependency)
 # blueprint-auth.workspace = true
-blueprint-keystore.workspace = true
-blueprint-pricing-engine = { workspace = true, optional = true }
+blueprint-keystore = { workspace = true, default-features = false, features = ["std"] }
+blueprint-pricing-engine.workspace = true
 parity-scale-codec = { workspace = true, features = ["derive"] }
 
 # Provider-specific dependencies
@@ -67,6 +67,7 @@ chacha20poly1305 = "0.10"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 libc = "0.2"
 rand = "0.8"
+urlencoding = "2.1"
 
 [dev-dependencies]
 mockall = "0.13"
@@ -94,7 +95,13 @@ kube = { version = "0.90", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.21", features = ["v1_29"] }
 
 [features]
-default = ["aws"]
+default = ["std", "aws"]
+std = [
+    "blueprint-std/std",
+    "blueprint-core/std",
+    "blueprint-keystore/std",
+    "blueprint-pricing-engine/std",
+]
 aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-autoscaling", "dep:aws-sdk-cloudwatchlogs"]
 aws-eks = ["aws", "dep:aws-sdk-eks"]
 gcp = []  # GCP support via REST API
@@ -103,7 +110,6 @@ digitalocean = []  # DigitalOcean support via REST API
 vultr = []  # Vultr support via REST API
 kubernetes = ["dep:kube", "dep:k8s-openapi"]
 docker = ["dep:bollard"]
-pricing = ["dep:blueprint-pricing-engine"]
 testing = []
 
 

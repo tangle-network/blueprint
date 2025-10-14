@@ -12,7 +12,7 @@ use crate::deployment::kubernetes::KubernetesDeploymentClient;
 use crate::infra::traits::BlueprintDeploymentResult;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use blueprint_core::{info, warn};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 use std::process::Command;
 
 /// Shared Kubernetes deployment implementation

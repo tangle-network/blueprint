@@ -4,54 +4,61 @@
 //! pricing engine to provide accurate cost calculations for both local and
 //! remote deployments.
 
-use crate::core::error::Result;
+use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
+use blueprint_std::{collections::HashMap, path::Path};
 
 /// Pricing calculator that integrates with the Pricing Engine
 ///
 /// Provides cost calculations for both local and remote deployments using
 /// the resource model.
+///
+/// NOTE: The default configuration uses HARDCODED base rates. For real pricing:
+/// - Use `from_config_file()` to load user-specific pricing
+/// - Use `PricingFetcher` for VM instance pricing from provider APIs
+/// - Use `FaasPricingFetcher` for serverless pricing (Lambda, Cloud Functions, Azure Functions)
+#[derive(Debug)]
 pub struct PricingCalculator {
     /// Pricing configuration loaded from TOML files
     pricing_config: PricingConfig,
 
-    /// Provider-specific multipliers for cloud markup
+    /// Provider-specific multipliers for cloud markup (HARDCODED estimates)
     cloud_multipliers: HashMap<CloudProvider, f64>,
 }
 
 impl PricingCalculator {
-    /// Create a new pricing calculator with default configuration
+    /// Create a new pricing calculator - REQUIRES CONFIG FILE
+    ///
+    /// ALL HARDCODED PRICING HAS BEEN REMOVED.
+    /// You must use `from_config_file()` to load pricing configuration.
+    ///
+    /// For real-time pricing from provider APIs:
+    /// - Use `PricingFetcher` for VM instance pricing
+    /// - Use `FaasPricingFetcher` for serverless pricing
     pub fn new() -> Result<Self> {
-        let pricing_config = Self::load_default_config()?;
-
-        let mut cloud_multipliers = HashMap::new();
-        // Cloud providers typically have markup over raw resource costs
-        cloud_multipliers.insert(CloudProvider::AWS, 1.2);
-        cloud_multipliers.insert(CloudProvider::GCP, 1.15);
-        cloud_multipliers.insert(CloudProvider::Azure, 1.25);
-        cloud_multipliers.insert(CloudProvider::DigitalOcean, 1.1);
-        cloud_multipliers.insert(CloudProvider::Vultr, 1.05);
-        cloud_multipliers.insert(CloudProvider::Generic, 1.0); // Self-hosted
-
-        Ok(Self {
-            pricing_config,
-            cloud_multipliers,
-        })
+        Err(Error::ConfigurationError(
+            "PricingCalculator::new() no longer supported - all hardcoded pricing removed. \
+            Use PricingCalculator::from_config_file(path) to load pricing from config, \
+            or use PricingFetcher/FaasPricingFetcher for real-time API pricing."
+                .to_string(),
+        ))
     }
 
     /// Load pricing configuration from a specific file
+    ///
+    /// This is the ONLY way to create a PricingCalculator now that hardcoded pricing is removed.
+    /// The config file must specify all pricing rates.
     pub fn from_config_file(path: &Path) -> Result<Self> {
         let config_str = std::fs::read_to_string(path)
-            .map_err(|e| crate::core::error::Error::ConfigurationError(e.to_string()))?;
+            .map_err(|e| Error::ConfigurationError(e.to_string()))?;
 
         let pricing_config: PricingConfig = toml::from_str(&config_str)
-            .map_err(|e| crate::core::error::Error::ConfigurationError(e.to_string()))?;
+            .map_err(|e| Error::ConfigurationError(e.to_string()))?;
 
-        let cloud_multipliers = Self::default_multipliers();
+        // No hardcoded multipliers - must come from config or use PricingFetcher
+        let cloud_multipliers = HashMap::new();
 
         Ok(Self {
             pricing_config,
@@ -146,67 +153,9 @@ impl PricingCalculator {
             .find(|r| r.kind == resource_type)
             .map(|r| r.price_per_unit_rate)
     }
-
-    /// Load default pricing configuration
-    fn load_default_config() -> Result<PricingConfig> {
-        // This would normally load from the pricing engine's default config
-        // Uses default pricing model format
-        Ok(PricingConfig {
-            default: PricingTier {
-                resources: vec![
-                    ResourcePrice {
-                        kind: "CPU".to_string(),
-                        count: 1,
-                        price_per_unit_rate: 0.001,
-                    },
-                    ResourcePrice {
-                        kind: "MemoryMB".to_string(),
-                        count: 1024,
-                        price_per_unit_rate: 0.00005,
-                    },
-                    ResourcePrice {
-                        kind: "StorageMB".to_string(),
-                        count: 1024,
-                        price_per_unit_rate: 0.00002,
-                    },
-                    ResourcePrice {
-                        kind: "NetworkEgressMB".to_string(),
-                        count: 1024,
-                        price_per_unit_rate: 0.00003,
-                    },
-                    ResourcePrice {
-                        kind: "NetworkIngressMB".to_string(),
-                        count: 1024,
-                        price_per_unit_rate: 0.00001,
-                    },
-                    ResourcePrice {
-                        kind: "GPU".to_string(),
-                        count: 1,
-                        price_per_unit_rate: 0.005,
-                    },
-                ],
-            },
-            blueprint_overrides: HashMap::new(),
-        })
-    }
-
-    fn default_multipliers() -> HashMap<CloudProvider, f64> {
-        let mut multipliers = HashMap::new();
-        multipliers.insert(CloudProvider::AWS, 1.2);
-        multipliers.insert(CloudProvider::GCP, 1.15);
-        multipliers.insert(CloudProvider::Azure, 1.25);
-        multipliers.insert(CloudProvider::DigitalOcean, 1.1);
-        multipliers.insert(CloudProvider::Vultr, 1.05);
-        multipliers.insert(CloudProvider::Generic, 1.0);
-        multipliers
-    }
 }
 
-impl Default for PricingCalculator {
-    fn default() -> Self {
-        Self::new().expect("Failed to create default pricing calculator")
-    }
-}
+// Removed Default implementation - no hardcoded pricing allowed
 
 /// Pricing configuration structure matching the pricing engine format
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -342,74 +291,22 @@ pub struct BenchmarkProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::resources::ResourceSpec;
 
     #[test]
-    fn test_pricing_calculation() {
-        let calculator = PricingCalculator::new().unwrap();
+    fn test_pricing_calculator_new_returns_error() {
+        // PricingCalculator::new() should return error since hardcoded pricing removed
+        let result = PricingCalculator::new();
 
-        let spec = ResourceSpec {
-            cpu: 4.0,
-            memory_gb: 16.0,
-            storage_gb: 100.0,
-            gpu_count: None,
-            allow_spot: false,
-            qos: Default::default(),
-        };
-
-        let report = calculator.calculate_cost(
-            &spec,
-            &CloudProvider::AWS,
-            24.0, // 24 hours
-        );
-
-        assert!(report.final_hourly_cost > 0.0);
-        assert!(report.total_cost > 0.0);
-        assert_eq!(report.currency, "USD");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, crate::core::error::Error::ConfigurationError(_)));
     }
 
     #[test]
-    fn test_provider_comparison() {
-        let calculator = PricingCalculator::new().unwrap();
+    fn test_from_config_file_missing_file() {
+        // Should fail with non-existent file
+        let result = PricingCalculator::from_config_file(std::path::Path::new("/nonexistent.toml"));
 
-        let spec = ResourceSpec::default();
-
-        let reports = calculator.compare_providers(&spec, 730.0);
-
-        assert_eq!(reports.len(), 6);
-
-        // Generic (self-hosted) should be cheapest
-        let generic_report = reports
-            .iter()
-            .find(|r| matches!(r.provider, CloudProvider::Generic))
-            .unwrap();
-
-        let aws_report = reports
-            .iter()
-            .find(|r| matches!(r.provider, CloudProvider::AWS))
-            .unwrap();
-
-        assert!(generic_report.final_hourly_cost < aws_report.final_hourly_cost);
-    }
-
-    #[test]
-    fn test_spot_pricing_discount() {
-        let calculator = PricingCalculator::new().unwrap();
-
-        let mut spec = ResourceSpec::default();
-
-        // Regular instance
-        let regular_cost = calculator.calculate_cost(&spec, &CloudProvider::AWS, 1.0);
-
-        // Spot instance (should be 30% cheaper)
-        spec.allow_spot = true;
-        let spot_cost = calculator.calculate_cost(&spec, &CloudProvider::AWS, 1.0);
-
-        assert!(spot_cost.final_hourly_cost < regular_cost.final_hourly_cost);
-        assert_eq!(spot_cost.spot_discount, 0.3); // 30% discount
-
-        // Verify actual discount calculation
-        let expected_spot_cost = regular_cost.final_hourly_cost * 0.7;
-        assert!((spot_cost.final_hourly_cost - expected_spot_cost).abs() < 0.001);
+        assert!(result.is_err());
     }
 }

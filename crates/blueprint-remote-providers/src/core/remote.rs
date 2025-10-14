@@ -3,8 +3,16 @@ use kube::config::Kubeconfig;
 #[cfg(feature = "kubernetes")]
 use kube::{Client, Config};
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::path::PathBuf;
+use blueprint_std::path::PathBuf;
+#[cfg(feature = "kubernetes")]
+use blueprint_std::{collections::HashMap, sync::Arc};
+#[cfg(feature = "kubernetes")]
+use tokio::sync::RwLock;
+#[cfg(feature = "kubernetes")]
+use blueprint_core::info;
+
+#[cfg(feature = "kubernetes")]
+use crate::core::error::{Error, Result};
 
 /// Manages remote Kubernetes clusters for Blueprint deployments
 #[cfg(feature = "kubernetes")]
@@ -175,34 +183,21 @@ impl Default for KubernetesClusterConfig {
     }
 }
 
-/// Cloud provider types for cost tracking and networking configuration
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum CloudProvider {
-    /// AWS EKS
-    AWS,
-    /// Google Cloud GKE
-    GCP,
-    /// Azure AKS
-    Azure,
-    /// DigitalOcean Kubernetes
-    DigitalOcean,
-    /// Vultr Kubernetes Engine
-    Vultr,
-    /// Linode Kubernetes Engine
-    Linode,
-    /// Generic Kubernetes cluster
-    Generic,
-    /// Local Docker
-    DockerLocal,
-    /// Remote Docker host
-    DockerRemote(String),
-    /// Bare metal with SSH
-    BareMetal(Vec<String>),
+/// Re-export CloudProvider from pricing-engine
+/// This is now the single source of truth for cloud provider types
+pub use blueprint_pricing_engine_lib::CloudProvider;
+
+/// Extension trait for Kubernetes-specific functionality
+pub trait CloudProviderExt {
+    /// Convert to Kubernetes service type based on provider
+    fn to_service_type(&self) -> &str;
+
+    /// Check if provider requires tunnel for private networking
+    fn requires_tunnel(&self) -> bool;
 }
 
-impl CloudProvider {
-    /// Convert to Kubernetes service type based on provider
-    pub fn to_service_type(&self) -> &str {
+impl CloudProviderExt for CloudProvider {
+    fn to_service_type(&self) -> &str {
         match self {
             CloudProvider::AWS | CloudProvider::Azure => "LoadBalancer",
             CloudProvider::GCP => "ClusterIP", // Use with Ingress
@@ -213,29 +208,11 @@ impl CloudProvider {
         }
     }
 
-    /// Check if provider requires tunnel for private networking
-    pub fn requires_tunnel(&self) -> bool {
+    fn requires_tunnel(&self) -> bool {
         matches!(
             self,
             CloudProvider::Generic | CloudProvider::BareMetal(_) | CloudProvider::DockerLocal
         )
-    }
-}
-
-impl fmt::Display for CloudProvider {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CloudProvider::AWS => write!(f, "AWS"),
-            CloudProvider::GCP => write!(f, "GCP"),
-            CloudProvider::Azure => write!(f, "Azure"),
-            CloudProvider::DigitalOcean => write!(f, "DigitalOcean"),
-            CloudProvider::Vultr => write!(f, "Vultr"),
-            CloudProvider::Linode => write!(f, "Linode"),
-            CloudProvider::Generic => write!(f, "Generic"),
-            CloudProvider::DockerLocal => write!(f, "Docker (Local)"),
-            CloudProvider::DockerRemote(host) => write!(f, "Docker (Remote: {host})"),
-            CloudProvider::BareMetal(hosts) => write!(f, "Bare Metal ({} hosts)", hosts.len()),
-        }
     }
 }
 
@@ -298,6 +275,7 @@ mod tests {
 
     #[test]
     fn test_provider_service_type() {
+        use super::CloudProviderExt;
         assert_eq!(CloudProvider::AWS.to_service_type(), "LoadBalancer");
         assert_eq!(CloudProvider::GCP.to_service_type(), "ClusterIP");
         assert_eq!(CloudProvider::Generic.to_service_type(), "ClusterIP");
@@ -305,6 +283,7 @@ mod tests {
 
     #[test]
     fn test_provider_tunnel_requirement() {
+        use super::CloudProviderExt;
         assert!(!CloudProvider::AWS.requires_tunnel());
         assert!(!CloudProvider::GCP.requires_tunnel());
         assert!(CloudProvider::Generic.requires_tunnel());

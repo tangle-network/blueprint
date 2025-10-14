@@ -157,6 +157,41 @@ where
         self
     }
 
+    /// Register a job to use FaaS execution in tests
+    ///
+    /// This allows testing FaaS-delegated jobs alongside local jobs in the same test environment.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use blueprint_faas::custom::HttpFaasExecutor;
+    ///
+    /// let faas_executor = HttpFaasExecutor::new("http://localhost:8080");
+    ///
+    /// test_runner
+    ///     .add_job(local_job)           // Job 0: executes locally
+    ///     .with_faas_executor(1, faas_executor)  // Job 1: executes on FaaS
+    ///     .add_job(faas_job);           // Job 1: definition
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the builder is not initialized.
+    #[cfg(feature = "faas")]
+    pub fn with_faas_executor(
+        &mut self,
+        job_id: u32,
+        executor: impl blueprint_runner::faas::FaasExecutor + 'static,
+    ) -> &mut Self {
+        self.builder = Some(
+            self.builder
+                .take()
+                .expect("BlueprintRunnerBuilder should always exist")
+                .with_faas_executor(job_id, executor),
+        );
+        self
+    }
+
     /// Start the runner
     ///
     /// # Errors

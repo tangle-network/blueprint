@@ -2,8 +2,7 @@
 
 use crate::core::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::PathBuf;
+use blueprint_std::{collections::HashMap, path::PathBuf};
 
 /// SSH authentication method
 #[derive(Debug, Clone, Serialize, Deserialize)]

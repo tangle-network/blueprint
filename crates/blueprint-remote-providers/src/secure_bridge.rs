@@ -7,8 +7,7 @@ use crate::core::error::{Error, Result};
 use crate::deployment::tracker::DeploymentRecord;
 use blueprint_core::{info, warn};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use blueprint_std::{collections::HashMap, sync::{Arc, RwLock}};
 
 /// Configuration for secure bridge
 #[derive(Debug, Clone)]

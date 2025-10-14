@@ -11,7 +11,7 @@ use crate::providers::common::ProvisioningConfig;
 use crate::providers::vultr::provisioner::VultrProvisioner;
 use async_trait::async_trait;
 use blueprint_core::{info, warn};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Vultr adapter for Blueprint deployment
 pub struct VultrAdapter {

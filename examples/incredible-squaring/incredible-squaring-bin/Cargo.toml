@@ -8,9 +8,14 @@ rust-version.workspace = true
 incredible-squaring-blueprint-lib.workspace = true
 
 blueprint-sdk = { workspace = true, features = ["std", "tangle"] }
+blueprint-faas = { workspace = true, features = ["custom"], optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tower.workspace = true
+
+[features]
+faas = ["dep:blueprint-faas", "blueprint-sdk/faas"]
 
 [build-dependencies]
 incredible-squaring-blueprint-lib.workspace = true
 blueprint-sdk = { workspace = true, features = ["macros", "build", "testing"] }
+blueprint-profiling.workspace = true

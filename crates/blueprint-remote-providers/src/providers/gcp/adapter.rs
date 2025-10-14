@@ -8,7 +8,7 @@ use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 use crate::providers::gcp::GcpProvisioner;
 use async_trait::async_trait;
 use blueprint_core::info;
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Professional GCP adapter with security and performance optimizations
 pub struct GcpAdapter {
@@ -341,7 +341,7 @@ impl GcpAdapter {
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
-        _env_vars: HashMap<String, String>,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
@@ -353,6 +353,7 @@ impl GcpAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
+                env_vars,
                 config,
             )
             .await
@@ -360,7 +361,7 @@ impl GcpAdapter {
 
         #[cfg(not(feature = "kubernetes"))]
         {
-            let _ = (cluster_id, namespace, blueprint_image, resource_spec); // Suppress unused warnings
+            let _ = (cluster_id, namespace, blueprint_image, resource_spec, env_vars); // Suppress unused warnings
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
@@ -373,7 +374,7 @@ impl GcpAdapter {
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
-        _env_vars: HashMap<String, String>,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
@@ -383,13 +384,14 @@ impl GcpAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
+                env_vars,
             )
             .await
         }
 
         #[cfg(not(feature = "kubernetes"))]
         {
-            let _ = (namespace, blueprint_image, resource_spec); // Suppress unused warnings
+            let _ = (namespace, blueprint_image, resource_spec, env_vars); // Suppress unused warnings
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))

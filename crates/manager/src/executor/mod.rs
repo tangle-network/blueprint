@@ -572,10 +572,14 @@ fn extract_resources_from_json(value: &serde_json::Value) -> Option<ResourceSpec
         .map(|v| v as u32);
 
     Some(ResourceSpec {
-        cpu,
-        memory_gb,
-        storage_gb,
+        cpu: cpu as f32,
+        memory_gb: memory_gb as f32,
+        storage_gb: storage_gb as f32,
         gpu_count,
-        network_bandwidth_mbps: value.get("network_mbps").and_then(|v| v.as_f64()),
+        allow_spot: value
+            .get("allow_spot")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        qos: blueprint_remote_providers::resources::QosParameters::default(),
     })
 }

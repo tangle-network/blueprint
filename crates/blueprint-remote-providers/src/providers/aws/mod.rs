@@ -21,7 +21,7 @@ pub mod adapter {
     use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
     use crate::infra::types::{InstanceStatus, ProvisionedInstance};
     use async_trait::async_trait;
-    use std::collections::HashMap;
+    use blueprint_std::collections::HashMap;
 
     pub struct AwsAdapter;
 

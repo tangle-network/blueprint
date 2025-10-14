@@ -61,7 +61,7 @@ impl RemoteMetricsProvider {
             self.remote_endpoints
                 .write()
                 .await
-                .insert(result.blueprint_id.clone(), qos_endpoint);
+                .insert(result.blueprint_id.clone(), qos_endpoint.clone());
             tracing::info!(
                 "Registered QoS endpoint for Blueprint deployment {}: {}",
                 result.blueprint_id,

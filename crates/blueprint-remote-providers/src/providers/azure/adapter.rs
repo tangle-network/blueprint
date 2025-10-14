@@ -11,11 +11,11 @@ use crate::providers::azure::provisioner::AzureProvisioner;
 use crate::providers::common::ProvisioningConfig;
 use async_trait::async_trait;
 use blueprint_core::{info, warn};
-use std::collections::HashMap;
+use blueprint_std::{collections::HashMap, sync::Arc};
 
 /// Azure adapter for Blueprint deployment
 pub struct AzureAdapter {
-    provisioner: std::sync::Arc<tokio::sync::Mutex<AzureProvisioner>>,
+    provisioner: Arc<tokio::sync::Mutex<AzureProvisioner>>,
 }
 
 impl AzureAdapter {
@@ -24,7 +24,7 @@ impl AzureAdapter {
         let provisioner = AzureProvisioner::new().await?;
 
         Ok(Self {
-            provisioner: std::sync::Arc::new(tokio::sync::Mutex::new(provisioner)),
+            provisioner: Arc::new(tokio::sync::Mutex::new(provisioner)),
         })
     }
 }

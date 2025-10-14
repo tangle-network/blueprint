@@ -194,6 +194,13 @@ testing = [
     "std",
 ]
 
+## Enable testing utilities with FaaS support
+testing-faas = [
+    "testing",
+    "faas",
+    "blueprint-testing-utils/faas",
+]
+
 #! ### Extra producers
 
 ## Enable the cron job producer
@@ -201,6 +208,9 @@ cronjob = ["blueprint-producers-extra/cron"]
 
 ## Enable remote cloud deployment providers
 remote-providers = ["dep:blueprint-remote-providers"]
+
+## Enable FaaS (Function-as-a-Service) execution support
+faas = ["blueprint-runner/faas"]
 
 [package.metadata.docs.rs]
 features = ["tangle", "evm", "eigenlayer", "networking", "round-based-compat", "local-store", "macros", "build", "testing", "cronjob"]

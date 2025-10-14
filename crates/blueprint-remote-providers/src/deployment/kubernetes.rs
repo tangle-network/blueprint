@@ -16,7 +16,7 @@ use kube::{
     Client,
     api::{Api, PostParams},
 };
-use std::collections::BTreeMap;
+use blueprint_std::collections::BTreeMap;
 
 /// Kubernetes deployment client for Blueprint services
 pub struct KubernetesDeploymentClient {
@@ -47,7 +47,7 @@ impl KubernetesDeploymentClient {
         image: &str,
         spec: &ResourceSpec,
         replicas: i32,
-        env_vars: std::collections::HashMap<String, String>,
+        env_vars: blueprint_std::collections::HashMap<String, String>,
     ) -> Result<(String, Vec<u16>)> {
         info!(
             "Deploying Blueprint {} to Kubernetes namespace {} with {} env vars",
@@ -96,7 +96,7 @@ impl KubernetesDeploymentClient {
         image: &str,
         spec: &ResourceSpec,
         replicas: i32,
-        env_vars: std::collections::HashMap<String, String>,
+        env_vars: blueprint_std::collections::HashMap<String, String>,
     ) -> Deployment {
         let container_ports = vec![
             ContainerPort {

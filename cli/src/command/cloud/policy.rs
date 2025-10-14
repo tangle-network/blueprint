@@ -21,6 +21,8 @@ pub struct RemoteDeploymentPolicy {
     pub regions: RegionPolicy,
     /// Failover and retry configuration
     pub failover: FailoverPolicy,
+    /// Serverless deployment configuration
+    pub serverless: ServerlessPolicy,
 }
 
 /// Provider preferences for different workload types.
@@ -84,6 +86,63 @@ pub struct FailoverPolicy {
     pub retry_different_providers: bool,
 }
 
+/// Serverless deployment configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerlessPolicy {
+    /// Enable serverless optimization for pure-FaaS blueprints
+    pub enable: bool,
+    /// FaaS provider to use (aws-lambda, gcp-functions, azure-functions)
+    pub provider: FaasProvider,
+    /// Default memory allocation for FaaS functions (MB)
+    pub default_memory_mb: u32,
+    /// Default timeout for FaaS functions (seconds)
+    pub default_timeout_secs: u32,
+    /// Fallback to VM deployment if serverless fails
+    pub fallback_to_vm: bool,
+}
+
+/// FaaS provider options.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum FaasProvider {
+    /// AWS Lambda
+    AwsLambda {
+        #[serde(default = "default_aws_region")]
+        region: String,
+    },
+    /// Google Cloud Functions
+    GcpFunctions {
+        #[serde(default)]
+        project_id: String,
+    },
+    /// Azure Functions
+    AzureFunctions {
+        #[serde(default)]
+        subscription_id: String,
+    },
+    /// Custom HTTP-based FaaS endpoint
+    Custom {
+        endpoint: String,
+    },
+}
+
+fn default_aws_region() -> String {
+    "us-east-1".to_string()
+}
+
+/// Simple provider type for CLI args
+#[derive(Debug, Clone, ValueEnum)]
+pub enum FaasProviderType {
+    #[value(name = "aws-lambda")]
+    AwsLambda,
+    #[value(name = "gcp-functions")]
+    GcpFunctions,
+    #[value(name = "azure-functions")]
+    AzureFunctions,
+    #[value(name = "custom")]
+    Custom,
+}
+
 impl Default for RemoteDeploymentPolicy {
     fn default() -> Self {
         Self {
@@ -113,6 +172,15 @@ impl Default for RemoteDeploymentPolicy {
                 retry_delay_seconds: 30,
                 retry_different_regions: true,
                 retry_different_providers: true,
+            },
+            serverless: ServerlessPolicy {
+                enable: true,
+                provider: FaasProvider::AwsLambda {
+                    region: "us-east-1".to_string(),
+                },
+                default_memory_mb: 512,
+                default_timeout_secs: 300,
+                fallback_to_vm: true,
             },
         }
     }
@@ -191,6 +259,42 @@ pub struct PolicyConfigureArgs {
     /// Cost optimization strategy
     #[arg(long, value_enum)]
     pub cost_strategy: Option<CostOptimization>,
+
+    /// Enable serverless optimization for pure-FaaS blueprints
+    #[arg(long)]
+    pub serverless: Option<bool>,
+
+    /// FaaS provider type (aws-lambda, gcp-functions, azure-functions, custom)
+    #[arg(long, value_enum)]
+    pub faas_provider: Option<FaasProviderType>,
+
+    /// AWS region for Lambda (only with --faas-provider aws-lambda)
+    #[arg(long)]
+    pub faas_aws_region: Option<String>,
+
+    /// GCP project ID (only with --faas-provider gcp-functions)
+    #[arg(long)]
+    pub faas_gcp_project: Option<String>,
+
+    /// Azure subscription ID (only with --faas-provider azure-functions)
+    #[arg(long)]
+    pub faas_azure_subscription: Option<String>,
+
+    /// Custom FaaS endpoint URL (only with --faas-provider custom)
+    #[arg(long)]
+    pub faas_custom_endpoint: Option<String>,
+
+    /// Default FaaS memory (MB)
+    #[arg(long)]
+    pub faas_memory: Option<u32>,
+
+    /// Default FaaS timeout (seconds)
+    #[arg(long)]
+    pub faas_timeout: Option<u32>,
+
+    /// Fallback to VM if serverless fails
+    #[arg(long)]
+    pub serverless_fallback: Option<bool>,
 }
 
 /// Configure remote deployment policy.
@@ -265,6 +369,64 @@ pub async fn configure_policy(args: PolicyConfigureArgs) -> Result<()> {
         changed = true;
     }
 
+    // Update serverless settings
+    if let Some(serverless) = args.serverless {
+        policy.serverless.enable = serverless;
+        println!("✓ Serverless optimization: {}", serverless);
+        changed = true;
+    }
+
+    if let Some(provider_type) = args.faas_provider {
+        let provider = match provider_type {
+            FaasProviderType::AwsLambda => {
+                let region = args.faas_aws_region.unwrap_or_else(|| "us-east-1".to_string());
+                FaasProvider::AwsLambda { region }
+            }
+            FaasProviderType::GcpFunctions => {
+                let project_id = args.faas_gcp_project
+                    .ok_or_else(|| color_eyre::eyre::eyre!(
+                        "GCP Functions requires --faas-gcp-project"
+                    ))?;
+                FaasProvider::GcpFunctions { project_id }
+            }
+            FaasProviderType::AzureFunctions => {
+                let subscription_id = args.faas_azure_subscription
+                    .ok_or_else(|| color_eyre::eyre::eyre!(
+                        "Azure Functions requires --faas-azure-subscription"
+                    ))?;
+                FaasProvider::AzureFunctions { subscription_id }
+            }
+            FaasProviderType::Custom => {
+                let endpoint = args.faas_custom_endpoint
+                    .ok_or_else(|| color_eyre::eyre::eyre!(
+                        "Custom FaaS requires --faas-custom-endpoint"
+                    ))?;
+                FaasProvider::Custom { endpoint }
+            }
+        };
+        println!("✓ FaaS provider: {:?}", provider);
+        policy.serverless.provider = provider;
+        changed = true;
+    }
+
+    if let Some(memory) = args.faas_memory {
+        policy.serverless.default_memory_mb = memory;
+        println!("✓ FaaS memory: {}MB", memory);
+        changed = true;
+    }
+
+    if let Some(timeout) = args.faas_timeout {
+        policy.serverless.default_timeout_secs = timeout;
+        println!("✓ FaaS timeout: {}s", timeout);
+        changed = true;
+    }
+
+    if let Some(fallback) = args.serverless_fallback {
+        policy.serverless.fallback_to_vm = fallback;
+        println!("✓ Serverless fallback to VM: {}", fallback);
+        changed = true;
+    }
+
     if changed {
         policy.save()?;
         println!("\n✅ Deployment policy updated!");
@@ -329,6 +491,26 @@ async fn show_current_policy(policy: &RemoteDeploymentPolicy) -> Result<()> {
         "  Retry delay:        {}s",
         policy.failover.retry_delay_seconds
     );
+
+    println!("\nServerless Settings:");
+    println!("  Enabled:            {}", policy.serverless.enable);
+    match &policy.serverless.provider {
+        FaasProvider::AwsLambda { region } => {
+            println!("  FaaS provider:      AWS Lambda ({})", region);
+        }
+        FaasProvider::GcpFunctions { project_id } => {
+            println!("  FaaS provider:      GCP Functions ({})", project_id);
+        }
+        FaasProvider::AzureFunctions { subscription_id } => {
+            println!("  FaaS provider:      Azure Functions ({})", subscription_id);
+        }
+        FaasProvider::Custom { endpoint } => {
+            println!("  FaaS provider:      Custom ({})", endpoint);
+        }
+    }
+    println!("  Default memory:     {}MB", policy.serverless.default_memory_mb);
+    println!("  Default timeout:    {}s", policy.serverless.default_timeout_secs);
+    println!("  Fallback to VM:     {}", policy.serverless.fallback_to_vm);
 
     Ok(())
 }
