@@ -46,7 +46,7 @@ jobs:
           kubectl get nodes
       
       - name: Run Kubernetes tests
-        run: cargo test -p blueprint-remote-providers --test managed_kubernetes_e2e -- --ignored
+        run: cargo test -p blueprint-remote-providers --test managed_kubernetes_e2e --features kubernetes
 
   docker-ssh-tests:
     name: Docker SSH Tests

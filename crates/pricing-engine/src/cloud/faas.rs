@@ -46,6 +46,7 @@ struct AwsProduct {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // Fields defined for API schema completeness
 struct AwsAttributes {
     #[serde(rename = "group")]
     group: Option<String>,
@@ -78,6 +79,7 @@ struct GcpBillingCatalog {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // Fields defined for API schema completeness
 struct GcpSku {
     name: String,
     description: String,
@@ -87,6 +89,7 @@ struct GcpSku {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // Fields defined for API schema completeness
 struct GcpCategory {
     #[serde(rename = "serviceDisplayName")]
     service_display_name: String,
@@ -113,6 +116,7 @@ struct GcpTieredRate {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // Fields defined for API schema completeness
 struct GcpMoney {
     #[serde(rename = "currencyCode")]
     currency_code: String,
@@ -128,6 +132,7 @@ struct AzureRetailPrices {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // Fields defined for API schema completeness
 struct AzurePriceItem {
     #[serde(rename = "currencyCode")]
     currency_code: String,

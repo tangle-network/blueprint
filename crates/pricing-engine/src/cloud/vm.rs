@@ -297,6 +297,7 @@ impl PricingFetcher {
         }
 
         #[derive(Deserialize, Debug)]
+        #[allow(dead_code)] // Fields defined for API schema completeness
         struct GcpSku {
             description: String,
             category: GcpCategory,
@@ -311,24 +312,28 @@ impl PricingFetcher {
         }
 
         #[derive(Deserialize, Debug)]
+        #[allow(dead_code)] // Fields defined for API schema completeness
         struct GcpPricingInfo {
             #[serde(rename = "pricingExpression")]
             pricing_expression: GcpPricingExpression,
         }
 
         #[derive(Deserialize, Debug)]
+        #[allow(dead_code)] // Fields defined for API schema completeness
         struct GcpPricingExpression {
             #[serde(rename = "tieredRates")]
             tiered_rates: Vec<GcpTieredRate>,
         }
 
         #[derive(Deserialize, Debug)]
+        #[allow(dead_code)] // Fields defined for API schema completeness
         struct GcpTieredRate {
             #[serde(rename = "unitPrice")]
             unit_price: GcpMoney,
         }
 
         #[derive(Deserialize, Debug)]
+        #[allow(dead_code)] // Fields defined for API schema completeness
         struct GcpMoney {
             units: String,
             nanos: i64,
@@ -461,6 +466,7 @@ impl PricingFetcher {
         }
 
         #[derive(Deserialize, Debug)]
+        #[allow(dead_code)] // Fields defined for API schema completeness
         struct VultrPlan {
             id: String,
             vcpu_count: i32,

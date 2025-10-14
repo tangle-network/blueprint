@@ -3,14 +3,15 @@ use kube::config::Kubeconfig;
 #[cfg(feature = "kubernetes")]
 use kube::{Client, Config};
 use serde::{Deserialize, Serialize};
-use blueprint_std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::Arc,
-};
+use blueprint_std::path::PathBuf;
+#[cfg(feature = "kubernetes")]
+use blueprint_std::{collections::HashMap, sync::Arc};
+#[cfg(feature = "kubernetes")]
 use tokio::sync::RwLock;
+#[cfg(feature = "kubernetes")]
 use blueprint_core::info;
 
+#[cfg(feature = "kubernetes")]
 use crate::core::error::{Error, Result};
 
 /// Manages remote Kubernetes clusters for Blueprint deployments
