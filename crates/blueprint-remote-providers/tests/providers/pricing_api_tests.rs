@@ -3,8 +3,8 @@
 //! Run with: cargo test -p blueprint-remote-providers --test real_pricing_test -- --nocapture
 
 use blueprint_remote_providers::{
-    pricing::fetcher::{PricingFetcher, InstanceInfo},
-    remote::CloudProvider,
+    pricing::{PricingFetcher, InstanceInfo},
+    core::remote::CloudProvider,
 };
 
 #[tokio::test]

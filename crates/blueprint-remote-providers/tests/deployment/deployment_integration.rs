@@ -4,9 +4,9 @@
 use blueprint_remote_providers::{
     cloud_provisioner::{CloudProvisioner, ProvisionedInstance, InstanceStatus},
     deployment::ssh::{SshDeploymentClient, SshConnection, ContainerRuntime, DeploymentConfig},
-    remote::CloudProvider,
-    resources::ResourceSpec,
-    pricing::fetcher::PricingFetcher,
+    core::remote::CloudProvider,
+    core::resources::ResourceSpec,
+    pricing::PricingFetcher,
     deployment::tracker::{DeploymentTracker, DeploymentRecord, DeploymentType, DeploymentStatus},
 };
 use serde_json::json;
@@ -259,7 +259,7 @@ async fn test_ttl_deployment_cleanup() {
 /// Test pricing integration for cost-optimized deployment
 #[tokio::test]
 async fn test_cost_optimized_deployment() {
-    use blueprint_remote_providers::pricing::fetcher::PricingFetcher;
+    use blueprint_remote_providers::pricing::PricingFetcher;
     
     let mut fetcher = PricingFetcher::new_or_default();
     

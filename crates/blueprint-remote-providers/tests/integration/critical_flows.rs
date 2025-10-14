@@ -1,10 +1,10 @@
 //! End-to-end deployment flow tests
 
 use blueprint_remote_providers::{
-    resources::ResourceSpec,
-    remote::CloudProvider,
+    core::resources::ResourceSpec,
+    core::remote::CloudProvider,
     provisioning::{select_instance_type, InstanceSelection},
-    pricing::fetcher::PricingFetcher,
+    pricing::PricingFetcher,
     deployment::tracker::DeploymentTracker,
 };
 use std::time::Duration;

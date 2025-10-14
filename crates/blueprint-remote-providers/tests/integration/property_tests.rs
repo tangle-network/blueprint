@@ -3,9 +3,9 @@
 
 use blueprint_remote_providers::{
     provisioning::select_instance_type,
-    remote::CloudProvider,
-    resources::ResourceSpec,
-    pricing::fetcher::PricingFetcher,
+    core::remote::CloudProvider,
+    core::resources::ResourceSpec,
+    pricing::PricingFetcher,
 };
 use proptest::prelude::*;
 

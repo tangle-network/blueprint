@@ -271,7 +271,7 @@ async fn test_multi_provider_real_sdk_integration() {
     println!("🌐 Testing multi-provider integration with real SDKs");
 
     use blueprint_remote_providers::infra::mapper::InstanceTypeMapper;
-    use blueprint_remote_providers::pricing::fetcher::PricingFetcher;
+    use blueprint_remote_providers::pricing::PricingFetcher;
 
     let spec = ResourceSpec::basic();
     let mut pricing_fetcher = PricingFetcher::new_or_default();
@@ -455,7 +455,7 @@ async fn get_blueprint_resource_requirements(binary_path: &str) -> BlueprintReso
 async fn test_real_cost_estimation_with_blueprint_data() {
     println!("💰 Testing real cost estimation using blueprint requirements");
 
-    use blueprint_remote_providers::pricing::fetcher::PricingFetcher;
+    use blueprint_remote_providers::pricing::PricingFetcher;
 
     let mut fetcher = PricingFetcher::new_or_default();
 
