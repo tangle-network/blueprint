@@ -93,6 +93,7 @@ tonic = { workspace = true }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
+protobuf-src = "2.1"
 
 [features]
 default = []
