@@ -158,6 +158,7 @@ fn test_gpu_instance_selection() {
 
 /// Test Vantage.sh pricing API for AWS instances
 #[tokio::test]
+#[ignore] // Requires network - run with: cargo test -- --ignored
 async fn test_pricing_api_integration() {
     use blueprint_remote_providers::pricing::PricingFetcher;
     

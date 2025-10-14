@@ -147,6 +147,7 @@ async fn test_deployment_ttl_tracking() {
 
 /// Test AWS and Azure pricing via Vantage.sh API
 #[tokio::test]
+#[ignore] // Requires network - run with: cargo test -- --ignored
 async fn test_pricing_apis_available() {
     let mut fetcher = PricingFetcher::new_or_default();
     
@@ -185,6 +186,7 @@ async fn test_pricing_apis_available() {
 
 /// Find cheapest provider for given resource requirements
 #[tokio::test]
+#[ignore] // Requires network - run with: cargo test -- --ignored
 async fn test_multi_provider_cost_optimization() {
     let spec = ResourceSpec::basic();
     let mut fetcher = PricingFetcher::new_or_default();

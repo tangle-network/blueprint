@@ -8,6 +8,7 @@ use blueprint_remote_providers::{
 };
 
 #[tokio::test]
+#[ignore] // Requires network - run with: cargo test -- --ignored
 async fn test_aws_vantage_api() {
     println!("\n🔍 Testing AWS pricing from instances.vantage.sh...");
     
@@ -51,6 +52,7 @@ async fn test_aws_vantage_api() {
 }
 
 #[tokio::test]
+#[ignore] // Requires network - run with: cargo test -- --ignored
 async fn test_azure_pricing_api() {
     println!("\n🔍 Testing Azure pricing API...");
     
@@ -82,6 +84,7 @@ async fn test_azure_pricing_api() {
 }
 
 #[tokio::test]
+#[ignore] // Requires network - run with: cargo test -- --ignored
 async fn test_pricing_fetcher_integration() {
     println!("\n🔍 Testing PricingFetcher with real APIs...");
     
@@ -149,6 +152,7 @@ async fn test_pricing_fetcher_integration() {
 }
 
 #[tokio::test]
+#[ignore] // Requires network - run with: cargo test -- --ignored
 async fn test_cheapest_provider_selection() {
     println!("\n💰 Testing cheapest provider selection...");
     
