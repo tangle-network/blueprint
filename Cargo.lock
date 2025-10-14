@@ -3648,12 +3648,15 @@ version = "0.3.0-alpha.21"
 dependencies = [
  "auto_impl",
  "axum",
+ "base64 0.22.1",
  "blueprint-auth",
  "blueprint-clients",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-keystore",
  "blueprint-manager-bridge",
+ "blueprint-pricing-engine",
+ "blueprint-profiling",
  "blueprint-qos",
  "blueprint-remote-providers",
  "blueprint-runner",
@@ -3669,6 +3672,7 @@ dependencies = [
  "document-features",
  "dynosaur",
  "fatfs",
+ "flate2",
  "futures",
  "hex",
  "http-body-util",
@@ -3847,6 +3851,7 @@ dependencies = [
  "parity-scale-codec",
  "prost 0.13.5",
  "rand 0.8.5",
+ "reqwest 0.12.23",
  "rust_decimal",
  "scale-info",
  "serde",
@@ -3867,6 +3872,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tracing-subscriber 0.3.20",
+ "urlencoding",
  "uuid 1.18.1",
 ]
 
@@ -3886,6 +3892,9 @@ dependencies = [
 name = "blueprint-profiling"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "flate2",
  "libc",
  "serde",
  "serde_json",

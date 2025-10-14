@@ -3199,6 +3199,7 @@ dependencies = [
  "parity-scale-codec",
  "prost",
  "rand 0.8.5",
+ "reqwest",
  "rust_decimal",
  "scale-info",
  "serde",
@@ -3217,6 +3218,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tracing-subscriber 0.3.20",
+ "urlencoding",
  "uuid 1.18.1",
 ]
 
@@ -3233,6 +3235,9 @@ dependencies = [
 name = "blueprint-profiling"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "flate2",
  "libc",
  "serde",
  "serde_json",
@@ -7575,6 +7580,7 @@ name = "incredible-squaring-blueprint-bin"
 version = "0.1.1"
 dependencies = [
  "blueprint-faas",
+ "blueprint-profiling",
  "blueprint-sdk",
  "incredible-squaring-blueprint-lib",
  "tokio",

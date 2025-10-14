@@ -754,7 +754,7 @@ impl RemoteDeploymentService {
             None => return Ok(None), // No blueprint ID, can't analyze
         };
 
-        let metadata = super::fetch_blueprint_metadata(blueprint_id, None).await?;
+        let metadata = super::fetch_blueprint_metadata(blueprint_id, None, None).await?;
         let job_count = metadata.job_count;
         let job_profiles = &metadata.job_profiles;
 

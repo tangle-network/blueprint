@@ -3,12 +3,10 @@
 //! This module provides pure functions to analyze blueprint metadata and
 //! recommend optimal deployment strategies (serverless, hybrid, traditional).
 
-use crate::config::BlueprintManagerContext;
-use crate::error::{Error, Result};
-use blueprint_std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 /// Deployment strategy recommendation based on blueprint analysis.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeploymentStrategy {
     /// Pure serverless: all jobs can run on FaaS
     Serverless {
@@ -68,6 +66,15 @@ impl FaasLimits {
         }
     }
 
+    /// DigitalOcean Functions limits
+    pub fn digitalocean_functions() -> Self {
+        Self {
+            max_memory_mb: 8192,        // 8 GB (configurable: 128MB-8GB)
+            max_timeout_secs: 900,      // 15 minutes (configurable: 1-900s)
+            max_payload_mb: 8,          // 8 MB (estimated)
+        }
+    }
+
     /// Custom FaaS (conservative defaults)
     pub fn custom() -> Self {
         Self {
@@ -79,20 +86,68 @@ impl FaasLimits {
 }
 
 /// Job analysis result.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobAnalysis {
     pub job_id: u32,
     pub faas_compatible: bool,
     pub reason: Option<String>,
 }
 
+/// Resource sizing recommendation for VM/K8s deployment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceSizing {
+    /// Recommended CPU cores
+    pub cpu_cores: f32,
+    /// Recommended memory in MB
+    pub memory_mb: u32,
+    /// Reasoning for the recommendation
+    pub reasoning: String,
+}
+
+impl ResourceSizing {
+    /// Calculate recommended sizing from job profiles
+    pub fn from_profiles(profiles: &[Option<super::blueprint_fetcher::JobProfile>]) -> Self {
+        let mut max_memory_mb = 512; // Minimum baseline
+        let mut has_data = false;
+
+        for profile_opt in profiles {
+            if let Some(profile) = profile_opt {
+                has_data = true;
+                // Add 50% headroom for safety
+                let job_memory = (profile.peak_memory_mb as f32 * 1.5) as u32;
+                max_memory_mb = max_memory_mb.max(job_memory);
+            }
+        }
+
+        // Estimate CPU based on memory (heuristic: 1 core per 2GB memory)
+        let cpu_cores = (max_memory_mb as f32 / 2048.0).max(1.0).ceil();
+
+        let reasoning = if has_data {
+            format!(
+                "Based on profiling data: {}MB peak memory with 50% headroom, {} CPU cores estimated",
+                max_memory_mb, cpu_cores
+            )
+        } else {
+            "No profiling data - using conservative defaults (1 CPU, 512MB)".to_string()
+        };
+
+        Self {
+            cpu_cores,
+            memory_mb: max_memory_mb,
+            reasoning,
+        }
+    }
+}
+
 /// Blueprint analysis result.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintAnalysis {
     pub total_jobs: usize,
     pub faas_compatible_jobs: Vec<JobAnalysis>,
     pub incompatible_jobs: Vec<JobAnalysis>,
     pub recommended_strategy: DeploymentStrategy,
+    /// Resource sizing for VM/K8s deployment (if needed)
+    pub resource_sizing: ResourceSizing,
 }
 
 /// Analyzes a blueprint and recommends deployment strategy.
@@ -158,11 +213,15 @@ pub fn analyze_blueprint(
         }
     };
 
+    // Calculate resource sizing for VM/K8s deployment
+    let resource_sizing = ResourceSizing::from_profiles(job_profiles);
+
     BlueprintAnalysis {
         total_jobs: job_ids.len(),
         faas_compatible_jobs: faas_compatible,
         incompatible_jobs: incompatible,
         recommended_strategy,
+        resource_sizing,
     }
 }
 
