@@ -17,7 +17,7 @@ use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
 use crate::providers::gcp::GcpAdapter;
 use crate::providers::vultr::adapter::VultrAdapter;
 use blueprint_core::{error, info, warn};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Multi-cloud provisioner that handles deployments across all supported providers
 pub struct CloudProvisioner {

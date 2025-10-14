@@ -4,7 +4,7 @@ use crate::core::error::Result;
 use crate::core::remote::CloudProvider;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Deployment record tracking all necessary cleanup information
 #[derive(Debug, Clone, Serialize, Deserialize)]

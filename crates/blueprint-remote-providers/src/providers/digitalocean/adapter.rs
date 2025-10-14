@@ -7,7 +7,7 @@ use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::digitalocean::{DigitalOceanProvisioner, Droplet};
 use async_trait::async_trait;
 use blueprint_core::{info, warn};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// DigitalOcean adapter for Blueprint deployment
 #[derive(Debug)]

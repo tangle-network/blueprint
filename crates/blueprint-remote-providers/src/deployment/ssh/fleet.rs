@@ -7,7 +7,7 @@ use super::types::{
 use crate::core::error::Result;
 use crate::core::resources::ResourceSpec;
 use blueprint_core::{info, warn};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Batch deployment to multiple hosts
 pub struct BareMetalFleet {

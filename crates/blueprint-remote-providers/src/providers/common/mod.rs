@@ -3,7 +3,7 @@
 use crate::core::remote::CloudProvider;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Result of instance type selection
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,7 +75,7 @@ impl ProvisionedInfrastructure {
 
     /// Check if a port is open on the given host
     async fn check_port_open(&self, host: &str, port: u16) -> bool {
-        use std::time::Duration;
+        use blueprint_std::time::Duration;
         use tokio::net::TcpStream;
         use tokio::time::timeout;
 

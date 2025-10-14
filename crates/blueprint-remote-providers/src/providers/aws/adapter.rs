@@ -8,7 +8,7 @@ use crate::providers::aws::provisioner::AwsProvisioner;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 use async_trait::async_trait;
 use blueprint_core::{debug, info, warn};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Professional AWS adapter with security and performance optimizations
 pub struct AwsAdapter {
@@ -245,7 +245,7 @@ impl AwsAdapter {
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
-        _env_vars: HashMap<String, String>,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
@@ -257,6 +257,7 @@ impl AwsAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
+                env_vars,
                 config,
             )
             .await
@@ -264,7 +265,7 @@ impl AwsAdapter {
 
         #[cfg(not(feature = "kubernetes"))]
         {
-            let _ = (cluster_id, namespace, blueprint_image, resource_spec); // Suppress unused warnings
+            let _ = (cluster_id, namespace, blueprint_image, resource_spec, env_vars); // Suppress unused warnings
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
@@ -277,7 +278,7 @@ impl AwsAdapter {
         namespace: &str,
         blueprint_image: &str,
         resource_spec: &ResourceSpec,
-        _env_vars: HashMap<String, String>,
+        env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         #[cfg(feature = "kubernetes")]
         {
@@ -287,13 +288,14 @@ impl AwsAdapter {
                 namespace,
                 blueprint_image,
                 resource_spec,
+                env_vars,
             )
             .await
         }
 
         #[cfg(not(feature = "kubernetes"))]
         {
-            let _ = (namespace, blueprint_image, resource_spec); // Suppress unused warnings
+            let _ = (namespace, blueprint_image, resource_spec, env_vars); // Suppress unused warnings
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))

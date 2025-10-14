@@ -5,7 +5,7 @@ use crate::core::resources::ResourceSpec;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 use blueprint_core::{debug, info};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Vultr API instance representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,7 +32,7 @@ impl VultrProvisioner {
     /// Create a new Vultr provisioner
     pub async fn new(api_key: String) -> Result<Self> {
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(blueprint_std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| Error::ConfigurationError(format!("Failed to create HTTP client: {e}")))?;
 

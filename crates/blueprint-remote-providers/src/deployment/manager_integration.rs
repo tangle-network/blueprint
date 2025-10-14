@@ -6,8 +6,7 @@ use crate::core::resources::ResourceSpec;
 use crate::deployment::tracker::{DeploymentTracker, DeploymentType};
 use blueprint_core::{error, info, warn};
 use chrono::{DateTime, Utc};
-use std::collections::HashMap;
-use std::sync::Arc;
+use blueprint_std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 
 /// Type alias for TTL registry mapping (blueprint_id, service_id) to expiry time

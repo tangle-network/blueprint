@@ -12,6 +12,9 @@ use blueprint_remote_providers::{
 };
 use tokio::process::Command as AsyncCommand;
 
+// Import helper functions and macro
+use test_helpers::{cleanup_test_cluster, cli_available, init_crypto, kubectl_working, require_kind};
+
 // These helper functions are available for manual testing but not used in automated tests
 #[allow(dead_code)]
 mod test_helpers {
@@ -53,15 +56,17 @@ mod test_helpers {
     #[allow(unused_macros)]
     macro_rules! require_kind {
         ($cluster_name:ident) => {
-            if !cli_available("kind").await {
+            if !$crate::test_helpers::cli_available("kind").await {
                 eprintln!(
                     "⚠️  Skipping test - kind not installed. Install with: brew install kind"
                 );
                 return;
             }
-            let $cluster_name = ensure_test_cluster().await;
+            let $cluster_name = $crate::test_helpers::ensure_test_cluster().await;
         };
     }
+
+    pub(crate) use require_kind;
 
     /// Create a unique test cluster name for each test
     pub(crate) fn get_test_cluster_name() -> String {
@@ -252,6 +257,7 @@ async fn test_shared_kubernetes_deployment_generic() {
         namespace,
         blueprint_image,
         &resource_spec,
+        std::collections::HashMap::new(),
     )
     .await;
 
@@ -412,6 +418,7 @@ async fn test_managed_k8s_deployment_with_mock_auth() {
         namespace,
         blueprint_image,
         &resource_spec,
+        std::collections::HashMap::new(),
         config,
     )
     .await;
@@ -496,9 +503,13 @@ async fn test_k8s_deployment_resource_allocation() {
             spec.storage_gb
         );
 
-        let result =
-            SharedKubernetesDeployment::deploy_to_generic_k8s("default", "alpine:latest", spec)
-                .await;
+        let result = SharedKubernetesDeployment::deploy_to_generic_k8s(
+            "default",
+            "alpine:latest",
+            spec,
+            std::collections::HashMap::new(),
+        )
+        .await;
 
         match result {
             Ok(deployment) => {
@@ -535,6 +546,7 @@ async fn test_k8s_deployment_port_exposure() {
         "default",
         "nginx:alpine",
         &ResourceSpec::default(),
+        std::collections::HashMap::new(),
     )
     .await;
 
@@ -688,6 +700,7 @@ async fn test_end_to_end_managed_k8s_workflow() {
             allow_spot: false,
             qos: Default::default(),
         },
+        std::collections::HashMap::new(),
     )
     .await;
 

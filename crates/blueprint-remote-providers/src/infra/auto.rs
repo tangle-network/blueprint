@@ -12,9 +12,7 @@ use crate::pricing::PricingFetcher;
 use blueprint_core::{debug, info, warn};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
-use std::sync::Arc;
+use blueprint_std::{collections::HashMap, path::Path, sync::Arc};
 use tokio::sync::RwLock;
 
 /// Deployment preferences configured by operators

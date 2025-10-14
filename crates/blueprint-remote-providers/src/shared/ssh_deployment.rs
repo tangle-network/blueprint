@@ -11,7 +11,7 @@ use crate::deployment::ssh::{
 use crate::infra::traits::BlueprintDeploymentResult;
 use crate::infra::types::ProvisionedInstance;
 use blueprint_core::{info, warn};
-use std::collections::HashMap;
+use blueprint_std::collections::HashMap;
 
 /// Shared SSH deployment implementation
 pub struct SharedSshDeployment;

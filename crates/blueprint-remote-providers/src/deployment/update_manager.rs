@@ -9,8 +9,8 @@ use crate::deployment::ssh::SshDeploymentClient;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use blueprint_core::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
-use std::time::{Duration, SystemTime};
+use blueprint_std::collections::{HashMap, VecDeque};
+use blueprint_std::time::{Duration, SystemTime};
 use tokio::time::{sleep, timeout};
 
 /// Maximum number of deployment versions to keep

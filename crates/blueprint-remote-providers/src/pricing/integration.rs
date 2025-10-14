@@ -8,8 +8,7 @@ use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
+use blueprint_std::{collections::HashMap, path::Path};
 
 /// Pricing calculator that integrates with the Pricing Engine
 ///
