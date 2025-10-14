@@ -8,7 +8,7 @@ use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::deployment::manager_integration::RemoteDeploymentConfig;
 use crate::deployment::tracker::DeploymentType;
-use crate::pricing::fetcher::PricingFetcher;
+use crate::pricing::PricingFetcher;
 use blueprint_core::{debug, info, warn};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};

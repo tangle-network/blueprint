@@ -38,7 +38,7 @@ blueprint-core = { workspace = true, features = ["tracing"] }
 # Blueprint dependencies (removed blueprint-manager and blueprint-qos to avoid cyclic dependency)
 # blueprint-auth.workspace = true
 blueprint-keystore.workspace = true
-blueprint-pricing-engine = { workspace = true, optional = true }
+blueprint-pricing-engine.workspace = true
 parity-scale-codec = { workspace = true, features = ["derive"] }
 
 # Provider-specific dependencies
@@ -104,7 +104,6 @@ digitalocean = []  # DigitalOcean support via REST API
 vultr = []  # Vultr support via REST API
 kubernetes = ["dep:kube", "dep:k8s-openapi"]
 docker = ["dep:bollard"]
-pricing = ["dep:blueprint-pricing-engine"]
 testing = []
 
 

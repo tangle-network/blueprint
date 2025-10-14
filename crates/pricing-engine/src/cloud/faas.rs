@@ -7,7 +7,7 @@
 //!
 //! NO HARDCODED PRICING - All costs fetched from provider APIs.
 
-use crate::core::error::{Error, Result};
+use crate::error::{PricingError, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -197,11 +197,11 @@ impl FaasPricingFetcher {
         let url = "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/current/index.json";
 
         let response = self.client.get(url).send().await.map_err(|e| {
-            Error::HttpError(format!("Failed to fetch AWS Lambda pricing: {}", e))
+            PricingError::HttpError(format!("Failed to fetch AWS Lambda pricing: {}", e))
         })?;
 
         let price_list: AwsLambdaPriceList = response.json().await.map_err(|e| {
-            Error::HttpError(format!("Failed to parse AWS Lambda pricing: {}", e))
+            PricingError::HttpError(format!("Failed to parse AWS Lambda pricing: {}", e))
         })?;
 
         // Parse pricing data
@@ -306,11 +306,11 @@ impl FaasPricingFetcher {
         );
 
         let response = self.client.get(&url).send().await.map_err(|e| {
-            Error::HttpError(format!("Failed to fetch GCP pricing: {}", e))
+            PricingError::HttpError(format!("Failed to fetch GCP pricing: {}", e))
         })?;
 
         let catalog: GcpBillingCatalog = response.json().await.map_err(|e| {
-            Error::HttpError(format!("Failed to parse GCP pricing: {}", e))
+            PricingError::HttpError(format!("Failed to parse GCP pricing: {}", e))
         })?;
 
         // Parse pricing data
@@ -391,11 +391,11 @@ impl FaasPricingFetcher {
         );
 
         let response = self.client.get(&url).send().await.map_err(|e| {
-            Error::HttpError(format!("Failed to fetch Azure pricing: {}", e))
+            PricingError::HttpError(format!("Failed to fetch Azure pricing: {}", e))
         })?;
 
         let prices: AzureRetailPrices = response.json().await.map_err(|e| {
-            Error::HttpError(format!("Failed to parse Azure pricing: {}", e))
+            PricingError::HttpError(format!("Failed to parse Azure pricing: {}", e))
         })?;
 
         // Parse pricing data

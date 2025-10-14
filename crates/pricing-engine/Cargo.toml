@@ -74,6 +74,9 @@ chrono = { workspace = true, features = ["serde", "clock"] }
 libc = { workspace = true }
 rust_decimal = { workspace = true, features = ["serde"] }
 
+# HTTP client for cloud pricing APIs
+reqwest = { workspace = true, features = ["json"] }
+urlencoding = "2.1"
 
 # gRPC
 tonic = { workspace = true, features = ["transport", "codegen", "prost", "router"] }

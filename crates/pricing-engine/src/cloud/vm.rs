@@ -1,8 +1,7 @@
-//! Real pricing data fetcher implementation
+//! Real VM instance pricing data fetcher implementation
 
-use crate::core::error::{Error, Result};
-use crate::core::remote::CloudProvider;
-use blueprint_core::debug;
+use crate::error::{PricingError, Result};
+use crate::types::CloudProvider;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -16,6 +15,7 @@ pub struct InstanceInfo {
 }
 
 /// Fetches real pricing data from public sources
+#[derive(Clone)]
 pub struct PricingFetcher {
     client: reqwest::Client,
     cache: HashMap<String, CachedPricing>,
@@ -38,7 +38,7 @@ impl PricingFetcher {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .map_err(|e| Error::Other(format!("Failed to create HTTP client: {e}")))?;
+            .map_err(|e| PricingError::Other(format!("Failed to create HTTP client: {e}")))?;
 
         Ok(Self {
             client,
@@ -84,7 +84,7 @@ impl PricingFetcher {
         }
 
         best.ok_or_else(|| {
-            Error::Other(format!(
+            PricingError::Other(format!(
                 "No instance found for {min_cpu} vCPUs, {min_memory_gb} GB RAM under ${max_price}/hr"
             ))
         })
@@ -101,7 +101,6 @@ impl PricingFetcher {
         // Check cache (24 hour TTL - pricing doesn't change frequently)
         if let Some(cached) = self.cache.get(&cache_key) {
             if cached.fetched_at.elapsed() < std::time::Duration::from_secs(86400) {
-                debug!("Using cached pricing data for {:?} {}", provider, region);
                 return Ok(cached.instances.clone());
             }
         }
@@ -114,7 +113,7 @@ impl PricingFetcher {
             CloudProvider::DigitalOcean => self.fetch_digitalocean_instances(region).await?,
             CloudProvider::Vultr => self.fetch_vultr_instances(region).await?,
             _ => {
-                return Err(Error::Other(format!(
+                return Err(PricingError::Other(format!(
                     "No pricing API available for provider: {provider:?}"
                 )));
             }
@@ -133,22 +132,20 @@ impl PricingFetcher {
     }
 
     async fn fetch_aws_instances(&self, _region: &str) -> Result<Vec<InstanceInfo>> {
-        debug!("Fetching AWS instances from ec2.shop pricing API");
-
         // Use ec2.shop - production-ready AWS pricing API with real data
         let url = "https://ec2.shop/?format=json";
 
         let response = self
             .client
             .get(url)
-            .header("User-Agent", "blueprint-remote-providers/0.1.0")
+            .header("User-Agent", "blueprint-pricing-engine/0.1.0")
             .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| Error::Other(format!("Failed to fetch AWS pricing from ec2.shop: {e}")))?;
+            .map_err(|e| PricingError::Other(format!("Failed to fetch AWS pricing from ec2.shop: {e}")))?;
 
         if !response.status().is_success() {
-            return Err(Error::Other(format!(
+            return Err(PricingError::Other(format!(
                 "ec2.shop API returned status: {}",
                 response.status()
             )));
@@ -175,7 +172,7 @@ impl PricingFetcher {
         let pricing_data: Ec2ShopResponse = response
             .json()
             .await
-            .map_err(|e| Error::Other(format!("Failed to parse ec2.shop JSON: {e}")))?;
+            .map_err(|e| PricingError::Other(format!("Failed to parse ec2.shop JSON: {e}")))?;
 
         let mut instances = Vec::new();
 
@@ -200,21 +197,15 @@ impl PricingFetcher {
         }
 
         if instances.is_empty() {
-            return Err(Error::Other(
+            return Err(PricingError::Other(
                 "No AWS instances found in ec2.shop data".to_string(),
             ));
         }
 
-        debug!(
-            "Fetched {} AWS instances from ec2.shop API",
-            instances.len()
-        );
         Ok(instances)
     }
 
     async fn fetch_azure_instances(&self, region: &str) -> Result<Vec<InstanceInfo>> {
-        debug!("Fetching Azure instances from Vantage API");
-
         let url = "https://instances.vantage.sh/azure/instances.json";
 
         #[derive(Deserialize, Debug)]
@@ -231,12 +222,12 @@ impl PricingFetcher {
             .timeout(std::time::Duration::from_secs(10))
             .send()
             .await
-            .map_err(|e| Error::Other(format!("Failed to fetch Azure pricing: {e}")))?;
+            .map_err(|e| PricingError::Other(format!("Failed to fetch Azure pricing: {e}")))?;
 
         let instances: Vec<VantageAzureInstance> = response
             .json()
             .await
-            .map_err(|e| Error::Other(format!("Failed to parse Azure pricing: {e}")))?;
+            .map_err(|e| PricingError::Other(format!("Failed to parse Azure pricing: {e}")))?;
 
         let mut result = Vec::new();
         // Limit to prevent huge responses
@@ -276,20 +267,18 @@ impl PricingFetcher {
         }
 
         if result.is_empty() {
-            Err(Error::Other("No instances found for region".to_string()))
+            Err(PricingError::Other("No instances found for region".to_string()))
         } else {
             Ok(result)
         }
     }
 
     async fn fetch_gcp_instances(&self, _region: &str) -> Result<Vec<InstanceInfo>> {
-        debug!("Fetching GCP instances from Cloud Billing Catalog API");
-
         // GCP Cloud Billing Catalog API requires API key
         // https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus (Compute Engine)
 
         let api_key = std::env::var("GCP_API_KEY").map_err(|_| {
-            Error::ConfigurationError(
+            PricingError::ConfigurationError(
                 "GCP_API_KEY environment variable required for GCP pricing. \
                 Get API key from: https://console.cloud.google.com/apis/credentials".to_string()
             )
@@ -351,10 +340,10 @@ impl PricingFetcher {
             .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| Error::HttpError(format!("Failed to fetch GCP pricing: {}", e)))?;
+            .map_err(|e| PricingError::HttpError(format!("Failed to fetch GCP pricing: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::HttpError(format!(
+            return Err(PricingError::HttpError(format!(
                 "GCP Cloud Billing API returned status: {}. Check API key is valid.",
                 response.status()
             )));
@@ -363,11 +352,11 @@ impl PricingFetcher {
         let billing_data: GcpBillingResponse = response
             .json()
             .await
-            .map_err(|e| Error::HttpError(format!("Failed to parse GCP pricing: {}", e)))?;
+            .map_err(|e| PricingError::HttpError(format!("Failed to parse GCP pricing: {}", e)))?;
 
         // Parse instance pricing from SKUs
         // GCP pricing is complex - this is simplified to extract compute pricing
-        let mut result: Vec<InstanceInfo> = Vec::new();
+        let _result: Vec<InstanceInfo> = Vec::new();
 
         for sku in billing_data.skus.iter().take(100) {
             if sku.category.resource_family == "Compute" && sku.description.contains("Instance Core") {
@@ -378,7 +367,7 @@ impl PricingFetcher {
             }
         }
 
-        Err(Error::ConfigurationError(
+        Err(PricingError::ConfigurationError(
             "GCP pricing requires using GCP Compute API with service account credentials. \
             Cloud Billing Catalog API does not provide ready-to-use instance pricing. \
             Consider using gcloud CLI or Compute Engine API directly.".to_string()
@@ -386,8 +375,6 @@ impl PricingFetcher {
     }
 
     async fn fetch_digitalocean_instances(&self, _region: &str) -> Result<Vec<InstanceInfo>> {
-        debug!("Fetching DigitalOcean instances from pricing page");
-
         let url = "https://www.digitalocean.com/pricing/droplets";
 
         let response = self
@@ -396,28 +383,28 @@ impl PricingFetcher {
             .timeout(std::time::Duration::from_secs(10))
             .send()
             .await
-            .map_err(|e| Error::Other(format!("Failed to fetch DO pricing: {e}")))?;
+            .map_err(|e| PricingError::Other(format!("Failed to fetch DO pricing: {e}")))?;
 
         let html = response
             .text()
             .await
-            .map_err(|e| Error::Other(format!("Failed to read DO pricing: {e}")))?;
+            .map_err(|e| PricingError::Other(format!("Failed to read DO pricing: {e}")))?;
 
         // Extract JSON data from __NEXT_DATA__ script tag
         let json_start = html
             .find(r#"__NEXT_DATA__" type="application/json">{"#)
-            .ok_or_else(|| Error::Other("Could not find pricing data".to_string()))?;
+            .ok_or_else(|| PricingError::Other("Could not find pricing data".to_string()))?;
         let json_start = json_start + r#"__NEXT_DATA__" type="application/json">"#.len();
 
         let json_end = html[json_start..]
             .find("</script>")
-            .ok_or_else(|| Error::Other("Could not find end of pricing data".to_string()))?;
+            .ok_or_else(|| PricingError::Other("Could not find end of pricing data".to_string()))?;
 
         let json_str = &html[json_start..json_start + json_end];
 
         // Parse the JSON
         let data: serde_json::Value = serde_json::from_str(json_str)
-            .map_err(|e| Error::Other(format!("Failed to parse DO pricing JSON: {e}")))?;
+            .map_err(|e| PricingError::Other(format!("Failed to parse DO pricing JSON: {e}")))?;
 
         let mut result = Vec::new();
 
@@ -451,18 +438,16 @@ impl PricingFetcher {
         }
 
         if result.is_empty() {
-            Err(Error::Other("No DigitalOcean instances found".to_string()))
+            Err(PricingError::Other("No DigitalOcean instances found".to_string()))
         } else {
             Ok(result)
         }
     }
 
     async fn fetch_vultr_instances(&self, _region: &str) -> Result<Vec<InstanceInfo>> {
-        debug!("Fetching Vultr instances from Vultr API v2");
-
         // Vultr API requires API key
         let api_key = std::env::var("VULTR_API_KEY").map_err(|_| {
-            Error::ConfigurationError(
+            PricingError::ConfigurationError(
                 "VULTR_API_KEY environment variable required for Vultr pricing. \
                 Get API key from: https://my.vultr.com/settings/#settingsapi".to_string()
             )
@@ -493,10 +478,10 @@ impl PricingFetcher {
             .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| Error::HttpError(format!("Failed to fetch Vultr pricing: {}", e)))?;
+            .map_err(|e| PricingError::HttpError(format!("Failed to fetch Vultr pricing: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::HttpError(format!(
+            return Err(PricingError::HttpError(format!(
                 "Vultr API returned status: {}. Check API key is valid.",
                 response.status()
             )));
@@ -505,7 +490,7 @@ impl PricingFetcher {
         let plans_data: VultrPlansResponse = response
             .json()
             .await
-            .map_err(|e| Error::HttpError(format!("Failed to parse Vultr pricing: {}", e)))?;
+            .map_err(|e| PricingError::HttpError(format!("Failed to parse Vultr pricing: {}", e)))?;
 
         let mut result = Vec::new();
 
@@ -529,27 +514,10 @@ impl PricingFetcher {
         }
 
         if result.is_empty() {
-            Err(Error::Other("No Vultr instances found in API response".to_string()))
+            Err(PricingError::Other("No Vultr instances found in API response".to_string()))
         } else {
-            debug!("Fetched {} Vultr instances from API", result.len());
             Ok(result)
         }
-    }
-}
-
-/// Convert common region names to AWS pricing API region names
-#[allow(dead_code)]
-fn convert_to_aws_region(region: &str) -> &str {
-    match region {
-        "us-east-1" => "us-east-1",
-        "us-east-2" => "us-east-2",
-        "us-west-1" => "us-west-1",
-        "us-west-2" => "us-west-2",
-        "eu-west-1" => "eu-west-1",
-        "eu-central-1" => "eu-central-1",
-        "ap-southeast-1" => "ap-southeast-1",
-        "ap-northeast-1" => "ap-northeast-1",
-        _ => "us-east-1", // Default to us-east-1 for unknown regions
     }
 }
 
@@ -579,7 +547,7 @@ mod tests {
     async fn test_aws_pricing_works() {
         let fetcher = PricingFetcher::new_or_default();
 
-        // AWS should work with Vantage API
+        // AWS should work with ec2.shop API
         let result = fetcher.fetch_aws_instances("us-east-1").await;
 
         // Should succeed with public API

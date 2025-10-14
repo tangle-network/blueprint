@@ -3,7 +3,7 @@
 use crate::core::error::Result;
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
-use crate::pricing::fetcher::PricingFetcher;
+use crate::pricing::PricingFetcher;
 use crate::providers::common::InstanceSelection;
 
 /// Maps resource requirements to optimal AWS instance types using real pricing
