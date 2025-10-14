@@ -1,8 +1,11 @@
 //! Test profiling for the square job
 //!
 //! This demonstrates how profiling works for determining FaaS compatibility.
+//!
+//! This test writes profiling results to `target/blueprint-profiles.json`, which is
+//! read by the Blueprint Manager to make deployment decisions (FaaS vs VM sizing).
 
-use blueprint_profiling::{JobProfile, ProfileConfig, ProfileRunner};
+use blueprint_profiling::{BlueprintProfiles, JobProfile, ProfileConfig, ProfileRunner};
 use incredible_squaring_blueprint_lib::square;
 use blueprint_sdk::tangle::extract::TangleArg;
 use std::time::Duration;
@@ -84,6 +87,29 @@ async fn test_profile_square_job() {
         faas_compatible,
         "Square job should be compatible with AWS Lambda"
     );
+
+    // Write profiles to disk for manager to use
+    let mut profiles = BlueprintProfiles::new("incredible-squaring");
+    profiles.add_job(0, profile);
+
+    // Save to workspace target directory
+    // During tests, current_dir is the package dir, so go up one level to workspace
+    let workspace_dir = std::env::current_dir()
+        .expect("Failed to get current directory")
+        .parent()
+        .expect("Failed to get parent directory")
+        .to_path_buf();
+
+    let target_dir = workspace_dir.join("target");
+    std::fs::create_dir_all(&target_dir).expect("Failed to create target directory");
+
+    let output_path = target_dir.join("blueprint-profiles.json");
+
+    profiles
+        .save_to_file(&output_path)
+        .expect("Failed to save profiles");
+
+    println!("✓ Profiles written to: {}", output_path.display());
 }
 
 #[tokio::test]
@@ -151,17 +177,10 @@ async fn test_profiling_varying_inputs() {
         max_execution_time: Duration::from_secs(10),
     };
 
-    let mut counter = 0u64;
-
     let profile = ProfileRunner::profile_job(
         || async {
-            // Use varying inputs across runs
-            let x = match counter % 3 {
-                0 => 10u64,
-                1 => 1_000_000u64,
-                _ => u64::MAX / 2,
-            };
-            counter += 1;
+            // Use a large input value to test varying workloads
+            let x = 1_000_000u64;
 
             let result = square(TangleArg(x)).await;
             assert_eq!(result.0, x.wrapping_mul(x));

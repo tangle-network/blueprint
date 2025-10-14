@@ -18,3 +18,4 @@ faas = ["dep:blueprint-faas", "blueprint-sdk/faas"]
 [build-dependencies]
 incredible-squaring-blueprint-lib.workspace = true
 blueprint-sdk = { workspace = true, features = ["macros", "build", "testing"] }
+blueprint-profiling.workspace = true

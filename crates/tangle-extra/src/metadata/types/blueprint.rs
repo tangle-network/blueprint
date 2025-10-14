@@ -30,6 +30,12 @@ pub struct ServiceMetadata<'a> {
     pub website: Option<Cow<'a, str>>,
     /// Service License.
     pub license: Option<Cow<'a, str>>,
+    /// Profiling data (base64-encoded compressed JSON).
+    /// Contains job profiling metrics for deployment strategy and pricing.
+    /// Format: base64(gzip(BlueprintProfiles JSON))
+    /// Typical size: 185-923 bytes compressed, ~250-1200 bytes base64
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profiling_data: Option<Cow<'a, str>>,
 }
 
 impl From<ServiceMetadata<'_>> for SubxtServiceMetadata {
@@ -43,6 +49,7 @@ impl From<ServiceMetadata<'_>> for SubxtServiceMetadata {
             logo,
             website,
             license,
+            profiling_data: _, // TODO: Add to chain after migration
         } = value;
 
         SubxtServiceMetadata {
@@ -54,6 +61,8 @@ impl From<ServiceMetadata<'_>> for SubxtServiceMetadata {
             logo: logo.map(new_bounded_string),
             website: website.map(new_bounded_string),
             license: license.map(new_bounded_string),
+            // TODO: Uncomment after chain migration adds profiling_data field
+            // profiling_data: profiling_data.map(new_bounded_string),
         }
     }
 }
