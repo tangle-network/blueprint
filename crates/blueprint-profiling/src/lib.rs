@@ -218,11 +218,7 @@ impl BlueprintProfiles {
     /// Returns None if the description doesn't contain profiling data marker.
     /// Returns Some(Err) if the description has the marker but decoding fails.
     pub fn from_description_field(description: &str) -> Option<Result<Self, ProfilingError>> {
-        if let Some(encoded) = description.strip_prefix("[PROFILING_DATA_V1]") {
-            Some(Self::from_base64_string(encoded))
-        } else {
-            None
-        }
+        description.strip_prefix("[PROFILING_DATA_V1]").map(|encoded| Self::from_base64_string(encoded))
     }
 }
 
