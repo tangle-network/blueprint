@@ -128,7 +128,7 @@ impl BlueprintProfiles {
         })?;
 
         serde_json::from_str(&content).map_err(|e| {
-            ProfilingError::InvalidConfiguration(format!("JSON deserialization failed: {}", e))
+            ProfilingError::InvalidConfiguration(format!("JSON deserialization failed: {e}"))
         })
     }
 
@@ -166,7 +166,7 @@ impl BlueprintProfiles {
         let mut decoder = GzDecoder::new(compressed);
         let mut json = String::new();
         decoder.read_to_string(&mut json).map_err(|e| {
-            ProfilingError::InvalidConfiguration(format!("Decompression failed: {}", e))
+            ProfilingError::InvalidConfiguration(format!("Decompression failed: {e}"))
         })?;
 
         // Deserialize
