@@ -142,7 +142,9 @@ impl PricingFetcher {
             .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| PricingError::Other(format!("Failed to fetch AWS pricing from ec2.shop: {e}")))?;
+            .map_err(|e| {
+                PricingError::Other(format!("Failed to fetch AWS pricing from ec2.shop: {e}"))
+            })?;
 
         if !response.status().is_success() {
             return Err(PricingError::Other(format!(
@@ -267,7 +269,9 @@ impl PricingFetcher {
         }
 
         if result.is_empty() {
-            Err(PricingError::Other("No instances found for region".to_string()))
+            Err(PricingError::Other(
+                "No instances found for region".to_string(),
+            ))
         } else {
             Ok(result)
         }
@@ -280,7 +284,8 @@ impl PricingFetcher {
         let api_key = std::env::var("GCP_API_KEY").map_err(|_| {
             PricingError::ConfigurationError(
                 "GCP_API_KEY environment variable required for GCP pricing. \
-                Get API key from: https://console.cloud.google.com/apis/credentials".to_string()
+                Get API key from: https://console.cloud.google.com/apis/credentials"
+                    .to_string(),
             )
         })?;
 
@@ -364,7 +369,9 @@ impl PricingFetcher {
         let _result: Vec<InstanceInfo> = Vec::new();
 
         for sku in billing_data.skus.iter().take(100) {
-            if sku.category.resource_family == "Compute" && sku.description.contains("Instance Core") {
+            if sku.category.resource_family == "Compute"
+                && sku.description.contains("Instance Core")
+            {
                 // This is a simplification - real implementation would need to:
                 // 1. Match cores to memory for specific machine types
                 // 2. Calculate per-instance pricing from per-core pricing
@@ -375,7 +382,8 @@ impl PricingFetcher {
         Err(PricingError::ConfigurationError(
             "GCP pricing requires using GCP Compute API with service account credentials. \
             Cloud Billing Catalog API does not provide ready-to-use instance pricing. \
-            Consider using gcloud CLI or Compute Engine API directly.".to_string()
+            Consider using gcloud CLI or Compute Engine API directly."
+                .to_string(),
         ))
     }
 
@@ -443,7 +451,9 @@ impl PricingFetcher {
         }
 
         if result.is_empty() {
-            Err(PricingError::Other("No DigitalOcean instances found".to_string()))
+            Err(PricingError::Other(
+                "No DigitalOcean instances found".to_string(),
+            ))
         } else {
             Ok(result)
         }
@@ -454,7 +464,8 @@ impl PricingFetcher {
         let api_key = std::env::var("VULTR_API_KEY").map_err(|_| {
             PricingError::ConfigurationError(
                 "VULTR_API_KEY environment variable required for Vultr pricing. \
-                Get API key from: https://my.vultr.com/settings/#settingsapi".to_string()
+                Get API key from: https://my.vultr.com/settings/#settingsapi"
+                    .to_string(),
             )
         })?;
 
@@ -470,7 +481,7 @@ impl PricingFetcher {
         struct VultrPlan {
             id: String,
             vcpu_count: i32,
-            ram: i64, // RAM in MB
+            ram: i64,  // RAM in MB
             disk: i64, // Disk in GB
             monthly_cost: f64,
             #[serde(rename = "type")]
@@ -484,7 +495,9 @@ impl PricingFetcher {
             .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| PricingError::HttpError(format!("Failed to fetch Vultr pricing: {}", e)))?;
+            .map_err(|e| {
+                PricingError::HttpError(format!("Failed to fetch Vultr pricing: {}", e))
+            })?;
 
         if !response.status().is_success() {
             return Err(PricingError::HttpError(format!(
@@ -493,10 +506,9 @@ impl PricingFetcher {
             )));
         }
 
-        let plans_data: VultrPlansResponse = response
-            .json()
-            .await
-            .map_err(|e| PricingError::HttpError(format!("Failed to parse Vultr pricing: {}", e)))?;
+        let plans_data: VultrPlansResponse = response.json().await.map_err(|e| {
+            PricingError::HttpError(format!("Failed to parse Vultr pricing: {}", e))
+        })?;
 
         let mut result = Vec::new();
 
@@ -520,7 +532,9 @@ impl PricingFetcher {
         }
 
         if result.is_empty() {
-            Err(PricingError::Other("No Vultr instances found in API response".to_string()))
+            Err(PricingError::Other(
+                "No Vultr instances found in API response".to_string(),
+            ))
         } else {
             Ok(result)
         }

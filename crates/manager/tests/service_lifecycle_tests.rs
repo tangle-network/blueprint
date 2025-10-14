@@ -11,8 +11,8 @@
 //!
 //! All tests use REAL types and validate actual service lifecycle logic.
 
-use blueprint_manager::rt::service::Status;
 use blueprint_manager::rt::native::ProcessHandle;
+use blueprint_manager::rt::service::Status;
 use tokio::sync::mpsc;
 
 /// Test Status enum variants and transitions
@@ -470,5 +470,9 @@ fn test_status_in_collections() {
     // Test unique count using dedup
     let mut statuses_with_dup = vec![Status::Running, Status::Running, Status::Finished];
     statuses_with_dup.dedup();
-    assert_eq!(statuses_with_dup.len(), 2, "Dedup should remove duplicate Status");
+    assert_eq!(
+        statuses_with_dup.len(),
+        2,
+        "Dedup should remove duplicate Status"
+    );
 }

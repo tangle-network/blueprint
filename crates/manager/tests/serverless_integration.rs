@@ -12,7 +12,7 @@
 /// based on REAL resource constraints and timing requirements.
 #[test]
 fn test_blueprint_analysis_faas_compatibility() {
-    use blueprint_manager::remote::blueprint_analyzer::{analyze_blueprint, FaasLimits};
+    use blueprint_manager::remote::blueprint_analyzer::{FaasLimits, analyze_blueprint};
     use blueprint_manager::remote::blueprint_fetcher::JobProfile;
 
     // Real FaaS limits from AWS Lambda
@@ -24,8 +24,8 @@ fn test_blueprint_analysis_faas_compatibility() {
 
     // Test Case 1: Job that FITS in FaaS (quick computation)
     let quick_job = JobProfile {
-        avg_duration_ms: 5000,    // 5 seconds
-        peak_memory_mb: 512,       // 512 MB
+        avg_duration_ms: 5000, // 5 seconds
+        peak_memory_mb: 512,   // 512 MB
         p95_duration_ms: 7000,
         stateful: false,
         persistent_connections: false,
@@ -65,7 +65,8 @@ fn test_blueprint_analysis_faas_compatibility() {
 
     // 1. Quick job should be marked as FaaS-compatible
     assert_eq!(
-        analysis.faas_compatible_jobs.len(), 1,
+        analysis.faas_compatible_jobs.len(),
+        1,
         "Should have 1 FaaS-compatible job"
     );
     assert_eq!(
@@ -75,27 +76,34 @@ fn test_blueprint_analysis_faas_compatibility() {
 
     // 2. Long-running and memory-heavy jobs should NOT be FaaS-compatible
     assert_eq!(
-        analysis.incompatible_jobs.len(), 2,
+        analysis.incompatible_jobs.len(),
+        2,
         "Should have 2 incompatible jobs"
     );
 
     // 3. Strategy should be Hybrid (some jobs FaaS, some VM)
     match analysis.recommended_strategy {
-        blueprint_manager::remote::DeploymentStrategy::Hybrid { ref faas_jobs, ref local_jobs } => {
+        blueprint_manager::remote::DeploymentStrategy::Hybrid {
+            ref faas_jobs,
+            ref local_jobs,
+        } => {
             assert_eq!(faas_jobs.len(), 1, "Should have exactly 1 FaaS job");
             assert_eq!(local_jobs.len(), 2, "Should have exactly 2 local jobs");
             assert_eq!(faas_jobs[0], 0, "Job 0 should be in FaaS");
             assert!(local_jobs.contains(&1), "Job 1 should be local");
             assert!(local_jobs.contains(&2), "Job 2 should be local");
         }
-        _ => panic!("Expected Hybrid strategy for mixed workload, got {:?}", analysis.recommended_strategy),
+        _ => panic!(
+            "Expected Hybrid strategy for mixed workload, got {:?}",
+            analysis.recommended_strategy
+        ),
     }
 }
 
 /// Test that the analyzer correctly handles edge cases
 #[test]
 fn test_blueprint_analysis_edge_cases() {
-    use blueprint_manager::remote::blueprint_analyzer::{analyze_blueprint, FaasLimits};
+    use blueprint_manager::remote::blueprint_analyzer::{FaasLimits, analyze_blueprint};
 
     let limits = FaasLimits::aws_lambda();
 
@@ -112,8 +120,8 @@ fn test_blueprint_analysis_edge_cases() {
     use blueprint_manager::remote::blueprint_fetcher::JobProfile;
     let edge_job = JobProfile {
         avg_duration_ms: 800_000, // 13 minutes - under limit
-        peak_memory_mb: 10240,     // Exactly at limit
-        p95_duration_ms: 850_000,  // Still under 15 min
+        peak_memory_mb: 10240,    // Exactly at limit
+        p95_duration_ms: 850_000, // Still under 15 min
         stateful: false,
         persistent_connections: false,
     };
@@ -122,7 +130,8 @@ fn test_blueprint_analysis_edge_cases() {
 
     // Job at the edge should still be FaaS-compatible
     assert_eq!(
-        analysis.faas_compatible_jobs.len(), 1,
+        analysis.faas_compatible_jobs.len(),
+        1,
         "Job at limits should be FaaS-compatible"
     );
 }
@@ -135,7 +144,7 @@ fn test_resource_spec_conversion_accuracy() {
     // Create real resource limits
     let limits = ResourceLimits {
         cpu_count: Some(4),
-        memory_size: 8 * 1024 * 1024 * 1024, // 8 GB in bytes
+        memory_size: 8 * 1024 * 1024 * 1024,     // 8 GB in bytes
         storage_space: 100 * 1024 * 1024 * 1024, // 100 GB in bytes
         gpu_count: Some(1),
         network_bandwidth: Some(1000), // 1 Gbps
@@ -191,23 +200,41 @@ fn test_faas_provider_limits_accuracy() {
     // AWS Lambda limits (as of 2024)
     let aws = FaasLimits::aws_lambda();
     assert_eq!(aws.max_memory_mb, 10240, "AWS Lambda max memory is 10 GB");
-    assert_eq!(aws.max_timeout_secs, 900, "AWS Lambda max timeout is 15 min (900s)");
+    assert_eq!(
+        aws.max_timeout_secs, 900,
+        "AWS Lambda max timeout is 15 min (900s)"
+    );
     assert_eq!(aws.max_payload_mb, 6, "AWS Lambda max payload is 6 MB");
 
     // GCP Cloud Functions limits
     let gcp = FaasLimits::gcp_functions();
-    assert_eq!(gcp.max_memory_mb, 32768, "GCP Functions max memory is 32 GB");
-    assert_eq!(gcp.max_timeout_secs, 3600, "GCP Functions max timeout is 60 min (3600s)");
+    assert_eq!(
+        gcp.max_memory_mb, 32768,
+        "GCP Functions max memory is 32 GB"
+    );
+    assert_eq!(
+        gcp.max_timeout_secs, 3600,
+        "GCP Functions max timeout is 60 min (3600s)"
+    );
 
     // Azure Functions limits
     let azure = FaasLimits::azure_functions();
-    assert_eq!(azure.max_memory_mb, 14336, "Azure Functions max memory is 14 GB");
-    assert_eq!(azure.max_timeout_secs, 600, "Azure Functions max timeout is 10 min (600s)");
+    assert_eq!(
+        azure.max_memory_mb, 14336,
+        "Azure Functions max memory is 14 GB"
+    );
+    assert_eq!(
+        azure.max_timeout_secs, 600,
+        "Azure Functions max timeout is 10 min (600s)"
+    );
 
     // Verify custom limits can be created
     let custom = FaasLimits::custom();
     assert_eq!(custom.max_memory_mb, 2048, "Custom default is 2 GB");
-    assert_eq!(custom.max_timeout_secs, 300, "Custom default is 5 min (300s)");
+    assert_eq!(
+        custom.max_timeout_secs, 300,
+        "Custom default is 5 min (300s)"
+    );
 }
 
 /// Test policy deserialization and application - NO MOCKS
@@ -230,8 +257,8 @@ fn test_policy_loading_and_application() {
     }"#;
 
     // Parse using REAL serde deserialization
-    let policy: DeploymentPolicy = serde_json::from_str(policy_json)
-        .expect("Policy JSON should deserialize correctly");
+    let policy: DeploymentPolicy =
+        serde_json::from_str(policy_json).expect("Policy JSON should deserialize correctly");
 
     // VERIFY PARSING LOGIC:
     assert!(policy.serverless.enable, "Serverless should be enabled");
@@ -268,7 +295,7 @@ fn test_policy_loading_and_application() {
 /// Test hybrid deployment decision tree - validates the ACTUAL algorithm
 #[test]
 fn test_deployment_strategy_selection_algorithm() {
-    use blueprint_manager::remote::blueprint_analyzer::{analyze_blueprint, FaasLimits};
+    use blueprint_manager::remote::blueprint_analyzer::{FaasLimits, analyze_blueprint};
     use blueprint_manager::remote::blueprint_fetcher::JobProfile;
 
     let limits = FaasLimits::aws_lambda();
@@ -339,7 +366,7 @@ fn test_deployment_strategy_selection_algorithm() {
 /// Test profiling data influences deployment decisions correctly
 #[test]
 fn test_profiling_data_integration() {
-    use blueprint_manager::remote::blueprint_analyzer::{analyze_blueprint, FaasLimits};
+    use blueprint_manager::remote::blueprint_analyzer::{FaasLimits, analyze_blueprint};
     use blueprint_manager::remote::blueprint_fetcher::JobProfile;
 
     let limits = FaasLimits::aws_lambda();
@@ -370,7 +397,8 @@ fn test_profiling_data_integration() {
     // If p95 is within limits (50s < 900s), it should still be FaaS-compatible
     if 50000 < (limits.max_timeout_secs as u64 * 1000) {
         assert_eq!(
-            analysis.faas_compatible_jobs.len(), 1,
+            analysis.faas_compatible_jobs.len(),
+            1,
             "Job with high variance but within limits should be FaaS-compatible"
         );
     }

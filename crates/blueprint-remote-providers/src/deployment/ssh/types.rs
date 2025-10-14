@@ -1,8 +1,8 @@
 //! Type definitions for SSH deployment
 
 use crate::core::resources::ResourceSpec;
-use serde::{Deserialize, Serialize};
 use blueprint_std::{collections::HashMap, path::PathBuf};
+use serde::{Deserialize, Serialize};
 
 /// SSH authentication method
 #[derive(Debug, Clone, Serialize, Deserialize)]

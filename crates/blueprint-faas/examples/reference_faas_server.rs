@@ -304,7 +304,9 @@ async fn invoke_function(
             match serde_json::from_slice::<serde_json::Value>(&output.stdout) {
                 Ok(json_output) => {
                     let response = InvokeResponse {
-                        job_id: json_output["job_id"].as_u64().unwrap_or(request.job_id as u64)
+                        job_id: json_output["job_id"]
+                            .as_u64()
+                            .unwrap_or(request.job_id as u64)
                             as u32,
                         result: json_output["result"]
                             .as_array()
@@ -524,7 +526,9 @@ async fn main() {
             |function_id: String,
              config_header: Option<String>,
              bytes: bytes::Bytes,
-             store: FunctionStore| deploy_function(function_id, config_header, bytes, store),
+             store: FunctionStore| {
+                deploy_function(function_id, config_header, bytes, store)
+            },
         );
 
     // Invoke function: POST /api/functions/{function_id}/invoke

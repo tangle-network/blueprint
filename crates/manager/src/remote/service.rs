@@ -160,7 +160,10 @@ impl RemoteDeploymentService {
                         )
                         .await;
                 }
-                super::DeploymentStrategy::Hybrid { faas_jobs, local_jobs } => {
+                super::DeploymentStrategy::Hybrid {
+                    faas_jobs,
+                    local_jobs,
+                } => {
                     info!(
                         "Deploying service '{}' in hybrid mode ({} FaaS, {} local)",
                         service_name,

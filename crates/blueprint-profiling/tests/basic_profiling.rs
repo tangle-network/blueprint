@@ -1,8 +1,6 @@
 //! Basic profiling test to verify cross-platform functionality
 
-use blueprint_profiling::{
-    profile_job, InputGenerator, FaasProvider, is_faas_compatible,
-};
+use blueprint_profiling::{is_faas_compatible, profile_job, FaasProvider, InputGenerator};
 
 /// Simple input generator for testing
 struct SimpleInputGenerator;

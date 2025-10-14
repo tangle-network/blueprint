@@ -6,8 +6,8 @@
 use crate::core::error::{Error, Result};
 use crate::monitoring::logs::{LogEntry, LogLevel};
 use blueprint_core::{debug, error, info};
-use serde::{Deserialize, Serialize};
 use blueprint_std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 /// Loki client for pushing and querying logs
 pub struct LokiClient {

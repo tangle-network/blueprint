@@ -5,8 +5,8 @@
 
 use crate::core::error::{Error, Result};
 use blueprint_core::{debug, warn};
-use reqwest::{Client, ClientBuilder, Request, Response, header};
 use blueprint_std::{collections::HashMap, time::Duration};
+use reqwest::{Client, ClientBuilder, Request, Response, header};
 use url::Url;
 
 /// Secure HTTP client with comprehensive security controls

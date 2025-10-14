@@ -56,9 +56,9 @@ impl JobProfile {
             cpu_details: Some(CpuBenchmarkResult {
                 num_cores_detected: 4, // Default assumption
                 avg_cores_used: avg_cores,
-                avg_usage_percent: 50.0, // Conservative estimate
+                avg_usage_percent: 50.0,          // Conservative estimate
                 peak_cores_used: avg_cores * 1.2, // 20% headroom
-                peak_usage_percent: 75.0, // Conservative peak estimate
+                peak_usage_percent: 75.0,         // Conservative peak estimate
                 benchmark_duration_ms: self.avg_duration_ms,
                 primes_found: 0, // Not measured in job profiling
                 max_prime: 0,
@@ -113,10 +113,7 @@ pub async fn fetch_blueprint_metadata(
     // Try to load profiling data from filesystem if binary path provided
     if let Some(bin_path) = binary_path {
         if let Some(profiles) = load_profiles_from_filesystem(bin_path) {
-            tracing::info!(
-                "Loaded {} job profiles from filesystem",
-                profiles.len()
-            );
+            tracing::info!("Loaded {} job profiles from filesystem", profiles.len());
             metadata.job_profiles = profiles;
         } else {
             tracing::warn!(
@@ -205,7 +202,9 @@ async fn fetch_from_chain(blueprint_id: u64, rpc_url: Option<&str>) -> Result<Bl
                 .unwrap_or("");
 
             if blueprint_profiling::has_profiling_data(description_str) {
-                match blueprint_profiling::BlueprintProfiles::from_description_field(description_str) {
+                match blueprint_profiling::BlueprintProfiles::from_description_field(
+                    description_str,
+                ) {
                     Some(Ok(profiles)) => {
                         // Convert BlueprintProfiles to Vec<Option<JobProfile>>
                         let max_job_id = profiles.jobs.keys().copied().max().unwrap_or(0);
@@ -301,7 +300,9 @@ fn decode_profiles_from_chain(encoded: &str) -> Result<Vec<Option<JobProfile>>> 
     let jobs = profiles
         .get("jobs")
         .and_then(|j| j.as_object())
-        .ok_or_else(|| crate::error::Error::Other("Missing 'jobs' field in profile data".to_string()))?;
+        .ok_or_else(|| {
+            crate::error::Error::Other("Missing 'jobs' field in profile data".to_string())
+        })?;
 
     // Convert to Vec<Option<JobProfile>>
     let max_job_id = jobs
@@ -336,10 +337,7 @@ fn load_profiles_from_filesystem(binary_path: &std::path::Path) -> Option<Vec<Op
     let profile_path = target_dir.join("blueprint-profiles.json");
 
     if !profile_path.exists() {
-        tracing::debug!(
-            "No profiling data found at {}",
-            profile_path.display()
-        );
+        tracing::debug!("No profiling data found at {}", profile_path.display());
         return None;
     }
 

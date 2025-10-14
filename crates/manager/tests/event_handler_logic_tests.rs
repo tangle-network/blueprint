@@ -192,9 +192,7 @@ fn test_source_fallback_priority() {
             tag: BoundedString(BoundedVec(b"v1.0.0".to_vec())),
             binaries: BoundedVec(vec![]),
         })),
-        BlueprintSource::Native(NativeFetcher::IPFS(BoundedVec(
-            b"QmFallbackHash".to_vec(),
-        ))),
+        BlueprintSource::Native(NativeFetcher::IPFS(BoundedVec(b"QmFallbackHash".to_vec()))),
     ];
 
     let blueprint = FilteredBlueprint {

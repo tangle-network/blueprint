@@ -361,7 +361,13 @@ impl GcpAdapter {
 
         #[cfg(not(feature = "kubernetes"))]
         {
-            let _ = (cluster_id, namespace, blueprint_image, resource_spec, env_vars); // Suppress unused warnings
+            let _ = (
+                cluster_id,
+                namespace,
+                blueprint_image,
+                resource_spec,
+                env_vars,
+            ); // Suppress unused warnings
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))

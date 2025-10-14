@@ -7,8 +7,8 @@
 
 #![cfg(feature = "custom")]
 
-use blueprint_faas::custom::HttpFaasExecutor;
 use blueprint_faas::FaasExecutor;
+use blueprint_faas::custom::HttpFaasExecutor;
 
 #[test]
 fn test_http_executor_creation() {

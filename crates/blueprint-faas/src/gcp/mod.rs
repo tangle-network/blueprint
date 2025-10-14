@@ -108,22 +108,18 @@ impl CloudFunctionExecutor {
         let scopes = &["https://www.googleapis.com/auth/cloud-platform"];
 
         // Get authentication provider
-        let auth = gcp_auth::provider()
-            .await
-            .map_err(|e| {
-                FaasError::InfrastructureError(format!(
-                    "Failed to initialize GCP auth: {}. \
+        let auth = gcp_auth::provider().await.map_err(|e| {
+            FaasError::InfrastructureError(format!(
+                "Failed to initialize GCP auth: {}. \
                     Set GOOGLE_APPLICATION_CREDENTIALS environment variable.",
-                    e
-                ))
-            })?;
+                e
+            ))
+        })?;
 
         // Get token for the required scopes
-        let token = auth.token(scopes)
-            .await
-            .map_err(|e| {
-                FaasError::InfrastructureError(format!("Failed to get GCP access token: {}", e))
-            })?;
+        let token = auth.token(scopes).await.map_err(|e| {
+            FaasError::InfrastructureError(format!("Failed to get GCP access token: {}", e))
+        })?;
 
         let token_str = token.as_str().to_string();
         *token_guard = Some(token);
@@ -325,13 +321,7 @@ impl FaasExecutor for CloudFunctionExecutor {
             .send()
             .await;
 
-        if update_response.is_ok()
-            && update_response
-                .as_ref()
-                .unwrap()
-                .status()
-                .is_success()
-        {
+        if update_response.is_ok() && update_response.as_ref().unwrap().status().is_success() {
             info!(function = %function_name, "Updated existing Cloud Function");
         } else {
             // Function doesn't exist, create it

@@ -14,7 +14,10 @@ fn test_custom_http_executor_exists() {
     {
         use blueprint_faas::custom::HttpFaasExecutor;
         let _executor = HttpFaasExecutor::new("http://localhost:8080");
-        assert!(true, "HttpFaasExecutor should be available with custom feature");
+        assert!(
+            true,
+            "HttpFaasExecutor should be available with custom feature"
+        );
     }
 
     #[cfg(not(feature = "custom"))]
@@ -28,7 +31,10 @@ fn test_aws_lambda_executor_exists() {
     #[cfg(feature = "aws")]
     {
         // Just verify the type exists
-        assert!(true, "AWS Lambda feature should make LambdaExecutor available");
+        assert!(
+            true,
+            "AWS Lambda feature should make LambdaExecutor available"
+        );
     }
 
     #[cfg(not(feature = "aws"))]

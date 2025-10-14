@@ -30,7 +30,9 @@
 use crate::error::Result;
 use crate::remote::blueprint_analyzer::{BlueprintAnalysis, DeploymentStrategy, analyze_blueprint};
 use crate::remote::blueprint_fetcher::{BlueprintMetadata, fetch_blueprint_metadata};
-use blueprint_pricing_engine_lib::{BenchmarkProfile, CloudProvider, FaasPricingFetcher, PricingFetcher};
+use blueprint_pricing_engine_lib::{
+    BenchmarkProfile, CloudProvider, FaasPricingFetcher, PricingFetcher,
+};
 use serde::{Deserialize, Serialize};
 
 /// Operator pricing service for calculating deployment costs
@@ -203,7 +205,11 @@ impl OperatorPricingService {
         // Choose cheapest provider for estimates
         let cheapest_vm = provider_costs
             .iter()
-            .min_by(|a, b| a.monthly_vm_cost_usd.partial_cmp(&b.monthly_vm_cost_usd).unwrap())
+            .min_by(|a, b| {
+                a.monthly_vm_cost_usd
+                    .partial_cmp(&b.monthly_vm_cost_usd)
+                    .unwrap()
+            })
             .map(|c| c.monthly_vm_cost_usd)
             .unwrap_or(0.0);
 
@@ -228,8 +234,8 @@ impl OperatorPricingService {
             0
         };
 
-        let total_monthly_cost_usd = cheapest_vm
-            + (cheapest_faas * estimated_monthly_executions as f64);
+        let total_monthly_cost_usd =
+            cheapest_vm + (cheapest_faas * estimated_monthly_executions as f64);
 
         Ok(PricingQuote {
             blueprint_id: metadata.blueprint_id,
@@ -244,7 +250,11 @@ impl OperatorPricingService {
     }
 
     /// Calculate FaaS cost per execution using real pricing APIs
-    async fn calculate_faas_cost(&self, provider: &str, benchmark: &BenchmarkProfile) -> Result<f64> {
+    async fn calculate_faas_cost(
+        &self,
+        provider: &str,
+        benchmark: &BenchmarkProfile,
+    ) -> Result<f64> {
         let memory_mb = benchmark
             .memory_details
             .as_ref()
@@ -256,24 +266,27 @@ impl OperatorPricingService {
 
         // Fetch real pricing from provider APIs
         let pricing = match provider {
-            "AWS Lambda" => {
-                self.faas_fetcher
-                    .fetch_aws_lambda_pricing("us-east-1")
-                    .await
-                    .map_err(|e| crate::error::Error::Other(format!("Failed to fetch AWS pricing: {e}")))?
-            }
-            "GCP Cloud Functions" => {
-                self.faas_fetcher
-                    .fetch_gcp_functions_pricing("us-central1")
-                    .await
-                    .map_err(|e| crate::error::Error::Other(format!("Failed to fetch GCP pricing: {e}")))?
-            }
-            "Azure Functions" => {
-                self.faas_fetcher
-                    .fetch_azure_functions_pricing("eastus")
-                    .await
-                    .map_err(|e| crate::error::Error::Other(format!("Failed to fetch Azure pricing: {e}")))?
-            }
+            "AWS Lambda" => self
+                .faas_fetcher
+                .fetch_aws_lambda_pricing("us-east-1")
+                .await
+                .map_err(|e| {
+                    crate::error::Error::Other(format!("Failed to fetch AWS pricing: {e}"))
+                })?,
+            "GCP Cloud Functions" => self
+                .faas_fetcher
+                .fetch_gcp_functions_pricing("us-central1")
+                .await
+                .map_err(|e| {
+                    crate::error::Error::Other(format!("Failed to fetch GCP pricing: {e}"))
+                })?,
+            "Azure Functions" => self
+                .faas_fetcher
+                .fetch_azure_functions_pricing("eastus")
+                .await
+                .map_err(|e| {
+                    crate::error::Error::Other(format!("Failed to fetch Azure pricing: {e}"))
+                })?,
             _ => return Ok(0.0),
         };
 

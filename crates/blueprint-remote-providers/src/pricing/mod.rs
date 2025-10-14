@@ -9,7 +9,9 @@ pub mod public;
 pub mod service;
 
 // Re-export from pricing-engine (single source of truth)
-pub use blueprint_pricing_engine_lib::{FaasPricing, FaasPricingFetcher, InstanceInfo, PricingFetcher};
+pub use blueprint_pricing_engine_lib::{
+    FaasPricing, FaasPricingFetcher, InstanceInfo, PricingFetcher,
+};
 
 pub use cost::{CostEstimator, CostReport};
 pub use integration::PricingCalculator;

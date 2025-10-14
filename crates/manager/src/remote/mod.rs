@@ -14,7 +14,9 @@ pub mod service;
 #[cfg(test)]
 mod integration_test;
 
-pub use blueprint_analyzer::{BlueprintAnalysis, DeploymentStrategy, FaasLimits, analyze_blueprint};
+pub use blueprint_analyzer::{
+    BlueprintAnalysis, DeploymentStrategy, FaasLimits, analyze_blueprint,
+};
 pub use blueprint_fetcher::{BlueprintMetadata, fetch_blueprint_metadata};
 pub use policy_loader::{DeploymentPolicy, load_policy};
 pub use pricing_service::{OperatorPricingService, PricingQuote, ProviderCost};

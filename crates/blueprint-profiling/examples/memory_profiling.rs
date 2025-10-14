@@ -1,6 +1,6 @@
 //! Memory-intensive profiling example to demonstrate memory measurement on macOS.
 
-use blueprint_profiling::{profile_job, FaasProvider, InputGenerator, is_faas_compatible};
+use blueprint_profiling::{is_faas_compatible, profile_job, FaasProvider, InputGenerator};
 
 /// Input generator that varies sizes to trigger memory allocation
 struct VaryingSizeGenerator;
@@ -10,9 +10,9 @@ impl InputGenerator for VaryingSizeGenerator {
         (0..count)
             .map(|i| {
                 let size = match i % 3 {
-                    0 => 1000,        // 1KB
-                    1 => 100_000,     // 100KB
-                    _ => 1_000_000,   // 1MB
+                    0 => 1000,      // 1KB
+                    1 => 100_000,   // 100KB
+                    _ => 1_000_000, // 1MB
                 };
                 vec![i as u8; size]
             })
@@ -58,10 +58,22 @@ async fn main() {
 
     // Check FaaS compatibility
     println!("FaaS Compatibility:");
-    println!("  AWS Lambda: {}", is_faas_compatible(&profile, FaasProvider::AwsLambda));
-    println!("  GCP Functions: {}", is_faas_compatible(&profile, FaasProvider::GcpFunctions));
-    println!("  Azure Functions: {}", is_faas_compatible(&profile, FaasProvider::AzureFunctions));
-    println!("  Custom: {}", is_faas_compatible(&profile, FaasProvider::Custom));
+    println!(
+        "  AWS Lambda: {}",
+        is_faas_compatible(&profile, FaasProvider::AwsLambda)
+    );
+    println!(
+        "  GCP Functions: {}",
+        is_faas_compatible(&profile, FaasProvider::GcpFunctions)
+    );
+    println!(
+        "  Azure Functions: {}",
+        is_faas_compatible(&profile, FaasProvider::AzureFunctions)
+    );
+    println!(
+        "  Custom: {}",
+        is_faas_compatible(&profile, FaasProvider::Custom)
+    );
     println!();
 
     println!("✅ Memory profiling completed successfully on macOS!");

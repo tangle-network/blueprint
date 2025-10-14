@@ -14,7 +14,9 @@ use tokio::process::Command as AsyncCommand;
 
 // Import helper functions and macro (only needed when kubernetes feature is enabled)
 #[cfg(feature = "kubernetes")]
-use test_helpers::{cleanup_test_cluster, cli_available, init_crypto, kubectl_working, require_kind};
+use test_helpers::{
+    cleanup_test_cluster, cli_available, init_crypto, kubectl_working, require_kind,
+};
 
 // These helper functions are available for manual testing but not used in automated tests
 #[allow(dead_code)]

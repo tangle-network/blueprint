@@ -6,8 +6,8 @@
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use blueprint_core::debug;
-use serde::{Deserialize, Serialize};
 use blueprint_std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 /// Machine type discovery service
 pub struct MachineTypeDiscovery {

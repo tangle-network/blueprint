@@ -1,6 +1,6 @@
 //! Simple example demonstrating blueprint profiling on macOS.
 
-use blueprint_profiling::{profile_job, FaasProvider, InputGenerator, is_faas_compatible};
+use blueprint_profiling::{is_faas_compatible, profile_job, FaasProvider, InputGenerator};
 
 /// Simple input generator for testing
 struct SimpleInputGenerator;
@@ -49,10 +49,22 @@ async fn main() {
 
     // Check FaaS compatibility
     println!("FaaS Compatibility:");
-    println!("  AWS Lambda: {}", is_faas_compatible(&profile, FaasProvider::AwsLambda));
-    println!("  GCP Functions: {}", is_faas_compatible(&profile, FaasProvider::GcpFunctions));
-    println!("  Azure Functions: {}", is_faas_compatible(&profile, FaasProvider::AzureFunctions));
-    println!("  Custom: {}", is_faas_compatible(&profile, FaasProvider::Custom));
+    println!(
+        "  AWS Lambda: {}",
+        is_faas_compatible(&profile, FaasProvider::AwsLambda)
+    );
+    println!(
+        "  GCP Functions: {}",
+        is_faas_compatible(&profile, FaasProvider::GcpFunctions)
+    );
+    println!(
+        "  Azure Functions: {}",
+        is_faas_compatible(&profile, FaasProvider::AzureFunctions)
+    );
+    println!(
+        "  Custom: {}",
+        is_faas_compatible(&profile, FaasProvider::Custom)
+    );
     println!();
 
     // Verify basic properties

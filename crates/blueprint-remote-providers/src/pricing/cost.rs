@@ -1,6 +1,6 @@
 use crate::core::remote::CloudProvider;
-use serde::{Deserialize, Serialize};
 use blueprint_std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 /// Cost estimator for cloud deployments
 ///

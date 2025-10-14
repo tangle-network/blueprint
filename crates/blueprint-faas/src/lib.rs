@@ -40,8 +40,8 @@ pub mod core;
 
 // Re-export core types for convenience
 pub use core::{
-    DynFaasExecutor, FaasConfig, FaasDeployment, FaasError, FaasExecutor, FaasMetrics,
-    FaasPayload, FaasRegistry, FaasResponse,
+    DynFaasExecutor, FaasConfig, FaasDeployment, FaasError, FaasExecutor, FaasMetrics, FaasPayload,
+    FaasRegistry, FaasResponse,
 };
 
 #[cfg(feature = "aws")]
@@ -142,8 +142,7 @@ pub mod factory {
             }
             #[cfg(feature = "gcp")]
             FaasProvider::GcpFunctions { project_id, region } => {
-                let executor =
-                    crate::gcp::CloudFunctionExecutor::new(project_id, region).await?;
+                let executor = crate::gcp::CloudFunctionExecutor::new(project_id, region).await?;
                 Ok(Arc::new(executor) as DynFaasExecutor)
             }
             #[cfg(feature = "azure")]
@@ -162,7 +161,8 @@ pub mod factory {
             }
             #[cfg(feature = "digitalocean")]
             FaasProvider::DigitalOcean { api_token, region } => {
-                let executor = crate::digitalocean::DigitalOceanExecutor::new(api_token, region).await?;
+                let executor =
+                    crate::digitalocean::DigitalOceanExecutor::new(api_token, region).await?;
                 Ok(Arc::new(executor) as DynFaasExecutor)
             }
         }
@@ -188,14 +188,24 @@ pub mod factory {
 
 /// Common utilities shared across providers
 mod utils {
-    #[cfg(any(feature = "aws", feature = "gcp", feature = "azure", feature = "digitalocean"))]
+    #[cfg(any(
+        feature = "aws",
+        feature = "gcp",
+        feature = "azure",
+        feature = "digitalocean"
+    ))]
     use super::FaasError;
 
     /// Create a deployment package from a binary (zip format)
     ///
     /// This creates a zip package suitable for AWS Lambda, GCP Cloud Functions, Azure Functions,
     /// and DigitalOcean Functions. The binary is packaged as "bootstrap" with executable permissions.
-    #[cfg(any(feature = "aws", feature = "gcp", feature = "azure", feature = "digitalocean"))]
+    #[cfg(any(
+        feature = "aws",
+        feature = "gcp",
+        feature = "azure",
+        feature = "digitalocean"
+    ))]
     pub(crate) fn create_lambda_package(binary: &[u8]) -> Result<Vec<u8>, FaasError> {
         use std::io::Cursor;
         use std::io::Write;

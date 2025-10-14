@@ -4,8 +4,8 @@
 #[cfg(feature = "custom")]
 #[test]
 fn test_http_executor_creation() {
-    use blueprint_faas::custom::HttpFaasExecutor;
     use blueprint_faas::FaasExecutor;
+    use blueprint_faas::custom::HttpFaasExecutor;
 
     let executor = HttpFaasExecutor::new("http://localhost:8080");
     let provider = executor.provider_name();
@@ -15,8 +15,8 @@ fn test_http_executor_creation() {
 #[cfg(feature = "custom")]
 #[test]
 fn test_http_executor_with_custom_endpoint() {
-    use blueprint_faas::custom::HttpFaasExecutor;
     use blueprint_faas::FaasExecutor;
+    use blueprint_faas::custom::HttpFaasExecutor;
 
     let executor = HttpFaasExecutor::new("http://localhost:8080")
         .with_job_endpoint(0, "http://custom.com/job0")

@@ -128,9 +128,7 @@ impl From<JobResult> for FaasResponse {
             Ok((_parts, body)) => Self {
                 result: body.to_vec(),
             },
-            Err(_) => Self {
-                result: Vec::new(),
-            },
+            Err(_) => Self { result: Vec::new() },
         }
     }
 }

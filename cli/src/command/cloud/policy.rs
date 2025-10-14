@@ -121,9 +121,7 @@ pub enum FaasProvider {
         subscription_id: String,
     },
     /// Custom HTTP-based FaaS endpoint
-    Custom {
-        endpoint: String,
-    },
+    Custom { endpoint: String },
 }
 
 fn default_aws_region() -> String {
@@ -379,28 +377,27 @@ pub async fn configure_policy(args: PolicyConfigureArgs) -> Result<()> {
     if let Some(provider_type) = args.faas_provider {
         let provider = match provider_type {
             FaasProviderType::AwsLambda => {
-                let region = args.faas_aws_region.unwrap_or_else(|| "us-east-1".to_string());
+                let region = args
+                    .faas_aws_region
+                    .unwrap_or_else(|| "us-east-1".to_string());
                 FaasProvider::AwsLambda { region }
             }
             FaasProviderType::GcpFunctions => {
-                let project_id = args.faas_gcp_project
-                    .ok_or_else(|| color_eyre::eyre::eyre!(
-                        "GCP Functions requires --faas-gcp-project"
-                    ))?;
+                let project_id = args.faas_gcp_project.ok_or_else(|| {
+                    color_eyre::eyre::eyre!("GCP Functions requires --faas-gcp-project")
+                })?;
                 FaasProvider::GcpFunctions { project_id }
             }
             FaasProviderType::AzureFunctions => {
-                let subscription_id = args.faas_azure_subscription
-                    .ok_or_else(|| color_eyre::eyre::eyre!(
-                        "Azure Functions requires --faas-azure-subscription"
-                    ))?;
+                let subscription_id = args.faas_azure_subscription.ok_or_else(|| {
+                    color_eyre::eyre::eyre!("Azure Functions requires --faas-azure-subscription")
+                })?;
                 FaasProvider::AzureFunctions { subscription_id }
             }
             FaasProviderType::Custom => {
-                let endpoint = args.faas_custom_endpoint
-                    .ok_or_else(|| color_eyre::eyre::eyre!(
-                        "Custom FaaS requires --faas-custom-endpoint"
-                    ))?;
+                let endpoint = args.faas_custom_endpoint.ok_or_else(|| {
+                    color_eyre::eyre::eyre!("Custom FaaS requires --faas-custom-endpoint")
+                })?;
                 FaasProvider::Custom { endpoint }
             }
         };
@@ -502,14 +499,23 @@ async fn show_current_policy(policy: &RemoteDeploymentPolicy) -> Result<()> {
             println!("  FaaS provider:      GCP Functions ({})", project_id);
         }
         FaasProvider::AzureFunctions { subscription_id } => {
-            println!("  FaaS provider:      Azure Functions ({})", subscription_id);
+            println!(
+                "  FaaS provider:      Azure Functions ({})",
+                subscription_id
+            );
         }
         FaasProvider::Custom { endpoint } => {
             println!("  FaaS provider:      Custom ({})", endpoint);
         }
     }
-    println!("  Default memory:     {}MB", policy.serverless.default_memory_mb);
-    println!("  Default timeout:    {}s", policy.serverless.default_timeout_secs);
+    println!(
+        "  Default memory:     {}MB",
+        policy.serverless.default_memory_mb
+    );
+    println!(
+        "  Default timeout:    {}s",
+        policy.serverless.default_timeout_secs
+    );
     println!("  Fallback to VM:     {}", policy.serverless.fallback_to_vm);
 
     Ok(())

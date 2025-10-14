@@ -10,9 +10,9 @@ use crate::deployment::manager_integration::RemoteDeploymentConfig;
 use crate::deployment::tracker::DeploymentType;
 use crate::pricing::PricingFetcher;
 use blueprint_core::{debug, info, warn};
+use blueprint_std::{collections::HashMap, path::Path, sync::Arc};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use blueprint_std::{collections::HashMap, path::Path, sync::Arc};
 use tokio::sync::RwLock;
 
 /// Deployment preferences configured by operators

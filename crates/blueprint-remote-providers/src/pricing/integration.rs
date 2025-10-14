@@ -7,8 +7,8 @@
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
-use serde::{Deserialize, Serialize};
 use blueprint_std::{collections::HashMap, path::Path};
+use serde::{Deserialize, Serialize};
 
 /// Pricing calculator that integrates with the Pricing Engine
 ///
@@ -51,11 +51,11 @@ impl PricingCalculator {
     /// This is the ONLY way to create a PricingCalculator now that hardcoded pricing is removed.
     /// The config file must specify all pricing rates.
     pub fn from_config_file(path: &Path) -> Result<Self> {
-        let config_str = std::fs::read_to_string(path)
-            .map_err(|e| Error::ConfigurationError(e.to_string()))?;
+        let config_str =
+            std::fs::read_to_string(path).map_err(|e| Error::ConfigurationError(e.to_string()))?;
 
-        let pricing_config: PricingConfig = toml::from_str(&config_str)
-            .map_err(|e| Error::ConfigurationError(e.to_string()))?;
+        let pricing_config: PricingConfig =
+            toml::from_str(&config_str).map_err(|e| Error::ConfigurationError(e.to_string()))?;
 
         // No hardcoded multipliers - must come from config or use PricingFetcher
         let cloud_multipliers = HashMap::new();
@@ -299,7 +299,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(matches!(err, crate::core::error::Error::ConfigurationError(_)));
+        assert!(matches!(
+            err,
+            crate::core::error::Error::ConfigurationError(_)
+        ));
     }
 
     #[test]

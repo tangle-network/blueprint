@@ -54,7 +54,10 @@ impl DigitalOceanExecutor {
     /// # Namespace Management
     ///
     /// Creates or reuses a namespace named "blueprint-functions" in the specified region.
-    pub async fn new(api_token: impl Into<String>, region: impl Into<String>) -> Result<Self, FaasError> {
+    pub async fn new(
+        api_token: impl Into<String>,
+        region: impl Into<String>,
+    ) -> Result<Self, FaasError> {
         let api_token = api_token.into();
         let region = region.into();
 
@@ -100,7 +103,9 @@ impl DigitalOceanExecutor {
             .bearer_auth(api_token)
             .send()
             .await
-            .map_err(|e| FaasError::InfrastructureError(format!("Failed to list namespaces: {}", e)))?;
+            .map_err(|e| {
+                FaasError::InfrastructureError(format!("Failed to list namespaces: {}", e))
+            })?;
 
         if response.status().is_success() {
             let data: NamespaceListResponse = response
@@ -129,7 +134,9 @@ impl DigitalOceanExecutor {
             .json(&create_req)
             .send()
             .await
-            .map_err(|e| FaasError::InfrastructureError(format!("Failed to create namespace: {}", e)))?;
+            .map_err(|e| {
+                FaasError::InfrastructureError(format!("Failed to create namespace: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
@@ -194,7 +201,10 @@ impl FaasExecutor for DigitalOceanExecutor {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(FaasError::FunctionError(format!("HTTP {} - {}", status, body)));
+            return Err(FaasError::FunctionError(format!(
+                "HTTP {} - {}",
+                status, body
+            )));
         }
 
         let faas_response: FaasResponse = response
@@ -279,46 +289,48 @@ impl FaasExecutor for DigitalOceanExecutor {
             .send()
             .await;
 
-        let function_url = if update_response.is_ok()
-            && update_response.as_ref().unwrap().status().is_success()
-        {
-            info!(function = %function_name, "Updated existing function");
-            update_response.unwrap()
-                .json::<FunctionResponse>()
-                .await
-                .map_err(|e| FaasError::SerializationError(e.to_string()))?
-                .trigger
-                .url
-        } else {
-            // Create new function
-            debug!(function = %function_name, "Creating new function");
+        let function_url =
+            if update_response.is_ok() && update_response.as_ref().unwrap().status().is_success() {
+                info!(function = %function_name, "Updated existing function");
+                update_response
+                    .unwrap()
+                    .json::<FunctionResponse>()
+                    .await
+                    .map_err(|e| FaasError::SerializationError(e.to_string()))?
+                    .trigger
+                    .url
+            } else {
+                // Create new function
+                debug!(function = %function_name, "Creating new function");
 
-            let create_url = self.api_endpoint("triggers");
-            let response = self
-                .client
-                .post(&create_url)
-                .bearer_auth(&self.api_token)
-                .json(&function_spec)
-                .send()
-                .await
-                .map_err(|e| FaasError::InfrastructureError(format!("Failed to create function: {}", e)))?;
+                let create_url = self.api_endpoint("triggers");
+                let response = self
+                    .client
+                    .post(&create_url)
+                    .bearer_auth(&self.api_token)
+                    .json(&function_spec)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        FaasError::InfrastructureError(format!("Failed to create function: {}", e))
+                    })?;
 
-            if !response.status().is_success() {
-                let error_text = response.text().await.unwrap_or_default();
-                return Err(FaasError::InfrastructureError(format!(
-                    "Failed to create function: {}",
-                    error_text
-                )));
-            }
+                if !response.status().is_success() {
+                    let error_text = response.text().await.unwrap_or_default();
+                    return Err(FaasError::InfrastructureError(format!(
+                        "Failed to create function: {}",
+                        error_text
+                    )));
+                }
 
-            let data: FunctionResponse = response
-                .json()
-                .await
-                .map_err(|e| FaasError::SerializationError(e.to_string()))?;
+                let data: FunctionResponse = response
+                    .json()
+                    .await
+                    .map_err(|e| FaasError::SerializationError(e.to_string()))?;
 
-            info!(function = %function_name, "Created new function");
-            data.trigger.url
-        };
+                info!(function = %function_name, "Created new function");
+                data.trigger.url
+            };
 
         Ok(FaasDeployment {
             function_id: function_name.clone(),
@@ -363,7 +375,9 @@ impl FaasExecutor for DigitalOceanExecutor {
             .bearer_auth(&self.api_token)
             .send()
             .await
-            .map_err(|e| FaasError::InfrastructureError(format!("Failed to get function: {}", e)))?;
+            .map_err(|e| {
+                FaasError::InfrastructureError(format!("Failed to get function: {}", e))
+            })?;
 
         if !response.status().is_success() {
             return Err(FaasError::InfrastructureError(format!(
@@ -399,7 +413,9 @@ impl FaasExecutor for DigitalOceanExecutor {
             .bearer_auth(&self.api_token)
             .send()
             .await
-            .map_err(|e| FaasError::InfrastructureError(format!("Failed to delete function: {}", e)))?;
+            .map_err(|e| {
+                FaasError::InfrastructureError(format!("Failed to delete function: {}", e))
+            })?;
 
         Ok(())
     }

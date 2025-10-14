@@ -42,45 +42,45 @@ impl FaasLimits {
     /// AWS Lambda limits
     pub fn aws_lambda() -> Self {
         Self {
-            max_memory_mb: 10240,      // 10 GB
-            max_timeout_secs: 900,      // 15 minutes
-            max_payload_mb: 6,          // 6 MB
+            max_memory_mb: 10240,  // 10 GB
+            max_timeout_secs: 900, // 15 minutes
+            max_payload_mb: 6,     // 6 MB
         }
     }
 
     /// GCP Cloud Functions limits
     pub fn gcp_functions() -> Self {
         Self {
-            max_memory_mb: 32768,       // 32 GB
-            max_timeout_secs: 3600,     // 60 minutes
-            max_payload_mb: 10,         // 10 MB
+            max_memory_mb: 32768,   // 32 GB
+            max_timeout_secs: 3600, // 60 minutes
+            max_payload_mb: 10,     // 10 MB
         }
     }
 
     /// Azure Functions limits
     pub fn azure_functions() -> Self {
         Self {
-            max_memory_mb: 14336,       // 14 GB
-            max_timeout_secs: 600,      // 10 minutes (consumption plan)
-            max_payload_mb: 100,        // 100 MB
+            max_memory_mb: 14336,  // 14 GB
+            max_timeout_secs: 600, // 10 minutes (consumption plan)
+            max_payload_mb: 100,   // 100 MB
         }
     }
 
     /// DigitalOcean Functions limits
     pub fn digitalocean_functions() -> Self {
         Self {
-            max_memory_mb: 8192,        // 8 GB (configurable: 128MB-8GB)
-            max_timeout_secs: 900,      // 15 minutes (configurable: 1-900s)
-            max_payload_mb: 8,          // 8 MB (estimated)
+            max_memory_mb: 8192,   // 8 GB (configurable: 128MB-8GB)
+            max_timeout_secs: 900, // 15 minutes (configurable: 1-900s)
+            max_payload_mb: 8,     // 8 MB (estimated)
         }
     }
 
     /// Custom FaaS (conservative defaults)
     pub fn custom() -> Self {
         Self {
-            max_memory_mb: 2048,        // 2 GB
-            max_timeout_secs: 300,      // 5 minutes
-            max_payload_mb: 5,          // 5 MB
+            max_memory_mb: 2048,   // 2 GB
+            max_timeout_secs: 300, // 5 minutes
+            max_payload_mb: 5,     // 5 MB
         }
     }
 }
@@ -257,9 +257,8 @@ fn analyze_job_with_profile(
 
     // 4. Persistent connections can't use FaaS
     if profile.persistent_connections {
-        incompatible_reasons.push(
-            "job maintains persistent connections (websockets, long-lived TCP)".to_string(),
-        );
+        incompatible_reasons
+            .push("job maintains persistent connections (websockets, long-lived TCP)".to_string());
     }
 
     if incompatible_reasons.is_empty() {
@@ -359,7 +358,10 @@ mod tests {
         assert_eq!(analysis.incompatible_jobs.len(), 2); // Jobs 1 and 2
 
         match analysis.recommended_strategy {
-            DeploymentStrategy::Hybrid { faas_jobs, local_jobs } => {
+            DeploymentStrategy::Hybrid {
+                faas_jobs,
+                local_jobs,
+            } => {
                 assert_eq!(faas_jobs, vec![0]);
                 assert_eq!(local_jobs, vec![1, 2]);
             }
@@ -403,10 +405,12 @@ mod tests {
         }
 
         // Verify reason includes guidance to run profiling
-        assert!(analysis.incompatible_jobs[0]
-            .reason
-            .as_ref()
-            .unwrap()
-            .contains("cargo tangle blueprint profile"));
+        assert!(
+            analysis.incompatible_jobs[0]
+                .reason
+                .as_ref()
+                .unwrap()
+                .contains("cargo tangle blueprint profile")
+        );
     }
 }

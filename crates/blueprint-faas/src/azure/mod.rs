@@ -71,7 +71,9 @@ impl AzureFunctionExecutor {
         );
 
         let credential = DefaultAzureCredential::create(TokenCredentialOptions::default())
-            .map_err(|e| FaasError::InfrastructureError(format!("Failed to create Azure credentials: {}", e)))?;
+            .map_err(|e| {
+                FaasError::InfrastructureError(format!("Failed to create Azure credentials: {}", e))
+            })?;
 
         Ok(Self {
             subscription_id,
@@ -367,7 +369,7 @@ impl FaasExecutor for AzureFunctionExecutor {
                 self.function_app_name, function_name
             ),
             cold_start_ms: Some(600),
-            memory_mb: 512, // Default
+            memory_mb: 512,    // Default
             timeout_secs: 300, // Default
         })
     }
@@ -439,7 +441,10 @@ impl AzureFunctionExecutor {
                 .send()
                 .await
                 .map_err(|e| {
-                    FaasError::InfrastructureError(format!("Failed to create resource group: {}", e))
+                    FaasError::InfrastructureError(format!(
+                        "Failed to create resource group: {}",
+                        e
+                    ))
                 })?;
         }
 
@@ -535,7 +540,11 @@ impl AzureFunctionExecutor {
     }
 
     /// Create function.json configuration file
-    async fn create_function_config(&self, job_id: u32, _config: &FaasConfig) -> Result<(), FaasError> {
+    async fn create_function_config(
+        &self,
+        job_id: u32,
+        _config: &FaasConfig,
+    ) -> Result<(), FaasError> {
         let function_name = self.function_name(job_id);
         let token = self.get_access_token().await?;
 

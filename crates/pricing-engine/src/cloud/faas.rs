@@ -199,7 +199,8 @@ impl FaasPricingFetcher {
         }
 
         // Fetch from AWS Price List API
-        let url = "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/current/index.json";
+        let url =
+            "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/current/index.json";
 
         let response = self.client.get(url).send().await.map_err(|e| {
             PricingError::HttpError(format!("Failed to fetch AWS Lambda pricing: {}", e))
@@ -233,9 +234,21 @@ impl FaasPricingFetcher {
                             let group = product.attributes.group.as_deref().unwrap_or("");
 
                             let pricing = FaasPricing {
-                                memory_gb_second: if group.contains("Duration") { price } else { 0.00001667 }, // Default: $0.0000166667 per GB-s
-                                request_cost: if group.contains("Request") { price } else { 0.0000002 }, // Default: $0.20 per 1M requests
-                                compute_cost: if group.contains("Compute") { price } else { 0.0000166667 },
+                                memory_gb_second: if group.contains("Duration") {
+                                    price
+                                } else {
+                                    0.00001667
+                                }, // Default: $0.0000166667 per GB-s
+                                request_cost: if group.contains("Request") {
+                                    price
+                                } else {
+                                    0.0000002
+                                }, // Default: $0.20 per 1M requests
+                                compute_cost: if group.contains("Compute") {
+                                    price
+                                } else {
+                                    0.0000166667
+                                },
                                 region: region.to_string(),
                                 provider: "AWS Lambda".to_string(),
                             };
@@ -249,15 +262,18 @@ impl FaasPricingFetcher {
         }
 
         // If no specific pricing found, use standard pricing
-        let pricing = region_prices.entry(region.to_string()).or_insert_with(|| {
-            FaasPricing {
-                memory_gb_second: 0.0000166667, // $0.0000166667 per GB-second
-                request_cost: 0.0000002,        // $0.20 per 1M requests = $0.0000002 per request
-                compute_cost: 0.0000166667,
-                region: region.to_string(),
-                provider: "AWS Lambda".to_string(),
-            }
-        }).clone();
+        let pricing = region_prices
+            .entry(region.to_string())
+            .or_insert_with(|| {
+                FaasPricing {
+                    memory_gb_second: 0.0000166667, // $0.0000166667 per GB-second
+                    request_cost: 0.0000002, // $0.20 per 1M requests = $0.0000002 per request
+                    compute_cost: 0.0000166667,
+                    region: region.to_string(),
+                    provider: "AWS Lambda".to_string(),
+                }
+            })
+            .clone();
 
         // Update cache
         {
@@ -294,9 +310,9 @@ impl FaasPricingFetcher {
         if api_key.is_empty() {
             // Return estimated pricing (documented standard rates)
             return Ok(FaasPricing {
-                memory_gb_second: 0.0000025,   // $0.0000025 per GB-second
-                request_cost: 0.0000004,       // $0.40 per 1M requests
-                compute_cost: 0.0000100,       // $0.00001 per vCPU-second
+                memory_gb_second: 0.0000025, // $0.0000025 per GB-second
+                request_cost: 0.0000004,     // $0.40 per 1M requests
+                compute_cost: 0.0000100,     // $0.00001 per vCPU-second
                 region: region.to_string(),
                 provider: "GCP Cloud Functions".to_string(),
             });
@@ -310,13 +326,15 @@ impl FaasPricingFetcher {
             service_id, api_key
         );
 
-        let response = self.client.get(&url).send().await.map_err(|e| {
-            PricingError::HttpError(format!("Failed to fetch GCP pricing: {}", e))
-        })?;
+        let response =
+            self.client.get(&url).send().await.map_err(|e| {
+                PricingError::HttpError(format!("Failed to fetch GCP pricing: {}", e))
+            })?;
 
-        let catalog: GcpBillingCatalog = response.json().await.map_err(|e| {
-            PricingError::HttpError(format!("Failed to parse GCP pricing: {}", e))
-        })?;
+        let catalog: GcpBillingCatalog = response
+            .json()
+            .await
+            .map_err(|e| PricingError::HttpError(format!("Failed to parse GCP pricing: {}", e)))?;
 
         // Parse pricing data
         let mut region_prices = HashMap::new();
@@ -487,7 +505,10 @@ mod tests {
         let cost = fetcher.estimate_execution_cost(&pricing, 1.0, 1.0, 1000);
 
         assert!(cost > 0.0, "Cost should be positive");
-        assert!(cost < 1.0, "Cost for single execution should be less than $1");
+        assert!(
+            cost < 1.0,
+            "Cost for single execution should be less than $1"
+        );
     }
 
     #[tokio::test]
@@ -530,8 +551,14 @@ mod tests {
 
         assert!(result.is_ok(), "Should fetch AWS Lambda pricing");
         let pricing = result.unwrap();
-        assert!(pricing.memory_gb_second > 0.0, "Memory cost should be positive");
-        assert!(pricing.request_cost > 0.0, "Request cost should be positive");
+        assert!(
+            pricing.memory_gb_second > 0.0,
+            "Memory cost should be positive"
+        );
+        assert!(
+            pricing.request_cost > 0.0,
+            "Request cost should be positive"
+        );
     }
 
     #[tokio::test]
@@ -543,7 +570,10 @@ mod tests {
 
         assert!(result.is_ok(), "Should fetch GCP pricing");
         let pricing = result.unwrap();
-        assert!(pricing.memory_gb_second > 0.0, "Memory cost should be positive");
+        assert!(
+            pricing.memory_gb_second > 0.0,
+            "Memory cost should be positive"
+        );
     }
 
     #[tokio::test]
@@ -554,6 +584,9 @@ mod tests {
 
         assert!(result.is_ok(), "Should fetch Azure pricing");
         let pricing = result.unwrap();
-        assert!(pricing.memory_gb_second > 0.0, "Memory cost should be positive");
+        assert!(
+            pricing.memory_gb_second > 0.0,
+            "Memory cost should be positive"
+        );
     }
 }

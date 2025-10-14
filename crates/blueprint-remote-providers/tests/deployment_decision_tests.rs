@@ -154,7 +154,10 @@ fn test_aws_instance_type_mapping_logic() {
     };
 
     let instance = AwsInstanceMapper::map(&small_spec);
-    assert!(!instance.instance_type.is_empty(), "Should return instance type");
+    assert!(
+        !instance.instance_type.is_empty(),
+        "Should return instance type"
+    );
     // t3.medium has 2 vCPU, 4 GB RAM
     assert_eq!(instance.instance_type, "t3.medium");
 
@@ -179,7 +182,10 @@ fn test_aws_instance_type_mapping_logic() {
     let mut gpu_spot_spec = gpu_spec.clone();
     gpu_spot_spec.allow_spot = true;
     let gpu_spot = AwsInstanceMapper::map(&gpu_spot_spec);
-    assert!(!gpu_spot.spot_capable, "GPU instances should not be spot-capable");
+    assert!(
+        !gpu_spot.spot_capable,
+        "GPU instances should not be spot-capable"
+    );
 
     // Test oversized requirements (should still try to find closest match)
     let large_spec = ResourceSpec {
@@ -192,7 +198,10 @@ fn test_aws_instance_type_mapping_logic() {
     };
 
     let large_instance = AwsInstanceMapper::map(&large_spec);
-    assert!(!large_instance.instance_type.is_empty(), "Should return instance type for large spec");
+    assert!(
+        !large_instance.instance_type.is_empty(),
+        "Should return instance type for large spec"
+    );
 }
 
 /// Test pricing units conversion logic
@@ -210,11 +219,7 @@ fn test_pricing_units_conversion() {
     let units = spec.to_pricing_units();
 
     // Verify conversion logic
-    assert_eq!(
-        units.get("CPU"),
-        Some(&4.0),
-        "CPU should convert directly"
-    );
+    assert_eq!(units.get("CPU"), Some(&4.0), "CPU should convert directly");
     assert_eq!(
         units.get("MemoryMB"),
         Some(&(8.0 * 1024.0)),
@@ -225,11 +230,7 @@ fn test_pricing_units_conversion() {
         Some(&(100.0 * 1024.0)),
         "Storage should convert to MB"
     );
-    assert_eq!(
-        units.get("GPU"),
-        Some(&1.0),
-        "GPU should be included"
-    );
+    assert_eq!(units.get("GPU"), Some(&1.0), "GPU should be included");
 
     // Test spec without GPU
     let no_gpu_spec = ResourceSpec {
@@ -305,16 +306,10 @@ fn test_kubernetes_resource_conversion() {
     let requests = k8s_resources.requests.unwrap();
 
     // CPU limits should match spec
-    assert!(
-        limits.contains_key("cpu"),
-        "Limits should include CPU"
-    );
+    assert!(limits.contains_key("cpu"), "Limits should include CPU");
 
     // Requests should be less than limits (80% for CPU)
-    assert!(
-        requests.contains_key("cpu"),
-        "Requests should include CPU"
-    );
+    assert!(requests.contains_key("cpu"), "Requests should include CPU");
 
     // Memory limits should match spec
     assert!(
@@ -336,7 +331,10 @@ fn test_resource_spec_presets() {
     let minimal = ResourceSpec::minimal();
     assert_eq!(minimal.cpu, 0.5, "Minimal should have 0.5 CPU");
     assert_eq!(minimal.memory_gb, 1.0, "Minimal should have 1 GB RAM");
-    assert_eq!(minimal.storage_gb, 10.0, "Minimal should have 10 GB storage");
+    assert_eq!(
+        minimal.storage_gb, 10.0,
+        "Minimal should have 10 GB storage"
+    );
     assert!(minimal.allow_spot, "Minimal should allow spot");
     assert!(minimal.validate().is_ok(), "Minimal should be valid");
 
@@ -351,16 +349,34 @@ fn test_resource_spec_presets() {
     // Recommended preset
     let recommended = ResourceSpec::recommended();
     assert_eq!(recommended.cpu, 4.0, "Recommended should have 4 CPUs");
-    assert_eq!(recommended.memory_gb, 16.0, "Recommended should have 16 GB RAM");
-    assert_eq!(recommended.storage_gb, 100.0, "Recommended should have 100 GB storage");
-    assert!(recommended.validate().is_ok(), "Recommended should be valid");
+    assert_eq!(
+        recommended.memory_gb, 16.0,
+        "Recommended should have 16 GB RAM"
+    );
+    assert_eq!(
+        recommended.storage_gb, 100.0,
+        "Recommended should have 100 GB storage"
+    );
+    assert!(
+        recommended.validate().is_ok(),
+        "Recommended should be valid"
+    );
 
     // Performance preset
     let performance = ResourceSpec::performance();
     assert_eq!(performance.cpu, 8.0, "Performance should have 8 CPUs");
-    assert_eq!(performance.memory_gb, 32.0, "Performance should have 32 GB RAM");
-    assert_eq!(performance.storage_gb, 500.0, "Performance should have 500 GB storage");
-    assert!(performance.validate().is_ok(), "Performance should be valid");
+    assert_eq!(
+        performance.memory_gb, 32.0,
+        "Performance should have 32 GB RAM"
+    );
+    assert_eq!(
+        performance.storage_gb, 500.0,
+        "Performance should have 500 GB storage"
+    );
+    assert!(
+        performance.validate().is_ok(),
+        "Performance should be valid"
+    );
 
     // Test GPU addition
     let with_gpu = ResourceSpec::basic().with_gpu(2);

@@ -4,8 +4,8 @@
 
 #![cfg(feature = "digitalocean")]
 
-use blueprint_faas::digitalocean::DigitalOceanExecutor;
 use blueprint_faas::FaasExecutor;
+use blueprint_faas::digitalocean::DigitalOceanExecutor;
 
 #[tokio::test]
 #[ignore = "Requires DigitalOcean API token and creates real resources"]
@@ -41,7 +41,10 @@ async fn test_end_to_end_deployment() {
     assert!(!deployment.endpoint.is_empty());
 
     // Health check
-    let healthy = executor.health_check(999).await.expect("Health check failed");
+    let healthy = executor
+        .health_check(999)
+        .await
+        .expect("Health check failed");
     assert!(healthy);
 
     // Clean up

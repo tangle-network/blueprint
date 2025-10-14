@@ -50,13 +50,39 @@ fn analyze_faas_compatibility(profile: &JobProfile) {
         && !profile.stateful
         && !profile.persistent_connections;
 
-    println!("AWS Lambda: {}", if aws_compatible { "✓ Compatible" } else { "✗ Not Compatible" });
-    println!("  - Duration: {}ms / {}ms limit", profile.p95_duration_ms, AWS_LAMBDA_TIMEOUT_MS);
-    println!("  - Memory: {}MB / {}MB limit", profile.peak_memory_mb, AWS_LAMBDA_MEMORY_MB);
+    println!(
+        "AWS Lambda: {}",
+        if aws_compatible {
+            "✓ Compatible"
+        } else {
+            "✗ Not Compatible"
+        }
+    );
+    println!(
+        "  - Duration: {}ms / {}ms limit",
+        profile.p95_duration_ms, AWS_LAMBDA_TIMEOUT_MS
+    );
+    println!(
+        "  - Memory: {}MB / {}MB limit",
+        profile.peak_memory_mb, AWS_LAMBDA_MEMORY_MB
+    );
 
-    println!("\nGCP Functions: {}", if gcp_compatible { "✓ Compatible" } else { "✗ Not Compatible" });
-    println!("  - Duration: {}ms / {}ms limit", profile.p95_duration_ms, GCP_TIMEOUT_MS);
-    println!("  - Memory: {}MB / {}MB limit", profile.peak_memory_mb, GCP_MEMORY_MB);
+    println!(
+        "\nGCP Functions: {}",
+        if gcp_compatible {
+            "✓ Compatible"
+        } else {
+            "✗ Not Compatible"
+        }
+    );
+    println!(
+        "  - Duration: {}ms / {}ms limit",
+        profile.p95_duration_ms, GCP_TIMEOUT_MS
+    );
+    println!(
+        "  - Memory: {}MB / {}MB limit",
+        profile.peak_memory_mb, GCP_MEMORY_MB
+    );
 
     if profile.stateful {
         println!("\n⚠ Job is stateful - not recommended for FaaS");
@@ -85,10 +111,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
 
     println!("Results:");
-    println!("  Avg: {}ms, P95: {}ms, P99: {}ms",
-        profile.avg_duration_ms,
-        profile.p95_duration_ms,
-        profile.p99_duration_ms
+    println!(
+        "  Avg: {}ms, P95: {}ms, P99: {}ms",
+        profile.avg_duration_ms, profile.p95_duration_ms, profile.p99_duration_ms
     );
     println!("  Peak memory: {}MB", profile.peak_memory_mb);
     analyze_faas_compatibility(&profile);
@@ -104,10 +129,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let profile = ProfileRunner::profile_job(slow_job, slow_config).await?;
 
     println!("Results:");
-    println!("  Avg: {}ms, P95: {}ms, P99: {}ms",
-        profile.avg_duration_ms,
-        profile.p95_duration_ms,
-        profile.p99_duration_ms
+    println!(
+        "  Avg: {}ms, P95: {}ms, P99: {}ms",
+        profile.avg_duration_ms, profile.p95_duration_ms, profile.p99_duration_ms
     );
     println!("  Peak memory: {}MB", profile.peak_memory_mb);
     analyze_faas_compatibility(&profile);
@@ -121,10 +145,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
 
     println!("Results:");
-    println!("  Avg: {}ms, P95: {}ms, P99: {}ms",
-        profile.avg_duration_ms,
-        profile.p95_duration_ms,
-        profile.p99_duration_ms
+    println!(
+        "  Avg: {}ms, P95: {}ms, P99: {}ms",
+        profile.avg_duration_ms, profile.p95_duration_ms, profile.p99_duration_ms
     );
     println!("  Peak memory: {}MB", profile.peak_memory_mb);
     analyze_faas_compatibility(&profile);

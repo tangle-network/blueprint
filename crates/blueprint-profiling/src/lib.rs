@@ -110,22 +110,26 @@ impl BlueprintProfiles {
     ///
     /// Typically saved to `target/blueprint-profiles.json` in the blueprint workspace.
     pub fn save_to_file(&self, path: impl AsRef<std::path::Path>) -> Result<(), ProfilingError> {
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| ProfilingError::InvalidConfiguration(format!("JSON serialization failed: {}", e)))?;
+        let json = serde_json::to_string_pretty(self).map_err(|e| {
+            ProfilingError::InvalidConfiguration(format!("JSON serialization failed: {}", e))
+        })?;
 
-        std::fs::write(path.as_ref(), json)
-            .map_err(|e| ProfilingError::InvalidConfiguration(format!("Failed to write file: {}", e)))?;
+        std::fs::write(path.as_ref(), json).map_err(|e| {
+            ProfilingError::InvalidConfiguration(format!("Failed to write file: {}", e))
+        })?;
 
         Ok(())
     }
 
     /// Load profiles from a JSON file
     pub fn load_from_file(path: impl AsRef<std::path::Path>) -> Result<Self, ProfilingError> {
-        let content = std::fs::read_to_string(path.as_ref())
-            .map_err(|e| ProfilingError::InvalidConfiguration(format!("Failed to read file: {}", e)))?;
+        let content = std::fs::read_to_string(path.as_ref()).map_err(|e| {
+            ProfilingError::InvalidConfiguration(format!("Failed to read file: {}", e))
+        })?;
 
-        serde_json::from_str(&content)
-            .map_err(|e| ProfilingError::InvalidConfiguration(format!("JSON deserialization failed: {}", e)))
+        serde_json::from_str(&content).map_err(|e| {
+            ProfilingError::InvalidConfiguration(format!("JSON deserialization failed: {}", e))
+        })
     }
 
     /// Serialize and compress profiles to bytes (for on-chain storage)
@@ -138,18 +142,19 @@ impl BlueprintProfiles {
         use std::io::Write;
 
         // Serialize to JSON (without pretty printing to save space)
-        let json = serde_json::to_string(self)
-            .map_err(|e| ProfilingError::InvalidConfiguration(format!("JSON serialization failed: {}", e)))?;
+        let json = serde_json::to_string(self).map_err(|e| {
+            ProfilingError::InvalidConfiguration(format!("JSON serialization failed: {}", e))
+        })?;
 
         // Compress with gzip
         let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
-        encoder
-            .write_all(json.as_bytes())
-            .map_err(|e| ProfilingError::InvalidConfiguration(format!("Compression failed: {}", e)))?;
+        encoder.write_all(json.as_bytes()).map_err(|e| {
+            ProfilingError::InvalidConfiguration(format!("Compression failed: {}", e))
+        })?;
 
-        encoder
-            .finish()
-            .map_err(|e| ProfilingError::InvalidConfiguration(format!("Compression finalization failed: {}", e)))
+        encoder.finish().map_err(|e| {
+            ProfilingError::InvalidConfiguration(format!("Compression finalization failed: {}", e))
+        })
     }
 
     /// Deserialize and decompress profiles from bytes (for on-chain retrieval)
@@ -160,13 +165,14 @@ impl BlueprintProfiles {
         // Decompress
         let mut decoder = GzDecoder::new(compressed);
         let mut json = String::new();
-        decoder
-            .read_to_string(&mut json)
-            .map_err(|e| ProfilingError::InvalidConfiguration(format!("Decompression failed: {}", e)))?;
+        decoder.read_to_string(&mut json).map_err(|e| {
+            ProfilingError::InvalidConfiguration(format!("Decompression failed: {}", e))
+        })?;
 
         // Deserialize
-        serde_json::from_str(&json)
-            .map_err(|e| ProfilingError::InvalidConfiguration(format!("JSON deserialization failed: {}", e)))
+        serde_json::from_str(&json).map_err(|e| {
+            ProfilingError::InvalidConfiguration(format!("JSON deserialization failed: {}", e))
+        })
     }
 
     /// Encode profiles as base64-encoded compressed data for on-chain storage
@@ -187,7 +193,9 @@ impl BlueprintProfiles {
         use base64::Engine;
         let compressed = base64::engine::general_purpose::STANDARD
             .decode(encoded)
-            .map_err(|e| ProfilingError::InvalidConfiguration(format!("Base64 decode failed: {}", e)))?;
+            .map_err(|e| {
+                ProfilingError::InvalidConfiguration(format!("Base64 decode failed: {}", e))
+            })?;
         Self::from_compressed_bytes(&compressed)
     }
 
@@ -265,8 +273,10 @@ fn get_cpu_time_us() -> u64 {
 
         if result == 0 {
             let usage = usage.assume_init();
-            let user_us = (usage.ru_utime.tv_sec as u64) * 1_000_000 + (usage.ru_utime.tv_usec as u64);
-            let sys_us = (usage.ru_stime.tv_sec as u64) * 1_000_000 + (usage.ru_stime.tv_usec as u64);
+            let user_us =
+                (usage.ru_utime.tv_sec as u64) * 1_000_000 + (usage.ru_utime.tv_usec as u64);
+            let sys_us =
+                (usage.ru_stime.tv_sec as u64) * 1_000_000 + (usage.ru_stime.tv_usec as u64);
             return user_us + sys_us;
         }
     }
@@ -361,10 +371,7 @@ impl ProfileRunner {
             .collect();
         durations.sort_unstable();
 
-        let mut memories: Vec<u64> = measurements
-            .iter()
-            .map(|m| m.peak_memory_bytes)
-            .collect();
+        let mut memories: Vec<u64> = measurements.iter().map(|m| m.peak_memory_bytes).collect();
         memories.sort_unstable();
 
         let avg_duration_ms = if !durations.is_empty() {
@@ -436,13 +443,9 @@ mod tests {
             max_execution_time: Duration::from_secs(10),
         };
 
-        let result = ProfileRunner::profile_job(
-            || async {
-                Err::<(), _>("test error".into())
-            },
-            config,
-        )
-        .await;
+        let result =
+            ProfileRunner::profile_job(|| async { Err::<(), _>("test error".into()) }, config)
+                .await;
 
         assert!(result.is_err());
         assert!(matches!(
@@ -490,22 +493,29 @@ mod tests {
     #[test]
     fn test_compression_single_job() {
         let mut profiles = BlueprintProfiles::new("test");
-        profiles.add_job(0, JobProfile {
-            avg_duration_ms: 100,
-            p95_duration_ms: 150,
-            p99_duration_ms: 200,
-            peak_memory_mb: 256,
-            stateful: false,
-            persistent_connections: false,
-            sample_size: 10,
-        });
+        profiles.add_job(
+            0,
+            JobProfile {
+                avg_duration_ms: 100,
+                p95_duration_ms: 150,
+                p99_duration_ms: 200,
+                peak_memory_mb: 256,
+                stateful: false,
+                persistent_connections: false,
+                sample_size: 10,
+            },
+        );
 
         // Compress
         let compressed = profiles.to_compressed_bytes().unwrap();
         println!("Compressed size (1 job): {} bytes", compressed.len());
 
         // Verify compression is effective (should be < 250 bytes for 1 job)
-        assert!(compressed.len() < 250, "Compression too large: {} bytes", compressed.len());
+        assert!(
+            compressed.len() < 250,
+            "Compression too large: {} bytes",
+            compressed.len()
+        );
 
         // Decompress and verify
         let decompressed = BlueprintProfiles::from_compressed_bytes(&compressed).unwrap();
@@ -520,15 +530,18 @@ mod tests {
 
         // Add 10 jobs
         for i in 0..10 {
-            profiles.add_job(i, JobProfile {
-                avg_duration_ms: 100 + i as u64 * 50,
-                p95_duration_ms: 150 + i as u64 * 60,
-                p99_duration_ms: 200 + i as u64 * 70,
-                peak_memory_mb: 256 + i * 64,
-                stateful: i % 5 == 0,
-                persistent_connections: i % 7 == 0,
-                sample_size: 10,
-            });
+            profiles.add_job(
+                i,
+                JobProfile {
+                    avg_duration_ms: 100 + i as u64 * 50,
+                    p95_duration_ms: 150 + i as u64 * 60,
+                    p99_duration_ms: 200 + i as u64 * 70,
+                    peak_memory_mb: 256 + i * 64,
+                    stateful: i % 5 == 0,
+                    persistent_connections: i % 7 == 0,
+                    sample_size: 10,
+                },
+            );
         }
 
         // Compress
@@ -536,7 +549,11 @@ mod tests {
         println!("Compressed size (10 jobs): {} bytes", compressed.len());
 
         // Should be under 700 bytes for 10 jobs
-        assert!(compressed.len() < 700, "Compression too large: {} bytes", compressed.len());
+        assert!(
+            compressed.len() < 700,
+            "Compression too large: {} bytes",
+            compressed.len()
+        );
 
         // Decompress and verify
         let decompressed = BlueprintProfiles::from_compressed_bytes(&compressed).unwrap();
@@ -545,7 +562,10 @@ mod tests {
         // Verify a few jobs
         assert_eq!(decompressed.jobs.get(&0).unwrap().peak_memory_mb, 256);
         assert_eq!(decompressed.jobs.get(&5).unwrap().stateful, true);
-        assert_eq!(decompressed.jobs.get(&7).unwrap().persistent_connections, true);
+        assert_eq!(
+            decompressed.jobs.get(&7).unwrap().persistent_connections,
+            true
+        );
     }
 
     #[test]
@@ -554,15 +574,18 @@ mod tests {
 
         // Add 50 jobs
         for i in 0..50 {
-            profiles.add_job(i, JobProfile {
-                avg_duration_ms: 100 + i as u64 * 20,
-                p95_duration_ms: 150 + i as u64 * 25,
-                p99_duration_ms: 200 + i as u64 * 30,
-                peak_memory_mb: 256 + i * 32,
-                stateful: i % 5 == 0,
-                persistent_connections: i % 7 == 0,
-                sample_size: 10,
-            });
+            profiles.add_job(
+                i,
+                JobProfile {
+                    avg_duration_ms: 100 + i as u64 * 20,
+                    p95_duration_ms: 150 + i as u64 * 25,
+                    p99_duration_ms: 200 + i as u64 * 30,
+                    peak_memory_mb: 256 + i * 32,
+                    stateful: i % 5 == 0,
+                    persistent_connections: i % 7 == 0,
+                    sample_size: 10,
+                },
+            );
         }
 
         // Compress
@@ -570,7 +593,11 @@ mod tests {
         println!("Compressed size (50 jobs): {} bytes", compressed.len());
 
         // Should be under 3KB for 50 jobs
-        assert!(compressed.len() < 3000, "Compression too large: {} bytes", compressed.len());
+        assert!(
+            compressed.len() < 3000,
+            "Compression too large: {} bytes",
+            compressed.len()
+        );
 
         // Decompress and verify integrity
         let decompressed = BlueprintProfiles::from_compressed_bytes(&compressed).unwrap();
@@ -581,15 +608,18 @@ mod tests {
     #[test]
     fn test_compression_roundtrip_preserves_data() {
         let mut profiles = BlueprintProfiles::new("test");
-        profiles.add_job(42, JobProfile {
-            avg_duration_ms: 12345,
-            p95_duration_ms: 23456,
-            p99_duration_ms: 34567,
-            peak_memory_mb: 4096,
-            stateful: true,
-            persistent_connections: true,
-            sample_size: 100,
-        });
+        profiles.add_job(
+            42,
+            JobProfile {
+                avg_duration_ms: 12345,
+                p95_duration_ms: 23456,
+                p99_duration_ms: 34567,
+                peak_memory_mb: 4096,
+                stateful: true,
+                persistent_connections: true,
+                sample_size: 100,
+            },
+        );
 
         let compressed = profiles.to_compressed_bytes().unwrap();
         let decompressed = BlueprintProfiles::from_compressed_bytes(&compressed).unwrap();
@@ -597,34 +627,52 @@ mod tests {
         let original_job = profiles.jobs.get(&42).unwrap();
         let decompressed_job = decompressed.jobs.get(&42).unwrap();
 
-        assert_eq!(original_job.avg_duration_ms, decompressed_job.avg_duration_ms);
-        assert_eq!(original_job.p95_duration_ms, decompressed_job.p95_duration_ms);
-        assert_eq!(original_job.p99_duration_ms, decompressed_job.p99_duration_ms);
+        assert_eq!(
+            original_job.avg_duration_ms,
+            decompressed_job.avg_duration_ms
+        );
+        assert_eq!(
+            original_job.p95_duration_ms,
+            decompressed_job.p95_duration_ms
+        );
+        assert_eq!(
+            original_job.p99_duration_ms,
+            decompressed_job.p99_duration_ms
+        );
         assert_eq!(original_job.peak_memory_mb, decompressed_job.peak_memory_mb);
         assert_eq!(original_job.stateful, decompressed_job.stateful);
-        assert_eq!(original_job.persistent_connections, decompressed_job.persistent_connections);
+        assert_eq!(
+            original_job.persistent_connections,
+            decompressed_job.persistent_connections
+        );
         assert_eq!(original_job.sample_size, decompressed_job.sample_size);
     }
 
     #[test]
     fn test_base64_encoding_for_chain_storage() {
         let mut profiles = BlueprintProfiles::new("incredible-squaring");
-        profiles.add_job(0, JobProfile {
-            avg_duration_ms: 5,
-            p95_duration_ms: 8,
-            p99_duration_ms: 10,
-            peak_memory_mb: 256,
-            stateful: false,
-            persistent_connections: false,
-            sample_size: 10,
-        });
+        profiles.add_job(
+            0,
+            JobProfile {
+                avg_duration_ms: 5,
+                p95_duration_ms: 8,
+                p99_duration_ms: 10,
+                peak_memory_mb: 256,
+                stateful: false,
+                persistent_connections: false,
+                sample_size: 10,
+            },
+        );
 
         // Encode as base64
         let encoded = profiles.to_base64_string().unwrap();
         println!("Base64 encoded size: {} bytes", encoded.len());
 
         // Should be reasonable size for on-chain storage
-        assert!(encoded.len() < 400, "Base64 size should be < 400 bytes for 1 job");
+        assert!(
+            encoded.len() < 400,
+            "Base64 size should be < 400 bytes for 1 job"
+        );
 
         // Decode and verify
         let decoded = BlueprintProfiles::from_base64_string(&encoded).unwrap();
@@ -642,15 +690,18 @@ mod tests {
 
         // Add 10 jobs
         for i in 0..10 {
-            profiles.add_job(i, JobProfile {
-                avg_duration_ms: 100 + i as u64 * 50,
-                p95_duration_ms: 150 + i as u64 * 60,
-                p99_duration_ms: 200 + i as u64 * 70,
-                peak_memory_mb: 256 + i * 64,
-                stateful: i % 5 == 0,
-                persistent_connections: i % 7 == 0,
-                sample_size: 10,
-            });
+            profiles.add_job(
+                i,
+                JobProfile {
+                    avg_duration_ms: 100 + i as u64 * 50,
+                    p95_duration_ms: 150 + i as u64 * 60,
+                    p99_duration_ms: 200 + i as u64 * 70,
+                    peak_memory_mb: 256 + i * 64,
+                    stateful: i % 5 == 0,
+                    persistent_connections: i % 7 == 0,
+                    sample_size: 10,
+                },
+            );
         }
 
         // Encode as base64
@@ -658,7 +709,10 @@ mod tests {
         println!("Base64 encoded size (10 jobs): {} bytes", encoded.len());
 
         // Should still be reasonable for on-chain storage
-        assert!(encoded.len() < 1000, "Base64 size should be < 1KB for 10 jobs");
+        assert!(
+            encoded.len() < 1000,
+            "Base64 size should be < 1KB for 10 jobs"
+        );
 
         // Roundtrip test
         let decoded = BlueprintProfiles::from_base64_string(&encoded).unwrap();

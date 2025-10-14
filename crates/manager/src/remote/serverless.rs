@@ -87,7 +87,9 @@ pub async fn deploy_serverless(
     // Step 3: Create service handle
     // For serverless, we return a lightweight native service that runs the orchestrator locally
     // The orchestrator itself just coordinates FaaS invocations
-    let runtime_dir = ctx.runtime_dir().join(format!("serverless-{}", service_name));
+    let runtime_dir = ctx
+        .runtime_dir()
+        .join(format!("serverless-{}", service_name));
     std::fs::create_dir_all(&runtime_dir)?;
 
     Service::new_native(
@@ -133,10 +135,11 @@ async fn deploy_orchestrator(
     // For MVP, we'll just return a note that the operator should run it locally
     // or deploy via remote-providers with tiny resources.
 
+    info!("Orchestrator deployment: operator should run BlueprintRunner locally or on t4g.nano");
     info!(
-        "Orchestrator deployment: operator should run BlueprintRunner locally or on t4g.nano"
+        "Configure FaaS executors via runner config for jobs: {:?}",
+        job_ids
     );
-    info!("Configure FaaS executors via runner config for jobs: {:?}", job_ids);
 
     Ok("local-or-t4g-nano".to_string())
 }
@@ -144,7 +147,12 @@ async fn deploy_orchestrator(
 /// Deploy a single job to the FaaS platform using the factory pattern.
 #[cfg(all(
     feature = "blueprint-faas",
-    any(feature = "aws", feature = "gcp", feature = "azure", feature = "custom")
+    any(
+        feature = "aws",
+        feature = "gcp",
+        feature = "azure",
+        feature = "custom"
+    )
 ))]
 async fn deploy_job_to_faas(
     _ctx: &BlueprintManagerContext,
@@ -158,7 +166,11 @@ async fn deploy_job_to_faas(
 
     // Read the binary (this should be the faas_handler or blueprint binary)
     let binary = std::fs::read(binary_path).map_err(|e| {
-        Error::Other(format!("Failed to read binary at {}: {}", binary_path.display(), e))
+        Error::Other(format!(
+            "Failed to read binary at {}: {}",
+            binary_path.display(),
+            e
+        ))
     })?;
 
     // Convert manager's config to factory config
@@ -171,9 +183,7 @@ async fn deploy_job_to_faas(
 
     info!(
         "Successfully deployed job {} to {}: {}",
-        job_id,
-        deployment.function_id,
-        deployment.endpoint
+        job_id, deployment.function_id, deployment.endpoint
     );
 
     Ok(())
@@ -181,7 +191,12 @@ async fn deploy_job_to_faas(
 
 #[cfg(not(all(
     feature = "blueprint-faas",
-    any(feature = "aws", feature = "gcp", feature = "azure", feature = "custom")
+    any(
+        feature = "aws",
+        feature = "gcp",
+        feature = "azure",
+        feature = "custom"
+    )
 )))]
 async fn deploy_job_to_faas(
     _ctx: &BlueprintManagerContext,
@@ -200,7 +215,12 @@ async fn deploy_job_to_faas(
 /// Convert manager's ServerlessConfig to factory's FaasProviderConfig
 #[cfg(all(
     feature = "blueprint-faas",
-    any(feature = "aws", feature = "gcp", feature = "azure", feature = "custom")
+    any(
+        feature = "aws",
+        feature = "gcp",
+        feature = "azure",
+        feature = "custom"
+    )
 ))]
 fn convert_to_factory_config(
     config: &ServerlessConfig,
@@ -243,7 +263,7 @@ fn convert_to_factory_config(
         _ => {
             return Err(Error::Other(
                 "Provider not supported with current feature flags".to_string(),
-            ))
+            ));
         }
     };
 
@@ -253,4 +273,3 @@ fn convert_to_factory_config(
         default_timeout_secs: config.default_timeout_secs,
     })
 }
-
