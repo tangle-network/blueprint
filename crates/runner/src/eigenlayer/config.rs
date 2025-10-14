@@ -21,8 +21,6 @@ pub struct EigenlayerProtocolSettings {
     pub operator_state_retriever_address: Address,
     /// The address of the operator registry contract
     pub delegation_manager_address: Address,
-    /// The address of the Service Manager contract
-    pub service_manager_address: Address,
     /// The address of the Stake Registry contract
     pub stake_registry_address: Address,
     /// The address of the strategy manager contract
@@ -35,6 +33,10 @@ pub struct EigenlayerProtocolSettings {
     pub permission_controller_address: Address,
     /// The address of the strategy contract
     pub strategy_address: Address,
+    /// The address of the Service Manager contract
+    pub service_manager_address: Address,
+    /// The address of the Task Manager contract
+    pub task_manager_address: Address,
 }
 
 impl ProtocolSettingsT for EigenlayerProtocolSettings {
@@ -58,9 +60,6 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
             delegation_manager_address: settings
                 .delegation_manager
                 .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
-            service_manager_address: settings
-                .service_manager
-                .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
             stake_registry_address: settings
                 .stake_registry
                 .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
@@ -78,6 +77,12 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
                 .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
             strategy_address: settings
                 .strategy
+                .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
+            service_manager_address: settings
+                .service_manager
+                .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
+            task_manager_address: settings
+                .task_manager
                 .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
         })
     }
@@ -100,13 +105,14 @@ impl Default for EigenlayerProtocolSettings {
             registry_coordinator_address: address!("fd471836031dc5108809d173a067e8486b9047a3"),
             operator_state_retriever_address: address!("922d6956c99e12dfeb3224dea977d0939758a1fe"),
             delegation_manager_address: address!("cf7ed3acca5a467e9e704c703e8d87f634fb0fc9"),
-            service_manager_address: address!("2bdcc0de6be1f7d2ee689a0342d76f52e8efaba3"), // Squaring service manager
             stake_registry_address: address!("7bc06c482dead17c0e297afbc32f6e63d3846650"),
             strategy_manager_address: address!("a513e6e4b8f2a923d98304ec87f64353c4d5c853"),
             avs_directory_address: address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e"),
             rewards_coordinator_address: address!("0dcd1bf9a1b36ce34237eeafef220932846bcd82"),
             permission_controller_address: address!("322813fd9a801c5507c9de605d63cea4f2ce6c44"),
             strategy_address: address!("ec4cfde48eadca2bc63e94bb437bbeace1371bf3"),
+            service_manager_address: address!("2bdcc0de6be1f7d2ee689a0342d76f52e8efaba3"),
+            task_manager_address: address!("c96304e3c037f81da488ed9dea1d8f2a48278a75"),
         }
     }
 }

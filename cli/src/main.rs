@@ -931,10 +931,6 @@ fn load_protocol_settings(
                     .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
                     .parse()
                     .map_err(|_| ConfigError::Other("Invalid DELEGATION_MANAGER_ADDRESS".into()))?,
-                service_manager_address: env::var("SERVICE_MANAGER_ADDRESS")
-                    .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
-                    .parse()
-                    .map_err(|_| ConfigError::Other("Invalid SERVICE_MANAGER_ADDRESS".into()))?,
                 stake_registry_address: env::var("STAKE_REGISTRY_ADDRESS")
                     .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
                     .parse()
@@ -963,6 +959,15 @@ fn load_protocol_settings(
                     .map_err(|_| {
                         ConfigError::Other("Invalid PERMISSION_CONTROLLER_ADDRESS".into())
                     })?,
+                service_manager_address: env::var("SERVICE_MANAGER_ADDRESS")
+                    .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
+                    .parse()
+                    .map_err(|_| ConfigError::Other("Invalid SERVICE_MANAGER_ADDRESS".into()))?,
+                task_manager_address: env::var("TASK_MANAGER_ADDRESS")
+                    .map_err(|_| ConfigError::MissingEigenlayerContractAddresses)?
+                    .parse()
+                    .map_err(|_| ConfigError::Other("Invalid TASK_MANAGER_ADDRESS".into()))?,
+              
             };
             Ok(ProtocolSettings::Eigenlayer(addresses))
         }

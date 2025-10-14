@@ -87,10 +87,18 @@ impl EigenlayerClient {
     async fn initialize(&self) -> Result<()> {
         let contract_addresses = self.config.protocol_settings.eigenlayer()?;
         let provider = self.get_provider_ws().await?;
-        let filter = Filter::new().address(contract_addresses.service_manager_address);
+        let filter = Filter::new().address(contract_addresses.task_manager_address);
+        
+        blueprint_core::info!(
+            "Initializing event stream for task manager address: {:?}",
+            contract_addresses.task_manager_address
+        );
+        
         let subscription = provider.subscribe_logs(&filter).await?;
-        let stream = subscription.into_stream().boxed();
+        let mut stream = subscription.into_stream().boxed();
         *self.log_stream.lock().await = Some(stream);
+
+        blueprint_core::info!("Event stream initialized successfully");
         Ok(())
     }
 
@@ -755,32 +763,80 @@ impl EigenlayerClient {
 
 impl EventsClient<Log> for EigenlayerClient {
     async fn next_event(&self) -> Option<Log> {
-        let mut stream = tokio::time::timeout(
-            Duration::from_millis(500),
-            self.log_stream.lock(),
-        )
-        .await
-        .ok()?;
-        
-        match stream.as_mut() {
-            Some(stream) => {
-                let log = stream.next().await?;
-                
-                let mut latest_event = tokio::time::timeout(
+        // let mut stream = tokio::time::timeout(
+        //     Duration::from_millis(500),
+        //     self.log_stream.lock(),
+        // )
+        // .await
+        // .ok()?;
+        // blueprint_core::info!("Should goes here");
+        // match stream.as_mut() {
+        //     Some(stream) => {
+        //         blueprint_core::info!("Should goes here ....");
+        //         let log = stream.next().await?;
+        //         blueprint_core::info!("Received event: {:?}", log);
+        //         let mut latest_event = tokio::time::timeout(
+        //             Duration::from_millis(500),
+        //             self.latest_event.lock(),
+        //         )
+        //         .await
+        //         .ok()?;
+        //         *latest_event = Some(log.clone());
+        //         Some(log)
+        //     }
+        //     None => {
+        //         blueprint_core::info!("or here ....");
+        //         blueprint_core::warn!("Retrying to subscribe to new events");
+        //         drop(stream);
+        //         self.initialize().await.ok()?;
+        //         // Next time, the stream should be initialized.
+        //         Box::pin(async { self.next_event().await }).await
+        //     }
+        // }
+        loop {
+            // Take the stream out of the mutex to avoid holding lock across await
+            let mut stream_opt = {
+                let mut stream_guard = tokio::time::timeout(
                     Duration::from_millis(500),
-                    self.latest_event.lock(),
+                    self.log_stream.lock(),
                 )
                 .await
                 .ok()?;
-                *latest_event = Some(log.clone());
-                Some(log)
-            }
-            None => {
-                drop(stream);
+                stream_guard.take()
+            };
+
+            if stream_opt.is_none() {
+                blueprint_core::warn!("Retrying to subscribe to new events");
                 self.initialize().await.ok()?;
-                // Next time, the stream should be initialized.
-                Box::pin(async { self.next_event().await }).await
+                continue;
             }
+
+            // Now we can await on the stream without holding the mutex
+            let stream = stream_opt.as_mut()?;
+            let log = stream.next().await?;
+            blueprint_core::info!("Received event: {:?}", log);
+
+            // Put the stream back
+            {
+                let mut stream_guard = tokio::time::timeout(
+                    Duration::from_millis(500),
+                    self.log_stream.lock(),
+                )
+                .await
+                .ok()?;
+                *stream_guard = stream_opt;
+            }
+
+            // Update latest_event
+            let mut latest_event = tokio::time::timeout(
+                Duration::from_millis(500),
+                self.latest_event.lock(),
+            )
+            .await
+            .ok()?;
+            *latest_event = Some(log.clone());
+
+            return Some(log);
         }
     }
 

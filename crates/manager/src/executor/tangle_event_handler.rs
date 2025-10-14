@@ -30,9 +30,8 @@ const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
 /// * For each `RpcServicesWithBlueprint`, fetch the associated blueprint binary (fetch/download)
 ///   -> If the services field is empty, just emit and log inside the executed binary "that states a new service instance got created by one of these blueprints"
 ///   -> If the services field is not empty, for each service in RpcServicesWithBlueprint.services, spawn the blueprint binary, using params to set the job type to listen to (in terms of our old language, each spawned service represents a single "`RoleType`")
-#[cfg(feature = "tangle")]
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn handle_init(
+pub async fn handle_init(
     tangle_runtime: &TangleClient,
     services_client: &TangleServicesClient<TangleConfig>,
     sub_account_id: &AccountId32,

@@ -1,5 +1,5 @@
 use tangle_subxt::subxt::ext::jsonrpsee::core::__reexports::serde_json;
-
+use blueprint_keystore::error::Error as KeystoreError;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -71,4 +71,6 @@ pub enum Error {
     TangleClient(#[from] blueprint_clients::tangle::error::Error),
     #[error(transparent)]
     Auth(#[from] blueprint_auth::Error),
+    #[error(transparent)]
+    Keystore(#[from] KeystoreError),
 }

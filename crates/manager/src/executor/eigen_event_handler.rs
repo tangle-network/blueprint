@@ -16,11 +16,10 @@ use color_eyre::eyre;
 use tokio::signal;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
-use tokio::process::{Child, Command};
 
 const DEFAULT_PROTOCOL: Protocol = Protocol::Eigenlayer;
 
-pub(crate) async fn handle_init(
+pub async fn handle_init(
     eigenlayer_client: &EigenlayerClient,
     config: &BlueprintEnvironment,
     ctx: &BlueprintManagerContext
@@ -28,7 +27,7 @@ pub(crate) async fn handle_init(
     info!("Beginning initialization of Blueprint Manager");
 
     let binary_path = ctx.eigen_blueprint_binary_path().unwrap();
-    let (blueprint_id, service_id, service_vm_id, blueprint_name) = get_blueprint_metadata(binary_path.clone());
+    let (blueprint_id, service_id, service_vm_id, blueprint_name) = get_blueprint_metadata(binary_path);
     // create directories
     let cache_dir = ctx.cache_dir().join(format!(
         "{blueprint_name}-{blueprint_id}",
@@ -59,7 +58,7 @@ pub(crate) async fn handle_init(
         data_dir: config.data_dir.clone(),
         blueprint_id: blueprint_id.into(),
         service_id: service_id.into(),
-        protocol: Protocol::Eigenlayer,
+        protocol: DEFAULT_PROTOCOL,
         chain: ctx.runtime_chain(),
         bootnodes: String::new(),
         // update via spawn > new_native

@@ -673,8 +673,6 @@ impl ContextConfig {
         #[cfg(feature = "eigenlayer")]
         let delegation_manager = eigenlayer_settings.map(|s| s.delegation_manager_address);
         #[cfg(feature = "eigenlayer")]
-        let service_manager = eigenlayer_settings.map(|s| s.service_manager_address);
-        #[cfg(feature = "eigenlayer")]
         let stake_registry = eigenlayer_settings.map(|s| s.stake_registry_address);
         #[cfg(feature = "eigenlayer")]
         let strategy_manager = eigenlayer_settings.map(|s| s.strategy_manager_address);
@@ -688,7 +686,11 @@ impl ContextConfig {
         let strategy = eigenlayer_settings.map(|s| s.strategy_address);
         #[cfg(feature = "eigenlayer")]
         let slasher = eigenlayer_settings.map(|s| s.slasher_address);
-
+        #[cfg(feature = "eigenlayer")]
+        let service_manager = eigenlayer_settings.map(|s| s.service_manager_address);
+        #[cfg(feature = "eigenlayer")]
+        let task_manager = eigenlayer_settings.map(|s| s.task_manager_address);
+        
         // Tangle settings
         #[cfg(feature = "tangle")]
         let tangle_settings = match protocol_settings {
@@ -749,8 +751,6 @@ impl ContextConfig {
                 #[cfg(feature = "eigenlayer")]
                 stake_registry,
                 #[cfg(feature = "eigenlayer")]
-                service_manager,
-                #[cfg(feature = "eigenlayer")]
                 strategy_manager,
                 #[cfg(feature = "eigenlayer")]
                 avs_directory,
@@ -760,6 +760,10 @@ impl ContextConfig {
                 permission_controller,
                 #[cfg(feature = "eigenlayer")]
                 strategy,
+                #[cfg(feature = "eigenlayer")]
+                task_manager,
+                #[cfg(feature = "eigenlayer")]
+                service_manager,
                 #[cfg(feature = "tls")]
                 tls_enabled: false,
                 #[cfg(feature = "tls")]
@@ -1049,15 +1053,6 @@ pub struct BlueprintSettings {
     )]
     pub strategy_manager: Option<alloy_primitives::Address>,
     #[cfg(feature = "eigenlayer")]
-    /// The address of the Service Manager
-    #[arg(
-        long,
-        value_name = "ADDR",
-        env = "SERVICE_MANAGER_ADDRESS",
-        required_if_eq("protocol", Protocol::Eigenlayer.as_str())
-    )]
-    pub service_manager: Option<alloy_primitives::Address>,
-    #[cfg(feature = "eigenlayer")]
     /// The address of the Stake Registry
     #[arg(
         long,
@@ -1102,6 +1097,26 @@ pub struct BlueprintSettings {
         required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
     )]
     pub strategy: Option<alloy_primitives::Address>,
+    #[cfg(feature = "eigenlayer")]
+    /// The address of the Service Manager
+    #[arg(
+        long,
+        value_name = "ADDR",
+        env = "SERVICE_MANAGER_ADDRESS",
+        required_if_eq("protocol", Protocol::Eigenlayer.as_str())
+    )]
+    pub service_manager: Option<alloy_primitives::Address>,
+    #[cfg(feature = "eigenlayer")]
+    /// The address of the Task Manager
+    #[arg(
+        long,
+        value_name = "ADDR",
+        env = "TASK_MANAGER_ADDRESS",
+        required_if_eq("protocol", Protocol::Eigenlayer.as_str())
+    )]
+    pub task_manager: Option<alloy_primitives::Address>,
+
+
     // TLS configuration
     /// Enable TLS for service registration
     #[cfg(feature = "tls")]
@@ -1210,8 +1225,6 @@ impl Default for BlueprintSettings {
             #[cfg(feature = "eigenlayer")]
             delegation_manager: None,
             #[cfg(feature = "eigenlayer")]
-            service_manager: None,
-            #[cfg(feature = "eigenlayer")]
             stake_registry: None,
             #[cfg(feature = "eigenlayer")]
             strategy_manager: None,
@@ -1223,6 +1236,10 @@ impl Default for BlueprintSettings {
             permission_controller: None,
             #[cfg(feature = "eigenlayer")]
             strategy: None,
+            #[cfg(feature = "eigenlayer")]
+            service_manager: None,
+            #[cfg(feature = "eigenlayer")]
+            task_manager: None,
 
             // ========
             // TLS CONFIGURATION

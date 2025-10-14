@@ -11,6 +11,7 @@ use eigensdk::utils::slashing::middleware::registry_coordinator::RegistryCoordin
 use url::Url;
 
 // ================= Core Eigenlayer Deployment Addresses =================
+// TODO(daniel): update these addresses to the new addresses of Tangle testnet
 /// The default Allocation Manager address on our testnet
 pub const ALLOCATION_MANAGER_ADDR: Address = address!("8a791620dd6260079bf849dc5567adc3f2fdc318");
 /// The default AVS Directory address on our testnet
@@ -47,6 +48,8 @@ pub const REGISTRY_COORDINATOR_ADDR: Address = address!("cd8a1c3ba11cf5ecfa62676
 pub const SERVICE_MANAGER_ADDR: Address = address!("36c02da8a0983159322a80ffe9f24b1acff8b570");
 /// The default Slasher address on our testnet
 pub const SLASHER_ADDR: Address = address!("1429859428c0abc9c2c47c8ee9fbaf82cfa0f20f");
+/// The default Task Manager address on our testnet
+pub const TASK_MANAGER_ADDR: Address = address!("c96304e3c037f81da488ed9dea1d8f2a48278a75");
 
 pub struct EigenlayerTestEnvironment {
     pub http_endpoint: String,
@@ -134,13 +137,14 @@ where
             registry_coordinator_address: REGISTRY_COORDINATOR_ADDR,
             operator_state_retriever_address: OPERATOR_STATE_RETRIEVER_ADDR,
             delegation_manager_address: DELEGATION_MANAGER_ADDR,
-            service_manager_address: SERVICE_MANAGER_ADDR,
             stake_registry_address: STAKE_REGISTRY_ADDR,
             strategy_manager_address: STRATEGY_MANAGER_ADDR,
             avs_directory_address: AVS_DIRECTORY_ADDR,
             rewards_coordinator_address: REWARDS_COORDINATOR_ADDR,
             permission_controller_address: PERMISSION_CONTROLLER_ADDR,
             strategy_address: STRATEGY_ADDR,
+            service_manager_address: SERVICE_MANAGER_ADDR,
+            task_manager_address: TASK_MANAGER_ADDR,
         },
     }
 }

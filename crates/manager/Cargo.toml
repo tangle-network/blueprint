@@ -78,10 +78,6 @@ nftables = { workspace = true, optional = true }
 
 [features]
 default = []
-## Enable whether manager for EigenLayer or Tangle Blueprint
-tangle = []
-eigenlayer = [] 
-
 
 ## Enable the VM sandbox
 ##
