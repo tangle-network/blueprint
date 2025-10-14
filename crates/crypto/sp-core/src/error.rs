@@ -22,7 +22,7 @@ pub struct SecretStringErrorWrapper(pub SecretStringError);
 impl blueprint_std::fmt::Display for SecretStringErrorWrapper {
     fn fmt(&self, f: &mut blueprint_std::fmt::Formatter<'_>) -> blueprint_std::fmt::Result {
         match &self.0 {
-            SecretStringError::InvalidFormat(err) => write!(f, "Invalid format: {:?}", err),
+            SecretStringError::InvalidFormat(err) => write!(f, "Invalid format: {err:?}"),
             SecretStringError::InvalidPhrase => write!(f, "Invalid phrase"),
             SecretStringError::InvalidPassword => write!(f, "Invalid password"),
             SecretStringError::InvalidSeed => write!(f, "Invalid seed"),

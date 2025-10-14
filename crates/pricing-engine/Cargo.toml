@@ -27,7 +27,7 @@ blueprint-std = { workspace = true }
 blueprint-tangle-extra = { workspace = true, features = ["std"] }
 
 # Misc dependencies
-clap = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
 serde_json = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
