@@ -1,4 +1,4 @@
-name: Remote Providers Tests
+name: CI
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       - 'crates/blueprint-remote-providers/**'
 
 jobs:
-  unit-tests:
+  test-remote-providers:
     name: cargo test (blueprint-remote-providers)
     runs-on: ubuntu-latest
     steps:
@@ -25,8 +25,8 @@ jobs:
       - name: Run pricing tests
         run: cargo test -p blueprint-remote-providers test_pricing
 
-  kubernetes-tests:
-    name: cargo test (blueprint-remote-providers kubernetes)
+  test-remote-providers-kubernetes:
+    name: cargo test (blueprint-remote-providers-kubernetes)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,8 +48,8 @@ jobs:
       - name: Run Kubernetes tests
         run: cargo test -p blueprint-remote-providers --test managed_kubernetes_e2e --features kubernetes
 
-  docker-ssh-tests:
-    name: cargo test (blueprint-remote-providers ssh)
+  test-remote-providers-ssh:
+    name: cargo test (blueprint-remote-providers-ssh)
     runs-on: ubuntu-latest
     services:
       ssh:
@@ -85,8 +85,8 @@ jobs:
       - name: Run SSH deployment tests
         run: echo "SSH deployment tests moved to lib tests" && cargo test -p blueprint-remote-providers --lib test_ssh
 
-  mock-integration-tests:
-    name: cargo test (blueprint-remote-providers integration)
+  test-remote-providers-integration:
+    name: cargo test (blueprint-remote-providers-integration)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
