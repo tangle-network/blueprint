@@ -111,11 +111,11 @@ impl BlueprintProfiles {
     /// Typically saved to `target/blueprint-profiles.json` in the blueprint workspace.
     pub fn save_to_file(&self, path: impl AsRef<std::path::Path>) -> Result<(), ProfilingError> {
         let json = serde_json::to_string_pretty(self).map_err(|e| {
-            ProfilingError::InvalidConfiguration(format!("JSON serialization failed: {}", e))
+            ProfilingError::InvalidConfiguration(format!("JSON serialization failed: {e}"))
         })?;
 
         std::fs::write(path.as_ref(), json).map_err(|e| {
-            ProfilingError::InvalidConfiguration(format!("Failed to write file: {}", e))
+            ProfilingError::InvalidConfiguration(format!("Failed to write file: {e}"))
         })?;
 
         Ok(())
@@ -124,7 +124,7 @@ impl BlueprintProfiles {
     /// Load profiles from a JSON file
     pub fn load_from_file(path: impl AsRef<std::path::Path>) -> Result<Self, ProfilingError> {
         let content = std::fs::read_to_string(path.as_ref()).map_err(|e| {
-            ProfilingError::InvalidConfiguration(format!("Failed to read file: {}", e))
+            ProfilingError::InvalidConfiguration(format!("Failed to read file: {e}"))
         })?;
 
         serde_json::from_str(&content).map_err(|e| {
@@ -171,7 +171,7 @@ impl BlueprintProfiles {
 
         // Deserialize
         serde_json::from_str(&json).map_err(|e| {
-            ProfilingError::InvalidConfiguration(format!("JSON deserialization failed: {}", e))
+            ProfilingError::InvalidConfiguration(format!("JSON deserialization failed: {e}"))
         })
     }
 
@@ -194,7 +194,7 @@ impl BlueprintProfiles {
         let compressed = base64::engine::general_purpose::STANDARD
             .decode(encoded)
             .map_err(|e| {
-                ProfilingError::InvalidConfiguration(format!("Base64 decode failed: {}", e))
+                ProfilingError::InvalidConfiguration(format!("Base64 decode failed: {e}"))
             })?;
         Self::from_compressed_bytes(&compressed)
     }
@@ -210,7 +210,7 @@ impl BlueprintProfiles {
     /// Total size: marker (20 bytes) + base64 data (~260-468 bytes for 1-10 jobs)
     pub fn to_description_field(&self) -> Result<String, ProfilingError> {
         let encoded = self.to_base64_string()?;
-        Ok(format!("[PROFILING_DATA_V1]{}", encoded))
+        Ok(format!("[PROFILING_DATA_V1]{encoded}"))
     }
 
     /// Extract profiles from description field if it contains profiling data
@@ -218,7 +218,7 @@ impl BlueprintProfiles {
     /// Returns None if the description doesn't contain profiling data marker.
     /// Returns Some(Err) if the description has the marker but decoding fails.
     pub fn from_description_field(description: &str) -> Option<Result<Self, ProfilingError>> {
-        description.strip_prefix("[PROFILING_DATA_V1]").map(|encoded| Self::from_base64_string(encoded))
+        description.strip_prefix("[PROFILING_DATA_V1]").map(Self::from_base64_string)
     }
 }
 
