@@ -171,7 +171,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
     let span = tracing::info_span!("Blueprint-Manager", id = logger_id);
 
-    let _span = span.enter();
+    // let _span = span.enter();
     info!("Starting blueprint manager ... waiting for start signal ...");
 
     // Create the auth proxy task
@@ -182,7 +182,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let ecdsa_key_pub = keystore.first_local::<SpEcdsa>()?;
     let ecdsa_pair = keystore.get_secret::<SpEcdsa>(&ecdsa_key_pub)?;
     let ecdsa_key = TanglePairSigner::new(ecdsa_pair.0);
-    
+
     let may_be_tangle_key = {
         if env.protocol_settings.protocol() == Protocol::Tangle {
         let sr_key_pub = keystore.first_local::<SpSr25519>().map_err(Error::Keystore)?;
@@ -314,7 +314,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         }
     };
 
-    drop(_span);
+    // drop(_span);
     let handle = tokio::spawn(combined_task);
 
     let handle = BlueprintManagerHandle {

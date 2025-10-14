@@ -21,6 +21,7 @@ use num_bigint::BigInt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::Duration;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 
 /// Client that provides access to EigenLayer utility functions through the use of the [`BlueprintEnvironment`].
 #[derive(Clone)]
@@ -28,6 +29,7 @@ pub struct EigenlayerClient {
     pub config: BlueprintEnvironment,
     log_stream: Arc<Mutex<Option<futures_util::stream::BoxStream<'static, Log>>>>,
     latest_event: Arc<Mutex<Option<Log>>>,
+    log_rx: Arc<Mutex<Option<UnboundedReceiver<Log>>>>,
 }
 
 impl EigenlayerClient {
@@ -38,6 +40,7 @@ impl EigenlayerClient {
             config,
             log_stream: Arc::new(Mutex::new(None)),
             latest_event: Arc::new(Mutex::new(None)),
+            log_rx: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -95,8 +98,18 @@ impl EigenlayerClient {
         );
         
         let subscription = provider.subscribe_logs(&filter).await?;
-        let mut stream = subscription.into_stream().boxed();
-        *self.log_stream.lock().await = Some(stream);
+        
+        // Spawn a background task to forward logs into a channel and keep provider alive
+        let (tx, rx) = unbounded_channel::<Log>();
+        tokio::task::spawn(async move {
+            let mut stream = subscription.into_stream();
+            let _keep_alive_provider = provider; // keep WS provider alive in this task
+            while let Some(log) = stream.next().await {
+                let _ = tx.send(log);
+            }
+        });
+        
+        *self.log_rx.lock().await = Some(rx);
 
         blueprint_core::info!("Event stream initialized successfully");
         Ok(())
@@ -763,71 +776,47 @@ impl EigenlayerClient {
 
 impl EventsClient<Log> for EigenlayerClient {
     async fn next_event(&self) -> Option<Log> {
-        // let mut stream = tokio::time::timeout(
-        //     Duration::from_millis(500),
-        //     self.log_stream.lock(),
-        // )
-        // .await
-        // .ok()?;
-        // blueprint_core::info!("Should goes here");
-        // match stream.as_mut() {
-        //     Some(stream) => {
-        //         blueprint_core::info!("Should goes here ....");
-        //         let log = stream.next().await?;
-        //         blueprint_core::info!("Received event: {:?}", log);
-        //         let mut latest_event = tokio::time::timeout(
-        //             Duration::from_millis(500),
-        //             self.latest_event.lock(),
-        //         )
-        //         .await
-        //         .ok()?;
-        //         *latest_event = Some(log.clone());
-        //         Some(log)
-        //     }
-        //     None => {
-        //         blueprint_core::info!("or here ....");
-        //         blueprint_core::warn!("Retrying to subscribe to new events");
-        //         drop(stream);
-        //         self.initialize().await.ok()?;
-        //         // Next time, the stream should be initialized.
-        //         Box::pin(async { self.next_event().await }).await
-        //     }
-        // }
         loop {
-            // Take the stream out of the mutex to avoid holding lock across await
-            let mut stream_opt = {
-                let mut stream_guard = tokio::time::timeout(
+            // Take receiver out of mutex to await without holding the lock
+            let mut rx_opt = {
+                let mut guard = tokio::time::timeout(
                     Duration::from_millis(500),
-                    self.log_stream.lock(),
+                    self.log_rx.lock(),
                 )
                 .await
                 .ok()?;
-                stream_guard.take()
+                guard.take()
             };
 
-            if stream_opt.is_none() {
+            if rx_opt.is_none() {
                 blueprint_core::warn!("Retrying to subscribe to new events");
                 self.initialize().await.ok()?;
                 continue;
             }
 
-            // Now we can await on the stream without holding the mutex
-            let stream = stream_opt.as_mut()?;
-            let log = stream.next().await?;
-            blueprint_core::info!("Received event: {:?}", log);
+            let mut rx = rx_opt?;
+            let log_opt = rx.recv().await;
 
-            // Put the stream back
+            // Put receiver back for next call
             {
-                let mut stream_guard = tokio::time::timeout(
+                let mut guard = tokio::time::timeout(
                     Duration::from_millis(500),
-                    self.log_stream.lock(),
+                    self.log_rx.lock(),
                 )
                 .await
                 .ok()?;
-                *stream_guard = stream_opt;
+                *guard = Some(rx);
             }
 
-            // Update latest_event
+            let log = match log_opt {
+                Some(l) => l,
+                None => {
+                    blueprint_core::warn!("Log channel closed; reinitializing subscription");
+                    self.initialize().await.ok()?;
+                    continue;
+                }
+            };
+
             let mut latest_event = tokio::time::timeout(
                 Duration::from_millis(500),
                 self.latest_event.lock(),

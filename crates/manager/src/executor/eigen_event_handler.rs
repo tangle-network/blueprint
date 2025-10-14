@@ -9,7 +9,7 @@ use blueprint_tangle_extra::metadata::types::sources::TestFetcher;
 use blueprint_std::borrow::Cow;
 use alloy_rpc_types::Log;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol};
-use blueprint_core::{info, error};
+use blueprint_core::{info, error, trace};
 use blueprint_std::fs;
 use blueprint_std::path::{Path, PathBuf};
 use color_eyre::eyre;
@@ -123,7 +123,7 @@ pub(crate) async fn handle_eigen_event(
     _blueprint_config: &BlueprintEnvironment,
     _ctx: &BlueprintManagerContext,
 ) -> Result<()> {
-    info!("Received notification {:?}", event);
+    trace!("Received notification {:?}", event);
 
     Ok(())
 }
