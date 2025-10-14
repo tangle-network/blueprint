@@ -37,7 +37,7 @@ blueprint-core = { workspace = true, features = ["tracing"] }
 
 # Blueprint dependencies (removed blueprint-manager and blueprint-qos to avoid cyclic dependency)
 # blueprint-auth.workspace = true
-blueprint-keystore.workspace = true
+blueprint-keystore = { workspace = true, default-features = false, features = ["std"] }
 blueprint-pricing-engine.workspace = true
 parity-scale-codec = { workspace = true, features = ["derive"] }
 
