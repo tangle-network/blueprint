@@ -619,7 +619,7 @@ where
         self
     }
 
-    /// Register multiple jobs to use FaaS execution
+    /// Register multiple jobs to use `FaaS` execution
     ///
     /// # Examples
     ///

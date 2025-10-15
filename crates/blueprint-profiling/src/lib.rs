@@ -143,17 +143,17 @@ impl BlueprintProfiles {
 
         // Serialize to JSON (without pretty printing to save space)
         let json = serde_json::to_string(self).map_err(|e| {
-            ProfilingError::InvalidConfiguration(format!("JSON serialization failed: {}", e))
+            ProfilingError::InvalidConfiguration(format!("JSON serialization failed: {e}"))
         })?;
 
         // Compress with gzip
         let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
         encoder.write_all(json.as_bytes()).map_err(|e| {
-            ProfilingError::InvalidConfiguration(format!("Compression failed: {}", e))
+            ProfilingError::InvalidConfiguration(format!("Compression failed: {e}"))
         })?;
 
         encoder.finish().map_err(|e| {
-            ProfilingError::InvalidConfiguration(format!("Compression finalization failed: {}", e))
+            ProfilingError::InvalidConfiguration(format!("Compression finalization failed: {e}"))
         })
     }
 

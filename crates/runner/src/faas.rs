@@ -1,7 +1,7 @@
-//! FaaS execution abstraction for BlueprintRunner
+//! `FaaS` execution abstraction for `BlueprintRunner`
 //!
-//! This module re-exports FaaS types from the `blueprint-faas` crate.
-//! The FaaS trait and types are defined in `blueprint-faas` to avoid
+//! This module re-exports `FaaS` types from the `blueprint-faas` crate.
+//! The `FaaS` trait and types are defined in `blueprint-faas` to avoid
 //! circular dependencies and substrate dependencies.
 
 #[cfg(feature = "faas")]
@@ -14,7 +14,7 @@ mod stub {
     use std::fmt;
     use std::sync::Arc;
 
-    /// Stub FaasError
+    /// Stub `FaasError`
     #[derive(Debug)]
     pub struct FaasError;
 
@@ -32,26 +32,29 @@ mod stub {
         async fn invoke(&self, _job_call: JobCall) -> Result<JobResult, FaasError> {
             Err(FaasError)
         }
-        fn provider_name(&self) -> &str {
+        fn provider_name(&self) -> &'static str {
             "stub"
         }
     }
 
-    /// Stub FaasRegistry
+    /// Stub `FaasRegistry`
     #[derive(Default, Debug)]
     pub struct FaasRegistry;
 
     impl FaasRegistry {
+        #[must_use]
         pub fn new() -> Self {
             Self
         }
 
         pub fn register(&mut self, _job_id: u32, _executor: Arc<dyn FaasExecutor>) {}
 
+        #[must_use]
         pub fn get(&self, _job_id: u32) -> Option<&Arc<dyn FaasExecutor>> {
             None
         }
 
+        #[must_use]
         pub fn is_faas_job(&self, _job_id: u32) -> bool {
             false
         }
