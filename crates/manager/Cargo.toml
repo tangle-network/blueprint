@@ -126,5 +126,14 @@ tee = ["blueprint-runner/tee"]
 ## [kata-containers]: https://katacontainers.io/
 containers = ["dep:kube", "dep:k8s-openapi"]
 
+# Optional integrations toggled by remote serverless modules
+tangle-client = []
+blueprint-faas = []
+aws = []
+gcp = []
+azure = []
+custom = []
+digitalocean = []
+
 [package.metadata.dist]
 dist = false

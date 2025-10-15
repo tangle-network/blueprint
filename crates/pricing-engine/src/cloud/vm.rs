@@ -291,10 +291,7 @@ impl PricingFetcher {
 
         // Compute Engine service ID
         let service_id = "services/6F81-5844-456A";
-        let url = format!(
-            "https://cloudbilling.googleapis.com/v1/{}/skus?key={}",
-            service_id, api_key
-        );
+        let url = format!("https://cloudbilling.googleapis.com/v1/{service_id}/skus?key={api_key}");
 
         #[derive(Deserialize, Debug)]
         struct GcpBillingResponse {
@@ -350,19 +347,19 @@ impl PricingFetcher {
             .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| PricingError::HttpError(format!("Failed to fetch GCP pricing: {}", e)))?;
+            .map_err(|e| PricingError::HttpError(format!("Failed to fetch GCP pricing: {e}")))?;
 
         if !response.status().is_success() {
+            let status = response.status();
             return Err(PricingError::HttpError(format!(
-                "GCP Cloud Billing API returned status: {}. Check API key is valid.",
-                response.status()
+                "GCP Cloud Billing API returned status: {status}. Check API key is valid."
             )));
         }
 
         let billing_data: GcpBillingResponse = response
             .json()
             .await
-            .map_err(|e| PricingError::HttpError(format!("Failed to parse GCP pricing: {}", e)))?;
+            .map_err(|e| PricingError::HttpError(format!("Failed to parse GCP pricing: {e}")))?;
 
         // Parse instance pricing from SKUs
         // GCP pricing is complex - this is simplified to extract compute pricing
@@ -491,24 +488,23 @@ impl PricingFetcher {
         let response = self
             .client
             .get(url)
-            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Authorization", format!("Bearer {api_key}"))
             .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| {
-                PricingError::HttpError(format!("Failed to fetch Vultr pricing: {}", e))
-            })?;
+            .map_err(|e| PricingError::HttpError(format!("Failed to fetch Vultr pricing: {e}")))?;
 
         if !response.status().is_success() {
+            let status = response.status();
             return Err(PricingError::HttpError(format!(
-                "Vultr API returned status: {}. Check API key is valid.",
-                response.status()
+                "Vultr API returned status: {status}. Check API key is valid."
             )));
         }
 
-        let plans_data: VultrPlansResponse = response.json().await.map_err(|e| {
-            PricingError::HttpError(format!("Failed to parse Vultr pricing: {}", e))
-        })?;
+        let plans_data: VultrPlansResponse = response
+            .json()
+            .await
+            .map_err(|e| PricingError::HttpError(format!("Failed to parse Vultr pricing: {e}")))?;
 
         let mut result = Vec::new();
 

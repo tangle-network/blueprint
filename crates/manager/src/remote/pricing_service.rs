@@ -2,7 +2,7 @@
 //!
 //! This module provides the pricing service that operators use to:
 //! 1. Fetch blueprint metadata with profiling data
-//! 2. Analyze deployment strategy (FaaS vs VM sizing)
+//! 2. Analyze deployment strategy (`FaaS` vs VM sizing)
 //! 3. Calculate pricing using the pricing-engine
 //! 4. Return a competitive quote
 //!
@@ -53,7 +53,7 @@ pub struct PricingQuote {
     /// Estimated monthly cost in USD (for VM deployments)
     pub monthly_cost_usd: f64,
 
-    /// Estimated per-execution cost in USD (for FaaS deployments)
+    /// Estimated per-execution cost in USD (for `FaaS` deployments)
     pub per_execution_cost_usd: f64,
 
     /// Expected executions per month (for total cost calculation)
@@ -210,8 +210,7 @@ impl OperatorPricingService {
                     .partial_cmp(&b.monthly_vm_cost_usd)
                     .unwrap()
             })
-            .map(|c| c.monthly_vm_cost_usd)
-            .unwrap_or(0.0);
+            .map_or(0.0, |c| c.monthly_vm_cost_usd);
 
         let cheapest_faas = provider_costs
             .iter()
@@ -221,8 +220,7 @@ impl OperatorPricingService {
                     .partial_cmp(&b.per_execution_cost_usd)
                     .unwrap()
             })
-            .map(|c| c.per_execution_cost_usd)
-            .unwrap_or(0.0);
+            .map_or(0.0, |c| c.per_execution_cost_usd);
 
         // Estimate monthly executions (default: 10k/month for FaaS)
         let estimated_monthly_executions = if matches!(
@@ -249,7 +247,7 @@ impl OperatorPricingService {
         })
     }
 
-    /// Calculate FaaS cost per execution using real pricing APIs
+    /// Calculate `FaaS` cost per execution using real pricing APIs
     async fn calculate_faas_cost(
         &self,
         provider: &str,
@@ -258,11 +256,10 @@ impl OperatorPricingService {
         let memory_mb = benchmark
             .memory_details
             .as_ref()
-            .map(|m| m.peak_memory_mb as u64)
-            .unwrap_or(128);
+            .map_or(128.0_f32, |m| m.peak_memory_mb.max(1.0));
 
         let duration_secs = benchmark.duration_secs as f64;
-        let memory_gb = memory_mb as f64 / 1024.0;
+        let memory_gb = f64::from(memory_mb) / 1024.0;
 
         // Fetch real pricing from provider APIs
         let pricing = match provider {

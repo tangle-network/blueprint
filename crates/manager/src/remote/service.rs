@@ -752,9 +752,8 @@ impl RemoteDeploymentService {
             return Ok(None);
         }
 
-        let blueprint_id = match blueprint_id {
-            Some(id) => id,
-            None => return Ok(None), // No blueprint ID, can't analyze
+        let Some(blueprint_id) = blueprint_id else {
+            return Ok(None);
         };
 
         let metadata = super::fetch_blueprint_metadata(blueprint_id, None, None).await?;

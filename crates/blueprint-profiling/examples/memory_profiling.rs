@@ -1,81 +1,57 @@
-//! Memory-intensive profiling example to demonstrate memory measurement on macOS.
+//! Memory intensive profiling example showing peak memory tracking.
 
-use blueprint_profiling::{is_faas_compatible, profile_job, FaasProvider, InputGenerator};
-
-/// Input generator that varies sizes to trigger memory allocation
-struct VaryingSizeGenerator;
-
-impl InputGenerator for VaryingSizeGenerator {
-    fn generate_inputs(&self, count: usize) -> Vec<Vec<u8>> {
-        (0..count)
-            .map(|i| {
-                let size = match i % 3 {
-                    0 => 1000,      // 1KB
-                    1 => 100_000,   // 100KB
-                    _ => 1_000_000, // 1MB
-                };
-                vec![i as u8; size]
-            })
-            .collect()
-    }
-}
+use blueprint_profiling::{ProfileConfig, ProfileRunner};
+use rand::{rngs::StdRng, Rng, SeedableRng};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[tokio::main]
-async fn main() {
-    println!("Blueprint Memory Profiling Example - Testing on macOS\n");
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Blueprint Memory Profiling Example\n");
 
-    let generator = VaryingSizeGenerator;
+    let config = ProfileConfig {
+        sample_size: 15,
+        warmup_runs: 2,
+        ..Default::default()
+    };
 
-    // Profile a memory-intensive function
-    let profile = profile_job(
-        0,
-        |input| async move {
-            // Allocate memory proportional to input size
-            let mut buffer = Vec::with_capacity(input.len() * 2);
-            buffer.extend_from_slice(&input);
-            buffer.extend_from_slice(&input);
+    // Use shared state to vary workload size on each invocation
+    let rng = Arc::new(Mutex::new(StdRng::seed_from_u64(42)));
 
-            // Do some computation
-            let sum: u64 = buffer.iter().map(|&b| b as u64).sum();
-            sum.to_le_bytes().to_vec()
+    let profile = ProfileRunner::profile_job(
+        || {
+            let rng = Arc::clone(&rng);
+            async move {
+                let mut rng = rng.lock().await;
+                let size = rng.gen_range(10_000..200_000);
+
+                let mut buffer = Vec::with_capacity(size);
+                buffer.resize(size, 7u8);
+
+                // Simulate CPU work
+                let sum: u64 = buffer.iter().map(|&b| b as u64).sum();
+                if sum == 0 {
+                    Err("unexpected zero sum".into())
+                } else {
+                    Ok(())
+                }
+            }
         },
-        &generator,
-        15, // 15 samples
+        config,
     )
-    .await;
+    .await?;
 
-    // Display results
-    println!("Profiling Results:");
-    println!("  Sample size: {}", profile.sample_size);
-    println!("  Min duration: {}ms", profile.min_duration_ms);
-    println!("  Avg duration: {}ms", profile.avg_duration_ms);
+    println!("Profiling Results (Sample size: {})", profile.sample_size);
+    println!("  Average duration: {}ms", profile.avg_duration_ms);
     println!("  P95 duration: {}ms", profile.p95_duration_ms);
-    println!("  Max duration: {}ms", profile.max_duration_ms);
-    println!("  Min memory: {}MB", profile.min_memory_mb);
-    println!("  Avg memory: {}MB", profile.avg_memory_mb);
     println!("  Peak memory: {}MB", profile.peak_memory_mb);
-    println!();
-
-    // Check FaaS compatibility
-    println!("FaaS Compatibility:");
+    println!("  Stateful: {}", profile.stateful);
     println!(
-        "  AWS Lambda: {}",
-        is_faas_compatible(&profile, FaasProvider::AwsLambda)
-    );
-    println!(
-        "  GCP Functions: {}",
-        is_faas_compatible(&profile, FaasProvider::GcpFunctions)
-    );
-    println!(
-        "  Azure Functions: {}",
-        is_faas_compatible(&profile, FaasProvider::AzureFunctions)
-    );
-    println!(
-        "  Custom: {}",
-        is_faas_compatible(&profile, FaasProvider::Custom)
+        "  Persistent connections: {}",
+        profile.persistent_connections
     );
     println!();
 
-    println!("✅ Memory profiling completed successfully on macOS!");
-    println!("   Note: Memory measurements use libc::getrusage which works cross-platform");
+    println!("✅ Memory profiling completed successfully.");
+    Ok(())
 }

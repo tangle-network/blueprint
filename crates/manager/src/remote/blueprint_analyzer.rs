@@ -8,14 +8,14 @@ use serde::{Deserialize, Serialize};
 /// Deployment strategy recommendation based on blueprint analysis.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeploymentStrategy {
-    /// Pure serverless: all jobs can run on FaaS
+    /// Pure serverless: all jobs can run on `FaaS`
     Serverless {
-        /// All jobs that will be deployed to FaaS
+        /// All jobs that will be deployed to `FaaS`
         job_ids: Vec<u32>,
     },
-    /// Hybrid: some jobs on FaaS, some local/VM
+    /// Hybrid: some jobs on `FaaS`, some local/VM
     Hybrid {
-        /// Jobs that will run on FaaS
+        /// Jobs that will run on `FaaS`
         faas_jobs: Vec<u32>,
         /// Jobs that will run locally/VM
         local_jobs: Vec<u32>,
@@ -27,7 +27,7 @@ pub enum DeploymentStrategy {
     },
 }
 
-/// FaaS compatibility limits (provider-specific).
+/// `FaaS` compatibility limits (provider-specific).
 #[derive(Debug, Clone)]
 pub struct FaasLimits {
     /// Maximum memory in MB
@@ -40,6 +40,7 @@ pub struct FaasLimits {
 
 impl FaasLimits {
     /// AWS Lambda limits
+    #[must_use]
     pub fn aws_lambda() -> Self {
         Self {
             max_memory_mb: 10240,  // 10 GB
@@ -49,6 +50,7 @@ impl FaasLimits {
     }
 
     /// GCP Cloud Functions limits
+    #[must_use]
     pub fn gcp_functions() -> Self {
         Self {
             max_memory_mb: 32768,   // 32 GB
@@ -58,6 +60,7 @@ impl FaasLimits {
     }
 
     /// Azure Functions limits
+    #[must_use]
     pub fn azure_functions() -> Self {
         Self {
             max_memory_mb: 14336,  // 14 GB
@@ -66,7 +69,8 @@ impl FaasLimits {
         }
     }
 
-    /// DigitalOcean Functions limits
+    /// `DigitalOcean` Functions limits
+    #[must_use]
     pub fn digitalocean_functions() -> Self {
         Self {
             max_memory_mb: 8192,   // 8 GB (configurable: 128MB-8GB)
@@ -75,7 +79,8 @@ impl FaasLimits {
         }
     }
 
-    /// Custom FaaS (conservative defaults)
+    /// Custom `FaaS` (conservative defaults)
+    #[must_use]
     pub fn custom() -> Self {
         Self {
             max_memory_mb: 2048,   // 2 GB
@@ -106,17 +111,16 @@ pub struct ResourceSizing {
 
 impl ResourceSizing {
     /// Calculate recommended sizing from job profiles
+    #[must_use]
     pub fn from_profiles(profiles: &[Option<super::blueprint_fetcher::JobProfile>]) -> Self {
         let mut max_memory_mb = 512; // Minimum baseline
         let mut has_data = false;
 
-        for profile_opt in profiles {
-            if let Some(profile) = profile_opt {
-                has_data = true;
-                // Add 50% headroom for safety
-                let job_memory = (profile.peak_memory_mb as f32 * 1.5) as u32;
-                max_memory_mb = max_memory_mb.max(job_memory);
-            }
+        for profile in profiles.iter().flatten() {
+            has_data = true;
+            // Add 50% headroom for safety using integer arithmetic
+            let job_memory = profile.peak_memory_mb.saturating_mul(3) / 2;
+            max_memory_mb = max_memory_mb.max(job_memory);
         }
 
         // Estimate CPU based on memory (heuristic: 1 core per 2GB memory)
@@ -156,6 +160,7 @@ pub struct BlueprintAnalysis {
 ///
 /// If job profiles are available (from `cargo tangle blueprint profile`),
 /// uses actual benchmarking data. Otherwise, falls back to heuristics.
+#[must_use]
 pub fn analyze_blueprint(
     job_count: u32,
     job_profiles: &[Option<super::blueprint_fetcher::JobProfile>],
@@ -235,7 +240,7 @@ fn analyze_job_with_profile(
     let mut incompatible_reasons = vec![];
 
     // 1. Execution time
-    if profile.p95_duration_ms > (limits.max_timeout_secs as u64 * 1000) {
+    if profile.p95_duration_ms > (u64::from(limits.max_timeout_secs) * 1000) {
         incompatible_reasons.push(format!(
             "p95 duration {}ms exceeds FaaS timeout {}s",
             profile.p95_duration_ms, limits.max_timeout_secs

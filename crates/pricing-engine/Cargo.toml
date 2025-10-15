@@ -90,6 +90,7 @@ blueprint-runner = { path = "../runner", features = ["std", "tangle"] }
 blueprint-chain-setup = { path = "../chain-setup" }
 tempfile = { workspace = true }
 tonic = { workspace = true }
+sp-core = { workspace = true }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }

@@ -4,7 +4,7 @@
 //! - Blueprint analysis algorithms
 //! - Deployment strategy selection
 //! - Resource requirement calculations
-//! - FaaS compatibility determination
+//! - `FaaS` compatibility determination
 //!
 //! NO MOCKS - All tests validate real computation and decision-making logic.
 
@@ -139,20 +139,19 @@ fn test_blueprint_analysis_edge_cases() {
 /// Test resource spec conversion logic with REAL calculations
 #[test]
 fn test_resource_spec_conversion_accuracy() {
-    use blueprint_manager::rt::ResourceLimits;
-
-    // Create real resource limits
-    let limits = ResourceLimits {
-        cpu_count: Some(4),
-        memory_size: 8 * 1024 * 1024 * 1024,     // 8 GB in bytes
-        storage_space: 100 * 1024 * 1024 * 1024, // 100 GB in bytes
-        gpu_count: Some(1),
-        network_bandwidth: Some(1000), // 1 Gbps
-    };
-
-    // This should be available in the manager when remote-providers is enabled
     #[cfg(feature = "remote-providers")]
     {
+        use blueprint_manager::rt::ResourceLimits;
+
+        // Create real resource limits
+        let limits = ResourceLimits {
+            cpu_count: Some(4),
+            memory_size: 8 * 1024 * 1024 * 1024, // 8 GB in bytes
+            storage_space: 100 * 1024 * 1024 * 1024, // 100 GB in bytes
+            gpu_count: Some(1),
+            network_bandwidth: Some(1000), // 1 Gbps
+        };
+
         use blueprint_remote_providers::resources::ResourceSpec;
 
         // Convert to ResourceSpec (this tests the actual conversion logic)
@@ -185,14 +184,12 @@ fn test_resource_spec_conversion_accuracy() {
 
         assert!(
             (hourly_cost - expected_total).abs() < 0.01,
-            "Cost calculation mismatch: got {}, expected {}",
-            hourly_cost,
-            expected_total
+            "Cost calculation mismatch: got {hourly_cost}, expected {expected_total}"
         );
     }
 }
 
-/// Test FaaS limits from real providers - validates the limit definitions match reality
+/// Test `FaaS` limits from real providers - validates the limit definitions match reality
 #[test]
 fn test_faas_provider_limits_accuracy() {
     use blueprint_manager::remote::blueprint_analyzer::FaasLimits;
@@ -395,7 +392,7 @@ fn test_profiling_data_integration() {
 
     // The analyzer should account for p95, not just average
     // If p95 is within limits (50s < 900s), it should still be FaaS-compatible
-    if 50000 < (limits.max_timeout_secs as u64 * 1000) {
+    if 50000 < (u64::from(limits.max_timeout_secs) * 1000) {
         assert_eq!(
             analysis.faas_compatible_jobs.len(),
             1,

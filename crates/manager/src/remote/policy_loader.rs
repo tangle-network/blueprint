@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Minimal policy structure matching CLI config.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DeploymentPolicy {
     #[serde(default)]
     pub serverless: ServerlessSettings,
@@ -65,14 +65,6 @@ impl Default for ServerlessSettings {
             default_memory_mb: default_memory(),
             default_timeout_secs: default_timeout(),
             fallback_to_vm: default_fallback(),
-        }
-    }
-}
-
-impl Default for DeploymentPolicy {
-    fn default() -> Self {
-        Self {
-            serverless: ServerlessSettings::default(),
         }
     }
 }

@@ -116,9 +116,7 @@ fn test_cost_estimation_formula() {
 
     assert!(
         (cost - expected_total).abs() < 0.01,
-        "Cost calculation should match formula: got {}, expected {}",
-        cost,
-        expected_total
+        "Cost calculation should match formula: got {cost}, expected {expected_total}"
     );
 
     // Test spot instance discount (30% off)
@@ -132,9 +130,7 @@ fn test_cost_estimation_formula() {
 
     assert!(
         (spot_cost - expected_spot).abs() < 0.01,
-        "Spot cost should be 70% of on-demand: got {}, expected {}",
-        spot_cost,
-        expected_spot
+        "Spot cost should be 70% of on-demand: got {spot_cost}, expected {expected_spot}"
     );
 }
 
@@ -434,12 +430,11 @@ fn test_pricing_calculator_requires_config() {
 
     // Verify it's a ConfigurationError
     let err = result.unwrap_err();
-    let err_msg = format!("{:?}", err);
+    let err_msg = format!("{err:?}");
 
     assert!(
         err_msg.contains("ConfigurationError") || err_msg.contains("hardcoded pricing removed"),
-        "Should be ConfigurationError explaining hardcoded pricing removal: {}",
-        err_msg
+        "Should be ConfigurationError explaining hardcoded pricing removal: {err_msg}"
     );
 
     // For real pricing, users must use:
@@ -473,17 +468,13 @@ fn test_spot_instance_discount_logic() {
 
     assert!(
         (spot_cost - expected_spot).abs() < 0.01,
-        "Spot should be 30% cheaper: on-demand=${:.2}, spot=${:.2}, expected=${:.2}",
-        on_demand_cost,
-        spot_cost,
-        expected_spot
+        "Spot should be 30% cheaper: on-demand=${on_demand_cost:.2}, spot=${spot_cost:.2}, expected=${expected_spot:.2}"
     );
 
     // Verify discount percentage
     let discount_pct = (on_demand_cost - spot_cost) / on_demand_cost * 100.0;
     assert!(
         (discount_pct - 30.0).abs() < 1.0,
-        "Discount should be ~30%, got {:.1}%",
-        discount_pct
+        "Discount should be ~30%, got {discount_pct:.1}%"
     );
 }

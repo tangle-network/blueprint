@@ -118,12 +118,12 @@ async fn deploy_function(
             Ok(decoded) => match serde_json::from_slice::<FaasConfig>(&decoded) {
                 Ok(cfg) => cfg,
                 Err(e) => {
-                    eprintln!("Failed to parse config: {}", e);
+                    eprintln!("Failed to parse config: {e}");
                     FaasConfig::default()
                 }
             },
             Err(e) => {
-                eprintln!("Failed to decode base64 config: {}", e);
+                eprintln!("Failed to decode base64 config: {e}");
                 FaasConfig::default()
             }
         }
@@ -152,7 +152,7 @@ async fn deploy_function(
     let function_dir = functions_dir.join(&function_id);
     if let Err(e) = fs::create_dir_all(&function_dir) {
         let response = ErrorResponse {
-            error: format!("Failed to create function directory: {}", e),
+            error: format!("Failed to create function directory: {e}"),
             code: Some("INFRASTRUCTURE_ERROR".to_string()),
             function_id: Some(function_id),
         };
@@ -166,7 +166,7 @@ async fn deploy_function(
     let zip_path = function_dir.join("function.zip");
     if let Err(e) = fs::write(&zip_path, bytes.as_ref()) {
         let response = ErrorResponse {
-            error: format!("Failed to write zip file: {}", e),
+            error: format!("Failed to write zip file: {e}"),
             code: Some("INFRASTRUCTURE_ERROR".to_string()),
             function_id: Some(function_id),
         };
@@ -187,7 +187,7 @@ async fn deploy_function(
         .output()
     {
         let response = ErrorResponse {
-            error: format!("Failed to extract zip: {}", e),
+            error: format!("Failed to extract zip: {e}"),
             code: Some("INFRASTRUCTURE_ERROR".to_string()),
             function_id: Some(function_id),
         };
@@ -200,7 +200,7 @@ async fn deploy_function(
     // Make bootstrap executable
     if let Err(e) = Command::new("chmod").arg("+x").arg(&binary_path).output() {
         let response = ErrorResponse {
-            error: format!("Failed to make bootstrap executable: {}", e),
+            error: format!("Failed to make bootstrap executable: {e}"),
             code: Some("INFRASTRUCTURE_ERROR".to_string()),
             function_id: Some(function_id),
         };
@@ -226,7 +226,7 @@ async fn deploy_function(
 
     let response = DeploymentInfo {
         function_id: function_id.clone(),
-        endpoint: format!("http://localhost:8080/api/functions/{}/invoke", function_id),
+        endpoint: format!("http://localhost:8080/api/functions/{function_id}/invoke"),
         status: "deployed".to_string(),
         cold_start_ms: 500,
         memory_mb: config.memory_mb,
@@ -326,9 +326,11 @@ async fn invoke_function(
                     ))
                 }
                 Err(e) => {
-                    eprintln!("Failed to parse function output: {}", e);
-                    eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-                    eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+                    eprintln!("Failed to parse function output: {e}");
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    eprintln!("stdout: {stdout}");
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    eprintln!("stderr: {stderr}");
                     let response = InvokeResponse {
                         job_id: request.job_id,
                         result: vec![],
@@ -344,10 +346,8 @@ async fn invoke_function(
             }
         }
         Ok(output) => {
-            eprintln!(
-                "Function execution failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("Function execution failed: {stderr}");
             let response = InvokeResponse {
                 job_id: request.job_id,
                 result: vec![],
@@ -361,9 +361,9 @@ async fn invoke_function(
             ))
         }
         Err(e) => {
-            eprintln!("Failed to execute function: {}", e);
+            eprintln!("Failed to execute function: {e}");
             let response = ErrorResponse {
-                error: format!("Failed to execute function: {}", e),
+                error: format!("Failed to execute function: {e}"),
                 code: Some("EXECUTION_ERROR".to_string()),
                 function_id: Some(function_id),
             };
@@ -415,7 +415,7 @@ async fn get_deployment(
         Some(meta) => {
             let response = DeploymentInfo {
                 function_id: function_id.clone(),
-                endpoint: format!("http://localhost:8080/api/functions/{}/invoke", function_id),
+                endpoint: format!("http://localhost:8080/api/functions/{function_id}/invoke"),
                 status: "deployed".to_string(),
                 cold_start_ms: 500,
                 memory_mb: meta.config.memory_mb,

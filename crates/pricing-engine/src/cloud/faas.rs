@@ -203,11 +203,11 @@ impl FaasPricingFetcher {
             "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/current/index.json";
 
         let response = self.client.get(url).send().await.map_err(|e| {
-            PricingError::HttpError(format!("Failed to fetch AWS Lambda pricing: {}", e))
+            PricingError::HttpError(format!("Failed to fetch AWS Lambda pricing: {e}"))
         })?;
 
         let price_list: AwsLambdaPriceList = response.json().await.map_err(|e| {
-            PricingError::HttpError(format!("Failed to parse AWS Lambda pricing: {}", e))
+            PricingError::HttpError(format!("Failed to parse AWS Lambda pricing: {e}"))
         })?;
 
         // Parse pricing data
@@ -225,8 +225,8 @@ impl FaasPricingFetcher {
 
             // Find pricing for this product
             if let Some(on_demand_terms) = price_list.terms.on_demand.get(product_id) {
-                for (_term_id, price_dim) in on_demand_terms {
-                    for (_dim_id, price_detail) in &price_dim.price_dimensions {
+                for price_dim in on_demand_terms.values() {
+                    for price_detail in price_dim.price_dimensions.values() {
                         if let Some(usd_price) = price_detail.price_per_unit.get("USD") {
                             let price: f64 = usd_price.parse().unwrap_or(0.0);
 
@@ -321,20 +321,17 @@ impl FaasPricingFetcher {
         // Fetch from Cloud Billing Catalog API
         // Service ID for Cloud Run (which includes Cloud Functions 2nd gen)
         let service_id = "services/cloud-run";
-        let url = format!(
-            "https://cloudbilling.googleapis.com/v1/{}/skus?key={}",
-            service_id, api_key
-        );
+        let url = format!("https://cloudbilling.googleapis.com/v1/{service_id}/skus?key={api_key}");
 
         let response =
             self.client.get(&url).send().await.map_err(|e| {
-                PricingError::HttpError(format!("Failed to fetch GCP pricing: {}", e))
+                PricingError::HttpError(format!("Failed to fetch GCP pricing: {e}"))
             })?;
 
         let catalog: GcpBillingCatalog = response
             .json()
             .await
-            .map_err(|e| PricingError::HttpError(format!("Failed to parse GCP pricing: {}", e)))?;
+            .map_err(|e| PricingError::HttpError(format!("Failed to parse GCP pricing: {e}")))?;
 
         // Parse pricing data
         let mut region_prices = HashMap::new();
@@ -404,22 +401,19 @@ impl FaasPricingFetcher {
 
         // Fetch from Azure Retail Prices API
         // Filter for Azure Functions in specific region
-        let filter = format!(
-            "serviceName eq 'Functions' and armRegionName eq '{}'",
-            region
-        );
-        let url = format!(
-            "https://prices.azure.com/api/retail/prices?$filter={}",
-            urlencoding::encode(&filter)
-        );
+        let filter = format!("serviceName eq 'Functions' and armRegionName eq '{region}'");
+        let encoded_filter = urlencoding::encode(&filter);
+        let url = format!("https://prices.azure.com/api/retail/prices?$filter={encoded_filter}");
 
-        let response = self.client.get(&url).send().await.map_err(|e| {
-            PricingError::HttpError(format!("Failed to fetch Azure pricing: {}", e))
-        })?;
+        let response =
+            self.client.get(&url).send().await.map_err(|e| {
+                PricingError::HttpError(format!("Failed to fetch Azure pricing: {e}"))
+            })?;
 
-        let prices: AzureRetailPrices = response.json().await.map_err(|e| {
-            PricingError::HttpError(format!("Failed to parse Azure pricing: {}", e))
-        })?;
+        let prices: AzureRetailPrices = response
+            .json()
+            .await
+            .map_err(|e| PricingError::HttpError(format!("Failed to parse Azure pricing: {e}")))?;
 
         // Parse pricing data
         let mut memory_cost = 0.000016; // Default: $0.000016 per GB-s

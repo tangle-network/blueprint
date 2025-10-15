@@ -486,6 +486,7 @@ mod tests {
                         name: "blueprint_tangle_extra::metadata::macros::tests::with_jobs::foo"
                             .into(),
                         description: None,
+                        profile: None,
                     },
                     params: vec![],
                     result: vec![FieldType::Uint64],
@@ -497,6 +498,7 @@ mod tests {
                         name: "blueprint_tangle_extra::metadata::macros::tests::with_jobs::bar"
                             .into(),
                         description: None,
+                        profile: None,
                     },
                     params: vec![FieldType::Uint64],
                     result: vec![FieldType::Uint64],

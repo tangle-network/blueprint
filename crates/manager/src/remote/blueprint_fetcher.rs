@@ -25,14 +25,17 @@ pub struct JobProfile {
 }
 
 impl JobProfile {
-    /// Convert to pricing-engine BenchmarkProfile for cost calculation
+    /// Convert to pricing-engine `BenchmarkProfile` for cost calculation
     ///
-    /// This creates a simplified BenchmarkProfile that can be used with the
+    /// This creates a simplified `BenchmarkProfile` that can be used with the
     /// existing pricing-engine infrastructure.
     ///
     /// This is a pure data transformation - no cloud access required.
+    #[must_use]
     pub fn to_pricing_benchmark_profile(&self) -> blueprint_pricing_engine_lib::BenchmarkProfile {
-        use blueprint_pricing_engine_lib::benchmark::*;
+        use blueprint_pricing_engine_lib::benchmark::{
+            CpuBenchmarkResult, MemoryAccessMode, MemoryBenchmarkResult, MemoryOperationType,
+        };
 
         // Estimate CPU cores from duration (heuristic)
         // Fast jobs (<100ms) likely use < 1 core, slower jobs use more
@@ -70,7 +73,7 @@ impl JobProfile {
                 avg_memory_mb: (self.peak_memory_mb as f32 * 0.7), // Avg ~70% of peak
                 peak_memory_mb: self.peak_memory_mb as f32,
                 block_size_kb: 4,
-                total_size_mb: self.peak_memory_mb as u64,
+                total_size_mb: u64::from(self.peak_memory_mb),
                 operations_per_second: 1000.0,
                 transfer_rate_mb_s: 100.0,
                 access_mode: MemoryAccessMode::Sequential,
@@ -273,7 +276,7 @@ async fn fetch_mock(blueprint_id: u64) -> Result<BlueprintMetadata> {
 
 /// Decode profiling data from chain metadata
 ///
-/// Decodes base64-encoded compressed profiling data from ServiceMetadata.
+/// Decodes base64-encoded compressed profiling data from `ServiceMetadata`.
 fn decode_profiles_from_chain(encoded: &str) -> Result<Vec<Option<JobProfile>>> {
     use base64::Engine;
 

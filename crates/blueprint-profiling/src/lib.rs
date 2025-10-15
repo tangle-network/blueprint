@@ -218,7 +218,9 @@ impl BlueprintProfiles {
     /// Returns None if the description doesn't contain profiling data marker.
     /// Returns Some(Err) if the description has the marker but decoding fails.
     pub fn from_description_field(description: &str) -> Option<Result<Self, ProfilingError>> {
-        description.strip_prefix("[PROFILING_DATA_V1]").map(Self::from_base64_string)
+        description
+            .strip_prefix("[PROFILING_DATA_V1]")
+            .map(Self::from_base64_string)
     }
 }
 
@@ -557,11 +559,8 @@ mod tests {
 
         // Verify a few jobs
         assert_eq!(decompressed.jobs.get(&0).unwrap().peak_memory_mb, 256);
-        assert_eq!(decompressed.jobs.get(&5).unwrap().stateful, true);
-        assert_eq!(
-            decompressed.jobs.get(&7).unwrap().persistent_connections,
-            true
-        );
+        assert!(decompressed.jobs.get(&5).unwrap().stateful);
+        assert!(decompressed.jobs.get(&7).unwrap().persistent_connections);
     }
 
     #[test]
@@ -714,6 +713,6 @@ mod tests {
         let decoded = BlueprintProfiles::from_base64_string(&encoded).unwrap();
         assert_eq!(decoded.jobs.len(), 10);
         assert_eq!(decoded.jobs.get(&0).unwrap().peak_memory_mb, 256);
-        assert_eq!(decoded.jobs.get(&5).unwrap().stateful, true);
+        assert!(decoded.jobs.get(&5).unwrap().stateful);
     }
 }

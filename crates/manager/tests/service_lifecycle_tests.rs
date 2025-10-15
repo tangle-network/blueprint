@@ -1,13 +1,13 @@
 //! Comprehensive service lifecycle tests - NO MOCKS
 //!
 //! These tests validate the ACTUAL service management logic:
-//! - Status state machine (NotStarted → Pending → Running → Finished/Error)
+//! - Status state machine (`NotStarted` → `Pending` → `Running` → `Finished`/`Error`)
 //! - Process spawning and monitoring
 //! - Bridge connection establishment and timeouts
 //! - Graceful vs forceful shutdown
 //! - Resource cleanup
 //! - Error recovery and restart logic
-//! - ProcessHandle behavior
+//! - `ProcessHandle` behavior
 //!
 //! All tests use REAL types and validate actual service lifecycle logic.
 
@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 #[test]
 fn test_status_enum_variants() {
     // All 6 status variants should be distinct
-    let statuses = vec![
+    let statuses = [
         Status::NotStarted,
         Status::Pending,
         Status::Running,
@@ -45,7 +45,7 @@ fn test_status_enum_variants() {
     );
 }
 
-/// Test status transition logic: NotStarted → Running
+/// Test status transition logic: `NotStarted` → `Running`
 #[test]
 fn test_status_transition_not_started_to_running() {
     let initial = Status::NotStarted;
@@ -60,7 +60,7 @@ fn test_status_transition_not_started_to_running() {
     );
 }
 
-/// Test status transition logic: Running → Finished
+/// Test status transition logic: `Running` → `Finished`
 #[test]
 fn test_status_transition_running_to_finished() {
     let running = Status::Running;
@@ -71,7 +71,7 @@ fn test_status_transition_running_to_finished() {
     assert!(matches!(finished, Status::Finished));
 }
 
-/// Test status transition logic: Running → Error
+/// Test status transition logic: `Running` → `Error`
 #[test]
 fn test_status_transition_running_to_error() {
     let running = Status::Running;
@@ -150,7 +150,7 @@ async fn test_process_handle_wait_for_status_change() {
 /// Test ProcessHandle abort mechanism
 #[tokio::test]
 async fn test_process_handle_abort() {
-    let (status_tx, status_rx) = mpsc::unbounded_channel::<Status>();
+    let (_status_tx, status_rx) = mpsc::unbounded_channel::<Status>();
     let (abort_tx, mut abort_rx) = tokio::sync::oneshot::channel::<()>();
 
     let handle = ProcessHandle::new(status_rx, abort_tx);
@@ -167,7 +167,7 @@ async fn test_process_handle_abort() {
 /// Test ProcessHandle abort fails after already aborted
 #[tokio::test]
 async fn test_process_handle_abort_already_aborted() {
-    let (status_tx, status_rx) = mpsc::unbounded_channel::<Status>();
+    let (_status_tx, status_rx) = mpsc::unbounded_channel::<Status>();
     let (abort_tx, _abort_rx) = tokio::sync::oneshot::channel::<()>();
 
     let handle = ProcessHandle::new(status_rx, abort_tx);
@@ -249,14 +249,10 @@ fn test_status_pattern_matching() {
 
     // Pattern matching should work correctly
     match status {
-        Status::NotStarted => panic!("Wrong status"),
-        Status::Pending => panic!("Wrong status"),
         Status::Running => {
             // Correct
         }
-        Status::Finished => panic!("Wrong status"),
-        Status::Error => panic!("Wrong status"),
-        Status::Unknown => panic!("Wrong status"),
+        _ => panic!("Wrong status"),
     }
 
     // PartialEq should work
@@ -461,7 +457,7 @@ fn test_status_clone_copy() {
 /// Test status in collections
 #[test]
 fn test_status_in_collections() {
-    let statuses = vec![Status::NotStarted, Status::Running, Status::Finished];
+    let statuses = [Status::NotStarted, Status::Running, Status::Finished];
 
     assert_eq!(statuses.len(), 3);
     assert!(statuses.contains(&Status::Running));

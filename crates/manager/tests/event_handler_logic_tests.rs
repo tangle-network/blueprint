@@ -21,7 +21,7 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collection
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::GithubFetcher;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::BoundedString;
 
-/// Test FilteredBlueprint creation with different source types
+/// Test `FilteredBlueprint` creation with different source types
 #[test]
 fn test_filtered_blueprint_creation() {
     // Test with GitHub source
@@ -78,7 +78,7 @@ fn test_registration_mode_vs_normal_mode() {
     assert_eq!(normal_blueprint.services.len(), 3);
 }
 
-/// Test ActiveBlueprints data structure operations
+/// Test `ActiveBlueprints` data structure operations
 #[test]
 fn test_active_blueprints_state_management() {
     let mut active: ActiveBlueprints = HashMap::new();
@@ -88,7 +88,7 @@ fn test_active_blueprints_state_management() {
 
     // Add blueprint with multiple services
     let blueprint_id = 100;
-    active.entry(blueprint_id).or_insert_with(HashMap::new);
+    active.entry(blueprint_id).or_default();
 
     // Blueprint exists but has no services yet
     assert!(active.contains_key(&blueprint_id));
@@ -313,8 +313,8 @@ fn test_service_state_synchronization_logic() {
     active.insert(100, services);
 
     // Simulate chain now only lists services 1, 2 (service 3 terminated)
-    let chain_services = vec![1, 2];
-    let local_services = vec![1, 2, 3];
+    let chain_services = [1, 2];
+    let local_services = [1, 2, 3];
 
     // Find services to remove (local but not on-chain)
     let to_remove: Vec<u64> = local_services
@@ -382,7 +382,7 @@ fn test_orphaned_service_detection_logic() {
     ];
 
     // Chain only has blueprint 1 with service 10
-    let chain_blueprint_1_services = vec![10];
+    let chain_blueprint_1_services = [10];
     let chain_has_blueprint_2 = false;
 
     let mut orphaned = vec![];
@@ -447,14 +447,14 @@ fn test_blueprint_name_handling() {
 /// Test service ID uniqueness within blueprint
 #[test]
 fn test_service_id_uniqueness() {
-    let services = vec![1, 2, 3, 4, 5];
+    let services = [1, 2, 3, 4, 5];
 
     // Verify no duplicates
     let unique: std::collections::HashSet<_> = services.iter().collect();
     assert_eq!(unique.len(), services.len());
 
     // Test duplicate detection
-    let services_with_dup = vec![1, 2, 3, 2, 4];
+    let services_with_dup = [1, 2, 3, 2, 4];
     let unique_dup: std::collections::HashSet<_> = services_with_dup.iter().collect();
     assert!(unique_dup.len() < services_with_dup.len()); // Detected duplicate
 }

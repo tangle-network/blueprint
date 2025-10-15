@@ -69,8 +69,6 @@ mod test_helpers {
         };
     }
 
-    pub(crate) use require_kind;
-
     /// Create a unique test cluster name for each test
     pub(crate) fn get_test_cluster_name() -> String {
         use std::sync::atomic::{AtomicU64, Ordering};

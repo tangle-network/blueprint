@@ -6,7 +6,7 @@
 use blueprint_remote_providers::{
     // providers::aws::provisioner::AwsProvisioner,
     // providers::gcp::provisioner::GcpProvisioner,
-    core::{remote::CloudProvider, resources::ResourceSpec},
+    core::resources::ResourceSpec,
 };
 use serial_test::serial;
 use std::time::Duration;

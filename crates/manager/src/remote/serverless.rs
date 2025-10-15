@@ -1,20 +1,29 @@
 //! Serverless deployment for pure-FaaS blueprints.
 //!
-//! This module handles deployment of blueprints where all jobs run on FaaS platforms,
+//! This module handles deployment of blueprints where all jobs run on `FaaS` platforms,
 //! eliminating the need for a full VM by using a minimal orchestrator.
 
 use crate::config::BlueprintManagerContext;
-use crate::error::{Error, Result};
+#[cfg(all(
+    feature = "blueprint-faas",
+    any(
+        feature = "aws",
+        feature = "gcp",
+        feature = "azure",
+        feature = "custom"
+    )
+))]
+use crate::error::Error;
+use crate::error::Result;
 use crate::rt::service::Service;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
-use blueprint_std::collections::HashMap;
 use blueprint_std::path::Path;
 use tracing::{info, warn};
 
 /// Serverless deployment configuration.
 #[derive(Debug, Clone)]
 pub struct ServerlessConfig {
-    /// FaaS provider to use
+    /// `FaaS` provider to use
     pub provider: FaasProviderConfig,
     /// Default memory allocation (MB)
     pub default_memory_mb: u32,
@@ -24,7 +33,7 @@ pub struct ServerlessConfig {
     pub fallback_to_vm: bool,
 }
 
-/// FaaS provider configuration.
+/// `FaaS` provider configuration.
 #[derive(Debug, Clone)]
 pub enum FaasProviderConfig {
     AwsLambda { region: String },
@@ -35,9 +44,9 @@ pub enum FaasProviderConfig {
 
 /// Deploy a blueprint in serverless mode.
 ///
-/// This creates a lightweight orchestrator and optionally deploys jobs to FaaS.
+/// This creates a lightweight orchestrator and optionally deploys jobs to `FaaS`.
 ///
-/// Note: Custom FaaS endpoints don't support auto-deployment - jobs must be
+/// Note: Custom `FaaS` endpoints don't support auto-deployment - jobs must be
 /// deployed manually and configured via policy.
 pub async fn deploy_serverless(
     ctx: &BlueprintManagerContext,
@@ -106,13 +115,13 @@ pub async fn deploy_serverless(
 
 /// Deploy the minimal orchestrator.
 ///
-/// The orchestrator is a lightweight BlueprintRunner that:
+/// The orchestrator is a lightweight `BlueprintRunner` that:
 /// 1. Subscribes to Tangle events
-/// 2. Invokes FaaS functions for each job
+/// 2. Invokes `FaaS` functions for each job
 /// 3. Submits results back to Tangle
 ///
 /// For serverless deployments, we use a tiny instance (t4g.nano ~ $3/month)
-/// instead of a full VM, since the runner only orchestrates FaaS calls.
+/// instead of a full VM, since the runner only orchestrates `FaaS` calls.
 async fn deploy_orchestrator(
     ctx: &BlueprintManagerContext,
     service_name: &str,
