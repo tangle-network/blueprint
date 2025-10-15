@@ -837,6 +837,21 @@ where
 
         poll_fn(|ctx| router.poll_ready(ctx)).await.unwrap_or(());
 
+            
+        blueprint_core::info!(
+            target: "blueprint-runner",
+            producer_count = producers.len(),
+            "Created producer stream with {} producers",
+            producers.len()
+        );
+        
+        if producers.is_empty() {
+            blueprint_core::warn!(
+                target: "blueprint-runner",
+                "No producers found! This will cause the producer stream to never yield any job calls."
+            );
+        }
+
         let producers = producers.into_iter().map(|producer| {
             futures::stream::unfold(producer, |producer| async move {
                 let result;
@@ -907,21 +922,41 @@ where
             );
         }
 
+        blueprint_core::info!(
+            target: "blueprint-runner",
+            "Starting main event loop"
+        );
+
         loop {
+            blueprint_core::info!(
+                target: "blueprint-runner",
+                "Finding ...."
+            );
             tokio::select! {
                 // Receive job calls from producer
                 producer_result = producer_stream.next() => {
+                    blueprint_core::info!(
+                        target: "blueprint-runner",
+                        "Producer stream returned: {:?}",
+                        producer_result.as_ref().map(|r| r.is_ok())
+                    );
+                    
                     match producer_result {
                         Some(Ok(job_call)) => {
-                            blueprint_core::trace!(
+                            blueprint_core::info!(
                                 target: "blueprint-runner",
                                 ?job_call,
-                                "Received a job call"
+                                "Received a job call from producer"
                             );
                             pending_jobs.push(tokio::task::spawn(router.call(job_call)));
                         },
                         Some(Err(e)) => {
-                            blueprint_core::error!(target: "blueprint-runner", "Producer error: {:?}", e);
+                            blueprint_core::error!(
+                                target: "blueprint-runner", 
+                                error = ?e,
+                                "Producer error: {:?}", 
+                                e
+                            );
                             let _ = shutdown_tx.send(true);
                             return Err(ProducerError::Failed(e).into());
                         },

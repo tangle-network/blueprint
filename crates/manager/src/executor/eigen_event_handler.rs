@@ -123,7 +123,7 @@ pub(crate) async fn handle_eigen_event(
     _blueprint_config: &BlueprintEnvironment,
     _ctx: &BlueprintManagerContext,
 ) -> Result<()> {
-    trace!("Received notification {:?}", event);
+    info!("Received notification {:?}", event);
 
     Ok(())
 }

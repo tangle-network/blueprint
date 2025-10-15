@@ -167,8 +167,39 @@ impl<P: Provider> PollingProducer<P> {
     /// If using [`PollingConfig::from_current()`], transport errors may occur when fetching the current block number.
     #[allow(clippy::cast_possible_truncation)]
     pub async fn new(provider: Arc<P>, mut config: PollingConfig) -> Result<Self, TransportError> {
+        blueprint_core::info!(
+            target: "evm-polling-producer",
+            "new PollingProducer"
+        );
         if let StartBlockSource::Current(current_block) = &mut config.start_block {
-            *current_block = get_block_number(provider.clone()).await?;
+            blueprint_core::info!(
+                target: "evm-polling-producer",
+                "fetching new block ... "
+            );
+            // Add timeout to prevent hanging during initialization
+            let block_number_result = tokio::time::timeout(
+                Duration::from_secs(30),
+                get_block_number(provider.clone())
+            ).await;
+            
+            match block_number_result {
+                Ok(Ok(block)) => {
+                    blueprint_core::info!(
+                        target: "evm-polling-producer",
+                        block_number = block,
+                        "Successfully fetched current block number"
+                    );
+                    *current_block = block;
+                },
+                Ok(Err(e)) => return Err(e),
+                Err(_timeout) => {
+                    blueprint_core::error!(
+                        target: "evm-polling-producer",
+                        "Timeout during PollingProducer initialization"
+                    );
+                    return Err(TransportError::LocalUsageError("Timeout during initialization".into()));
+                }
+            }
         }
 
         // Calculate initial block range accounting for confirmations
@@ -180,7 +211,7 @@ impl<P: Provider> PollingProducer<P> {
             .from_block(initial_start_block)
             .to_block(initial_start_block + config.step);
 
-        blueprint_core::trace!(
+        blueprint_core::info!(
             target: "evm-polling-producer",
             start_block = initial_start_block,
             step = config.step,
@@ -205,10 +236,15 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
-
+        blueprint_core::info!(
+            target: "evm-polling-producer", "Should poll next"
+        );
         loop {
             // Serve from buffer if available
             if let Some(job) = this.buffer.pop_front() {
+                blueprint_core::info!(
+                    target: "evm-polling-producer", "Serving job from buffer"
+                );
                 if !this.buffer.is_empty() {
                     cx.waker().wake_by_ref();
                 }
@@ -216,20 +252,31 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
             }
 
             let mut state = this.state.lock().unwrap();
+            blueprint_core::info!(
+                target: "evm-polling-producer", "State: {:?}", *state
+            );
             match *state {
                 PollingState::Idle(ref mut fut) => match fut.as_mut().poll(cx) {
                     Poll::Ready(()) => {
                         // Transition to fetching block number
-                        blueprint_core::trace!(
+                        blueprint_core::info!(
                             target: "evm-polling-producer", "Polling interval elapsed, fetching current block number"
                         );
                         let fut = get_block_number(this.provider.clone());
                         *state = PollingState::FetchingBlockNumber(Box::pin(fut));
+                        // Wake up the waker to ensure we get polled again
+                        cx.waker().wake_by_ref();
                     }
                     Poll::Pending => return Poll::Pending,
                 },
                 PollingState::FetchingBlockNumber(ref mut fut) => match fut.as_mut().poll(cx) {
                     Poll::Ready(Ok(current_block)) => {
+                        blueprint_core::info!(
+                            target: "evm-polling-producer",
+                            current_block,
+                            "Successfully fetched current block number"
+                        );
+                        
                         // Calculate the highest block we can safely query considering confirmations
                         let safe_block = current_block.saturating_sub(this.config.confirmations);
                         let last_queried = this
@@ -242,7 +289,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                         let proposed_to_block = last_queried.saturating_add(this.config.step);
                         let next_to_block = proposed_to_block.min(safe_block);
 
-                        blueprint_core::trace!(
+                        blueprint_core::info!(
                             target: "evm-polling-producer",
                             current_block,
                             safe_block,
@@ -253,13 +300,18 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
 
                         // Check if we have new blocks to process
                         if next_from_block > safe_block {
-                            blueprint_core::trace!(
-                                target: "evm-polling-producer", "No new blocks to process yet, waiting for next interval"
+                            blueprint_core::info!(
+                                target: "evm-polling-producer", 
+                                next_from_block,
+                                safe_block,
+                                "No new blocks to process yet, waiting for next interval"
                             );
                             *state = PollingState::Idle(Box::pin(tokio::time::sleep(
                                 this.config.poll_interval,
                             )));
-                            continue;
+                            // Wake up the waker to ensure we get polled again after the sleep
+                            cx.waker().wake_by_ref();
+                            return Poll::Pending;
                         }
 
                         // Update filter for next range
@@ -267,7 +319,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                             .from_block(next_from_block)
                             .to_block(next_to_block);
 
-                        blueprint_core::trace!(
+                        blueprint_core::info!(
                             from_block = next_from_block,
                             to_block = next_to_block,
                             current_block,
@@ -277,23 +329,32 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                         // Transition to fetching logs
                         let fut = get_logs(this.provider.clone(), this.filter.clone());
                         *state = PollingState::FetchingLogs(Box::pin(fut));
+                        // Wake up the waker to ensure we get polled again
+                        cx.waker().wake_by_ref();
                     }
                     Poll::Ready(Err(e)) => {
-                        blueprint_core::error!(
+                        blueprint_core::info!(
                             target: "evm-polling-producer",
                             error = ?e,
                             "Failed to fetch current block number, retrying after interval"
                         );
+                        // Don't return the error immediately, just go back to idle and retry
                         *state = PollingState::Idle(Box::pin(tokio::time::sleep(
                             this.config.poll_interval,
                         )));
-                        return Poll::Ready(Some(Err(e)));
+                        continue;
                     }
-                    Poll::Pending => return Poll::Pending,
+                    Poll::Pending => {
+                        blueprint_core::info!(
+                            target: "evm-polling-producer",
+                            "Still waiting for block number response"
+                        );
+                        return Poll::Pending;
+                    }
                 },
                 PollingState::FetchingLogs(ref mut fut) => match fut.as_mut().poll(cx) {
                     Poll::Ready(Ok(logs)) => {
-                        blueprint_core::trace!(
+                        blueprint_core::info!(
                             target: "evm-polling-producer",
                             logs_count = logs.len(),
                             from_block = ?this.filter.get_from_block(),
@@ -311,17 +372,18 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                         )));
                     }
                     Poll::Ready(Err(e)) => {
-                        blueprint_core::error!(
+                        blueprint_core::info!(
                             target: "evm-polling-producer",
                             error = ?e,
                             from_block = ?this.filter.get_from_block(),
                             to_block = ?this.filter.get_to_block(),
                             "Failed to fetch logs, retrying after interval"
                         );
+                        // Don't return the error immediately, just go back to idle and retry
                         *state = PollingState::Idle(Box::pin(tokio::time::sleep(
                             this.config.poll_interval,
                         )));
-                        return Poll::Ready(Some(Err(e)));
+                        continue;
                     }
                     Poll::Pending => return Poll::Pending,
                 },
@@ -332,24 +394,88 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
 
 /// Fetches the current block number from the provider
 async fn get_block_number<P: Provider>(provider: P) -> Result<u64, TransportError> {
-    provider.get_block_number().await
+    blueprint_core::info!(
+        target: "evm-polling-producer",
+        "Fetching current block number from provider"
+    );
+    
+    // Add a timeout to prevent hanging
+    let result = tokio::time::timeout(
+        Duration::from_secs(5), // Reduced timeout to 5 seconds for faster recovery
+        provider.get_block_number()
+    ).await;
+    
+    let result = match result {
+        Ok(block_result) => {
+            blueprint_core::info!(
+                target: "evm-polling-producer",
+                "Block number request completed"
+            );
+            block_result
+        },
+        Err(_timeout) => {
+            blueprint_core::info!(
+                target: "evm-polling-producer",
+                "Timeout while fetching current block number, retrying will happen on next poll"
+            );
+            return Err(TransportError::LocalUsageError("Timeout fetching block number".into()));
+        }
+    };
+    
+    match &result {
+        Ok(block_number) => {
+            blueprint_core::info!(
+                target: "evm-polling-producer",
+                block_number = block_number,
+                "Successfully fetched current block number"
+            );
+        }
+        Err(e) => {
+            blueprint_core::info!(
+                target: "evm-polling-producer",
+                error = ?e,
+                "Failed to fetch current block number, will retry on next poll"
+            );
+        }
+    }
+    
+    result
 }
 
 /// Fetches logs from the provider for the specified filter range
 async fn get_logs<P: Provider>(provider: P, filter: Filter) -> Result<Vec<Log>, TransportError> {
-    blueprint_core::trace!(
+    blueprint_core::info!(
         target: "evm-polling-producer",
         from_block = ?filter.get_from_block(),
         to_block = ?filter.get_to_block(),
         "Fetching logs from provider"
     );
-    let logs = provider.get_logs(&filter).await?;
-    blueprint_core::trace!(
+    
+    // Add timeout to prevent hanging
+    let result = tokio::time::timeout(
+        Duration::from_secs(10),
+        provider.get_logs(&filter)
+    ).await;
+    
+    let logs = match result {
+        Ok(logs_result) => logs_result?,
+        Err(_timeout) => {
+            blueprint_core::info!(
+                target: "evm-polling-producer",
+                from_block = ?filter.get_from_block(),
+                to_block = ?filter.get_to_block(),
+                "Timeout while fetching logs, will retry on next poll"
+            );
+            return Err(TransportError::LocalUsageError("Timeout fetching logs".into()));
+        }
+    };
+
+    blueprint_core::info!(
         target: "evm-polling-producer",
         from_block = ?filter.get_from_block(),
         to_block = ?filter.get_to_block(),
         logs_count = logs.len(),
-        "Fetched logs from provider"
+        "Successfully fetched logs from provider"
     );
     Ok(logs)
 }
