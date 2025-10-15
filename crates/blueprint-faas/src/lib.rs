@@ -233,7 +233,7 @@ mod utils {
     #[allow(dead_code)]
     pub(crate) fn extract_job_id(function_name: &str, prefix: &str) -> Option<u32> {
         function_name
-            .strip_prefix(&format!("{}-job-", prefix))
+            .strip_prefix(&format!("{prefix}-job-"))
             .and_then(|s| s.parse().ok())
     }
 }
