@@ -1,13 +1,15 @@
 name: CI
 
 on:
-  push:
-    paths:
-      - 'crates/blueprint-remote-providers/**'
-      - '.github/workflows/remote-providers-tests.yml'
   pull_request:
     paths:
       - 'crates/blueprint-remote-providers/**'
+      - '.github/workflows/remote-providers-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'crates/blueprint-remote-providers/**'
+      - '.github/workflows/remote-providers-tests.yml'
 
 jobs:
   test-remote-providers:
