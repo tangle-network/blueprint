@@ -215,20 +215,21 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
                 // The PollingProducer in the runner will process job calls
                 info!("Eigenlayer manager initialized, letting runner handle producer stream");
                 
-                // while let Some(event) = eigenlayer_client.next_event().await {
-                //     eigen_event_handler::handle_eigen_event(
-                //         &event,
-                //         &env,
-                //         &ctx,
-                //     )
-                //     .await?;
-                // }
-
-                // Keep the manager task alive but don't block on WebSocket
-                loop {
-                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-                    info!("Eigenlayer manager still running...");
+                while let Some(event) = eigenlayer_client.next_event().await {
+                    eigen_event_handler::handle_eigen_event(
+                        &event,
+                        &env,
+                        &ctx,
+                    )
+                    .await?;
                 }
+                Err::<(), _>(Error::ClientDied)
+
+                // // Keep the manager task alive but don't block on WebSocket
+                // loop {
+                //     tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                //     info!("Eigenlayer manager still running...");
+                // }
             },
             Protocol::Tangle => {
                 let tangle_key = tangle_key.unwrap();

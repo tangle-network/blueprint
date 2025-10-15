@@ -324,6 +324,7 @@ async fn run_eigenlayer_incredible_squaring_test(
         timeout_duration,
     )
     .await;
+    info!("Completed waiting for responses");
 
     // Start the shutdown/cleanup process
     aggregator_context_clone.shutdown().await;
@@ -432,6 +433,7 @@ pub async fn setup_task_response_listener(
         }
     };
     while let Some(event) = event_stream.next().await {
+        info!("Received task responded event");
         let SquaringTask::TaskResponded {
             taskResponse: _, ..
         } = event
@@ -439,6 +441,7 @@ pub async fn setup_task_response_listener(
             .unwrap()
             .inner
             .data;
+        info!("Decoded task responded event");
         let mut counter = match successful_responses.lock() {
             Ok(guard) => guard,
             Err(e) => {

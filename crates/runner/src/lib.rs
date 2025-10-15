@@ -1017,6 +1017,7 @@ where
                 // Background service status updates
                 result = &mut background_services => {
                     let (result, _, remaining_background_services) = result;
+                    blueprint_core::info!(target: "blueprint-runner", remaining_background_services=remaining_background_services.len());
                     match result {
                         Ok(()) => {
                             if has_background_services {
@@ -1024,7 +1025,7 @@ where
                             }
                         },
                         Err(e) => {
-                            blueprint_core::error!(target: "blueprint-runner", "A background service failed: {:?}", e);
+                            blueprint_core::info!(target: "blueprint-runner", "A background service failed: {:?}", e);
                             let _ = shutdown_tx.send(true);
                             return Err(e);
                         }

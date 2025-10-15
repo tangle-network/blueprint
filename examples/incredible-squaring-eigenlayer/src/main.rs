@@ -67,7 +67,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     )
     .await
     .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?;
-
+    info!("Task manager address: {}", *TASK_MANAGER_ADDRESS);
     info!("~~~ Executing the incredible squaring blueprint ~~~");
     let eigen_config = EigenlayerBLSConfig::new(Address::default(), Address::default());
     BlueprintRunner::builder(eigen_config, BlueprintEnvironment::default())

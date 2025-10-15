@@ -15,7 +15,7 @@ use std::sync::LazyLock;
 pub static TASK_MANAGER_ADDRESS: LazyLock<Address> = LazyLock::new(|| {
     env::var("TASK_MANAGER_ADDRESS")
         .map(|addr| addr.parse().expect("Invalid TASK_MANAGER_ADDRESS"))
-        .unwrap_or_else(|_| address!("0000000000000000000000000000000000000000"))
+        .unwrap_or_else(|_| address!("5f3f1dbd7b74c6b46e8c44f98792a1daf8d69154"))
 });
 pub static PRIVATE_KEY: LazyLock<String> = LazyLock::new(|| {
     env::var("PRIVATE_KEY").unwrap_or_else(|_| {

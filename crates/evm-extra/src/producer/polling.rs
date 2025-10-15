@@ -240,6 +240,8 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
             target: "evm-polling-producer", "Should poll next"
         );
         loop {
+            blueprint_core::info!("Beginning polling loop");
+            blueprint_core::info!(target: "evm-polling-producer", "Buffer: {:?}", this.buffer);
             // Serve from buffer if available
             if let Some(job) = this.buffer.pop_front() {
                 blueprint_core::info!(
@@ -251,6 +253,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                 return Poll::Ready(Some(Ok(job)));
             }
 
+            blueprint_core::info!("No job found in buffer, checking state");
             let mut state = this.state.lock().unwrap();
             blueprint_core::info!(
                 target: "evm-polling-producer", "State: {:?}", *state
@@ -388,6 +391,7 @@ impl<P: Provider + 'static> Stream for PollingProducer<P> {
                     Poll::Pending => return Poll::Pending,
                 },
             }
+            blueprint_core::info!("Ending polling loop");
         }
     }
 }

@@ -233,70 +233,69 @@ async fn register_bls_impl(
         .into());
     }
 
-    // TODO(daniel): fix these
-    // // Stake tokens to the quorum
-    // let stake_amount = 1_000_000_000_000_000_000u64;
-    // let operator_sets = vec![0u32];
+    // Stake tokens to the quorum
+    let stake_amount = 1_000_000_000_000_000_000u64;
+    let operator_sets = vec![0u32];
 
-    // info!(
-    //     "Staking {} tokens to quorums {:?}",
-    //     stake_amount, operator_sets
-    // );
-    // let stake_hash = el_writer
-    //     .modify_allocations(
-    //         operator_address,
-    //         vec![AllocateParams {
-    //             operatorSet: OperatorSet {
-    //                 avs: service_manager_address,
-    //                 id: operator_sets[0],
-    //             },
-    //             strategies: vec![strategy_address],
-    //             newMagnitudes: vec![stake_amount],
-    //         }],
-    //     )
-    //     .await
-    //     .map_err(|e| EigenlayerError::Registration(e.to_string()))?;
+    info!(
+        "Staking {} tokens to quorums {:?}",
+        stake_amount, operator_sets
+    );
+    let stake_hash = el_writer
+        .modify_allocations(
+            operator_address,
+            vec![AllocateParams {
+                operatorSet: OperatorSet {
+                    avs: service_manager_address,
+                    id: operator_sets[0],
+                },
+                strategies: vec![strategy_address],
+                newMagnitudes: vec![stake_amount],
+            }],
+        )
+        .await
+        .map_err(|e| EigenlayerError::Registration(e.to_string()))?;
 
-    // let stake_receipt = wait_transaction(env.http_rpc_endpoint.clone(), stake_hash)
-    //     .await
-    //     .map_err(|e| EigenlayerError::Registration(format!("Quorum staking error: {}", e)))?;
+    let stake_receipt = wait_transaction(env.http_rpc_endpoint.clone(), stake_hash)
+        .await
+        .map_err(|e| EigenlayerError::Registration(format!("Quorum staking error: {}", e)))?;
 
-    // if stake_receipt.status() {
-    //     info!("Successfully staked tokens to quorums {:?}", operator_sets);
-    // } else {
-    //     blueprint_core::error!("Failed to stake tokens to quorums");
-    //     return Err(EigenlayerError::Other("Quorum staking failed".into()).into());
-    // }
+    if stake_receipt.status() {
+        info!("Successfully staked tokens to quorums {:?}", operator_sets);
+    } else {
+        blueprint_core::error!("Failed to stake tokens to quorums");
+        return Err(EigenlayerError::Other("Quorum staking failed".into()).into());
+    }
 
-    // info!("Operator BLS key pair: {:?}", operator_bls_key);
+    info!("Operator BLS key pair: {:?}", operator_bls_key);
 
-    // // Register to Operator Sets
-    // info!("Registering to operator sets");
-    // println!("Registering to operator sets");
-    // let registration_hash = el_writer
-    //     .register_for_operator_sets(
-    //         operator_address,
-    //         service_manager_address,
-    //         vec![0u32],
-    //         operator_bls_key,
-    //         "incredible",
-    //     )
-    //     .await
-    //     .map_err(EigenlayerError::ElContracts)?;
-    // println!("Registration hash: {:?}", registration_hash);
-    // let registration_receipt = wait_transaction(env.http_rpc_endpoint.clone(), registration_hash)
-    //     .await
-    //     .map_err(|e| {
-    //         EigenlayerError::Registration(format!("Operator sets registration error: {}", e))
-    //     })?;
-    // println!("Registration receipt: {:?}", registration_receipt);
-    // if registration_receipt.status() {
-    //     info!("Registered to operator sets for Eigenlayer");
-    // } else {
-    //     blueprint_core::error!("Registration failed for operator sets");
-    //     return Err(EigenlayerError::Registration("Registration failed".into()).into());
-    // }
-    // println!("Registration successful");
+    // Register to Operator Sets
+    info!("Registering to operator sets");
+    println!("Registering to operator sets");
+    let registration_hash = el_writer
+        .register_for_operator_sets(
+            operator_address,
+            service_manager_address,
+            vec![0u32],
+            operator_bls_key,
+            "incredible",
+        )
+        .await
+        .map_err(EigenlayerError::ElContracts)?;
+    println!("Registration hash: {:?}", registration_hash);
+    let registration_receipt = wait_transaction(env.http_rpc_endpoint.clone(), registration_hash)
+        .await
+        .map_err(|e| {
+            EigenlayerError::Registration(format!("Operator sets registration error: {}", e))
+        })?;
+    println!("Registration receipt: {:?}", registration_receipt);
+    if registration_receipt.status() {
+        info!("Registered to operator sets for Eigenlayer");
+    } else {
+        blueprint_core::error!("Registration failed for operator sets");
+        return Err(EigenlayerError::Registration("Registration failed".into()).into());
+    }
+    println!("Registration successful");
 
     info!("If the terminal exits, you should re-run the runner to continue execution.");
     Ok(())

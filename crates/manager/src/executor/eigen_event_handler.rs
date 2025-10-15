@@ -83,10 +83,11 @@ pub async fn handle_init(
     match service_start_res {
         Ok(Some(is_alive)) => {
             is_alive.await?;
+            blueprint_core::info!("Service started successfully");
         }
         Ok(None) => {}
         Err(e) => {
-            error!("Service did not start successfully, aborting: {e}");
+            blueprint_core::info!("Service did not start successfully, aborting: {e}");
             service.shutdown().await?;
         }
     };
@@ -123,7 +124,7 @@ pub(crate) async fn handle_eigen_event(
     _blueprint_config: &BlueprintEnvironment,
     _ctx: &BlueprintManagerContext,
 ) -> Result<()> {
-    info!("Received notification {:?}", event);
+    trace!("Received notification {:?}", event);
 
     Ok(())
 }
