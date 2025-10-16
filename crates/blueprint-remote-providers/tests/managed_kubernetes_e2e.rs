@@ -82,6 +82,10 @@ mod test_helpers {
         format!("bp-test-{timestamp}-{counter}")
     }
 
+    fn kubeconfig_path(cluster_name: &str) -> String {
+        format!("/tmp/{cluster_name}-kubeconfig")
+    }
+
     /// Ensure test cluster exists with unique name
     pub(crate) async fn ensure_test_cluster() -> String {
         let cluster_name = get_test_cluster_name();
@@ -91,6 +95,12 @@ mod test_helpers {
             .args(["delete", "cluster", "--name", &cluster_name])
             .output()
             .await;
+
+        let kubeconfig = kubeconfig_path(&cluster_name);
+        // Remove any stale kubeconfig or lock file from previous runs
+        let _ = tokio::fs::remove_file(&kubeconfig).await;
+        let _ = tokio::fs::remove_file(format!("{kubeconfig}.lock")).await;
+        std::env::set_var("KUBECONFIG", &kubeconfig);
 
         println!("Creating test cluster '{cluster_name}'...");
         let create = AsyncCommand::new("kind")
@@ -127,7 +137,12 @@ mod test_helpers {
             .args(["delete", "cluster", "--name", cluster_name])
             .status()
             .await;
+        let kubeconfig = kubeconfig_path(cluster_name);
+        let _ = tokio::fs::remove_file(&kubeconfig).await;
+        let _ = tokio::fs::remove_file(format!("{kubeconfig}.lock")).await;
     }
+
+    pub(crate) use require_kind;
 }
 
 #[tokio::test]
