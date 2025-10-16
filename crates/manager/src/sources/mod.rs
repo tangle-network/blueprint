@@ -38,6 +38,7 @@ pub trait BlueprintSourceHandler: Send + Sync {
 unsafe impl Send for DynBlueprintSource<'_> {}
 unsafe impl Sync for DynBlueprintSource<'_> {}
 
+#[derive(Clone)]
 pub struct BlueprintArgs {
     pub test_mode: bool,
     pub pretty: bool,
@@ -87,6 +88,7 @@ impl BlueprintArgs {
     }
 }
 
+#[derive(Clone)]
 pub struct BlueprintEnvVars {
     pub http_rpc_endpoint: Url,
     pub ws_rpc_endpoint: Url,

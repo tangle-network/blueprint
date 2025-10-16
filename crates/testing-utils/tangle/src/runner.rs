@@ -56,6 +56,40 @@ where
         self.qos_service = Some(service);
     }
 
+    /// Register a job to use FaaS execution in tests
+    ///
+    /// This allows testing FaaS-delegated jobs alongside local jobs in the same test environment.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use blueprint_faas::custom::HttpFaasExecutor;
+    ///
+    /// let faas_executor = HttpFaasExecutor::new("http://localhost:8080");
+    ///
+    /// test_env
+    ///     .with_faas_executor(1, faas_executor);  // Job 1 executes on FaaS
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the runner is already running.
+    #[cfg(feature = "faas")]
+    pub fn with_faas_executor(
+        &mut self,
+        job_id: u32,
+        executor: impl blueprint_runner::faas::FaasExecutor + 'static,
+    ) -> &mut Self
+    where
+        Ctx: Clone + Send + Sync + 'static,
+    {
+        self.runner
+            .as_mut()
+            .expect("Runner already running")
+            .with_faas_executor(job_id, executor);
+        self
+    }
+
     // TODO(serial): This needs to return errors. Too many chances to panic here. Not helpful.
     pub(crate) async fn set_tangle_producer_consumer(&mut self) {
         let runner = self.runner.as_mut().expect("Runner already running");
