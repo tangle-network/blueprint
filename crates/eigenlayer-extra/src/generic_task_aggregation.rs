@@ -342,6 +342,7 @@ where
         let shutdown = self.shutdown.clone();
         let interval_secs = self.config.processing_interval;
 
+        info!("Starting processing loop");
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(interval_secs));
 
@@ -358,8 +359,10 @@ where
                             let mut cache = response_cache.lock().await;
                             std::mem::take(&mut *cache)
                         };
+                        info!("Responses to process");
 
                         for signed_resp in responses_to_process {
+                            info!("Processing signed response");
                             let task_index = signed_resp.response.reference_task_index();
 
                             // Check if we have the task
@@ -432,7 +435,10 @@ where
                             .and_then(|r| r.get(&response_digest))
                             .cloned();
 
+                        blueprint_core::info!("task {}, response {}", task_opt.is_some(), response_opt.is_some());
+    
                         if let (Some(task), Some(response)) = (task_opt, response_opt) {
+                            blueprint_core::info!("Sending aggregated response");
                             // Try to send the response to the contract
                             for i in 0..config.send_retries {
                                 match response_sender
@@ -531,7 +537,7 @@ where
             }
         }
 
-        blueprint_core::debug!("Successfully processed signature for task {}", task_index);
+        blueprint_core::info!("Successfully processed signature for task {}", task_index);
         Ok(())
     }
 }

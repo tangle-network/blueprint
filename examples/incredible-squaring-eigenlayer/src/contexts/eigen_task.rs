@@ -13,6 +13,7 @@ use eigensdk::services_blsaggregation::bls_aggregation_service_response::BlsAggr
 use eigensdk::types::avs::TaskIndex;
 use reqwest::Url;
 use std::future::Future;
+use ark_ec::AffineRepr;
 use std::pin::Pin;
 
 // Wrapper for Task that includes the task index
@@ -83,6 +84,15 @@ impl ResponseSender<IndexedTask, TaskResponse> for SquaringTaskResponseSender {
         let task_manager_address = self.task_manager_address;
         let http_rpc_url = self.http_rpc_url.clone();
 
+        blueprint_sdk::info!("aggregation_result: {:#?}", aggregation_result);
+
+        // Validate aggregation result before processing
+        blueprint_sdk::info!("Validating aggregation result...");
+        blueprint_sdk::info!("non_signers_pub_keys_g1 count: {}", aggregation_result.non_signers_pub_keys_g1.len());
+        blueprint_sdk::info!("quorum_apks_g1 count: {}", aggregation_result.quorum_apks_g1.len());
+        blueprint_sdk::info!("signers_apk_g2: {:?}", aggregation_result.signers_apk_g2);
+        blueprint_sdk::info!("signers_agg_sig_g1: {:?}", aggregation_result.signers_agg_sig_g1);
+
         Box::pin(async move {
             let key = "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"; // Private key from our Aggregator Anvil account
             let provider = get_provider_from_signer(key, http_rpc_url);
@@ -91,20 +101,74 @@ impl ResponseSender<IndexedTask, TaskResponse> for SquaringTaskResponseSender {
                 IncredibleSquaringTaskManager::new(task_manager_address, provider.clone());
 
             // Convert the aggregation result to the NonSignerStakesAndSignature format
+            blueprint_sdk::info!("Starting conversion of aggregation result...");
+            
+            // Convert non-signer pubkeys
+            blueprint_sdk::info!("Converting non_signers_pub_keys_g1 (count: {})", aggregation_result.non_signers_pub_keys_g1.len());
+            let non_signer_pubkeys = aggregation_result
+                .non_signers_pub_keys_g1
+                .into_iter()
+                .enumerate()
+                .map(|(i, pk)| {
+                    blueprint_sdk::info!("Converting non-signer pubkey {}: {:?}", i, pk);
+                    to_g1_point(pk)
+                })
+                .collect::<Vec<_>>();
+            blueprint_sdk::info!("Successfully converted {} non-signer pubkeys", non_signer_pubkeys.len());
+
+            // Convert quorum APKs
+            blueprint_sdk::info!("Converting quorum_apks_g1 (count: {})", aggregation_result.quorum_apks_g1.len());
+            
+            // Debug each quorum APK in detail
+            for (i, pk) in aggregation_result.quorum_apks_g1.iter().enumerate() {
+                blueprint_sdk::info!("Quorum APK {} details:", i);
+                blueprint_sdk::info!("  - BlsG1Point: {:?}", pk);
+                blueprint_sdk::info!("  - g1() data: {:?}", pk.g1());
+
+                let g1 = pk.g1();
+                blueprint_sdk::info!("Is x point exits: {}", g1.x().is_some());
+                blueprint_sdk::info!("Is y point exits: {}", g1.y().is_some());
+                
+                // Try to convert and catch the error
+                match convert_to_g1_point(pk.g1()) {
+                    Ok(pt) => {
+                        blueprint_sdk::info!("  - Conversion successful: X={:?}, Y={:?}", pt.X, pt.Y);
+                    }
+                    Err(e) => {
+                        blueprint_sdk::error!("  - Conversion failed: {:?}", e);
+                        blueprint_sdk::error!("  - Raw g1 data: {:?}", pk.g1());
+                        blueprint_sdk::error!("  - BlsG1Point structure: {:?}", pk);
+                    }
+                }
+            }
+            
+            let quorum_apks = aggregation_result
+                .quorum_apks_g1
+                .into_iter()
+                .enumerate()
+                .map(|(i, pk)| {
+                    blueprint_sdk::info!("Converting quorum APK {}: {:?}", i, pk);
+                    to_g1_point(pk)
+                })
+                .collect::<Vec<_>>();
+            blueprint_sdk::info!("Successfully converted {} quorum APKs", quorum_apks.len());
+
+            // Convert APK G2
+            blueprint_sdk::info!("Converting signers_apk_g2: {:?}", aggregation_result.signers_apk_g2);
+            let apk_g2 = to_g2_point(aggregation_result.signers_apk_g2);
+            blueprint_sdk::info!("Successfully converted APK G2");
+
+            // Convert signature G1
+            blueprint_sdk::info!("Converting signers_agg_sig_g1: {:?}", aggregation_result.signers_agg_sig_g1);
+            let sigma = to_g1_point(aggregation_result.signers_agg_sig_g1.g1_point());
+            blueprint_sdk::info!("Successfully converted signature G1");
+
             let non_signer_stakes_and_signature = NonSignerStakesAndSignature {
-                nonSignerPubkeys: aggregation_result
-                    .non_signers_pub_keys_g1
-                    .into_iter()
-                    .map(to_g1_point)
-                    .collect(),
+                nonSignerPubkeys: non_signer_pubkeys,
                 nonSignerQuorumBitmapIndices: aggregation_result.non_signer_quorum_bitmap_indices,
-                quorumApks: aggregation_result
-                    .quorum_apks_g1
-                    .into_iter()
-                    .map(to_g1_point)
-                    .collect(),
-                apkG2: to_g2_point(aggregation_result.signers_apk_g2),
-                sigma: to_g1_point(aggregation_result.signers_agg_sig_g1.g1_point()),
+                quorumApks: quorum_apks,
+                apkG2: apk_g2,
+                sigma: sigma,
                 quorumApkIndices: aggregation_result.quorum_apk_indices,
                 totalStakeIndices: aggregation_result.total_stake_indices,
                 nonSignerStakeIndices: aggregation_result.non_signer_stake_indices,

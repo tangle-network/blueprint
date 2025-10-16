@@ -100,6 +100,7 @@ pub async fn xsquare_eigen(
                 "Failed to send signed task response: {e:?}",
             )));
         }
+        info!("Signed task response sent to BLS Aggregator");
     }
 
     Ok(())
