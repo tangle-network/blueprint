@@ -78,6 +78,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_aws_adapter_creation() {
+        if std::env::var("AWS_ACCESS_KEY_ID").is_err()
+            || std::env::var("AWS_SECRET_ACCESS_KEY").is_err()
+        {
+            eprintln!("Skipping AWS adapter test - credentials not configured");
+            return;
+        }
+
         let adapter = AdapterFactory::create_adapter(CloudProvider::AWS).await;
         assert!(adapter.is_ok(), "AWS adapter should be available");
     }

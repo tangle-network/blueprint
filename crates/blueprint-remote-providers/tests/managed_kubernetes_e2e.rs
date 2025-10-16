@@ -10,22 +10,20 @@ use blueprint_remote_providers::{
     infra::types::InstanceStatus,
     shared::{ManagedK8sConfig, SharedKubernetesDeployment},
 };
-use tokio::process::Command as AsyncCommand;
 
 // Import helper functions and macro (only needed when kubernetes feature is enabled)
 #[cfg(feature = "kubernetes")]
-use test_helpers::{
-    cleanup_test_cluster, cli_available, init_crypto, kubectl_working, require_kind,
-};
+use test_helpers::{cleanup_test_cluster, cli_available, init_crypto, kubectl_working};
 
 // These helper functions are available for manual testing but not used in automated tests
 #[allow(dead_code)]
 mod test_helpers {
-    use std::sync::Once;
+    use std::sync::{Mutex, Once};
     use tokio::process::Command as AsyncCommand;
 
     // Initialize rustls crypto provider once
     static INIT: Once = Once::new();
+    static KUBECONFIG_PATH: Mutex<Option<String>> = Mutex::new(None);
 
     pub(crate) fn init_crypto() {
         INIT.call_once(|| {
@@ -47,7 +45,7 @@ mod test_helpers {
 
     /// Check if kubectl is configured and working
     pub(crate) async fn kubectl_working() -> bool {
-        AsyncCommand::new("kubectl")
+        kubectl_command()
             .args(["cluster-info", "--request-timeout=5s"])
             .output()
             .await
@@ -82,8 +80,25 @@ mod test_helpers {
         format!("bp-test-{timestamp}-{counter}")
     }
 
-    fn kubeconfig_path(cluster_name: &str) -> String {
+    fn kubeconfig_file(cluster_name: &str) -> String {
         format!("/tmp/{cluster_name}-kubeconfig")
+    }
+
+    fn set_kubeconfig_path(path: Option<String>) {
+        let mut guard = KUBECONFIG_PATH.lock().unwrap();
+        *guard = path;
+    }
+
+    fn current_kubeconfig() -> Option<String> {
+        KUBECONFIG_PATH.lock().unwrap().clone()
+    }
+
+    pub(crate) fn kubectl_command() -> AsyncCommand {
+        let mut command = AsyncCommand::new("kubectl");
+        if let Some(path) = current_kubeconfig() {
+            command.env("KUBECONFIG", path);
+        }
+        command
     }
 
     /// Ensure test cluster exists with unique name
@@ -96,11 +111,11 @@ mod test_helpers {
             .output()
             .await;
 
-        let kubeconfig = kubeconfig_path(&cluster_name);
+        let kubeconfig = kubeconfig_file(&cluster_name);
         // Remove any stale kubeconfig or lock file from previous runs
         let _ = tokio::fs::remove_file(&kubeconfig).await;
         let _ = tokio::fs::remove_file(format!("{kubeconfig}.lock")).await;
-        std::env::set_var("KUBECONFIG", &kubeconfig);
+        set_kubeconfig_path(Some(kubeconfig.clone()));
 
         println!("Creating test cluster '{cluster_name}'...");
         let create = AsyncCommand::new("kind")
@@ -120,7 +135,14 @@ mod test_helpers {
 
         // Set kubeconfig
         let export = AsyncCommand::new("kind")
-            .args(["export", "kubeconfig", "--name", &cluster_name])
+            .args([
+                "export",
+                "kubeconfig",
+                "--name",
+                &cluster_name,
+                "--kubeconfig",
+                &kubeconfig,
+            ])
             .status()
             .await
             .expect("Failed to export kubeconfig");
@@ -137,11 +159,13 @@ mod test_helpers {
             .args(["delete", "cluster", "--name", cluster_name])
             .status()
             .await;
-        let kubeconfig = kubeconfig_path(cluster_name);
+        let kubeconfig = kubeconfig_file(cluster_name);
         let _ = tokio::fs::remove_file(&kubeconfig).await;
         let _ = tokio::fs::remove_file(format!("{kubeconfig}.lock")).await;
+        set_kubeconfig_path(None);
     }
 
+    #[cfg(feature = "kubernetes")]
     pub(crate) use require_kind;
 }
 
@@ -215,7 +239,7 @@ async fn test_managed_k8s_config_creation() {
 #[cfg(feature = "kubernetes")]
 async fn test_kubectl_cluster_health_check() {
     init_crypto();
-    require_kind!(cluster_name);
+    test_helpers::require_kind!(cluster_name);
 
     println!("Testing kubectl cluster health verification...");
 
@@ -226,8 +250,8 @@ async fn test_kubectl_cluster_health_check() {
     }
 
     // Test the actual health check command that our code uses
-    let output = AsyncCommand::new("kubectl")
-        .args(&["cluster-info", "--request-timeout=10s"])
+    let output = test_helpers::kubectl_command()
+        .args(["cluster-info", "--request-timeout=10s"])
         .output()
         .await
         .expect("Failed to run kubectl cluster-info");
@@ -253,7 +277,7 @@ async fn test_kubectl_cluster_health_check() {
 #[cfg(feature = "kubernetes")]
 async fn test_shared_kubernetes_deployment_generic() {
     init_crypto();
-    require_kind!(cluster_name);
+    test_helpers::require_kind!(cluster_name);
 
     println!("Testing SharedKubernetesDeployment with generic K8s...");
 
@@ -405,7 +429,7 @@ async fn test_managed_k8s_authentication_commands() {
 #[cfg(feature = "kubernetes")]
 async fn test_managed_k8s_deployment_with_mock_auth() {
     init_crypto();
-    require_kind!(cluster_name);
+    test_helpers::require_kind!(cluster_name);
 
     println!("Testing managed K8s deployment with simulated authentication...");
 
@@ -476,7 +500,7 @@ async fn test_managed_k8s_deployment_with_mock_auth() {
 #[cfg(feature = "kubernetes")]
 async fn test_k8s_deployment_resource_allocation() {
     init_crypto();
-    require_kind!(cluster_name);
+    test_helpers::require_kind!(cluster_name);
 
     println!("Testing K8s deployment resource allocation...");
 
@@ -554,7 +578,7 @@ async fn test_k8s_deployment_resource_allocation() {
 #[cfg(feature = "kubernetes")]
 async fn test_k8s_deployment_port_exposure() {
     init_crypto();
-    require_kind!(cluster_name);
+    test_helpers::require_kind!(cluster_name);
 
     println!("Testing K8s deployment port exposure...");
 
@@ -585,8 +609,8 @@ async fn test_k8s_deployment_port_exposure() {
 
             // Verify service creation in cluster
             let service_name = format!("{}-service", deployment.blueprint_id);
-            if let Ok(output) = AsyncCommand::new("kubectl")
-                .args(&["get", "service", &service_name, "-o", "json"])
+            if let Ok(output) = test_helpers::kubectl_command()
+                .args(["get", "service", &service_name, "-o", "json"])
                 .output()
                 .await
             {
@@ -667,7 +691,7 @@ async fn test_k8s_deployment_metadata_consistency() {
 #[allow(dead_code)]
 async fn delete_k8s_deployment(deployment_name: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Delete deployment
-    let deployment_result = AsyncCommand::new("kubectl")
+    let deployment_result = test_helpers::kubectl_command()
         .args([
             "delete",
             "deployment",
@@ -679,7 +703,7 @@ async fn delete_k8s_deployment(deployment_name: &str) -> Result<(), Box<dyn std:
 
     // Delete service
     let service_name = format!("{deployment_name}-service");
-    let service_result = AsyncCommand::new("kubectl")
+    let service_result = test_helpers::kubectl_command()
         .args(["delete", "service", &service_name, "--ignore-not-found"])
         .status()
         .await?;
@@ -696,7 +720,7 @@ async fn delete_k8s_deployment(deployment_name: &str) -> Result<(), Box<dyn std:
 #[cfg(feature = "kubernetes")]
 async fn test_end_to_end_managed_k8s_workflow() {
     init_crypto();
-    require_kind!(cluster_name);
+    test_helpers::require_kind!(cluster_name);
 
     println!("Running end-to-end managed K8s workflow test...");
 
@@ -725,8 +749,8 @@ async fn test_end_to_end_managed_k8s_workflow() {
             println!("  ✓ 2. Deployment successful: {}", result.blueprint_id);
 
             // 3. Verify deployment in cluster
-            let pod_check = AsyncCommand::new("kubectl")
-                .args(&["get", "pods", "-l", &format!("app={}", result.blueprint_id)])
+            let pod_check = test_helpers::kubectl_command()
+                .args(["get", "pods", "-l", &format!("app={}", result.blueprint_id)])
                 .output()
                 .await;
 
@@ -743,8 +767,8 @@ async fn test_end_to_end_managed_k8s_workflow() {
             }
 
             // 4. Test service exposure
-            let service_check = AsyncCommand::new("kubectl")
-                .args(&[
+            let service_check = test_helpers::kubectl_command()
+                .args([
                     "get",
                     "service",
                     &format!("{}-service", result.blueprint_id),

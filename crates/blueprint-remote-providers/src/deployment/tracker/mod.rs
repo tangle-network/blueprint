@@ -44,6 +44,21 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let tracker = DeploymentTracker::new(temp_dir.path()).await.unwrap();
 
+        struct NoopCleanup;
+        #[async_trait::async_trait]
+        impl CleanupHandler for NoopCleanup {
+            async fn cleanup(
+                &self,
+                _deployment: &DeploymentRecord,
+            ) -> crate::core::error::Result<()> {
+                Ok(())
+            }
+        }
+
+        tracker
+            .set_cleanup_handler(DeploymentType::LocalDocker, Box::new(NoopCleanup))
+            .await;
+
         let mut record = DeploymentRecord::new(
             "blueprint-ttl".to_string(),
             DeploymentType::LocalDocker,

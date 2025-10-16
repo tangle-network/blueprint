@@ -342,6 +342,16 @@ impl DeploymentTracker {
         }
         Ok(())
     }
+
+    #[cfg(test)]
+    pub async fn set_cleanup_handler(
+        &self,
+        deployment_type: DeploymentType,
+        handler: Box<dyn CleanupHandler>,
+    ) {
+        let mut handlers = self.cleanup_handlers.write().await;
+        handlers.insert(deployment_type, handler);
+    }
 }
 
 impl Clone for DeploymentTracker {
