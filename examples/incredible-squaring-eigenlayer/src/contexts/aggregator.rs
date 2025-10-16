@@ -230,7 +230,10 @@ impl AggregatorContext {
                     // Server task panicked during shutdown - this is a known issue with jsonrpc-http-server
                     // The server's internal runtime panics when dropped in a blocking context
                     // This is harmless as it only happens during cleanup after successful operation
-                    debug!("Server handle completed with expected shutdown panic: {}", e);
+                    debug!(
+                        "Server handle completed with expected shutdown panic: {}",
+                        e
+                    );
                 }
                 Err(_) => {
                     // Timeout - the server is taking too long, we'll just let it drop
