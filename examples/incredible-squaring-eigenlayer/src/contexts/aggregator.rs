@@ -184,22 +184,24 @@ impl AggregatorContext {
         let (server_tx, server_rx) = oneshot::channel();
 
         // Spawn the server in a blocking task
-        let server_handle = tokio::task::spawn_blocking(move || {
+        let mut server_handle = tokio::task::spawn_blocking(move || {
             server.wait();
             let _ = server_tx.send(());
         });
 
         // Use tokio::select! to wait for either the server to finish or the shutdown signal
-        tokio::select! {
-            result = server_handle => {
+        let shutdown_result = tokio::select! {
+            result = &mut server_handle => {
                 info!("Server has stopped naturally");
                 result.map_err(|e| {
                     error!("Server task failed: {}", e);
                     Error::Runtime(e.to_string())
                 })?;
+                None
             }
             _ = server_rx => {
                 info!("Server has been shut down via close handle");
+                Some(server_handle)
             }
             _ = async {
                 let (notify, is_shutdown) = &*shutdown;
@@ -212,6 +214,28 @@ impl AggregatorContext {
             } => {
                 info!("Shutdown signal received, stopping server");
                 close_handle.close();
+                Some(server_handle)
+            }
+        };
+
+        // If we have a server handle that wasn't awaited, wait for it with a timeout
+        // The close_handle.close() should have signaled the server to stop
+        if let Some(handle) = shutdown_result {
+            debug!("Waiting for server handle to complete shutdown");
+            match tokio::time::timeout(Duration::from_secs(2), handle).await {
+                Ok(Ok(())) => {
+                    debug!("Server handle completed successfully");
+                }
+                Ok(Err(e)) => {
+                    // Server task panicked during shutdown - this is a known issue with jsonrpc-http-server
+                    // The server's internal runtime panics when dropped in a blocking context
+                    // This is harmless as it only happens during cleanup after successful operation
+                    debug!("Server handle completed with expected shutdown panic: {}", e);
+                }
+                Err(_) => {
+                    // Timeout - the server is taking too long, we'll just let it drop
+                    debug!("Server handle timed out, proceeding with shutdown");
+                }
             }
         }
 
