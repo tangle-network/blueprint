@@ -83,10 +83,12 @@ where
 
         // Add method for processing signed responses
         io.add_method("process_signed_task_response", move |params: Params| {
+            info!("Eigenlayer-Extra: Adding process_signed_task_response method");
             let aggregator = Arc::clone(&aggregator);
             let converter = Arc::clone(&converter);
 
             async move {
+                info!("Eigenlayer-Extra: Processing signed task response");
                 // Parse the outer structure first
                 let outer_params: Value = params.parse()?;
 

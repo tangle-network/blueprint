@@ -115,6 +115,7 @@ pub enum ServiceSpawnMethod {
     Native,
     #[cfg(feature = "vm-debug")]
     Vm,
+    #[cfg(feature = "containers")]
     Container,
 }
 
@@ -180,7 +181,7 @@ pub async fn execute(
     let env = BlueprintEnvVars {
         http_rpc_endpoint: http,
         ws_rpc_endpoint: ws,
-        // TODO
+        #[cfg(feature = "tee")]
         kms_endpoint: "https://127.0.0.1:19821".parse().unwrap(),
         keystore_uri: ctx.keystore_uri().to_string(),
         data_dir: ctx.data_dir().to_path_buf(),
@@ -212,6 +213,7 @@ pub async fn execute(
 
             (service, Some(pty))
         }
+        #[cfg(feature = "containers")]
         ServiceSpawnMethod::Container => {
             let service = container::setup_with_container(
                 &ctx,

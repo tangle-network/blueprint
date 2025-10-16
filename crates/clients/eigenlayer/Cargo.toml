@@ -24,6 +24,10 @@ alloy-network = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-transport = { workspace = true }
+alloy-pubsub = { workspace = true }
+alloy-rpc-types = { workspace = true }
+auto_impl = { workspace = true }
+futures-util = { workspace = true }
 eigensdk = { workspace = true, features = [
 	"common",
 	"client-avsregistry",

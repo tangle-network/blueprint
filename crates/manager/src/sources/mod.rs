@@ -3,6 +3,7 @@ use crate::config::{BlueprintManagerConfig, BlueprintManagerContext};
 use crate::rt::ResourceLimits;
 use crate::rt::service::Service;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
+use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use std::path::{Path, PathBuf};
 use url::Url;
 
@@ -42,6 +43,11 @@ pub struct BlueprintArgs {
     pub test_mode: bool,
     pub pretty: bool,
     pub verbose: u8,
+
+    // TODO(daniel): Implement Keystore Password
+    // #[cfg(feature = "eigenlayer")]
+    // /// The keystore password to reveal config
+    // pub keystore_password: Option<String>,
 }
 
 impl BlueprintArgs {
@@ -51,7 +57,7 @@ impl BlueprintArgs {
             blueprint_core::warn!("Test mode is enabled");
         }
 
-        // TODO: Add support for keystore password
+        // TODO(daniel): Add support for keystore password
         // if let Some(keystore_password) = &env.keystore_password {
         //     arguments.push(format!("--keystore-password={}", keystore_password));
         // }

@@ -6,15 +6,16 @@ use crate::error::Result;
 use crate::rt::hypervisor::net;
 use crate::sdk::entry::SendFuture;
 use blueprint_auth::db::RocksDb;
-use blueprint_clients::tangle::EventsClient;
-use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
-use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
+use blueprint_clients::EventsClient;
+use blueprint_clients::tangle::client::TangleClient;
+use blueprint_clients::eigenlayer::client::EigenlayerClient;
 use blueprint_core::{error, info, warn};
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
-use blueprint_runner::config::BlueprintEnvironment;
+use blueprint_runner::config::{BlueprintEnvironment, Protocol};
+use blueprint_runner::config::ProtocolSettingsT;
 use color_eyre::Report;
 use color_eyre::eyre::OptionExt;
 use sp_core::{ecdsa, sr25519};
@@ -27,14 +28,15 @@ use tangle_subxt::subxt::tx::Signer;
 use tangle_subxt::subxt::utils::AccountId32;
 use tokio::task::JoinHandle;
 
-pub(crate) mod event_handler;
+pub(crate) mod tangle_event_handler;
+pub(crate) mod eigen_event_handler;
 
 pub struct BlueprintManagerHandle {
     shutdown_call: Option<tokio::sync::oneshot::Sender<()>>,
     start_tx: Option<tokio::sync::oneshot::Sender<()>>,
     running_task: JoinHandle<color_eyre::Result<()>>,
     span: tracing::Span,
-    sr25519_id: TanglePairSigner<sr25519::Pair>,
+    sr25519_id: Option<TanglePairSigner<sr25519::Pair>>,
     ecdsa_id: TanglePairSigner<ecdsa::Pair>,
     keystore_uri: String,
 }
@@ -64,7 +66,7 @@ impl BlueprintManagerHandle {
 
     /// Returns the SR25519 keypair for this blueprint manager
     #[must_use]
-    pub fn sr25519_id(&self) -> &TanglePairSigner<sr25519::Pair> {
+    pub fn sr25519_id(&self) -> &Option<TanglePairSigner<sr25519::Pair>> {
         &self.sr25519_id
     }
 
@@ -177,73 +179,111 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         run_auth_proxy(ctx.data_dir().to_path_buf(), ctx.auth_proxy_opts.clone()).await?;
     ctx.set_db(db).await;
 
-    // TODO: Actual error handling
-    let (tangle_key, ecdsa_key) = {
-        let sr_key_pub = keystore.first_local::<SpSr25519>()?;
-        let sr_pair = keystore.get_secret::<SpSr25519>(&sr_key_pub)?;
-        let sr_key = TanglePairSigner::new(sr_pair.0);
+    let ecdsa_key_pub = keystore.first_local::<SpEcdsa>()?;
+    let ecdsa_pair = keystore.get_secret::<SpEcdsa>(&ecdsa_key_pub)?;
+    let ecdsa_key = TanglePairSigner::new(ecdsa_pair.0);
 
-        let ecdsa_key_pub = keystore.first_local::<SpEcdsa>()?;
-        let ecdsa_pair = keystore.get_secret::<SpEcdsa>(&ecdsa_key_pub)?;
-        let ecdsa_key = TanglePairSigner::new(ecdsa_pair.0);
-
-        (sr_key, ecdsa_key)
+    let may_be_tangle_key = {
+        if env.protocol_settings.protocol() == Protocol::Tangle {
+        let sr_key_pub = keystore.first_local::<SpSr25519>().map_err(Error::Keystore)?;
+            let sr_pair = keystore.get_secret::<SpSr25519>(&sr_key_pub)?;
+            Some(TanglePairSigner::new(sr_pair.0))
+        } else {
+            None
+        }
     };
-
-    let sub_account_id = tangle_key.account_id().clone();
-
-    let mut active_blueprints = HashMap::new();
+    let tangle_key = may_be_tangle_key.clone();
 
     let keystore_uri = env.keystore_uri.clone();
+
     #[cfg(feature = "vm-sandbox")]
     let network_interface = ctx.vm.network_interface.clone();
 
+    let protocol = env.protocol_settings.protocol();
     let manager_task = async move {
-        let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
-        let services_client = tangle_client.services_client();
+        match protocol {
+            Protocol::Eigenlayer => {
+                let eigenlayer_client = EigenlayerClient::new(env.clone());
+                eigen_event_handler::handle_init(
+                    &eigenlayer_client,
+                    &env,
+                    &ctx,
+                )
+                .await?;
 
-        // With the basics setup, we must now implement the main logic of the Blueprint Manager
-        // Handle initialization logic
-        // NOTE: The node running this code should be registered as an operator for the blueprints, otherwise, this
-        // code will fail
-        let mut operator_subscribed_blueprints = handle_init(
-            &tangle_client,
-            services_client,
-            &sub_account_id,
-            &mut active_blueprints,
-            &env,
-            &ctx,
-        )
-        .await?;
-
-        // Now, run the main event loop
-        // Listen to FinalityNotifications and poll for new/deleted services that correspond to the blueprints above
-        while let Some(event) = tangle_client.next_event().await {
-            let result = event_handler::check_blueprint_events(
-                &event,
-                &mut active_blueprints,
-                &sub_account_id.clone(),
-            );
-
-            if result.needs_update {
-                operator_subscribed_blueprints = services_client
-                    .query_operator_blueprints(event.hash, sub_account_id.clone())
+                // For Eigenlayer, we let the runner handle the producer stream
+                // The PollingProducer in the runner will process job calls
+                info!("Eigenlayer manager initialized, letting runner handle producer stream");
+                
+                while let Some(event) = eigenlayer_client.next_event().await {
+                    eigen_event_handler::handle_eigen_event(
+                        &event,
+                        &env,
+                        &ctx,
+                    )
                     .await?;
-            }
+                }
+                Err::<(), _>(Error::ClientDied)
 
-            event_handler::handle_tangle_event(
-                &event,
-                &operator_subscribed_blueprints,
-                &env,
-                &ctx,
-                &mut active_blueprints,
-                result,
-                services_client,
-            )
-            .await?;
+                // // Keep the manager task alive but don't block on WebSocket
+                // loop {
+                //     tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                //     info!("Eigenlayer manager still running...");
+                // }
+            },
+            Protocol::Tangle => {
+                let tangle_key = tangle_key.unwrap();
+                let sub_account_id = tangle_key.account_id().clone();
+                let mut active_blueprints = HashMap::new();
+            
+                let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
+                let services_client = tangle_client.services_client();
+        
+                // With the basics setup, we must now implement the main logic of the Blueprint Manager
+                // Handle initialization logic
+                // NOTE: The node running this code should be registered as an operator for the blueprints, otherwise, this
+                // code will fail
+                let mut operator_subscribed_blueprints = tangle_event_handler::handle_init(
+                    &tangle_client,
+                    services_client,
+                    &sub_account_id,
+                    &mut active_blueprints,
+                    &env,
+                    &ctx,
+                )
+                .await?;
+        
+                // Now, run the main event loop
+                // Listen to FinalityNotifications and poll for new/deleted services that correspond to the blueprints above
+                while let Some(event) = tangle_client.next_event().await {
+                    let result = tangle_event_handler::check_blueprint_events(
+                        &event,
+                        &mut active_blueprints,
+                        &sub_account_id.clone(),
+                    );
+        
+                    if result.needs_update {
+                        operator_subscribed_blueprints = services_client
+                            .query_operator_blueprints(event.hash, sub_account_id.clone())
+                            .await?;
+                    }
+        
+                    tangle_event_handler::handle_tangle_event(
+                        &event,
+                        &operator_subscribed_blueprints,
+                        &env,
+                        &ctx,
+                        &mut active_blueprints,
+                        result,
+                        services_client,
+                    )
+                    .await?;
+                }
+        
+                Err::<(), _>(Error::ClientDied)
+            },
+            _ => unreachable!("should be exhaustive"),
         }
-
-        Err::<(), _>(Error::ClientDied)
     };
 
     let (tx_stop, rx_stop) = tokio::sync::oneshot::channel::<()>();
@@ -261,7 +301,6 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     };
 
     let (start_tx, start_rx) = tokio::sync::oneshot::channel::<()>();
-
     let combined_task = async move {
         start_rx
             .await
@@ -274,13 +313,11 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
             res1 = auth_proxy_task => {
                 Err(Report::msg(format!("Auth Proxy Closed Unexpectedly: {res1:?}")))
             },
-
             () = shutdown_task => {
                 #[cfg(feature = "vm-sandbox")]
                 if let Err(e) = net::nftables::cleanup_firewall(&network_interface) {
                     error!("Failed to cleanup nftables rules: {e}");
                 }
-
                 Ok(())
             }
         }
@@ -294,7 +331,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         shutdown_call: Some(tx_stop),
         running_task: handle,
         span,
-        sr25519_id: tangle_key,
+        sr25519_id: may_be_tangle_key,
         ecdsa_id: ecdsa_key,
         keystore_uri,
     };
@@ -334,61 +371,6 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
         shutdown_cmd,
     )
     .await
-}
-
-/// * Query to get Vec<RpcServicesWithBlueprint>
-/// * For each `RpcServicesWithBlueprint`, fetch the associated blueprint binary (fetch/download)
-///   -> If the services field is empty, just emit and log inside the executed binary "that states a new service instance got created by one of these blueprints"
-///   -> If the services field is not empty, for each service in RpcServicesWithBlueprint.services, spawn the blueprint binary, using params to set the job type to listen to (in terms of our old language, each spawned service represents a single "`RoleType`")
-#[allow(clippy::too_many_arguments)]
-async fn handle_init(
-    tangle_runtime: &TangleClient,
-    services_client: &TangleServicesClient<TangleConfig>,
-    sub_account_id: &AccountId32,
-    active_blueprints: &mut ActiveBlueprints,
-    blueprint_env: &BlueprintEnvironment,
-    ctx: &BlueprintManagerContext,
-) -> Result<Vec<RpcServicesWithBlueprint>> {
-    info!("Beginning initialization of Blueprint Manager");
-
-    let Some(init_event) = tangle_runtime.next_event().await else {
-        return Err(Error::InitialBlock);
-    };
-
-    let maybe_operator_subscribed_blueprints = services_client
-        .query_operator_blueprints(init_event.hash, sub_account_id.clone())
-        .await;
-
-    let operator_subscribed_blueprints =
-        maybe_operator_subscribed_blueprints.unwrap_or_else(|err| {
-            warn!(
-                "Failed to query operator blueprints: {}, did you register as an operator?",
-                err
-            );
-            Vec::new()
-        });
-
-    info!(
-        "Received {} initial blueprints this operator is registered to",
-        operator_subscribed_blueprints.len()
-    );
-
-    // Immediately poll, handling the initial state
-    let poll_result =
-        event_handler::check_blueprint_events(&init_event, active_blueprints, sub_account_id);
-
-    event_handler::handle_tangle_event(
-        &init_event,
-        &operator_subscribed_blueprints,
-        blueprint_env,
-        ctx,
-        active_blueprints,
-        poll_result,
-        services_client,
-    )
-    .await?;
-
-    Ok(operator_subscribed_blueprints)
 }
 
 /// Runs the authentication proxy server.

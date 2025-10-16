@@ -1,6 +1,10 @@
 use crate::error::Result;
+use blueprint_client_core::EventsClient;
 use alloy_primitives::{Address, Bytes, U256};
 use alloy_provider::{Provider, RootProvider};
+use alloy_rpc_types::{Block, Log, Filter};
+use alloy_pubsub::{PubSubFrontend, Subscription};
+use futures_util::StreamExt;
 use blueprint_evm_extra::util::{get_provider_http, get_wallet_provider_http};
 use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_std::collections::HashMap;
@@ -14,18 +18,30 @@ use eigensdk::utils::slashing::core::allocation_manager::{
 use eigensdk::utils::slashing::core::delegation_manager::DelegationManager;
 use eigensdk::utils::slashing::middleware::operator_state_retriever::OperatorStateRetriever;
 use num_bigint::BigInt;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::time::Duration;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 
 /// Client that provides access to EigenLayer utility functions through the use of the [`BlueprintEnvironment`].
 #[derive(Clone)]
 pub struct EigenlayerClient {
     pub config: BlueprintEnvironment,
+    log_stream: Arc<Mutex<Option<futures_util::stream::BoxStream<'static, Log>>>>,
+    latest_event: Arc<Mutex<Option<Log>>>,
+    log_rx: Arc<Mutex<Option<UnboundedReceiver<Log>>>>,
 }
 
 impl EigenlayerClient {
     /// Creates a new [`EigenlayerClient`].
     #[must_use]
     pub fn new(config: BlueprintEnvironment) -> Self {
-        Self { config }
+        Self { 
+            config,
+            log_stream: Arc::new(Mutex::new(None)),
+            latest_event: Arc::new(Mutex::new(None)),
+            log_rx: Arc::new(Mutex::new(None)),
+        }
     }
 
     /// Get the [`BlueprintEnvironment`] for this client
@@ -66,6 +82,37 @@ impl EigenlayerClient {
         get_ws_provider(self.config.ws_rpc_endpoint.as_str())
             .await
             .map_err(Into::into)
+    }
+
+    /// Initialize the event streaming by subscribing to logs.
+    ///
+    /// This method must be called before using the EventsClient functionality.
+    async fn initialize(&self) -> Result<()> {
+        let contract_addresses = self.config.protocol_settings.eigenlayer()?;
+        let provider = self.get_provider_ws().await?;
+        let filter = Filter::new().address(contract_addresses.task_manager_address);
+        
+        blueprint_core::info!(
+            "Initializing event stream for task manager address: {:?}",
+            contract_addresses.task_manager_address
+        );
+        
+        let subscription = provider.subscribe_logs(&filter).await?;
+        
+        // Spawn a background task to forward logs into a channel and keep provider alive
+        let (tx, rx) = unbounded_channel::<Log>();
+        tokio::task::spawn(async move {
+            let mut stream = subscription.into_stream();
+            let _keep_alive_provider = provider; // keep WS provider alive in this task
+            while let Some(log) = stream.next().await {
+                let _ = tx.send(log);
+            }
+        });
+        
+        *self.log_rx.lock().await = Some(rx);
+
+        blueprint_core::info!("Event stream initialized successfully");
+        Ok(())
     }
 
     // TODO: Slashing contracts equivalent
@@ -724,5 +771,78 @@ impl EigenlayerClient {
         }
 
         Ok(result)
+    }
+}
+
+impl EventsClient<Log> for EigenlayerClient {
+    async fn next_event(&self) -> Option<Log> {
+        loop {
+            // Take receiver out of mutex to await without holding the lock
+            let mut rx_opt = {
+                let mut guard = tokio::time::timeout(
+                    Duration::from_millis(500),
+                    self.log_rx.lock(),
+                )
+                .await
+                .ok()?;
+                guard.take()
+            };
+
+            if rx_opt.is_none() {
+                blueprint_core::warn!("Retrying to subscribe to new events");
+                self.initialize().await.ok()?;
+                continue;
+            }
+
+            let mut rx = rx_opt?;
+            let log_opt = rx.recv().await;
+
+            // Put receiver back for next call
+            {
+                let mut guard = tokio::time::timeout(
+                    Duration::from_millis(500),
+                    self.log_rx.lock(),
+                )
+                .await
+                .ok()?;
+                *guard = Some(rx);
+            }
+
+            let log = match log_opt {
+                Some(l) => l,
+                None => {
+                    blueprint_core::warn!("Log channel closed; reinitializing subscription");
+                    self.initialize().await.ok()?;
+                    continue;
+                }
+            };
+
+            let mut latest_event = tokio::time::timeout(
+                Duration::from_millis(500),
+                self.latest_event.lock(),
+            )
+            .await
+            .ok()?;
+            *latest_event = Some(log.clone());
+
+            return Some(log);
+        }
+    }
+
+    async fn latest_event(&self) -> Option<Log> {
+        let latest_event = tokio::time::timeout(
+            Duration::from_millis(500),
+            self.latest_event.lock(),
+        )
+        .await
+        .ok()?;
+        
+        match &*latest_event {
+            Some(event) => Some(event.clone()),
+            None => {
+                drop(latest_event);
+                self.next_event().await
+            }
+        }
     }
 }

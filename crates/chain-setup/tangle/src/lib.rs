@@ -161,7 +161,11 @@ macro_rules! test_tangle_blueprint {
         ::blueprint_test_utils::tangle_blueprint_test_template!(
             $N,
             |client, handles, blueprint, _| async move {
-                let keypair = handles[0].sr25519_id().clone();
+                let keypair = handles[0]
+                    .sr25519_id()
+                    .as_ref()
+                    .expect("Missing sr25519 keypair");
+
                 let selected_service = &blueprint.services[0];
                 let service_id = selected_service.id;
 

@@ -125,9 +125,11 @@ impl AggregatorContext {
     async fn start_server(aggregator: Arc<Mutex<Self>>) -> Result<(), Error> {
         let mut io = IoHandler::new();
         io.add_method("process_signed_task_response", {
+            info!("Adding process_signed_task_response method");
             let aggregator = Arc::clone(&aggregator);
             move |params: Params| {
                 let aggregator = Arc::clone(&aggregator);
+                info!("Processing signed task response");
                 async move {
                     // Parse the outer structure first
                     let outer_params: Value = params.parse()?;
@@ -144,6 +146,8 @@ impl AggregatorContext {
                                 "Invalid SignedTaskResponse: {e}",
                             ))
                         })?;
+
+                    info!("Processing signed task response: {:#?}", signed_task_response);
 
                     aggregator
                         .lock()
@@ -231,6 +235,7 @@ impl AggregatorContext {
 
         // Process the signed response using the generic task aggregator
         if let Some(task_agg) = &self.task_aggregator {
+            info!("Processing generic_signed_response");
             task_agg
                 .process_signed_response(generic_signed_response)
                 .await;
