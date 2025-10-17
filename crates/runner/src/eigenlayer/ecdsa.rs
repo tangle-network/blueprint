@@ -18,16 +18,14 @@ use std::str::FromStr;
 /// Eigenlayer protocol configuration for ECDSA-based contracts
 #[derive(Clone, Copy)]
 pub struct EigenlayerECDSAConfig {
-    earnings_receiver_address: Address,
     delegation_approver_address: Address,
 }
 
 impl EigenlayerECDSAConfig {
     /// Create a new `EigenlayerECDSAConfig`
     #[must_use]
-    pub fn new(earnings_receiver_address: Address, delegation_approver_address: Address) -> Self {
+    pub fn new(delegation_approver_address: Address) -> Self {
         Self {
-            earnings_receiver_address,
             delegation_approver_address,
         }
     }
@@ -35,12 +33,7 @@ impl EigenlayerECDSAConfig {
 
 impl BlueprintConfig for EigenlayerECDSAConfig {
     async fn register(&self, env: &BlueprintEnvironment) -> Result<(), RunnerError> {
-        register_ecdsa_impl(
-            env,
-            self.earnings_receiver_address,
-            self.delegation_approver_address,
-        )
-        .await
+        register_ecdsa_impl(env, self.delegation_approver_address).await
     }
 
     async fn requires_registration(&self, env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
@@ -79,7 +72,6 @@ async fn requires_registration_ecdsa_impl(env: &BlueprintEnvironment) -> Result<
 
 async fn register_ecdsa_impl(
     env: &BlueprintEnvironment,
-    earnings_receiver_address: Address,
     delegation_approver_address: Address,
 ) -> Result<(), RunnerError> {
     let contract_addresses = env.protocol_settings.eigenlayer()?;
@@ -135,7 +127,7 @@ async fn register_ecdsa_impl(
         delegation_approver_address,
         metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
         allocation_delay: Some(30), // TODO: Make allocation delay configurable
-        _deprecated_earnings_receiver_address: Some(earnings_receiver_address),
+        _deprecated_earnings_receiver_address: None, // Deprecated in eigensdk-rs v2.0.0
         staker_opt_out_window_blocks: Some(staker_opt_out_window_blocks),
     };
 
