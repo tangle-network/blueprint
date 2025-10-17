@@ -1,52 +1,21 @@
-use alloy_primitives::Uint;
-use alloy_primitives::{Address, address};
+use alloy_primitives::{Address, Uint, address};
+use alloy_primitives::aliases::U96;
 use alloy_provider::Provider;
 use blueprint_chain_setup::anvil::get_receipt;
 use blueprint_core::info;
-use blueprint_evm_extra::util::get_provider_http;
+use blueprint_evm_extra::util::{get_provider_from_signer, get_provider_http};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
-use eigensdk::utils::slashing::middleware::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
-use eigensdk::utils::slashing::middleware::registry_coordinator::IStakeRegistryTypes::StrategyParams;
-use eigensdk::utils::slashing::middleware::registry_coordinator::RegistryCoordinator;
+use eigenlayer_contract_deployer::bindings::core::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
+use eigenlayer_contract_deployer::bindings::core::registry_coordinator::IStakeRegistryTypes::StrategyParams;
+use eigenlayer_contract_deployer::bindings::RegistryCoordinator;
+use eigenlayer_contract_deployer::core::{
+    deploy_core_contracts, DelegationManagerConfig, DeploymentConfigData,
+    EigenPodManagerConfig, RewardsCoordinatorConfig, StrategyFactoryConfig,
+    StrategyManagerConfig
+};
+use eigenlayer_contract_deployer::deploy::{deploy_avs_contracts, DeployedContracts};
+use eigenlayer_contract_deployer::permissions::setup_avs_permissions;
 use url::Url;
-
-// ================= Core Eigenlayer Deployment Addresses =================
-/// The default Allocation Manager address on our testnet
-pub const ALLOCATION_MANAGER_ADDR: Address = address!("8a791620dd6260079bf849dc5567adc3f2fdc318");
-/// The default AVS Directory address on our testnet
-pub const AVS_DIRECTORY_ADDR: Address = address!("5fc8d32690cc91d4c39d9d3abcbd16989f875707");
-/// The default Delegation address on our testnet
-pub const DELEGATION_MANAGER_ADDR: Address = address!("cf7ed3acca5a467e9e704c703e8d87f634fb0fc9");
-/// The default Strategy Manager address on our testnet
-pub const STRATEGY_MANAGER_ADDR: Address = address!("a513e6e4b8f2a923d98304ec87f64353c4d5c853");
-/// The default Strategy Factory address on our testnet
-pub const STRATEGY_FACTORY_ADDR: Address = address!("0b306bf915c4d645ff596e518faf3f9669b97016");
-/// The default Rewards Coordinator address on our testnet
-pub const REWARDS_COORDINATOR_ADDR: Address = address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e");
-/// The default Pauser Registry address on our testnet
-pub const PAUSER_REGISTRY_ADDR: Address = address!("c6e7df5e7b4f2a278906862b61205850344d4e7d");
-/// The default Strategy Beacon address on our testnet
-pub const STRATEGY_BEACON_ADDR: Address = address!("c3e53f4d16ae77db1c982e75a937b9f60fe63690");
-/// The default Permission Controller address on our testnet
-pub const PERMISSION_CONTROLLER_ADDR: Address =
-    address!("3aa5ebb10dc797cac828524e59a333d0a371443c");
-/// The default Strategy address for our Squaring Example
-pub const STRATEGY_ADDR: Address = address!("524f04724632eed237cba3c37272e018b3a7967e");
-/// The default Token address for our Squaring Example
-pub const TOKEN_ADDR: Address = address!("4826533b4897376654bb4d4ad88b7fafd0c98528");
-/// The default Stake Registry address on our testnet (Differs when using ECDSA Base)
-pub const STAKE_REGISTRY_ADDR: Address = address!("4c5859f0f772848b2d91f1d83e2fe57935348029");
-
-// ================= Incredible Squaring Deployment Addresses =================
-/// The default Operator State Retriever address on our testnet
-pub const OPERATOR_STATE_RETRIEVER_ADDR: Address =
-    address!("b0d4afd8879ed9f52b28595d31b441d079b2ca07");
-/// The default Registry Coordinator address on our testnet
-pub const REGISTRY_COORDINATOR_ADDR: Address = address!("cd8a1c3ba11cf5ecfa6267617243239504a98d90");
-/// The default Service Manager address on our testnet (Depends on AVS, this is the proxy)
-pub const SERVICE_MANAGER_ADDR: Address = address!("36c02da8a0983159322a80ffe9f24b1acff8b570");
-/// The default Slasher address on our testnet
-pub const SLASHER_ADDR: Address = address!("1429859428c0abc9c2c47c8ee9fbaf82cfa0f20f");
 
 pub struct EigenlayerTestEnvironment {
     pub http_endpoint: String,
@@ -58,7 +27,9 @@ pub struct EigenlayerTestEnvironment {
 /// Sets up the test environment for the EigenLayer Blueprint.
 ///
 /// # Description
-/// - Sets all the necessary environment variables for the necessary EigenLayer Contract Addresses.
+/// - Deploys all EigenLayer contracts programmatically to the testnet
+/// - Sets up AVS permissions and metadata
+/// - Creates a quorum for operator registration
 /// - Returns a [`EigenlayerTestEnvironment`] struct containing the test environment state.
 #[allow(clippy::missing_panics_doc)]
 pub async fn setup_eigenlayer_test_environment<T: TryInto<Url>, U: TryInto<Url>>(
@@ -75,70 +46,137 @@ where
 
     let accounts = provider.get_accounts().await.unwrap();
 
-    unsafe {
-        std::env::set_var(
-            "REGISTRY_COORDINATOR_ADDR",
-            REGISTRY_COORDINATOR_ADDR.to_string(),
-        );
-        std::env::set_var(
-            "OPERATOR_STATE_RETRIEVER_ADDR",
-            OPERATOR_STATE_RETRIEVER_ADDR.to_string(),
-        );
-        std::env::set_var(
-            "DELEGATION_MANAGER_ADDR",
-            DELEGATION_MANAGER_ADDR.to_string(),
-        );
-        std::env::set_var(
-            "PERMISSION_CONTROLLER_ADDR",
-            PERMISSION_CONTROLLER_ADDR.to_string(),
-        );
-        std::env::set_var("SERVICE_MANAGER_ADDR", SERVICE_MANAGER_ADDR.to_string());
-        std::env::set_var("STAKE_REGISTRY_ADDR", STAKE_REGISTRY_ADDR.to_string());
-        std::env::set_var("STRATEGY_MANAGER_ADDR", STRATEGY_MANAGER_ADDR.to_string());
-        std::env::set_var("AVS_DIRECTORY_ADDR", AVS_DIRECTORY_ADDR.to_string());
-        std::env::set_var("SLASHER_ADDR", SLASHER_ADDR.to_string());
-    }
+    // Use Anvil's default accounts
+    let owner_account = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+    let task_generator_account = address!("15d34AAf54267DB7D7c367839AAf71A00a2C6A65");
+    let aggregator_account = address!("a0Ee7A142d267C1f36714E4a8F75612F20a79720");
+    let private_key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
+    info!("Deploying EigenLayer core contracts...");
+
+    let core_config = DeploymentConfigData {
+        strategy_manager: StrategyManagerConfig {
+            init_paused_status: Uint::from(0),
+            init_withdrawal_delay_blocks: 1u32,
+        },
+        delegation_manager: DelegationManagerConfig {
+            init_paused_status: Uint::from(0),
+            withdrawal_delay_blocks: 0u32,
+        },
+        eigen_pod_manager: EigenPodManagerConfig {
+            init_paused_status: Uint::from(0),
+        },
+        rewards_coordinator: RewardsCoordinatorConfig {
+            init_paused_status: Uint::from(0),
+            max_rewards_duration: 864_000_u32,
+            max_retroactive_length: 432_000_u32,
+            max_future_length: 864_000_u32,
+            genesis_rewards_timestamp: 1_672_531_200_u32,
+            updater: owner_account,
+            activation_delay: 0u32,
+            calculation_interval_seconds: 86400u32,
+            global_operator_commission_bips: 1000u16,
+        },
+        strategy_factory: StrategyFactoryConfig {
+            init_paused_status: Uint::from(0),
+        },
+    };
+
+    let core_contracts = deploy_core_contracts(
+        &http_endpoint.to_string(),
+        private_key,
+        owner_account,
+        core_config,
+        Some(address!("00000000219ab540356cBB839Cbe05303d7705Fa")),
+        Some(1_564_000),
+    )
+    .await
+    .unwrap();
+
+    info!("Deploying AVS contracts...");
+
+    let avs_contracts = deploy_avs_contracts(
+        &http_endpoint.to_string(),
+        private_key,
+        owner_account,
+        1,
+        core_contracts.permission_controller,
+        core_contracts.allocation_manager,
+        core_contracts.avs_directory,
+        core_contracts.delegation_manager,
+        core_contracts.pauser_registry,
+        core_contracts.rewards_coordinator,
+        core_contracts.strategy_factory,
+        task_generator_account,
+        aggregator_account,
+        10,
+    )
+    .await
+    .unwrap();
+
+    let DeployedContracts {
+        registry_coordinator: registry_coordinator_address,
+        operator_state_retriever: operator_state_retriever_address,
+        stake_registry: stake_registry_address,
+        strategy: strategy_address,
+        squaring_service_manager: service_manager_address,
+        ..
+    } = avs_contracts;
+
+    info!("Setting AVS permissions and metadata...");
+    let signer_wallet = get_provider_from_signer(private_key, http_endpoint.as_str());
+
+    setup_avs_permissions(
+        &core_contracts,
+        &avs_contracts,
+        &signer_wallet,
+        owner_account,
+        "https://github.com/tangle-network/avs/blob/main/metadata.json".to_string(),
+    )
+    .await
+    .unwrap();
+
+    info!("Creating quorum...");
     let registry_coordinator =
-        RegistryCoordinator::new(REGISTRY_COORDINATOR_ADDR, provider.clone());
+        RegistryCoordinator::new(registry_coordinator_address, signer_wallet.clone());
 
-    let operator_set_params = OperatorSetParam {
+    let operator_set_param = OperatorSetParam {
         maxOperatorCount: 10,
         kickBIPsOfOperatorStake: 100,
         kickBIPsOfTotalStake: 1000,
     };
+
     let strategy_params = StrategyParams {
-        strategy: TOKEN_ADDR,
-        multiplier: Uint::from(1),
+        strategy: strategy_address,
+        multiplier: U96::from(1),
     };
 
-    info!("Creating Quorum...");
-    let _receipt = get_receipt(registry_coordinator.createTotalDelegatedStakeQuorum(
-        operator_set_params,
-        Uint::from(0),
+    let create_quorum_call = registry_coordinator.createTotalDelegatedStakeQuorum(
+        operator_set_param,
+        U96::from(0),
         vec![strategy_params],
-    ))
-    .await
-    .unwrap();
+    );
 
-    info!("Setup Eigenlayer test environment");
+    let _receipt = get_receipt(create_quorum_call).await.unwrap();
+
+    info!("EigenLayer test environment setup complete");
 
     EigenlayerTestEnvironment {
         http_endpoint: http_endpoint.to_string(),
         ws_endpoint: ws_endpoint.to_string(),
         accounts,
         eigenlayer_contract_addresses: EigenlayerProtocolSettings {
-            allocation_manager_address: ALLOCATION_MANAGER_ADDR,
-            registry_coordinator_address: REGISTRY_COORDINATOR_ADDR,
-            operator_state_retriever_address: OPERATOR_STATE_RETRIEVER_ADDR,
-            delegation_manager_address: DELEGATION_MANAGER_ADDR,
-            service_manager_address: SERVICE_MANAGER_ADDR,
-            stake_registry_address: STAKE_REGISTRY_ADDR,
-            strategy_manager_address: STRATEGY_MANAGER_ADDR,
-            avs_directory_address: AVS_DIRECTORY_ADDR,
-            rewards_coordinator_address: REWARDS_COORDINATOR_ADDR,
-            permission_controller_address: PERMISSION_CONTROLLER_ADDR,
-            strategy_address: STRATEGY_ADDR,
+            allocation_manager_address: core_contracts.allocation_manager,
+            registry_coordinator_address,
+            operator_state_retriever_address,
+            delegation_manager_address: core_contracts.delegation_manager,
+            service_manager_address,
+            stake_registry_address,
+            strategy_manager_address: core_contracts.strategy_manager,
+            avs_directory_address: core_contracts.avs_directory,
+            rewards_coordinator_address: core_contracts.rewards_coordinator,
+            permission_controller_address: core_contracts.permission_controller,
+            strategy_address,
         },
     }
 }

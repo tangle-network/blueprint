@@ -67,7 +67,7 @@ where
     ///
     /// * TODO
     pub async fn setup_with_context(test_dir: TempDir, _context: Ctx) -> Result<Self, Error> {
-        // Start local Anvil testnet
+        // Start local Anvil testnet (empty, we'll deploy contracts)
         let testnet = start_empty_anvil_testnet(true).await;
 
         // Setup Eigenlayer test environment

@@ -19,7 +19,7 @@ path = "src/main.rs"
 [dependencies]
 blueprint-core = { workspace = true, features = ["tracing"] }
 tracing = { workspace = true }
-blueprint-runner = { workspace = true, features = ["networking", "tangle", "std"] }
+blueprint-runner = { workspace = true, features = ["networking", "tangle", "eigenlayer", "std"] }
 blueprint-clients = { workspace = true, features = ["std", "tangle"] }
 blueprint-crypto = { workspace = true, features = ["std", "tangle-pair-signer"] }
 blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
@@ -27,6 +27,13 @@ blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
 
+# Alloy dependencies for EigenLayer protocol
+alloy-provider = { workspace = true }
+alloy-rpc-types = { workspace = true }
+alloy-transport-http = { workspace = true }
+alloy-primitives = { workspace = true }
+
+serde = { workspace = true, features = ["derive"] }
 document-features.workspace = true
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
 docktopus = { workspace = true, features = ["deploy"] }
@@ -94,6 +101,13 @@ tee = ["blueprint-runner/tee"]
 ## [kubernetes]: https://kubernetes.io/
 ## [kata-containers]: https://katacontainers.io/
 containers = ["dep:kube", "dep:k8s-openapi"]
+
+[dev-dependencies]
+blueprint-tangle-testing-utils = { path = "../testing-utils/tangle" }
+blueprint-eigenlayer-testing-utils = { path = "../testing-utils/eigenlayer" }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+rand = { workspace = true }
 
 [package.metadata.dist]
 dist = false

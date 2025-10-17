@@ -537,7 +537,7 @@ async fn main() -> color_eyre::Result<()> {
                 protocol,
                 rpc_url,
                 keystore_path,
-                binary_path,
+                binary_path: _,
                 network,
                 data_dir,
                 bootnodes,
@@ -637,7 +637,13 @@ async fn main() -> color_eyre::Result<()> {
 
                 match protocol {
                     Protocol::Eigenlayer => {
-                        run_eigenlayer_avs(config, chain, binary_path).await?;
+                        run_eigenlayer_avs(
+                            config,
+                            chain,
+                            None, // keystore_path already set in config
+                            data_dir,
+                            allow_unchecked_attestations,
+                        ).await?;
                     }
                     Protocol::Tangle => {
                         // Create the run options for the Tangle blueprint

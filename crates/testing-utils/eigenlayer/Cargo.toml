@@ -27,5 +27,6 @@ tempfile = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-provider = { workspace = true }
 eigensdk = { workspace = true }
+eigenlayer-contract-deployer = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 url = { workspace = true }

@@ -150,7 +150,7 @@ async fn register_bls_impl(
         delegation_approver_address,
         metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
         allocation_delay: Some(0), // TODO: Make allocation delay configurable
-        _deprecated_earnings_receiver_address: Some(earnings_receiver_address),
+        _deprecated_earnings_receiver_address: None, // Deprecated in eigensdk-rs v2.0.0
         staker_opt_out_window_blocks: Some(staker_opt_out_window_blocks),
     };
 

@@ -14,6 +14,7 @@ pub mod blueprint;
 pub mod config;
 pub mod error;
 pub mod executor;
+pub mod protocol;
 pub mod rt;
 pub mod sdk;
 pub mod sources;

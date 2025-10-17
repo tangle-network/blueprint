@@ -69,8 +69,19 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?;
 
     info!("~~~ Executing the incredible squaring blueprint ~~~");
-    let eigen_config = EigenlayerBLSConfig::new(Address::default(), Address::default());
-    BlueprintRunner::builder(eigen_config, BlueprintEnvironment::default())
+
+    // Configure EigenLayer operator addresses:
+    // - delegation_approver: Address::ZERO is acceptable for test/development (matches eigensdk-rs test patterns)
+    //   For production, use operator wallet address to enable delegation approval
+    // - earnings_receiver: Deprecated in eigensdk-rs v2.0.0, internally set to None
+    let earnings_receiver_address = Address::ZERO; // Ignored - deprecated field
+    let delegation_approver_address = Address::ZERO; // For tests; use wallet.address() in production
+
+    let eigen_config = EigenlayerBLSConfig::new(
+        earnings_receiver_address,
+        delegation_approver_address,
+    );
+    BlueprintRunner::builder(eigen_config, env)
         .router(
             Router::new()
                 .route(XSQUARE_JOB_ID, xsquare_eigen)

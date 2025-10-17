@@ -71,4 +71,6 @@ pub enum Error {
     TangleClient(#[from] blueprint_clients::tangle::error::Error),
     #[error(transparent)]
     Auth(#[from] blueprint_auth::Error),
+    #[error(transparent)]
+    Keystore(#[from] blueprint_keystore::Error),
 }
