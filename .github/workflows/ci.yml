@@ -169,9 +169,9 @@ jobs:
         with:
           tool: nextest
 
-      - name: Determine nextest profile
+      - name: Determine nextest profile and features
         run: |
-          SERIAL_CRATES=("blueprint-tangle-testing-utils" "blueprint-client-evm" "blueprint-tangle-extra" "blueprint-networking" "blueprint-qos" "cargo-tangle")
+          SERIAL_CRATES=("blueprint-tangle-testing-utils" "blueprint-client-evm" "blueprint-tangle-extra" "blueprint-networking" "blueprint-qos" "cargo-tangle" "blueprint-manager")
           PROFILE=ci
 
           for crate in "${SERIAL_CRATES[@]}"; do
