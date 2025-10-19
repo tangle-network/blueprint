@@ -29,6 +29,7 @@ use blueprint_sdk::std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+use tokio::sync::Notify;
 use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
 use blueprint_sdk::testing::utils::anvil::wait_for_responses;
 use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
@@ -231,6 +232,26 @@ async fn run_eigenlayer_incredible_squaring_test(
     let successful_responses_clone = successful_responses.clone();
     let successful_responses_listener_clone = successful_responses.clone();
 
+    // Create registration readiness notifier
+    let registration_ready = Arc::new(Notify::new());
+    let registration_ready_clone = registration_ready.clone();
+    let registration_ready_spawner = registration_ready.clone();
+
+    // Clone endpoints for listeners
+    let ws_endpoint_for_registration = env.ws_rpc_endpoint.to_string();
+    let ws_endpoint_for_responses = env.ws_rpc_endpoint.to_string();
+
+    // Spawn registration listener
+    tokio::spawn(async move {
+        setup_registration_listener(
+            ws_endpoint_for_registration,
+            registry_coordinator_address,
+            harness.owner_account(),
+            registration_ready_clone,
+        )
+        .await;
+    });
+
     // Create task spawner
     let task_spawner = setup_task_spawner(
         http_endpoint.clone(),
@@ -238,6 +259,7 @@ async fn run_eigenlayer_incredible_squaring_test(
         task_generator_address,
         accounts,
         task_manager_address,
+        registration_ready_spawner,
     );
 
     tokio::spawn(async move {
@@ -245,7 +267,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     });
     tokio::spawn(async move {
         setup_task_response_listener(
-            ws_endpoint,
+            ws_endpoint_for_responses,
             task_manager_address,
             successful_responses_listener_clone,
         )
@@ -278,7 +300,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     let client = Arc::new(provider);
     let task_producer = PollingProducer::new(
         client.clone(),
-        PollingConfig::default()
+        PollingConfig::from_genesis()
             .poll_interval(Duration::from_secs(1))
             .confirmations(1)
             .step(1),
@@ -361,6 +383,7 @@ pub fn setup_task_spawner(
     task_generator_address: Address,
     accounts: Vec<Address>,
     task_manager_address: Address,
+    registration_ready: Arc<Notify>,
 ) -> impl std::future::Future<Output = ()> {
     setup_log();
     info!("Setting up task spawner...");
@@ -372,6 +395,11 @@ pub fn setup_task_spawner(
     let operators = vec![vec![accounts[0]]];
     let quorums = Bytes::from(vec![0]);
     async move {
+        // Wait for operator registration to complete before creating tasks
+        info!("Waiting for operator registration...");
+        registration_ready.notified().await;
+        info!("Operator registered! Starting task creation...");
+
         loop {
             // Delay to allow for proper task initialization
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
@@ -448,4 +476,50 @@ pub async fn setup_task_response_listener(
         };
         *counter += 1;
     }
+}
+
+pub async fn setup_registration_listener(
+    ws_endpoint: String,
+    registry_coordinator_address: Address,
+    operator_address: Address,
+    registration_ready: Arc<Notify>,
+) {
+    setup_log();
+    info!("Setting up registration listener for operator: {:#x}", operator_address);
+
+    let provider = get_provider_ws(&ws_endpoint).await;
+    let registry_coordinator = RegistryCoordinator::new(registry_coordinator_address, provider.clone());
+
+    // Subscribe to OperatorRegistered events
+    let filter = registry_coordinator.OperatorRegistered_filter().filter;
+
+    let mut event_stream = match provider.subscribe_logs(&filter).await {
+        Ok(stream) => stream.into_stream(),
+        Err(e) => {
+            error!("Failed to subscribe to OperatorRegistered events: {:?}", e);
+            return;
+        }
+    };
+
+    info!("Listening for OperatorRegistered event...");
+
+    // Wait for the registration event for our specific operator
+    while let Some(event) = event_stream.next().await {
+        if let Ok(log) = event.log_decode::<RegistryCoordinator::OperatorRegistered>() {
+            // Check if this is the operator we're waiting for
+            if log.inner.data.operator == operator_address {
+                info!(
+                    "✅ Operator registered! Address: {:#x}, ID: {:#x}",
+                    log.inner.data.operator,
+                    log.inner.data.operatorId
+                );
+
+                // Notify task spawner that registration is complete
+                registration_ready.notify_one();
+                return;
+            }
+        }
+    }
+
+    error!("Registration listener stream ended without receiving OperatorRegistered event");
 }
