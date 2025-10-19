@@ -110,7 +110,7 @@ where
             data_dir,
             None,
             SupportedChains::LocalTestnet,
-            eigenlayer_contract_addresses,
+            eigenlayer_contract_addresses.clone(),
         );
 
         // Load environment with bridge configuration
@@ -124,7 +124,7 @@ where
         let config = EigenlayerTestConfig {
             http_endpoint: Some(Url::parse(&http_endpoint)?),
             ws_endpoint: Some(Url::parse(&ws_endpoint)?),
-            eigenlayer_contract_addresses: Some(eigenlayer_contract_addresses),
+            eigenlayer_contract_addresses: Some(eigenlayer_contract_addresses.clone()),
         };
 
         Ok(Self {

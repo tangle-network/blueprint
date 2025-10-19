@@ -193,17 +193,18 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let manager_task = async move {
         // Protocol abstraction: routes to Tangle or EigenLayer based on env.protocol_settings
         let protocol_type: crate::protocol::ProtocolType = (&env.protocol_settings).into();
-        info!("Initializing blueprint manager for protocol: {:?}", protocol_type);
+        info!(
+            "Initializing blueprint manager for protocol: {:?}",
+            protocol_type
+        );
 
-        let mut protocol_manager = crate::protocol::ProtocolManager::new(
-            protocol_type,
-            env.clone(),
-            &ctx,
-        )
-        .await?;
+        let mut protocol_manager =
+            crate::protocol::ProtocolManager::new(protocol_type, env.clone(), &ctx).await?;
 
         // Run the protocol event loop
-        protocol_manager.run(&env, &ctx, &mut active_blueprints).await?;
+        protocol_manager
+            .run(&env, &ctx, &mut active_blueprints)
+            .await?;
 
         Err::<(), _>(Error::ClientDied)
     };
@@ -297,7 +298,6 @@ pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
     )
     .await
 }
-
 
 /// Runs the authentication proxy server.
 ///

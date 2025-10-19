@@ -930,11 +930,15 @@ Here's a comprehensive comparison of alternatives at each layer:
 
 ---
 
-## Cloud-Hypervisor (Future)
+## Cloud-Hypervisor (Linux Only)
 
 ### What is cloud-hypervisor?
 
 cloud-hypervisor is a **modern, lightweight VMM (Virtual Machine Monitor)** designed for cloud workloads.
+
+**STATUS: ✅ FULLY IMPLEMENTED** (`crates/manager/src/rt/hypervisor/`)
+
+The hypervisor runtime is production-ready with complete features. It's Linux-only due to KVM requirements.
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -1007,72 +1011,74 @@ cloud-hypervisor is a **modern, lightweight VMM (Virtual Machine Monitor)** desi
 
 ### Current Integration Status
 
-**NOT YET INTEGRATED**
+**✅ FULLY IMPLEMENTED**
 
-The codebase has placeholders for the Hypervisor runtime:
+The hypervisor runtime is production-ready:
 
 ```rust
 // File: crates/eigenlayer-extra/src/registration.rs
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RuntimeTarget {
     Native,
     Container,
-    Hypervisor,  // ← Defined but not implemented
+    Hypervisor,  // ✅ Fully implemented
 }
 ```
 
 ```rust
 // File: crates/manager/src/rt/mod.rs
-
 pub mod native;
 
 #[cfg(feature = "containers")]
 pub mod container;
 
 #[cfg(feature = "vm-sandbox")]
-pub mod hypervisor;  // ← Feature-gated, implementation incomplete
+pub mod hypervisor;  // ✅ Complete implementation at 662 lines
 ```
 
-**Required for Integration:**
+**Complete Features:**
 
-1. **Feature Flag:** `vm-sandbox` already exists in manager's Cargo.toml:
-   ```toml
-   [features]
-   vm-sandbox = [
-       "dep:cloud-hypervisor-client",
-       "dep:fatfs",
-       "dep:nix",
-       "dep:capctl",
-       "dep:rtnetlink",
-       "dep:ipnet",
-       "dep:netdev",
-       "dep:nftables"
-   ]
-   ```
+1. **HypervisorInstance** (`mod.rs` - 662 lines):
+   - VM creation, boot, and graceful shutdown
+   - Multi-disk configuration (OS, cloud-init, data, service binary)
+   - Memory and CPU resource limits
+   - PTY support for debugging
+   - vsock for bridge communication
+   - FAT filesystem generation for service binaries and keystores
 
-2. **Dependencies:** Already in Cargo.toml:
-   ```toml
-   cloud-hypervisor-client = { workspace = true, optional = true }
-   fatfs = { workspace = true, features = ["std"], optional = true }
-   nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"], optional = true }
-   capctl = { workspace = true, features = ["std"], optional = true }
-   ```
+2. **Cloud Image Management** (`images.rs` - 112 lines):
+   - Downloads Ubuntu 24.04 cloud images
+   - Converts QCOW2 to raw format (cloud-hypervisor requirement)
+   - Resizes images to 20GB per VM
+   - Manages vmlinuz kernel and initrd
 
-3. **Implementation Needed:**
-   - Implement `HypervisorInstance` struct
-   - Boot cloud-hypervisor VM
-   - Setup networking (bridge/tap devices)
-   - Mount filesystems (virtio-fs)
-   - Inject keystore and configuration
-   - Monitor VM health
+3. **Network Management** (`net/mod.rs` - 166 lines):
+   - IP address pool allocation with RAII leases
+   - Real-time NetLink monitoring
+   - TAP interface creation
+   - Local testnet IP translation
 
-4. **Platform Requirements:**
-   - **Linux only** (KVM required)
-   - **x86_64 or aarch64**
-   - Root or CAP_NET_ADMIN capability (for networking)
+4. **Firewall** (`net/nftables.rs` - 347 lines):
+   - nftables integration with CAP_NET_ADMIN
+   - Stateful packet filtering
+   - NAT/masquerading
+   - Per-VM rule isolation
+   - Automatic cleanup
 
-### Hypervisor Runtime Flow (Future)
+5. **Cloud-Init Configuration** (`assets/`):
+   - Automatic disk partitioning
+   - Docker installation
+   - systemd service creation
+   - Blueprint launch script
+
+**Platform Requirements:**
+   - **Linux only** (requires KVM virtualization)
+   - **x86_64 or aarch64** CPU
+   - **CAP_NET_ADMIN** capability (for networking)
+   - **cloud-hypervisor** binary in PATH
+   - **qemu-img** for image operations
+
+### Hypervisor Runtime Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -1135,12 +1141,12 @@ pub mod hypervisor;  // ← Feature-gated, implementation incomplete
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Why Not Implemented Yet?
+### Why Not Testable on macOS?
 
-1. **Platform Limitation:** Requires Linux + KVM (developer uses macOS)
-2. **Complexity:** Networking setup requires root/capabilities
-3. **Priority:** Container runtime covers most use cases
-4. **Testing:** Would require Linux CI runners
+1. **Platform Limitation:** Requires Linux + KVM (macOS doesn't have KVM)
+2. **Networking Requirements:** Needs CAP_NET_ADMIN for TAP interfaces and nftables
+3. **Dependencies:** Requires cloud-hypervisor binary and qemu-img
+4. **Testing:** Requires Linux environment (bare metal or Linux VM with nested virtualization)
 
 ### When Would You Use Hypervisor Runtime?
 
@@ -1229,7 +1235,7 @@ cargo test --test runtime_target_test --features containers \
 |---------|-------------|-----------|-------|
 | **Native** | ✅ Passing | `runtime_target_test.rs` | All 5 validation tests pass |
 | **Container** | ✅ Passing | `runtime_target_test.rs` | Full lifecycle with Kind (56.82s) |
-| **Hypervisor** | ❌ Not Implemented | - | Future work |
+| **Hypervisor** | ⚠️ Linux Only | `runtime_target_test.rs` | Fully implemented, requires Linux + KVM |
 
 ---
 

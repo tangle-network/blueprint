@@ -1,7 +1,6 @@
 /// EigenLayer Protocol Client
 ///
 /// Handles connection to EigenLayer AVS and streams EVM events.
-
 use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
 use crate::protocol::types::{EigenlayerProtocolEvent, ProtocolEvent};
@@ -30,8 +29,7 @@ impl EigenlayerProtocolClient {
         let http_rpc_url = env.http_rpc_endpoint.clone();
 
         // Create alloy provider using the URL string
-        let provider = ProviderBuilder::new()
-            .connect_http(http_rpc_url);
+        let provider = ProviderBuilder::new().connect_http(http_rpc_url);
 
         // Get the current block number to start from
         let current_block = provider
@@ -39,10 +37,7 @@ impl EigenlayerProtocolClient {
             .await
             .map_err(|e| Error::Other(format!("Failed to get current block number: {e}")))?;
 
-        info!(
-            "EigenLayer client initialized at block {}",
-            current_block
-        );
+        info!("EigenLayer client initialized at block {}", current_block);
 
         // TODO: Get contract addresses from environment or config
         // For now, we'll poll all logs (empty filter)
@@ -94,8 +89,7 @@ impl EigenlayerProtocolClient {
         let block_hash = block.header.hash;
 
         // Create filter for logs in this block
-        let filter = Filter::new()
-            .at_block_hash(block_hash);
+        let filter = Filter::new().at_block_hash(block_hash);
 
         // If we have specific contract addresses, filter by them
         let filter = if self.contract_addresses.is_empty() {
@@ -105,11 +99,12 @@ impl EigenlayerProtocolClient {
         };
 
         // Get logs for this block
-        let logs = self
-            .provider
-            .get_logs(&filter)
-            .await
-            .map_err(|e| Error::Other(format!("Failed to get logs for block {}: {e}", block_number)))?;
+        let logs = self.provider.get_logs(&filter).await.map_err(|e| {
+            Error::Other(format!(
+                "Failed to get logs for block {}: {e}",
+                block_number
+            ))
+        })?;
 
         debug!("Found {} logs in block {}", logs.len(), block_number);
 

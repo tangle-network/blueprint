@@ -9,7 +9,6 @@
 /// - `ProtocolClient`: Defines how to connect to and listen to a protocol
 /// - `ProtocolEventHandler`: Handles protocol-specific events
 /// - `ProtocolConfig`: Protocol-specific configuration
-
 use crate::blueprint::ActiveBlueprints;
 use crate::config::BlueprintManagerContext;
 use crate::error::Result;
@@ -65,10 +64,14 @@ impl ProtocolManager {
     ) -> Result<()> {
         match self {
             Self::Tangle { client, handler } => {
-                handler.initialize(client, env, ctx, active_blueprints).await
+                handler
+                    .initialize(client, env, ctx, active_blueprints)
+                    .await
             }
             Self::Eigenlayer { client, handler } => {
-                handler.initialize(client, env, ctx, active_blueprints).await
+                handler
+                    .initialize(client, env, ctx, active_blueprints)
+                    .await
             }
         }
     }
@@ -91,10 +94,14 @@ impl ProtocolManager {
     ) -> Result<()> {
         match self {
             Self::Tangle { handler, .. } => {
-                handler.handle_event(event, env, ctx, active_blueprints).await
+                handler
+                    .handle_event(event, env, ctx, active_blueprints)
+                    .await
             }
             Self::Eigenlayer { handler, .. } => {
-                handler.handle_event(event, env, ctx, active_blueprints).await
+                handler
+                    .handle_event(event, env, ctx, active_blueprints)
+                    .await
             }
         }
     }
@@ -111,7 +118,8 @@ impl ProtocolManager {
 
         // Event loop
         while let Some(event) = self.next_event().await {
-            self.handle_event(&event, env, ctx, active_blueprints).await?;
+            self.handle_event(&event, env, ctx, active_blueprints)
+                .await?;
         }
 
         Err(crate::error::Error::ClientDied)

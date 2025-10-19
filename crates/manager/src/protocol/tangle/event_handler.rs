@@ -65,10 +65,10 @@ impl TangleEventHandler {
 
     /// Extract account ID from environment
     async fn get_account_id(env: &BlueprintEnvironment) -> Result<AccountId32> {
-        use blueprint_keystore::{Keystore, KeystoreConfig};
-        use blueprint_keystore::backends::Backend;
         use blueprint_crypto::sp_core::SpSr25519;
         use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
+        use blueprint_keystore::backends::Backend;
+        use blueprint_keystore::{Keystore, KeystoreConfig};
         use tangle_subxt::subxt::tx::Signer;
 
         let keystore = Keystore::new(KeystoreConfig::new().fs_root(&env.keystore_uri))?;
@@ -199,11 +199,14 @@ impl TangleEventHandler {
         services_client: &TangleServicesClient<TangleConfig>,
         operator_blueprints: &[RpcServicesWithBlueprint],
     ) -> Result<()> {
-        let tangle_event = event.as_tangle().ok_or_else(|| {
-            Error::Other("Expected Tangle event in Tangle handler".to_string())
-        })?;
+        let tangle_event = event
+            .as_tangle()
+            .ok_or_else(|| Error::Other("Expected Tangle event in Tangle handler".to_string()))?;
 
-        info!("Processing Tangle event at block {}", tangle_event.block_number);
+        info!(
+            "Processing Tangle event at block {}",
+            tangle_event.block_number
+        );
 
         // Handle new registrations from PreRegistration events
         let mut registration_blueprints = Vec::new();
@@ -356,7 +359,10 @@ impl TangleEventHandler {
             state.account_id = Some(account_id.clone());
         }
 
-        info!("Tangle protocol handler initialized for operator: {}", account_id);
+        info!(
+            "Tangle protocol handler initialized for operator: {}",
+            account_id
+        );
 
         Ok(())
     }
@@ -617,7 +623,8 @@ fn get_fetcher_candidates(
     }
 
     if ctx.test_mode {
-        fetcher_candidates = vec![fetcher_candidates.remove(test_fetcher_idx.expect("Should exist"))];
+        fetcher_candidates =
+            vec![fetcher_candidates.remove(test_fetcher_idx.expect("Should exist"))];
     }
 
     Ok(fetcher_candidates)

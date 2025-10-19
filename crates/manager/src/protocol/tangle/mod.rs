@@ -1,7 +1,6 @@
 /// Tangle Protocol implementation for blueprint manager
 ///
 /// This module contains the Tangle-specific client and event handler.
-
 pub mod client;
 pub mod event_handler;
 

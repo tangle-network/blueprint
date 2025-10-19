@@ -177,6 +177,13 @@ where
             rewards_coordinator_address: core_contracts.rewards_coordinator,
             permission_controller_address: core_contracts.permission_controller,
             strategy_address,
+            // Registration parameters (use defaults for testing)
+            allocation_delay: 0,
+            deposit_amount: 5_000_000_000_000_000_000_000,
+            stake_amount: 1_000_000_000_000_000_000,
+            operator_sets: vec![0],
+            staker_opt_out_window_blocks: 50400,
+            metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
         },
     }
 }

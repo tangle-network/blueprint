@@ -4,10 +4,10 @@ use alloy_primitives::{Address, address};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
-/// The contract addresses used for EigenLayer Blueprint AVSs
+/// The contract addresses and registration parameters used for EigenLayer Blueprint AVSs
 ///
 /// The default values of these contracts are the addresses for our testing environment.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EigenlayerProtocolSettings {
     /// The address of the allocation manager contract
     pub allocation_manager_address: Address,
@@ -31,6 +31,20 @@ pub struct EigenlayerProtocolSettings {
     pub permission_controller_address: Address,
     /// The address of the strategy contract
     pub strategy_address: Address,
+
+    // Registration parameters
+    /// Allocation delay in blocks (default: 0)
+    pub allocation_delay: u32,
+    /// Deposit amount in wei (default: 5000 ether)
+    pub deposit_amount: u128,
+    /// Stake amount in wei (default: 1 ether)
+    pub stake_amount: u64,
+    /// Operator sets to register for (default: [0])
+    pub operator_sets: Vec<u32>,
+    /// Staker opt-out window in blocks (default: 50400)
+    pub staker_opt_out_window_blocks: u32,
+    /// Operator metadata URL
+    pub metadata_url: String,
 }
 
 impl ProtocolSettingsT for EigenlayerProtocolSettings {
@@ -69,6 +83,21 @@ impl ProtocolSettingsT for EigenlayerProtocolSettings {
             strategy_address: settings
                 .strategy
                 .ok_or(ConfigError::MissingEigenlayerContractAddresses)?,
+            // Registration parameters with defaults
+            allocation_delay: settings.eigenlayer_allocation_delay.unwrap_or(0),
+            deposit_amount: settings
+                .eigenlayer_deposit_amount
+                .unwrap_or(5_000_000_000_000_000_000_000),
+            stake_amount: settings
+                .eigenlayer_stake_amount
+                .unwrap_or(1_000_000_000_000_000_000),
+            operator_sets: settings.eigenlayer_operator_sets.unwrap_or_else(|| vec![0]),
+            staker_opt_out_window_blocks: settings
+                .eigenlayer_staker_opt_out_window_blocks
+                .unwrap_or(50400),
+            metadata_url: settings
+                .eigenlayer_metadata_url
+                .unwrap_or_else(|| "https://github.com/tangle-network/blueprint".to_string()),
         })
     }
 
@@ -95,6 +124,13 @@ impl Default for EigenlayerProtocolSettings {
             rewards_coordinator_address: address!("b7f8bc63bbcad18155201308c8f3540b07f84f5e"),
             permission_controller_address: address!("3aa5ebb10dc797cac828524e59a333d0a371443c"),
             strategy_address: address!("524f04724632eed237cba3c37272e018b3a7967e"),
+            // Registration parameter defaults
+            allocation_delay: 0,
+            deposit_amount: 5_000_000_000_000_000_000_000, // 5000 ether in wei
+            stake_amount: 1_000_000_000_000_000_000,       // 1 ether in wei
+            operator_sets: vec![0],
+            staker_opt_out_window_blocks: 50400,
+            metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
         }
     }
 }

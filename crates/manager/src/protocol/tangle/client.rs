@@ -1,12 +1,11 @@
 /// Tangle Protocol Client
 ///
 /// Handles connection to Tangle network and streams finality notifications.
-
 use crate::config::BlueprintManagerContext;
 use crate::error::Result;
 use crate::protocol::types::{ProtocolEvent, TangleProtocolEvent};
-use blueprint_clients::tangle::client::TangleClient;
 use blueprint_clients::tangle::EventsClient;
+use blueprint_clients::tangle::client::TangleClient;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_runner::config::BlueprintEnvironment;
 

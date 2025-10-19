@@ -77,8 +77,7 @@ pub async fn run_eigenlayer_avs(
 
     println!(
         "{}",
-        style("Preparing EigenLayer AVS to run, this may take a few minutes...")
-            .cyan()
+        style("Preparing EigenLayer AVS to run, this may take a few minutes...").cyan()
     );
 
     let pb = ProgressBar::new_spinner();

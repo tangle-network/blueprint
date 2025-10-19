@@ -51,3 +51,49 @@ pub fn operator_id_from_key(key: &BlsKeyPair) -> OperatorId {
 pub fn operator_id_from_ark_bls_bn254(key: &ArkBlsBn254Secret) -> Result<OperatorId, BlsError> {
     BlsKeyPair::new(key.0.to_string()).map(|key| operator_id_from_key(&key))
 }
+
+/// Validate an operator address
+///
+/// Ensures the address is not zero and is properly formatted.
+///
+/// # Errors
+/// - Returns error if address is zero
+pub fn validate_operator_address(
+    address: Address,
+) -> Result<(), crate::error::EigenlayerExtraError> {
+    if address == Address::ZERO {
+        return Err(crate::error::EigenlayerExtraError::InvalidConfiguration(
+            "Operator address cannot be zero".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Format operator address for display
+#[must_use]
+pub fn format_operator_address(address: Address) -> alloc::string::String {
+    alloc::format!("{address:#x}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_operator_address_rejects_zero() {
+        assert!(validate_operator_address(Address::ZERO).is_err());
+    }
+
+    #[test]
+    fn test_validate_operator_address_accepts_valid() {
+        let addr = Address::from([1u8; 20]);
+        assert!(validate_operator_address(addr).is_ok());
+    }
+
+    #[test]
+    fn test_format_operator_address() {
+        let addr = Address::from([1u8; 20]);
+        let formatted = format_operator_address(addr);
+        assert!(formatted.starts_with("0x"));
+    }
+}

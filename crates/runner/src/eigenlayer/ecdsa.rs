@@ -121,14 +121,19 @@ async fn register_ecdsa_impl(
         operator_private_key.clone(),
     );
 
-    let staker_opt_out_window_blocks = 50400u32;
+    // Get registration parameters from protocol settings
+    let eigenlayer_settings = env
+        .protocol_settings
+        .eigenlayer()
+        .map_err(|e| EigenlayerError::Other(e.to_string().into()))?;
+
     let operator_details = Operator {
         address: operator_address,
         delegation_approver_address,
-        metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
-        allocation_delay: Some(30), // TODO: Make allocation delay configurable
+        metadata_url: eigenlayer_settings.metadata_url.clone(),
+        allocation_delay: Some(eigenlayer_settings.allocation_delay),
         _deprecated_earnings_receiver_address: None, // Deprecated in eigensdk-rs v2.0.0
-        staker_opt_out_window_blocks: Some(staker_opt_out_window_blocks),
+        staker_opt_out_window_blocks: Some(eigenlayer_settings.staker_opt_out_window_blocks),
     };
 
     let tx_hash = el_writer

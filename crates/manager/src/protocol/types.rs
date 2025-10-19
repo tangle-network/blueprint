@@ -1,5 +1,4 @@
 /// Common types used across the protocol abstraction layer
-
 use blueprint_runner::config::{Protocol, ProtocolSettings};
 use serde::{Deserialize, Serialize};
 
