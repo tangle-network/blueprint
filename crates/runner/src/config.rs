@@ -272,7 +272,7 @@ impl Default for BlueprintEnvironment {
             http_rpc_endpoint: default_http_rpc_url(),
             ws_rpc_endpoint: default_ws_rpc_url(),
             keystore_uri: String::default(),
-            data_dir: PathBuf::default(),
+            data_dir: PathBuf::from("./data"),
             protocol_settings: ProtocolSettings::default(),
             test_mode: false,
             bridge_socket_path: None,

@@ -1,6 +1,9 @@
 use blueprint_core::info;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
+use blueprint_manager::executor::run_auth_proxy;
+use blueprint_manager::config::AuthProxyOpts;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
+use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
 use blueprint_std::fs;
 use blueprint_std::path::PathBuf;
 use color_eyre::eyre::{Result, eyre};
@@ -79,9 +82,8 @@ pub async fn run_eigenlayer_avs(
 
     // Run the AVS binary with the provided options
     println!("Starting AVS...");
-    let mut command = Command::new(&binary_path);
 
-    let env = BlueprintEnvVars {
+    let mut env = BlueprintEnvVars {
         http_rpc_endpoint: config.http_rpc_endpoint,
         ws_rpc_endpoint: config.ws_rpc_endpoint,
         kms_endpoint: config.kms_url,
@@ -96,10 +98,30 @@ pub async fn run_eigenlayer_avs(
         bridge_socket_path: None,
     };
 
+    // Setup auth proxy
+    println!("Setting up auth proxy...");
+    let (auth_proxy_db, auth_proxy_task) = run_auth_proxy(env.data_dir.clone().to_path_buf(), AuthProxyOpts::default()).await?;
+    let _auth_proxy = tokio::spawn(auth_proxy_task);
+    println!("Auth proxy setup complete");
+
+    // Setup bridge
+    println!("Setting up bridge...");
+    let runtime_dir = env.data_dir.clone().as_path().join("runtime");
+    tokio::fs::create_dir_all(&runtime_dir).await?;
+    let service_name = format!("eigenlayer-{}-service", binary_path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("blueprint"));
+    let bridge = Bridge::new(runtime_dir, service_name, auth_proxy_db, true);
+    let bridge_socket_path = bridge.base_socket_path();
+    let (_bridge_handle, _alive_rx) = bridge.spawn()?;
+    println!("Bridge setup complete");
+    env.bridge_socket_path = Some(bridge_socket_path);
+
+    let mut command = Command::new(&binary_path);
     command.envs(env.encode());
 
     let args = BlueprintArgs {
-        test_mode: false,
+        test_mode: config.test_mode,
         pretty: false,
         verbose: 0,
     };

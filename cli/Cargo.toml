@@ -34,6 +34,7 @@ blueprint-crypto = { workspace = true, features = [
 blueprint-crypto-core = { workspace = true, features = ["clap"] }
 blueprint-keystore = { workspace = true, features = ["tangle-full", "eigenlayer-full", "evm", "std"] }
 blueprint-manager = { workspace = true, features = ["containers", "tee"] }
+blueprint-manager-bridge = { workspace = true, features = ["server"] }
 
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }

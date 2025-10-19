@@ -31,3 +31,7 @@ docs/
 
 # Soldeer
 /dependencies
+
+# Data directory
+data/
+test-keystore/

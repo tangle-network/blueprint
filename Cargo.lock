@@ -4312,6 +4312,7 @@ dependencies = [
  "blueprint-evm-extra",
  "blueprint-keystore",
  "blueprint-manager",
+ "blueprint-manager-bridge",
  "blueprint-runner",
  "blueprint-std",
  "blueprint-tangle-extra",
@@ -8939,6 +8940,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-util 0.7.16",
+ "tracing-subscriber 0.3.20",
  "uuid 1.18.1",
 ]
 
