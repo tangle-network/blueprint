@@ -89,12 +89,19 @@ impl RewardsManager {
             distribution_root.root, distribution_root.activatedAt
         );
 
-        // Note: Actual claimable amount requires fetching Merkle proofs from off-chain API
-        // The DistributionRoot contains the Merkle root, but individual claims need proofs
-        // from https://eigenlabs-rewards-mainnet-ethereum.s3.amazonaws.com/
+        // Note: Actual rewards claiming requires:
+        // 1. Fetching rewards data from EigenLayer Sidecar (gRPC/HTTP indexer)
+        //    - List distribution roots: GET /rewards/v1/distribution-roots
+        //    - Get rewards for root: GET /rewards/v1/distribution-roots/{rootIndex}/rewards
+        // 2. Set claimer address if not already set (call set_claimer_for)
+        // 3. Submit claim with Merkle proof (call process_claim or process_claims)
         //
-        // For now, we return the timestamp of the latest claimable root
-        // Operators should use the EigenLayer CLI/API to get their specific claim proofs
+        // The S3 bucket approach is deprecated. Future implementation should integrate
+        // with the Sidecar gRPC/HTTP API to automate claiming.
+        //
+        // For now, we return the timestamp of the latest claimable root as a signal
+        // that rewards are available. Operators can manually claim via EigenLayer CLI
+        // or we can implement automated claiming in a future update.
 
         Ok(U256::from(distribution_root.activatedAt))
     }
