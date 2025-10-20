@@ -2,7 +2,6 @@
 ///
 /// Tests verify that both Tangle and EigenLayer protocols work correctly
 /// through the unified ProtocolManager interface.
-
 mod common;
 
 use blueprint_manager::blueprint::ActiveBlueprints;

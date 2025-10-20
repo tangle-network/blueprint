@@ -12,7 +12,6 @@
 /// - Require significant resources
 ///
 /// Run with: cargo test --test eigenlayer_e2e_test -- --ignored --nocapture --test-threads=1
-
 mod common;
 
 use blueprint_eigenlayer_extra::{
@@ -96,10 +95,7 @@ async fn test_single_avs_registration_flow() {
     // Create AVS registration config
     let config = common::create_avs_config(&harness, blueprint_path, RuntimeTarget::Native);
 
-    println!(
-        "📝 Registering AVS: {:#x}",
-        config.service_manager
-    );
+    println!("📝 Registering AVS: {:#x}", config.service_manager);
 
     // Create test-specific state file to avoid interference between tests
     let test_state_file = TempDir::new().unwrap();
@@ -172,14 +168,15 @@ async fn test_multi_avs_registration() {
     // For multi-AVS testing, we need unique service manager addresses
     // In a real scenario, these would be different AVS contracts
     // For testing, we'll use the same binary but pretend they're different AVS
-    let config1 = common::create_avs_config(&harness, blueprint_path.clone(), RuntimeTarget::Native);
+    let config1 =
+        common::create_avs_config(&harness, blueprint_path.clone(), RuntimeTarget::Native);
 
     // Create a second config with a different service manager address
     // Note: In production, this would be a completely different AVS contract
     let mut config2 = config1.clone();
     // Modify the service manager to make it unique (simulating a second AVS)
     // We'll just change one byte of the address for testing purposes
-    let mut addr_bytes = config2.service_manager.0 .0;
+    let mut addr_bytes = config2.service_manager.0.0;
     addr_bytes[19] = addr_bytes[19].wrapping_add(1);
     config2.service_manager = alloy_primitives::Address::from(addr_bytes);
 
@@ -339,10 +336,7 @@ async fn test_registration_lifecycle() {
 
     // Verify final deregistration
     let loaded = RegistrationStateManager::load_from_file(&state_file_path).unwrap();
-    let final_dereg = loaded
-        .registrations()
-        .get(config.service_manager)
-        .unwrap();
+    let final_dereg = loaded.registrations().get(config.service_manager).unwrap();
     assert_eq!(final_dereg.status, RegistrationStatus::Deregistered);
 
     println!("✅ Final deregistration verified");

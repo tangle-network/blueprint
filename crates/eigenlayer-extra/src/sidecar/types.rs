@@ -105,4 +105,3 @@ mod hex {
         hex::decode(s).map_err(serde::de::Error::custom)
     }
 }
-

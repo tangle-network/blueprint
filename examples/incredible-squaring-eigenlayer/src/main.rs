@@ -77,10 +77,8 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     let earnings_receiver_address = Address::ZERO; // Ignored - deprecated field
     let delegation_approver_address = Address::ZERO; // For tests; use wallet.address() in production
 
-    let eigen_config = EigenlayerBLSConfig::new(
-        earnings_receiver_address,
-        delegation_approver_address,
-    );
+    let eigen_config =
+        EigenlayerBLSConfig::new(earnings_receiver_address, delegation_approver_address);
     BlueprintRunner::builder(eigen_config, env)
         .router(
             Router::new()

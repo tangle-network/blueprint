@@ -1,7 +1,6 @@
 /// Common test utilities for EigenLayer integration tests
 ///
 /// This module provides shared helpers to reduce code duplication across test files.
-
 use blueprint_eigenlayer_extra::{AvsRegistrationConfig, RuntimeTarget};
 use blueprint_eigenlayer_testing_utils::EigenlayerTestHarness;
 use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};

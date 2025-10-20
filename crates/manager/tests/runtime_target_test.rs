@@ -16,7 +16,6 @@
 ///    - Environment variable passing across runtimes
 ///    - Resource limits enforcement
 ///    - Health checks after spawn
-
 mod common;
 
 use blueprint_eigenlayer_extra::{AvsRegistration, RegistrationStateManager, RuntimeTarget};
@@ -333,9 +332,10 @@ mod lifecycle_tests {
 
         let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
-        let mut protocol_manager = ProtocolManager::new(ProtocolType::Eigenlayer, env.clone(), &ctx)
-            .await
-            .unwrap();
+        let mut protocol_manager =
+            ProtocolManager::new(ProtocolType::Eigenlayer, env.clone(), &ctx)
+                .await
+                .unwrap();
 
         let mut active_blueprints = ActiveBlueprints::default();
 
@@ -409,9 +409,7 @@ mod lifecycle_tests {
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
         // Step 1: Check if Kind is installed
-        let kind_check = Command::new("kind")
-            .arg("version")
-            .output();
+        let kind_check = Command::new("kind").arg("version").output();
 
         if kind_check.is_err() || !kind_check.unwrap().status.success() {
             eprintln!("❌ Kind is not installed. Install with:");
@@ -424,9 +422,7 @@ mod lifecycle_tests {
         println!("✅ Kind is installed");
 
         // Step 2: Check if Docker is running
-        let docker_check = Command::new("docker")
-            .arg("ps")
-            .output();
+        let docker_check = Command::new("docker").arg("ps").output();
 
         if docker_check.is_err() || !docker_check.unwrap().status.success() {
             panic!("Docker is not running - test requires Docker daemon");
@@ -444,7 +440,10 @@ mod lifecycle_tests {
             .expect("Failed to create Kind cluster");
 
         if !create_cluster.status.success() {
-            eprintln!("Failed to create Kind cluster: {}", String::from_utf8_lossy(&create_cluster.stderr));
+            eprintln!(
+                "Failed to create Kind cluster: {}",
+                String::from_utf8_lossy(&create_cluster.stderr)
+            );
             panic!("Could not create Kind cluster");
         }
 
@@ -465,10 +464,9 @@ mod lifecycle_tests {
         // Step 4: Build and load Docker image
         println!("🐳 Building Docker image for incredible-squaring-eigenlayer...");
 
-        let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../..");
-        let build_script = workspace_root
-            .join("examples/incredible-squaring-eigenlayer/build-docker.sh");
+        let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let build_script =
+            workspace_root.join("examples/incredible-squaring-eigenlayer/build-docker.sh");
 
         let build_image = Command::new(&build_script)
             .args(["--load-kind", &cluster_name])
@@ -477,7 +475,10 @@ mod lifecycle_tests {
             .expect("Failed to run build-docker.sh");
 
         if !build_image.status.success() {
-            eprintln!("Failed to build/load image: {}", String::from_utf8_lossy(&build_image.stderr));
+            eprintln!(
+                "Failed to build/load image: {}",
+                String::from_utf8_lossy(&build_image.stderr)
+            );
             panic!("Could not build Docker image");
         }
 
@@ -544,7 +545,9 @@ mod lifecycle_tests {
 
         println!("✅ Container lifecycle test completed successfully");
         println!("   Note: Full pod spawn test requires BlueprintManagerContext with kube client");
-        println!("   This test verified: Kind setup, Docker build, image loading, and config validation");
+        println!(
+            "   This test verified: Kind setup, Docker build, image loading, and config validation"
+        );
     }
 
     // TODO: Add hypervisor lifecycle test (Linux + vm-sandbox feature only)

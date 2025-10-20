@@ -485,10 +485,14 @@ pub async fn setup_registration_listener(
     registration_ready: Arc<Notify>,
 ) {
     setup_log();
-    info!("Setting up registration listener for operator: {:#x}", operator_address);
+    info!(
+        "Setting up registration listener for operator: {:#x}",
+        operator_address
+    );
 
     let provider = get_provider_ws(&ws_endpoint).await;
-    let registry_coordinator = RegistryCoordinator::new(registry_coordinator_address, provider.clone());
+    let registry_coordinator =
+        RegistryCoordinator::new(registry_coordinator_address, provider.clone());
 
     // Subscribe to OperatorRegistered events
     let filter = registry_coordinator.OperatorRegistered_filter().filter;
@@ -510,8 +514,7 @@ pub async fn setup_registration_listener(
             if log.inner.data.operator == operator_address {
                 info!(
                     "✅ Operator registered! Address: {:#x}, ID: {:#x}",
-                    log.inner.data.operator,
-                    log.inner.data.operatorId
+                    log.inner.data.operator, log.inner.data.operatorId
                 );
 
                 // Notify task spawner that registration is complete

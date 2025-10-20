@@ -78,7 +78,9 @@ fn read_package_name_from_cargo_toml(blueprint_path: &std::path::Path) -> Result
         }
     }
 
-    Err(Error::Other("Could not find package name in Cargo.toml".to_string()))
+    Err(Error::Other(
+        "Could not find package name in Cargo.toml".to_string(),
+    ))
 }
 
 /// EigenLayer protocol event handler implementation
@@ -390,12 +392,11 @@ impl EigenlayerEventHandler {
             blueprint_eigenlayer_extra::RuntimeTarget::Container => {
                 #[cfg(feature = "containers")]
                 {
-                    let container_image = registration
-                        .config
-                        .container_image
-                        .clone()
-                        .ok_or_else(|| {
-                            Error::Other("Container runtime requires container_image in config".into())
+                    let container_image =
+                        registration.config.container_image.clone().ok_or_else(|| {
+                            Error::Other(
+                                "Container runtime requires container_image in config".into(),
+                            )
                         })?;
 
                     info!("Using Container runtime with image: {}", container_image);
