@@ -26,7 +26,12 @@ use std::path::Path;
 /// - Operator address cannot be derived
 /// - Registration state cannot be saved
 /// - On-chain verification fails (if enabled)
-pub async fn register_avs(config_path: &Path, keystore_uri: &str, runtime_target: Option<&str>, verify: bool) -> Result<()> {
+pub async fn register_avs(
+    config_path: &Path,
+    keystore_uri: &str,
+    runtime_target: Option<&str>,
+    verify: bool,
+) -> Result<()> {
     println!(
         "🔐 Loading EigenLayer AVS registration configuration from: {}",
         config_path.display()
@@ -39,7 +44,8 @@ pub async fn register_avs(config_path: &Path, keystore_uri: &str, runtime_target
     // Override runtime_target if specified via CLI
     if let Some(runtime_str) = runtime_target {
         use blueprint_eigenlayer_extra::RuntimeTarget;
-        let runtime = runtime_str.parse::<RuntimeTarget>()
+        let runtime = runtime_str
+            .parse::<RuntimeTarget>()
             .map_err(|e| color_eyre::eyre::eyre!("Invalid runtime target: {}", e))?;
         config.runtime_target = runtime;
         println!("⚙️  Runtime target set to: {}", runtime);
@@ -52,7 +58,8 @@ pub async fn register_avs(config_path: &Path, keystore_uri: &str, runtime_target
 
     // Validate configuration (fail fast)
     println!("🔍 Validating configuration...");
-    config.validate()
+    config
+        .validate()
         .map_err(|e| color_eyre::eyre::eyre!("Configuration validation failed: {}", e))?;
     println!("✅ Configuration validated successfully");
 

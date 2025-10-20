@@ -224,7 +224,8 @@ impl AvsRegistrationConfig {
                 if self.container_image.is_none() {
                     return Err(
                         "Container runtime requires 'container_image' field in config. \
-                        Example: \"ghcr.io/my-org/my-avs:latest\"".to_string()
+                        Example: \"ghcr.io/my-org/my-avs:latest\""
+                            .to_string(),
                     );
                 }
 
@@ -236,7 +237,8 @@ impl AvsRegistrationConfig {
                     // Should have at least image:tag format
                     if !image.contains(':') {
                         return Err(
-                            "Container image must include tag. Example: \"my-image:latest\"".to_string()
+                            "Container image must include tag. Example: \"my-image:latest\""
+                                .to_string(),
                         );
                     }
                 }
@@ -555,6 +557,7 @@ mod tests {
             deposit_amount: 1000,
             stake_amount: 100,
             operator_sets: vec![0],
+            container_image: None,
         };
 
         let result = config.validate();
@@ -586,6 +589,7 @@ mod tests {
             deposit_amount: 1000,
             stake_amount: 100,
             operator_sets: vec![0],
+            container_image: None,
         };
 
         let result = config.validate();
@@ -612,6 +616,7 @@ mod tests {
             deposit_amount: 5000,
             stake_amount: 1000,
             operator_sets: vec![0],
+            container_image: None,
         };
 
         let registration = AvsRegistration::new(Address::from([12u8; 20]), config);
@@ -645,6 +650,7 @@ mod tests {
             deposit_amount: 5000,
             stake_amount: 1000,
             operator_sets: vec![0],
+            container_image: None,
         };
 
         let registration = AvsRegistration::new(Address::from([12u8; 20]), config);

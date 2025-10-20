@@ -28,6 +28,7 @@ pub mod error;
 pub mod generic_task_aggregation;
 pub mod registration;
 pub mod services;
+pub mod sidecar;
 pub mod util;
 
 // Re-exports for convenience

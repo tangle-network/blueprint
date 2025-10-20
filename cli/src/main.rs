@@ -436,6 +436,82 @@ pub enum EigenlayerCommands {
         #[arg(long, value_name = "FILE")]
         settings_file: Option<PathBuf>,
     },
+
+    /// Show rewards for an earner address
+    #[command(visible_alias = "show")]
+    ShowRewards {
+        /// Earner Ethereum address
+        #[arg(long, value_name = "ADDRESS")]
+        earner_address: String,
+
+        /// Sidecar API URL (defaults to mainnet)
+        #[arg(long, value_name = "URL")]
+        sidecar_url: Option<String>,
+
+        /// Network (mainnet or holesky)
+        #[arg(long, default_value = "mainnet")]
+        network: String,
+    },
+
+    /// Claim rewards for an earner
+    #[command(visible_alias = "claim")]
+    ClaimRewards {
+        /// Earner Ethereum address
+        #[arg(long, value_name = "ADDRESS")]
+        earner_address: String,
+
+        /// Recipient address (defaults to earner)
+        #[arg(long, value_name = "ADDRESS")]
+        recipient_address: Option<String>,
+
+        /// Token addresses to claim (empty = all)
+        #[arg(long, value_delimiter = ',')]
+        tokens: Vec<String>,
+
+        /// RewardsCoordinator contract address
+        #[arg(long, value_name = "ADDRESS")]
+        rewards_coordinator: String,
+
+        /// Sidecar API URL (defaults to mainnet)
+        #[arg(long, value_name = "URL")]
+        sidecar_url: Option<String>,
+
+        /// Network (mainnet or holesky)
+        #[arg(long, default_value = "mainnet")]
+        network: String,
+
+        /// The keystore URI to use
+        #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
+        keystore_uri: String,
+
+        /// HTTP RPC endpoint
+        #[arg(long, default_value = "http://127.0.0.1:8545")]
+        rpc_url: String,
+
+        /// Batch claim file (YAML)
+        #[arg(long, value_name = "FILE")]
+        batch_file: Option<String>,
+    },
+
+    /// Set claimer address for the operator
+    #[command(visible_alias = "set-claimer")]
+    SetClaimer {
+        /// Claimer Ethereum address
+        #[arg(long, value_name = "ADDRESS")]
+        claimer_address: String,
+
+        /// RewardsCoordinator contract address
+        #[arg(long, value_name = "ADDRESS")]
+        rewards_coordinator: String,
+
+        /// The keystore URI to use
+        #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
+        keystore_uri: String,
+
+        /// HTTP RPC endpoint
+        #[arg(long, default_value = "http://127.0.0.1:8545")]
+        rpc_url: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -838,8 +914,13 @@ async fn main() -> color_eyre::Result<()> {
                     runtime,
                     verify,
                 } => {
-                    cargo_tangle::command::eigenlayer::register_avs(&config, &keystore_uri, runtime.as_deref(), verify)
-                        .await?;
+                    cargo_tangle::command::eigenlayer::register_avs(
+                        &config,
+                        &keystore_uri,
+                        runtime.as_deref(),
+                        verify,
+                    )
+                    .await?;
                 }
                 EigenlayerCommands::Deregister {
                     service_manager,
@@ -867,6 +948,68 @@ async fn main() -> color_eyre::Result<()> {
                         &http_rpc_url,
                         &keystore_uri,
                         settings_file.as_deref(),
+                    )
+                    .await?;
+                }
+                EigenlayerCommands::ShowRewards {
+                    earner_address,
+                    sidecar_url,
+                    network,
+                } => {
+                    cargo_tangle::command::eigenlayer::show_rewards(
+                        &earner_address,
+                        sidecar_url.as_deref(),
+                        Some(&network),
+                    )
+                    .await?;
+                }
+                EigenlayerCommands::ClaimRewards {
+                    earner_address,
+                    recipient_address,
+                    tokens,
+                    rewards_coordinator,
+                    sidecar_url,
+                    network,
+                    keystore_uri,
+                    rpc_url,
+                    batch_file,
+                } => {
+                    use alloy_primitives::Address;
+                    let rewards_coord_addr = Address::parse_checksummed(&rewards_coordinator, None)
+                        .map_err(|e| {
+                            color_eyre::eyre::eyre!("Invalid rewards coordinator address: {}", e)
+                        })?;
+
+                    cargo_tangle::command::eigenlayer::claim_rewards(
+                        &earner_address,
+                        recipient_address.as_deref(),
+                        tokens,
+                        rewards_coord_addr,
+                        sidecar_url.as_deref(),
+                        Some(&network),
+                        &keystore_uri,
+                        &rpc_url,
+                        batch_file.as_deref(),
+                    )
+                    .await?;
+                }
+                EigenlayerCommands::SetClaimer {
+                    claimer_address,
+                    rewards_coordinator,
+                    keystore_uri,
+                    rpc_url,
+                } => {
+                    use alloy_primitives::Address;
+                    let rewards_coord_addr = Address::parse_checksummed(&rewards_coordinator, None)
+                        .map_err(|e| {
+                            color_eyre::eyre::eyre!("Invalid rewards coordinator address: {}", e)
+                        })?;
+
+                    cargo_tangle::command::eigenlayer::set_claimer(
+                        &claimer_address,
+                        rewards_coord_addr,
+                        &keystore_uri,
+                        &rpc_url,
                     )
                     .await?;
                 }
