@@ -1,9 +1,9 @@
 use blueprint_core::info;
-use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
-use blueprint_manager::executor::run_auth_proxy;
 use blueprint_manager::config::AuthProxyOpts;
+use blueprint_manager::executor::run_auth_proxy;
+use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
+use blueprint_manager_bridge::server::Bridge;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
-use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
 use blueprint_std::fs;
 use blueprint_std::path::PathBuf;
 use color_eyre::eyre::{Result, eyre};
@@ -100,17 +100,22 @@ pub async fn run_eigenlayer_avs(
 
     // Setup auth proxy
     println!("Setting up auth proxy...");
-    let (auth_proxy_db, auth_proxy_task) = run_auth_proxy(env.data_dir.clone().to_path_buf(), AuthProxyOpts::default()).await?;
+    let (auth_proxy_db, auth_proxy_task) =
+        run_auth_proxy(env.data_dir.clone(), AuthProxyOpts::default()).await?;
     let _auth_proxy = tokio::spawn(auth_proxy_task);
     println!("Auth proxy setup complete");
 
     // Setup bridge
     println!("Setting up bridge...");
-    let runtime_dir = env.data_dir.clone().as_path().join("runtime");
+    let runtime_dir = env.data_dir.as_path().join("runtime");
     tokio::fs::create_dir_all(&runtime_dir).await?;
-    let service_name = format!("eigenlayer-{}-service", binary_path.file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("blueprint"));
+    let service_name = format!(
+        "eigenlayer-{}-service",
+        binary_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("blueprint")
+    );
     let bridge = Bridge::new(runtime_dir, service_name, auth_proxy_db, true);
     let bridge_socket_path = bridge.base_socket_path();
     let (_bridge_handle, _alive_rx) = bridge.spawn()?;

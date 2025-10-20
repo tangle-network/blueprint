@@ -8,27 +8,31 @@ use alloy_primitives::{Address, Bytes, U256};
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_sdk::evm::producer::{PollingConfig, PollingProducer};
 use blueprint_sdk::evm::util::get_wallet_provider_http;
-use blueprint_sdk::runner::BlueprintRunner;
-use blueprint_sdk::runner::config::BlueprintEnvironment;
-use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
 use blueprint_sdk::keystore::backends::Backend;
 use blueprint_sdk::keystore::backends::eigenlayer::EigenlayerBackend;
 use blueprint_sdk::keystore::crypto::k256::K256Ecdsa;
-use blueprint_sdk::{Router, info, error};
+use blueprint_sdk::runner::BlueprintRunner;
+use blueprint_sdk::runner::config::BlueprintEnvironment;
+use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
+use blueprint_sdk::{Router, error, info};
 use eigenlayer_contract_deployer::bindings::RegistryCoordinator;
-use incredible_squaring_blueprint_eigenlayer::{TASK_GENERATOR_PRIVATE_KEY, AGGREGATOR_PRIVATE_KEY, REGISTRY_COORDINATOR_ADDRESS};
+use incredible_squaring_blueprint_eigenlayer::SquaringTask;
 use incredible_squaring_blueprint_eigenlayer::TASK_MANAGER_ADDRESS;
 use incredible_squaring_blueprint_eigenlayer::contexts::aggregator::AggregatorContext;
 use incredible_squaring_blueprint_eigenlayer::contexts::client::AggregatorClient;
 use incredible_squaring_blueprint_eigenlayer::contexts::combined::CombinedContext;
 use incredible_squaring_blueprint_eigenlayer::contexts::x_square::EigenSquareContext;
+#[allow(unused_imports)]
 use incredible_squaring_blueprint_eigenlayer::jobs::compute_x_square::{
     XSQUARE_JOB_ID, xsquare_eigen,
 };
+#[allow(unused_imports)]
 use incredible_squaring_blueprint_eigenlayer::jobs::initialize_task::{
     INITIALIZE_TASK_JOB_ID, initialize_bls_task,
 };
-use incredible_squaring_blueprint_eigenlayer::SquaringTask;
+use incredible_squaring_blueprint_eigenlayer::{
+    AGGREGATOR_PRIVATE_KEY, REGISTRY_COORDINATOR_ADDRESS, TASK_GENERATOR_PRIVATE_KEY,
+};
 use reqwest::Url;
 use tracing_subscriber::EnvFilter;
 
@@ -77,7 +81,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?;
 
     info!("~~~ Executing the incredible squaring blueprint ~~~");
-    if env.test_mode.clone() {
+    if env.test_mode {
         // Create task spawner
         let ecdsa_public = env.keystore().first_local::<K256Ecdsa>()?;
         let ecdsa_secret = env
@@ -93,15 +97,14 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
         });
     }
 
-
     let eigen_config = EigenlayerBLSConfig::new(Address::default(), Address::default())
         .with_exit_after_register(false);
 
-        BlueprintRunner::builder(eigen_config, env)
+    BlueprintRunner::builder(eigen_config, env)
         .router(
             Router::new()
                 // @dev Due to topic0 of event `emit NewTaskCreated(latestTaskNum, newTask);`
-                // in  `examples/incredible-squaring-eigenlayer/contracts/src/TaskManager.sol:153` 
+                // in  `examples/incredible-squaring-eigenlayer/contracts/src/TaskManager.sol:153`
                 // is a sequence number, we need to use `always` to force handle all the tasks.
                 .always(xsquare_eigen)
                 .always(initialize_bls_task)
@@ -125,9 +128,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
 }
 
 fn setup_log() {
-    let filter = EnvFilter::new(
-        "trace,info",
-    );
+    let filter = EnvFilter::new("trace,info");
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(true)
@@ -137,21 +138,28 @@ fn setup_log() {
         .try_init();
 }
 
-pub fn setup_task_spawner(http_endpoint: Url, operator_addr: Address) -> impl std::future::Future<Output = ()> {
+pub fn setup_task_spawner(
+    http_endpoint: Url,
+    operator_addr: Address,
+) -> impl std::future::Future<Output = ()> {
     let task_manager_address = *TASK_MANAGER_ADDRESS;
     let registry_coordinator_address = *REGISTRY_COORDINATOR_ADDRESS;
-    let task_generator_signer = TASK_GENERATOR_PRIVATE_KEY.parse::<PrivateKeySigner>().expect("failed to generate task generator wallet");
+    let task_generator_signer = TASK_GENERATOR_PRIVATE_KEY
+        .parse::<PrivateKeySigner>()
+        .expect("failed to generate task generator wallet");
     let task_generator_address = task_generator_signer.address();
     let task_generator_wallet = EthereumWallet::from(task_generator_signer);
     let provider = get_wallet_provider_http(http_endpoint.clone(), task_generator_wallet);
     let task_manager = SquaringTask::new(task_manager_address, provider.clone());
-    let registry_coordinator =
-    RegistryCoordinator::new(registry_coordinator_address, provider);
+    let registry_coordinator = RegistryCoordinator::new(registry_coordinator_address, provider);
     info!("Operator address: {}", operator_addr);
     let operators = vec![vec![operator_addr]];
     let quorums = Bytes::from(vec![0]);
 
-    info!("Setting up task spawner for task manager: {} using task generator: {}", task_manager_address, task_generator_address);
+    info!(
+        "Setting up task spawner for task manager: {} using task generator: {}",
+        task_manager_address, task_generator_address
+    );
 
     async move {
         loop {
@@ -179,7 +187,8 @@ pub fn setup_task_spawner(http_endpoint: Url, operator_addr: Address) -> impl st
                 }
             }
 
-            match registry_coordinator.updateOperatorsForQuorum(operators.clone(), quorums.clone())
+            match registry_coordinator
+                .updateOperatorsForQuorum(operators.clone(), quorums.clone())
                 .from(task_generator_address)
                 .send()
                 .await
@@ -192,7 +201,7 @@ pub fn setup_task_spawner(http_endpoint: Url, operator_addr: Address) -> impl st
                     if !receipt.status() {
                         error!("Failed to update operators for quorum: {:?}", receipt);
                     }
-                },
+                }
                 Err(e) => {
                     error!("Failed to update operators for quorum: {:?}", e);
                 }
