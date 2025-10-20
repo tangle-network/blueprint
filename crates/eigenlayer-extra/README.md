@@ -2,95 +2,15 @@
 
 High-level framework for running multiple EigenLayer AVS services with a single operator.
 
-## Quick Start
+## Overview
 
-### 1. Generate Keys
+This crate provides Rust APIs for:
+- Managing multiple AVS registrations with persistent state
+- Discovering operator AVS registrations on-chain
+- Monitoring rewards and slashing events
+- Configuring blueprint execution runtimes (native, hypervisor, container)
 
-```bash
-# Generate ECDSA key (operator address)
-cargo tangle blueprint generate-keys -k ecdsa -p ./keystore
-
-# Generate BLS key (for aggregation)
-cargo tangle blueprint generate-keys -k bls -p ./keystore
-```
-
-### 2. Register with an AVS
-
-Create a configuration file `my-avs-config.json`:
-
-```json
-{
-  "service_manager": "0x...",
-  "registry_coordinator": "0x...",
-  "operator_state_retriever": "0x...",
-  "strategy_manager": "0x...",
-  "delegation_manager": "0x...",
-  "avs_directory": "0x...",
-  "rewards_coordinator": "0x...",
-  "permission_controller": "0x...",
-  "allocation_manager": "0x...",
-  "strategy_address": "0x...",
-  "stake_registry": "0x...",
-  "blueprint_path": "/path/to/your/avs/blueprint",
-  "runtime_target": "hypervisor",
-  "allocation_delay": 0,
-  "deposit_amount": 5000000000000000000000,
-  "stake_amount": 1000000000000000000,
-  "operator_sets": [0]
-}
-```
-
-Register:
-
-```bash
-cargo tangle blueprint eigenlayer register \
-  --config my-avs-config.json \
-  --keystore-uri ./keystore
-```
-
-Or override runtime target via CLI:
-
-```bash
-cargo tangle blueprint eigenlayer register \
-  --config my-avs-config.json \
-  --keystore-uri ./keystore \
-  --runtime native
-```
-
-### 3. List Registrations
-
-```bash
-# List all registrations
-cargo tangle blueprint eigenlayer list
-
-# List only active registrations
-cargo tangle blueprint eigenlayer list --active-only
-
-# JSON output
-cargo tangle blueprint eigenlayer list --format json
-```
-
-### 4. Run the Manager
-
-```bash
-cargo tangle blueprint run \
-  --protocol eigenlayer \
-  --config ./config.toml
-```
-
-The manager will:
-- Read all active AVS registrations from `~/.tangle/eigenlayer_registrations.json`
-- Spawn a separate blueprint instance for each AVS
-- Monitor rewards and slashing events
-- Auto-restart failed blueprints
-
-### 5. Deregister from an AVS
-
-```bash
-cargo tangle blueprint eigenlayer deregister \
-  --service-manager 0x... \
-  --keystore-uri ./keystore
-```
+For CLI usage, see the [CLI README](../../cli/README.md#eigenlayer-multi-avs-commands).
 
 ## Architecture
 
@@ -109,38 +29,17 @@ Each AVS can specify its execution runtime:
 
 - **`native`** - Bare process (no sandbox)
   - Fastest startup and lowest overhead
-  - **For testing only** - no isolation
-  - Direct process execution
+  - For testing only - no isolation
 
 - **`hypervisor`** - cloud-hypervisor VM (default)
   - Production-ready VM isolation
   - Strong security boundaries
   - Resource limits enforced
-  - **Recommended for production**
+  - Recommended for production
 
-- **`container`** - Docker/Kata containers (**Coming Soon**)
+- **`container`** - Docker/Kata containers (Coming Soon)
   - Not yet implemented
-  - Will require extending config with container image field
   - For now, use `native` for testing or `hypervisor` for production
-
-Set via config file:
-```json
-{
-  "runtime_target": "hypervisor"
-}
-```
-
-Or override via CLI:
-```bash
---runtime native  # Testing only
---runtime hypervisor  # Production (requires Linux/KVM)
-```
-
-### Background Services
-
-Operator-level monitoring (runs once per operator):
-- **Rewards**: Check claimable rewards every hour
-- **Slashing**: Monitor for slashing events every 5 minutes
 
 ### Registration State
 
@@ -159,75 +58,11 @@ Stored in `~/.tangle/eigenlayer_registrations.json`:
 }
 ```
 
-## CLI Commands
+### Background Services
 
-### `register`
-
-Register with a new EigenLayer AVS.
-
-```bash
-cargo tangle blueprint eigenlayer register \
-  --config <CONFIG_FILE> \
-  --keystore-uri <KEYSTORE_PATH> \
-  [--runtime <RUNTIME>] \
-  [--verify]
-```
-
-**Arguments**:
-- `--config`: Path to JSON configuration file
-- `--keystore-uri`: Keystore path (default: `./keystore`)
-- `--runtime`: Runtime target (`native`, `hypervisor`, `container`) - overrides config file
-- `--verify`: Perform on-chain verification (optional)
-
-**Aliases**: `reg`
-
-### `deregister`
-
-Deregister from an EigenLayer AVS.
-
-```bash
-cargo tangle blueprint eigenlayer deregister \
-  --service-manager <ADDRESS> \
-  --keystore-uri <KEYSTORE_PATH>
-```
-
-**Arguments**:
-- `--service-manager`: Service manager contract address
-- `--keystore-uri`: Keystore path (default: `./keystore`)
-
-**Aliases**: `dereg`
-
-### `list`
-
-List all registered AVS services.
-
-```bash
-cargo tangle blueprint eigenlayer list \
-  [--active-only] \
-  [--format <FORMAT>]
-```
-
-**Arguments**:
-- `--active-only`: Show only active registrations
-- `--format`: Output format: `table` (default) or `json`
-
-**Aliases**: `ls`
-
-### `sync`
-
-Synchronize local registrations with on-chain state.
-
-```bash
-cargo tangle blueprint eigenlayer sync \
-  --http-rpc-url <URL> \
-  --keystore-uri <KEYSTORE_PATH> \
-  [--settings-file <FILE>]
-```
-
-**Arguments**:
-- `--http-rpc-url`: HTTP RPC endpoint (default: `http://127.0.0.1:8545`)
-- `--keystore-uri`: Keystore path (default: `./keystore`)
-- `--settings-file`: Protocol settings file (optional)
+Operator-level monitoring (runs once per operator):
+- **Rewards**: Check claimable rewards every hour
+- **Slashing**: Monitor for slashing events every 5 minutes
 
 ## API
 
@@ -281,81 +116,35 @@ let slashing_monitor = SlashingMonitor::new(env);
 let is_slashed = slashing_monitor.is_operator_slashed().await?;
 ```
 
-## Configuration File Format
+## Configuration
 
 ### AVS Registration Config
 
 ```json
 {
-  "service_manager": "0x...",              // ServiceManager contract
-  "registry_coordinator": "0x...",         // RegistryCoordinator contract
-  "operator_state_retriever": "0x...",     // OperatorStateRetriever contract
-  "strategy_manager": "0x...",             // StrategyManager contract
-  "delegation_manager": "0x...",           // DelegationManager contract
-  "avs_directory": "0x...",                // AVSDirectory contract
-  "rewards_coordinator": "0x...",          // RewardsCoordinator contract
-  "permission_controller": "0x...",        // PermissionController contract (optional)
-  "allocation_manager": "0x...",           // AllocationManager contract (optional)
-  "strategy_address": "0x...",             // Strategy contract for deposits
-  "stake_registry": "0x...",               // StakeRegistry contract
-  "blueprint_path": "/path/to/blueprint",  // Path to AVS blueprint binary
-  "runtime_target": "hypervisor",          // Runtime: native, hypervisor, container
-  "allocation_delay": 0,                   // Allocation delay in seconds
-  "deposit_amount": 5000000000000000000000, // Deposit amount (wei)
-  "stake_amount": 1000000000000000000,     // Stake amount (wei)
-  "operator_sets": [0]                     // Operator sets to register with
+  "service_manager": "0x...",
+  "registry_coordinator": "0x...",
+  "operator_state_retriever": "0x...",
+  "strategy_manager": "0x...",
+  "delegation_manager": "0x...",
+  "avs_directory": "0x...",
+  "rewards_coordinator": "0x...",
+  "permission_controller": "0x...",
+  "allocation_manager": "0x...",
+  "strategy_address": "0x...",
+  "stake_registry": "0x...",
+  "blueprint_path": "/path/to/blueprint",
+  "runtime_target": "hypervisor",
+  "allocation_delay": 0,
+  "deposit_amount": 5000000000000000000000,
+  "stake_amount": 1000000000000000000,
+  "operator_sets": [0]
 }
 ```
 
 ## Examples
 
 See [`examples/incredible-squaring-eigenlayer/`](../../examples/incredible-squaring-eigenlayer/) for a complete AVS blueprint example.
-
-## Troubleshooting
-
-### Registration file not found
-
-The first time you register, the file `~/.tangle/eigenlayer_registrations.json` will be created automatically.
-
-### Blueprint fails to spawn
-
-Check:
-1. `blueprint_path` in config points to a valid Rust project with `Cargo.toml`
-2. Project has a binary target matching the directory name
-3. Keystore contains valid ECDSA and BLS keys
-
-### On-chain verification fails
-
-Use `sync` command to verify on-chain state:
-
-```bash
-cargo tangle blueprint eigenlayer sync \
-  --http-rpc-url http://your-rpc-endpoint \
-  --keystore-uri ./keystore
-```
-
-## Architecture Diagrams
-
-### Registration Flow
-
-```
-CLI (register) → RegistrationStateManager → ~/.tangle/eigenlayer_registrations.json
-                                                         ↓
-Blueprint Manager → Load registrations → Spawn AVS blueprints
-```
-
-### Multi-AVS Runtime
-
-```
-Blueprint Manager
-├── Background Services (operator-level)
-│   ├── RewardsManager (hourly)
-│   └── SlashingMonitor (5 min)
-└── AVS Blueprints (per-AVS)
-    ├── AVS #1 (blueprint_id=hash(service_manager_1))
-    ├── AVS #2 (blueprint_id=hash(service_manager_2))
-    └── AVS #3 (blueprint_id=hash(service_manager_3))
-```
 
 ## Testing
 
