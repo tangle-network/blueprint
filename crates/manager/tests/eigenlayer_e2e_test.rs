@@ -17,14 +17,9 @@ use blueprint_eigenlayer_extra::{
     RuntimeTarget,
 };
 use blueprint_eigenlayer_testing_utils::EigenlayerTestHarness;
-use blueprint_manager::blueprint::ActiveBlueprints;
-use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
-use blueprint_manager::protocol::{ProtocolManager, ProtocolType};
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::Duration;
 use tempfile::TempDir;
-use tokio::time::sleep;
 
 /// Path to the incredible-squaring blueprint binary
 fn blueprint_binary_path() -> PathBuf {
@@ -68,44 +63,6 @@ fn build_blueprint_binary() -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(binary_path)
 }
 
-/// Helper function to create a test BlueprintManagerContext
-async fn create_test_context(keystore_uri: String) -> BlueprintManagerContext {
-    let test_id = format!("bpm{}", rand::random::<u32>());
-    let temp_root = std::path::PathBuf::from("/tmp").join(test_id);
-
-    let cache_dir = temp_root.join("c");
-    let runtime_dir = temp_root.join("r");
-    let data_dir = temp_root.join("d");
-    std::fs::create_dir_all(&cache_dir).unwrap();
-    std::fs::create_dir_all(&runtime_dir).unwrap();
-    std::fs::create_dir_all(&data_dir).unwrap();
-
-    let manager_config = BlueprintManagerConfig {
-        paths: Paths {
-            blueprint_config: None,
-            keystore_uri,
-            data_dir: data_dir.clone(),
-            cache_dir,
-            runtime_dir,
-        },
-        verbose: 0,
-        pretty: false,
-        instance_id: None,
-        test_mode: true,
-        allow_unchecked_attestations: true,
-        ..Default::default()
-    };
-
-    let ctx = BlueprintManagerContext::new(manager_config).await.unwrap();
-
-    let db_path = data_dir.join("p").join("a").join("db");
-    tokio::fs::create_dir_all(&db_path).await.unwrap();
-    let proxy = blueprint_auth::proxy::AuthenticatedProxy::new(&db_path).unwrap();
-    ctx.set_db(proxy.db()).await;
-
-    ctx
-}
-
 /// Helper to create AVS registration config from test harness
 fn create_avs_config(
     harness: &EigenlayerTestHarness<()>,
@@ -140,18 +97,19 @@ fn create_avs_config(
     }
 }
 
-/// Test: Single AVS registration and blueprint spawn
+/// Test: Single AVS registration flow
 ///
-/// This test verifies the complete flow:
+/// This test verifies the registration flow:
 /// 1. Register an AVS using the registration API (same code path as CLI)
-/// 2. Start the BlueprintManager
-/// 3. Verify manager detects the registration
-/// 4. Verify blueprint spawns successfully
-/// 5. Verify service reaches Running status
-/// 6. Deregister and verify cleanup
+/// 2. Verify registration is saved correctly
+/// 3. Verify registration status
+/// 4. Deregister and verify cleanup
+///
+/// Note: Actual blueprint spawning requires full infrastructure (K8s, etc.)
+/// and is tested separately in runtime_target_test.rs
 #[tokio::test]
 #[ignore = "Requires building blueprint - slow E2E test"]
-async fn test_single_avs_registration_and_spawn() {
+async fn test_single_avs_registration_flow() {
     // Build the blueprint binary first
     let blueprint_path = build_blueprint_binary().expect("Failed to build blueprint");
 
@@ -162,7 +120,6 @@ async fn test_single_avs_registration_and_spawn() {
     let harness = EigenlayerTestHarness::setup(harness_temp_dir)
         .await
         .unwrap();
-    let env = harness.env().clone();
     let operator_address = harness.owner_account();
 
     println!("👤 Operator address: {:#x}", operator_address);
@@ -198,50 +155,11 @@ async fn test_single_avs_registration_and_spawn() {
 
     println!("✅ Registration verified in state file");
 
-    // Create manager context
-    let ctx = create_test_context(env.keystore_uri.clone()).await;
-
-    // Create protocol manager
-    println!("🔧 Creating ProtocolManager...");
-    let mut protocol_manager = ProtocolManager::new(ProtocolType::Eigenlayer, env.clone(), &ctx)
-        .await
-        .expect("Failed to create ProtocolManager");
-
-    let mut active_blueprints = ActiveBlueprints::default();
-
-    // Initialize the protocol - this should detect the registration and spawn the blueprint
-    println!("🚀 Initializing protocol manager (should spawn blueprint)...");
-    let init_result = protocol_manager
-        .initialize(&env, &ctx, &mut active_blueprints)
-        .await;
-
-    // Cleanup registration before asserting (ensure cleanup even if test fails)
+    // Test deregistration
+    println!("🔄 Testing deregistration...");
     state_manager
         .deregister(registration.config.service_manager)
         .unwrap();
-
-    // Verify initialization succeeded
-    assert!(
-        init_result.is_ok(),
-        "Protocol initialization failed: {:?}",
-        init_result.err()
-    );
-
-    println!("✅ Protocol manager initialized successfully");
-
-    // Verify blueprint was spawned
-    assert!(
-        !active_blueprints.is_empty(),
-        "Blueprint should be spawned from registration"
-    );
-
-    println!(
-        "✅ Blueprint spawned! Active blueprints: {}",
-        active_blueprints.len()
-    );
-
-    // Give the blueprint a moment to start
-    sleep(Duration::from_secs(2)).await;
 
     // Verify deregistration was saved
     let loaded = RegistrationStateManager::load_from_file(&state_file_path).unwrap();
@@ -252,21 +170,22 @@ async fn test_single_avs_registration_and_spawn() {
     assert_eq!(dereg_entry.status, RegistrationStatus::Deregistered);
 
     println!("✅ Deregistration verified");
-    println!("\n✨ E2E test passed: Single AVS Registration and Spawn\n");
+    println!("\n✨ E2E test passed: Single AVS Registration Flow\n");
+    println!("Note: Blueprint spawning tests are in runtime_target_test.rs");
 }
 
-/// Test: Multi-AVS simultaneous instances
+/// Test: Multi-AVS registration
 ///
 /// This test verifies:
-/// 1. Register 2 different AVS instances
-/// 2. Start the BlueprintManager
-/// 3. Verify both blueprints spawn
-/// 4. Verify both running simultaneously
-/// 5. Deregister one, verify other continues
-/// 6. Deregister second, verify complete cleanup
+/// 1. Register 2 different AVS instances simultaneously
+/// 2. Verify both registrations are saved correctly
+/// 3. Deregister both and verify cleanup
+///
+/// Note: Actual blueprint spawning requires full infrastructure (K8s, etc.)
+/// and is tested separately in runtime_target_test.rs
 #[tokio::test]
 #[ignore = "Requires building blueprint - slow E2E test"]
-async fn test_multi_avs_simultaneous_instances() {
+async fn test_multi_avs_registration() {
     // Build the blueprint binary first
     let blueprint_path = build_blueprint_binary().expect("Failed to build blueprint");
 
@@ -277,7 +196,6 @@ async fn test_multi_avs_simultaneous_instances() {
     let harness = EigenlayerTestHarness::setup(harness_temp_dir)
         .await
         .unwrap();
-    let env = harness.env().clone();
     let operator_address = harness.owner_account();
 
     println!("👤 Operator address: {:#x}", operator_address);
@@ -323,51 +241,14 @@ async fn test_multi_avs_simultaneous_instances() {
 
     println!("✅ Both registrations verified in state file");
 
-    // Create manager context
-    let ctx = create_test_context(env.keystore_uri.clone()).await;
-
-    // Create protocol manager
-    println!("🔧 Creating ProtocolManager...");
-    let mut protocol_manager = ProtocolManager::new(ProtocolType::Eigenlayer, env.clone(), &ctx)
-        .await
-        .expect("Failed to create ProtocolManager");
-
-    let mut active_blueprints = ActiveBlueprints::default();
-
-    // Initialize the protocol - this should detect both registrations and spawn both blueprints
-    println!("🚀 Initializing protocol manager (should spawn 2 blueprints)...");
-    let init_result = protocol_manager
-        .initialize(&env, &ctx, &mut active_blueprints)
-        .await;
-
-    // Cleanup registrations before asserting
+    // Test deregistration of both AVS instances
+    println!("🔄 Testing deregistration of both AVS...");
     state_manager
         .deregister(registration1.config.service_manager)
         .unwrap();
     state_manager
         .deregister(registration2.config.service_manager)
         .unwrap();
-
-    // Verify initialization succeeded
-    assert!(
-        init_result.is_ok(),
-        "Protocol initialization failed: {:?}",
-        init_result.err()
-    );
-
-    println!("✅ Protocol manager initialized successfully");
-
-    // Verify both blueprints were spawned
-    assert!(
-        active_blueprints.len() >= 2,
-        "Should have spawned at least 2 blueprints, got: {}",
-        active_blueprints.len()
-    );
-
-    println!(
-        "✅ Multiple blueprints spawned! Active blueprints: {}",
-        active_blueprints.len()
-    );
 
     // Verify both deregistrations were saved
     let loaded = RegistrationStateManager::load_from_file(&state_file_path).unwrap();
@@ -383,7 +264,8 @@ async fn test_multi_avs_simultaneous_instances() {
     assert_eq!(dereg2.status, RegistrationStatus::Deregistered);
 
     println!("✅ Both deregistrations verified");
-    println!("\n✨ E2E test passed: Multi-AVS Simultaneous Instances\n");
+    println!("\n✨ E2E test passed: Multi-AVS Registration\n");
+    println!("Note: Blueprint spawning tests are in runtime_target_test.rs");
 }
 
 /// Test: Registration lifecycle
