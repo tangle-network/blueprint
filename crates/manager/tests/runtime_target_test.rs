@@ -17,54 +17,14 @@
 ///    - Resource limits enforcement
 ///    - Health checks after spawn
 
+mod common;
+
 use blueprint_eigenlayer_extra::{AvsRegistration, RegistrationStateManager, RuntimeTarget};
 use blueprint_eigenlayer_testing_utils::EigenlayerTestHarness;
 use blueprint_manager::blueprint::ActiveBlueprints;
-use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
 use blueprint_manager::protocol::{ProtocolManager, ProtocolType};
 use blueprint_manager::rt::service::Status;
 use tempfile::TempDir;
-
-// =============================================================================
-// TEST UTILITIES
-// =============================================================================
-
-async fn create_test_context(keystore_uri: String) -> BlueprintManagerContext {
-    let test_id = format!("bpm{}", rand::random::<u32>());
-    let temp_root = std::path::PathBuf::from("/tmp").join(test_id);
-
-    let cache_dir = temp_root.join("c");
-    let runtime_dir = temp_root.join("r");
-    let data_dir = temp_root.join("d");
-    std::fs::create_dir_all(&cache_dir).unwrap();
-    std::fs::create_dir_all(&runtime_dir).unwrap();
-    std::fs::create_dir_all(&data_dir).unwrap();
-
-    let manager_config = BlueprintManagerConfig {
-        paths: Paths {
-            blueprint_config: None,
-            keystore_uri,
-            data_dir: data_dir.clone(),
-            cache_dir,
-            runtime_dir,
-        },
-        verbose: 0,
-        pretty: false,
-        instance_id: None,
-        test_mode: true,
-        allow_unchecked_attestations: true,
-        ..Default::default()
-    };
-
-    let ctx = BlueprintManagerContext::new(manager_config).await.unwrap();
-
-    let db_path = data_dir.join("p").join("a").join("db");
-    tokio::fs::create_dir_all(&db_path).await.unwrap();
-    let proxy = blueprint_auth::proxy::AuthenticatedProxy::new(&db_path).unwrap();
-    ctx.set_db(proxy.db()).await;
-
-    ctx
-}
 
 // =============================================================================
 // SECTION 1: VALIDATION TESTS (Fast, no spawning)
@@ -371,7 +331,7 @@ mod lifecycle_tests {
         let mut state_manager = RegistrationStateManager::load().unwrap();
         state_manager.register(registration.clone()).unwrap();
 
-        let ctx = create_test_context(env.keystore_uri.clone()).await;
+        let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
         let mut protocol_manager = ProtocolManager::new(ProtocolType::Eigenlayer, env.clone(), &ctx)
             .await
@@ -570,7 +530,7 @@ mod lifecycle_tests {
         let mut state_manager = RegistrationStateManager::load().unwrap();
         state_manager.register(registration.clone()).unwrap();
 
-        let ctx = create_test_context(env.keystore_uri.clone()).await;
+        let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
         // Initialize container support in context
         // Note: This requires the context to have container support configured

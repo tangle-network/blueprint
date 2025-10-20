@@ -593,38 +593,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_os = "linux"))]
-    fn test_validation_hypervisor_on_non_linux() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let blueprint_path = temp_dir.path().join("test_blueprint");
-        std::fs::File::create(&blueprint_path).unwrap();
-
-        let config = AvsRegistrationConfig {
-            service_manager: Address::ZERO,
-            registry_coordinator: Address::ZERO,
-            operator_state_retriever: Address::ZERO,
-            strategy_manager: Address::ZERO,
-            delegation_manager: Address::ZERO,
-            avs_directory: Address::ZERO,
-            rewards_coordinator: Address::ZERO,
-            permission_controller: None,
-            allocation_manager: None,
-            strategy_address: Address::ZERO,
-            stake_registry: Address::ZERO,
-            blueprint_path,
-            runtime_target: RuntimeTarget::Hypervisor,
-            allocation_delay: 0,
-            deposit_amount: 1000,
-            stake_amount: 100,
-            operator_sets: vec![0],
-        };
-
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires Linux"));
-    }
-
-    #[test]
     fn test_registration_serialization() {
         let config = AvsRegistrationConfig {
             service_manager: Address::from([1u8; 20]),

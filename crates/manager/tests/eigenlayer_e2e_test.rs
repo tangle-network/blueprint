@@ -12,6 +12,9 @@
 /// - Require significant resources
 ///
 /// Run with: cargo test --test eigenlayer_e2e_test -- --ignored --nocapture --test-threads=1
+
+mod common;
+
 use blueprint_eigenlayer_extra::{
     AvsRegistration, AvsRegistrationConfig, RegistrationStateManager, RegistrationStatus,
     RuntimeTarget,
@@ -63,40 +66,6 @@ fn build_blueprint_binary() -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(binary_path)
 }
 
-/// Helper to create AVS registration config from test harness
-fn create_avs_config(
-    harness: &EigenlayerTestHarness<()>,
-    blueprint_path: PathBuf,
-    runtime_target: RuntimeTarget,
-) -> AvsRegistrationConfig {
-    let settings = harness
-        .env()
-        .protocol_settings
-        .eigenlayer()
-        .expect("Should have EigenLayer settings");
-
-    AvsRegistrationConfig {
-        service_manager: settings.service_manager_address,
-        registry_coordinator: settings.registry_coordinator_address,
-        operator_state_retriever: settings.operator_state_retriever_address,
-        strategy_manager: settings.strategy_manager_address,
-        delegation_manager: settings.delegation_manager_address,
-        avs_directory: settings.avs_directory_address,
-        rewards_coordinator: settings.rewards_coordinator_address,
-        permission_controller: Some(settings.permission_controller_address),
-        allocation_manager: Some(settings.allocation_manager_address),
-        strategy_address: settings.strategy_address,
-        stake_registry: settings.stake_registry_address,
-        blueprint_path,
-        container_image: None,
-        runtime_target,
-        allocation_delay: 0,
-        deposit_amount: 5_000_000_000_000_000_000_000,
-        stake_amount: 1_000_000_000_000_000_000,
-        operator_sets: vec![0],
-    }
-}
-
 /// Test: Single AVS registration flow
 ///
 /// This test verifies the registration flow:
@@ -125,7 +94,7 @@ async fn test_single_avs_registration_flow() {
     println!("👤 Operator address: {:#x}", operator_address);
 
     // Create AVS registration config
-    let config = create_avs_config(&harness, blueprint_path, RuntimeTarget::Native);
+    let config = common::create_avs_config(&harness, blueprint_path, RuntimeTarget::Native);
 
     println!(
         "📝 Registering AVS: {:#x}",
@@ -203,7 +172,7 @@ async fn test_multi_avs_registration() {
     // For multi-AVS testing, we need unique service manager addresses
     // In a real scenario, these would be different AVS contracts
     // For testing, we'll use the same binary but pretend they're different AVS
-    let config1 = create_avs_config(&harness, blueprint_path.clone(), RuntimeTarget::Native);
+    let config1 = common::create_avs_config(&harness, blueprint_path.clone(), RuntimeTarget::Native);
 
     // Create a second config with a different service manager address
     // Note: In production, this would be a completely different AVS contract
@@ -293,7 +262,7 @@ async fn test_registration_lifecycle() {
     println!("👤 Operator address: {:#x}", operator_address);
 
     // Create AVS registration config
-    let config = create_avs_config(&harness, blueprint_path, RuntimeTarget::Native);
+    let config = common::create_avs_config(&harness, blueprint_path, RuntimeTarget::Native);
 
     println!(
         "📝 Testing lifecycle for AVS: {:#x}",

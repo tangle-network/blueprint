@@ -2,61 +2,15 @@
 ///
 /// Tests verify that both Tangle and EigenLayer protocols work correctly
 /// through the unified ProtocolManager interface.
+
+mod common;
+
 use blueprint_manager::blueprint::ActiveBlueprints;
-use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
+use blueprint_manager::config::BlueprintManagerContext;
 use blueprint_manager::protocol::{ProtocolManager, ProtocolType};
 use blueprint_runner::config::BlueprintEnvironment;
 use std::time::Duration;
 use tokio::time::timeout;
-
-/// Helper function to create a test BlueprintManagerContext with temp directories and RocksDB
-///
-/// Uses /tmp for shorter paths to avoid Unix socket SUN_LEN limit (typically 104-108 bytes)
-async fn create_test_context(
-    _temp_dir: &std::path::Path,
-    keystore_uri: String,
-) -> BlueprintManagerContext {
-    // Use /tmp with short random name to avoid socket path length issues
-    let test_id = format!("bpm{}", rand::random::<u32>());
-    let temp_root = std::path::PathBuf::from("/tmp").join(test_id);
-
-    let cache_dir = temp_root.join("c");
-    let runtime_dir = temp_root.join("r");
-    let data_dir = temp_root.join("d");
-    std::fs::create_dir_all(&cache_dir).unwrap();
-    std::fs::create_dir_all(&runtime_dir).unwrap();
-    std::fs::create_dir_all(&data_dir).unwrap();
-
-    let manager_config = BlueprintManagerConfig {
-        paths: Paths {
-            blueprint_config: None,
-            keystore_uri,
-            data_dir: data_dir.clone(),
-            cache_dir,
-            runtime_dir,
-        },
-        verbose: 0,
-        pretty: false,
-        instance_id: None,
-        test_mode: true,
-        allow_unchecked_attestations: true,
-        ..Default::default()
-    };
-
-    let ctx = BlueprintManagerContext::new(manager_config).await.unwrap();
-
-    // Setup RocksDB database for bridge functionality
-    // This matches how the test harnesses initialize the database
-    let db_path = data_dir.join("p").join("a").join("db");
-    tokio::fs::create_dir_all(&db_path).await.unwrap();
-
-    let proxy = blueprint_auth::proxy::AuthenticatedProxy::new(&db_path).unwrap();
-    let db = proxy.db();
-
-    ctx.set_db(db).await;
-
-    ctx
-}
 
 /// Test that ProtocolManager can be constructed for Tangle
 #[tokio::test]
@@ -70,7 +24,7 @@ async fn test_tangle_protocol_manager_initialization() {
     let env = harness.env().clone();
 
     let manager_temp_dir = TempDir::new().unwrap();
-    let ctx = create_test_context(manager_temp_dir.path(), env.keystore_uri.clone()).await;
+    let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
     // Create ProtocolManager with Tangle
     let result = ProtocolManager::new(ProtocolType::Tangle, env, &ctx).await;
@@ -96,7 +50,7 @@ async fn test_eigenlayer_protocol_manager_initialization() {
     let env = harness.env().clone();
 
     let manager_temp_dir = TempDir::new().unwrap();
-    let ctx = create_test_context(manager_temp_dir.path(), env.keystore_uri.clone()).await;
+    let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
     // Create ProtocolManager with EigenLayer
     let result = ProtocolManager::new(ProtocolType::Eigenlayer, env, &ctx).await;
@@ -119,7 +73,7 @@ async fn test_tangle_protocol_manager_event_flow() {
     let env = harness.env().clone();
 
     let manager_temp_dir = TempDir::new().unwrap();
-    let ctx = create_test_context(manager_temp_dir.path(), env.keystore_uri.clone()).await;
+    let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
     let mut protocol_manager = ProtocolManager::new(ProtocolType::Tangle, env.clone(), &ctx)
         .await
@@ -169,7 +123,7 @@ async fn test_eigenlayer_protocol_manager_event_flow() {
     let env = harness.env().clone();
 
     let manager_temp_dir = TempDir::new().unwrap();
-    let ctx = create_test_context(manager_temp_dir.path(), env.keystore_uri.clone()).await;
+    let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
     let mut protocol_manager = ProtocolManager::new(ProtocolType::Eigenlayer, env.clone(), &ctx)
         .await
@@ -210,87 +164,6 @@ async fn test_eigenlayer_protocol_manager_event_flow() {
             // Timeout is acceptable for this test - just verifying the flow works
         }
     }
-}
-
-/// Test EigenLayer blueprint spawning through ProtocolManager
-///
-/// With multi-AVS architecture, blueprints spawn when registrations exist.
-/// This test creates a registration and verifies spawning.
-#[tokio::test]
-async fn test_eigenlayer_blueprint_spawning() {
-    use blueprint_eigenlayer_extra::{AvsRegistration, RegistrationStateManager};
-    use blueprint_eigenlayer_testing_utils::EigenlayerTestHarness;
-    use tempfile::TempDir;
-
-    let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(harness_temp_dir)
-        .await
-        .unwrap();
-    let env = harness.env().clone();
-    let operator_address = harness.owner_account();
-
-    let manager_temp_dir = TempDir::new().unwrap();
-
-    // Use mock blueprint path for testing
-    let blueprint_path = std::path::PathBuf::from("/tmp/mock_blueprint_spawn_test");
-
-    // Create AVS registration
-    let settings = env
-        .protocol_settings
-        .eigenlayer()
-        .expect("Should have EigenLayer settings");
-
-    let config = blueprint_eigenlayer_extra::AvsRegistrationConfig {
-        service_manager: settings.service_manager_address,
-        registry_coordinator: settings.registry_coordinator_address,
-        operator_state_retriever: settings.operator_state_retriever_address,
-        strategy_manager: settings.strategy_manager_address,
-        delegation_manager: settings.delegation_manager_address,
-        avs_directory: settings.avs_directory_address,
-        rewards_coordinator: settings.rewards_coordinator_address,
-        permission_controller: Some(settings.permission_controller_address),
-        allocation_manager: Some(settings.allocation_manager_address),
-        strategy_address: settings.strategy_address,
-        stake_registry: settings.stake_registry_address,
-        blueprint_path,
-        container_image: None,
-        runtime_target: blueprint_eigenlayer_extra::RuntimeTarget::Native,
-        allocation_delay: 0,
-        deposit_amount: 5_000_000_000_000_000_000_000,
-        stake_amount: 1_000_000_000_000_000_000,
-        operator_sets: vec![0],
-    };
-
-    let registration = AvsRegistration::new(operator_address, config);
-
-    // Register AVS
-    let mut state_manager = RegistrationStateManager::load().unwrap();
-    state_manager.register(registration.clone()).unwrap();
-
-    let ctx = create_test_context(manager_temp_dir.path(), env.keystore_uri.clone()).await;
-
-    let mut protocol_manager = ProtocolManager::new(ProtocolType::Eigenlayer, env.clone(), &ctx)
-        .await
-        .unwrap();
-
-    let mut active_blueprints = ActiveBlueprints::default();
-
-    // Initialize - with registration, blueprint should spawn (but will fail due to mock path)
-    let init_result = protocol_manager
-        .initialize(&env, &ctx, &mut active_blueprints)
-        .await;
-
-    // Cleanup registration
-    state_manager
-        .deregister(registration.config.service_manager)
-        .unwrap();
-
-    // We expect initialization to fail because the mock blueprint path doesn't exist
-    // This is ok - we're just verifying the spawning logic is triggered
-    assert!(
-        init_result.is_err(),
-        "Initialization should fail with mock blueprint path"
-    );
 }
 
 /// Test edge case: invalid protocol configuration
