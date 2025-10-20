@@ -63,32 +63,46 @@ impl RewardsManager {
     /// * Configuration errors if EigenLayer settings not found
     /// * Keystore errors
     pub async fn get_claimable_rewards(&self) -> Result<U256> {
-        let operator_address = self.get_operator_address()?;
         let contract_addresses = self
             .env
             .protocol_settings
             .eigenlayer()
             .map_err(|e| EigenlayerExtraError::InvalidConfiguration(e.to_string()))?;
 
-        let provider =
-            blueprint_evm_extra::util::get_provider_http(self.env.http_rpc_endpoint.clone());
+        let el_chain_reader = ELChainReader::new(
+            Some(contract_addresses.allocation_manager_address),
+            contract_addresses.delegation_manager_address,
+            contract_addresses.rewards_coordinator_address,
+            contract_addresses.avs_directory_address,
+            Some(contract_addresses.permission_controller_address),
+            self.env.http_rpc_endpoint.to_string(),
+        );
 
-        let rewards_coordinator =
-            RewardsCoordinator::new(contract_addresses.rewards_coordinator_address, provider);
-
-        // Get cumulative claimed rewards
-        let claimed = rewards_coordinator
-            .cumulativeClaimed(operator_address, Address::ZERO) // Use ZERO for native token
-            .call()
+        // Get current claimable distribution root
+        let distribution_root = el_chain_reader
+            .get_current_claimable_distribution_root()
             .await
-            .map_err(|e| EigenlayerExtraError::Contract(e.to_string()))?;
+            .map_err(|e| EigenlayerExtraError::EigenSdk(e.to_string()))?;
 
-        Ok(claimed)
+        info!(
+            "Current claimable distribution root: {} (activated at {})",
+            distribution_root.root, distribution_root.activatedAt
+        );
+
+        // Note: Actual claimable amount requires fetching Merkle proofs from off-chain API
+        // The DistributionRoot contains the Merkle root, but individual claims need proofs
+        // from https://eigenlabs-rewards-mainnet-ethereum.s3.amazonaws.com/
+        //
+        // For now, we return the timestamp of the latest claimable root
+        // Operators should use the EigenLayer CLI/API to get their specific claim proofs
+
+        Ok(U256::from(distribution_root.activatedAt))
     }
 
     /// Calculate earnings per strategy for the operator
     ///
-    /// Returns a mapping of strategy addresses to earnings amounts.
+    /// Returns a mapping of strategy addresses to share amounts.
+    /// These shares represent the operator's stake in each strategy.
     ///
     /// # Errors
     ///
@@ -114,15 +128,25 @@ impl RewardsManager {
             self.env.http_rpc_endpoint.to_string(),
         );
 
-        // TODO: eigensdk v2.0.0 doesn't have get_operator_details yet
-        // For now, return empty vec as we'd need to query strategy-specific earnings
-        // This would require additional contract calls to get the list of strategies
-        // and then query earnings for each one
-        info!(
-            "Operator {} earnings calculation pending (eigensdk API incomplete)",
-            operator_address
-        );
-        Ok(alloc::vec::Vec::new())
+        // Get operator's deposited shares (strategies and amounts)
+        let (strategies, shares) = el_chain_reader
+            .get_staker_shares(operator_address)
+            .await
+            .map_err(|e| EigenlayerExtraError::EigenSdk(e.to_string()))?;
+
+        // Combine strategies with their corresponding shares
+        let mut earnings = alloc::vec::Vec::with_capacity(strategies.len());
+        for (strategy, share) in strategies.into_iter().zip(shares.into_iter()) {
+            if !share.is_zero() {
+                earnings.push((strategy, share));
+                info!(
+                    "Operator {} has {} shares in strategy {}",
+                    operator_address, share, strategy
+                );
+            }
+        }
+
+        Ok(earnings)
     }
 
     /// Claim rewards for the operator
