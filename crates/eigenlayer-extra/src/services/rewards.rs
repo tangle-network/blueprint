@@ -156,9 +156,10 @@ impl RewardsManager {
         Ok(earnings)
     }
 
-    /// Claim rewards for the operator
+    /// Claim a single reward for the operator
     ///
-    /// Submits a transaction to claim all pending rewards for the operator.
+    /// Submits a transaction to claim a specific reward for the operator.
+    /// For claiming multiple rewards at once (gas optimization), use `claim_rewards_batch()`.
     ///
     /// # Arguments
     ///
@@ -221,6 +222,85 @@ impl RewardsManager {
 
         info!(
             "Rewards claimed successfully: {:?}",
+            receipt.transaction_hash
+        );
+
+        Ok(receipt.transaction_hash)
+    }
+
+    /// Batch claim multiple rewards for the operator (gas optimized)
+    ///
+    /// Submits a single transaction to claim multiple rewards at once.
+    /// This is more gas efficient than calling `claim_rewards()` multiple times.
+    ///
+    /// This matches the gas optimization used by the EigenLayer CLI's batch claiming feature.
+    ///
+    /// # Arguments
+    ///
+    /// * `reward_claims` - Vector of reward claim data structures
+    ///
+    /// # Errors
+    ///
+    /// * Transaction errors
+    /// * Configuration errors
+    /// * No rewards available to claim
+    #[allow(dead_code)]
+    pub async fn claim_rewards_batch(
+        &self,
+        reward_claims: Vec<IRewardsCoordinator::RewardsMerkleClaim>,
+    ) -> Result<FixedBytes<32>> {
+        if reward_claims.is_empty() {
+            return Err(EigenlayerExtraError::InvalidConfiguration(
+                "No reward claims provided".into(),
+            ));
+        }
+
+        let contract_addresses = self
+            .env
+            .protocol_settings
+            .eigenlayer()
+            .map_err(|e| EigenlayerExtraError::InvalidConfiguration(e.to_string()))?;
+
+        let operator_address = self.get_operator_address()?;
+        let ecdsa_public = self
+            .env
+            .keystore()
+            .first_local::<K256Ecdsa>()
+            .map_err(EigenlayerExtraError::Keystore)?;
+        let ecdsa_secret = self
+            .env
+            .keystore()
+            .expose_ecdsa_secret(&ecdsa_public)
+            .map_err(EigenlayerExtraError::Keystore)?
+            .ok_or_else(|| {
+                EigenlayerExtraError::InvalidConfiguration("No ECDSA secret found".into())
+            })?;
+
+        let private_key = alloy_primitives::hex::encode(ecdsa_secret.0.to_bytes());
+        let wallet = alloy_signer_local::PrivateKeySigner::from_str(&private_key)
+            .map_err(|e| EigenlayerExtraError::InvalidConfiguration(e.to_string()))?;
+
+        let provider = blueprint_evm_extra::util::get_wallet_provider_http(
+            self.env.http_rpc_endpoint.clone(),
+            alloy_network::EthereumWallet::from(wallet),
+        );
+
+        let rewards_coordinator =
+            RewardsCoordinator::new(contract_addresses.rewards_coordinator_address, provider);
+
+        // Process all claims in a single transaction (gas optimization)
+        let receipt = rewards_coordinator
+            .processClaims(reward_claims.clone(), operator_address)
+            .send()
+            .await
+            .map_err(|e| EigenlayerExtraError::Transaction(e.to_string()))?
+            .get_receipt()
+            .await
+            .map_err(|e| EigenlayerExtraError::Transaction(e.to_string()))?;
+
+        info!(
+            "Batch claimed {} rewards successfully: {:?}",
+            reward_claims.len(),
             receipt.transaction_hash
         );
 
