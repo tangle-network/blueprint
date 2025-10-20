@@ -62,10 +62,10 @@ impl OperatorLifecycleManager {
         Ok((operator_address, private_key))
     }
 
-    /// Deregister the operator from EigenLayer
+    /// Deregister the operator from this AVS's operator sets
     ///
-    /// Removes the operator registration, preventing them from receiving
-    /// new delegations or participating in AVS services.
+    /// Removes the operator from the operator sets configured for this AVS,
+    /// preventing them from receiving new work or participating in this AVS.
     ///
     /// # Errors
     ///
@@ -73,14 +73,14 @@ impl OperatorLifecycleManager {
     /// * Configuration errors
     /// * Operator not registered
     pub async fn deregister_operator(&self) -> Result<FixedBytes<32>> {
-        let (_operator_address, private_key) = self.get_operator_credentials()?;
+        let (operator_address, private_key) = self.get_operator_credentials()?;
         let contract_addresses = self
             .env
             .protocol_settings
             .eigenlayer()
             .map_err(|e| EigenlayerExtraError::InvalidConfiguration(e.to_string()))?;
 
-        let _el_writer = ELChainWriter::new(
+        let el_writer = ELChainWriter::new(
             contract_addresses.strategy_manager_address,
             contract_addresses.rewards_coordinator_address,
             Some(contract_addresses.permission_controller_address),
@@ -98,12 +98,25 @@ impl OperatorLifecycleManager {
             private_key,
         );
 
-        // TODO: eigensdk v2.0.0 doesn't have deregister_as_operator yet
-        // This functionality will need to be implemented once it's available
-        // For now, return an error indicating this feature is not yet supported
-        Err(EigenlayerExtraError::Other(
-            "Operator deregistration not yet supported in eigensdk v2.0.0".to_string(),
-        ))
+        // Deregister from this AVS's operator sets
+        let tx_hash = el_writer
+            .deregister_from_operator_sets(
+                operator_address,
+                contract_addresses.service_manager_address,
+                contract_addresses.operator_sets.clone(),
+            )
+            .await
+            .map_err(|e| EigenlayerExtraError::EigenSdk(e.to_string()))?;
+
+        info!(
+            "Operator {} deregistered from AVS {} operator sets {:?}: {:?}",
+            operator_address,
+            contract_addresses.service_manager_address,
+            contract_addresses.operator_sets,
+            tx_hash
+        );
+
+        Ok(tx_hash.into())
     }
 
     /// Update operator metadata
