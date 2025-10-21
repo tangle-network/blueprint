@@ -25,21 +25,25 @@ const DEFAULT_SIDECAR_URL_HOLESKY: &str = "https://sidecar-rpc.eigenlayer.xyz/ho
 /// * `earner_address` - Ethereum address of the earner
 /// * `sidecar_url` - Optional Sidecar API URL (defaults to mainnet)
 /// * `network` - Network name (mainnet or holesky)
+///
+/// # Errors
+///
+/// Returns error if:
+/// - Sidecar client cannot be created
+/// - Rewards data cannot be fetched from Sidecar API
 pub async fn show_rewards(
     earner_address: &str,
     sidecar_url: Option<&str>,
     network: Option<&str>,
 ) -> Result<()> {
-    let url = sidecar_url
-        .map(String::from)
-        .unwrap_or_else(|| match network {
-            Some("holesky") => DEFAULT_SIDECAR_URL_HOLESKY.to_string(),
-            _ => DEFAULT_SIDECAR_URL_MAINNET.to_string(),
-        });
+    let url = sidecar_url.unwrap_or(match network {
+        Some("holesky") => DEFAULT_SIDECAR_URL_HOLESKY,
+        _ => DEFAULT_SIDECAR_URL_MAINNET,
+    });
 
     println!("Fetching rewards from Sidecar: {}", url);
 
-    let client = SidecarClient::new(url)
+    let client = SidecarClient::new(url.to_string())
         .map_err(|e| color_eyre::eyre::eyre!("Failed to create Sidecar client: {}", e))?;
 
     let rewards = client
@@ -83,6 +87,19 @@ pub async fn show_rewards(
 /// * `keystore_uri` - Keystore URI for signing
 /// * `rpc_url` - Ethereum RPC endpoint
 /// * `batch_file` - Optional YAML file for batch claiming
+///
+/// # Errors
+///
+/// Returns error if:
+/// - Sidecar client cannot be created
+/// - Invalid address format for earner or recipient
+/// - Keystore cannot be loaded or accessed
+/// - ECDSA key not found in keystore
+/// - Failed to create wallet signer
+/// - Proof generation fails
+/// - Transaction submission or receipt retrieval fails
+/// - Batch file cannot be read or parsed
+#[allow(clippy::too_many_arguments)]
 pub async fn claim_rewards(
     earner_address: &str,
     recipient_address: Option<&str>,
@@ -94,14 +111,12 @@ pub async fn claim_rewards(
     rpc_url: &str,
     batch_file: Option<&str>,
 ) -> Result<()> {
-    let url = sidecar_url
-        .map(String::from)
-        .unwrap_or_else(|| match network {
-            Some("holesky") => DEFAULT_SIDECAR_URL_HOLESKY.to_string(),
-            _ => DEFAULT_SIDECAR_URL_MAINNET.to_string(),
-        });
+    let url = sidecar_url.unwrap_or(match network {
+        Some("holesky") => DEFAULT_SIDECAR_URL_HOLESKY,
+        _ => DEFAULT_SIDECAR_URL_MAINNET,
+    });
 
-    let sidecar = SidecarClient::new(url.clone())
+    let sidecar = SidecarClient::new(url.to_string())
         .map_err(|e| color_eyre::eyre::eyre!("Failed to create Sidecar client: {}", e))?;
 
     let recipient = if let Some(addr) = recipient_address {
@@ -211,6 +226,16 @@ pub async fn claim_rewards(
 /// * `rewards_coordinator` - `RewardsCoordinator` contract address
 /// * `keystore_uri` - Keystore URI for signing
 /// * `rpc_url` - Ethereum RPC endpoint
+///
+/// # Errors
+///
+/// Returns error if:
+/// - Invalid claimer address format
+/// - Keystore cannot be loaded or accessed
+/// - ECDSA key not found in keystore
+/// - Failed to derive earner address
+/// - Failed to create wallet signer
+/// - Transaction submission or receipt retrieval fails
 pub async fn set_claimer(
     claimer_address: &str,
     rewards_coordinator: Address,

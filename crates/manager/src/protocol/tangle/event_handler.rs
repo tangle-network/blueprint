@@ -76,12 +76,9 @@ impl TangleEventHandler {
         active_blueprints: &mut ActiveBlueprints,
         account_id: &AccountId32,
     ) -> EventCheckResult {
-        let tangle_event = match event.as_tangle() {
-            Some(evt) => evt,
-            None => {
-                warn!("Expected Tangle event but got different protocol");
-                return EventCheckResult::default();
-            }
+        let Some(tangle_event) = event.as_tangle() else {
+            warn!("Expected Tangle event but got different protocol");
+            return EventCheckResult::default();
         };
 
         let inner = &tangle_event.inner;
@@ -328,6 +325,10 @@ impl Default for TangleEventHandler {
 
 impl TangleEventHandler {
     /// Initialize the handler with the protocol client
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the keystore cannot be accessed or the account ID cannot be retrieved
     pub async fn initialize(
         &mut self,
         client: &TangleProtocolClient,
@@ -359,6 +360,10 @@ impl TangleEventHandler {
     }
 
     /// Handle a Tangle protocol event
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if initialization has not completed or if spawning blueprint services fails
     pub async fn handle_event(
         &mut self,
         event: &ProtocolEvent,
@@ -488,6 +493,7 @@ impl VerifiedBlueprint {
 
                 info!("Starting protocol: {sub_service_str}");
 
+                #[allow(clippy::cast_possible_truncation)]
                 let id = active_blueprints.len() as u32;
                 let runtime_dir = ctx.runtime_dir().join(id.to_string());
                 std::fs::create_dir_all(&runtime_dir)?;

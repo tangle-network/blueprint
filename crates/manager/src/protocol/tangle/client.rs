@@ -16,6 +16,10 @@ pub struct TangleProtocolClient {
 
 impl TangleProtocolClient {
     /// Create a new Tangle protocol client
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the keystore cannot be initialized or if the Tangle client connection fails
     pub async fn new(env: BlueprintEnvironment, _ctx: &BlueprintManagerContext) -> Result<Self> {
         let keystore = Keystore::new(KeystoreConfig::new().fs_root(&env.keystore_uri))?;
         let client = TangleClient::with_keystore(env, keystore).await?;

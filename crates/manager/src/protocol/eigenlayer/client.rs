@@ -24,6 +24,10 @@ pub struct EigenlayerProtocolClient {
 
 impl EigenlayerProtocolClient {
     /// Create a new EigenLayer protocol client
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP RPC endpoint connection fails or if the current block number cannot be retrieved
     pub async fn new(env: BlueprintEnvironment, _ctx: &BlueprintManagerContext) -> Result<Self> {
         // Get HTTP RPC URL from environment - it's already a url::Url
         let http_rpc_url = env.http_rpc_endpoint.clone();

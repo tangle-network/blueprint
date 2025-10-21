@@ -150,7 +150,6 @@ async fn run_eigenlayer_incredible_squaring_test(
 
     info!("Setting AVS permissions and Metadata...");
     // Extract necessary data from harness before moving it
-    let ws_endpoint = harness.ws_endpoint.to_string();
     let accounts = harness.accounts().to_vec();
     let task_generator_address = harness.task_generator_account();
     let signer: PrivateKeySigner = AGGREGATOR_PRIVATE_KEY

@@ -26,6 +26,10 @@ use std::path::Path;
 /// - Operator address cannot be derived
 /// - Registration state cannot be saved
 /// - On-chain verification fails (if enabled)
+///
+/// # Panics
+///
+/// Panics if the registration state manager cannot be created after failing to load existing state
 pub async fn register_avs(
     config_path: &Path,
     keystore_uri: &str,

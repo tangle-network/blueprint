@@ -424,7 +424,7 @@ mod lifecycle_tests {
         // Step 2: Check if Docker is running
         let docker_check = Command::new("docker").arg("ps").output();
 
-        assert!(!(docker_check.is_err() || !docker_check.unwrap().status.success()), "Docker is not running - test requires Docker daemon");
+        assert!(docker_check.is_ok() && docker_check.unwrap().status.success(), "Docker is not running - test requires Docker daemon");
 
         println!("✅ Docker is running");
 
@@ -529,7 +529,7 @@ mod lifecycle_tests {
         let mut state_manager = RegistrationStateManager::load().unwrap();
         state_manager.register(registration.clone()).unwrap();
 
-        let ctx = common::create_test_context(env.keystore_uri.clone()).await;
+        let _ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
         // Initialize container support in context
         // Note: This requires the context to have container support configured

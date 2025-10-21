@@ -288,6 +288,7 @@ impl Service {
     ///
     /// * See [`HypervisorInstance::status()`]
     /// * See [`ProcessHandle::status()`]
+    #[allow(clippy::unused_async)]
     pub async fn status(&mut self) -> Result<Status> {
         match &mut self.runtime {
             #[cfg(feature = "vm-sandbox")]
@@ -309,6 +310,7 @@ impl Service {
     /// # Errors
     ///
     /// * See [`HypervisorInstance::start()`]
+    #[allow(clippy::unused_async)]
     pub async fn start(&mut self) -> Result<Option<impl Future<Output = Result<()>> + use<>>> {
         let Some(alive_rx) = self.alive_rx.take() else {
             error!("Service already started!");
@@ -373,6 +375,7 @@ impl Service {
     ///
     /// * [`HypervisorInstance::shutdown()`]
     /// * [`BridgeHandle::shutdown()`]
+    #[allow(clippy::unused_async)]
     pub async fn shutdown(self) -> Result<()> {
         match self.runtime {
             #[cfg(feature = "vm-sandbox")]

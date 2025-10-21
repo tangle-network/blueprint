@@ -474,6 +474,10 @@ impl EigenlayerEventHandler {
     /// Initialize the handler with the protocol client
     ///
     /// Loads AVS registrations and spawns blueprint instances for each active AVS.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if spawning background services fails or if registered AVS blueprints fail to start
     pub async fn initialize(
         &mut self,
         _client: &EigenlayerProtocolClient,
@@ -486,7 +490,7 @@ impl EigenlayerEventHandler {
         // Start operator-level background services (rewards, slashing monitoring)
         if self.background_services.is_none() {
             info!("Starting operator-level background services");
-            self.background_services = Some(Self::spawn_background_services(env.clone())?);
+            self.background_services = Some(Self::spawn_background_services(env));
         }
 
         // Start all registered AVS blueprints
@@ -501,7 +505,7 @@ impl EigenlayerEventHandler {
     /// These services run continuously and monitor:
     /// - Rewards accumulation and claiming
     /// - Slashing events
-    fn spawn_background_services(env: BlueprintEnvironment) -> Result<BackgroundServices> {
+    fn spawn_background_services(env: &BlueprintEnvironment) -> BackgroundServices {
         use blueprint_eigenlayer_extra::{RewardsManager, SlashingMonitor};
 
         // Spawn rewards monitoring task
@@ -550,16 +554,20 @@ impl EigenlayerEventHandler {
             }
         });
 
-        Ok(BackgroundServices {
+        BackgroundServices {
             rewards_task,
             slashing_task,
-        })
+        }
     }
 
     /// Handle an EigenLayer protocol event
     ///
     /// Ensures all registered AVS blueprints are running. The blueprint binaries
     /// themselves process events via their job handlers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the event is not an EigenLayer event or if ensuring AVS blueprints are running fails
     pub async fn handle_event(
         &mut self,
         event: &ProtocolEvent,

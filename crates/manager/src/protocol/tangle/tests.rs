@@ -1,5 +1,6 @@
 /// Tests for Tangle protocol handler to ensure backwards compatibility
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use super::super::event_handler::TangleEventHandler;
     use crate::protocol::types::{EigenlayerProtocolEvent, ProtocolEvent};

@@ -19,10 +19,10 @@ async fn test_tangle_protocol_manager_initialization() {
     use tempfile::TempDir;
 
     let harness_temp_dir = TempDir::new().unwrap();
-    let harness: TangleTestHarness<()> = TangleTestHarness::setup(harness_temp_dir).await.unwrap();
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::setup(harness_temp_dir)).await.unwrap();
     let env = harness.env().clone();
 
-    let manager_temp_dir = TempDir::new().unwrap();
+    let _manager_temp_dir = TempDir::new().unwrap();
     let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
     // Create ProtocolManager with Tangle
@@ -48,7 +48,7 @@ async fn test_eigenlayer_protocol_manager_initialization() {
         .unwrap();
     let env = harness.env().clone();
 
-    let manager_temp_dir = TempDir::new().unwrap();
+    let _manager_temp_dir = TempDir::new().unwrap();
     let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
     // Create ProtocolManager with EigenLayer
@@ -68,10 +68,10 @@ async fn test_tangle_protocol_manager_event_flow() {
     use tempfile::TempDir;
 
     let harness_temp_dir = TempDir::new().unwrap();
-    let harness: TangleTestHarness<()> = TangleTestHarness::setup(harness_temp_dir).await.unwrap();
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::setup(harness_temp_dir)).await.unwrap();
     let env = harness.env().clone();
 
-    let manager_temp_dir = TempDir::new().unwrap();
+    let _manager_temp_dir = TempDir::new().unwrap();
     let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
     let mut protocol_manager = ProtocolManager::new(ProtocolType::Tangle, env.clone(), &ctx)
@@ -93,9 +93,9 @@ async fn test_tangle_protocol_manager_event_flow() {
     // - A timeout (no events yet, which is ok)
     // - Or an actual event (if the testnet produced one)
     match event_result {
-        Ok(Some(_event)) => {
+        Ok(Some(event)) => {
             // Got an event - verify it's a Tangle event
-            assert!(_event.as_tangle().is_some(), "Expected Tangle event");
+            assert!(event.as_tangle().is_some(), "Expected Tangle event");
         }
         Ok(None) => {
             panic!("Protocol manager returned None, expected Some or timeout");
@@ -121,7 +121,7 @@ async fn test_eigenlayer_protocol_manager_event_flow() {
         .unwrap();
     let env = harness.env().clone();
 
-    let manager_temp_dir = TempDir::new().unwrap();
+    let _manager_temp_dir = TempDir::new().unwrap();
     let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
     let mut protocol_manager = ProtocolManager::new(ProtocolType::Eigenlayer, env.clone(), &ctx)
@@ -149,10 +149,10 @@ async fn test_eigenlayer_protocol_manager_event_flow() {
     // - A timeout (no events yet, which is ok)
     // - Or an actual event (if the testnet produced one)
     match event_result {
-        Ok(Some(_event)) => {
+        Ok(Some(event)) => {
             // Got an event - verify it's an EigenLayer event
             assert!(
-                _event.as_eigenlayer().is_some(),
+                event.as_eigenlayer().is_some(),
                 "Expected EigenLayer event"
             );
         }

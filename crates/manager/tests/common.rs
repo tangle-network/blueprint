@@ -13,6 +13,11 @@ use std::path::PathBuf;
 /// # Arguments
 ///
 /// * `keystore_uri` - Path to keystore
+///
+/// # Panics
+///
+/// Panics if directory creation fails, context initialization fails, or database setup fails
+#[allow(dead_code)]
 pub async fn create_test_context(keystore_uri: String) -> BlueprintManagerContext {
     let test_id = format!("bpm{}", rand::random::<u32>());
     let temp_root = std::path::PathBuf::from("/tmp").join(test_id);
@@ -61,7 +66,13 @@ pub async fn create_test_context(keystore_uri: String) -> BlueprintManagerContex
 /// * `harness` - EigenLayer test harness
 /// * `blueprint_path` - Path to blueprint binary
 /// * `runtime_target` - Runtime target (Native, Hypervisor, Container)
-#[must_use] pub fn create_avs_config(
+///
+/// # Panics
+///
+/// Panics if the harness does not have EigenLayer protocol settings configured
+#[must_use]
+#[allow(dead_code)]
+pub fn create_avs_config(
     harness: &EigenlayerTestHarness<()>,
     blueprint_path: PathBuf,
     runtime_target: RuntimeTarget,

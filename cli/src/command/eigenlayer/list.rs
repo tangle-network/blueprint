@@ -40,7 +40,7 @@ pub async fn list_avs_registrations(active_only: bool, format: &str) -> Result<(
 
     match format {
         "json" => print_json(&filtered)?,
-        "table" | _ => print_table(&filtered),
+        _ => print_table(&filtered),
     }
 
     Ok(())
