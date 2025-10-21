@@ -58,6 +58,10 @@ pub struct ContainerInstance {
 
 impl ContainerInstance {
     /// Create a new `ContainerInstance`
+    ///
+    /// # Errors
+    ///
+    /// * Kubernetes client is not available (no kubeconfig found during initialization)
     pub async fn new(
         ctx: &BlueprintManagerContext,
         limits: ResourceLimits,
@@ -66,9 +70,17 @@ impl ContainerInstance {
         env: BlueprintEnvVars,
         args: BlueprintArgs,
         debug: bool,
-    ) -> ContainerInstance {
-        Self {
-            client: ctx.containers.kube_client.clone(),
+    ) -> Result<ContainerInstance> {
+        let client = ctx.containers.kube_client.clone().ok_or_else(|| {
+            crate::error::Error::Other(
+                "Kubernetes client not available. Container runtime requires a valid kubeconfig. \
+                Please ensure Kubernetes is configured or use --runtime native for local testing."
+                    .to_string(),
+            )
+        })?;
+
+        Ok(Self {
+            client,
             local_ip: ctx.containers.local_ip,
             service_port: ctx.kube_service_port().await,
 
@@ -78,7 +90,7 @@ impl ContainerInstance {
             env,
             args,
             debug,
-        }
+        })
     }
 
     /// Attempt to start the instance

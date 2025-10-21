@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 #[cfg(feature = "containers")]
 pub struct ContainerContext {
-    pub kube_client: kube::Client,
+    pub kube_client: Option<kube::Client>,
     pub kube_service_port: Mutex<crate::sdk::utils::PortLock>,
     pub local_ip: std::net::IpAddr,
 }
@@ -70,10 +70,25 @@ impl BlueprintManagerContext {
             (NetworkManager::new(network_candidates).await?, interface)
         };
 
+        #[cfg(feature = "containers")]
+        let kube_client = match kube::Client::try_default().await {
+            Ok(client) => {
+                tracing::debug!("Successfully initialized Kubernetes client");
+                Some(client)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to initialize Kubernetes client (container runtime will be unavailable): {}",
+                    e
+                );
+                None
+            }
+        };
+
         Ok(Self {
             #[cfg(feature = "containers")]
             containers: ContainerContext {
-                kube_client: kube::Client::try_default().await?,
+                kube_client,
                 kube_service_port: Mutex::new(crate::sdk::utils::PortLock::lock(
                     config.kube_service_port(),
                 )?),

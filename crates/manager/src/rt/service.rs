@@ -233,7 +233,7 @@ impl Service {
 
         let instance =
             ContainerInstance::new(ctx, limits, service_name, image, env_vars, arguments, debug)
-                .await;
+                .await?;
 
         Ok(Self {
             runtime: Runtime::Container(instance),
