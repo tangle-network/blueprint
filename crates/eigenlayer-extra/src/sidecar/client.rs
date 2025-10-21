@@ -23,7 +23,7 @@ impl SidecarClient {
             .timeout(Duration::from_secs(300))
             .build()
             .map_err(|e| {
-                EigenlayerExtraError::Other(format!("Failed to create HTTP client: {}", e))
+                EigenlayerExtraError::Other(format!("Failed to create HTTP client: {e}"))
             })?;
 
         Ok(Self { base_url, client })
@@ -55,21 +55,20 @@ impl SidecarClient {
             .json(&req)
             .send()
             .await
-            .map_err(|e| EigenlayerExtraError::Other(format!("Sidecar request failed: {}", e)))?;
+            .map_err(|e| EigenlayerExtraError::Other(format!("Sidecar request failed: {e}")))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             return Err(EigenlayerExtraError::Other(format!(
-                "Sidecar API error {}: {}",
-                status, body
+                "Sidecar API error {status}: {body}"
             )));
         }
 
         let resp: GenerateClaimProofResponse = response
             .json()
             .await
-            .map_err(|e| EigenlayerExtraError::Other(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| EigenlayerExtraError::Other(format!("Failed to parse response: {e}")))?;
 
         Ok(resp.proof)
     }
@@ -92,7 +91,7 @@ impl SidecarClient {
         );
 
         if let Some(height) = block_height {
-            url.push_str(&format!("?blockHeight={}", height));
+            url.push_str(&format!("?blockHeight={height}"));
         }
 
         let response = self
@@ -101,21 +100,20 @@ impl SidecarClient {
             .header("x-sidecar-source", "tangle-cli")
             .send()
             .await
-            .map_err(|e| EigenlayerExtraError::Other(format!("Sidecar request failed: {}", e)))?;
+            .map_err(|e| EigenlayerExtraError::Other(format!("Sidecar request failed: {e}")))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             return Err(EigenlayerExtraError::Other(format!(
-                "Sidecar API error {}: {}",
-                status, body
+                "Sidecar API error {status}: {body}"
             )));
         }
 
         let resp: GetSummarizedRewardsResponse = response
             .json()
             .await
-            .map_err(|e| EigenlayerExtraError::Other(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| EigenlayerExtraError::Other(format!("Failed to parse response: {e}")))?;
 
         Ok(resp.rewards)
     }
@@ -131,7 +129,7 @@ impl SidecarClient {
         let mut url = format!("{}/rewards/v1/distribution-roots", self.base_url);
 
         if let Some(height) = block_height {
-            url.push_str(&format!("?blockHeight={}", height));
+            url.push_str(&format!("?blockHeight={height}"));
         }
 
         let response = self
@@ -140,21 +138,20 @@ impl SidecarClient {
             .header("x-sidecar-source", "tangle-cli")
             .send()
             .await
-            .map_err(|e| EigenlayerExtraError::Other(format!("Sidecar request failed: {}", e)))?;
+            .map_err(|e| EigenlayerExtraError::Other(format!("Sidecar request failed: {e}")))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             return Err(EigenlayerExtraError::Other(format!(
-                "Sidecar API error {}: {}",
-                status, body
+                "Sidecar API error {status}: {body}"
             )));
         }
 
         let resp: ListDistributionRootsResponse = response
             .json()
             .await
-            .map_err(|e| EigenlayerExtraError::Other(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| EigenlayerExtraError::Other(format!("Failed to parse response: {e}")))?;
 
         Ok(resp.distribution_roots)
     }

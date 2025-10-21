@@ -71,8 +71,7 @@ impl std::str::FromStr for RuntimeTarget {
             "hypervisor" | "vm" => Ok(Self::Hypervisor),
             "container" | "docker" | "kata" => Ok(Self::Container),
             _ => Err(format!(
-                "Invalid runtime target: '{}'. Valid options: 'native', 'hypervisor', 'container'",
-                s
+                "Invalid runtime target: '{s}'. Valid options: 'native', 'hypervisor', 'container'"
             )),
         }
     }
@@ -209,15 +208,6 @@ impl AvsRegistrationConfig {
                             .to_string(),
                     );
                 }
-
-                // Check if vm-sandbox feature is enabled (compile-time check happens at spawn)
-                #[cfg(not(feature = "vm-sandbox"))]
-                {
-                    return Err(
-                        "Hypervisor runtime requires recompiling with --features vm-sandbox. Use 'native' for testing."
-                            .to_string(),
-                    );
-                }
             }
             RuntimeTarget::Container => {
                 // Container runtime requires container_image field
@@ -291,19 +281,19 @@ impl AvsRegistrations {
 
     /// Remove a registration by service manager address
     pub fn remove(&mut self, service_manager: Address) -> Option<AvsRegistration> {
-        let key = format!("{:#x}", service_manager);
+        let key = format!("{service_manager:#x}");
         self.registrations.remove(&key)
     }
 
     /// Get a registration by service manager address
     pub fn get(&self, service_manager: Address) -> Option<&AvsRegistration> {
-        let key = format!("{:#x}", service_manager);
+        let key = format!("{service_manager:#x}");
         self.registrations.get(&key)
     }
 
     /// Get a mutable reference to a registration
     pub fn get_mut(&mut self, service_manager: Address) -> Option<&mut AvsRegistration> {
-        let key = format!("{:#x}", service_manager);
+        let key = format!("{service_manager:#x}");
         self.registrations.get_mut(&key)
     }
 
@@ -348,11 +338,11 @@ impl RegistrationStateManager {
     pub fn load_from_file(path: &Path) -> Result<Self, crate::error::Error> {
         let registrations = if path.exists() {
             let contents = std::fs::read_to_string(path).map_err(|e| {
-                crate::error::Error::Other(format!("Failed to read registration state: {}", e))
+                crate::error::Error::Other(format!("Failed to read registration state: {e}"))
             })?;
 
             serde_json::from_str(&contents).map_err(|e| {
-                crate::error::Error::Other(format!("Failed to parse registration state: {}", e))
+                crate::error::Error::Other(format!("Failed to parse registration state: {e}"))
             })?
         } else {
             info!(
@@ -375,7 +365,7 @@ impl RegistrationStateManager {
 
         let tangle_dir = home.join(".tangle");
         std::fs::create_dir_all(&tangle_dir).map_err(|e| {
-            crate::error::Error::Other(format!("Failed to create .tangle directory: {}", e))
+            crate::error::Error::Other(format!("Failed to create .tangle directory: {e}"))
         })?;
 
         Ok(tangle_dir.join("eigenlayer_registrations.json"))
@@ -384,11 +374,11 @@ impl RegistrationStateManager {
     /// Save registration state to disk
     pub fn save(&self) -> Result<(), crate::error::Error> {
         let contents = serde_json::to_string_pretty(&self.registrations).map_err(|e| {
-            crate::error::Error::Other(format!("Failed to serialize registrations: {}", e))
+            crate::error::Error::Other(format!("Failed to serialize registrations: {e}"))
         })?;
 
         std::fs::write(&self.state_file, contents).map_err(|e| {
-            crate::error::Error::Other(format!("Failed to write registration state: {}", e))
+            crate::error::Error::Other(format!("Failed to write registration state: {e}"))
         })?;
 
         info!("Saved registration state to {}", self.state_file.display());
@@ -424,8 +414,7 @@ impl RegistrationStateManager {
             self.save()
         } else {
             Err(crate::error::Error::Other(format!(
-                "AVS {:#x} not found in registrations",
-                service_manager
+                "AVS {service_manager:#x} not found in registrations"
             )))
         }
     }
@@ -440,8 +429,7 @@ impl RegistrationStateManager {
     ) -> Result<bool, crate::error::Error> {
         let registration = self.registrations.get(service_manager).ok_or_else(|| {
             crate::error::Error::Other(format!(
-                "AVS {:#x} not found in local registrations",
-                service_manager
+                "AVS {service_manager:#x} not found in local registrations"
             ))
         })?;
 
@@ -452,16 +440,16 @@ impl RegistrationStateManager {
         let ecdsa_public = env
             .keystore()
             .first_local::<K256Ecdsa>()
-            .map_err(|e| crate::error::Error::Other(format!("Keystore error: {}", e)))?;
+            .map_err(|e| crate::error::Error::Other(format!("Keystore error: {e}")))?;
 
         let ecdsa_secret = env
             .keystore()
             .expose_ecdsa_secret(&ecdsa_public)
-            .map_err(|e| crate::error::Error::Other(format!("Keystore error: {}", e)))?
+            .map_err(|e| crate::error::Error::Other(format!("Keystore error: {e}")))?
             .ok_or_else(|| crate::error::Error::Other("No ECDSA secret found".into()))?;
 
         let operator_address = ecdsa_secret.alloy_address().map_err(|e| {
-            crate::error::Error::Other(format!("Failed to get operator address: {}", e))
+            crate::error::Error::Other(format!("Failed to get operator address: {e}"))
         })?;
 
         // Create AVS registry reader
@@ -473,7 +461,7 @@ impl RegistrationStateManager {
             )
             .await
             .map_err(|e| {
-                crate::error::Error::Other(format!("Failed to create AVS registry reader: {}", e))
+                crate::error::Error::Other(format!("Failed to create AVS registry reader: {e}"))
             })?;
 
         // Check if operator is registered
@@ -481,7 +469,7 @@ impl RegistrationStateManager {
             .is_operator_registered(operator_address)
             .await
             .map_err(|e| {
-                crate::error::Error::Other(format!("Failed to check registration status: {}", e))
+                crate::error::Error::Other(format!("Failed to check registration status: {e}"))
             })
     }
 

@@ -80,7 +80,7 @@ impl AvsDiscoveryService {
         )
         .await
         .map_err(|e| {
-            EigenlayerExtraError::Other(format!("Failed to create AVS registry reader: {}", e))
+            EigenlayerExtraError::Other(format!("Failed to create AVS registry reader: {e}"))
         })?;
 
         // Check if operator is registered
@@ -88,7 +88,7 @@ impl AvsDiscoveryService {
             .is_operator_registered(operator_address)
             .await
             .map_err(|e| {
-                EigenlayerExtraError::Other(format!("Failed to check registration status: {}", e))
+                EigenlayerExtraError::Other(format!("Failed to check registration status: {e}"))
             })?;
 
         if !is_registered {
@@ -140,7 +140,7 @@ impl AvsDiscoveryService {
         )
         .await
         .map_err(|e| {
-            EigenlayerExtraError::Other(format!("Failed to create AVS registry reader: {}", e))
+            EigenlayerExtraError::Other(format!("Failed to create AVS registry reader: {e}"))
         })?;
 
         match registry_reader
@@ -228,14 +228,14 @@ impl AvsDiscoveryService {
         )
         .await
         .map_err(|e| {
-            EigenlayerExtraError::Other(format!("Failed to create AVS registry reader: {}", e))
+            EigenlayerExtraError::Other(format!("Failed to create AVS registry reader: {e}"))
         })?;
 
         let is_registered = registry_reader
             .is_operator_registered(operator_address)
             .await
             .map_err(|e| {
-                EigenlayerExtraError::Other(format!("Failed to query operator status: {}", e))
+                EigenlayerExtraError::Other(format!("Failed to query operator status: {e}"))
             })?;
 
         Ok(OperatorStatus {

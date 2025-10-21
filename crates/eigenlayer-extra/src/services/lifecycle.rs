@@ -116,7 +116,7 @@ impl OperatorLifecycleManager {
             tx_hash
         );
 
-        Ok(tx_hash.into())
+        Ok(tx_hash)
     }
 
     /// Update operator metadata

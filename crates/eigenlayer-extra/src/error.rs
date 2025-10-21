@@ -1,6 +1,7 @@
 use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum EigenlayerExtraError {
     #[error("Keystore error: {0}")]
     Keystore(#[from] blueprint_keystore::Error),
