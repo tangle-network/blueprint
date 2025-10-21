@@ -1,9 +1,13 @@
 [package]
 name = "blueprint-eigenlayer-extra"
-version = "0.1.0"
-edition = "2024"
-license = "Apache-2.0 OR MIT"
-description = "High-level AVS framework services for EigenLayer protocol"
+version = "0.1.0-alpha.13"
+description = "Eigenlayer extra utilities for Blueprint framework"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 # Core
