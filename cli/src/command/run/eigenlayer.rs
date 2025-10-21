@@ -1,4 +1,4 @@
-use blueprint_core::info;
+use blueprint_core::{debug, info};
 use blueprint_manager::config::AuthProxyOpts;
 use blueprint_manager::executor::run_auth_proxy;
 use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
@@ -55,7 +55,7 @@ pub async fn run_eigenlayer_avs(
         target_dir.join(&binary_name)
     };
 
-    println!(
+    info!(
         "Attempting to run Eigenlayer AVS binary at: {}",
         binary_path.display()
     );
@@ -81,7 +81,7 @@ pub async fn run_eigenlayer_avs(
         .map_err(|_| eyre!("Missing Eigenlayer contract addresses"))?;
 
     // Run the AVS binary with the provided options
-    println!("Starting AVS...");
+    info!("Starting AVS...");
 
     let mut env = BlueprintEnvVars {
         http_rpc_endpoint: config.http_rpc_endpoint,
@@ -99,14 +99,14 @@ pub async fn run_eigenlayer_avs(
     };
 
     // Setup auth proxy
-    println!("Setting up auth proxy...");
+    debug!("Setting up auth proxy...");
     let (auth_proxy_db, auth_proxy_task) =
         run_auth_proxy(env.data_dir.clone(), AuthProxyOpts::default()).await?;
     let _auth_proxy = tokio::spawn(auth_proxy_task);
-    println!("Auth proxy setup complete");
+    debug!("Auth proxy setup complete");
 
     // Setup bridge
-    println!("Setting up bridge...");
+    debug!("Setting up bridge...");
     let runtime_dir = env.data_dir.as_path().join("runtime");
     tokio::fs::create_dir_all(&runtime_dir).await?;
     let service_name = format!(
@@ -119,7 +119,7 @@ pub async fn run_eigenlayer_avs(
     let bridge = Bridge::new(runtime_dir, service_name, auth_proxy_db, true);
     let bridge_socket_path = bridge.base_socket_path();
     let (_bridge_handle, _alive_rx) = bridge.spawn()?;
-    println!("Bridge setup complete");
+    debug!("Bridge setup complete");
     env.bridge_socket_path = Some(bridge_socket_path);
 
     let mut command = Command::new(&binary_path);
@@ -207,9 +207,10 @@ pub async fn run_eigenlayer_avs(
     // Wait for both tasks to complete
     let _ = tokio::join!(stdout_task, stderr_task);
 
-    println!(
+    info!(
         "AVS is running with PID: {}",
         child.id().unwrap_or_default()
     );
+
     Ok(child)
 }
