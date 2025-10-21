@@ -3163,7 +3163,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-eigenlayer-extra"
-version = "0.1.0"
+version = "0.1.0-alpha.13"
 dependencies = [
  "alloy",
  "alloy-contract",

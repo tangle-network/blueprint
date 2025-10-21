@@ -493,6 +493,25 @@ pub async fn setup_registration_listener(
     let registry_coordinator =
         RegistryCoordinator::new(registry_coordinator_address, provider.clone());
 
+    // First, check if operator is already registered (prevents race condition)
+    match registry_coordinator.getOperatorId(operator_address).call().await {
+        Ok(operator_id) => {
+            // If operator_id is not zero bytes, operator is already registered
+            if operator_id != [0u8; 32] {
+                info!(
+                    "✅ Operator already registered! Address: {:#x}, ID: {:#x}",
+                    operator_address, operator_id
+                );
+                registration_ready.notify_one();
+                return;
+            }
+        }
+        Err(e) => {
+            warn!("Failed to check operator registration status: {:?}", e);
+            // Continue to wait for event even if check fails
+        }
+    }
+
     // Subscribe to OperatorRegistered events
     let filter = registry_coordinator.OperatorRegistered_filter().filter;
 
