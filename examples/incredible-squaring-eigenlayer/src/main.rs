@@ -1,5 +1,6 @@
 #![allow(clippy::result_large_err)]
 
+use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -47,7 +48,9 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     let wallet = EthereumWallet::from(signer);
     let provider = get_wallet_provider_http(env.http_rpc_endpoint.clone(), wallet.clone());
 
-    let server_address = format!("{}:{}", "127.0.0.1", 8081);
+    let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let server_port = env::var("SERVER_PORT").unwrap_or_else(|_| "8081".to_string());
+    let server_address = format!("{server_host}:{server_port}");
     let eigen_client_context = EigenSquareContext {
         client: AggregatorClient::new(&server_address)
             .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?,
@@ -82,7 +85,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
 
     info!("~~~ Executing the incredible squaring blueprint ~~~");
     if env.test_mode {
-        // Create task spawner
+        // Create task spawner with graceful shutdown
         let ecdsa_public = env.keystore().first_local::<K256Ecdsa>()?;
         let ecdsa_secret = env
             .keystore()
@@ -172,7 +175,7 @@ pub fn setup_task_spawner(
                 .from(task_generator_address)
                 .send()
                 .await
-                .unwrap()
+                .expect("Failed to send task creation transaction")
                 .get_receipt()
                 .await
             {
@@ -192,7 +195,7 @@ pub fn setup_task_spawner(
                 .from(task_generator_address)
                 .send()
                 .await
-                .unwrap()
+                .expect("Failed to send operator update transaction")
                 .get_receipt()
                 .await
             {
@@ -217,7 +220,7 @@ pub fn setup_task_spawner(
                 ))
                 .output()
                 .await
-                .unwrap();
+                .expect("Failed to mine block");
             info!("Mined a block...");
         }
     }

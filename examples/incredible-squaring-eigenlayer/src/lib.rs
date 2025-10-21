@@ -25,7 +25,7 @@ pub static REGISTRY_COORDINATOR_ADDRESS: LazyLock<Address> = LazyLock::new(|| {
 
 // Deployer & Owner
 pub static PRIVATE_KEY: LazyLock<String> = LazyLock::new(|| {
-    env::var("TASK_GENERATOR_PRIVATE_KEY").unwrap_or_else(|_| {
+    env::var("PRIVATE_KEY").unwrap_or_else(|_| {
         // Anvil account 0th
         "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80".to_string()
     })
