@@ -3,7 +3,7 @@ use alloy_primitives::{Address, FixedBytes};
 use alloy_signer_local::PrivateKeySigner;
 /// EigenLayer rewards claiming and management
 ///
-/// Requires EigenLayer Sidecar API (https://github.com/Layr-Labs/sidecar)
+/// Requires EigenLayer Sidecar API (<https://github.com/Layr-Labs/sidecar>)
 use blueprint_eigenlayer_extra::sidecar::{Proof, SidecarClient};
 use blueprint_evm_extra::util::get_wallet_provider_http;
 use blueprint_keystore::backends::Backend;
@@ -77,7 +77,7 @@ pub async fn show_rewards(
 /// * `earner_address` - Ethereum address of the earner
 /// * `recipient_address` - Address to receive rewards (defaults to earner)
 /// * `token_addresses` - Specific tokens to claim (empty = all claimable)
-/// * `rewards_coordinator` - RewardsCoordinator contract address
+/// * `rewards_coordinator` - `RewardsCoordinator` contract address
 /// * `sidecar_url` - Optional Sidecar API URL
 /// * `network` - Network name
 /// * `keystore_uri` - Keystore URI for signing
@@ -114,7 +114,7 @@ pub async fn claim_rewards(
 
     // Load keystore for signing
     println!("Loading keystore from: {}", keystore_uri);
-    let keystore_config = KeystoreConfig::new().fs_root(keystore_uri.to_string());
+    let keystore_config = KeystoreConfig::new().fs_root(keystore_uri);
     let keystore = Keystore::new(keystore_config)?;
 
     let ecdsa_public = keystore
@@ -208,7 +208,7 @@ pub async fn claim_rewards(
 ///
 /// # Arguments
 /// * `claimer_address` - Address authorized to claim on behalf of earner
-/// * `rewards_coordinator` - RewardsCoordinator contract address
+/// * `rewards_coordinator` - `RewardsCoordinator` contract address
 /// * `keystore_uri` - Keystore URI for signing
 /// * `rpc_url` - Ethereum RPC endpoint
 pub async fn set_claimer(
@@ -221,7 +221,7 @@ pub async fn set_claimer(
         .map_err(|e| color_eyre::eyre::eyre!("Invalid claimer address: {}", e))?;
 
     println!("Loading keystore from: {}", keystore_uri);
-    let keystore_config = KeystoreConfig::new().fs_root(keystore_uri.to_string());
+    let keystore_config = KeystoreConfig::new().fs_root(keystore_uri);
     let keystore = Keystore::new(keystore_config)?;
 
     let ecdsa_public = keystore
@@ -264,7 +264,7 @@ pub async fn set_claimer(
     Ok(())
 }
 
-/// Convert Sidecar Proof to RewardsCoordinator contract format
+/// Convert Sidecar Proof to `RewardsCoordinator` contract format
 fn convert_proof_to_contract_format(proof: Proof) -> IRewardsCoordinator::RewardsMerkleClaim {
     let mut earner_token_root = [0u8; 32];
     earner_token_root.copy_from_slice(&proof.earner_leaf.earner_token_root);

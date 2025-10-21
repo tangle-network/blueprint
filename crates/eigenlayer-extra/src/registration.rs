@@ -523,7 +523,7 @@ impl RegistrationStateManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    
 
     #[test]
     fn test_validation_nonexistent_path() {

@@ -51,8 +51,8 @@ fn print_table(registrations: &[&blueprint_eigenlayer_extra::registration::AvsRe
     println!("📋 Registered EigenLayer AVS Services");
     println!("{}", "=".repeat(120));
     println!(
-        "{:<20} {:<44} {:<12} {}",
-        "Blueprint ID", "Service Manager", "Status", "Operator"
+        "{:<20} {:<44} {:<12} Operator",
+        "Blueprint ID", "Service Manager", "Status"
     );
     println!("{}", "-".repeat(120));
 

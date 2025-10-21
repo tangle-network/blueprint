@@ -8,6 +8,7 @@
 //!
 //! - **registration**: AVS registration state management (shared with CLI)
 //! - **discovery**: On-chain AVS discovery and operator status queries
+#![allow(clippy::result_large_err)]
 //! - **services**: High-level operator services (rewards, slashing, lifecycle)
 //! - **util**: Utility functions for AVS development
 //!

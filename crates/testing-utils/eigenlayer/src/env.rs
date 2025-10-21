@@ -83,7 +83,7 @@ where
     };
 
     let core_contracts = deploy_core_contracts(
-        &http_endpoint.to_string(),
+        http_endpoint.as_ref(),
         private_key,
         owner_account,
         core_config,
@@ -96,7 +96,7 @@ where
     info!("Deploying AVS contracts...");
 
     let avs_contracts = deploy_avs_contracts(
-        &http_endpoint.to_string(),
+        http_endpoint.as_ref(),
         private_key,
         owner_account,
         1,

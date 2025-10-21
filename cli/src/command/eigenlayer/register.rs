@@ -65,7 +65,7 @@ pub async fn register_avs(
 
     // Load keystore to get operator address
     println!("🔑 Loading keystore from: {}", keystore_uri);
-    let keystore_config = KeystoreConfig::new().fs_root(keystore_uri.to_string());
+    let keystore_config = KeystoreConfig::new().fs_root(keystore_uri);
     let keystore = Keystore::new(keystore_config)?;
 
     // Get the ECDSA public key (operator address)

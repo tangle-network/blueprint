@@ -180,6 +180,6 @@ mod tests {
             .await;
 
         // This test will fail with invalid address, but verifies the client works
-        println!("Result: {:?}", result);
+        println!("Result: {result:?}");
     }
 }
