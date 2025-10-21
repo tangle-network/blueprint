@@ -40,7 +40,6 @@ struct TangleHandlerState {
     services_client: Option<Arc<TangleServicesClient<TangleConfig>>>,
 }
 
-
 /// Tangle protocol event handler implementation
 pub struct TangleEventHandler {
     state: Arc<RwLock<TangleHandlerState>>,
@@ -48,7 +47,8 @@ pub struct TangleEventHandler {
 
 impl TangleEventHandler {
     /// Create a new Tangle event handler
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             state: Arc::new(RwLock::new(TangleHandlerState::default())),
         }

@@ -292,9 +292,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     let _ = run_eigenlayer_avs(
         run_opts,
         SupportedChains::LocalTestnet,
-        None,  // keystore_path (already set in config)
+        None, // keystore_path (already set in config)
         Some(data_dir_path.clone()),
-        true   // allow_unchecked_attestations
+        true, // allow_unchecked_attestations
     );
 
     // The run function now blocks, so we can't easily test it without rewriting

@@ -523,7 +523,6 @@ impl RegistrationStateManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_validation_nonexistent_path() {

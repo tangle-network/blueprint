@@ -102,7 +102,8 @@ struct BackgroundServices {
 
 impl EigenlayerEventHandler {
     /// Create a new EigenLayer event handler
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             background_services: None,
         }

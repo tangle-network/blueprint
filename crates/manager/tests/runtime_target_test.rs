@@ -424,7 +424,10 @@ mod lifecycle_tests {
         // Step 2: Check if Docker is running
         let docker_check = Command::new("docker").arg("ps").output();
 
-        assert!(docker_check.is_ok() && docker_check.unwrap().status.success(), "Docker is not running - test requires Docker daemon");
+        assert!(
+            docker_check.is_ok() && docker_check.unwrap().status.success(),
+            "Docker is not running - test requires Docker daemon"
+        );
 
         println!("✅ Docker is running");
 

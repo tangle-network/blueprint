@@ -76,7 +76,8 @@ pub struct EigenlayerProtocolEvent {
 
 impl ProtocolEvent {
     /// Extract Tangle event data if this is a Tangle event
-    #[must_use] pub fn as_tangle(&self) -> Option<&TangleProtocolEvent> {
+    #[must_use]
+    pub fn as_tangle(&self) -> Option<&TangleProtocolEvent> {
         match self {
             ProtocolEvent::Tangle(evt) => Some(evt),
             _ => None,
@@ -84,7 +85,8 @@ impl ProtocolEvent {
     }
 
     /// Extract EigenLayer event data if this is an EigenLayer event
-    #[must_use] pub fn as_eigenlayer(&self) -> Option<&EigenlayerProtocolEvent> {
+    #[must_use]
+    pub fn as_eigenlayer(&self) -> Option<&EigenlayerProtocolEvent> {
         match self {
             ProtocolEvent::Eigenlayer(evt) => Some(evt),
             _ => None,
@@ -92,7 +94,8 @@ impl ProtocolEvent {
     }
 
     /// Get the block number for any protocol event
-    #[must_use] pub fn block_number(&self) -> u64 {
+    #[must_use]
+    pub fn block_number(&self) -> u64 {
         match self {
             ProtocolEvent::Tangle(evt) => evt.block_number,
             ProtocolEvent::Eigenlayer(evt) => evt.block_number,

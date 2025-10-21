@@ -167,7 +167,6 @@ impl SlashingMonitor {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[tokio::test]
     #[ignore] // Requires EigenLayer deployment

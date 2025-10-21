@@ -19,7 +19,9 @@ async fn test_tangle_protocol_manager_initialization() {
     use tempfile::TempDir;
 
     let harness_temp_dir = TempDir::new().unwrap();
-    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::setup(harness_temp_dir)).await.unwrap();
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::setup(harness_temp_dir))
+        .await
+        .unwrap();
     let env = harness.env().clone();
 
     let _manager_temp_dir = TempDir::new().unwrap();
@@ -68,7 +70,9 @@ async fn test_tangle_protocol_manager_event_flow() {
     use tempfile::TempDir;
 
     let harness_temp_dir = TempDir::new().unwrap();
-    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::setup(harness_temp_dir)).await.unwrap();
+    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::setup(harness_temp_dir))
+        .await
+        .unwrap();
     let env = harness.env().clone();
 
     let _manager_temp_dir = TempDir::new().unwrap();
@@ -151,10 +155,7 @@ async fn test_eigenlayer_protocol_manager_event_flow() {
     match event_result {
         Ok(Some(event)) => {
             // Got an event - verify it's an EigenLayer event
-            assert!(
-                event.as_eigenlayer().is_some(),
-                "Expected EigenLayer event"
-            );
+            assert!(event.as_eigenlayer().is_some(), "Expected EigenLayer event");
         }
         Ok(None) => {
             panic!("Protocol manager returned None, expected Some or timeout");

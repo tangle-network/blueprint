@@ -30,7 +30,8 @@ impl TangleProtocolClient {
     /// Get a reference to the underlying Tangle client
     ///
     /// This is useful for protocol-specific operations like querying services
-    #[must_use] pub fn tangle_client(&self) -> &TangleClient {
+    #[must_use]
+    pub fn tangle_client(&self) -> &TangleClient {
         &self.client
     }
 }
