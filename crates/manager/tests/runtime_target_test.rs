@@ -5,7 +5,7 @@
 /// 1. **Validation Tests** (Fast, no spawning):
 ///    - Platform requirements (hypervisor → Linux only)
 ///    - Feature flag requirements (hypervisor → vm-sandbox, container → containers)
-///    - Configuration requirements (container → container_image with tag)
+///    - Configuration requirements (container → `container_image` with tag)
 ///
 /// 2. **Lifecycle Tests** (E2E, spawns real blueprints):
 ///    - Native runtime: Full spawn → verify running → shutdown cycle
@@ -424,9 +424,7 @@ mod lifecycle_tests {
         // Step 2: Check if Docker is running
         let docker_check = Command::new("docker").arg("ps").output();
 
-        if docker_check.is_err() || !docker_check.unwrap().status.success() {
-            panic!("Docker is not running - test requires Docker daemon");
-        }
+        assert!(!(docker_check.is_err() || !docker_check.unwrap().status.success()), "Docker is not running - test requires Docker daemon");
 
         println!("✅ Docker is running");
 

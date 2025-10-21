@@ -125,11 +125,12 @@ impl EigenlayerProtocolClient {
         loop {
             match self.poll_next_block().await {
                 Ok(Some(event)) => return Some(event),
-                Ok(None) => continue, // No new block yet, keep polling
+                Ok(None) => {
+                    // No new block yet, keep polling
+                }
                 Err(e) => {
                     warn!("Error polling EigenLayer blocks: {}", e);
                     sleep(self.poll_interval).await;
-                    continue;
                 }
             }
         }

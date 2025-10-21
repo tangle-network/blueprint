@@ -6,9 +6,9 @@ use blueprint_eigenlayer_testing_utils::EigenlayerTestHarness;
 use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
 use std::path::PathBuf;
 
-/// Create a test BlueprintManagerContext with temp directories and RocksDB
+/// Create a test `BlueprintManagerContext` with temp directories and `RocksDB`
 ///
-/// Uses /tmp for shorter paths to avoid Unix socket SUN_LEN limit (typically 104-108 bytes)
+/// Uses /tmp for shorter paths to avoid Unix socket `SUN_LEN` limit (typically 104-108 bytes)
 ///
 /// # Arguments
 ///
@@ -61,7 +61,7 @@ pub async fn create_test_context(keystore_uri: String) -> BlueprintManagerContex
 /// * `harness` - EigenLayer test harness
 /// * `blueprint_path` - Path to blueprint binary
 /// * `runtime_target` - Runtime target (Native, Hypervisor, Container)
-pub fn create_avs_config(
+#[must_use] pub fn create_avs_config(
     harness: &EigenlayerTestHarness<()>,
     blueprint_path: PathBuf,
     runtime_target: RuntimeTarget,

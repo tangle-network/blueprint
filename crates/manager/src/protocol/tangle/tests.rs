@@ -1,5 +1,4 @@
 /// Tests for Tangle protocol handler to ensure backwards compatibility
-
 #[cfg(test)]
 mod tests {
     use super::super::event_handler::TangleEventHandler;

@@ -1,7 +1,6 @@
 /// Tangle Protocol Event Handler
 ///
 /// Handles Tangle-specific events including blueprint registration, service lifecycle, and job execution.
-
 use crate::blueprint::native::FilteredBlueprint;
 use crate::blueprint::ActiveBlueprints;
 use crate::config::BlueprintManagerContext;
@@ -31,6 +30,7 @@ use crate::rt::service::Status;
 const DEFAULT_PROTOCOL: Protocol = Protocol::Tangle;
 
 /// Internal state maintained by the Tangle event handler
+#[derive(Default)]
 struct TangleHandlerState {
     /// Blueprints the operator is registered to
     operator_blueprints: Vec<RpcServicesWithBlueprint>,
@@ -40,15 +40,6 @@ struct TangleHandlerState {
     services_client: Option<Arc<TangleServicesClient<TangleConfig>>>,
 }
 
-impl Default for TangleHandlerState {
-    fn default() -> Self {
-        Self {
-            operator_blueprints: Vec::new(),
-            account_id: None,
-            services_client: None,
-        }
-    }
-}
 
 /// Tangle protocol event handler implementation
 pub struct TangleEventHandler {
@@ -57,14 +48,14 @@ pub struct TangleEventHandler {
 
 impl TangleEventHandler {
     /// Create a new Tangle event handler
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         Self {
             state: Arc::new(RwLock::new(TangleHandlerState::default())),
         }
     }
 
     /// Extract account ID from environment
-    async fn get_account_id(env: &BlueprintEnvironment) -> Result<AccountId32> {
+    fn get_account_id(env: &BlueprintEnvironment) -> Result<AccountId32> {
         use blueprint_crypto::sp_core::SpSr25519;
         use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
         use blueprint_keystore::backends::Backend;
@@ -80,7 +71,7 @@ impl TangleEventHandler {
     }
 
     /// Process Tangle events and return information about what changed
-    async fn check_events(
+    fn check_events(
         event: &ProtocolEvent,
         active_blueprints: &mut ActiveBlueprints,
         account_id: &AccountId32,
@@ -350,7 +341,7 @@ impl TangleEventHandler {
         let services_client = Arc::new(client.tangle_client().services_client().clone());
 
         // Get the account ID from the keystore
-        let account_id = Self::get_account_id(env).await?;
+        let account_id = Self::get_account_id(env)?;
 
         // Store in state for future use
         {
@@ -393,7 +384,7 @@ impl TangleEventHandler {
         };
 
         // Check what happened in this event
-        let check_result = Self::check_events(event, active_blueprints, &account_id).await;
+        let check_result = Self::check_events(event, active_blueprints, &account_id);
 
         // If we need to update blueprints, query the latest state
         if check_result.needs_update || operator_blueprints.is_empty() {

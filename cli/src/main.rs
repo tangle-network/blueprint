@@ -468,7 +468,7 @@ pub enum EigenlayerCommands {
         #[arg(long, value_delimiter = ',')]
         tokens: Vec<String>,
 
-        /// RewardsCoordinator contract address
+        /// `RewardsCoordinator` contract address
         #[arg(long, value_name = "ADDRESS")]
         rewards_coordinator: String,
 
@@ -500,7 +500,7 @@ pub enum EigenlayerCommands {
         #[arg(long, value_name = "ADDRESS")]
         claimer_address: String,
 
-        /// RewardsCoordinator contract address
+        /// `RewardsCoordinator` contract address
         #[arg(long, value_name = "ADDRESS")]
         rewards_coordinator: String,
 

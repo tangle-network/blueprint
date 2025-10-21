@@ -36,6 +36,10 @@ pub enum ProtocolManager {
 
 impl ProtocolManager {
     /// Create a new protocol manager for the given protocol type
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the protocol client fails to initialize
     pub async fn new(
         protocol: ProtocolType,
         env: BlueprintEnvironment,
@@ -56,6 +60,10 @@ impl ProtocolManager {
     }
 
     /// Initialize the protocol (query initial state, etc.)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if initialization fails (e.g., loading state, spawning blueprints)
     pub async fn initialize(
         &mut self,
         env: &BlueprintEnvironment,
@@ -85,6 +93,10 @@ impl ProtocolManager {
     }
 
     /// Handle a protocol event
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if event handling fails (e.g., spawning services, contract calls)
     pub async fn handle_event(
         &mut self,
         event: &ProtocolEvent,
@@ -107,6 +119,10 @@ impl ProtocolManager {
     }
 
     /// Run the protocol event loop
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if initialization or event handling fails
     pub async fn run(
         &mut self,
         env: &BlueprintEnvironment,
@@ -132,7 +148,7 @@ mod tests {
     use blueprint_runner::config::ProtocolSettings;
     use blueprint_runner::tangle::config::TangleProtocolSettings;
 
-    /// Test that ProtocolType correctly converts from ProtocolSettings
+    /// Test that `ProtocolType` correctly converts from `ProtocolSettings`
     #[test]
     fn test_protocol_type_from_settings() {
         // Test Tangle conversion
@@ -149,7 +165,7 @@ mod tests {
         assert!(matches!(protocol_type, ProtocolType::Tangle));
     }
 
-    /// Test that ProtocolEvent correctly identifies its variant
+    /// Test that `ProtocolEvent` correctly identifies its variant
     #[test]
     fn test_protocol_event_variant_checking() {
         use crate::protocol::types::EigenlayerProtocolEvent;

@@ -1,7 +1,7 @@
-/// Integration tests for the ProtocolManager abstraction
+/// Integration tests for the `ProtocolManager` abstraction
 ///
 /// Tests verify that both Tangle and EigenLayer protocols work correctly
-/// through the unified ProtocolManager interface.
+/// through the unified `ProtocolManager` interface.
 mod common;
 
 use blueprint_manager::blueprint::ActiveBlueprints;

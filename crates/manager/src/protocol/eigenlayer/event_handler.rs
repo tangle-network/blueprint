@@ -6,10 +6,9 @@
 ///
 /// - **Multi-AVS Support**: Spawns separate blueprint instances for each registered AVS
 /// - **Registration-Based**: Reads AVS registrations from `~/.tangle/eigenlayer_registrations.json`
-/// - **Unique Blueprint IDs**: Derives blueprint_id from service_manager address
-/// - **Task-Based Events**: Each AVS blueprint processes TaskCreated events from EVM logs
+/// - **Unique Blueprint IDs**: Derives `blueprint_id` from `service_manager` address
+/// - **Task-Based Events**: Each AVS blueprint processes `TaskCreated` events from EVM logs
 /// - **No Service Registration Flow**: Uses CLI-based registration/deregistration
-
 use crate::blueprint::ActiveBlueprints;
 use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
@@ -26,7 +25,7 @@ use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collection
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::BoundedString;
 use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::BlueprintSource;
 
-/// Helper function to create a BoundedString from any type that can be converted to String
+/// Helper function to create a `BoundedString` from any type that can be converted to String
 fn new_bounded_string<S: Into<String>>(s: S) -> BoundedString {
     let s = s.into();
     BoundedString(BoundedVec(s.into_bytes()))
@@ -103,7 +102,7 @@ struct BackgroundServices {
 
 impl EigenlayerEventHandler {
     /// Create a new EigenLayer event handler
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         Self {
             background_services: None,
         }
@@ -155,12 +154,10 @@ impl EigenlayerEventHandler {
                             );
                             continue; // Already running, skip
                         }
-                        _ => {
-                            info!(
-                                "AVS {} (blueprint_id={}) process died, will restart",
-                                registration.config.service_manager, blueprint_id
-                            );
-                        }
+                        _ => info!(
+                            "AVS {} (blueprint_id={}) process died, will restart",
+                            registration.config.service_manager, blueprint_id
+                        ),
                     }
                 }
             }
@@ -250,6 +247,7 @@ impl EigenlayerEventHandler {
         })?;
 
         // Create runtime directory
+        #[allow(clippy::cast_possible_truncation)]
         let id = active_blueprints.len() as u32;
         let runtime_dir = ctx.runtime_dir().join(id.to_string());
         std::fs::create_dir_all(&runtime_dir)?;

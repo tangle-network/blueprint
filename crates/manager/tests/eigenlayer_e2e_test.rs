@@ -2,7 +2,7 @@
 ///
 /// These tests verify the complete integration between:
 /// - Registration state management (same code path as CLI)
-/// - BlueprintManager detecting registrations
+/// - `BlueprintManager` detecting registrations
 /// - Blueprint spawning and lifecycle
 /// - Multi-AVS simultaneous deployments
 ///
@@ -11,7 +11,7 @@
 /// - Spawn real processes (not mocks)
 /// - Require significant resources
 ///
-/// Run with: cargo test --test eigenlayer_e2e_test -- --ignored --nocapture --test-threads=1
+/// Run with: cargo test --test `eigenlayer_e2e_test` -- --ignored --nocapture --test-threads=1
 mod common;
 
 use blueprint_eigenlayer_extra::{
