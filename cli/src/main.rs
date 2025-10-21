@@ -494,7 +494,6 @@ pub enum EigenlayerCommands {
     },
 
     /// Set claimer address for the operator
-    #[command(visible_alias = "set-claimer")]
     SetClaimer {
         /// Claimer Ethereum address
         #[arg(long, value_name = "ADDRESS")]

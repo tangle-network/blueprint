@@ -200,6 +200,16 @@ impl AvsRegistrationConfig {
                 }
             }
             RuntimeTarget::Hypervisor => {
+                // Hypervisor requires vm-sandbox feature
+                #[cfg(not(feature = "vm-sandbox"))]
+                {
+                    return Err(
+                        "Hypervisor runtime requires 'vm-sandbox' feature. \
+                        Enable with --features vm-sandbox or use 'native' runtime."
+                            .to_string(),
+                    );
+                }
+
                 // Hypervisor requires Linux
                 #[cfg(not(target_os = "linux"))]
                 {
