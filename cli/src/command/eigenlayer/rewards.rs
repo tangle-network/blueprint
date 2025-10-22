@@ -294,14 +294,14 @@ fn convert_proof_to_contract_format(proof: Proof) -> IRewardsCoordinator::Reward
     let mut earner_token_root = [0u8; 32];
     earner_token_root.copy_from_slice(&proof.earner_leaf.earner_token_root);
 
-    let earner = Address::parse_checksummed(&proof.earner_leaf.earner, None)
+    let earner = proof.earner_leaf.earner.parse()
         .expect("Invalid earner address in proof");
 
     let token_leaves: Vec<IRewardsCoordinator::TokenTreeMerkleLeaf> = proof
         .token_leaves
         .into_iter()
         .map(|leaf| {
-            let token = Address::parse_checksummed(&leaf.token, None)
+            let token: Address = leaf.token.parse()
                 .expect("Invalid token address in proof");
             let cumulative_earnings = alloy_primitives::U256::from_str(&leaf.cumulative_earnings)
                 .expect("Invalid cumulative earnings");
