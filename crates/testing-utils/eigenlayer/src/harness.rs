@@ -3,7 +3,7 @@ use crate::env::{EigenlayerTestEnvironment, setup_eigenlayer_test_environment};
 use alloy_primitives::Address;
 use alloy_provider::RootProvider;
 use blueprint_auth::db::RocksDb;
-use blueprint_chain_setup::anvil::keys::{ANVIL_PRIVATE_KEYS, inject_anvil_key};
+use blueprint_chain_setup::anvil::keys::inject_anvil_key;
 use blueprint_chain_setup::anvil::{Container, start_empty_anvil_testnet};
 use blueprint_core::{error, info};
 use blueprint_evm_extra::util::get_provider_http;
@@ -18,22 +18,13 @@ use tempfile::TempDir;
 use tokio::task::JoinHandle;
 use url::Url;
 
-/// Configuration for the Eigenlayer test harness
-#[derive(Default)]
-pub struct EigenlayerTestConfig {
-    pub http_endpoint: Option<Url>,
-    pub ws_endpoint: Option<Url>,
-    pub eigenlayer_contract_addresses: Option<EigenlayerProtocolSettings>,
-}
-
 /// Test harness for Eigenlayer network tests
 pub struct EigenlayerTestHarness<Ctx> {
     env: BlueprintEnvironment,
-    config: EigenlayerTestConfig,
     pub http_endpoint: Url,
     pub ws_endpoint: Url,
-    pub accounts: Vec<Address>,
-    pub eigenlayer_contract_addresses: EigenlayerProtocolSettings,
+    accounts: Vec<Address>,
+    eigenlayer_contract_addresses: EigenlayerProtocolSettings,
     _temp_dir: TempDir,
     _container: Container,
     _phantom: PhantomData<Ctx>,
@@ -50,8 +41,8 @@ impl EigenlayerTestHarness<()> {
     /// # Errors
     ///
     /// * See [`Self::setup_with_context()`]
-    pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
-        Self::setup_with_context(test_dir, ()).await
+    pub async fn setup(owner_private_key: &str, test_dir: TempDir) -> Result<Self, Error> {
+        Self::setup_with_context(owner_private_key, test_dir, ()).await
     }
 }
 
@@ -66,7 +57,7 @@ where
     /// # Errors
     ///
     /// * TODO
-    pub async fn setup_with_context(test_dir: TempDir, _context: Ctx) -> Result<Self, Error> {
+    pub async fn setup_with_context(owner_private_key: &str, test_dir: TempDir, _context: Ctx) -> Result<Self, Error> {
         // Start local Anvil testnet (empty, we'll deploy contracts)
         let testnet = start_empty_anvil_testnet(true).await;
 
@@ -80,7 +71,7 @@ where
 
         // Setup temporary testing keystore
         let keystore_path = test_dir.path().join("keystore");
-        inject_anvil_key(&keystore_path, ANVIL_PRIVATE_KEYS[0])?;
+        inject_anvil_key(&keystore_path, owner_private_key)?;
 
         let data_dir = test_dir.path().join("data");
         tokio::fs::create_dir_all(&data_dir).await?;
@@ -120,16 +111,8 @@ where
         env.bridge_socket_path = Some(bridge_socket_path);
         env.test_mode = true;
 
-        // Create config
-        let config = EigenlayerTestConfig {
-            http_endpoint: Some(Url::parse(&http_endpoint)?),
-            ws_endpoint: Some(Url::parse(&ws_endpoint)?),
-            eigenlayer_contract_addresses: Some(eigenlayer_contract_addresses.clone()),
-        };
-
         Ok(Self {
             env,
-            config,
             http_endpoint: Url::parse(&http_endpoint)?,
             ws_endpoint: Url::parse(&ws_endpoint)?,
             accounts,
@@ -150,7 +133,6 @@ where
     ) -> EigenlayerTestHarness<Ctx2> {
         EigenlayerTestHarness {
             env: self.env,
-            config: self.config,
             http_endpoint: self.http_endpoint,
             ws_endpoint: self.ws_endpoint,
             accounts: self.accounts,

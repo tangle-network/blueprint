@@ -17,13 +17,9 @@ pub static TASK_MANAGER_ADDRESS: LazyLock<Address> = LazyLock::new(|| {
         .map(|addr| addr.parse().expect("Invalid TASK_MANAGER_ADDRESS"))
         .unwrap_or_else(|_| address!("0000000000000000000000000000000000000000"))
 });
-pub static PRIVATE_KEY: LazyLock<String> = LazyLock::new(|| {
-    env::var("PRIVATE_KEY").unwrap_or_else(|_| {
-        "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80".to_string()
-    })
-});
+
 pub static AGGREGATOR_PRIVATE_KEY: LazyLock<String> = LazyLock::new(|| {
-    env::var("PRIVATE_KEY").unwrap_or_else(|_| {
+    env::var("AGGREGATOR_PRIVATE_KEY").unwrap_or_else(|_| {
         "2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6".to_string()
     })
 });

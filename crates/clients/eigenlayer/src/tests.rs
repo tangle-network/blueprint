@@ -5,7 +5,7 @@ use alloy_primitives::aliases::U96;
 use alloy_provider::Provider;
 use blueprint_eigenlayer_testing_utils::EigenlayerTestHarness;
 
-use blueprint_chain_setup_anvil::get_receipt;
+use blueprint_chain_setup_anvil::{keys::ANVIL_PRIVATE_KEYS, get_receipt};
 use blueprint_core_testing_utils::setup_log;
 use blueprint_evm_extra::util::get_provider_from_signer;
 
@@ -24,14 +24,14 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
     setup_log();
 
     // Initialize test harness
+    let private_key = ANVIL_PRIVATE_KEYS[0];
     let temp_dir = tempfile::TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(temp_dir).await.unwrap();
+    let harness = EigenlayerTestHarness::setup(private_key, temp_dir).await.unwrap();
 
     let http_endpoint = harness.http_endpoint.to_string();
-    let owner_account = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
-    let task_generator_account = address!("15d34AAf54267DB7D7c367839AAf71A00a2C6A65");
-    let aggregator_account = address!("a0Ee7A142d267C1f36714E4a8F75612F20a79720");
-    let private_key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+    let owner_account = harness.owner_account();
+    let task_generator_account = harness.task_generator_account();
+    let aggregator_account = harness.aggregator_account();
 
     let core_config = DeploymentConfigData {
         strategy_manager: StrategyManagerConfig {
@@ -218,11 +218,8 @@ async fn avs_registry_reader() {
 async fn avs_registry_writer() {
     let harness = setup_test_environment().await;
     let client = EigenlayerClient::new(harness.env().clone());
-    let private_key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-    let _ = client
-        .avs_registry_writer(private_key.to_string())
-        .await
-        .unwrap();
+    let private_key = ANVIL_PRIVATE_KEYS[0].to_string();
+    let _ = client.avs_registry_writer(private_key).await.unwrap();
 }
 
 #[tokio::test]

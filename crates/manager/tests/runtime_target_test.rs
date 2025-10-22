@@ -1,3 +1,4 @@
+/// TODO: Create a common function to deploy AVS before each of these test
 /// Runtime Target Tests
 ///
 /// This test suite validates runtime target functionality across three aspects:
@@ -40,7 +41,7 @@ mod validation_tests {
     #[cfg(not(target_os = "linux"))]
     async fn test_hypervisor_requires_linux_platform() {
         let harness_temp_dir = TempDir::new().unwrap();
-        let harness = EigenlayerTestHarness::setup(harness_temp_dir)
+        let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
             .await
             .unwrap();
         let env = harness.env().clone();
@@ -287,7 +288,7 @@ mod lifecycle_tests {
     #[ignore = "Requires building example blueprint (slow)"]
     async fn test_native_runtime_full_lifecycle() {
         let harness_temp_dir = TempDir::new().unwrap();
-        let harness = EigenlayerTestHarness::setup(harness_temp_dir)
+        let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
             .await
             .unwrap();
         let env = harness.env().clone();
@@ -487,7 +488,7 @@ mod lifecycle_tests {
 
         // Step 5: Set up test environment
         let harness_temp_dir = TempDir::new().unwrap();
-        let harness = EigenlayerTestHarness::setup(harness_temp_dir)
+        let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
             .await
             .unwrap();
         let env = harness.env().clone();

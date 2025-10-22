@@ -45,7 +45,7 @@ async fn test_eigenlayer_protocol_manager_initialization() {
     use tempfile::TempDir;
 
     let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(harness_temp_dir)
+    let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
         .await
         .unwrap();
     let env = harness.env().clone();
@@ -120,7 +120,7 @@ async fn test_eigenlayer_protocol_manager_event_flow() {
     use tempfile::TempDir;
 
     let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(harness_temp_dir)
+    let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
         .await
         .unwrap();
     let env = harness.env().clone();

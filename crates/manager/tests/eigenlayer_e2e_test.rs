@@ -85,7 +85,7 @@ async fn test_single_avs_registration_flow() {
 
     // Setup test harness
     let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(harness_temp_dir)
+    let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
         .await
         .unwrap();
     let operator_address = harness.owner_account();
@@ -158,7 +158,7 @@ async fn test_multi_avs_registration() {
 
     // Setup test harness
     let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(harness_temp_dir)
+    let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
         .await
         .unwrap();
     let operator_address = harness.owner_account();
@@ -251,7 +251,7 @@ async fn test_registration_lifecycle() {
 
     // Setup test harness
     let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(harness_temp_dir)
+    let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
         .await
         .unwrap();
     let operator_address = harness.owner_account();
