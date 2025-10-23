@@ -1,4 +1,3 @@
-/// TODO: Create a common function to deploy AVS before each of these test
 /// Runtime Target Tests
 ///
 /// This test suite validates runtime target functionality across three aspects:
@@ -20,11 +19,12 @@
 mod common;
 
 use blueprint_eigenlayer_extra::{AvsRegistration, RegistrationStateManager, RuntimeTarget};
-use blueprint_eigenlayer_testing_utils::EigenlayerTestHarness;
+use blueprint_testing_utils::eigenlayer::EigenlayerTestHarness;
 use blueprint_manager::blueprint::ActiveBlueprints;
 use blueprint_manager::protocol::{ProtocolManager, ProtocolType};
 use blueprint_manager::rt::service::Status;
 use tempfile::TempDir;
+use common::ANVIL_PRIVATE_KEYS;
 
 // =============================================================================
 // SECTION 1: VALIDATION TESTS (Fast, no spawning)
@@ -41,7 +41,7 @@ mod validation_tests {
     #[cfg(not(target_os = "linux"))]
     async fn test_hypervisor_requires_linux_platform() {
         let harness_temp_dir = TempDir::new().unwrap();
-        let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
+        let harness = EigenlayerTestHarness::setup(ANVIL_PRIVATE_KEYS[0], harness_temp_dir)
             .await
             .unwrap();
         let env = harness.env().clone();
@@ -287,10 +287,14 @@ mod lifecycle_tests {
     #[tokio::test]
     #[ignore = "Requires building example blueprint (slow)"]
     async fn test_native_runtime_full_lifecycle() {
+        blueprint_testing_utils::setup_log();
+
+        let private_key = ANVIL_PRIVATE_KEYS[0];
         let harness_temp_dir = TempDir::new().unwrap();
-        let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
+        let harness = EigenlayerTestHarness::setup(private_key, harness_temp_dir)
             .await
             .unwrap();
+
         let env = harness.env().clone();
         let operator_address = harness.owner_account();
 
@@ -325,6 +329,7 @@ mod lifecycle_tests {
             operator_sets: vec![0],
         };
 
+        println!("Registering AVS");
         let registration = AvsRegistration::new(operator_address, config);
 
         // Register AVS
@@ -333,6 +338,7 @@ mod lifecycle_tests {
 
         let ctx = common::create_test_context(env.keystore_uri.clone()).await;
 
+        println!("Creating protocol manager");
         let mut protocol_manager =
             ProtocolManager::new(ProtocolType::Eigenlayer, env.clone(), &ctx)
                 .await
@@ -340,11 +346,13 @@ mod lifecycle_tests {
 
         let mut active_blueprints = ActiveBlueprints::default();
 
+        println!("Protocol Manager is initializing");
         // Initialize - should spawn blueprint with native runtime
         let init_result = protocol_manager
             .initialize(&env, &ctx, &mut active_blueprints)
             .await;
 
+        println!("De-registering AVS");
         // Cleanup state before assertions
         state_manager
             .deregister(registration.config.service_manager)
@@ -356,6 +364,7 @@ mod lifecycle_tests {
             init_result.err()
         );
 
+        println!("Verifying blueprint was spawned");
         // Verify blueprint was spawned
         let blueprint_id = registration.blueprint_id();
         assert!(
@@ -363,6 +372,7 @@ mod lifecycle_tests {
             "Blueprint should be spawned"
         );
 
+        println!("Verifying the service is running and then shutting it down");
         // Verify the service is running and then shut it down
         if let Some(services) = active_blueprints.get_mut(&blueprint_id) {
             if let Some(service) = services.get_mut(&0) {
@@ -488,7 +498,7 @@ mod lifecycle_tests {
 
         // Step 5: Set up test environment
         let harness_temp_dir = TempDir::new().unwrap();
-        let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
+        let harness = EigenlayerTestHarness::setup(ANVIL_PRIVATE_KEYS[0], harness_temp_dir)
             .await
             .unwrap();
         let env = harness.env().clone();

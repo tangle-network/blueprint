@@ -18,7 +18,7 @@ use blueprint_eigenlayer_extra::{
     AvsRegistration, AvsRegistrationConfig, RegistrationStateManager, RegistrationStatus,
     RuntimeTarget,
 };
-use blueprint_eigenlayer_testing_utils::EigenlayerTestHarness;
+use blueprint_testing_utils::eigenlayer::harness::EigenlayerTestHarness;
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;

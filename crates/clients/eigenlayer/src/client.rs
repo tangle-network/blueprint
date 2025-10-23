@@ -177,8 +177,11 @@ impl EigenlayerClient {
             eigensdk::services_operatorsinfo::operatorsinfo_inmemory::OperatorInfoServiceInMemory,
         >,
     > {
+        println!("180");
         let avs_registry_reader = self.avs_registry_reader().await?;
+        println!("182");
         let (operator_info_service, _) = self.operator_info_service_in_memory().await?;
+        println!("184");
 
         let cancellation_token = tokio_util::sync::CancellationToken::new();
         let token_clone = cancellation_token.clone();

@@ -26,7 +26,8 @@ blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
-blueprint-eigenlayer-extra = { path = "../eigenlayer-extra" }
+blueprint-eigenlayer-extra = { workspace = true, features = ["std"]}
+blueprint-testing-utils = { workspace = true, features = ["anvil", "tangle", "eigenlayer"] }
 
 # Alloy dependencies for EigenLayer protocol
 alloy-provider = { workspace = true }
@@ -48,7 +49,7 @@ color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace",
 tangle-subxt = { workspace = true }
 toml = { workspace = true, features = ["parse", "serde"] }
 hex = { workspace = true }
-tokio = { workspace = true, features = ["process", "io-util", "signal", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "process", "io-util", "signal", "macros"] }
 reqwest = { workspace = true }
 sha2 = { workspace = true }
 futures = { workspace = true }
@@ -64,6 +65,10 @@ hyper-util.workspace = true
 http-body-util.workspace = true
 dirs.workspace = true
 walkdir.workspace = true
+tempfile = { workspace = true }
+rand = { workspace = true }
+rustls = { workspace = true, features = ["aws-lc-rs"] }
+
 
 # Binary extraction
 cargo-dist-schema.workspace = true
@@ -107,14 +112,6 @@ tee = ["blueprint-runner/tee"]
 ## [kubernetes]: https://kubernetes.io/
 ## [kata-containers]: https://katacontainers.io/
 containers = ["dep:kube", "dep:k8s-openapi"]
-
-[dev-dependencies]
-blueprint-tangle-testing-utils = { path = "../testing-utils/tangle" }
-blueprint-eigenlayer-testing-utils = { path = "../testing-utils/eigenlayer" }
-tempfile = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-rand = { workspace = true }
-rustls = { workspace = true, features = ["aws-lc-rs"] }
 
 [package.metadata.dist]
 dist = false

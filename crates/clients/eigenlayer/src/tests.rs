@@ -3,9 +3,9 @@ use alloy_primitives::U256;
 use alloy_primitives::address;
 use alloy_primitives::aliases::U96;
 use alloy_provider::Provider;
-use blueprint_eigenlayer_testing_utils::EigenlayerTestHarness;
+use blueprint_eigenlayer_testing_utils::{EigenlayerTestHarness, get_accounts, get_owner_account, get_task_generator_account, get_aggregator_account};
 
-use blueprint_chain_setup_anvil::{keys::ANVIL_PRIVATE_KEYS, get_receipt};
+use blueprint_chain_setup_anvil::{keys::ANVIL_PRIVATE_KEYS, get_receipt, start_empty_anvil_testnet};
 use blueprint_core_testing_utils::setup_log;
 use blueprint_evm_extra::util::get_provider_from_signer;
 
@@ -20,18 +20,19 @@ use eigenlayer_contract_deployer::deploy::deploy_avs_contracts;
 use eigenlayer_contract_deployer::deploy::DeployedContracts;
 use eigenlayer_contract_deployer::permissions::setup_avs_permissions;
 
-async fn setup_test_environment() -> EigenlayerTestHarness<()> {
+async fn setup_test_environment() -> EigenlayerTestHarness {
     setup_log();
+
+    let testnet = start_empty_anvil_testnet(true).await;
+    let http_endpoint = testnet.http_endpoint.clone();
+    let accounts = get_accounts(http_endpoint.clone()).await;
+    let owner_account = get_owner_account(&accounts);
+    let task_generator_account = get_task_generator_account(&accounts);
+    let aggregator_account = get_aggregator_account(&accounts);
 
     // Initialize test harness
     let private_key = ANVIL_PRIVATE_KEYS[0];
     let temp_dir = tempfile::TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(private_key, temp_dir).await.unwrap();
-
-    let http_endpoint = harness.http_endpoint.to_string();
-    let owner_account = harness.owner_account();
-    let task_generator_account = harness.task_generator_account();
-    let aggregator_account = harness.aggregator_account();
 
     let core_config = DeploymentConfigData {
         strategy_manager: StrategyManagerConfig {
@@ -48,13 +49,13 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
         rewards_coordinator: RewardsCoordinatorConfig {
             init_paused_status: U256::from(0),
             max_rewards_duration: 864_000_u32,
-            max_retroactive_length: 432_000_u32,
-            max_future_length: 864_000_u32,
+            max_retroactive_length: 432_000u32,
+            max_future_length: 86_400u32,
             genesis_rewards_timestamp: 1_672_531_200_u32,
             updater: owner_account,
             activation_delay: 0u32,
-            calculation_interval_seconds: 86400u32,
-            global_operator_commission_bips: 1000u16,
+            calculation_interval_seconds: 86_400_u32,
+            global_operator_commission_bips: 1_000u16,
         },
         strategy_factory: StrategyFactoryConfig {
             init_paused_status: U256::from(0),
@@ -62,8 +63,8 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
     };
 
     let core_contracts = deploy_core_contracts(
-        &http_endpoint,
-        private_key,
+        http_endpoint.as_str(),
+        &private_key,
         owner_account,
         core_config,
         Some(address!("00000000219ab540356cBB839Cbe05303d7705Fa")),
@@ -83,9 +84,10 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
         ..
     } = core_contracts;
 
+   
     let avs_contracts = deploy_avs_contracts(
-        &http_endpoint,
-        private_key,
+        http_endpoint.as_str(),
+        &private_key,
         owner_account,
         1,
         permission_controller_address,
@@ -116,7 +118,7 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
         &core_contracts,
         &avs_contracts,
         &signer_wallet,
-        harness.owner_account(),
+        owner_account,
         "https://github.com/tangle-network/avs/blob/main/metadata.json".to_string(),
     )
     .await
@@ -127,6 +129,9 @@ async fn setup_test_environment() -> EigenlayerTestHarness<()> {
             panic!("Failed to set up AVS permissions: {}", e);
         }
     }
+
+    let harness = EigenlayerTestHarness::setup(private_key, temp_dir).await.unwrap();
+    let env = harness.env().clone();
 
     let registry_coordinator =
         RegistryCoordinator::new(registry_coordinator_address, signer_wallet.clone());

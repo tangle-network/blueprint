@@ -10,12 +10,13 @@ use blueprint_manager::protocol::{ProtocolManager, ProtocolType};
 use blueprint_runner::config::BlueprintEnvironment;
 use std::time::Duration;
 use tokio::time::timeout;
+use common::ANVIL_PRIVATE_KEYS;
 
 /// Test that ProtocolManager can be constructed for Tangle
 #[tokio::test]
 async fn test_tangle_protocol_manager_initialization() {
     // This test uses the existing TangleTestHarness infrastructure
-    use blueprint_tangle_testing_utils::TangleTestHarness;
+    use blueprint_testing_utils::tangle::harness::TangleTestHarness;
     use tempfile::TempDir;
 
     let harness_temp_dir = TempDir::new().unwrap();
@@ -41,11 +42,11 @@ async fn test_tangle_protocol_manager_initialization() {
 #[tokio::test]
 async fn test_eigenlayer_protocol_manager_initialization() {
     // This test uses the existing EigenlayerTestHarness infrastructure
-    use blueprint_eigenlayer_testing_utils::EigenlayerTestHarness;
+    use blueprint_testing_utils::eigenlayer::harness::EigenlayerTestHarness;
     use tempfile::TempDir;
 
     let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
+    let harness = EigenlayerTestHarness::setup(ANVIL_PRIVATE_KEYS[0], harness_temp_dir)
         .await
         .unwrap();
     let env = harness.env().clone();
@@ -66,7 +67,7 @@ async fn test_eigenlayer_protocol_manager_initialization() {
 /// Test that ProtocolManager can initialize and receive events from Tangle
 #[tokio::test]
 async fn test_tangle_protocol_manager_event_flow() {
-    use blueprint_tangle_testing_utils::TangleTestHarness;
+    use blueprint_testing_utils::tangle::harness::TangleTestHarness;
     use tempfile::TempDir;
 
     let harness_temp_dir = TempDir::new().unwrap();
@@ -116,11 +117,11 @@ async fn test_tangle_protocol_manager_event_flow() {
 /// This test verifies initialization succeeds without registrations.
 #[tokio::test]
 async fn test_eigenlayer_protocol_manager_event_flow() {
-    use blueprint_eigenlayer_testing_utils::EigenlayerTestHarness;
+    use blueprint_testing_utils::eigenlayer::harness::EigenlayerTestHarness;
     use tempfile::TempDir;
 
     let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
+    let harness = EigenlayerTestHarness::setup(ANVIL_PRIVATE_KEYS[0], harness_temp_dir)
         .await
         .unwrap();
     let env = harness.env().clone();

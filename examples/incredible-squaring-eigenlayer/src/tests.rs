@@ -24,15 +24,15 @@ use blueprint_sdk::evm::util::get_provider_ws;
 use blueprint_sdk::evm::util::get_wallet_provider_http;
 use blueprint_sdk::evm::util::{get_provider_from_signer, get_provider_http};
 use blueprint_sdk::runner::BlueprintRunner;
-use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
+use blueprint_sdk::runner::eigenlayer::{config::EigenlayerProtocolSettings, bls::EigenlayerBLSConfig};
 use blueprint_sdk::std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
 use tokio::sync::Notify;
-use blueprint_sdk::testing::chain_setup::anvil::{keys::ANVIL_PRIVATE_KEYS, get_receipt};
+use blueprint_sdk::testing::chain_setup::anvil::{keys::ANVIL_PRIVATE_KEYS, get_receipt, start_empty_anvil_testnet};
 use blueprint_sdk::testing::utils::anvil::wait_for_responses;
-use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
+use blueprint_sdk::testing::utils::eigenlayer::{EigenlayerTestHarness, get_accounts, get_owner_account, get_task_generator_account, get_aggregator_account};
 use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::{Router, error, info, warn};
 use futures::StreamExt;
@@ -56,21 +56,17 @@ async fn run_eigenlayer_incredible_squaring_test(
 ) {
     setup_log();
 
-    // Initialize test harness
+    // Start empty anvil testnet
+    let testnet = start_empty_anvil_testnet(true).await;
+    let http_endpoint = testnet.http_endpoint.clone();
+    let accounts = get_accounts(http_endpoint.clone()).await;
+    let owner_account = get_owner_account(&accounts);
+    let task_generator_account = get_task_generator_account(&accounts);
+    let aggregator_account = get_aggregator_account(&accounts);
 
     // Owner account private key
     let private_key = ANVIL_PRIVATE_KEYS[0].to_string();
     let temp_dir = tempfile::TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(private_key.as_str(), temp_dir)
-        .await
-        .unwrap();
-
-    let env = harness.env().clone();
-    let http_endpoint = harness.http_endpoint.clone();
-    let owner_account = harness.owner_account();
-    let task_generator_account = harness.task_generator_account();
-    let aggregator_account = harness.aggregator_account();
-    let accounts = harness.accounts().to_vec();
 
     let core_config = DeploymentConfigData {
         strategy_manager: StrategyManagerConfig {
@@ -90,7 +86,7 @@ async fn run_eigenlayer_incredible_squaring_test(
             max_retroactive_length: 432000u32,
             max_future_length: 86400u32,
             genesis_rewards_timestamp: 1672531200u32,
-            updater: harness.owner_account(),
+            updater: owner_account,
             activation_delay: 0u32,
             calculation_interval_seconds: 86400u32,
             global_operator_commission_bips: 1000u16,
@@ -108,7 +104,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     let core_contracts = deploy_core_contracts(
         http_endpoint.as_str(),
         &private_key,
-        harness.owner_account(),
+        owner_account,
         core_config,
         Some(address!("00000000219ab540356cBB839Cbe05303d7705Fa")),
         Some(1_564_000),
@@ -131,7 +127,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     std::fs::write("core_contracts.json", core_contracts_json).unwrap();
 
     let avs_contracts = deploy_avs_contracts(
-        env.http_rpc_endpoint.as_str(),
+        http_endpoint.as_str(),
         &private_key,
         owner_account,
         1,
@@ -185,6 +181,37 @@ async fn run_eigenlayer_incredible_squaring_test(
             panic!("Failed to set up AVS permissions: {e}");
         }
     }
+
+    // Initialize test harness
+    let harness = EigenlayerTestHarness::setup(
+        private_key.as_str(),
+        temp_dir,
+        testnet,
+        Some(EigenlayerProtocolSettings {
+            allocation_manager_address: core_contracts.allocation_manager,
+            registry_coordinator_address,
+            operator_state_retriever_address: avs_contracts.operator_state_retriever,
+            delegation_manager_address: core_contracts.delegation_manager,
+            service_manager_address: avs_contracts.squaring_service_manager,
+            stake_registry_address: avs_contracts.stake_registry,
+            strategy_manager_address: core_contracts.strategy_manager,
+            avs_directory_address: core_contracts.avs_directory,
+            rewards_coordinator_address: core_contracts.rewards_coordinator,
+            permission_controller_address: core_contracts.permission_controller,
+            strategy_address,
+            // Registration parameters (use defaults for testing)
+            allocation_delay: 0,
+            deposit_amount: 5_000_000_000_000_000_000_000,
+            stake_amount: 1_000_000_000_000_000_000,
+            operator_sets: vec![0],
+            staker_opt_out_window_blocks: 50400,
+            metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
+        }),
+    )
+        .await
+        .unwrap();
+
+    let env = harness.env().clone();
 
     let registry_coordinator =
         RegistryCoordinator::new(registry_coordinator_address, signer_wallet.clone());
