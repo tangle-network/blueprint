@@ -208,8 +208,8 @@ async fn run_eigenlayer_incredible_squaring_test(
             metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
         }),
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
 
     let env = harness.env().clone();
 

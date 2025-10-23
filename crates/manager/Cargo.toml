@@ -27,7 +27,8 @@ blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
 blueprint-eigenlayer-extra = { workspace = true, features = ["std"]}
-blueprint-testing-utils = { workspace = true, features = ["anvil", "tangle", "eigenlayer"] }
+blueprint-testing-utils = { workspace = true, features = ["tangle", "eigenlayer"] }
+blueprint-chain-setup = { workspace = true, features = ["anvil"] }
 
 # Alloy dependencies for EigenLayer protocol
 alloy-provider = { workspace = true }
@@ -37,6 +38,7 @@ alloy-primitives = { workspace = true }
 
 # EigenLayer SDK for registration verification
 eigensdk = { workspace = true }
+eigenlayer-contract-deployer = { workspace = true }
 
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

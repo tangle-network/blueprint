@@ -1,23 +1,20 @@
 /// Common test utilities for EigenLayer integration tests
 ///
 /// This module provides shared helpers to reduce code duplication across test files.
+use alloy_primitives::Address;
+use blueprint_chain_setup::anvil::AnvilTestnet;
+use blueprint_chain_setup::anvil::keys::ANVIL_PRIVATE_KEYS;
 use blueprint_eigenlayer_extra::{AvsRegistrationConfig, RuntimeTarget};
-use blueprint_testing_utils::eigenlayer::EigenlayerTestHarness;
 use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
+use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
+use blueprint_testing_utils::eigenlayer::{
+    EigenlayerTestHarness, deploy_eigenlayer_core_contracts, get_accounts, get_aggregator_account,
+    get_owner_account, get_task_generator_account,
+};
+use eigenlayer_contract_deployer::deploy::{DeployedContracts, deploy_avs_contracts};
+use eigenlayer_contract_deployer::helpers::get_provider_from_signer;
+use eigenlayer_contract_deployer::permissions::setup_avs_permissions;
 use std::path::PathBuf;
-
-pub const ANVIL_PRIVATE_KEYS: [&str; 10] = [
-    "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-    "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
-    "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
-    "7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
-    "47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
-    "8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
-    "92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
-    "4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
-    "dbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
-    "2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
-];
 
 /// Create a test `BlueprintManagerContext` with temp directories and `RocksDB`
 ///
@@ -118,8 +115,115 @@ pub fn create_avs_config(
     }
 }
 
-
 /// Deploy core Eigenlayer contract & AVS contract
-pub fn deploy_eigenlayer() {
-   // TODO(daniel) 
+///
+/// * Params
+/// * `testnet` - Anvil testnet
+///
+/// * Returns
+/// * `(EigenlayerTestHarness, Vec<Address>)` - Eigenlayer test harness and accounts
+/// * `EigenlayerTestHarness` - Eigenlayer test harness
+/// * `Vec<Address>` - Accounts
+///
+/// * # Errors
+/// * `Error` - Error deploying core contracts
+/// * `Error` - Error deploying AVS contracts
+/// * `Error` - Error setting up AVS permissions
+///
+/// * # Panics
+/// * Panics if error deploying core contracts
+pub async fn setup_incredible_squaring_avs_harness(
+    testnet: AnvilTestnet,
+) -> (EigenlayerTestHarness, Vec<Address>) {
+    let http_endpoint = testnet.http_endpoint.clone();
+    let accounts = get_accounts(http_endpoint.clone()).await;
+    let owner_account = get_owner_account(&accounts);
+    let task_generator_account = get_task_generator_account(&accounts);
+    let aggregator_account = get_aggregator_account(&accounts);
+
+    // Owner account private key
+    let private_key = ANVIL_PRIVATE_KEYS[0].to_string();
+    let temp_dir = tempfile::TempDir::new().unwrap();
+
+    let core_contracts =
+        deploy_eigenlayer_core_contracts(http_endpoint.as_str(), &private_key, owner_account)
+            .await
+            .unwrap();
+
+    let avs_contracts = deploy_avs_contracts(
+        http_endpoint.as_str(),
+        &private_key,
+        owner_account,
+        1,
+        core_contracts.permission_controller,
+        core_contracts.allocation_manager,
+        core_contracts.avs_directory,
+        core_contracts.delegation_manager,
+        core_contracts.pauser_registry,
+        core_contracts.rewards_coordinator,
+        core_contracts.strategy_factory,
+        task_generator_account,
+        aggregator_account,
+        10,
+    )
+    .await
+    .unwrap();
+
+    let DeployedContracts {
+        registry_coordinator: registry_coordinator_address,
+        strategy: strategy_address,
+        ..
+    } = avs_contracts;
+
+    blueprint_core::info!("AVS Contracts deployed at: {:?}", avs_contracts);
+
+    blueprint_core::info!("Setting AVS permissions and Metadata...");
+    let signer_wallet = get_provider_from_signer(&private_key, http_endpoint.as_str());
+
+    match setup_avs_permissions(
+        &core_contracts,
+        &avs_contracts,
+        &signer_wallet,
+        owner_account,
+        "https://github.com/tangle-network/avs/blob/main/metadata.json".to_string(),
+    )
+    .await
+    {
+        Ok(_set_up_avs_res) => blueprint_core::info!("Successfully set up AVS permissions"),
+        Err(e) => {
+            blueprint_core::error!("Failed to set up AVS permissions: {e}");
+            panic!("Failed to set up AVS permissions: {e}");
+        }
+    }
+
+    // Initialize test harness
+    let harness = EigenlayerTestHarness::setup(
+        private_key.as_str(),
+        temp_dir,
+        testnet,
+        Some(EigenlayerProtocolSettings {
+            allocation_manager_address: core_contracts.allocation_manager,
+            registry_coordinator_address,
+            operator_state_retriever_address: avs_contracts.operator_state_retriever,
+            delegation_manager_address: core_contracts.delegation_manager,
+            service_manager_address: avs_contracts.squaring_service_manager,
+            stake_registry_address: avs_contracts.stake_registry,
+            strategy_manager_address: core_contracts.strategy_manager,
+            avs_directory_address: core_contracts.avs_directory,
+            rewards_coordinator_address: core_contracts.rewards_coordinator,
+            permission_controller_address: core_contracts.permission_controller,
+            strategy_address,
+            // Registration parameters (use defaults for testing)
+            allocation_delay: 0,
+            deposit_amount: 5_000_000_000_000_000_000_000,
+            stake_amount: 1_000_000_000_000_000_000,
+            operator_sets: vec![0],
+            staker_opt_out_window_blocks: 50400,
+            metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
+        }),
+    )
+    .await
+    .unwrap();
+
+    (harness, accounts)
 }

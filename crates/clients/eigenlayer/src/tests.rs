@@ -3,11 +3,16 @@ use alloy_primitives::U256;
 use alloy_primitives::address;
 use alloy_primitives::aliases::U96;
 use alloy_provider::Provider;
-use blueprint_eigenlayer_testing_utils::{EigenlayerTestHarness, get_accounts, get_owner_account, get_task_generator_account, get_aggregator_account};
-
-use blueprint_chain_setup_anvil::{keys::ANVIL_PRIVATE_KEYS, get_receipt, start_empty_anvil_testnet};
+use blueprint_chain_setup_anvil::{
+    get_receipt, keys::ANVIL_PRIVATE_KEYS, start_empty_anvil_testnet,
+};
 use blueprint_core_testing_utils::setup_log;
+use blueprint_eigenlayer_testing_utils::{
+    EigenlayerTestHarness, get_accounts, get_aggregator_account, get_owner_account,
+    get_task_generator_account,
+};
 use blueprint_evm_extra::util::get_provider_from_signer;
+use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 
 use eigenlayer_contract_deployer::bindings::core::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
 use eigenlayer_contract_deployer::bindings::core::registry_coordinator::IStakeRegistryTypes::StrategyParams;
@@ -64,7 +69,7 @@ async fn setup_test_environment() -> EigenlayerTestHarness {
 
     let core_contracts = deploy_core_contracts(
         http_endpoint.as_str(),
-        &private_key,
+        private_key,
         owner_account,
         core_config,
         Some(address!("00000000219ab540356cBB839Cbe05303d7705Fa")),
@@ -84,10 +89,9 @@ async fn setup_test_environment() -> EigenlayerTestHarness {
         ..
     } = core_contracts;
 
-   
     let avs_contracts = deploy_avs_contracts(
         http_endpoint.as_str(),
-        &private_key,
+        private_key,
         owner_account,
         1,
         permission_controller_address,
@@ -112,7 +116,7 @@ async fn setup_test_environment() -> EigenlayerTestHarness {
 
     println!("Setting AVS permissions and Metadata...");
     println!("Private key: {}", private_key);
-    let signer_wallet = get_provider_from_signer(private_key, &*http_endpoint);
+    let signer_wallet = get_provider_from_signer(private_key, http_endpoint.as_str());
 
     match setup_avs_permissions(
         &core_contracts,
@@ -130,8 +134,33 @@ async fn setup_test_environment() -> EigenlayerTestHarness {
         }
     }
 
-    let harness = EigenlayerTestHarness::setup(private_key, temp_dir).await.unwrap();
-    let env = harness.env().clone();
+    let harness = EigenlayerTestHarness::setup(
+        private_key,
+        temp_dir,
+        testnet,
+        Some(EigenlayerProtocolSettings {
+            allocation_manager_address: core_contracts.allocation_manager,
+            registry_coordinator_address,
+            operator_state_retriever_address: avs_contracts.operator_state_retriever,
+            delegation_manager_address: core_contracts.delegation_manager,
+            service_manager_address: avs_contracts.squaring_service_manager,
+            stake_registry_address: avs_contracts.stake_registry,
+            strategy_manager_address: core_contracts.strategy_manager,
+            avs_directory_address: core_contracts.avs_directory,
+            rewards_coordinator_address: core_contracts.rewards_coordinator,
+            permission_controller_address: core_contracts.permission_controller,
+            strategy_address,
+            // Registration parameters (use defaults for testing)
+            allocation_delay: 0,
+            deposit_amount: 5_000_000_000_000_000_000_000,
+            stake_amount: 1_000_000_000_000_000_000,
+            operator_sets: vec![0],
+            staker_opt_out_window_blocks: 50400,
+            metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
+        }),
+    )
+    .await
+    .unwrap();
 
     let registry_coordinator =
         RegistryCoordinator::new(registry_coordinator_address, signer_wallet.clone());

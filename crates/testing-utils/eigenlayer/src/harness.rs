@@ -1,6 +1,7 @@
 use crate::Error;
 use crate::env::setup_eigenlayer_test_environment;
-use alloy_primitives::Address;
+use alloy_primitives::address;
+use alloy_primitives::{Address, U256};
 use alloy_provider::Provider;
 use blueprint_auth::db::RocksDb;
 use blueprint_chain_setup::anvil::keys::inject_anvil_key;
@@ -10,6 +11,10 @@ use blueprint_evm_extra::util::get_provider_http;
 use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
 use blueprint_runner::config::{BlueprintEnvironment, ContextConfig, SupportedChains};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
+use eigenlayer_contract_deployer::core::{
+    DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData, EigenPodManagerConfig,
+    RewardsCoordinatorConfig, StrategyFactoryConfig, StrategyManagerConfig,
+};
 use std::future::Future;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
@@ -27,7 +32,7 @@ pub struct EigenlayerTestHarness {
 }
 
 impl EigenlayerTestHarness {
-    /// 
+    ///
     /// Create a new `EigenlayerTestHarness`
     ///
     /// NOTE: The resulting harness will have a context of `()`. This is not valid for jobs that require
@@ -40,9 +45,15 @@ impl EigenlayerTestHarness {
         owner_private_key: &str,
         test_dir: TempDir,
         testnet: AnvilTestnet,
-        eigenlayer_protocol_settings: Option<EigenlayerProtocolSettings>
+        eigenlayer_protocol_settings: Option<EigenlayerProtocolSettings>,
     ) -> Result<Self, Error> {
-        Self::setup_with_context(owner_private_key, test_dir, testnet, eigenlayer_protocol_settings).await
+        Self::setup_with_context(
+            owner_private_key,
+            test_dir,
+            testnet,
+            eigenlayer_protocol_settings,
+        )
+        .await
     }
 }
 
@@ -66,7 +77,7 @@ impl EigenlayerTestHarness {
         owner_private_key: &str,
         test_dir: TempDir,
         testnet: AnvilTestnet,
-        eigenlayer_protocol_settings: Option<EigenlayerProtocolSettings>
+        eigenlayer_protocol_settings: Option<EigenlayerProtocolSettings>,
     ) -> Result<Self, Error> {
         // Setup temporary testing keystore
         let keystore_path = test_dir.path().join("keystore");
@@ -131,7 +142,7 @@ impl EigenlayerTestHarness {
 }
 
 /// Gets the accounts from the HTTP endpoint
-/// 
+///
 /// # Panics
 ///
 /// * See [`Provider::get_accounts()`]
@@ -203,4 +214,68 @@ async fn run_auth_proxy(
     };
 
     Ok((db, task))
+}
+
+/// Deploy core Eigenlayer core contract
+///
+/// # Arguments
+///
+/// * `owner_private_key`: The private key of the owner account
+/// * `owner_account`: The owner account
+/// * `testnet`: The Anvil testnet
+///
+/// # Returns
+///
+/// * `Result<DeployedCoreContracts, Error>`: The deployed core contracts
+///     - `Ok(DeployedCoreContracts)`: The deployed core contracts
+///     - `Err(Error)`: The error
+///
+/// # Errors
+/// See [`eigenlayer_contract_deployer::core::deploy_core_contracts`]
+///
+/// # Panics
+/// See [`eigenlayer_contract_deployer::core::deploy_core_contracts`]
+pub async fn deploy_eigenlayer_core_contracts(
+    http_endpoint: &str,
+    owner_private_key: &str,
+    owner_account: Address,
+) -> Result<DeployedCoreContracts, Error> {
+    let core_config = DeploymentConfigData {
+        strategy_manager: StrategyManagerConfig {
+            init_paused_status: U256::from(0),
+            init_withdrawal_delay_blocks: 1u32,
+        },
+        delegation_manager: DelegationManagerConfig {
+            init_paused_status: U256::from(0),
+            withdrawal_delay_blocks: 0u32,
+        },
+        eigen_pod_manager: EigenPodManagerConfig {
+            init_paused_status: U256::from(0),
+        },
+        rewards_coordinator: RewardsCoordinatorConfig {
+            init_paused_status: U256::from(0),
+            max_rewards_duration: 864_000u32,
+            max_retroactive_length: 432_000u32,
+            max_future_length: 86_400u32,
+            genesis_rewards_timestamp: 1_672_531_200_u32,
+            updater: owner_account,
+            activation_delay: 0u32,
+            calculation_interval_seconds: 86_400u32,
+            global_operator_commission_bips: 1_000u16,
+        },
+        strategy_factory: StrategyFactoryConfig {
+            init_paused_status: U256::from(0),
+        },
+    };
+
+    Ok(eigenlayer_contract_deployer::core::deploy_core_contracts(
+        http_endpoint,
+        owner_private_key,
+        owner_account,
+        core_config,
+        Some(address!("00000000219ab540356cBB839Cbe05303d7705Fa")),
+        Some(1_564_000),
+    )
+    .await
+    .unwrap())
 }

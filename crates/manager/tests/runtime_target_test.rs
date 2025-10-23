@@ -18,13 +18,13 @@
 ///    - Health checks after spawn
 mod common;
 
+use blueprint_chain_setup::anvil::start_empty_anvil_testnet;
 use blueprint_eigenlayer_extra::{AvsRegistration, RegistrationStateManager, RuntimeTarget};
-use blueprint_testing_utils::eigenlayer::EigenlayerTestHarness;
 use blueprint_manager::blueprint::ActiveBlueprints;
 use blueprint_manager::protocol::{ProtocolManager, ProtocolType};
 use blueprint_manager::rt::service::Status;
-use tempfile::TempDir;
-use common::ANVIL_PRIVATE_KEYS;
+use blueprint_testing_utils::eigenlayer::get_owner_account;
+use common::setup_incredible_squaring_avs_harness;
 
 // =============================================================================
 // SECTION 1: VALIDATION TESTS (Fast, no spawning)
@@ -40,10 +40,8 @@ mod validation_tests {
     #[tokio::test]
     #[cfg(not(target_os = "linux"))]
     async fn test_hypervisor_requires_linux_platform() {
-        let harness_temp_dir = TempDir::new().unwrap();
-        let harness = EigenlayerTestHarness::setup(ANVIL_PRIVATE_KEYS[0], harness_temp_dir)
-            .await
-            .unwrap();
+        let testnet = start_empty_anvil_testnet(true).await;
+        let (harness, _) = common::setup_incredible_squaring_avs_harness(testnet).await;
         let env = harness.env().clone();
 
         let blueprint_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -289,14 +287,10 @@ mod lifecycle_tests {
     async fn test_native_runtime_full_lifecycle() {
         blueprint_testing_utils::setup_log();
 
-        let private_key = ANVIL_PRIVATE_KEYS[0];
-        let harness_temp_dir = TempDir::new().unwrap();
-        let harness = EigenlayerTestHarness::setup(private_key, harness_temp_dir)
-            .await
-            .unwrap();
-
+        let testnet = start_empty_anvil_testnet(true).await;
+        let (harness, accounts) = common::setup_incredible_squaring_avs_harness(testnet).await;
         let env = harness.env().clone();
-        let operator_address = harness.owner_account();
+        let operator_address = get_owner_account(&accounts);
 
         // Point to the real incredible-squaring blueprint
         let blueprint_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -497,12 +491,10 @@ mod lifecycle_tests {
         println!("✅ Built and loaded image into Kind cluster");
 
         // Step 5: Set up test environment
-        let harness_temp_dir = TempDir::new().unwrap();
-        let harness = EigenlayerTestHarness::setup(ANVIL_PRIVATE_KEYS[0], harness_temp_dir)
-            .await
-            .unwrap();
+        let testnet = start_empty_anvil_testnet(true).await;
+        let (harness, accounts) = setup_incredible_squaring_avs_harness(testnet).await;
         let env = harness.env().clone();
-        let operator_address = harness.owner_account();
+        let operator_address = get_owner_account(&accounts);
 
         let settings = env
             .protocol_settings

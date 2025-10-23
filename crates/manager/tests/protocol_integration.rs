@@ -4,25 +4,21 @@
 /// through the unified `ProtocolManager` interface.
 mod common;
 
+use blueprint_chain_setup::anvil::start_empty_anvil_testnet;
 use blueprint_manager::blueprint::ActiveBlueprints;
 use blueprint_manager::config::BlueprintManagerContext;
 use blueprint_manager::protocol::{ProtocolManager, ProtocolType};
 use blueprint_runner::config::BlueprintEnvironment;
+use common::setup_incredible_squaring_avs_harness;
 use std::time::Duration;
+use tempfile::TempDir;
 use tokio::time::timeout;
-use common::ANVIL_PRIVATE_KEYS;
 
 /// Test that ProtocolManager can be constructed for Tangle
 #[tokio::test]
 async fn test_tangle_protocol_manager_initialization() {
-    // This test uses the existing TangleTestHarness infrastructure
-    use blueprint_testing_utils::tangle::harness::TangleTestHarness;
-    use tempfile::TempDir;
-
-    let harness_temp_dir = TempDir::new().unwrap();
-    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::setup(harness_temp_dir))
-        .await
-        .unwrap();
+    let testnet = start_empty_anvil_testnet(true).await;
+    let (harness, _accounts) = setup_incredible_squaring_avs_harness(testnet).await;
     let env = harness.env().clone();
 
     let _manager_temp_dir = TempDir::new().unwrap();
@@ -41,14 +37,8 @@ async fn test_tangle_protocol_manager_initialization() {
 /// Test that ProtocolManager can be constructed for EigenLayer
 #[tokio::test]
 async fn test_eigenlayer_protocol_manager_initialization() {
-    // This test uses the existing EigenlayerTestHarness infrastructure
-    use blueprint_testing_utils::eigenlayer::harness::EigenlayerTestHarness;
-    use tempfile::TempDir;
-
-    let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(ANVIL_PRIVATE_KEYS[0], harness_temp_dir)
-        .await
-        .unwrap();
+    let testnet = start_empty_anvil_testnet(true).await;
+    let (harness, _accounts) = setup_incredible_squaring_avs_harness(testnet).await;
     let env = harness.env().clone();
 
     let _manager_temp_dir = TempDir::new().unwrap();
@@ -67,13 +57,8 @@ async fn test_eigenlayer_protocol_manager_initialization() {
 /// Test that ProtocolManager can initialize and receive events from Tangle
 #[tokio::test]
 async fn test_tangle_protocol_manager_event_flow() {
-    use blueprint_testing_utils::tangle::harness::TangleTestHarness;
-    use tempfile::TempDir;
-
-    let harness_temp_dir = TempDir::new().unwrap();
-    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::setup(harness_temp_dir))
-        .await
-        .unwrap();
+    let testnet = start_empty_anvil_testnet(true).await;
+    let (harness, _accounts) = setup_incredible_squaring_avs_harness(testnet).await;
     let env = harness.env().clone();
 
     let _manager_temp_dir = TempDir::new().unwrap();
@@ -117,13 +102,8 @@ async fn test_tangle_protocol_manager_event_flow() {
 /// This test verifies initialization succeeds without registrations.
 #[tokio::test]
 async fn test_eigenlayer_protocol_manager_event_flow() {
-    use blueprint_testing_utils::eigenlayer::harness::EigenlayerTestHarness;
-    use tempfile::TempDir;
-
-    let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(ANVIL_PRIVATE_KEYS[0], harness_temp_dir)
-        .await
-        .unwrap();
+    let testnet = start_empty_anvil_testnet(true).await;
+    let (harness, _accounts) = setup_incredible_squaring_avs_harness(testnet).await;
     let env = harness.env().clone();
 
     let _manager_temp_dir = TempDir::new().unwrap();

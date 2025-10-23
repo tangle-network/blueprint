@@ -22,15 +22,17 @@ pub async fn setup_eigenlayer_test_environment<T: TryInto<Url>>(
     http_endpoint: T,
 ) -> EigenlayerProtocolSettings
 where
-    <T as TryInto<Url>>::Error: std::fmt::Debug
+    <T as TryInto<Url>>::Error: std::fmt::Debug,
 {
     let http_endpoint = http_endpoint.try_into().unwrap();
     let provider = get_provider_http(http_endpoint.clone());
 
     let default_eigenlayer_protocol_settings = EigenlayerProtocolSettings::default();
 
-    let registry_coordinator =
-        RegistryCoordinator::new(default_eigenlayer_protocol_settings.registry_coordinator_address, provider.clone());
+    let registry_coordinator = RegistryCoordinator::new(
+        default_eigenlayer_protocol_settings.registry_coordinator_address,
+        provider.clone(),
+    );
 
     let operator_set_params = OperatorSetParam {
         maxOperatorCount: 10,

@@ -14,11 +14,13 @@
 /// Run with: cargo test --test `eigenlayer_e2e_test` -- --ignored --nocapture --test-threads=1
 mod common;
 
+use blueprint_chain_setup::anvil::start_empty_anvil_testnet;
 use blueprint_eigenlayer_extra::{
     AvsRegistration, AvsRegistrationConfig, RegistrationStateManager, RegistrationStatus,
     RuntimeTarget,
 };
-use blueprint_testing_utils::eigenlayer::harness::EigenlayerTestHarness;
+use blueprint_testing_utils::eigenlayer::harness::get_owner_account;
+use common::setup_incredible_squaring_avs_harness;
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
@@ -84,11 +86,9 @@ async fn test_single_avs_registration_flow() {
     println!("\n🚀 Starting E2E test: Single AVS Registration and Spawn\n");
 
     // Setup test harness
-    let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
-        .await
-        .unwrap();
-    let operator_address = harness.owner_account();
+    let testnet = start_empty_anvil_testnet(true).await;
+    let (harness, accounts) = common::setup_incredible_squaring_avs_harness(testnet).await;
+    let operator_address = get_owner_account(&accounts);
 
     println!("👤 Operator address: {:#x}", operator_address);
 
@@ -98,7 +98,7 @@ async fn test_single_avs_registration_flow() {
     println!("📝 Registering AVS: {:#x}", config.service_manager);
 
     // Create test-specific state file to avoid interference between tests
-    let test_state_file = TempDir::new().unwrap();
+    let test_state_file = tempfile::TempDir::new().unwrap();
     let state_file_path = test_state_file.path().join("test_registrations.json");
 
     // Create and save registration (same code path as CLI, but with test-specific file)
@@ -157,11 +157,9 @@ async fn test_multi_avs_registration() {
     println!("\n🚀 Starting E2E test: Multi-AVS Simultaneous Instances\n");
 
     // Setup test harness
-    let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
-        .await
-        .unwrap();
-    let operator_address = harness.owner_account();
+    let testnet = start_empty_anvil_testnet(true).await;
+    let (harness, accounts) = setup_incredible_squaring_avs_harness(testnet).await;
+    let operator_address = get_owner_account(&accounts);
 
     println!("👤 Operator address: {:#x}", operator_address);
 
@@ -250,11 +248,9 @@ async fn test_registration_lifecycle() {
     println!("\n🚀 Starting E2E test: Registration Lifecycle\n");
 
     // Setup test harness
-    let harness_temp_dir = TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", harness_temp_dir)
-        .await
-        .unwrap();
-    let operator_address = harness.owner_account();
+    let testnet = start_empty_anvil_testnet(true).await;
+    let (harness, accounts) = setup_incredible_squaring_avs_harness(testnet).await;
+    let operator_address = get_owner_account(&accounts);
 
     println!("👤 Operator address: {:#x}", operator_address);
 
