@@ -332,7 +332,7 @@ alloy-signer-gcp = { version = "1.0.35", default-features = false }
 alloy-signer-ledger = { version = "1.0.35", default-features = false, features = ["eip712"] }
 aws-config = { version = "1", default-features = false }
 aws-sdk-kms = { version = "1", default-features = false }
-gcloud-sdk = { version = "0.27.4", default-features = false }
+gcloud-sdk = { version = "0.28.2", default-features = false }
 
 # Arkworks
 ark-bn254 = { version = "0.5.0", default-features = false }
