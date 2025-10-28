@@ -14,6 +14,7 @@ use blueprint_testing_utils::eigenlayer::{
 use eigenlayer_contract_deployer::deploy::{DeployedContracts, deploy_avs_contracts};
 use eigenlayer_contract_deployer::helpers::get_provider_from_signer;
 use eigenlayer_contract_deployer::permissions::setup_avs_permissions;
+use std::path::Path;
 use std::path::PathBuf;
 
 /// Create a test `BlueprintManagerContext` with temp directories and `RocksDB`
@@ -67,6 +68,22 @@ pub async fn create_test_context(keystore_uri: String) -> BlueprintManagerContex
     ctx.set_db(db).await;
 
     ctx
+}
+
+/// Remove temporary manager test directories under /tmp created by `create_test_context`
+#[allow(dead_code)]
+pub fn cleanup_manager_tmp_dirs() {
+    let tmp_path = Path::new("/tmp");
+    if let Ok(entries) = std::fs::read_dir(tmp_path) {
+        for entry in entries.flatten() {
+            if let Ok(file_name) = entry.file_name().into_string() {
+                if file_name.starts_with("bpm") {
+                    let path = entry.path();
+                    let _ = std::fs::remove_dir_all(&path);
+                }
+            }
+        }
+    }
 }
 
 /// Create AVS registration config from test harness
