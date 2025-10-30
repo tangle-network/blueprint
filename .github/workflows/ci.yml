@@ -27,11 +27,11 @@ jobs:
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2025-10-20
           components: rustfmt
 
       - name: Check Formatting
-        run: cargo +nightly fmt -- --check
+        run: cargo +nightly-2025-10-20 fmt -- --check
 
   linting:
     timeout-minutes: 120

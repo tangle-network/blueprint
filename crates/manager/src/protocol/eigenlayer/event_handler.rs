@@ -563,7 +563,7 @@ impl EigenlayerEventHandler {
                         info!("Rewards monitoring task shutting down");
                         break;
                     }
-                    _ = tokio::time::sleep(std::time::Duration::from_secs(3600)) => {
+                    () = tokio::time::sleep(std::time::Duration::from_secs(3600)) => {
                         // Check for claimable rewards every hour
                         match rewards_manager.get_claimable_rewards().await {
                             Ok(amount) => {
@@ -593,7 +593,7 @@ impl EigenlayerEventHandler {
                         info!("Slashing monitoring task shutting down");
                         break;
                     }
-                    _ = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
+                    () = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
                         // Check for slashing events every 5 minutes
                         match slashing_monitor.is_operator_slashed().await {
                             Ok(is_slashed) => {
