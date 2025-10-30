@@ -8,7 +8,7 @@ use crate::rt::ResourceLimits;
 use crate::rt::container::ContainerInstance;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_core::error;
-use blueprint_core::{debug, info, warn};
+use blueprint_core::{info, warn};
 use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
 use blueprint_runner::config::BlueprintEnvironment;
 use std::path::{Path, PathBuf};
@@ -336,7 +336,7 @@ impl Service {
                 NativeProcess::NotStarted(info) => {
                     let args = info.arguments.encode(true);
                     let env_vars = info.env_vars.encode();
-                    
+
                     info!(
                         "Spawning native process: {} with args: {:?}",
                         info.binary_path.display(),

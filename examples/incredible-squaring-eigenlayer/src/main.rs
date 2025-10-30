@@ -18,7 +18,6 @@ use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
 use blueprint_sdk::{Router, error, info};
 use eigenlayer_contract_deployer::bindings::RegistryCoordinator;
 use incredible_squaring_blueprint_eigenlayer::SquaringTask;
-use incredible_squaring_blueprint_eigenlayer::{AGGREGATOR_PRIVATE_KEY, TASK_GENERATOR_PRIVATE_KEY};
 use incredible_squaring_blueprint_eigenlayer::TASK_MANAGER_ADDRESS;
 use incredible_squaring_blueprint_eigenlayer::contexts::aggregator::AggregatorContext;
 use incredible_squaring_blueprint_eigenlayer::contexts::client::AggregatorClient;
@@ -31,6 +30,9 @@ use incredible_squaring_blueprint_eigenlayer::jobs::compute_x_square::{
 #[allow(unused_imports)]
 use incredible_squaring_blueprint_eigenlayer::jobs::initialize_task::{
     INITIALIZE_TASK_JOB_ID, initialize_bls_task,
+};
+use incredible_squaring_blueprint_eigenlayer::{
+    AGGREGATOR_PRIVATE_KEY, TASK_GENERATOR_PRIVATE_KEY,
 };
 
 #[tokio::main]
@@ -89,7 +91,13 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
         let operator_address = ecdsa_secret
             .alloy_address()
             .expect("Failed to get operator address");
-        let task_spawner = setup_task_spawner(env.protocol_settings.eigenlayer()?.registry_coordinator_address, env.http_rpc_endpoint.clone(), operator_address);
+        let task_spawner = setup_task_spawner(
+            env.protocol_settings
+                .eigenlayer()?
+                .registry_coordinator_address,
+            env.http_rpc_endpoint.clone(),
+            operator_address,
+        );
         tokio::spawn(async move {
             task_spawner.await;
         });

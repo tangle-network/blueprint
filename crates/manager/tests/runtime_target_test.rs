@@ -415,19 +415,51 @@ mod lifecycle_tests {
     #[ignore = "Requires Kind (Kubernetes in Docker) and Docker to be running - slow test"]
     async fn test_container_runtime_full_lifecycle_with_kind() {
         use std::process::Command;
+        use std::process::Output;
 
         // Initialize rustls crypto provider
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
+        // Helper to print command output consistently
+        fn print_cmd_output(step: &str, output: &Output) {
+            println!(
+                "\n----- {}: stdout -----\n{}",
+                step,
+                String::from_utf8_lossy(&output.stdout)
+            );
+            eprintln!(
+                "----- {}: stderr -----\n{}\n",
+                step,
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
         // Step 1: Check if Kind is installed
         let kind_check = Command::new("kind").arg("version").output();
 
-        if kind_check.is_err() || !kind_check.unwrap().status.success() {
-            eprintln!("❌ Kind is not installed. Install with:");
-            eprintln!("   brew install kind  # macOS");
-            eprintln!("   # OR");
-            eprintln!("   go install sigs.k8s.io/kind@latest  # Linux");
-            panic!("Kind not found - test requires Kind to be installed");
+        match kind_check {
+            Ok(out) => {
+                print_cmd_output("kind version", &out);
+                if !out.status.success() {
+                    eprintln!(
+                        "❌ 'kind version' exited with non-zero status: {:?}",
+                        out.status.code()
+                    );
+                    eprintln!("Install Kind with:");
+                    eprintln!("   brew install kind  # macOS");
+                    eprintln!("   # OR");
+                    eprintln!("   go install sigs.k8s.io/kind@latest  # Linux");
+                    panic!("Kind not found - test requires Kind to be installed");
+                }
+            }
+            Err(e) => {
+                eprintln!("❌ Failed to execute 'kind version': {}", e);
+                eprintln!("Install Kind with:");
+                eprintln!("   brew install kind  # macOS");
+                eprintln!("   # OR");
+                eprintln!("   go install sigs.k8s.io/kind@latest  # Linux");
+                panic!("Kind not found - test requires Kind to be installed");
+            }
         }
 
         println!("✅ Kind is installed");
@@ -435,10 +467,18 @@ mod lifecycle_tests {
         // Step 2: Check if Docker is running
         let docker_check = Command::new("docker").arg("ps").output();
 
-        assert!(
-            docker_check.is_ok() && docker_check.unwrap().status.success(),
-            "Docker is not running - test requires Docker daemon"
-        );
+        match docker_check {
+            Ok(out) => {
+                print_cmd_output("docker ps", &out);
+                assert!(
+                    out.status.success(),
+                    "Docker is not running - test requires Docker daemon"
+                );
+            }
+            Err(e) => {
+                panic!("Failed to run 'docker ps': {}", e);
+            }
+        }
 
         println!("✅ Docker is running");
 
@@ -450,6 +490,9 @@ mod lifecycle_tests {
             .args(["create", "cluster", "--name", &cluster_name])
             .output()
             .expect("Failed to create Kind cluster");
+
+        // Always show outputs for visibility
+        print_cmd_output("kind create cluster", &create_cluster);
 
         if !create_cluster.status.success() {
             eprintln!(
@@ -466,9 +509,19 @@ mod lifecycle_tests {
         impl Drop for ClusterCleanup {
             fn drop(&mut self) {
                 println!("🧹 Cleaning up Kind cluster: {}", self.0);
-                let _ = Command::new("kind")
+                if let Ok(out) = Command::new("kind")
                     .args(["delete", "cluster", "--name", &self.0])
-                    .output();
+                    .output()
+                {
+                    println!(
+                        "Kind delete cluster stdout:\n{}",
+                        String::from_utf8_lossy(&out.stdout)
+                    );
+                    eprintln!(
+                        "Kind delete cluster stderr:\n{}",
+                        String::from_utf8_lossy(&out.stderr)
+                    );
+                }
             }
         }
         let _cleanup = ClusterCleanup(cluster_name.clone());
@@ -485,6 +538,9 @@ mod lifecycle_tests {
             .current_dir(&workspace_root)
             .output()
             .expect("Failed to run build-docker.sh");
+
+        // Always show outputs for visibility
+        print_cmd_output("build-docker.sh --load-kind", &build_image);
 
         if !build_image.status.success() {
             eprintln!(
@@ -519,8 +575,8 @@ mod lifecycle_tests {
             delegation_manager: settings.delegation_manager_address,
             avs_directory: settings.avs_directory_address,
             rewards_coordinator: settings.rewards_coordinator_address,
-            permission_controller: Some(settings.permission_controller_address),
-            allocation_manager: Some(settings.allocation_manager_address),
+            permission_controller: settings.permission_controller_address,
+            allocation_manager: settings.allocation_manager_address,
             strategy_address: settings.strategy_address,
             stake_registry: settings.stake_registry_address,
             blueprint_path: dummy_path,
@@ -553,7 +609,6 @@ mod lifecycle_tests {
             .deregister(registration.config.service_manager)
             .unwrap();
 
-        drop(protocol_manager);
         drop(harness);
 
         // Cleanup temp manager dirs

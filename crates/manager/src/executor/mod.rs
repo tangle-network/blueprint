@@ -14,7 +14,7 @@ use blueprint_runner::config::BlueprintEnvironment;
 use blueprint_runner::config::ProtocolSettingsT;
 use color_eyre::Report;
 use color_eyre::eyre::OptionExt;
-use sp_core::{ecdsa, sr25519, Pair};
+use sp_core::{Pair, ecdsa, sr25519};
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;

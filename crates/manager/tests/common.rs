@@ -270,7 +270,8 @@ pub async fn setup_incredible_squaring_avs_harness(
 
     blueprint_core::info!("Sent createTotalDelegatedStakeQuorum transaction");
 
-    match create_quorum_call.send()
+    match create_quorum_call
+        .send()
         .await
         .expect("Failed to send task creation transaction")
         .get_receipt()
@@ -288,7 +289,6 @@ pub async fn setup_incredible_squaring_avs_harness(
             panic!("Failed to create a new quorum: {:?}", e);
         }
     }
-    
 
     (harness, accounts)
 }

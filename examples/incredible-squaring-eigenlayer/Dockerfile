@@ -3,6 +3,11 @@
 #
 # Build time: ~5-10 minutes (first build with cold cache)
 
+###
+### Foundry - Official image
+###
+FROM ghcr.io/foundry-rs/foundry:latest AS foundry
+
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
@@ -21,6 +26,13 @@ RUN apt-get update && apt-get install -y \
 
 # Copy the entire workspace
 COPY . .
+
+# Include Foundry tools from official image
+COPY --chown=root:root --from=foundry /usr/local/bin/forge /usr/local/bin/forge
+COPY --chown=root:root --from=foundry /usr/local/bin/cast /usr/local/bin/cast
+COPY --chown=root:root --from=foundry /usr/local/bin/anvil /usr/local/bin/anvil
+COPY --chown=root:root --from=foundry /usr/local/bin/chisel /usr/local/bin/chisel
+
 
 # Build the blueprint binary for Linux
 RUN cargo build --release --package incredible-squaring-blueprint-eigenlayer
@@ -44,6 +56,12 @@ RUN useradd -m -u 1000 blueprint && \
 
 # Copy the compiled binary from builder
 COPY --from=builder /build/target/release/incredible-squaring-blueprint-eigenlayer /usr/local/bin/blueprint
+
+# Include Foundry tools from official image
+COPY --chown=root:root --from=builder /usr/local/bin/forge /usr/local/bin/forge
+COPY --chown=root:root --from=builder /usr/local/bin/cast /usr/local/bin/cast
+COPY --chown=root:root --from=builder /usr/local/bin/anvil /usr/local/bin/anvil
+COPY --chown=root:root --from=builder /usr/local/bin/chisel /usr/local/bin/chisel
 
 # Make it executable
 RUN chmod +x /usr/local/bin/blueprint
