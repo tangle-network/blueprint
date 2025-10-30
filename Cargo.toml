@@ -46,7 +46,7 @@ broken_intra_doc_links = "deny"
 
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
-blueprint-sdk = { version = "0.1.0-alpha.21", path = "./crates/sdk", default-features = false }
+blueprint-sdk = { version = "0.1.0-alpha.22", path = "./crates/sdk", default-features = false }
 
 # Job system
 blueprint-core = { version = "0.1.0-alpha.5", path = "crates/core", default-features = false }
@@ -64,7 +64,7 @@ incredible-squaring-blueprint = { version = "0.1.1", path = "./examples/incredib
 incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./examples/incredible-squaring-eigenlayer", default-features = false }
 
 # Blueprint utils
-blueprint-manager = { version = "0.3.0-alpha.22", path = "./crates/manager", default-features = false }
+blueprint-manager = { version = "0.3.0-alpha.23", path = "./crates/manager", default-features = false }
 blueprint-manager-bridge = { version = "0.1.0-alpha.8", path = "./crates/manager/bridge", default-features = false }
 blueprint-build-utils = { version = "0.1.0-alpha.4", path = "./crates/build-utils", default-features = false }
 blueprint-auth = { version = "0.1.0-alpha.10", path = "./crates/auth", default-features = false }
@@ -100,14 +100,14 @@ blueprint-pricing-engine = { version = "0.2.5", path = "./crates/pricing-engine"
 
 # Macros
 blueprint-macros = { version = "0.1.0-alpha.7", path = "./crates/macros", default-features = false }
-blueprint-context-derive = { version = "0.1.0-alpha.12", path = "./crates/macros/context-derive", default-features = false }
+blueprint-context-derive = { version = "0.1.0-alpha.13", path = "./crates/macros/context-derive", default-features = false }
 
 # Quality of Service
 blueprint-qos = { version = "0.1.0-alpha.6", path = "./crates/qos", default-features = false }
 
 # Stores
-blueprint-stores = { version = "0.1.0-alpha.7", path = "./crates/stores", default-features = false }
-blueprint-store-local-database = { version = "0.1.0-alpha.6", path = "./crates/stores/local-database", default-features = false }
+blueprint-stores = { version = "0.1.0-alpha.8", path = "./crates/stores", default-features = false }
+blueprint-store-local-database = { version = "0.1.0-alpha.7", path = "./crates/stores/local-database", default-features = false }
 rocksdb = { version = "0.21.0", default-features = false }
 
 # SDK
@@ -116,8 +116,8 @@ blueprint-std = { version = "0.1.0-alpha.4", path = "./crates/std", default-feat
 
 # P2P
 blueprint-networking = { version = "0.1.0-alpha.15", path = "./crates/networking", default-features = false }
-blueprint-networking-round-based-extension = { version = "0.1.0-alpha.15", path = "./crates/networking/extensions/round-based", default-features = false }
-blueprint-networking-agg-sig-gossip-extension = { version = "0.1.0-alpha.14", path = "./crates/networking/extensions/agg-sig-gossip", default-features = false }
+blueprint-networking-round-based-extension = { version = "0.1.0-alpha.16", path = "./crates/networking/extensions/round-based", default-features = false }
+blueprint-networking-agg-sig-gossip-extension = { version = "0.1.0-alpha.15", path = "./crates/networking/extensions/agg-sig-gossip", default-features = false }
 
 # Testing utilities
 blueprint-testing-utils = { version = "0.1.0-alpha.20", path = "./crates/testing-utils", default-features = false }
