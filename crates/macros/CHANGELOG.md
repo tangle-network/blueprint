@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-macros-v0.1.0-alpha.6...blueprint-macros-v0.1.0-alpha.7) - 2025-10-30
+
+### Fixed
+
+- *(ci)* release-plz rate limit error (#1205)
+
 ## [0.1.0-alpha.6](https://github.com/tangle-network/blueprint/compare/blueprint-macros-v0.1.0-alpha.5...blueprint-macros-v0.1.0-alpha.6) - 2025-07-03
 
 ### Other
