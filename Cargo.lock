@@ -2939,7 +2939,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-context-derive"
-version = "0.1.0-alpha.11"
+version = "0.1.0-alpha.12"
 dependencies = [
  "alloy-network",
  "alloy-provider",
@@ -3298,7 +3298,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-macros"
-version = "0.1.0-alpha.6"
+version = "0.1.0-alpha.7"
 dependencies = [
  "blueprint-sdk",
  "proc-macro2",
@@ -3313,7 +3313,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager"
-version = "0.3.0-alpha.21"
+version = "0.3.0-alpha.22"
 dependencies = [
  "alloy-primitives 1.2.1",
  "alloy-provider",
@@ -3440,7 +3440,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-networking-agg-sig-gossip-extension"
-version = "0.1.0-alpha.13"
+version = "0.1.0-alpha.14"
 dependencies = [
  "bincode",
  "bitvec",
@@ -3468,7 +3468,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-networking-round-based-extension"
-version = "0.1.0-alpha.14"
+version = "0.1.0-alpha.15"
 dependencies = [
  "blueprint-core",
  "blueprint-crypto",
@@ -3656,7 +3656,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-sdk"
-version = "0.1.0-alpha.20"
+version = "0.1.0-alpha.21"
 dependencies = [
  "alloy",
  "alloy-json-abi",
@@ -3706,7 +3706,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-store-local-database"
-version = "0.1.0-alpha.5"
+version = "0.1.0-alpha.6"
 dependencies = [
  "blueprint-std",
  "serde",
@@ -3717,7 +3717,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-stores"
-version = "0.1.0-alpha.6"
+version = "0.1.0-alpha.7"
 dependencies = [
  "blueprint-store-local-database",
  "document-features",
