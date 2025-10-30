@@ -18,13 +18,13 @@
 ///    - Health checks after spawn
 mod common;
 
+use crate::common::cleanup_manager_tmp_dirs;
 use blueprint_chain_setup::anvil::start_empty_anvil_testnet;
 use blueprint_eigenlayer_extra::{AvsRegistration, RegistrationStateManager, RuntimeTarget};
 use blueprint_manager::blueprint::ActiveBlueprints;
 use blueprint_manager::protocol::{ProtocolManager, ProtocolType};
 use blueprint_manager::rt::service::Status;
 use blueprint_testing_utils::eigenlayer::get_owner_account;
-use common::setup_incredible_squaring_avs_harness;
 
 // =============================================================================
 // SECTION 1: VALIDATION TESTS (Fast, no spawning)
@@ -40,7 +40,7 @@ mod validation_tests {
     #[tokio::test]
     #[cfg(not(target_os = "linux"))]
     async fn test_hypervisor_requires_linux_platform() {
-        let testnet = start_empty_anvil_testnet(true).await;
+        let testnet = start_empty_anvil_testnet(false).await;
         let (harness, _) = common::setup_incredible_squaring_avs_harness(testnet).await;
         let env = harness.env().clone();
 
@@ -60,8 +60,8 @@ mod validation_tests {
             delegation_manager: settings.delegation_manager_address,
             avs_directory: settings.avs_directory_address,
             rewards_coordinator: settings.rewards_coordinator_address,
-            permission_controller: Some(settings.permission_controller_address),
-            allocation_manager: Some(settings.allocation_manager_address),
+            permission_controller: settings.permission_controller_address,
+            allocation_manager: settings.allocation_manager_address,
             strategy_address: settings.strategy_address,
             stake_registry: settings.stake_registry_address,
             blueprint_path: blueprint_dir,
@@ -106,8 +106,8 @@ mod validation_tests {
             delegation_manager: alloy_primitives::Address::ZERO,
             avs_directory: alloy_primitives::Address::ZERO,
             rewards_coordinator: alloy_primitives::Address::ZERO,
-            permission_controller: None,
-            allocation_manager: None,
+            permission_controller: alloy_primitives::Address::ZERO,
+            allocation_manager: alloy_primitives::Address::ZERO,
             strategy_address: alloy_primitives::Address::ZERO,
             stake_registry: alloy_primitives::Address::ZERO,
             blueprint_path,
@@ -161,8 +161,8 @@ mod validation_tests {
             delegation_manager: alloy_primitives::Address::ZERO,
             avs_directory: alloy_primitives::Address::ZERO,
             rewards_coordinator: alloy_primitives::Address::ZERO,
-            permission_controller: None,
-            allocation_manager: None,
+            permission_controller: alloy_primitives::Address::ZERO,
+            allocation_manager: alloy_primitives::Address::ZERO,
             strategy_address: alloy_primitives::Address::ZERO,
             stake_registry: alloy_primitives::Address::ZERO,
             blueprint_path,
@@ -201,8 +201,8 @@ mod validation_tests {
             delegation_manager: alloy_primitives::Address::ZERO,
             avs_directory: alloy_primitives::Address::ZERO,
             rewards_coordinator: alloy_primitives::Address::ZERO,
-            permission_controller: None,
-            allocation_manager: None,
+            permission_controller: alloy_primitives::Address::ZERO,
+            allocation_manager: alloy_primitives::Address::ZERO,
             strategy_address: alloy_primitives::Address::ZERO,
             stake_registry: alloy_primitives::Address::ZERO,
             blueprint_path,
@@ -242,8 +242,8 @@ mod validation_tests {
             delegation_manager: alloy_primitives::Address::ZERO,
             avs_directory: alloy_primitives::Address::ZERO,
             rewards_coordinator: alloy_primitives::Address::ZERO,
-            permission_controller: None,
-            allocation_manager: None,
+            permission_controller: alloy_primitives::Address::ZERO,
+            allocation_manager: alloy_primitives::Address::ZERO,
             strategy_address: alloy_primitives::Address::ZERO,
             stake_registry: alloy_primitives::Address::ZERO,
             blueprint_path,
@@ -310,8 +310,8 @@ mod lifecycle_tests {
             delegation_manager: settings.delegation_manager_address,
             avs_directory: settings.avs_directory_address,
             rewards_coordinator: settings.rewards_coordinator_address,
-            permission_controller: Some(settings.permission_controller_address),
-            allocation_manager: Some(settings.allocation_manager_address),
+            permission_controller: settings.permission_controller_address,
+            allocation_manager: settings.allocation_manager_address,
             strategy_address: settings.strategy_address,
             stake_registry: settings.stake_registry_address,
             blueprint_path: blueprint_dir.clone(),
@@ -346,6 +346,14 @@ mod lifecycle_tests {
             .initialize(&env, &ctx, &mut active_blueprints)
             .await;
 
+        println!("Verifying blueprint was spawned");
+        // Verify blueprint was spawned
+        let blueprint_id = registration.blueprint_id();
+        assert!(
+            active_blueprints.contains_key(&blueprint_id),
+            "Blueprint should be spawned"
+        );
+
         println!("De-registering AVS");
         // Cleanup state before assertions
         state_manager
@@ -356,14 +364,6 @@ mod lifecycle_tests {
             init_result.is_ok(),
             "Failed to initialize with native runtime: {:?}",
             init_result.err()
-        );
-
-        println!("Verifying blueprint was spawned");
-        // Verify blueprint was spawned
-        let blueprint_id = registration.blueprint_id();
-        assert!(
-            active_blueprints.contains_key(&blueprint_id),
-            "Blueprint should be spawned"
         );
 
         println!("Verifying the service is running and then shutting it down");
@@ -383,6 +383,12 @@ mod lifecycle_tests {
                 let _ = service.shutdown().await;
             }
         }
+
+        drop(protocol_manager);
+        drop(harness);
+
+        // Cleanup temp manager dirs and any lingering Anvil containers
+        cleanup_manager_tmp_dirs();
     }
 
     /// Test: Container runtime full lifecycle with Kind
@@ -492,7 +498,7 @@ mod lifecycle_tests {
 
         // Step 5: Set up test environment
         let testnet = start_empty_anvil_testnet(true).await;
-        let (harness, accounts) = setup_incredible_squaring_avs_harness(testnet).await;
+        let (harness, accounts) = common::setup_incredible_squaring_avs_harness(testnet).await;
         let env = harness.env().clone();
         let operator_address = get_owner_account(&accounts);
 
@@ -546,6 +552,12 @@ mod lifecycle_tests {
         state_manager
             .deregister(registration.config.service_manager)
             .unwrap();
+
+        drop(protocol_manager);
+        drop(harness);
+
+        // Cleanup temp manager dirs
+        cleanup_manager_tmp_dirs();
 
         println!("✅ Container lifecycle test completed successfully");
         println!("   Note: Full pod spawn test requires BlueprintManagerContext with kube client");

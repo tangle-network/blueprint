@@ -100,6 +100,12 @@ struct BackgroundServices {
     slashing_task: tokio::task::JoinHandle<()>,
 }
 
+// Helper to format address without 0x prefix and handle Option
+fn format_address(addr: &alloy_primitives::Address) -> String {
+    // Use {:x} to format as hex without 0x prefix
+    format!("{:x}", addr)
+}
+
 impl EigenlayerEventHandler {
     /// Create a new EigenLayer event handler
     #[must_use]
@@ -262,57 +268,47 @@ impl EigenlayerEventHandler {
         let eigenlayer_args = vec![
             (
                 "--allocation-manager".to_string(),
-                format!(
-                    "{:?}",
-                    avs_config
-                        .allocation_manager
-                        .unwrap_or(avs_config.strategy_manager)
-                ),
+                format_address(&avs_config.allocation_manager),
             ),
             (
                 "--registry-coordinator".to_string(),
-                format!("{:?}", avs_config.registry_coordinator),
+                format_address(&avs_config.registry_coordinator),
             ),
             (
                 "--operator-state-retriever".to_string(),
-                format!("{:?}", avs_config.operator_state_retriever),
+                format_address(&avs_config.operator_state_retriever),
             ),
             (
                 "--delegation-manager".to_string(),
-                format!("{:?}", avs_config.delegation_manager),
+                format_address(&avs_config.delegation_manager),
             ),
             (
                 "--strategy-manager".to_string(),
-                format!("{:?}", avs_config.strategy_manager),
+                format_address(&avs_config.strategy_manager),
             ),
             (
                 "--service-manager".to_string(),
-                format!("{:?}", avs_config.service_manager),
+                format_address(&avs_config.service_manager),
             ),
             (
                 "--stake-registry".to_string(),
-                format!("{:?}", avs_config.stake_registry),
+                format_address(&avs_config.stake_registry),
             ),
             (
                 "--avs-directory".to_string(),
-                format!("{:?}", avs_config.avs_directory),
+                format_address(&avs_config.avs_directory),
             ),
             (
                 "--rewards-coordinator".to_string(),
-                format!("{:?}", avs_config.rewards_coordinator),
+                format_address(&avs_config.rewards_coordinator),
             ),
             (
                 "--permission-controller".to_string(),
-                format!(
-                    "{:?}",
-                    avs_config
-                        .permission_controller
-                        .unwrap_or(avs_config.delegation_manager)
-                ),
+                format_address(&avs_config.permission_controller),
             ),
             (
                 "--strategy".to_string(),
-                format!("{:?}", avs_config.strategy_address),
+                format_address(&avs_config.strategy_address),
             ),
         ];
 

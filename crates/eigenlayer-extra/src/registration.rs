@@ -94,10 +94,10 @@ pub struct AvsRegistrationConfig {
     pub avs_directory: Address,
     /// Rewards coordinator contract address
     pub rewards_coordinator: Address,
-    /// Permission controller contract address (optional)
-    pub permission_controller: Option<Address>,
-    /// Allocation manager contract address (optional)
-    pub allocation_manager: Option<Address>,
+    /// Permission controller contract address
+    pub permission_controller: Address,
+    /// Allocation manager contract address
+    pub allocation_manager: Address,
     /// Strategy address for staking
     pub strategy_address: Address,
     /// Stake registry address
@@ -534,8 +534,8 @@ mod tests {
             delegation_manager: Address::ZERO,
             avs_directory: Address::ZERO,
             rewards_coordinator: Address::ZERO,
-            permission_controller: None,
-            allocation_manager: None,
+            permission_controller: Address::ZERO,
+            allocation_manager: Address::ZERO,
             strategy_address: Address::ZERO,
             stake_registry: Address::ZERO,
             blueprint_path: PathBuf::from("/nonexistent/path/to/blueprint"),
@@ -566,8 +566,8 @@ mod tests {
             delegation_manager: Address::ZERO,
             avs_directory: Address::ZERO,
             rewards_coordinator: Address::ZERO,
-            permission_controller: None,
-            allocation_manager: None,
+            permission_controller: Address::ZERO,
+            allocation_manager: Address::ZERO,
             strategy_address: Address::ZERO,
             stake_registry: Address::ZERO,
             blueprint_path,
@@ -627,8 +627,8 @@ mod tests {
             delegation_manager: Address::from([5u8; 20]),
             avs_directory: Address::from([6u8; 20]),
             rewards_coordinator: Address::from([7u8; 20]),
-            permission_controller: None,
-            allocation_manager: None,
+            permission_controller: Address::from([8u8; 20]),
+            allocation_manager: Address::from([9u8; 20]),
             strategy_address: Address::from([10u8; 20]),
             stake_registry: Address::from([11u8; 20]),
             blueprint_path: PathBuf::from("/path/to/blueprint"),

@@ -8,7 +8,7 @@ use crate::rt::ResourceLimits;
 use crate::rt::container::ContainerInstance;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_core::error;
-use blueprint_core::{info, warn};
+use blueprint_core::{debug, info, warn};
 use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
 use blueprint_runner::config::BlueprintEnvironment;
 use std::path::{Path, PathBuf};
@@ -334,13 +334,21 @@ impl Service {
             }
             Runtime::Native(instance) => match instance {
                 NativeProcess::NotStarted(info) => {
-                    // TODO: Resource limits
+                    let args = info.arguments.encode(true);
+                    let env_vars = info.env_vars.encode();
+                    
+                    info!(
+                        "Spawning native process: {} with args: {:?}",
+                        info.binary_path.display(),
+                        args
+                    );
+
                     let process_handle = tokio::process::Command::new(&info.binary_path)
                         .kill_on_drop(true)
                         .stdin(std::process::Stdio::null())
                         .current_dir(&std::env::current_dir()?)
-                        .envs(info.env_vars.encode())
-                        .args(info.arguments.encode(true))
+                        .envs(env_vars)
+                        .args(args)
                         .spawn()?;
 
                     let handle =
@@ -424,6 +432,7 @@ fn generate_running_process_status_handle(
     let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<Status>();
     let service_name = service_name.to_string();
 
+    let service_name_clone = service_name.clone();
     let task = async move {
         info!("Starting process execution for {service_name}");
         let _ = status_tx.send(Status::Running);
@@ -439,7 +448,9 @@ fn generate_running_process_status_handle(
 
     let task = async move {
         tokio::select! {
-            _ = abort_rx => {},
+            _ = abort_rx => {
+                info!("Abort signal received for {service_name_clone}");
+            },
             () = task => {},
         }
     };

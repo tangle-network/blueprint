@@ -11,9 +11,10 @@ use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_runner::config::BlueprintEnvironment;
+use blueprint_runner::config::ProtocolSettingsT;
 use color_eyre::Report;
 use color_eyre::eyre::OptionExt;
-use sp_core::{ecdsa, sr25519};
+use sp_core::{ecdsa, sr25519, Pair};
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
@@ -171,9 +172,17 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
-        let sr_key_pub = keystore.first_local::<SpSr25519>()?;
-        let sr_pair = keystore.get_secret::<SpSr25519>(&sr_key_pub)?;
-        let sr_key = TanglePairSigner::new(sr_pair.0);
+        // Only require SR25519 when protocol is tangle; otherwise, use an ephemeral default
+        let sr_key = if env.protocol_settings.protocol_name() == "tangle" {
+            let sr_key_pub = keystore.first_local::<SpSr25519>()?;
+            let sr_pair = keystore.get_secret::<SpSr25519>(&sr_key_pub)?;
+            TanglePairSigner::new(sr_pair.0)
+        } else {
+            // Ephemeral default signer for non-tangle protocols (unused but required by types)
+            let default_sr = sr25519::Pair::from_seed_slice(&[0u8; 32])
+                .map_err(|e| Error::Other(format!("Failed to create default sr25519 pair: {e}")))?;
+            TanglePairSigner::new(default_sr)
+        };
 
         let ecdsa_key_pub = keystore.first_local::<SpEcdsa>()?;
         let ecdsa_pair = keystore.get_secret::<SpEcdsa>(&ecdsa_key_pub)?;

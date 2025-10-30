@@ -52,6 +52,7 @@ thiserror = { workspace = true }
 jsonrpc-core = { workspace = true }
 jsonrpc-http-server = { workspace = true }
 num-bigint = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 
 [dev-dependencies]
 blueprint-sdk = { workspace = true, features = ["testing", "eigenlayer", "evm"] }

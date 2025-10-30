@@ -2,9 +2,13 @@
 ///
 /// This module provides shared helpers to reduce code duplication across test files.
 use alloy_primitives::Address;
+use alloy_primitives::aliases::U96;
 use blueprint_chain_setup::anvil::AnvilTestnet;
 use blueprint_chain_setup::anvil::keys::ANVIL_PRIVATE_KEYS;
 use blueprint_eigenlayer_extra::{AvsRegistrationConfig, RuntimeTarget};
+use eigenlayer_contract_deployer::bindings::core::registry_coordinator::ISlashingRegistryCoordinatorTypes::OperatorSetParam;
+use eigenlayer_contract_deployer::bindings::core::registry_coordinator::IStakeRegistryTypes::StrategyParams;
+use eigenlayer_contract_deployer::bindings::RegistryCoordinator;
 use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use blueprint_testing_utils::eigenlayer::{
@@ -118,8 +122,8 @@ pub fn create_avs_config(
         delegation_manager: settings.delegation_manager_address,
         avs_directory: settings.avs_directory_address,
         rewards_coordinator: settings.rewards_coordinator_address,
-        permission_controller: Some(settings.permission_controller_address),
-        allocation_manager: Some(settings.allocation_manager_address),
+        permission_controller: settings.permission_controller_address,
+        allocation_manager: settings.allocation_manager_address,
         strategy_address: settings.strategy_address,
         stake_registry: settings.stake_registry_address,
         blueprint_path,
@@ -241,6 +245,50 @@ pub async fn setup_incredible_squaring_avs_harness(
     )
     .await
     .unwrap();
+
+    let registry_coordinator =
+        RegistryCoordinator::new(registry_coordinator_address, signer_wallet.clone());
+
+    let operator_set_param = OperatorSetParam {
+        maxOperatorCount: 3,
+        kickBIPsOfOperatorStake: 100,
+        kickBIPsOfTotalStake: 100,
+    };
+    let strategy_params = StrategyParams {
+        strategy: strategy_address,
+        multiplier: U96::from(1),
+    };
+    let minimum_stake = U96::from(0);
+
+    blueprint_core::info!("Attempting to create quorum with strategy: {strategy_address}",);
+
+    let create_quorum_call = registry_coordinator.createTotalDelegatedStakeQuorum(
+        operator_set_param.clone(),
+        minimum_stake,
+        vec![strategy_params],
+    );
+
+    blueprint_core::info!("Sent createTotalDelegatedStakeQuorum transaction");
+
+    match create_quorum_call.send()
+        .await
+        .expect("Failed to send task creation transaction")
+        .get_receipt()
+        .await
+    {
+        Ok(receipt) => {
+            blueprint_core::info!("Created quorum");
+            if !receipt.status() {
+                blueprint_core::error!("Failed to create a new quorum: {:?}", receipt);
+                panic!("Failed to create a new quorum: {:?}", receipt);
+            }
+        }
+        Err(e) => {
+            blueprint_core::error!("Failed to create a new quorum: {:?}", e);
+            panic!("Failed to create a new quorum: {:?}", e);
+        }
+    }
+    
 
     (harness, accounts)
 }
