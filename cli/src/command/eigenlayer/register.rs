@@ -94,11 +94,8 @@ pub async fn register_avs(
     println!("📝 Saving registration to state file...");
 
     // Load or create registration state manager
-    let mut state_manager = RegistrationStateManager::load().unwrap_or_else(|e| {
-        eprintln!("⚠️  Warning: Could not load existing registrations: {}", e);
-        eprintln!("   Creating new registration state file");
-        RegistrationStateManager::load().expect("Failed to create registration state manager")
-    });
+    let mut state_manager = RegistrationStateManager::load_or_create()
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize registration state: {}", e))?;
 
     // Check if already registered
     if let Some(existing) = state_manager.registrations().get(config.service_manager) {

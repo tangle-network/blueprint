@@ -180,11 +180,22 @@ impl AvsRegistrationConfig {
             ));
         }
 
-        // For native binaries, check if it's a file
+        // Check if path is a valid file or directory
         if !self.blueprint_path.is_dir() && !self.blueprint_path.is_file() {
             return Err(format!(
                 "Blueprint path is neither a file nor directory: {}",
                 self.blueprint_path.display()
+            ));
+        }
+
+        // Pre-compiled binaries not yet supported for Native/Hypervisor runtimes
+        if self.blueprint_path.is_file() && self.runtime_target != RuntimeTarget::Container {
+            return Err(format!(
+                "Pre-compiled binaries are not yet supported for {:?} runtime. \
+                Please use one of these options:\n\
+                1. Provide a Rust project directory (containing Cargo.toml)\n\
+                2. Use Container runtime (--runtime container) with a container image",
+                self.runtime_target
             ));
         }
 
@@ -219,15 +230,25 @@ impl AvsRegistrationConfig {
                     );
                 }
 
-                // Validate image format (basic check)
+                // Validate image format
                 if let Some(ref image) = self.container_image {
                     if image.trim().is_empty() {
                         return Err("Container image cannot be empty".to_string());
                     }
-                    // Should have at least image:tag format
-                    if !image.contains(':') {
+
+                    // Validate format: should be "name:tag" or "registry/name:tag"
+                    let parts: Vec<&str> = image.split(':').collect();
+                    if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
+                        return Err(format!(
+                            "Container image must be 'name:tag' or 'registry/name:tag' format (got: '{image}'). \
+                            Example: \"ghcr.io/my-org/my-avs:latest\" or \"my-image:latest\""
+                        ));
+                    }
+
+                    // Check for common mistakes
+                    if parts[0].contains("://") {
                         return Err(
-                            "Container image must include tag. Example: \"my-image:latest\""
+                            "Container image should not include protocol (http:// or https://)"
                                 .to_string(),
                         );
                     }
@@ -332,6 +353,32 @@ impl RegistrationStateManager {
     pub fn load() -> Result<Self, crate::error::Error> {
         let state_file = Self::default_state_file()?;
         Self::load_from_file(&state_file)
+    }
+
+    /// Load registration state from the default location, or create a new empty state if it doesn't exist
+    ///
+    /// This is useful for commands that need to read or create registrations without failing
+    /// when the state file doesn't exist yet (e.g., first-time registration).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if home directory cannot be determined or if directory creation fails
+    pub fn load_or_create() -> Result<Self, crate::error::Error> {
+        match Self::load() {
+            Ok(manager) => Ok(manager),
+            Err(_) => {
+                // Failed to load - create a new empty state
+                let state_file = Self::default_state_file()?;
+                info!(
+                    "Creating new registration state file at {}",
+                    state_file.display()
+                );
+                Ok(Self {
+                    state_file,
+                    registrations: AvsRegistrations::default(),
+                })
+            }
+        }
     }
 
     /// Load registration state from a specific file

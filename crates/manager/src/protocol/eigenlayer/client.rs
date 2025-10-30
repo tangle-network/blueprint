@@ -43,8 +43,15 @@ impl EigenlayerProtocolClient {
 
         info!("EigenLayer client initialized at block {}", current_block);
 
-        // TODO: Get contract addresses from environment or config
-        // For now, we'll poll all logs (empty filter)
+        // TODO(PERFORMANCE - HIGH PRIORITY): Filter logs by AVS contract addresses
+        // GitHub Issue: https://github.com/tangle-network/blueprint/issues/XXX (create this issue)
+        // BLOCKER FOR MAINNET: Currently polls ALL logs from every block - this will cause major
+        // performance degradation on mainnet with high transaction throughput.
+        // Required implementation before mainnet deployment:
+        //   1. Read AVS contract addresses from RegistrationStateManager
+        //   2. Build filter with service_manager addresses from all active registrations
+        //   3. Add filter update mechanism when new AVS registrations are added/removed
+        // For now, we poll all logs (empty filter) - acceptable for testnet only
         let contract_addresses = Vec::new();
 
         Ok(Self {

@@ -94,10 +94,25 @@ pub struct EigenlayerEventHandler {
 
 /// Background services for operator-level monitoring
 struct BackgroundServices {
-    #[allow(dead_code)] // Keep handles alive to prevent task cancellation
+    #[allow(dead_code)] // Will be used when shutdown is wired up
     rewards_task: tokio::task::JoinHandle<()>,
-    #[allow(dead_code)] // Keep handles alive to prevent task cancellation
+    #[allow(dead_code)] // Will be used when shutdown is wired up
     slashing_task: tokio::task::JoinHandle<()>,
+    #[allow(dead_code)] // Will be used when shutdown is wired up
+    shutdown_tx: tokio::sync::broadcast::Sender<()>,
+}
+
+impl BackgroundServices {
+    /// Gracefully shutdown background services
+    #[allow(dead_code)] // Will be wired up in future PR for proper cleanup
+    async fn shutdown(self) {
+        info!("Shutting down EigenLayer background services");
+        // Signal shutdown to both tasks (broadcast to all receivers)
+        let _ = self.shutdown_tx.send(());
+        // Wait for both tasks to complete
+        let _ = tokio::join!(self.rewards_task, self.slashing_task);
+        info!("EigenLayer background services stopped");
+    }
 }
 
 // Helper to format address without 0x prefix and handle Option
@@ -204,30 +219,61 @@ impl EigenlayerEventHandler {
 
         info!("Using AVS blueprint directory at: {}", blueprint_dir);
 
-        // Read blueprint package name from Cargo.toml (not directory name)
-        // This ensures binary name matches what `cargo build --bin` expects
-        let blueprint_name = read_package_name_from_cargo_toml(&registration.config.blueprint_path)
-            .unwrap_or_else(|_| {
-                // Fallback to directory name if Cargo.toml can't be read
-                warn!("Could not read package name from Cargo.toml, using directory name");
-                registration
-                    .config
-                    .blueprint_path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("eigenlayer-blueprint")
-                    .to_string()
-            });
+        // Determine blueprint name based on whether path is a file (binary) or directory (source)
+        let blueprint_name = if registration.config.blueprint_path.is_file() {
+            // Pre-compiled binary - use filename without extension
+            registration
+                .config
+                .blueprint_path
+                .file_stem()
+                .and_then(|n| n.to_str())
+                .unwrap_or("eigenlayer-blueprint")
+                .to_string()
+        } else if registration.config.blueprint_path.is_dir() {
+            // Rust project directory - read package name from Cargo.toml
+            read_package_name_from_cargo_toml(&registration.config.blueprint_path).unwrap_or_else(
+                |_| {
+                    // Fallback to directory name if Cargo.toml can't be read
+                    warn!("Could not read package name from Cargo.toml, using directory name");
+                    registration
+                        .config
+                        .blueprint_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("eigenlayer-blueprint")
+                        .to_string()
+                },
+            )
+        } else {
+            return Err(Error::Other(format!(
+                "Blueprint path must be file or directory: {}",
+                registration.config.blueprint_path.display()
+            )));
+        };
 
-        // Create a test fetcher for the blueprint
-        // TestSourceFetcher will run `cargo build` in the blueprint directory to produce the binary
+        // Create appropriate fetcher based on blueprint path type
         use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
+
+        // Check if path is a pre-compiled binary (not yet supported)
+        if registration.config.blueprint_path.is_file() {
+            // Pre-compiled binary support
+            // TODO: Implement proper binary file fetcher that just copies the file
+            // For now, we reject pre-compiled binaries with a clear error message
+            return Err(Error::Other(format!(
+                "Pre-compiled binary support not yet implemented. \
+                Blueprint path '{}' is a file. \
+                Please provide a path to a Rust project directory containing Cargo.toml, \
+                or use Container runtime with --runtime container and specify a container_image in your config.",
+                registration.config.blueprint_path.display()
+            )));
+        }
+
+        // Rust project directory - use TestSourceFetcher to build it
         let test_fetcher = TestFetcher {
             cargo_package: new_bounded_string(&blueprint_name),
             cargo_bin: new_bounded_string(&blueprint_name),
             base_path: new_bounded_string(blueprint_dir.clone()),
         };
-
         let mut fetcher: Box<DynBlueprintSource<'static>> = {
             let fetcher =
                 TestSourceFetcher::new(test_fetcher.clone(), blueprint_id, blueprint_name.clone());
@@ -246,12 +292,6 @@ impl EigenlayerEventHandler {
             );
             return Err(e.into());
         }
-
-        // Fetch the blueprint binary
-        fetcher.fetch(&cache_dir).await.map_err(|e| {
-            error!("Failed to fetch EigenLayer blueprint binary: {e}");
-            e
-        })?;
 
         // Create runtime directory
         #[allow(clippy::cast_possible_truncation)]
@@ -336,8 +376,11 @@ impl EigenlayerEventHandler {
         // Configure resource limits
         let limits = ResourceLimits::default();
 
-        // Fetch the binary
-        let binary_path = fetcher.fetch(&cache_dir).await?;
+        // Fetch the binary (compile or locate the blueprint binary)
+        let binary_path = fetcher.fetch(&cache_dir).await.map_err(|e| {
+            error!("Failed to fetch EigenLayer blueprint binary: {e}");
+            e
+        })?;
 
         // Spawn the blueprint process using the runtime target from registration config
         let mut service = match registration.config.runtime_target {
@@ -505,55 +548,73 @@ impl EigenlayerEventHandler {
     fn spawn_background_services(env: &BlueprintEnvironment) -> BackgroundServices {
         use blueprint_eigenlayer_extra::{RewardsManager, SlashingMonitor};
 
+        // Create shutdown broadcast channel (supports multiple receivers)
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(2);
+
         // Spawn rewards monitoring task
         let env_clone = env.clone();
+        let mut shutdown_rx = shutdown_tx.subscribe();
         let rewards_task = tokio::spawn(async move {
             let rewards_manager = RewardsManager::new(env_clone);
 
             loop {
-                // Check for claimable rewards every hour
-                match rewards_manager.get_claimable_rewards().await {
-                    Ok(amount) => {
-                        if amount > alloy_primitives::U256::ZERO {
-                            info!("Claimable rewards available: {}", amount);
-                            // TODO: Auto-claim based on threshold configuration
+                tokio::select! {
+                    _ = shutdown_rx.recv() => {
+                        info!("Rewards monitoring task shutting down");
+                        break;
+                    }
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(3600)) => {
+                        // Check for claimable rewards every hour
+                        match rewards_manager.get_claimable_rewards().await {
+                            Ok(amount) => {
+                                if amount > alloy_primitives::U256::ZERO {
+                                    info!("Claimable rewards available: {}", amount);
+                                    // TODO: Auto-claim based on threshold configuration
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to check claimable rewards: {}", e);
+                            }
                         }
                     }
-                    Err(e) => {
-                        error!("Failed to check claimable rewards: {}", e);
-                    }
                 }
-
-                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
             }
         });
 
         // Spawn slashing monitoring task
         let env_clone = env.clone();
+        let mut shutdown_rx = shutdown_tx.subscribe();
         let slashing_task = tokio::spawn(async move {
             let slashing_monitor = SlashingMonitor::new(env_clone);
 
             loop {
-                // Check for slashing events every 5 minutes
-                match slashing_monitor.is_operator_slashed().await {
-                    Ok(is_slashed) => {
-                        if is_slashed {
-                            error!("CRITICAL: Operator has been slashed!");
-                            // TODO: Trigger alert/notification system
+                tokio::select! {
+                    _ = shutdown_rx.recv() => {
+                        info!("Slashing monitoring task shutting down");
+                        break;
+                    }
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
+                        // Check for slashing events every 5 minutes
+                        match slashing_monitor.is_operator_slashed().await {
+                            Ok(is_slashed) => {
+                                if is_slashed {
+                                    error!("CRITICAL: Operator has been slashed!");
+                                    // TODO: Trigger alert/notification system
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to check slashing status: {}", e);
+                            }
                         }
                     }
-                    Err(e) => {
-                        error!("Failed to check slashing status: {}", e);
-                    }
                 }
-
-                tokio::time::sleep(std::time::Duration::from_secs(300)).await;
             }
         });
 
         BackgroundServices {
             rewards_task,
             slashing_task,
+            shutdown_tx,
         }
     }
 
