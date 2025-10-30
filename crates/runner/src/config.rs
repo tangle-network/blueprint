@@ -111,7 +111,7 @@ impl core::str::FromStr for Protocol {
     }
 }
 
-#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub enum ProtocolSettings {
     #[default]
     None,
@@ -642,7 +642,11 @@ impl ContextConfig {
     /// - `chain`: The [`chain`](SupportedChains)
     /// - `protocol`: The [`Protocol`]
     /// - `protocol_settings`: The protocol-specific settings
-    #[allow(clippy::too_many_arguments, clippy::match_wildcard_for_single_variants)]
+    #[allow(
+        clippy::too_many_arguments,
+        clippy::match_wildcard_for_single_variants,
+        clippy::needless_pass_by_value
+    )]
     #[must_use]
     pub fn create_config(
         http_rpc_url: Url,
@@ -657,37 +661,56 @@ impl ContextConfig {
     ) -> Self {
         // Eigenlayer addresses
         #[cfg(feature = "eigenlayer")]
-        let eigenlayer_settings = match protocol_settings {
+        let eigenlayer_settings = match &protocol_settings {
             ProtocolSettings::Eigenlayer(settings) => Some(settings),
             _ => None,
         };
         #[cfg(feature = "eigenlayer")]
-        let allocation_manager = eigenlayer_settings.map(|s| s.allocation_manager_address);
+        let allocation_manager = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.allocation_manager_address);
         #[cfg(feature = "eigenlayer")]
-        let registry_coordinator = eigenlayer_settings.map(|s| s.registry_coordinator_address);
+        let registry_coordinator = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.registry_coordinator_address);
         #[cfg(feature = "eigenlayer")]
-        let operator_state_retriever =
-            eigenlayer_settings.map(|s| s.operator_state_retriever_address);
+        let operator_state_retriever = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.operator_state_retriever_address);
         #[cfg(feature = "eigenlayer")]
-        let delegation_manager = eigenlayer_settings.map(|s| s.delegation_manager_address);
+        let delegation_manager = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.delegation_manager_address);
         #[cfg(feature = "eigenlayer")]
-        let service_manager = eigenlayer_settings.map(|s| s.service_manager_address);
+        let service_manager = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.service_manager_address);
         #[cfg(feature = "eigenlayer")]
-        let stake_registry = eigenlayer_settings.map(|s| s.stake_registry_address);
+        let stake_registry = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.stake_registry_address);
         #[cfg(feature = "eigenlayer")]
-        let strategy_manager = eigenlayer_settings.map(|s| s.strategy_manager_address);
+        let strategy_manager = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.strategy_manager_address);
         #[cfg(feature = "eigenlayer")]
-        let avs_directory = eigenlayer_settings.map(|s| s.avs_directory_address);
+        let avs_directory = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.avs_directory_address);
         #[cfg(feature = "eigenlayer")]
-        let rewards_coordinator = eigenlayer_settings.map(|s| s.rewards_coordinator_address);
+        let rewards_coordinator = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.rewards_coordinator_address);
         #[cfg(feature = "eigenlayer")]
-        let permission_controller = eigenlayer_settings.map(|s| s.permission_controller_address);
+        let permission_controller = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.permission_controller_address);
         #[cfg(feature = "eigenlayer")]
-        let strategy = eigenlayer_settings.map(|s| s.strategy_address);
+        let strategy = eigenlayer_settings.as_ref().map(|s| s.strategy_address);
 
         // Tangle settings
         #[cfg(feature = "tangle")]
-        let tangle_settings = match protocol_settings {
+        let tangle_settings = match &protocol_settings {
             ProtocolSettings::Tangle(settings) => Some(settings),
             _ => None,
         };
@@ -752,6 +775,18 @@ impl ContextConfig {
                 permission_controller,
                 #[cfg(feature = "eigenlayer")]
                 strategy,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_allocation_delay: None,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_deposit_amount: None,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_stake_amount: None,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_operator_sets: None,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_staker_opt_out_window_blocks: None,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_metadata_url: None,
                 #[cfg(feature = "tls")]
                 tls_enabled: false,
                 #[cfg(feature = "tls")]
@@ -1076,7 +1111,38 @@ pub struct BlueprintSettings {
         required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
     )]
     pub strategy: Option<alloy_primitives::Address>,
-    // TLS configuration
+
+    // ========
+    // EIGENLAYER REGISTRATION PARAMETERS
+    // ========
+    #[cfg(feature = "eigenlayer")]
+    /// Allocation delay in blocks (default: 0)
+    #[arg(long, env = "EIGENLAYER_ALLOCATION_DELAY")]
+    pub eigenlayer_allocation_delay: Option<u32>,
+    #[cfg(feature = "eigenlayer")]
+    /// Deposit amount in wei (default: 5000 ether)
+    #[arg(long, env = "EIGENLAYER_DEPOSIT_AMOUNT")]
+    pub eigenlayer_deposit_amount: Option<u128>,
+    #[cfg(feature = "eigenlayer")]
+    /// Stake amount in wei (default: 1 ether)
+    #[arg(long, env = "EIGENLAYER_STAKE_AMOUNT")]
+    pub eigenlayer_stake_amount: Option<u64>,
+    #[cfg(feature = "eigenlayer")]
+    /// Operator sets to register for (comma-separated, default: 0)
+    #[arg(long, env = "EIGENLAYER_OPERATOR_SETS", value_delimiter = ',')]
+    pub eigenlayer_operator_sets: Option<Vec<u32>>,
+    #[cfg(feature = "eigenlayer")]
+    /// Staker opt-out window in blocks (default: 50400)
+    #[arg(long, env = "EIGENLAYER_STAKER_OPT_OUT_WINDOW_BLOCKS")]
+    pub eigenlayer_staker_opt_out_window_blocks: Option<u32>,
+    #[cfg(feature = "eigenlayer")]
+    /// Operator metadata URL
+    #[arg(long, env = "EIGENLAYER_METADATA_URL")]
+    pub eigenlayer_metadata_url: Option<String>,
+
+    // ========
+    // TLS CONFIGURATION
+    // ========
     /// Enable TLS for service registration
     #[cfg(feature = "tls")]
     #[arg(long, env)]
@@ -1193,6 +1259,22 @@ impl Default for BlueprintSettings {
             permission_controller: None,
             #[cfg(feature = "eigenlayer")]
             strategy: None,
+
+            // ========
+            // EIGENLAYER REGISTRATION PARAMETERS
+            // ========
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_allocation_delay: None,
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_deposit_amount: None,
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_stake_amount: None,
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_operator_sets: None,
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_staker_opt_out_window_blocks: None,
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_metadata_url: None,
 
             // ========
             // TLS CONFIGURATION

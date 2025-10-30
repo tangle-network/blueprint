@@ -1,188 +1,121 @@
-use blueprint_core::info;
-use blueprint_manager::sources::{BlueprintArgs, BlueprintEnvVars};
-use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
-use blueprint_std::fs;
-use blueprint_std::path::PathBuf;
-use color_eyre::eyre::{Result, eyre};
-use tokio::io::AsyncBufReadExt;
-use tokio::io::BufReader;
-use tokio::process::{Child, Command};
-use toml::Value;
+use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
+use blueprint_manager::executor::run_blueprint_manager;
+use blueprint_runner::config::{BlueprintEnvironment, SupportedChains};
+use color_eyre::eyre::Result;
+use dialoguer::console::style;
+use indicatif::{ProgressBar, ProgressStyle};
+use std::path::PathBuf;
+use std::time::Duration;
+use tokio::signal;
 
-fn get_binary_name() -> Result<String> {
-    let cargo_toml = fs::read_to_string("Cargo.toml")?;
-    let cargo_data: Value = toml::from_str(&cargo_toml)?;
-
-    // First check for [[bin]] section
-    if let Some(Value::Array(bins)) = cargo_data.get("bin") {
-        if let Some(first_bin) = bins.first() {
-            if let Some(name) = first_bin.get("name").and_then(|n| n.as_str()) {
-                return Ok(name.to_string());
-            }
-        }
-    }
-
-    // If no [[bin]] section, try package name
-    if let Some(package) = cargo_data.get("package") {
-        if let Some(name) = package.get("name").and_then(|n| n.as_str()) {
-            return Ok(name.to_string());
-        }
-    }
-
-    Err(eyre!("Could not find binary name in Cargo.toml"))
-}
-
-/// Run a compiled Eigenlayer AVS binary with the provided options
+/// Run an Eigenlayer AVS using the blueprint manager
+///
+/// This function sets up and runs an EigenLayer AVS using the unified blueprint manager,
+/// which provides consistent process management and lifecycle control across protocols.
+///
+/// # Arguments
+///
+/// * `mut config` - Blueprint environment configuration
+/// * `chain` - The blockchain network to connect to
+/// * `keystore_path` - Optional path to the keystore directory
+/// * `data_dir` - Optional data directory path
+/// * `allow_unchecked_attestations` - Whether to skip binary integrity checks
 ///
 /// # Errors
 ///
-/// * Failed to build the binary (if needed)
-/// * The binary fails to run, for any reason
+/// Returns an error if:
+/// * Eigenlayer protocol settings are missing or invalid
+/// * Failed to create or configure the blueprint manager
+/// * Failed to run the blueprint
 #[allow(clippy::missing_panics_doc)]
 pub async fn run_eigenlayer_avs(
-    config: BlueprintEnvironment,
-    chain: SupportedChains,
-    binary_path: Option<PathBuf>,
-) -> Result<Child> {
-    let binary_path = if let Some(path) = binary_path {
-        path
-    } else {
-        let target_dir = PathBuf::from("./target/release");
-        let binary_name = get_binary_name()?;
-        target_dir.join(&binary_name)
-    };
-
-    println!(
-        "Attempting to run Eigenlayer AVS binary at: {}",
-        binary_path.display()
-    );
-
-    // Build only if binary doesn't exist or no path was provided
-    if !binary_path.exists() {
-        info!("Binary not found at {}, building...", binary_path.display());
-        let status = Command::new("cargo")
-            .arg("build")
-            .arg("--release")
-            .status()
-            .await?;
-
-        if !status.success() {
-            return Err(eyre!("Failed to build AVS binary"));
-        }
+    mut config: BlueprintEnvironment,
+    _chain: SupportedChains,
+    keystore_path: Option<String>,
+    data_dir: Option<PathBuf>,
+    allow_unchecked_attestations: bool,
+) -> Result<()> {
+    // Ensure keystore path is set and absolute
+    if let Some(keystore) = keystore_path {
+        config.keystore_uri = keystore;
     }
+    config.keystore_uri = std::path::absolute(&config.keystore_uri)?
+        .display()
+        .to_string();
 
-    // Get contract addresses
-    let contract_addresses = config
-        .protocol_settings
-        .eigenlayer()
-        .map_err(|_| eyre!("Missing Eigenlayer contract addresses"))?;
+    // Set data directory
+    config.data_dir = data_dir.unwrap_or_else(|| PathBuf::from("./data"));
 
-    // Run the AVS binary with the provided options
-    println!("Starting AVS...");
-    let mut command = Command::new(&binary_path);
-
-    let env = BlueprintEnvVars {
-        http_rpc_endpoint: config.http_rpc_endpoint,
-        ws_rpc_endpoint: config.ws_rpc_endpoint,
-        kms_endpoint: config.kms_url,
-        keystore_uri: config.keystore_uri,
-        data_dir: config.data_dir,
-        blueprint_id: 0,
-        service_id: 0,
-        protocol: Protocol::Eigenlayer,
-        chain: Some(chain),
-        bootnodes: String::new(),
-        registration_mode: false,
-        bridge_socket_path: None,
-    };
-
-    command.envs(env.encode());
-
-    let args = BlueprintArgs {
-        test_mode: false,
-        pretty: false,
-        verbose: 0,
-    };
-
-    command.args(args.encode(true));
-
-    // Optional arguments
-    // TODO: Implement Keystore Password
-    // if let Some(password) = &config.keystore_password {
-    //     command.arg("--keystore-password").arg(password);
-    // }
-
-    // Contract addresses
-    command
-        .arg("--registry-coordinator")
-        .arg(contract_addresses.registry_coordinator_address.to_string())
-        .arg("--operator-state-retriever")
-        .arg(
-            contract_addresses
-                .operator_state_retriever_address
-                .to_string(),
-        )
-        .arg("--delegation-manager")
-        .arg(contract_addresses.delegation_manager_address.to_string())
-        .arg("--strategy-manager")
-        .arg(contract_addresses.strategy_manager_address.to_string())
-        .arg("--service-manager")
-        .arg(contract_addresses.service_manager_address.to_string())
-        .arg("--stake-registry")
-        .arg(contract_addresses.stake_registry_address.to_string())
-        .arg("--avs-directory")
-        .arg(contract_addresses.avs_directory_address.to_string())
-        .arg("--rewards-coordinator")
-        .arg(contract_addresses.rewards_coordinator_address.to_string())
-        .arg("--allocation-manager")
-        .arg(contract_addresses.allocation_manager_address.to_string())
-        .arg("--permission-controller")
-        .arg(contract_addresses.permission_controller_address.to_string())
-        .arg("--strategy")
-        .arg(contract_addresses.strategy_address.to_string());
-
-    assert!(binary_path.exists(), "Binary path does not exist");
-
-    let mut child = command
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()?;
-
-    // Handle stdout
-    let stdout = child.stdout.take().expect("Failed to capture stdout");
-    let mut stdout_reader = BufReader::new(stdout).lines();
-
-    // Handle stderr
-    let stderr = child.stderr.take().expect("Failed to capture stderr");
-    let mut stderr_reader = BufReader::new(stderr).lines();
-
-    // Spawn tasks to handle stdout and stderr
-    let stdout_task = tokio::spawn(async move {
-        while let Some(line) = stdout_reader
-            .next_line()
-            .await
-            .expect("Failed to read stdout")
-        {
-            println!("{}", line);
-        }
-    });
-
-    let stderr_task = tokio::spawn(async move {
-        while let Some(line) = stderr_reader
-            .next_line()
-            .await
-            .expect("Failed to read stderr")
-        {
-            eprintln!("{}", line);
-        }
-    });
-
-    // Wait for both tasks to complete
-    let _ = tokio::join!(stdout_task, stderr_task);
+    // Verify protocol settings are for Eigenlayer
+    let _eigenlayer_settings = config.protocol_settings.eigenlayer()
+        .map_err(|_| color_eyre::eyre::eyre!(
+            "Eigenlayer protocol settings are required. Use --eigenlayer flag or set protocol_settings in config."
+        ))?;
 
     println!(
-        "AVS is running with PID: {}",
-        child.id().unwrap_or_default()
+        "{}",
+        style("Starting EigenLayer AVS via Blueprint Manager")
+            .cyan()
+            .bold()
     );
-    Ok(child)
+
+    // Configure blueprint manager
+    let blueprint_manager_config = BlueprintManagerConfig {
+        paths: Paths {
+            keystore_uri: config.keystore_uri.clone(),
+            data_dir: config.data_dir.clone(),
+            ..Default::default()
+        },
+        verbose: 2,
+        pretty: true,
+        instance_id: Some("EigenLayer-AVS".to_string()),
+        allow_unchecked_attestations,
+        ..Default::default()
+    };
+
+    let ctx = BlueprintManagerContext::new(blueprint_manager_config).await?;
+
+    println!(
+        "{}",
+        style("Preparing EigenLayer AVS to run, this may take a few minutes...").cyan()
+    );
+
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(
+        ProgressStyle::default_spinner()
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
+            .template("{spinner:.blue} {msg}")
+            .unwrap(),
+    );
+    pb.set_message("Initializing EigenLayer AVS");
+    pb.enable_steady_tick(Duration::from_millis(100));
+
+    let shutdown_signal = async move {
+        let _ = signal::ctrl_c().await;
+        println!(
+            "{}",
+            style("Received shutdown signal, stopping EigenLayer AVS")
+                .yellow()
+                .bold()
+        );
+    };
+
+    let mut handle = run_blueprint_manager(ctx, config, shutdown_signal).await?;
+
+    pb.finish_with_message("EigenLayer AVS initialized successfully!");
+
+    println!(
+        "{}",
+        style("Starting EigenLayer AVS execution...").green().bold()
+    );
+    handle.start()?;
+
+    println!(
+        "{}",
+        style("EigenLayer AVS is running. Press Ctrl+C to stop.").cyan()
+    );
+    handle.await?;
+
+    println!("{}", style("EigenLayer AVS has stopped").green());
+    Ok(())
 }

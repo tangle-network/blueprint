@@ -38,10 +38,13 @@ pub trait BlueprintSourceHandler: Send + Sync {
 unsafe impl Send for DynBlueprintSource<'_> {}
 unsafe impl Sync for DynBlueprintSource<'_> {}
 
+#[derive(Clone)]
 pub struct BlueprintArgs {
     pub test_mode: bool,
     pub pretty: bool,
     pub verbose: u8,
+    /// Protocol-specific extra arguments (e.g., EigenLayer contract addresses)
+    pub extra_args: Vec<(String, String)>,
 }
 
 impl BlueprintArgs {
@@ -60,6 +63,7 @@ impl BlueprintArgs {
             test_mode: manager_config.test_mode,
             pretty: manager_config.pretty,
             verbose: manager_config.verbose,
+            extra_args: Vec::new(),
         }
     }
 
@@ -83,10 +87,17 @@ impl BlueprintArgs {
             arguments.push(format!("-{}", "v".repeat(self.verbose as usize)));
         }
 
+        // Add protocol-specific extra arguments (e.g., EigenLayer contract addresses)
+        for (key, value) in &self.extra_args {
+            arguments.push(key.clone());
+            arguments.push(value.clone());
+        }
+
         arguments
     }
 }
 
+#[derive(Clone)]
 pub struct BlueprintEnvVars {
     pub http_rpc_endpoint: Url,
     pub ws_rpc_endpoint: Url,

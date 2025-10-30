@@ -19,14 +19,30 @@ path = "src/main.rs"
 [dependencies]
 blueprint-core = { workspace = true, features = ["tracing"] }
 tracing = { workspace = true }
-blueprint-runner = { workspace = true, features = ["networking", "tangle", "std"] }
+blueprint-runner = { workspace = true, features = ["networking", "tangle", "eigenlayer", "std"] }
 blueprint-clients = { workspace = true, features = ["std", "tangle"] }
 blueprint-crypto = { workspace = true, features = ["std", "tangle-pair-signer"] }
 blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
+blueprint-eigenlayer-extra = { workspace = true, features = ["std"]}
+blueprint-testing-utils = { workspace = true, features = ["tangle", "eigenlayer"] }
+blueprint-chain-setup = { workspace = true, features = ["anvil"] }
 
+# Alloy dependencies for EigenLayer protocol
+alloy-provider = { workspace = true }
+alloy-rpc-types = { workspace = true }
+alloy-transport-http = { workspace = true }
+alloy-primitives = { workspace = true }
+
+# EigenLayer SDK for registration verification
+eigensdk = { workspace = true }
+eigenlayer-contract-deployer = { workspace = true }
+
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
 document-features.workspace = true
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
 docktopus = { workspace = true, features = ["deploy"] }
@@ -35,7 +51,7 @@ color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace",
 tangle-subxt = { workspace = true }
 toml = { workspace = true, features = ["parse", "serde"] }
 hex = { workspace = true }
-tokio = { workspace = true, features = ["process", "io-util", "signal", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "process", "io-util", "signal", "macros"] }
 reqwest = { workspace = true }
 sha2 = { workspace = true }
 futures = { workspace = true }
@@ -51,6 +67,10 @@ hyper-util.workspace = true
 http-body-util.workspace = true
 dirs.workspace = true
 walkdir.workspace = true
+tempfile = { workspace = true }
+rand = { workspace = true }
+rustls = { workspace = true, features = ["aws-lc-rs"] }
+
 
 # Binary extraction
 cargo-dist-schema.workspace = true

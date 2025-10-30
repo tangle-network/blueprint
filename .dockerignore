@@ -1,0 +1,43 @@
+# Rust build artifacts
+target/
+**/target/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node
+node_modules/
+**/node_modules/
+
+# Logs
+*.log
+**/*.log
+
+# Test artifacts
+*.profdata
+*.profraw
+
+# Docker
+Dockerfile
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Temporary files
+*.tmp
+.DS_Store

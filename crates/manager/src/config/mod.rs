@@ -262,14 +262,14 @@ impl BlueprintManagerConfig {
 fn default_cache_dir() -> PathBuf {
     match dirs::cache_dir() {
         Some(dir) => dir.join("blueprint-manager"),
-        None => PathBuf::from("./blueprint-manager-cache"),
+        None => PathBuf::from("./blueprint-manager/cache"),
     }
 }
 
 fn default_runtime_dir() -> PathBuf {
     match dirs::runtime_dir() {
         Some(dir) => dir.join("blueprint-manager"),
-        None => PathBuf::from("/run/blueprint-manager"),
+        None => PathBuf::from("./blueprint-manager/run"),
     }
 }
 

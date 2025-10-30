@@ -14,10 +14,19 @@
 
 ## Overview
 
-Blueprints are Infrastructure-as-Code templates that allow developers to quickly build crypto services. The Blueprint SDK
-comes equipped with a variety of tools, from event listeners and p2p networking to flexible keystores, allowing you to rapidly
-prototype distributed systems. With these tools, developers can get started building anything from oracles to bridge
-security systems, zk prover networks, AI agent orchestration systems. Deploy these applications on the [Tangle Network], [Eigenlayer], or natively.
+The Blueprint SDK is a modular Rust toolkit for building decentralized services—called Blueprints—that run across networks like Tangle, EigenLayer, and standard EVM chains.
+
+Blueprints turn complex on-chain and off-chain infrastructure into reproducible, deployable units of logic—think Infrastructure-as-Code for crypto systems.
+With one SDK, you can design anything from oracles and MPC networks to agent-based AI services or zk-proof markets, and deploy them seamlessly.
+
+The SDK unifies:
+- Job orchestration and routing across async, event-driven systems
+- P2P networking with secure message handling and round-based protocol support
+- Cryptographic primitives and keystore management for signing, verification, and MPC
+- EVM and EigenLayer extensions for direct smart contract and restaking integrations
+- Testing and benchmarking utilities for reproducible environments and performance tuning
+
+In short, Blueprints let developers move from concept to distributed protocol with minimal friction.
 
 We also have a [documentation site](https://docs.tangle.tools/) on all things Tangle to help you get started.
 
