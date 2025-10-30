@@ -25,8 +25,8 @@ if [[ ! -f "$RELEASE_JSON" ]]; then
 fi
 
 # Extract package names from the release-plz JSON output
-# The JSON format is: {"releases": [{"package_name": "...", "version": "...", ...}, ...]}
-if ! packages=$(jq -r '.releases[].package_name' "$RELEASE_JSON" 2>&1); then
+# The GitHub Action outputs the releases array directly: [{"package_name": "...", "version": "...", ...}, ...]
+if ! packages=$(jq -r '.[].package_name' "$RELEASE_JSON" 2>&1); then
     echo "Error: Failed to parse JSON file"
     echo "$packages"
     exit 1
