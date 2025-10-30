@@ -20,6 +20,7 @@ blueprint-keystore = { workspace = true }
 blueprint-crypto = { workspace = true }
 blueprint-qos = { workspace = true }
 blueprint-manager-bridge = { workspace = true, features = ["client"] }
+blueprint-faas = { workspace = true, optional = true }
 blueprint-auth = { workspace = true, optional = true }
 
 futures-core.workspace = true
@@ -27,7 +28,9 @@ futures-util.workspace = true
 tower.workspace = true
 tokio = { workspace = true, features = ["full"] }
 serde.workspace = true
+serde_json.workspace = true
 tracing.workspace = true
+async-trait.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 futures.workspace = true
 thiserror.workspace = true
@@ -116,6 +119,9 @@ eigenlayer = [
 ##
 ## [Symbiotic]: https://symbiotic.fi
 symbiotic = []
+
+## Enable FaaS (Function-as-a-Service) execution support
+faas = ["dep:blueprint-faas"]
 
 [package.metadata.docs.rs]
 all-features = true

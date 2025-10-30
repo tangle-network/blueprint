@@ -1,0 +1,61 @@
+[package]
+name = "blueprint-faas"
+version = "0.1.0-alpha.1"
+description = "FaaS provider integrations for Blueprint SDK"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Core dependencies
+blueprint-core.workspace = true
+
+async-trait.workspace = true
+bytes.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_bytes = "0.11"
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+futures.workspace = true
+
+# HTTP client for custom FaaS
+reqwest = { version = "0.12", features = ["json"], optional = true }
+
+# For creating Lambda deployment packages and DigitalOcean binary encoding
+zip = "2.2"
+base64 = { version = "0.22", optional = true }
+
+# AWS SDK
+aws-config = { version = "1.5", optional = true }
+aws-sdk-lambda = { version = "1.52", optional = true }
+aws-smithy-types = { version = "1.2", optional = true }
+
+# GCP SDK
+gcp_auth = { version = "0.12", optional = true }
+
+# Azure SDK
+azure_core = { version = "0.20", optional = true }
+azure_identity = { version = "0.20", optional = true }
+
+[dev-dependencies]
+serial_test.workspace = true
+tokio = { workspace = true, features = ["full", "test-util"] }
+warp = "0.3"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", features = ["blocking"] }
+
+[features]
+default = ["std"]
+std = ["serde_json/std"]
+aws = ["dep:aws-config", "dep:aws-sdk-lambda", "dep:aws-smithy-types"]
+gcp = ["dep:gcp_auth", "dep:reqwest"]
+azure = ["dep:azure_core", "dep:azure_identity", "dep:reqwest"]
+custom = ["dep:reqwest"]
+digitalocean = ["dep:reqwest", "dep:base64"]
+all = ["aws", "gcp", "azure", "custom", "digitalocean"]

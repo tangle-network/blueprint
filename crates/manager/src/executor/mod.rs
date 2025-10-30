@@ -14,9 +14,13 @@ use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
+#[cfg(feature = "remote-providers")]
+use blueprint_remote_providers::core::resources::ResourceSpec;
 use blueprint_runner::config::BlueprintEnvironment;
 use color_eyre::Report;
 use color_eyre::eyre::OptionExt;
+#[cfg(feature = "remote-providers")]
+use serde_json;
 use sp_core::{ecdsa, sr25519};
 use std::collections::HashMap;
 use std::future::Future;
@@ -28,6 +32,8 @@ use tangle_subxt::subxt::utils::AccountId32;
 use tokio::task::JoinHandle;
 
 pub(crate) mod event_handler;
+#[cfg(feature = "remote-providers")]
+pub(crate) mod remote_provider_integration;
 
 pub struct BlueprintManagerHandle {
     shutdown_call: Option<tokio::sync::oneshot::Sender<()>>,
@@ -177,6 +183,9 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         run_auth_proxy(ctx.data_dir().to_path_buf(), ctx.auth_proxy_opts.clone()).await?;
     ctx.set_db(db).await;
 
+    // TODO: Implement Blueprint Portal observability server (React/TypeScript with Tangle UI components)
+    // See docs/BLUEPRINT_PORTAL_SPEC.md for implementation requirements
+
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
         let sr_key_pub = keystore.first_local::<SpSr25519>()?;
@@ -201,6 +210,12 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let manager_task = async move {
         let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
         let services_client = tangle_client.services_client();
+
+        #[cfg(feature = "remote-providers")]
+        let remote_provider_mgr = {
+            use crate::executor::remote_provider_integration::RemoteProviderManager;
+            RemoteProviderManager::new(&ctx).await?
+        };
 
         // With the basics setup, we must now implement the main logic of the Blueprint Manager
         // Handle initialization logic
@@ -241,6 +256,41 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
                 services_client,
             )
             .await?;
+
+            #[cfg(feature = "remote-providers")]
+            {
+                // Handle remote provider events
+                if let Some(ref mgr) = remote_provider_mgr {
+                    for evt in result.service_initiated {
+                        // Extract resource requirements from the service request using request_id
+                        let resource_spec = match extract_resource_requirements_from_request(
+                            services_client,
+                            event.hash,
+                            evt.request_id,
+                        )
+                        .await
+                        {
+                            Ok(spec) => {
+                                info!(
+                                    "Extracted resource requirements for request {}: {:?}",
+                                    evt.request_id, spec
+                                );
+                                Some(spec)
+                            }
+                            Err(e) => {
+                                warn!(
+                                    "Failed to extract resource requirements for request {}: {}. Using defaults.",
+                                    evt.request_id, e
+                                );
+                                None
+                            }
+                        };
+
+                        mgr.on_service_initiated(evt.blueprint_id, evt.service_id, resource_spec)
+                            .await?;
+                    }
+                }
+            }
         }
 
         Err::<(), _>(Error::ClientDied)
@@ -436,4 +486,100 @@ pub async fn run_auth_proxy(
 
         Ok(())
     }))
+}
+
+/// Extract resource requirements from a service request using the request_id
+#[cfg(feature = "remote-providers")]
+async fn extract_resource_requirements_from_request(
+    services_client: &TangleServicesClient<TangleConfig>,
+    block_hash: tangle_subxt::subxt::utils::H256,
+    request_id: u64,
+) -> Result<ResourceSpec> {
+    // Query the service request from chain storage using request_id
+    let service_request = services_client
+        .query_service_request(block_hash, request_id)
+        .await?
+        .ok_or_else(|| Error::Other(format!("Service request {} not found", request_id)))?;
+
+    info!(
+        "Found service request: blueprint_id={}, args={:?}",
+        service_request.blueprint_id, service_request.args
+    );
+
+    // Parse resource requirements from request args
+    // The customer's paid quote resource specs should be in the request args
+    let resource_spec = parse_resource_spec_from_args(&service_request.args)?;
+
+    Ok(resource_spec)
+}
+
+/// Parse ResourceSpec from service request arguments
+#[cfg(feature = "remote-providers")]
+fn parse_resource_spec_from_args(args: &[u8]) -> Result<ResourceSpec> {
+    // Resource requirements could be encoded in different ways:
+    // 1. As structured JSON in the args
+    // 2. As SCALE-encoded parameters
+    // 3. As predefined resource tiers based on payment amount
+
+    // Try to decode args as JSON first (most common for resource specs)
+    if let Ok(json_str) = std::str::from_utf8(args) {
+        if let Ok(spec) = serde_json::from_str::<ResourceSpec>(json_str) {
+            info!(
+                "Successfully parsed ResourceSpec from JSON args: {:?}",
+                spec
+            );
+            return Ok(spec);
+        }
+
+        // Try to parse as structured arguments with resource fields
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(json_str) {
+            if let Some(resources) = extract_resources_from_json(&value) {
+                info!("Extracted resources from structured JSON: {:?}", resources);
+                return Ok(resources);
+            }
+        }
+    }
+
+    // If args don't contain explicit resource specs, derive from payment amount
+    // This would require integration with pricing engine to reverse-calculate
+    // specs from the amount paid by the customer
+
+    warn!("Could not parse resource requirements from args, using minimal defaults");
+    Ok(ResourceSpec::minimal())
+}
+
+/// Extract resource specifications from JSON value
+#[cfg(feature = "remote-providers")]
+fn extract_resources_from_json(value: &serde_json::Value) -> Option<ResourceSpec> {
+    // Look for common resource specification patterns in the JSON
+    let cpu = value.get("cpu")?.as_f64().unwrap_or(2.0);
+    let memory_gb = value
+        .get("memory_gb")
+        .or_else(|| value.get("memory"))
+        .or_else(|| value.get("ram"))?
+        .as_f64()
+        .unwrap_or(4.0);
+    let storage_gb = value
+        .get("storage_gb")
+        .or_else(|| value.get("disk"))
+        .or_else(|| value.get("storage"))?
+        .as_f64()
+        .unwrap_or(50.0);
+    let gpu_count = value
+        .get("gpu_count")
+        .or_else(|| value.get("gpu"))
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+
+    Some(ResourceSpec {
+        cpu: cpu as f32,
+        memory_gb: memory_gb as f32,
+        storage_gb: storage_gb as f32,
+        gpu_count,
+        allow_spot: value
+            .get("allow_spot")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        qos: blueprint_remote_providers::resources::QosParameters::default(),
+    })
 }

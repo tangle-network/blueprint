@@ -7,11 +7,22 @@ rust-version.workspace = true
 [dependencies]
 blueprint-sdk = { workspace = true, features = ["std", "tangle", "macros"] }
 tokio = { workspace = true, features = ["sync"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_bytes = "0.11"
 
 [dev-dependencies]
-blueprint-sdk = { workspace = true, features = ["testing", "tangle"] }
+blueprint-sdk = { workspace = true, features = ["testing-faas", "tangle"] }
+blueprint-faas = { workspace = true, features = ["custom"] }
+blueprint-profiling = { path = "../../../crates/blueprint-profiling" }
 tokio = { workspace = true, features = ["macros"] }
 color-eyre = { workspace = true }
+serial_test = { workspace = true }
+axum = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+
+[features]
+faas = []
 
 [package.metadata.blueprint]
 manager = { Evm = "ExperimentalBlueprint" }

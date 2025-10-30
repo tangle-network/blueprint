@@ -44,3 +44,4 @@ dirs = "5.0.1"
 [features]
 default = ["tracing"]
 tracing = ["blueprint-core/tracing"]
+faas = ["blueprint-runner/faas", "blueprint-core-testing-utils/faas"]

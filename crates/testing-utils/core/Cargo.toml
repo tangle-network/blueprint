@@ -27,3 +27,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+
+[features]
+faas = ["blueprint-runner/faas"]

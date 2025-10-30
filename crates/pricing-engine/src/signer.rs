@@ -68,10 +68,17 @@ impl<K: KeyType> OperatorSigner<K> {
 
 /// Creates a hash of the quote details for on-chain verification
 pub fn hash_quote_details(quote_details: &pricing_engine::QuoteDetails) -> Result<[u8; 32]> {
+    use tiny_keccak::{Hasher, Keccak};
+
     let on_chain_quote = crate::utils::create_on_chain_quote_type(quote_details)?;
     let serialized = on_chain_quote.encode();
-    let keccak_hash = sp_core::keccak_256(&serialized);
-    Ok(keccak_hash)
+
+    let mut keccak = Keccak::v256();
+    let mut output = [0u8; 32];
+    keccak.update(&serialized);
+    keccak.finalize(&mut output);
+
+    Ok(output)
 }
 
 /// Verify a quote signature by checking the signature against the hash of the quote details.
