@@ -65,7 +65,7 @@ incredible-squaring-blueprint-eigenlayer = { version = "0.1.1", path = "./exampl
 
 # Blueprint utils
 blueprint-manager = { version = "0.3.0-alpha.22", path = "./crates/manager", default-features = false }
-blueprint-manager-bridge = { version = "0.1.0-alpha.8", path = "./crates/manager/bridge", default-features = false }
+blueprint-manager-bridge = { version = "0.1.0-alpha.9", path = "./crates/manager/bridge", default-features = false }
 blueprint-build-utils = { version = "0.1.0-alpha.4", path = "./crates/build-utils", default-features = false }
 blueprint-auth = { version = "0.1.0-alpha.10", path = "./crates/auth", default-features = false }
 
