@@ -139,13 +139,13 @@ tnt-core-bytecode = { version = "0.6.0", default-features = false }
 tangle-subxt = { version = "0.24.0", default-features = false }
 round-based = { version = "0.4.1", default-features = false }
 
-# Substrate dependencies
-sp-core = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2503", default-features = false }
-sp-io = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2503", default-features = false }
-sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2503", default-features = false }
-sp-keystore = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2503", default-features = false }
-sc-keystore = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2503", default-features = false }
-sp-application-crypto = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2503", default-features = false }
+# Substrate dependencies (polkadot-sdk stable2503 - commit f7103db0)
+sp-core = { version = "36.1", default-features = false }
+sp-io = { version = "40.0", default-features = false }
+sp-runtime = { version = "41.1", default-features = false }
+sp-keystore = { version = "0.42", default-features = false }
+sc-keystore = { version = "35.0", default-features = false }
+sp-application-crypto = { version = "40.1", default-features = false }
 scale-info = { version = "2.11", default-features = false }
 parity-scale-codec = { version = "3.7", default-features = false }
 
