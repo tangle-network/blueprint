@@ -5,7 +5,8 @@
 //!
 //! A job ID can be anything that implements `Into<JobId>`, and it is implemented for various primitive types.
 
-use alloc::string::ToString;
+use alloc::string::ToString as _;
+use core::fmt::Write as _;
 
 /// Job Identifier.
 #[derive(Clone, PartialEq, Eq, Hash, Copy)]
@@ -29,7 +30,7 @@ impl core::fmt::Debug for JobId {
 impl core::fmt::Display for JobId {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for limb in self.0.iter() {
-            write!(f, "{:016x}", limb)?;
+            write!(f, "{limb:016x}")?;
         }
         Ok(())
     }
@@ -168,7 +169,7 @@ impl From<JobId> for alloc::string::String {
         let hash: [u8; 32] = value.into();
         let mut result = alloc::string::String::with_capacity(64);
         for byte in hash.iter() {
-            result.push_str(&alloc::format!("{:02x}", byte));
+            let _ = write!(result, "{byte:02x}");
         }
         result
     }

@@ -60,8 +60,7 @@ pub fn run_io_benchmark(_config: &BenchmarkRunConfig) -> Result<IoBenchmarkResul
     let (initial_read_bytes, initial_write_bytes) = utils::get_io_stats()?;
 
     println!(
-        "Initial I/O stats: Read: {} bytes, Write: {} bytes",
-        initial_read_bytes, initial_write_bytes
+        "Initial I/O stats: Read: {initial_read_bytes} bytes, Write: {initial_write_bytes} bytes",
     );
 
     // Clean up any existing test files first to ensure a clean state
@@ -80,19 +79,13 @@ pub fn run_io_benchmark(_config: &BenchmarkRunConfig) -> Result<IoBenchmarkResul
     // Get final I/O stats for logging purposes
     let (final_read_bytes, final_write_bytes) = utils::get_io_stats()?;
 
-    println!(
-        "Final I/O stats: Read: {} bytes, Write: {} bytes",
-        final_read_bytes, final_write_bytes
-    );
+    println!("Final I/O stats: Read: {final_read_bytes} bytes, Write: {final_write_bytes} bytes",);
 
     // Calculate I/O in MB from system stats (for logging only)
     let read_mb = (final_read_bytes - initial_read_bytes) as f32 / 1024.0 / 1024.0;
     let write_mb = (final_write_bytes - initial_write_bytes) as f32 / 1024.0 / 1024.0;
 
-    println!(
-        "I/O benchmark completed: Read: {:.2} MB, Write: {:.2} MB",
-        read_mb, write_mb
-    );
+    println!("I/O benchmark completed: Read: {read_mb:.2} MB, Write: {write_mb:.2} MB",);
 
     // Log detailed benchmark results
     println!("I/O benchmark details:");
@@ -119,7 +112,7 @@ pub fn run_io_benchmark(_config: &BenchmarkRunConfig) -> Result<IoBenchmarkResul
 fn run_comprehensive_io_benchmark() -> Result<IoBenchmarkResult> {
     // Create test directory if it doesn't exist
     std::fs::create_dir_all(DEFAULT_TEST_DIR)
-        .map_err(|e| PricingError::Benchmark(format!("Failed to create test directory: {}", e)))?;
+        .map_err(|e| PricingError::Benchmark(format!("Failed to create test directory: {e}")))?;
 
     // Prepare test files
     prepare_test_files()?;
@@ -148,7 +141,7 @@ fn prepare_test_files() -> Result<()> {
 
     // Create test directory if it doesn't exist
     std::fs::create_dir_all(DEFAULT_TEST_DIR)
-        .map_err(|e| PricingError::Benchmark(format!("Failed to create test directory: {}", e)))?;
+        .map_err(|e| PricingError::Benchmark(format!("Failed to create test directory: {e}")))?;
 
     for i in 0..num_files {
         let file_path = get_test_file_path(i);
@@ -161,7 +154,7 @@ fn prepare_test_files() -> Result<()> {
         // Create the file
         let mut file = options
             .open(&file_path)
-            .map_err(|e| PricingError::Benchmark(format!("Failed to create test file: {}", e)))?;
+            .map_err(|e| PricingError::Benchmark(format!("Failed to create test file: {e}")))?;
 
         let blocks_per_file = file_size / block_size as u64;
 
@@ -174,7 +167,7 @@ fn prepare_test_files() -> Result<()> {
             fill_buffer(&mut buffer, offset);
 
             file.write_all(&buffer).map_err(|e| {
-                PricingError::Benchmark(format!("Failed to write to test file: {}", e))
+                PricingError::Benchmark(format!("Failed to write to test file: {e}"))
             })?;
 
             // Only sync occasionally to improve performance
@@ -219,8 +212,7 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
         let file_path = get_test_file_path(i);
         if !file_path.exists() {
             return Err(PricingError::Benchmark(format!(
-                "Test file does not exist: {:?}",
-                file_path
+                "Test file does not exist: {file_path:?}",
             )));
         }
     }
@@ -236,7 +228,7 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
 
         let file = options
             .open(&file_path)
-            .map_err(|e| PricingError::Benchmark(format!("Failed to open test file: {}", e)))?;
+            .map_err(|e| PricingError::Benchmark(format!("Failed to open test file: {e}")))?;
         files.push(file);
     }
 
@@ -254,7 +246,7 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
                 // Sequential write
                 for file in &mut files {
                     file.seek(SeekFrom::Start(0))
-                        .map_err(|e| PricingError::Benchmark(format!("Failed to seek: {}", e)))?;
+                        .map_err(|e| PricingError::Benchmark(format!("Failed to seek: {e}")))?;
 
                     let blocks_per_file = file_size / block_size as u64;
                     let mut sync_counter = 0;
@@ -266,7 +258,7 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
 
                         let write_start = Instant::now();
                         file.write_all(&buffer).map_err(|e| {
-                            PricingError::Benchmark(format!("Failed to write: {}", e))
+                            PricingError::Benchmark(format!("Failed to write: {e}"))
                         })?;
 
                         // Only sync occasionally to improve performance
@@ -291,7 +283,7 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
                 // Sequential read
                 for file in &mut files {
                     file.seek(SeekFrom::Start(0))
-                        .map_err(|e| PricingError::Benchmark(format!("Failed to seek: {}", e)))?;
+                        .map_err(|e| PricingError::Benchmark(format!("Failed to seek: {e}")))?;
 
                     let blocks_per_file = file_size / block_size as u64;
 
@@ -572,7 +564,7 @@ fn cleanup_test_files() -> Result<()> {
 
 /// Get the path for a test file
 fn get_test_file_path(index: usize) -> PathBuf {
-    Path::new(DEFAULT_TEST_DIR).join(format!("{}_{}", DEFAULT_FILE_PREFIX, index))
+    Path::new(DEFAULT_TEST_DIR).join(format!("{DEFAULT_FILE_PREFIX}_{index}"))
 }
 
 /// Fill a buffer with random data and embed checksum and offset

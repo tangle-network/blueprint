@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.13](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-extra-v0.1.0-alpha.12...blueprint-eigenlayer-extra-v0.1.0-alpha.13) - 2025-10-02
+
+### Other
+
+- bump eigensdk & alloy version (#1164)
+
+## [0.1.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-extra-v0.1.0-alpha.11...blueprint-eigenlayer-extra-v0.1.0-alpha.12) - 2025-08-11
+
+### Other
+
+- updated the following local packages: blueprint-core, blueprint-evm-extra
+
+## [0.1.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-extra-v0.1.0-alpha.10...blueprint-eigenlayer-extra-v0.1.0-alpha.11) - 2025-08-06
+
+### Other
+
+- updated the following local packages: blueprint-crypto-bn254
+
 ## [0.1.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-extra-v0.1.0-alpha.9...blueprint-eigenlayer-extra-v0.1.0-alpha.10) - 2025-07-07
 
 ### Other

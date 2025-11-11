@@ -44,8 +44,22 @@ jobs:
           cargo hakari remove-deps -y
 
       - uses: ./.github/actions/free-disk-space
-      - name: Run release-plz
+      - name: Run release-plz (creates tags & releases, but doesn't publish)
+        id: release-plz
         uses: release-plz/action@v0.5
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Save release output for batch publishing
+        if: steps.release-plz.outputs.releases_created == 'true'
+        run: |
+          echo '${{ steps.release-plz.outputs.releases }}' > release-output.json
+          cat release-output.json
+
+      - name: Batch publish to crates.io (with rate limiting)
+        if: steps.release-plz.outputs.releases_created == 'true'
+        run: |
+          ./.github/scripts/batch-publish.sh release-output.json
+        env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

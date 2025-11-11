@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-manager"
-version = "0.3.0-alpha.17"
+version = "0.3.0-alpha.23"
 description = "Tangle Blueprint manager and Runner"
 authors.workspace = true
 edition.workspace = true
@@ -18,28 +18,44 @@ path = "src/main.rs"
 
 [dependencies]
 blueprint-core = { workspace = true, features = ["tracing"] }
-blueprint-runner = { workspace = true, features = ["networking", "tangle", "std"] }
+tracing = { workspace = true }
+blueprint-runner = { workspace = true, features = ["networking", "tangle", "eigenlayer", "std"] }
 blueprint-clients = { workspace = true, features = ["std", "tangle"] }
 blueprint-crypto = { workspace = true, features = ["std", "tangle-pair-signer"] }
 blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
+blueprint-eigenlayer-extra = { workspace = true, features = ["std"]}
+blueprint-testing-utils = { workspace = true, features = ["tangle", "eigenlayer"] }
+blueprint-chain-setup = { workspace = true, features = ["anvil"] }
 
+# Alloy dependencies for EigenLayer protocol
+alloy-provider = { workspace = true }
+alloy-rpc-types = { workspace = true }
+alloy-transport-http = { workspace = true }
+alloy-primitives = { workspace = true }
+
+# EigenLayer SDK for registration verification
+eigensdk = { workspace = true }
+eigenlayer-contract-deployer = { workspace = true }
+
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
 document-features.workspace = true
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
 docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace", "issue-url"] }
 tangle-subxt = { workspace = true }
-toml = { workspace = true, features = ["parse"] }
+toml = { workspace = true, features = ["parse", "serde"] }
 hex = { workspace = true }
-tokio = { workspace = true, features = ["process", "io-util", "signal", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "process", "io-util", "signal", "macros"] }
 reqwest = { workspace = true }
 sha2 = { workspace = true }
 futures = { workspace = true }
 thiserror.workspace = true
-tracing = { workspace = true, features = ["log"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "ansi", "tracing-log"] }
 auto_impl = { workspace = true }
 dynosaur = { workspace = true }
@@ -51,6 +67,10 @@ hyper-util.workspace = true
 http-body-util.workspace = true
 dirs.workspace = true
 walkdir.workspace = true
+tempfile = { workspace = true }
+rand = { workspace = true }
+rustls = { workspace = true, features = ["aws-lc-rs"] }
+
 
 # Binary extraction
 cargo-dist-schema.workspace = true
@@ -63,6 +83,11 @@ fatfs = { workspace = true, features = ["std"], optional = true }
 nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"], optional = true }
 capctl = { workspace = true, features = ["std"], optional = true }
 
+# TEE
+kube = { workspace = true, features = ["client", "rustls-tls"], optional = true }
+k8s-openapi = { workspace = true, features = ["latest"], optional = true }
+local-ip-address.workspace = true
+
 ## Networking
 rtnetlink = { workspace = true, features = ["tokio_socket"], optional = true }
 ipnet = { workspace = true, optional = true }
@@ -70,14 +95,25 @@ netdev = { workspace = true, features = ["gateway"], optional = true }
 nftables = { workspace = true, optional = true }
 
 [features]
-default = ["vm-sandbox"]
+default = []
 
 ## Enable the VM sandbox
 ##
 ## **NOTE**: This is only supported on Linux
 ##
-## Enabling this will also add additional CLI arguments: `--no-vm`, `--network-interface`, and `--default-address-pool`
+## Enabling this will also add additional CLI options: `--no-vm`, `--network-interface`, and `--default-address-pool`
 vm-sandbox = ["dep:cloud-hypervisor-client", "dep:fatfs", "dep:nix", "dep:capctl", "dep:rtnetlink", "dep:ipnet", "dep:netdev", "dep:nftables"]
+
+## Enable TEE (Trusted Execution Environment) support
+tee = ["blueprint-runner/tee"]
+
+## Enable containerized blueprints through [Kubernetes] and [kata-containers]
+##
+## Enabling this will also add additional CLI options:
+##
+## [kubernetes]: https://kubernetes.io/
+## [kata-containers]: https://katacontainers.io/
+containers = ["dep:kube", "dep:k8s-openapi"]
 
 [package.metadata.dist]
 dist = false

@@ -41,7 +41,7 @@ impl core::fmt::Display for ResourceUnit {
             ResourceUnit::Invocation => write!(f, "Invocation"),
             ResourceUnit::ExecutionTimeMS => write!(f, "ExecutionTimeMS"),
             ResourceUnit::StorageIOPS => write!(f, "StorageIOPS"),
-            ResourceUnit::Custom(name) => write!(f, "{}", name),
+            ResourceUnit::Custom(name) => write!(f, "{name}"),
         }
     }
 }

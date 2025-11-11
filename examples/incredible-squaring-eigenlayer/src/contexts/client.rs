@@ -28,7 +28,7 @@ pub struct AggregatorClient {
 impl AggregatorClient {
     /// Creates a new AggregatorClient
     pub fn new(aggregator_address: &str) -> Result<Self> {
-        let url = Url::parse(&format!("http://{}", aggregator_address))?;
+        let url = Url::parse(&format!("http://{aggregator_address}"))?;
         let client = ReqwestClient::new_http(url);
         Ok(Self { client })
     }

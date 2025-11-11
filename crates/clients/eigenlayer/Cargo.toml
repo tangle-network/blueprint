@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-client-eigenlayer"
-version = "0.1.0-alpha.15"
+version = "0.1.0-alpha.20"
 description = "Eigenlayer client for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -28,7 +28,6 @@ eigensdk = { workspace = true, features = [
 	"common",
 	"client-avsregistry",
 	"client-elcontracts",
-	"logging",
 	"services-blsaggregation",
 	"services-operatorsinfo",
 	"services-avsregistry",

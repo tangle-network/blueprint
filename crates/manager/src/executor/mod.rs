@@ -1,36 +1,26 @@
-use crate::blueprint::ActiveBlueprints;
-use crate::config::{AuthProxyOpts, BlueprintManagerConfig};
+use crate::config::{AuthProxyOpts, BlueprintManagerContext};
 use crate::error::Error;
 use crate::error::Result;
 #[cfg(feature = "vm-sandbox")]
-use crate::rt::hypervisor::{
-    self,
-    net::{self, NetworkManager},
-};
+use crate::rt::hypervisor::net;
 use crate::sdk::entry::SendFuture;
 use blueprint_auth::db::RocksDb;
-use blueprint_clients::tangle::EventsClient;
-use blueprint_clients::tangle::client::{TangleClient, TangleConfig};
-use blueprint_clients::tangle::services::{RpcServicesWithBlueprint, TangleServicesClient};
-use blueprint_core::{error, info, warn};
+use blueprint_core::{error, info};
 use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
 use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_runner::config::BlueprintEnvironment;
+use blueprint_runner::config::ProtocolSettingsT;
 use color_eyre::Report;
 use color_eyre::eyre::OptionExt;
-use sp_core::{ecdsa, sr25519};
+use sp_core::{Pair, ecdsa, sr25519};
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tangle_subxt::subxt::tx::Signer;
-use tangle_subxt::subxt::utils::AccountId32;
 use tokio::task::JoinHandle;
-
-pub(crate) mod event_handler;
 
 pub struct BlueprintManagerHandle {
     shutdown_call: Option<tokio::sync::oneshot::Sender<()>>,
@@ -137,20 +127,6 @@ impl Future for BlueprintManagerHandle {
     }
 }
 
-#[cfg(feature = "vm-sandbox")]
-async fn vm_prep(manager_config: &mut BlueprintManagerConfig) -> Result<(NetworkManager, String)> {
-    let ret = net::init_manager_config(manager_config).await?;
-
-    if manager_config.no_vm {
-        info!("Skipping VM image check, running in no-vm mode");
-    } else {
-        info!("Checking for VM images");
-        hypervisor::images::download_image_if_needed(&manager_config.cache_dir).await?;
-    }
-
-    Ok(ret)
-}
-
 /// Run the blueprint manager with the given configuration
 ///
 /// # Arguments
@@ -173,12 +149,12 @@ async fn vm_prep(manager_config: &mut BlueprintManagerConfig) -> Result<(Network
 /// * If the SR25519 or ECDSA keypair cannot be found
 #[allow(clippy::used_underscore_binding)]
 pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
-    #[allow(unused_mut)] mut blueprint_manager_config: BlueprintManagerConfig,
+    #[allow(unused_mut)] mut ctx: BlueprintManagerContext,
     keystore: Keystore,
     env: BlueprintEnvironment,
     shutdown_cmd: F,
 ) -> color_eyre::Result<BlueprintManagerHandle> {
-    let logger_id = if let Some(custom_id) = &blueprint_manager_config.instance_id {
+    let logger_id = if let Some(custom_id) = &ctx.instance_id {
         custom_id.as_str()
     } else {
         "Local"
@@ -189,23 +165,24 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let _span = span.enter();
     info!("Starting blueprint manager ... waiting for start signal ...");
 
-    blueprint_manager_config.verify_directories_exist()?;
-
-    #[cfg(feature = "vm-sandbox")]
-    let (network_manager, network_interface) = vm_prep(&mut blueprint_manager_config).await?;
-
     // Create the auth proxy task
-    let (db, auth_proxy_task) = run_auth_proxy(
-        blueprint_manager_config.data_dir.clone(),
-        blueprint_manager_config.auth_proxy_opts.clone(),
-    )
-    .await?;
+    let (db, auth_proxy_task) =
+        run_auth_proxy(ctx.data_dir().to_path_buf(), ctx.auth_proxy_opts.clone()).await?;
+    ctx.set_db(db).await;
 
     // TODO: Actual error handling
     let (tangle_key, ecdsa_key) = {
-        let sr_key_pub = keystore.first_local::<SpSr25519>()?;
-        let sr_pair = keystore.get_secret::<SpSr25519>(&sr_key_pub)?;
-        let sr_key = TanglePairSigner::new(sr_pair.0);
+        // Only require SR25519 when protocol is tangle; otherwise, use an ephemeral default
+        let sr_key = if env.protocol_settings.protocol_name() == "tangle" {
+            let sr_key_pub = keystore.first_local::<SpSr25519>()?;
+            let sr_pair = keystore.get_secret::<SpSr25519>(&sr_key_pub)?;
+            TanglePairSigner::new(sr_pair.0)
+        } else {
+            // Ephemeral default signer for non-tangle protocols (unused but required by types)
+            let default_sr = sr25519::Pair::from_seed_slice(&[0u8; 32])
+                .map_err(|e| Error::Other(format!("Failed to create default sr25519 pair: {e}")))?;
+            TanglePairSigner::new(default_sr)
+        };
 
         let ecdsa_key_pub = keystore.first_local::<SpEcdsa>()?;
         let ecdsa_pair = keystore.get_secret::<SpEcdsa>(&ecdsa_key_pub)?;
@@ -214,62 +191,27 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         (sr_key, ecdsa_key)
     };
 
-    let sub_account_id = tangle_key.account_id().clone();
-
     let mut active_blueprints = HashMap::new();
 
     let keystore_uri = env.keystore_uri.clone();
+    #[cfg(feature = "vm-sandbox")]
+    let network_interface = ctx.vm.network_interface.clone();
 
     let manager_task = async move {
-        let tangle_client = TangleClient::with_keystore(env.clone(), keystore).await?;
-        let services_client = tangle_client.services_client();
+        // Protocol abstraction: routes to Tangle or EigenLayer based on env.protocol_settings
+        let protocol_type: crate::protocol::ProtocolType = (&env.protocol_settings).into();
+        info!(
+            "Initializing blueprint manager for protocol: {:?}",
+            protocol_type
+        );
 
-        // With the basics setup, we must now implement the main logic of the Blueprint Manager
-        // Handle initialization logic
-        // NOTE: The node running this code should be registered as an operator for the blueprints, otherwise, this
-        // code will fail
-        let mut operator_subscribed_blueprints = handle_init(
-            &tangle_client,
-            services_client,
-            &sub_account_id,
-            &mut active_blueprints,
-            &env,
-            &blueprint_manager_config,
-            db.clone(),
-            #[cfg(feature = "vm-sandbox")]
-            network_manager.clone(),
-        )
-        .await?;
+        let mut protocol_manager =
+            crate::protocol::ProtocolManager::new(protocol_type, env.clone(), &ctx).await?;
 
-        // Now, run the main event loop
-        // Listen to FinalityNotifications and poll for new/deleted services that correspond to the blueprints above
-        while let Some(event) = tangle_client.next_event().await {
-            let result = event_handler::check_blueprint_events(
-                &event,
-                &mut active_blueprints,
-                &sub_account_id.clone(),
-            );
-
-            if result.needs_update {
-                operator_subscribed_blueprints = services_client
-                    .query_operator_blueprints(event.hash, sub_account_id.clone())
-                    .await?;
-            }
-
-            event_handler::handle_tangle_event(
-                &event,
-                &operator_subscribed_blueprints,
-                &env,
-                db.clone(),
-                &blueprint_manager_config,
-                &mut active_blueprints,
-                result,
-                services_client,
-                #[cfg(feature = "vm-sandbox")]
-                network_manager.clone(),
-            )
+        // Run the protocol event loop
+        protocol_manager
+            .run(&env, &ctx, &mut active_blueprints)
             .await?;
-        }
 
         Err::<(), _>(Error::ClientDied)
     };
@@ -351,77 +293,17 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 /// * If the SR25519 or ECDSA keypair cannot be found
 #[allow(clippy::used_underscore_binding)]
 pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
-    blueprint_manager_config: BlueprintManagerConfig,
+    ctx: BlueprintManagerContext,
     env: BlueprintEnvironment,
     shutdown_cmd: F,
 ) -> color_eyre::Result<BlueprintManagerHandle> {
     run_blueprint_manager_with_keystore(
-        blueprint_manager_config,
+        ctx,
         Keystore::new(KeystoreConfig::new().fs_root(&env.keystore_uri))?,
         env,
         shutdown_cmd,
     )
     .await
-}
-
-/// * Query to get Vec<RpcServicesWithBlueprint>
-/// * For each `RpcServicesWithBlueprint`, fetch the associated blueprint binary (fetch/download)
-///   -> If the services field is empty, just emit and log inside the executed binary "that states a new service instance got created by one of these blueprints"
-///   -> If the services field is not empty, for each service in RpcServicesWithBlueprint.services, spawn the blueprint binary, using params to set the job type to listen to (in terms of our old language, each spawned service represents a single "`RoleType`")
-#[allow(clippy::too_many_arguments)]
-async fn handle_init(
-    tangle_runtime: &TangleClient,
-    services_client: &TangleServicesClient<TangleConfig>,
-    sub_account_id: &AccountId32,
-    active_blueprints: &mut ActiveBlueprints,
-    blueprint_env: &BlueprintEnvironment,
-    blueprint_manager_config: &BlueprintManagerConfig,
-    db: RocksDb,
-    #[cfg(feature = "vm-sandbox")] network_manager: NetworkManager,
-) -> Result<Vec<RpcServicesWithBlueprint>> {
-    info!("Beginning initialization of Blueprint Manager");
-
-    let Some(init_event) = tangle_runtime.next_event().await else {
-        return Err(Error::InitialBlock);
-    };
-
-    let maybe_operator_subscribed_blueprints = services_client
-        .query_operator_blueprints(init_event.hash, sub_account_id.clone())
-        .await;
-
-    let operator_subscribed_blueprints =
-        maybe_operator_subscribed_blueprints.unwrap_or_else(|err| {
-            warn!(
-                "Failed to query operator blueprints: {}, did you register as an operator?",
-                err
-            );
-            Vec::new()
-        });
-
-    info!(
-        "Received {} initial blueprints this operator is registered to",
-        operator_subscribed_blueprints.len()
-    );
-
-    // Immediately poll, handling the initial state
-    let poll_result =
-        event_handler::check_blueprint_events(&init_event, active_blueprints, sub_account_id);
-
-    event_handler::handle_tangle_event(
-        &init_event,
-        &operator_subscribed_blueprints,
-        blueprint_env,
-        db.clone(),
-        blueprint_manager_config,
-        active_blueprints,
-        poll_result,
-        services_client,
-        #[cfg(feature = "vm-sandbox")]
-        network_manager,
-    )
-    .await?;
-
-    Ok(operator_subscribed_blueprints)
 }
 
 /// Runs the authentication proxy server.

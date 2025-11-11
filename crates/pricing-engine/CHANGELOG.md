@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.2.4...blueprint-pricing-engine-v0.2.5) - 2025-10-02
+
+### Other
+
+- logging import cleanup (#1153)
+
+## [0.2.4](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.2.3...blueprint-pricing-engine-v0.2.4) - 2025-08-11
+
+### Fixed
+
+- *(ci)* fix Clippy & build issues (#1125)
+
+## [0.2.3](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.2.2...blueprint-pricing-engine-v0.2.3) - 2025-08-06
+
+### Added
+
+- standalone auth proxy (#1103)
+
 ## [0.2.2](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.2.1...blueprint-pricing-engine-v0.2.2) - 2025-07-07
 
 ### Other

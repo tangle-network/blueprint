@@ -539,7 +539,7 @@ impl NodeConfig {
 
         // Add target-specific levels
         for (target, level) in &self.log_targets {
-            parts.push(format!("{}={}", target, level));
+            parts.push(format!("{target}={level}"));
         }
 
         parts.join(",")

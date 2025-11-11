@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-crypto-sr25519-v0.1.0-alpha.9...blueprint-crypto-sr25519-v0.1.0-alpha.10) - 2025-10-02
+
+### Other
+
+- updated the following local packages: blueprint-crypto-core
+
+## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-crypto-sr25519-v0.1.0-alpha.8...blueprint-crypto-sr25519-v0.1.0-alpha.9) - 2025-08-11
+
+### Fixed
+
+- *(ci)* fix Clippy & build issues (#1125)
+
+## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-crypto-sr25519-v0.1.0-alpha.7...blueprint-crypto-sr25519-v0.1.0-alpha.8) - 2025-08-06
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-crypto-sr25519-v0.1.0-alpha.6...blueprint-crypto-sr25519-v0.1.0-alpha.7) - 2025-06-16
 
 ### Other

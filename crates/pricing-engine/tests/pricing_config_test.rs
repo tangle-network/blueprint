@@ -90,8 +90,7 @@ async fn test_default_pricing_config() -> Result<()> {
 
         assert!(
             resource.is_some(),
-            "Resource type {:?} should be present",
-            expected_type
+            "Resource type {expected_type:?} should be present",
         );
     }
 

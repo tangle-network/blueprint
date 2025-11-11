@@ -149,8 +149,7 @@ impl PricingEngine for PricingEngineService {
                     blueprint_id
                 );
                 return Err(Status::not_found(format!(
-                    "No benchmark profile found for blueprint ID: {}",
-                    blueprint_id
+                    "No benchmark profile found for blueprint ID: {blueprint_id}"
                 )));
             }
         };

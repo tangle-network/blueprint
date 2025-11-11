@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.23](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.22...blueprint-manager-v0.3.0-alpha.23) - 2025-11-03
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.3.0-alpha.22](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.21...blueprint-manager-v0.3.0-alpha.22) - 2025-10-30
+
+### Other
+
+- Add Eigenlayer CLI commands and integrate with blueprint manager (#1193)
+
+## [0.3.0-alpha.21](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.20...blueprint-manager-v0.3.0-alpha.21) - 2025-10-02
+
+### Added
+
+- *(auth)* add mTLS support for authenticated proxy (#1156)
+
+### Other
+
+- bump eigensdk & alloy version (#1164)
+- logging import cleanup (#1153)
+
+## [0.3.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.19...blueprint-manager-v0.3.0-alpha.20) - 2025-08-20
+
+### Added
+
+- *(manager)* [**breaking**] add optional container source support (#1085)
+
+## [0.3.0-alpha.19](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.18...blueprint-manager-v0.3.0-alpha.19) - 2025-08-11
+
+### Fixed
+
+- *(ci)* fix Clippy & build issues (#1125)
+
+## [0.3.0-alpha.18](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.17...blueprint-manager-v0.3.0-alpha.18) - 2025-08-06
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.3.0-alpha.17](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.16...blueprint-manager-v0.3.0-alpha.17) - 2025-07-07
 
 ### Other

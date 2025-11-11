@@ -1,9 +1,15 @@
 #![allow(unused_variables, unreachable_code)]
 
+#[cfg(feature = "tls")]
+use std::path::Path;
 use std::path::PathBuf;
 
 use crate::error::ConfigError;
 use alloc::string::{String, ToString};
+#[cfg(feature = "tls")]
+use blueprint_auth::models::TlsProfile;
+#[cfg(feature = "tls")]
+use blueprint_auth::tls_envelope::{TlsEnvelope, TlsEnvelopeKey};
 #[cfg(feature = "std")]
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_manager_bridge::client::Bridge;
@@ -105,7 +111,7 @@ impl core::str::FromStr for Protocol {
     }
 }
 
-#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub enum ProtocolSettings {
     #[default]
     None,
@@ -237,6 +243,10 @@ pub struct BlueprintEnvironment {
     #[serde(skip)]
     bridge: Arc<Mutex<Option<Arc<Bridge>>>>,
 
+    /// KMS HTTP endpoint
+    #[cfg(feature = "tee")]
+    pub kms_url: Url,
+
     #[cfg(feature = "networking")]
     pub bootnodes: Vec<Multiaddr>,
     /// The port to bind the network to
@@ -250,6 +260,10 @@ pub struct BlueprintEnvironment {
     /// The target number of peers to connect to
     #[cfg(feature = "networking")]
     pub target_peer_count: u32,
+
+    // TLS configuration
+    #[cfg(feature = "tls")]
+    pub tls_profile: Option<TlsProfile>,
 }
 
 impl Default for BlueprintEnvironment {
@@ -264,6 +278,9 @@ impl Default for BlueprintEnvironment {
             bridge_socket_path: None,
             bridge: Arc::new(Mutex::new(None)),
 
+            #[cfg(feature = "tee")]
+            kms_url: default_kms_url(),
+
             #[cfg(feature = "networking")]
             bootnodes: Vec::new(),
             #[cfg(feature = "networking")]
@@ -274,6 +291,9 @@ impl Default for BlueprintEnvironment {
             enable_kademlia: false,
             #[cfg(feature = "networking")]
             target_peer_count: 0,
+
+            #[cfg(feature = "tls")]
+            tls_profile: None,
         }
     }
 }
@@ -326,6 +346,9 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
     let keystore_uri = settings.keystore_uri.clone();
     let bridge_socket_path = settings.bridge_socket_path.clone();
 
+    #[cfg(feature = "tee")]
+    let kms_url = settings.kms_url.clone();
+
     #[cfg(feature = "networking")]
     let bootnodes = settings.bootnodes.clone().unwrap_or_default();
     #[cfg(feature = "networking")]
@@ -336,6 +359,10 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
     let enable_kademlia = settings.enable_kademlia;
     #[cfg(feature = "networking")]
     let target_peer_count = settings.target_peer_count.unwrap_or(24);
+
+    // Create TLS profile before settings is moved
+    #[cfg(feature = "tls")]
+    let tls_profile = create_tls_profile(&settings)?;
 
     let protocol_settings = ProtocolSettings::load(settings)?;
 
@@ -349,6 +376,9 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         bridge_socket_path,
         bridge: Arc::new(Mutex::new(None)),
 
+        #[cfg(feature = "tee")]
+        kms_url,
+
         #[cfg(feature = "networking")]
         bootnodes,
         #[cfg(feature = "networking")]
@@ -359,7 +389,125 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         enable_kademlia,
         #[cfg(feature = "networking")]
         target_peer_count,
+        #[cfg(feature = "tls")]
+        tls_profile,
     })
+}
+
+#[cfg(feature = "tls")]
+fn load_tls_envelope(settings: &BlueprintSettings) -> Result<TlsEnvelope, ConfigError> {
+    if let Ok(key_hex) = std::env::var("TLS_ENVELOPE_KEY") {
+        let key = TlsEnvelopeKey::from_hex(&key_hex).map_err(|e| {
+            ConfigError::InvalidTlsConfig(format!("Invalid TLS_ENVELOPE_KEY value: {e}"))
+        })?;
+        return Ok(TlsEnvelope::with_key(key));
+    }
+
+    let key_path = if let Ok(path) = std::env::var("TLS_ENVELOPE_KEY_PATH") {
+        Some(PathBuf::from(path))
+    } else {
+        let default_path = settings.data_dir.join(".tls_envelope_key");
+        if default_path.exists() {
+            Some(default_path)
+        } else {
+            None
+        }
+    };
+
+    if let Some(path) = key_path {
+        let key_bytes = std::fs::read(&path).map_err(|e| ConfigError::IoError(e.to_string()))?;
+        if key_bytes.len() != 32 {
+            return Err(ConfigError::InvalidTlsConfig(format!(
+                "TLS envelope key at {} must be 32 bytes but was {}",
+                path.display(),
+                key_bytes.len()
+            )));
+        }
+        let mut key_array = [0u8; 32];
+        key_array.copy_from_slice(&key_bytes);
+        return Ok(TlsEnvelope::with_key(TlsEnvelopeKey::from_bytes(key_array)));
+    }
+
+    Err(ConfigError::MissingTlsConfig(
+        "TLS_ENVELOPE_KEY or TLS_ENVELOPE_KEY_PATH must be set when TLS is enabled".into(),
+    ))
+}
+
+#[cfg(feature = "tls")]
+fn encrypt_file(path: &Path, envelope: &TlsEnvelope) -> Result<Vec<u8>, ConfigError> {
+    let data = std::fs::read(path).map_err(|e| ConfigError::IoError(e.to_string()))?;
+    envelope
+        .encrypt(&data)
+        .map_err(|e| ConfigError::Other(Box::new(e)))
+}
+
+#[cfg(feature = "tls")]
+fn encrypt_optional_file(
+    path: Option<&PathBuf>,
+    envelope: &TlsEnvelope,
+) -> Result<Vec<u8>, ConfigError> {
+    if let Some(path) = path {
+        encrypt_file(path.as_path(), envelope)
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+#[cfg(feature = "tls")]
+/// Create a TLS profile from the given settings
+///
+/// # Errors
+/// Returns [`ConfigError::MissingTlsConfig`] when mandatory TLS files or keys are absent, and
+/// propagates IO or encryption failures encountered while loading and envelope-encrypting TLS assets.
+pub fn create_tls_profile(settings: &BlueprintSettings) -> Result<Option<TlsProfile>, ConfigError> {
+    if !settings.tls_enabled {
+        return Ok(None);
+    }
+
+    let envelope = load_tls_envelope(settings)?;
+
+    let server_cert_path = settings.tls_server_cert_path.as_ref().ok_or_else(|| {
+        ConfigError::MissingTlsConfig(
+            "Server certificate path is required when TLS is enabled".to_string(),
+        )
+    })?;
+    let encrypted_server_cert = encrypt_file(server_cert_path.as_path(), &envelope)?;
+
+    let server_key_path = settings.tls_server_key_path.as_ref().ok_or_else(|| {
+        ConfigError::MissingTlsConfig("Server key path is required when TLS is enabled".to_string())
+    })?;
+    let encrypted_server_key = encrypt_file(server_key_path.as_path(), &envelope)?;
+
+    let client_ca_path = settings.tls_client_ca_path.as_ref().ok_or_else(|| {
+        ConfigError::MissingTlsConfig(
+            "Client CA bundle path is required when TLS is enabled".to_string(),
+        )
+    })?;
+    let encrypted_client_ca_bundle = encrypt_file(client_ca_path.as_path(), &envelope)?;
+
+    let encrypted_upstream_ca_bundle =
+        encrypt_optional_file(settings.tls_upstream_ca_path.as_ref(), &envelope)?;
+
+    let encrypted_upstream_client_cert =
+        encrypt_optional_file(settings.tls_upstream_client_cert_path.as_ref(), &envelope)?;
+
+    let encrypted_upstream_client_key =
+        encrypt_optional_file(settings.tls_upstream_client_key_path.as_ref(), &envelope)?;
+
+    Ok(Some(TlsProfile {
+        tls_enabled: true,
+        require_client_mtls: settings.tls_require_client_mtls,
+        encrypted_server_cert,
+        encrypted_server_key,
+        encrypted_client_ca_bundle,
+        encrypted_upstream_ca_bundle,
+        encrypted_upstream_client_cert,
+        encrypted_upstream_client_key,
+        client_cert_ttl_hours: settings.tls_client_cert_ttl_hours,
+        sni: settings.tls_sni.clone(),
+        subject_alt_name_template: settings.tls_subject_alt_name_template.clone(),
+        allowed_dns_names: settings.tls_allowed_dns_names.clone().unwrap_or_default(),
+    }))
 }
 
 impl BlueprintEnvironment {
@@ -494,7 +642,11 @@ impl ContextConfig {
     /// - `chain`: The [`chain`](SupportedChains)
     /// - `protocol`: The [`Protocol`]
     /// - `protocol_settings`: The protocol-specific settings
-    #[allow(clippy::too_many_arguments, clippy::match_wildcard_for_single_variants)]
+    #[allow(
+        clippy::too_many_arguments,
+        clippy::match_wildcard_for_single_variants,
+        clippy::needless_pass_by_value
+    )]
     #[must_use]
     pub fn create_config(
         http_rpc_url: Url,
@@ -509,37 +661,56 @@ impl ContextConfig {
     ) -> Self {
         // Eigenlayer addresses
         #[cfg(feature = "eigenlayer")]
-        let eigenlayer_settings = match protocol_settings {
+        let eigenlayer_settings = match &protocol_settings {
             ProtocolSettings::Eigenlayer(settings) => Some(settings),
             _ => None,
         };
         #[cfg(feature = "eigenlayer")]
-        let allocation_manager = eigenlayer_settings.map(|s| s.allocation_manager_address);
+        let allocation_manager = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.allocation_manager_address);
         #[cfg(feature = "eigenlayer")]
-        let registry_coordinator = eigenlayer_settings.map(|s| s.registry_coordinator_address);
+        let registry_coordinator = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.registry_coordinator_address);
         #[cfg(feature = "eigenlayer")]
-        let operator_state_retriever =
-            eigenlayer_settings.map(|s| s.operator_state_retriever_address);
+        let operator_state_retriever = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.operator_state_retriever_address);
         #[cfg(feature = "eigenlayer")]
-        let delegation_manager = eigenlayer_settings.map(|s| s.delegation_manager_address);
+        let delegation_manager = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.delegation_manager_address);
         #[cfg(feature = "eigenlayer")]
-        let service_manager = eigenlayer_settings.map(|s| s.service_manager_address);
+        let service_manager = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.service_manager_address);
         #[cfg(feature = "eigenlayer")]
-        let stake_registry = eigenlayer_settings.map(|s| s.stake_registry_address);
+        let stake_registry = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.stake_registry_address);
         #[cfg(feature = "eigenlayer")]
-        let strategy_manager = eigenlayer_settings.map(|s| s.strategy_manager_address);
+        let strategy_manager = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.strategy_manager_address);
         #[cfg(feature = "eigenlayer")]
-        let avs_directory = eigenlayer_settings.map(|s| s.avs_directory_address);
+        let avs_directory = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.avs_directory_address);
         #[cfg(feature = "eigenlayer")]
-        let rewards_coordinator = eigenlayer_settings.map(|s| s.rewards_coordinator_address);
+        let rewards_coordinator = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.rewards_coordinator_address);
         #[cfg(feature = "eigenlayer")]
-        let permission_controller = eigenlayer_settings.map(|s| s.permission_controller_address);
+        let permission_controller = eigenlayer_settings
+            .as_ref()
+            .map(|s| s.permission_controller_address);
         #[cfg(feature = "eigenlayer")]
-        let strategy = eigenlayer_settings.map(|s| s.strategy_address);
+        let strategy = eigenlayer_settings.as_ref().map(|s| s.strategy_address);
 
         // Tangle settings
         #[cfg(feature = "tangle")]
-        let tangle_settings = match protocol_settings {
+        let tangle_settings = match &protocol_settings {
             ProtocolSettings::Tangle(settings) => Some(settings),
             _ => None,
         };
@@ -567,6 +738,8 @@ impl ContextConfig {
                 enable_kademlia,
                 #[cfg(feature = "networking")]
                 target_peer_count: None,
+                #[cfg(feature = "tee")]
+                kms_url: default_kms_url(),
                 keystore_uri,
                 data_dir,
                 chain,
@@ -602,6 +775,42 @@ impl ContextConfig {
                 permission_controller,
                 #[cfg(feature = "eigenlayer")]
                 strategy,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_allocation_delay: None,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_deposit_amount: None,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_stake_amount: None,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_operator_sets: None,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_staker_opt_out_window_blocks: None,
+                #[cfg(feature = "eigenlayer")]
+                eigenlayer_metadata_url: None,
+                #[cfg(feature = "tls")]
+                tls_enabled: false,
+                #[cfg(feature = "tls")]
+                tls_server_cert_path: None,
+                #[cfg(feature = "tls")]
+                tls_server_key_path: None,
+                #[cfg(feature = "tls")]
+                tls_client_ca_path: None,
+                #[cfg(feature = "tls")]
+                tls_require_client_mtls: false,
+                #[cfg(feature = "tls")]
+                tls_upstream_ca_path: None,
+                #[cfg(feature = "tls")]
+                tls_upstream_client_cert_path: None,
+                #[cfg(feature = "tls")]
+                tls_upstream_client_key_path: None,
+                #[cfg(feature = "tls")]
+                tls_client_cert_ttl_hours: 24,
+                #[cfg(feature = "tls")]
+                tls_sni: None,
+                #[cfg(feature = "tls")]
+                tls_subject_alt_name_template: None,
+                #[cfg(feature = "tls")]
+                tls_allowed_dns_names: None,
             }),
         }
     }
@@ -767,6 +976,17 @@ pub struct BlueprintSettings {
     #[serde(default)]
     pub target_peer_count: Option<u32>,
 
+    // ========
+    // TEE
+    // ========
+    /// URL of the Key Brokerage Service (KBS)
+    ///
+    /// This defaults to the central KBS hosted by Tangle
+    #[cfg(feature = "tee")]
+    #[arg(long, env, default_value_t = default_kms_url())]
+    #[serde(default = "default_kms_url")]
+    pub kms_url: Url,
+
     // =======
     // TANGLE
     // =======
@@ -891,6 +1111,86 @@ pub struct BlueprintSettings {
         required_if_eq("protocol", Protocol::Eigenlayer.as_str()),
     )]
     pub strategy: Option<alloy_primitives::Address>,
+
+    // ========
+    // EIGENLAYER REGISTRATION PARAMETERS
+    // ========
+    #[cfg(feature = "eigenlayer")]
+    /// Allocation delay in blocks (default: 0)
+    #[arg(long, env = "EIGENLAYER_ALLOCATION_DELAY")]
+    pub eigenlayer_allocation_delay: Option<u32>,
+    #[cfg(feature = "eigenlayer")]
+    /// Deposit amount in wei (default: 5000 ether)
+    #[arg(long, env = "EIGENLAYER_DEPOSIT_AMOUNT")]
+    pub eigenlayer_deposit_amount: Option<u128>,
+    #[cfg(feature = "eigenlayer")]
+    /// Stake amount in wei (default: 1 ether)
+    #[arg(long, env = "EIGENLAYER_STAKE_AMOUNT")]
+    pub eigenlayer_stake_amount: Option<u64>,
+    #[cfg(feature = "eigenlayer")]
+    /// Operator sets to register for (comma-separated, default: 0)
+    #[arg(long, env = "EIGENLAYER_OPERATOR_SETS", value_delimiter = ',')]
+    pub eigenlayer_operator_sets: Option<Vec<u32>>,
+    #[cfg(feature = "eigenlayer")]
+    /// Staker opt-out window in blocks (default: 50400)
+    #[arg(long, env = "EIGENLAYER_STAKER_OPT_OUT_WINDOW_BLOCKS")]
+    pub eigenlayer_staker_opt_out_window_blocks: Option<u32>,
+    #[cfg(feature = "eigenlayer")]
+    /// Operator metadata URL
+    #[arg(long, env = "EIGENLAYER_METADATA_URL")]
+    pub eigenlayer_metadata_url: Option<String>,
+
+    // ========
+    // TLS CONFIGURATION
+    // ========
+    /// Enable TLS for service registration
+    #[cfg(feature = "tls")]
+    #[arg(long, env)]
+    pub tls_enabled: bool,
+    #[cfg(feature = "tls")]
+    /// Path to server certificate file (PEM format)
+    #[arg(long, env)]
+    pub tls_server_cert_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Path to server private key file (PEM format)
+    #[arg(long, env)]
+    pub tls_server_key_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Path to client CA bundle file (PEM format) for mTLS
+    #[arg(long, env)]
+    pub tls_client_ca_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Require client mTLS authentication
+    #[arg(long, env)]
+    pub tls_require_client_mtls: bool,
+    #[cfg(feature = "tls")]
+    /// Path to upstream CA bundle file (PEM format)
+    #[arg(long, env)]
+    pub tls_upstream_ca_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Path to upstream client certificate file (PEM format)
+    #[arg(long, env)]
+    pub tls_upstream_client_cert_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Path to upstream client private key file (PEM format)
+    #[arg(long, env)]
+    pub tls_upstream_client_key_path: Option<PathBuf>,
+    #[cfg(feature = "tls")]
+    /// Client certificate TTL in hours
+    #[arg(long, env, default_value_t = 24u32)]
+    pub tls_client_cert_ttl_hours: u32,
+    #[cfg(feature = "tls")]
+    /// SNI hostname for TLS connections
+    #[arg(long, env)]
+    pub tls_sni: Option<String>,
+    #[cfg(feature = "tls")]
+    /// Subject alternative name template
+    #[arg(long, env)]
+    pub tls_subject_alt_name_template: Option<String>,
+    #[cfg(feature = "tls")]
+    /// Allowed DNS names for TLS connections
+    #[arg(long, env, value_delimiter = ',')]
+    pub tls_allowed_dns_names: Option<Vec<String>>,
 }
 
 impl Default for BlueprintSettings {
@@ -919,6 +1219,12 @@ impl Default for BlueprintSettings {
             enable_kademlia: false,
             #[cfg(feature = "networking")]
             target_peer_count: None,
+
+            // ========
+            // TEE
+            // ========
+            #[cfg(feature = "tee")]
+            kms_url: default_kms_url(),
 
             // =======
             // TANGLE
@@ -953,6 +1259,50 @@ impl Default for BlueprintSettings {
             permission_controller: None,
             #[cfg(feature = "eigenlayer")]
             strategy: None,
+
+            // ========
+            // EIGENLAYER REGISTRATION PARAMETERS
+            // ========
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_allocation_delay: None,
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_deposit_amount: None,
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_stake_amount: None,
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_operator_sets: None,
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_staker_opt_out_window_blocks: None,
+            #[cfg(feature = "eigenlayer")]
+            eigenlayer_metadata_url: None,
+
+            // ========
+            // TLS CONFIGURATION
+            // ========
+            #[cfg(feature = "tls")]
+            tls_enabled: false,
+            #[cfg(feature = "tls")]
+            tls_server_cert_path: None,
+            #[cfg(feature = "tls")]
+            tls_server_key_path: None,
+            #[cfg(feature = "tls")]
+            tls_client_ca_path: None,
+            #[cfg(feature = "tls")]
+            tls_require_client_mtls: false,
+            #[cfg(feature = "tls")]
+            tls_upstream_ca_path: None,
+            #[cfg(feature = "tls")]
+            tls_upstream_client_cert_path: None,
+            #[cfg(feature = "tls")]
+            tls_upstream_client_key_path: None,
+            #[cfg(feature = "tls")]
+            tls_client_cert_ttl_hours: 24,
+            #[cfg(feature = "tls")]
+            tls_sni: None,
+            #[cfg(feature = "tls")]
+            tls_subject_alt_name_template: None,
+            #[cfg(feature = "tls")]
+            tls_allowed_dns_names: None,
         }
     }
 }
@@ -963,6 +1313,11 @@ fn default_http_rpc_url() -> Url {
 
 fn default_ws_rpc_url() -> Url {
     Url::from_str("ws://127.0.0.1:9944").unwrap()
+}
+
+#[cfg(feature = "tee")]
+fn default_kms_url() -> Url {
+    Url::from_str("https://kms.tangle.tools").unwrap()
 }
 
 #[derive(Copy, Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, clap::ValueEnum)]

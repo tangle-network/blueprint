@@ -105,9 +105,9 @@ pub async fn start_anvil_container(state_json: Option<&str>, include_logs: bool)
         .unwrap();
 
     let http_endpoint = format!("http://localhost:{port}").parse().unwrap();
-    println!("Anvil HTTP endpoint: {}", http_endpoint);
+    println!("Anvil HTTP endpoint: {http_endpoint}");
     let ws_endpoint = format!("ws://localhost:{port}").parse().unwrap();
-    println!("Anvil WS endpoint: {}", ws_endpoint);
+    println!("Anvil WS endpoint: {ws_endpoint}");
 
     AnvilTestnet {
         container,
@@ -162,8 +162,8 @@ pub async fn start_anvil_testnet_with_state(
 }
 
 #[allow(clippy::missing_errors_doc)] // TODO: should this even be public?
-pub async fn get_receipt<T, P, D>(
-    call: CallBuilder<T, P, D, Ethereum>,
+pub async fn get_receipt<P, D>(
+    call: CallBuilder<P, D, Ethereum>,
 ) -> Result<TransactionReceipt, Error>
 where
     P: Provider<Ethereum>,

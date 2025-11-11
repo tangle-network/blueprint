@@ -62,6 +62,14 @@ impl RocksDb {
                 ColumnFamilyDescriptor::new(cf::USER_TOKENS_CF, db_opts.clone()),
                 ColumnFamilyDescriptor::new(cf::TOKENS_OPTS_CF, db_opts.clone()),
                 ColumnFamilyDescriptor::new(cf::SERVICES_USER_KEYS_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::API_KEYS_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::API_KEYS_BY_ID_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::SERVICES_OAUTH_POLICY_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::OAUTH_JTI_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::OAUTH_RL_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::TLS_ASSETS_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::TLS_CERT_METADATA_CF, db_opts.clone()),
+                ColumnFamilyDescriptor::new(cf::TLS_ISSUANCE_LOG_CF, db_opts.clone()),
             ],
         )?;
         Ok(Self { db: Arc::new(db) })
@@ -78,6 +86,22 @@ pub mod cf {
     pub const USER_TOKENS_CF: &str = "usr_tkns";
     /// Services column family (used to store the services with their user keys)
     pub const SERVICES_USER_KEYS_CF: &str = "svs_usr_keys";
+    /// API keys column family (used to store long-lived API keys by key_id)
+    pub const API_KEYS_CF: &str = "api_keys";
+    /// API keys by ID column family (used to lookup API keys by database ID)
+    pub const API_KEYS_BY_ID_CF: &str = "api_keys_by_id";
+    /// OAuth per-service policy configuration
+    pub const SERVICES_OAUTH_POLICY_CF: &str = "services_oauth_policy";
+    /// OAuth assertion replay cache (jti -> exp)
+    pub const OAUTH_JTI_CF: &str = "oauth_jti";
+    /// OAuth token endpoint rate limit buckets
+    pub const OAUTH_RL_CF: &str = "oauth_rl";
+    /// TLS assets (encrypted certificates, keys, CA bundles)
+    pub const TLS_ASSETS_CF: &str = "tls_assets";
+    /// TLS certificate metadata (service_id, cert_id) -> metadata
+    pub const TLS_CERT_METADATA_CF: &str = "tls_cert_metadata";
+    /// TLS certificate issuance log (append-only for auditing)
+    pub const TLS_ISSUANCE_LOG_CF: &str = "tls_issuance_log";
 }
 
 /// RocksDbConfig is used to configure RocksDb.
@@ -213,6 +237,9 @@ mod tests {
             cf::USER_TOKENS_CF.to_string(),
             cf::TOKENS_OPTS_CF.to_string(),
             cf::SERVICES_USER_KEYS_CF.to_string(),
+            cf::TLS_ASSETS_CF.to_string(),
+            cf::TLS_CERT_METADATA_CF.to_string(),
+            cf::TLS_ISSUANCE_LOG_CF.to_string(),
         ];
 
         // Check that we can get each column family

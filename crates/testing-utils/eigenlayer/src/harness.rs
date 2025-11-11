@@ -1,47 +1,38 @@
 use crate::Error;
-use crate::env::{EigenlayerTestEnvironment, setup_eigenlayer_test_environment};
-use alloy_primitives::Address;
-use alloy_provider::RootProvider;
+use crate::env::setup_eigenlayer_test_environment;
+use alloy_primitives::address;
+use alloy_primitives::{Address, U256};
+use alloy_provider::Provider;
 use blueprint_auth::db::RocksDb;
-use blueprint_chain_setup::anvil::keys::{ANVIL_PRIVATE_KEYS, inject_anvil_key};
-use blueprint_chain_setup::anvil::{Container, start_empty_anvil_testnet};
+use blueprint_chain_setup::anvil::keys::inject_anvil_key;
+use blueprint_chain_setup::anvil::{AnvilTestnet, Container};
 use blueprint_core::{error, info};
 use blueprint_evm_extra::util::get_provider_http;
 use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
 use blueprint_runner::config::{BlueprintEnvironment, ContextConfig, SupportedChains};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
+use eigenlayer_contract_deployer::core::{
+    DelegationManagerConfig, DeployedCoreContracts, DeploymentConfigData, EigenPodManagerConfig,
+    RewardsCoordinatorConfig, StrategyFactoryConfig, StrategyManagerConfig,
+};
 use std::future::Future;
-use std::marker::PhantomData;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use tokio::task::JoinHandle;
 use url::Url;
 
-/// Configuration for the Eigenlayer test harness
-#[derive(Default)]
-pub struct EigenlayerTestConfig {
-    pub http_endpoint: Option<Url>,
-    pub ws_endpoint: Option<Url>,
-    pub eigenlayer_contract_addresses: Option<EigenlayerProtocolSettings>,
-}
-
 /// Test harness for Eigenlayer network tests
-pub struct EigenlayerTestHarness<Ctx> {
+pub struct EigenlayerTestHarness {
     env: BlueprintEnvironment,
-    config: EigenlayerTestConfig,
-    pub http_endpoint: Url,
-    pub ws_endpoint: Url,
-    pub accounts: Vec<Address>,
-    pub eigenlayer_contract_addresses: EigenlayerProtocolSettings,
     _temp_dir: TempDir,
     _container: Container,
-    _phantom: PhantomData<Ctx>,
     _auth_proxy: JoinHandle<Result<(), Error>>,
     _bridge: BridgeHandle,
 }
 
-impl EigenlayerTestHarness<()> {
+impl EigenlayerTestHarness {
+    ///
     /// Create a new `EigenlayerTestHarness`
     ///
     /// NOTE: The resulting harness will have a context of `()`. This is not valid for jobs that require
@@ -49,38 +40,53 @@ impl EigenlayerTestHarness<()> {
     ///
     /// # Errors
     ///
-    /// * See [`Self::setup_with_context()`]
-    pub async fn setup(test_dir: TempDir) -> Result<Self, Error> {
-        Self::setup_with_context(test_dir, ()).await
+    /// * See [`EigenlayerTestHarness::setup_with_context()`]
+    pub async fn setup(
+        owner_private_key: &str,
+        test_dir: TempDir,
+        testnet: AnvilTestnet,
+        eigenlayer_protocol_settings: Option<EigenlayerProtocolSettings>,
+    ) -> Result<Self, Error> {
+        Self::setup_with_context(
+            owner_private_key,
+            test_dir,
+            testnet,
+            eigenlayer_protocol_settings,
+        )
+        .await
     }
 }
 
-impl<Ctx> EigenlayerTestHarness<Ctx>
-where
-    Ctx: Clone + Send + Sync + 'static,
-{
+impl EigenlayerTestHarness {
     /// Create a new `EigenlayerTestHarness` with a predefined context
     ///
     /// NOTE: If your context type depends on [`Self::env()`], see [`Self::setup()`]
     ///
+    /// * Params
+    /// - `owner_private_key`: The private key of the owner account
+    /// - `test_dir`: The directory to store the test data
+    /// - `testnet`: The Anvil testnet
+    /// - `eigenlayer_protocol_settings`: The Eigenlayer protocol settings.
+    ///     - Option<T>: When you set up empty Anvil testnet and re-deploy smart contracts your-self
+    ///     - None: When you use the default Eigenlayer test environment
+    ///
     /// # Errors
     ///
-    /// * TODO
-    pub async fn setup_with_context(test_dir: TempDir, _context: Ctx) -> Result<Self, Error> {
-        // Start local Anvil testnet
-        let testnet = start_empty_anvil_testnet(true).await;
-
-        // Setup Eigenlayer test environment
-        let EigenlayerTestEnvironment {
-            accounts,
-            http_endpoint,
-            ws_endpoint,
-            eigenlayer_contract_addresses,
-        } = setup_eigenlayer_test_environment(testnet.http_endpoint, testnet.ws_endpoint).await;
-
+    /// * See [`crate::Error`]
+    pub async fn setup_with_context(
+        owner_private_key: &str,
+        test_dir: TempDir,
+        testnet: AnvilTestnet,
+        eigenlayer_protocol_settings: Option<EigenlayerProtocolSettings>,
+    ) -> Result<Self, Error> {
         // Setup temporary testing keystore
         let keystore_path = test_dir.path().join("keystore");
-        inject_anvil_key(&keystore_path, ANVIL_PRIVATE_KEYS[0])?;
+        inject_anvil_key(&keystore_path, owner_private_key)?;
+
+        let eigenlayer_protocol_settings = match eigenlayer_protocol_settings {
+            Some(settings) => settings,
+            None => setup_eigenlayer_test_environment(testnet.http_endpoint.clone()).await,
+        };
 
         let data_dir = test_dir.path().join("data");
         tokio::fs::create_dir_all(&data_dir).await?;
@@ -103,14 +109,14 @@ where
 
         // Create context config
         let context_config = ContextConfig::create_eigenlayer_config(
-            Url::parse(&http_endpoint)?,
-            Url::parse(&ws_endpoint)?,
+            testnet.http_endpoint.clone(),
+            testnet.ws_endpoint.clone(),
             keystore_path.to_string_lossy().into_owned(),
             None,
             data_dir,
             None,
             SupportedChains::LocalTestnet,
-            eigenlayer_contract_addresses,
+            eigenlayer_protocol_settings,
         );
 
         // Load environment with bridge configuration
@@ -120,47 +126,13 @@ where
         env.bridge_socket_path = Some(bridge_socket_path);
         env.test_mode = true;
 
-        // Create config
-        let config = EigenlayerTestConfig {
-            http_endpoint: Some(Url::parse(&http_endpoint)?),
-            ws_endpoint: Some(Url::parse(&ws_endpoint)?),
-            eigenlayer_contract_addresses: Some(eigenlayer_contract_addresses),
-        };
-
         Ok(Self {
             env,
-            config,
-            http_endpoint: Url::parse(&http_endpoint)?,
-            ws_endpoint: Url::parse(&ws_endpoint)?,
-            accounts,
-            eigenlayer_contract_addresses,
             _temp_dir: test_dir,
             _container: testnet.container,
-            _phantom: core::marker::PhantomData,
             _auth_proxy: auth_proxy,
             _bridge: bridge_handle,
         })
-    }
-
-    #[must_use]
-    #[allow(clippy::used_underscore_binding)]
-    pub fn set_context<Ctx2: Clone + Send + Sync + 'static>(
-        self,
-        _context: Ctx2,
-    ) -> EigenlayerTestHarness<Ctx2> {
-        EigenlayerTestHarness {
-            env: self.env,
-            config: self.config,
-            http_endpoint: self.http_endpoint,
-            ws_endpoint: self.ws_endpoint,
-            accounts: self.accounts,
-            eigenlayer_contract_addresses: self.eigenlayer_contract_addresses,
-            _temp_dir: self._temp_dir,
-            _container: self._container,
-            _phantom: PhantomData::<Ctx2>,
-            _auth_proxy: self._auth_proxy,
-            _bridge: self._bridge,
-        }
     }
 
     #[must_use]
@@ -169,36 +141,33 @@ where
     }
 }
 
-impl<Ctx> EigenlayerTestHarness<Ctx> {
-    /// Gets a provider for the HTTP endpoint
-    #[must_use]
-    pub fn provider(&self) -> RootProvider {
-        get_provider_http(self.http_endpoint.as_str())
-    }
+/// Gets the accounts from the HTTP endpoint
+///
+/// # Panics
+///
+/// * See [`Provider::get_accounts()`]
+#[must_use]
+pub async fn get_accounts(http_endpoint: Url) -> Vec<Address> {
+    let provider = get_provider_http(http_endpoint.clone());
+    provider.get_accounts().await.unwrap()
+}
 
-    /// Gets the list of accounts
-    #[must_use]
-    pub fn accounts(&self) -> &[Address] {
-        &self.accounts
-    }
+/// Gets the owner account (first account)
+#[must_use]
+pub fn get_owner_account(accounts: &[Address]) -> Address {
+    accounts[0]
+}
 
-    /// Gets the owner account (first account)
-    #[must_use]
-    pub fn owner_account(&self) -> Address {
-        self.accounts[0]
-    }
+/// Gets the aggregator account (ninth account)
+#[must_use]
+pub fn get_aggregator_account(accounts: &[Address]) -> Address {
+    accounts[9]
+}
 
-    /// Gets the aggregator account (ninth account)
-    #[must_use]
-    pub fn aggregator_account(&self) -> Address {
-        self.accounts[9]
-    }
-
-    /// Gets the task generator account (fourth account)
-    #[must_use]
-    pub fn task_generator_account(&self) -> Address {
-        self.accounts[4]
-    }
+/// Gets the task generator account (fourth account)
+#[must_use]
+pub fn get_task_generator_account(accounts: &[Address]) -> Address {
+    accounts[4]
 }
 
 /// Runs the authentication proxy server.
@@ -245,4 +214,68 @@ async fn run_auth_proxy(
     };
 
     Ok((db, task))
+}
+
+/// Deploy core Eigenlayer core contract
+///
+/// # Arguments
+///
+/// * `owner_private_key`: The private key of the owner account
+/// * `owner_account`: The owner account
+/// * `testnet`: The Anvil testnet
+///
+/// # Returns
+///
+/// * `Result<DeployedCoreContracts, Error>`: The deployed core contracts
+///     - `Ok(DeployedCoreContracts)`: The deployed core contracts
+///     - `Err(Error)`: The error
+///
+/// # Errors
+/// See [`eigenlayer_contract_deployer::core::deploy_core_contracts`]
+///
+/// # Panics
+/// See [`eigenlayer_contract_deployer::core::deploy_core_contracts`]
+pub async fn deploy_eigenlayer_core_contracts(
+    http_endpoint: &str,
+    owner_private_key: &str,
+    owner_account: Address,
+) -> Result<DeployedCoreContracts, Error> {
+    let core_config = DeploymentConfigData {
+        strategy_manager: StrategyManagerConfig {
+            init_paused_status: U256::from(0),
+            init_withdrawal_delay_blocks: 1u32,
+        },
+        delegation_manager: DelegationManagerConfig {
+            init_paused_status: U256::from(0),
+            withdrawal_delay_blocks: 0u32,
+        },
+        eigen_pod_manager: EigenPodManagerConfig {
+            init_paused_status: U256::from(0),
+        },
+        rewards_coordinator: RewardsCoordinatorConfig {
+            init_paused_status: U256::from(0),
+            max_rewards_duration: 864_000u32,
+            max_retroactive_length: 432_000u32,
+            max_future_length: 86_400u32,
+            genesis_rewards_timestamp: 1_672_531_200_u32,
+            updater: owner_account,
+            activation_delay: 0u32,
+            calculation_interval_seconds: 86_400u32,
+            global_operator_commission_bips: 1_000u16,
+        },
+        strategy_factory: StrategyFactoryConfig {
+            init_paused_status: U256::from(0),
+        },
+    };
+
+    Ok(eigenlayer_contract_deployer::core::deploy_core_contracts(
+        http_endpoint,
+        owner_private_key,
+        owner_account,
+        core_config,
+        Some(address!("00000000219ab540356cBB839Cbe05303d7705Fa")),
+        Some(1_564_000),
+    )
+    .await
+    .unwrap())
 }

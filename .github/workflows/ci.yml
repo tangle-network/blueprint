@@ -27,11 +27,11 @@ jobs:
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2025-10-20
           components: rustfmt
 
       - name: Check Formatting
-        run: cargo +nightly fmt -- --check
+        run: cargo +nightly-2025-10-20 fmt -- --check
 
   linting:
     timeout-minutes: 120
@@ -169,9 +169,9 @@ jobs:
         with:
           tool: nextest
 
-      - name: Determine nextest profile
+      - name: Determine nextest profile and features
         run: |
-          SERIAL_CRATES=("blueprint-tangle-testing-utils" "blueprint-client-evm" "blueprint-tangle-extra" "blueprint-networking" "blueprint-qos" "cargo-tangle")
+          SERIAL_CRATES=("blueprint-tangle-testing-utils" "blueprint-client-evm" "blueprint-tangle-extra" "blueprint-networking" "blueprint-qos" "cargo-tangle" "blueprint-manager")
           PROFILE=ci
 
           for crate in "${SERIAL_CRATES[@]}"; do

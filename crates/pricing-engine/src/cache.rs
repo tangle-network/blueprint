@@ -26,7 +26,7 @@ impl PriceCache {
         let mut cache = self
             .cache
             .lock()
-            .map_err(|e| PricingError::Cache(format!("Lock error: {}", e)))?;
+            .map_err(|e| PricingError::Cache(format!("Lock error: {e}")))?;
         cache.insert(blueprint_id, price_model.clone());
         Ok(())
     }
@@ -37,7 +37,7 @@ impl PriceCache {
         let cache = self
             .cache
             .lock()
-            .map_err(|e| PricingError::Cache(format!("Lock error: {}", e)))?;
+            .map_err(|e| PricingError::Cache(format!("Lock error: {e}")))?;
         Ok(cache.get(&blueprint_id).cloned())
     }
 
@@ -46,7 +46,7 @@ impl PriceCache {
         let mut cache = self
             .cache
             .lock()
-            .map_err(|e| PricingError::Cache(format!("Lock error: {}", e)))?;
+            .map_err(|e| PricingError::Cache(format!("Lock error: {e}")))?;
         Ok(cache.remove(&blueprint_id))
     }
 }

@@ -1,10 +1,10 @@
 pub mod images;
 pub mod net;
 
-use net::NetworkManager;
-
 use super::service::Status;
+use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
+use crate::rt::ResourceLimits;
 use crate::rt::hypervisor::images::CloudImage;
 use crate::rt::hypervisor::net::Lease;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
@@ -31,30 +31,15 @@ use url::{Host, Url};
 
 const VM_DATA_DIR: &str = "/mnt/data";
 
+#[derive(Default)]
 pub struct ServiceVmConfig {
     pub id: u32,
     pub pty: bool,
-    /// Allocated storage space in bytes
-    pub storage_space: u64,
-    /// Allocated memory space in bytes
-    pub memory_size: u64,
-}
-
-impl Default for ServiceVmConfig {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            pty: false,
-            // 20GB
-            storage_space: 1024 * 1024 * 1024 * 20,
-            // 4GB
-            memory_size: 4_294_967_296,
-        }
-    }
 }
 
 pub struct HypervisorInstance {
     config: ServiceVmConfig,
+    limits: ResourceLimits,
     sock_path: PathBuf,
     guest_logs_path: PathBuf,
     binary_image_path: PathBuf,
@@ -73,11 +58,12 @@ impl HypervisorInstance {
     /// * Unable to start a `cloud-hypervisor` instance
     ///     * In this case, the issue may be logged in `<cache_dir>/<service_name>.log.stderr`
     pub fn new(
+        ctx: &BlueprintManagerContext,
+        limits: ResourceLimits,
         config: ServiceVmConfig,
         cache_dir: impl AsRef<Path>,
         runtime_dir: impl AsRef<Path>,
         service_name: &str,
-        network_interface: String,
     ) -> Result<HypervisorInstance> {
         info!("Initializing hypervisor for service `{service_name}`...");
 
@@ -115,13 +101,14 @@ impl HypervisorInstance {
 
         Ok(HypervisorInstance {
             config,
+            limits,
             sock_path,
             guest_logs_path,
             binary_image_path,
             cloud_init_image_path,
             hypervisor: hypervisor_handle,
             lease: None,
-            network_interface,
+            network_interface: ctx.vm.network_interface.clone(),
         })
     }
 
@@ -146,7 +133,7 @@ impl HypervisorInstance {
             writeln!(&mut env_vars_str, "export {key}=\"{val}\"").unwrap();
         }
 
-        let args = arguments.encode().join(" ");
+        let args = arguments.encode(true).join(" ");
 
         let launcher_script = LAUNCHER_SCRIPT_TEMPLATE
             .replace("{{ENV_VARS}}", &env_vars_str)
@@ -261,7 +248,7 @@ impl HypervisorInstance {
         let out = Command::new("qemu-img")
             .args(["create", "-f", "qcow2"])
             .arg(&image_path)
-            .arg(self.config.storage_space.to_string())
+            .arg(self.limits.storage_space.to_string())
             .output()
             .await?;
 
@@ -290,7 +277,7 @@ impl HypervisorInstance {
     #[allow(clippy::too_many_arguments)]
     pub async fn prepare(
         &mut self,
-        network_manager: NetworkManager,
+        ctx: &BlueprintManagerContext,
         keystore: impl AsRef<Path>,
         data_dir: impl AsRef<Path>,
         cache_dir: impl AsRef<Path>,
@@ -317,7 +304,7 @@ impl HypervisorInstance {
         env_vars.data_dir = PathBuf::from(VM_DATA_DIR);
         env_vars.keystore_uri = String::from("/srv/keystore");
 
-        let Some(lease) = network_manager.allocate().await else {
+        let Some(lease) = ctx.vm.network_manager.allocate().await else {
             return Err(io::Error::new(io::ErrorKind::QuotaExceeded, "IP pool exhausted").into());
         };
 
@@ -344,7 +331,7 @@ impl HypervisorInstance {
         #[allow(clippy::cast_possible_wrap)]
         let vm_conf = VmConfig {
             memory: Some(MemoryConfig {
-                size: self.config.memory_size as i64,
+                size: self.limits.memory_size as i64,
                 shared: Some(true),
                 ..Default::default()
             }),

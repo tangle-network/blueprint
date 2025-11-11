@@ -16,7 +16,7 @@ async fn test_sign_and_verify_quote() -> Result<()> {
 
     // Initialize an operator signer with a new keypair
     let secret = K256Ecdsa::generate_with_seed(None)
-        .map_err(|e| PricingError::Other(format!("Failed to generate keypair: {}", e)))?;
+        .map_err(|e| PricingError::Other(format!("Failed to generate keypair: {e}")))?;
 
     let mut signer = OperatorSigner::<K256Ecdsa>::new(&config, secret, AccountId::from([0u8; 32]))?;
 

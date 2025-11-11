@@ -193,7 +193,7 @@ mod tests {
     use k256::ecdsa::signature::Verifier;
 
     #[tokio::test]
-    #[ignore] // Requires GCP credentials
+    #[ignore = "Requires GCP credentials"]
     async fn test_gcp_signer() {
         let config = GcpRemoteSignerConfig {
             keys: vec![GcpKeyConfig {

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.15](https://github.com/tangle-network/blueprint/compare/blueprint-networking-v0.1.0-alpha.14...blueprint-networking-v0.1.0-alpha.15) - 2025-10-02
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.1.0-alpha.14](https://github.com/tangle-network/blueprint/compare/blueprint-networking-v0.1.0-alpha.13...blueprint-networking-v0.1.0-alpha.14) - 2025-08-11
+
+### Other
+
+- updated the following local packages: blueprint-core, blueprint-crypto
+
+## [0.1.0-alpha.13](https://github.com/tangle-network/blueprint/compare/blueprint-networking-v0.1.0-alpha.12...blueprint-networking-v0.1.0-alpha.13) - 2025-08-06
+
+### Other
+
+- updated the following local packages: blueprint-crypto
+
 ## [0.1.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-networking-v0.1.0-alpha.11...blueprint-networking-v0.1.0-alpha.12) - 2025-07-03
 
 ### Other

@@ -102,7 +102,6 @@ impl DefaultMetricsProvider {
 
 impl MetricsProvider for DefaultMetricsProvider {
     /// Returns the latest collected `SystemMetrics`.
-    #[must_use]
     async fn get_system_metrics(&self) -> SystemMetrics {
         if let Ok(metrics_guard) = self.system_metrics.try_read() {
             metrics_guard.last().cloned().unwrap_or_default()
@@ -114,7 +113,6 @@ impl MetricsProvider for DefaultMetricsProvider {
         }
     }
     /// Returns the latest collected `BlueprintMetrics`.
-    #[must_use]
     async fn get_blueprint_metrics(&self) -> BlueprintMetrics {
         if let Ok(metrics_guard) = self.blueprint_metrics.try_read() {
             metrics_guard.last().cloned().unwrap_or_default()
@@ -126,7 +124,6 @@ impl MetricsProvider for DefaultMetricsProvider {
         }
     }
     /// Returns the current `BlueprintStatus`.
-    #[must_use]
     async fn get_blueprint_status(&self) -> BlueprintStatus {
         if let Ok(status_guard) = self.blueprint_status.try_read() {
             status_guard.clone()
@@ -138,7 +135,6 @@ impl MetricsProvider for DefaultMetricsProvider {
         }
     }
     /// Returns a history of collected `SystemMetrics`.
-    #[must_use]
     async fn get_system_metrics_history(&self) -> Vec<SystemMetrics> {
         if let Ok(metrics_guard) = self.system_metrics.try_read() {
             metrics_guard.clone()
@@ -150,7 +146,6 @@ impl MetricsProvider for DefaultMetricsProvider {
         }
     }
     /// Returns a history of collected `BlueprintMetrics`.
-    #[must_use]
     async fn get_blueprint_metrics_history(&self) -> Vec<BlueprintMetrics> {
         if let Ok(metrics_guard) = self.blueprint_metrics.try_read() {
             metrics_guard.clone()

@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.21](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-testing-utils-v0.1.0-alpha.20...blueprint-eigenlayer-testing-utils-v0.1.0-alpha.21) - 2025-10-30
+
+### Other
+
+- Add Eigenlayer CLI commands and integrate with blueprint manager (#1193)
+
+## [0.1.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-testing-utils-v0.1.0-alpha.19...blueprint-eigenlayer-testing-utils-v0.1.0-alpha.20) - 2025-10-02
+
+### Other
+
+- bump eigensdk & alloy version (#1164)
+
+## [0.1.0-alpha.19](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-testing-utils-v0.1.0-alpha.18...blueprint-eigenlayer-testing-utils-v0.1.0-alpha.19) - 2025-08-20
+
+### Other
+
+- updated the following local packages: blueprint-auth, blueprint-runner, blueprint-manager-bridge, blueprint-core-testing-utils, blueprint-chain-setup
+
+## [0.1.0-alpha.18](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-testing-utils-v0.1.0-alpha.17...blueprint-eigenlayer-testing-utils-v0.1.0-alpha.18) - 2025-08-11
+
+### Other
+
+- updated the following local packages: blueprint-core, blueprint-auth, blueprint-runner, blueprint-evm-extra, blueprint-manager-bridge, blueprint-core-testing-utils, blueprint-chain-setup
+
+## [0.1.0-alpha.17](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-testing-utils-v0.1.0-alpha.16...blueprint-eigenlayer-testing-utils-v0.1.0-alpha.17) - 2025-08-06
+
+### Other
+
+- updated the following local packages: blueprint-auth, blueprint-manager-bridge, blueprint-runner, blueprint-core-testing-utils, blueprint-chain-setup
+
 ## [0.1.0-alpha.16](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-testing-utils-v0.1.0-alpha.15...blueprint-eigenlayer-testing-utils-v0.1.0-alpha.16) - 2025-07-07
 
 ### Other

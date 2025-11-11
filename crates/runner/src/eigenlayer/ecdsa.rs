@@ -10,25 +10,22 @@ use blueprint_keystore::backends::Backend;
 use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
 use blueprint_keystore::crypto::k256::K256Ecdsa;
 use eigensdk::client_elcontracts::{reader::ELChainReader, writer::ELChainWriter};
-use eigensdk::logging::get_test_logger;
 use eigensdk::types::operator::Operator;
-use eigensdk::utils::rewardsv2::middleware::ecdsastakeregistry::ECDSAStakeRegistry;
-use eigensdk::utils::rewardsv2::middleware::ecdsastakeregistry::ISignatureUtils::SignatureWithSaltAndExpiry;
+use eigensdk::utils::rewardsv2::middleware::ecdsa_stake_registry::ECDSAStakeRegistry;
+use eigensdk::utils::rewardsv2::middleware::ecdsa_stake_registry::ISignatureUtils::SignatureWithSaltAndExpiry;
 use std::str::FromStr;
 
 /// Eigenlayer protocol configuration for ECDSA-based contracts
 #[derive(Clone, Copy)]
 pub struct EigenlayerECDSAConfig {
-    earnings_receiver_address: Address,
     delegation_approver_address: Address,
 }
 
 impl EigenlayerECDSAConfig {
     /// Create a new `EigenlayerECDSAConfig`
     #[must_use]
-    pub fn new(earnings_receiver_address: Address, delegation_approver_address: Address) -> Self {
+    pub fn new(delegation_approver_address: Address) -> Self {
         Self {
-            earnings_receiver_address,
             delegation_approver_address,
         }
     }
@@ -36,12 +33,7 @@ impl EigenlayerECDSAConfig {
 
 impl BlueprintConfig for EigenlayerECDSAConfig {
     async fn register(&self, env: &BlueprintEnvironment) -> Result<(), RunnerError> {
-        register_ecdsa_impl(
-            env,
-            self.earnings_receiver_address,
-            self.delegation_approver_address,
-        )
-        .await
+        register_ecdsa_impl(env, self.delegation_approver_address).await
     }
 
     async fn requires_registration(&self, env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
@@ -73,14 +65,13 @@ async fn requires_registration_ecdsa_impl(env: &BlueprintEnvironment) -> Result<
         .await
         .map_err(EigenlayerError::Contract)
     {
-        Ok(is_registered) => Ok(!is_registered._0),
+        Ok(is_registered) => Ok(!is_registered),
         Err(e) => Err(e.into()),
     }
 }
 
 async fn register_ecdsa_impl(
     env: &BlueprintEnvironment,
-    earnings_receiver_address: Address,
     delegation_approver_address: Address,
 ) -> Result<(), RunnerError> {
     let contract_addresses = env.protocol_settings.eigenlayer()?;
@@ -110,9 +101,7 @@ async fn register_ecdsa_impl(
 
     let provider = get_provider_http(env.http_rpc_endpoint.clone());
 
-    let logger = get_test_logger();
     let el_chain_reader = ELChainReader::new(
-        logger,
         Some(allocation_manager_address),
         delegation_manager_address,
         rewards_coordinator_address,
@@ -132,14 +121,19 @@ async fn register_ecdsa_impl(
         operator_private_key.clone(),
     );
 
-    let staker_opt_out_window_blocks = 50400u32;
+    // Get registration parameters from protocol settings
+    let eigenlayer_settings = env
+        .protocol_settings
+        .eigenlayer()
+        .map_err(|e| EigenlayerError::Other(e.to_string().into()))?;
+
     let operator_details = Operator {
         address: operator_address,
         delegation_approver_address,
-        metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
-        allocation_delay: Some(30), // TODO: Make allocation delay configurable
-        _deprecated_earnings_receiver_address: Some(earnings_receiver_address),
-        staker_opt_out_window_blocks: Some(staker_opt_out_window_blocks),
+        metadata_url: eigenlayer_settings.metadata_url.clone(),
+        allocation_delay: Some(eigenlayer_settings.allocation_delay),
+        _deprecated_earnings_receiver_address: None, // Deprecated in eigensdk-rs v2.0.0
+        staker_opt_out_window_blocks: Some(eigenlayer_settings.staker_opt_out_window_blocks),
     };
 
     let tx_hash = el_writer
@@ -210,6 +204,6 @@ async fn register_ecdsa_impl(
             EigenlayerError::Registration(format!("Failed to check registration: {}", e))
         })?;
 
-    blueprint_core::info!("Operator Registration Status {:?}", is_registered._0);
+    blueprint_core::info!("Operator Registration Status {:?}", is_registered);
     Ok(())
 }

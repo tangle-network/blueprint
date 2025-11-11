@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-client-evm-v0.1.0-alpha.6...blueprint-client-evm-v0.1.0-alpha.7) - 2025-10-02
+
+### Other
+
+- bump eigensdk & alloy version (#1164)
+
+## [0.1.0-alpha.6](https://github.com/tangle-network/blueprint/compare/blueprint-client-evm-v0.1.0-alpha.5...blueprint-client-evm-v0.1.0-alpha.6) - 2025-08-11
+
+### Other
+
+- updated the following local packages: blueprint-core
+
 ## [0.1.0-alpha.5](https://github.com/tangle-network/blueprint/compare/blueprint-client-evm-v0.1.0-alpha.4...blueprint-client-evm-v0.1.0-alpha.5) - 2025-06-16
 
 ### Added

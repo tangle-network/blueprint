@@ -230,7 +230,7 @@ resources = [
 
         let multiplier = RATE_MULTIPLIERS[i - 1];
         let port = BASE_PORT + i as u16;
-        let addr = format!("127.0.0.1:{}", port);
+        let addr = format!("127.0.0.1:{port}");
         let socket_addr = match addr.parse() {
             Ok(addr) => addr,
             Err(e) => {
@@ -238,11 +238,11 @@ resources = [
                 continue;
             }
         };
-        operator_endpoints.push(format!("http://{}", addr));
+        operator_endpoints.push(format!("http://{addr}"));
 
         let node_handle = match nodes[i].clone() {
             NodeSlot::Occupied(node) => node,
-            NodeSlot::Empty => panic!("Node {} is not initialized", i),
+            NodeSlot::Empty => panic!("Node {i} is not initialized"),
         };
         node_handles.push(node_handle.clone());
         let operator_env = node_handle.test_env.read().await.env.clone();
@@ -298,7 +298,7 @@ resources = [
         servers.push(server_handle);
 
         let client = loop {
-            match tonic::transport::Endpoint::new(format!("http://{}", addr)) {
+            match tonic::transport::Endpoint::new(format!("http://{addr}")) {
                 Ok(endpoint) => match endpoint.connect().await {
                     Ok(channel) => {
                         break PricingEngineClient::new(channel);
@@ -492,12 +492,11 @@ resources = [
         .unwrap();
 
     let operators = test_env.nodes.read().await.len();
-    info!("Found {} operators in the test environment", operators);
+    info!("Found {operators} operators in the test environment");
 
     assert!(
         *operator_index < operators,
-        "Selected operator index {} is out of bounds",
-        operator_index
+        "Selected operator index {operator_index} is out of bounds",
     );
 
     let operator_handle = node_handles[*operator_index].clone();
