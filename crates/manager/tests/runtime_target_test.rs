@@ -85,18 +85,18 @@ mod validation_tests {
         );
     }
 
-    /// Test: Hypervisor runtime requires vm-sandbox feature flag
+    /// Test: Hypervisor runtime validation
     ///
-    /// On platforms where hypervisor is supported (Linux), validates that
-    /// the vm-sandbox feature flag requirement is enforced.
+    /// On non-Linux platforms, validates that hypervisor is rejected.
+    /// On Linux platforms, hypervisor is accepted during validation
+    /// (the vm-sandbox feature check happens later during execution).
     #[tokio::test]
-    #[cfg(not(feature = "vm-sandbox"))]
-    async fn test_hypervisor_requires_feature_flag() {
+    async fn test_hypervisor_platform_check() {
         use tempfile::tempdir;
 
         let temp_dir = tempdir().unwrap();
         let blueprint_path = temp_dir.path().join("test_blueprint");
-        std::fs::File::create(&blueprint_path).unwrap();
+        std::fs::create_dir(&blueprint_path).unwrap();
 
         let config = blueprint_eigenlayer_extra::AvsRegistrationConfig {
             service_manager: alloy_primitives::Address::ZERO,
@@ -120,25 +120,28 @@ mod validation_tests {
         };
 
         let result = config.validate();
-        assert!(result.is_err(), "Should fail without vm-sandbox feature");
 
-        let err_msg = result.unwrap_err();
-
-        // On non-Linux platforms, we get the platform error first
+        // On non-Linux platforms, we get the platform error
         #[cfg(not(target_os = "linux"))]
-        assert!(
-            err_msg.contains("requires Linux"),
-            "On non-Linux platforms, error should mention Linux requirement. Got: {}",
-            err_msg
-        );
+        {
+            assert!(result.is_err(), "Should fail on non-Linux platforms");
+            let err_msg = result.unwrap_err();
+            assert!(
+                err_msg.contains("requires Linux"),
+                "On non-Linux platforms, error should mention Linux requirement. Got: {}",
+                err_msg
+            );
+        }
 
-        // On Linux without vm-sandbox feature, we get the feature flag error
+        // On Linux platforms, validation passes (vm-sandbox check happens during execution)
         #[cfg(target_os = "linux")]
-        assert!(
-            err_msg.contains("vm-sandbox"),
-            "On Linux without vm-sandbox feature, error should mention feature flag. Got: {}",
-            err_msg
-        );
+        {
+            assert!(
+                result.is_ok(),
+                "Hypervisor should pass validation on Linux. Got error: {:?}",
+                result.unwrap_err()
+            );
+        }
     }
 
     /// Test: Container runtime requires container_image field

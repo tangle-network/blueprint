@@ -30,7 +30,7 @@ hex = { workspace = true }
 parking_lot = { workspace = true }
 thiserror = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
-crossbeam-channel = { workspace = true }
+crossbeam-channel = { workspace = true, features = ["std"] }
 
 # TODO: Can be optional with proper flag. Used for p2p w/ evm addresses
 libsecp256k1 = { workspace = true, features = ["static-context"] }
