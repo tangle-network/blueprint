@@ -56,9 +56,6 @@ pub enum Error {
     Noise(#[from] libp2p::noise::Error),
 
     #[error(transparent)]
-    Behaviour(#[from] libp2p::BehaviourBuilderError),
-
-    #[error(transparent)]
     Subscription(#[from] libp2p::gossipsub::SubscriptionError),
 
     #[error(transparent)]
