@@ -141,13 +141,10 @@ mod validation_tests {
         );
     }
 
-
-    // TODO: Test: Hypervisor runtime requires vm-sandbox feature flag with different 
+    // TODO: Test: Hypervisor runtime requires vm-sandbox feature flag with different
     // RuntimeTarget, except for RuntimeTarget::Native
     // because "Pre-compiled binaries not yet supported for Native/Hypervisor runtimes"
     // See `AvsRegistrationConfig::validate` in crates/eigenlayer-extra/src/registration.rs:191
-
-
 
     /// Test: Container runtime requires container_image field
     ///
