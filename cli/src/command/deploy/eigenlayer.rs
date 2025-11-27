@@ -63,7 +63,7 @@ impl EigenlayerDeployOpts {
             // For local testnet with no specified keystore, use a temporary directory
             let temp_dir = tempfile::tempdir()
                 .expect("Failed to create temporary directory")
-                .into_path();
+                .keep();
             temp_dir.to_string_lossy().to_string()
         } else {
             keystore_path.map_or_else(

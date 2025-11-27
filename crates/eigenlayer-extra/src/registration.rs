@@ -603,7 +603,7 @@ mod tests {
     fn test_validation_valid_config() {
         let temp_dir = tempfile::tempdir().unwrap();
         let blueprint_path = temp_dir.path().join("test_blueprint");
-        std::fs::File::create(&blueprint_path).unwrap();
+        std::fs::create_dir_all(&blueprint_path).unwrap();
 
         let config = AvsRegistrationConfig {
             service_manager: Address::ZERO,

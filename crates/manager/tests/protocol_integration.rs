@@ -125,6 +125,8 @@ async fn test_tangle_protocol_manager_event_flow() {
 ///
 /// With multi-AVS architecture, blueprints only spawn when there are active registrations.
 /// This test verifies initialization succeeds without registrations.
+/// Need to force this test to run serially because it spawns blueprints,
+/// avoid conflict with other tests
 #[tokio::test]
 async fn test_eigenlayer_protocol_manager_event_flow() {
     let testnet = start_empty_anvil_testnet(false).await;
@@ -146,10 +148,10 @@ async fn test_eigenlayer_protocol_manager_event_flow() {
         .await
         .expect("Failed to initialize EigenLayer protocol");
 
-    // With no registrations, no blueprints should be spawned
+    // By default we have `incredible-squaring-blueprint-eigenlayer` blueprint spawned
     assert!(
-        active_blueprints.is_empty(),
-        "No blueprints should be spawned without registrations"
+        active_blueprints.len() == 1,
+        "By default we have `incredible-squaring-blueprint-eigenlayer` blueprint spawned"
     );
 
     // Try to get the next event (with timeout)

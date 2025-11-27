@@ -138,8 +138,9 @@ impl EigenlayerEventHandler {
         ctx: &BlueprintManagerContext,
         active_blueprints: &mut ActiveBlueprints,
     ) -> Result<()> {
-        // Load AVS registrations from state file
-        let state_manager = RegistrationStateManager::load()
+        // Load AVS registrations from state file, or create empty state if it doesn't exist
+        // This is expected during initialization when no registrations have been made yet
+        let state_manager = RegistrationStateManager::load_or_create()
             .map_err(|e| Error::Other(format!("Failed to load AVS registrations: {}", e)))?;
 
         // Get all active registrations
