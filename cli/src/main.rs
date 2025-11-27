@@ -4,7 +4,7 @@ use blueprint_runner::config::{BlueprintEnvironment, Protocol, ProtocolSettings,
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use blueprint_runner::error::ConfigError;
 use blueprint_runner::tangle::config::TangleProtocolSettings;
-use cargo_tangle::command::create::{new_blueprint, BlueprintType};
+use cargo_tangle::command::create::{new_blueprint, BlueprintType, TemplateVariables};
 use cargo_tangle::command::deploy::eigenlayer::deploy_eigenlayer;
 use cargo_tangle::command::deploy::tangle::deploy_tangle;
 use cargo_tangle::command::jobs::submit::submit_job;
@@ -155,6 +155,9 @@ pub enum BlueprintCommands {
 
         #[command(flatten)]
         blueprint_type: Option<BlueprintType>,
+
+        #[command(flatten)]
+        template_variables: TemplateVariables,
 
         /// Define a value for template variables (can be used multiple times)
         /// Example: --define gh-username=myusername
@@ -626,6 +629,7 @@ async fn main() -> color_eyre::Result<()> {
                 name,
                 source,
                 blueprint_type,
+                template_variables,
                 define,
                 template_values_file,
                 skip_prompts,
@@ -635,6 +639,7 @@ async fn main() -> color_eyre::Result<()> {
                     source,
                     blueprint_type,
                     define,
+                    template_variables,
                     &template_values_file,
                     skip_prompts,
                 )?;
