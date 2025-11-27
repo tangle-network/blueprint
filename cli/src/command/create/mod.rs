@@ -138,13 +138,12 @@ fn build_define_map(define: &[String]) -> HashMap<String, String> {
 fn container_fields_required(provided: &HashMap<String, String>) -> bool {
     provided
         .get("container")
-        .map(|value| {
+        .is_none_or(|value| {
             matches!(
                 value.trim().to_ascii_lowercase().as_str(),
                 "true" | "1" | "yes"
             )
         })
-        .unwrap_or(true)
 }
 
 /// Generate a new blueprint from a template
