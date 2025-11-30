@@ -85,18 +85,18 @@ mod validation_tests {
         );
     }
 
-    /// Test: Hypervisor runtime requires vm-sandbox feature flag
+    /// Test: Hypervisor runtime with RuntimeTarget::Binary
     ///
     /// On platforms where hypervisor is supported (Linux), validates that
-    /// the vm-sandbox feature flag requirement is enforced.
+    /// the binary is not supported for Hypervisor runtime.
     #[tokio::test]
     #[cfg(not(feature = "vm-sandbox"))]
-    async fn test_hypervisor_requires_feature_flag() {
+    async fn test_hypervisor_not_supported_for_binary() {
         use tempfile::tempdir;
 
         let temp_dir = tempdir().unwrap();
         let blueprint_path = temp_dir.path().join("test_blueprint");
-        std::fs::File::create(&blueprint_path).unwrap();
+        std::fs::create_dir_all(&blueprint_path).unwrap();
 
         let config = blueprint_eigenlayer_extra::AvsRegistrationConfig {
             service_manager: alloy_primitives::Address::ZERO,
@@ -135,11 +135,16 @@ mod validation_tests {
         // On Linux without vm-sandbox feature, we get the feature flag error
         #[cfg(target_os = "linux")]
         assert!(
-            err_msg.contains("vm-sandbox"),
-            "On Linux without vm-sandbox feature, error should mention feature flag. Got: {}",
+            err_msg.contains("Pre-compiled binaries are not yet supported for Hypervisor runtime"),
+            "On Linux, Hypervisor runtime with RuntimeTarget::Binary, error should mention that pre-compiled binaries are not supported. Got: {}",
             err_msg
         );
     }
+
+    // TODO: Test: Hypervisor runtime requires vm-sandbox feature flag with different
+    // RuntimeTarget, except for RuntimeTarget::Native
+    // because "Pre-compiled binaries not yet supported for Native/Hypervisor runtimes"
+    // See `AvsRegistrationConfig::validate` in crates/eigenlayer-extra/src/registration.rs:191
 
     /// Test: Container runtime requires container_image field
     ///
