@@ -76,7 +76,12 @@ impl BlueprintConfig for EigenlayerBLSConfig {
 }
 
 async fn requires_registration_bls_impl(env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
-    is_operator_registered(env).await
+    if is_operator_registered(env).await? {
+        info!("Operator is already registered for Eigenlayer");
+        Ok(false)
+    } else {
+        Ok(true)
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -325,7 +330,7 @@ async fn is_operator_registered(env: &BlueprintEnvironment) -> Result<bool, Runn
         .is_operator_registered(operator_address)
         .await
     {
-        Ok(is_registered) => Ok(!is_registered),
+        Ok(is_registered) => Ok(is_registered),
         Err(e) => Err(EigenlayerError::AvsRegistry(e).into()),
     }
 }
