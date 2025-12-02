@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.21](https://github.com/tangle-network/blueprint/compare/blueprint-client-eigenlayer-v0.1.0-alpha.20...blueprint-client-eigenlayer-v0.1.0-alpha.21) - 2025-12-02
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-client-eigenlayer-v0.1.0-alpha.19...blueprint-client-eigenlayer-v0.1.0-alpha.20) - 2025-10-30
 
 ### Other

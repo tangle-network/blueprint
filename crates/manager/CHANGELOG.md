@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.24](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.23...blueprint-manager-v0.3.0-alpha.24) - 2025-12-02
+
+### Fixed
+
+- *(crates/runner/src/eigenlayer)* update requires_registration (#1227)
+- *(cargo-tangle)* impl noninteractive cli to generate blueprint (#1225)
+
 ## [0.3.0-alpha.23](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.22...blueprint-manager-v0.3.0-alpha.23) - 2025-11-03
 
 ### Other

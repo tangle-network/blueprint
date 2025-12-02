@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.16](https://github.com/tangle-network/blueprint/compare/blueprint-keystore-v0.1.0-alpha.15...blueprint-keystore-v0.1.0-alpha.16) - 2025-12-02
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.0-alpha.15](https://github.com/tangle-network/blueprint/compare/blueprint-keystore-v0.1.0-alpha.14...blueprint-keystore-v0.1.0-alpha.15) - 2025-10-02
 
 ### Other

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-macros-v0.1.0-alpha.7...blueprint-macros-v0.1.0-alpha.8) - 2025-12-02
+
+### Fixed
+
+- *(cargo-tangle)* impl noninteractive cli to generate blueprint (#1225)
+
 ## [0.1.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-macros-v0.1.0-alpha.6...blueprint-macros-v0.1.0-alpha.7) - 2025-10-30
 
 ### Fixed

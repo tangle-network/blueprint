@@ -2673,7 +2673,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-anvil-testing-utils"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "alloy-primitives 1.2.1",
  "alloy-provider",
@@ -2689,7 +2689,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-auth"
-version = "0.1.0-alpha.10"
+version = "0.1.0-alpha.11"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -2756,7 +2756,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "blueprint-chain-setup-anvil",
  "blueprint-chain-setup-common",
@@ -2765,7 +2765,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup-anvil"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "alloy-contract",
  "alloy-provider",
@@ -2786,7 +2786,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup-common"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "alloy-signer-local",
  "blueprint-clients",
@@ -2805,7 +2805,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-chain-setup-tangle"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "alloy-json-abi",
  "alloy-network",
@@ -2849,7 +2849,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-client-eigenlayer"
-version = "0.1.0-alpha.20"
+version = "0.1.0-alpha.21"
 dependencies = [
  "alloy-contract",
  "alloy-network",
@@ -2908,7 +2908,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-client-tangle"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "auto_impl",
  "blueprint-client-core",
@@ -2927,7 +2927,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-clients"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "blueprint-client-core",
  "blueprint-client-eigenlayer",
@@ -2957,7 +2957,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-contexts"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "blueprint-clients",
  "blueprint-keystore",
@@ -2986,7 +2986,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-core-testing-utils"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "blueprint-auth",
  "blueprint-clients",
@@ -3163,7 +3163,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-eigenlayer-extra"
-version = "0.1.0-alpha.13"
+version = "0.1.0-alpha.14"
 dependencies = [
  "alloy",
  "alloy-contract",
@@ -3197,7 +3197,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-eigenlayer-testing-utils"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "alloy-primitives 1.2.1",
  "alloy-provider",
@@ -3250,7 +3250,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-keystore"
-version = "0.1.0-alpha.15"
+version = "0.1.0-alpha.16"
 dependencies = [
  "alloy-network",
  "alloy-primitives 1.2.1",
@@ -3298,7 +3298,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-macros"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 dependencies = [
  "blueprint-sdk",
  "proc-macro2",
@@ -3313,7 +3313,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager"
-version = "0.3.0-alpha.23"
+version = "0.3.0-alpha.24"
 dependencies = [
  "alloy-primitives 1.2.1",
  "alloy-provider",
@@ -3381,7 +3381,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager-bridge"
-version = "0.1.0-alpha.9"
+version = "0.1.0-alpha.10"
 dependencies = [
  "blueprint-auth",
  "blueprint-core",
@@ -3496,7 +3496,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-pricing-engine"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3560,7 +3560,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-qos"
-version = "0.1.0-alpha.6"
+version = "0.1.0-alpha.7"
 dependencies = [
  "axum",
  "blueprint-core",
@@ -3614,7 +3614,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-runner"
-version = "0.1.0-alpha.20"
+version = "0.1.0-alpha.21"
 dependencies = [
  "alloy-contract",
  "alloy-primitives 1.2.1",
@@ -3656,7 +3656,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-sdk"
-version = "0.1.0-alpha.22"
+version = "0.1.0-alpha.23"
 dependencies = [
  "alloy",
  "alloy-json-abi",
@@ -3706,7 +3706,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-store-local-database"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 dependencies = [
  "blueprint-std",
  "serde",
@@ -3717,7 +3717,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-stores"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "blueprint-store-local-database",
  "document-features",
@@ -3726,7 +3726,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-tangle-extra"
-version = "0.1.0-alpha.12"
+version = "0.1.0-alpha.13"
 dependencies = [
  "blueprint-core",
  "blueprint-testing-utils",
@@ -3752,7 +3752,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-tangle-testing-utils"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "alloy-primitives 1.2.1",
  "alloy-signer-local",
@@ -3784,7 +3784,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-testing-utils"
-version = "0.1.0-alpha.20"
+version = "0.1.0-alpha.21"
 dependencies = [
  "blueprint-anvil-testing-utils",
  "blueprint-core-testing-utils",

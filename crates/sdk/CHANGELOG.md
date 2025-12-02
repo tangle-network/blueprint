@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.23](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.22...blueprint-sdk-v0.1.0-alpha.23) - 2025-12-02
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.0-alpha.22](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.21...blueprint-sdk-v0.1.0-alpha.22) - 2025-11-03
 
 ### Other
