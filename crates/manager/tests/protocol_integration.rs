@@ -150,7 +150,7 @@ async fn test_eigenlayer_protocol_manager_event_flow() {
 
     // By default we have `incredible-squaring-blueprint-eigenlayer` blueprint spawned
     assert!(
-        active_blueprints.len() == 0,
+        active_blueprints.is_empty(),
         "By default we have `incredible-squaring-blueprint-eigenlayer` blueprint spawned"
     );
 
