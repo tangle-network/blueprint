@@ -3,14 +3,14 @@
 //! Produces [`JobCall`]s from Tangle EVM contract events.
 
 use alloc::collections::VecDeque;
-use alloy_primitives::{Address, U256};
+use alloy_primitives::Address;
 use alloy_rpc_types::Log;
 use alloy_sol_types::SolEvent;
 use blueprint_client_tangle_evm::contracts::ITangle;
 use blueprint_client_tangle_evm::TangleEvmClient;
 use blueprint_core::extensions::Extensions;
 use blueprint_core::job::call::Parts;
-use blueprint_core::metadata::{MetadataMap, MetadataValue};
+use blueprint_core::metadata::MetadataMap;
 use blueprint_core::JobCall;
 use core::future::Future;
 use core::pin::Pin;
@@ -169,7 +169,7 @@ async fn poll_for_jobs(
         // Try to decode as JobSubmitted event
         if let Ok(job_event) = decode_job_submitted(log) {
             // Filter by service ID
-            if job_event.serviceId != service_id {
+            if job_event.service_id != service_id {
                 continue;
             }
 
@@ -197,23 +197,31 @@ async fn poll_for_jobs(
 
 /// Decoded JobSubmitted event
 struct JobSubmittedEvent {
-    serviceId: u64,
-    callId: u64,
-    jobIndex: u8,
+    service_id: u64,
+    call_id: u64,
+    job_index: u8,
     caller: Address,
     inputs: alloc::vec::Vec<u8>,
 }
 
 /// Decode a JobSubmitted event from a log
 fn decode_job_submitted(log: &Log) -> Result<JobSubmittedEvent, ProducerError> {
+    // Convert alloy_rpc_types::Log to alloy_primitives::Log for decoding
+    let primitive_log = alloy_primitives::Log::new(
+        log.address(),
+        log.topics().to_vec(),
+        log.data().data.clone(),
+    )
+    .ok_or_else(|| ProducerError::Decoding("Failed to create primitive log".to_string()))?;
+
     // The JobSubmitted event signature
-    let event = ITangle::JobSubmitted::decode_log(log, true)
+    let event = ITangle::JobSubmitted::decode_log(&primitive_log)
         .map_err(|e| ProducerError::Decoding(e.to_string()))?;
 
     Ok(JobSubmittedEvent {
-        serviceId: event.serviceId,
-        callId: event.callId,
-        jobIndex: event.jobIndex,
+        service_id: event.serviceId,
+        call_id: event.callId,
+        job_index: event.jobIndex,
         caller: event.caller,
         inputs: event.inputs.to_vec(),
     })
@@ -227,16 +235,17 @@ fn job_submitted_to_call(
     timestamp: u64,
 ) -> JobCall {
     let mut metadata = MetadataMap::new();
-    metadata.insert(extract::CallId::METADATA_KEY, event.callId);
-    metadata.insert(extract::ServiceId::METADATA_KEY, event.serviceId);
-    metadata.insert(extract::JobIndex::METADATA_KEY, event.jobIndex);
+    metadata.insert(extract::CallId::METADATA_KEY, event.call_id);
+    metadata.insert(extract::ServiceId::METADATA_KEY, event.service_id);
+    // Convert u8 to [u8; 1] since MetadataValue doesn't impl From<u8>
+    metadata.insert(extract::JobIndex::METADATA_KEY, [event.job_index]);
     metadata.insert(extract::BlockNumber::METADATA_KEY, block_number);
     metadata.insert(extract::BlockHash::METADATA_KEY, block_hash);
     metadata.insert(extract::Timestamp::METADATA_KEY, timestamp);
     metadata.insert(extract::Caller::METADATA_KEY, event.caller.0 .0);
 
     let extensions = Extensions::new();
-    let parts = Parts::new(event.jobIndex)
+    let parts = Parts::new(event.job_index)
         .with_metadata(metadata)
         .with_extensions(extensions);
 

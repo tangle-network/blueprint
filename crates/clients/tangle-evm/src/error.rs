@@ -1,5 +1,8 @@
 //! Error types for the Tangle EVM client
 
+extern crate alloc;
+
+use alloc::string::{String, ToString};
 use alloy_primitives::Address;
 use thiserror::Error;
 
@@ -64,6 +67,10 @@ pub enum Error {
     /// Provider not initialized
     #[error("Provider not initialized - call connect() first")]
     ProviderNotInitialized,
+
+    /// Client core error
+    #[error("Client error: {0}")]
+    ClientCore(#[from] blueprint_client_core::error::Error),
 
     /// Generic error
     #[error("{0}")]

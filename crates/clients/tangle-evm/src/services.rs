@@ -2,12 +2,17 @@
 //!
 //! Service-specific queries and operations for Tangle v2 contracts.
 
+#![allow(missing_docs)]
+
+extern crate alloc;
+
+use alloc::string::ToString;
 use alloy_primitives::{Address, U256};
 use blueprint_std::vec::Vec;
 
 use crate::client::TangleEvmClient;
 use crate::contracts::ITangle;
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 /// Service information from the Tangle contract
 #[derive(Debug, Clone)]
@@ -162,12 +167,11 @@ impl TangleEvmClient {
     /// Queries all services and filters for those where the operator is active
     pub async fn get_operator_services(&self, operator: Address) -> Result<Vec<u64>> {
         let contract = self.tangle_contract();
-        let service_count = contract
+        let service_count: u64 = contract
             .serviceCount()
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))?
-            ._0;
+            .map_err(|e| Error::Contract(e.to_string()))?;
 
         let mut services = Vec::new();
 

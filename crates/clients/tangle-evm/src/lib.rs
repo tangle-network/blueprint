@@ -58,31 +58,36 @@
     unused_qualifications
 )]
 
+#[allow(unused_extern_crates)]
 extern crate alloc;
+
+use core::future::Future;
 
 pub mod client;
 pub mod config;
+#[allow(missing_docs)]
 pub mod contracts;
 pub mod error;
+#[allow(missing_docs)]
 pub mod services;
 
 // Re-exports
-pub use client::{TangleEvmClient, TangleEvmEvent, EcdsaPublicKey};
+pub use client::{EcdsaPublicKey, TangleEvmClient, TangleEvmEvent};
 pub use config::{TangleEvmClientConfig, TangleEvmSettings};
-pub use contracts::{ITangle, IMultiAssetDelegation, IOperatorStatusRegistry};
+pub use contracts::{IMultiAssetDelegation, IOperatorStatusRegistry, ITangle};
 pub use error::{Error, Result};
 pub use services::{
-    BlueprintConfig, BlueprintInfo, MembershipModel, OperatorSecurityCommitment,
-    PricingModel, ServiceInfo, ServiceStatus,
+    BlueprintConfig, BlueprintInfo, MembershipModel, OperatorSecurityCommitment, PricingModel,
+    ServiceInfo, ServiceStatus,
 };
 
 /// Trait for clients that provide events
 pub trait EventsClient<E> {
     /// Get the next event
-    fn next_event(&self) -> impl core::future::Future<Output = Option<E>> + Send;
+    fn next_event(&self) -> impl Future<Output = Option<E>> + Send;
 
     /// Get the latest event
-    fn latest_event(&self) -> impl core::future::Future<Output = Option<E>> + Send;
+    fn latest_event(&self) -> impl Future<Output = Option<E>> + Send;
 }
 
 impl EventsClient<TangleEvmEvent> for TangleEvmClient {

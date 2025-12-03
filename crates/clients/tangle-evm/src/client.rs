@@ -2,21 +2,31 @@
 //!
 //! Provides connectivity to Tangle v2 EVM contracts for blueprint operators.
 
+extern crate alloc;
+
+use alloc::format;
+use alloc::string::ToString;
+use alloc::vec;
+use alloy_network::Ethereum;
 use alloy_primitives::{Address, B256, U256};
-use alloy_provider::{Provider, ProviderBuilder, RootProvider};
+use alloy_provider::{DynProvider, Provider, ProviderBuilder};
 use alloy_rpc_types::{Block, BlockNumberOrTag, Filter, Log};
-use alloy_transport::BoxTransport;
 use blueprint_client_core::{BlueprintServicesClient, OperatorSet};
+use blueprint_crypto::k256::K256Ecdsa;
+use blueprint_keystore::backends::Backend;
 use blueprint_keystore::Keystore;
 use blueprint_std::collections::BTreeMap;
-use blueprint_std::string::String;
 use blueprint_std::sync::Arc;
 use blueprint_std::vec::Vec;
+use k256::elliptic_curve::sec1::ToEncodedPoint;
 use tokio::sync::Mutex;
 
 use crate::config::TangleEvmClientConfig;
 use crate::contracts::{IMultiAssetDelegation, ITangle};
 use crate::error::{Error, Result};
+
+/// Type alias for the dynamic provider
+pub type TangleProvider = DynProvider<Ethereum>;
 
 /// Type alias for ECDSA public key (uncompressed, 65 bytes)
 pub type EcdsaPublicKey = [u8; 65];
@@ -41,7 +51,7 @@ pub struct TangleEvmEvent {
 #[derive(Clone)]
 pub struct TangleEvmClient {
     /// RPC provider
-    provider: Arc<RootProvider<BoxTransport>>,
+    provider: Arc<TangleProvider>,
     /// Tangle contract address
     tangle_address: Address,
     /// MultiAssetDelegation contract address
@@ -92,26 +102,26 @@ impl TangleEvmClient {
     pub async fn with_keystore(config: TangleEvmClientConfig, keystore: Keystore) -> Result<Self> {
         let rpc_url = config.http_rpc_endpoint.as_str();
 
-        // Create provider
+        // Create provider and wrap in DynProvider for type erasure
         let provider = ProviderBuilder::new()
-            .on_builtin(rpc_url)
+            .connect(rpc_url)
             .await
-            .map_err(|e| {
-                Error::Transport(alloy_transport::TransportError::local_usage_str(
-                    &e.to_string(),
-                ))
-            })?;
+            .map_err(|e| Error::Config(e.to_string()))?;
+
+        let dyn_provider = DynProvider::new(provider);
 
         // Get operator's address from keystore (using ECDSA key)
         let ecdsa_key = keystore
-            .first_local::<blueprint_crypto::EcdsaKey>()
+            .first_local::<K256Ecdsa>()
             .map_err(Error::Keystore)?;
 
         // Convert ECDSA public key to Ethereum address
-        let account = ecdsa_public_key_to_address(&ecdsa_key.0)?;
+        // The key.0 is a VerifyingKey - extract the bytes from it
+        let pubkey_bytes = ecdsa_key.0.to_encoded_point(false);
+        let account = ecdsa_public_key_to_address(pubkey_bytes.as_bytes())?;
 
         Ok(Self {
-            provider: Arc::new(provider),
+            provider: Arc::new(dyn_provider),
             tangle_address: config.settings.tangle_contract,
             restaking_address: config.settings.restaking_contract,
             account,
@@ -123,19 +133,12 @@ impl TangleEvmClient {
     }
 
     /// Get the Tangle contract instance
-    pub fn tangle_contract(
-        &self,
-    ) -> ITangle::ITangleInstance<BoxTransport, Arc<RootProvider<BoxTransport>>> {
+    pub fn tangle_contract(&self) -> ITangle::ITangleInstance<Arc<TangleProvider>> {
         ITangle::new(self.tangle_address, Arc::clone(&self.provider))
     }
 
     /// Get the MultiAssetDelegation contract instance
-    pub fn restaking_contract(
-        &self,
-    ) -> IMultiAssetDelegation::IMultiAssetDelegationInstance<
-        BoxTransport,
-        Arc<RootProvider<BoxTransport>>,
-    > {
+    pub fn restaking_contract(&self) -> IMultiAssetDelegation::IMultiAssetDelegationInstance<Arc<TangleProvider>> {
         IMultiAssetDelegation::new(self.restaking_address, Arc::clone(&self.provider))
     }
 
@@ -162,7 +165,7 @@ impl TangleEvmClient {
     /// Get a block by number
     pub async fn get_block(&self, number: BlockNumberOrTag) -> Result<Option<Block>> {
         self.provider
-            .get_block_by_number(number, false)
+            .get_block_by_number(number)
             .await
             .map_err(Error::Transport)
     }
@@ -266,23 +269,21 @@ impl TangleEvmClient {
         operator: Address,
     ) -> Result<bool> {
         let contract = self.tangle_contract();
-        let result = contract
+        contract
             .isOperatorRegistered(blueprint_id, operator)
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))?;
-        Ok(result._0)
+            .map_err(|e| Error::Contract(e.to_string()))
     }
 
     /// Get all operators registered for a blueprint
     pub async fn get_blueprint_operators(&self, blueprint_id: u64) -> Result<Vec<Address>> {
         let contract = self.tangle_contract();
-        let result = contract
+        contract
             .getBlueprintOperators(blueprint_id)
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))?;
-        Ok(result._0)
+            .map_err(|e| Error::Contract(e.to_string()))
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -302,23 +303,21 @@ impl TangleEvmClient {
     /// Get service operators
     pub async fn get_service_operators(&self, service_id: u64) -> Result<Vec<Address>> {
         let contract = self.tangle_contract();
-        let result = contract
+        contract
             .getServiceOperators(service_id)
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))?;
-        Ok(result._0)
+            .map_err(|e| Error::Contract(e.to_string()))
     }
 
     /// Check if address is a service operator
     pub async fn is_service_operator(&self, service_id: u64, operator: Address) -> Result<bool> {
         let contract = self.tangle_contract();
-        let result = contract
+        contract
             .isServiceOperator(service_id, operator)
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))?;
-        Ok(result._0)
+            .map_err(|e| Error::Contract(e.to_string()))
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -328,45 +327,41 @@ impl TangleEvmClient {
     /// Check if address is a registered operator
     pub async fn is_operator(&self, operator: Address) -> Result<bool> {
         let contract = self.restaking_contract();
-        let result = contract
+        contract
             .isOperator(operator)
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))?;
-        Ok(result._0)
+            .map_err(|e| Error::Contract(e.to_string()))
     }
 
     /// Check if operator is active
     pub async fn is_operator_active(&self, operator: Address) -> Result<bool> {
         let contract = self.restaking_contract();
-        let result = contract
+        contract
             .isOperatorActive(operator)
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))?;
-        Ok(result._0)
+            .map_err(|e| Error::Contract(e.to_string()))
     }
 
     /// Get operator's total stake
     pub async fn get_operator_stake(&self, operator: Address) -> Result<U256> {
         let contract = self.restaking_contract();
-        let result = contract
+        contract
             .getOperatorStake(operator)
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))?;
-        Ok(result._0)
+            .map_err(|e| Error::Contract(e.to_string()))
     }
 
     /// Get minimum operator stake requirement
     pub async fn min_operator_stake(&self) -> Result<U256> {
         let contract = self.restaking_contract();
-        let result = contract
+        contract
             .minOperatorStake()
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))?;
-        Ok(result._0)
+            .map_err(|e| Error::Contract(e.to_string()))
     }
 }
 
@@ -383,7 +378,7 @@ fn ecdsa_public_key_to_address(pubkey: &[u8]) -> Result<Address> {
         let point = EncodedPoint::from_bytes(pubkey)
             .map_err(|e| Error::InvalidAddress(format!("Invalid compressed key: {e}")))?;
 
-        let pubkey = k256::PublicKey::from_encoded_point(&point)
+        let pubkey: k256::PublicKey = Option::from(k256::PublicKey::from_encoded_point(&point))
             .ok_or_else(|| Error::InvalidAddress("Failed to decompress public key".into()))?;
 
         pubkey.to_encoded_point(false).as_bytes().to_vec()
@@ -457,13 +452,15 @@ impl BlueprintServicesClient for TangleEvmClient {
     async fn operator_id(&self) -> core::result::Result<Self::PublicApplicationIdentity, Self::Error> {
         let key = self
             .keystore
-            .first_local::<blueprint_crypto::EcdsaKey>()
+            .first_local::<K256Ecdsa>()
             .map_err(Error::Keystore)?;
 
-        // Convert to 65-byte uncompressed format
+        // Convert VerifyingKey to 65-byte uncompressed format
+        let encoded = key.0.to_encoded_point(false);
+        let bytes = encoded.as_bytes();
+
         let mut uncompressed = [0u8; 65];
-        uncompressed[0] = 0x04;
-        uncompressed[1..].copy_from_slice(&key.0[..64]);
+        uncompressed.copy_from_slice(bytes);
 
         Ok(uncompressed)
     }

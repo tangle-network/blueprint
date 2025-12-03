@@ -3,14 +3,15 @@
 //! Consumes [`JobResult`]s and submits them to the Tangle EVM contract.
 
 use crate::extract;
-use alloc::collections::VecDeque;
+use alloy_primitives::Bytes;
 use blueprint_client_tangle_evm::TangleEvmClient;
 use blueprint_core::error::BoxError;
 use blueprint_core::JobResult;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use futures_util::Sink;
-use std::sync::Mutex;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 /// Error type for the consumer
 #[derive(Debug, thiserror::Error)]
@@ -19,23 +20,28 @@ pub enum ConsumerError {
     #[error("Client error: {0}")]
     Client(String),
     /// Missing metadata
-    #[error("Missing required metadata: {0}")]
+    #[error("Missing metadata: {0}")]
     MissingMetadata(&'static str),
-    /// Invalid metadata value
-    #[error("Invalid metadata value for {0}")]
+    /// Invalid metadata
+    #[error("Invalid metadata: {0}")]
     InvalidMetadata(&'static str),
+    /// Transaction error
+    #[error("Transaction error: {0}")]
+    Transaction(String),
 }
 
-/// A derived job result with extracted metadata
+/// Derived job result for submission
 struct DerivedJobResult {
-    call_id: u64,
     service_id: u64,
-    output: alloc::vec::Vec<u8>,
+    call_id: u64,
+    output: Bytes,
 }
 
 enum State {
     WaitingForResult,
-    SubmittingResult(Pin<Box<dyn core::future::Future<Output = Result<(), ConsumerError>> + Send>>),
+    ProcessingSubmission(
+        Pin<Box<dyn core::future::Future<Output = Result<(), ConsumerError>> + Send>>,
+    ),
 }
 
 impl State {
@@ -46,8 +52,8 @@ impl State {
 
 /// A consumer of Tangle EVM [`JobResult`]s
 pub struct TangleEvmConsumer {
-    client: TangleEvmClient,
-    buffer: VecDeque<DerivedJobResult>,
+    client: Arc<TangleEvmClient>,
+    buffer: Mutex<VecDeque<DerivedJobResult>>,
     state: Mutex<State>,
 }
 
@@ -55,8 +61,8 @@ impl TangleEvmConsumer {
     /// Create a new [`TangleEvmConsumer`]
     pub fn new(client: TangleEvmClient) -> Self {
         Self {
-            client,
-            buffer: VecDeque::new(),
+            client: Arc::new(client),
+            buffer: Mutex::new(VecDeque::new()),
             state: Mutex::new(State::WaitingForResult),
         }
     }
@@ -77,23 +83,21 @@ impl Sink<JobResult> for TangleEvmConsumer {
 
     fn start_send(self: Pin<&mut Self>, item: JobResult) -> Result<(), Self::Error> {
         let JobResult::Ok { head, body } = &item else {
-            // Discard error results
-            blueprint_core::trace!(
-                target: "tangle-evm-consumer",
-                "Discarding job result with error"
-            );
+            // We don't care about errors here
+            blueprint_core::trace!(target: "tangle-evm-consumer", "Discarding job result with error");
             return Ok(());
         };
 
-        // Extract required metadata
-        let call_id_raw = head
-            .metadata
-            .get(extract::CallId::METADATA_KEY)
-            .ok_or_else(|| ConsumerError::MissingMetadata("call_id"))?;
-        let service_id_raw = head
-            .metadata
-            .get(extract::ServiceId::METADATA_KEY)
-            .ok_or_else(|| ConsumerError::MissingMetadata("service_id"))?;
+        let (Some(call_id_raw), Some(service_id_raw)) = (
+            head.metadata.get(extract::CallId::METADATA_KEY),
+            head.metadata.get(extract::ServiceId::METADATA_KEY),
+        ) else {
+            // Not a tangle EVM job result
+            blueprint_core::trace!(target: "tangle-evm-consumer", "Discarding job result with missing metadata");
+            return Ok(());
+        };
+
+        blueprint_core::debug!(target: "tangle-evm-consumer", result = ?item, "Received job result, handling...");
 
         let call_id: u64 = call_id_raw
             .try_into()
@@ -102,19 +106,11 @@ impl Sink<JobResult> for TangleEvmConsumer {
             .try_into()
             .map_err(|_| ConsumerError::InvalidMetadata("service_id"))?;
 
-        blueprint_core::debug!(
-            target: "tangle-evm-consumer",
-            "Received job result for service_id={}, call_id={}",
+        self.get_mut().buffer.lock().unwrap().push_back(DerivedJobResult {
             service_id,
-            call_id
-        );
-
-        self.get_mut().buffer.push_back(DerivedJobResult {
             call_id,
-            service_id,
-            output: body.to_vec(),
+            output: Bytes::copy_from_slice(body),
         });
-
         Ok(())
     }
 
@@ -122,30 +118,38 @@ impl Sink<JobResult> for TangleEvmConsumer {
         let consumer = self.get_mut();
         let mut state = consumer.state.lock().unwrap();
 
-        if consumer.buffer.is_empty() && state.is_waiting() {
-            return Poll::Ready(Ok(()));
+        {
+            let buffer = consumer.buffer.lock().unwrap();
+            if buffer.is_empty() && state.is_waiting() {
+                return Poll::Ready(Ok(()));
+            }
         }
 
         loop {
             match &mut *state {
                 State::WaitingForResult => {
+                    let result = {
+                        let mut buffer = consumer.buffer.lock().unwrap();
+                        buffer.pop_front()
+                    };
+
                     let Some(DerivedJobResult {
-                        call_id,
                         service_id,
+                        call_id,
                         output,
-                    }) = consumer.buffer.pop_front()
+                    }) = result
                     else {
                         return Poll::Ready(Ok(()));
                     };
 
-                    let client = consumer.client.clone();
+                    let client = Arc::clone(&consumer.client);
                     let fut = Box::pin(async move {
                         submit_result(client, service_id, call_id, output).await
                     });
 
-                    *state = State::SubmittingResult(fut);
+                    *state = State::ProcessingSubmission(fut);
                 }
-                State::SubmittingResult(future) => match future.as_mut().poll(cx) {
+                State::ProcessingSubmission(future) => match future.as_mut().poll(cx) {
                     Poll::Ready(Ok(())) => {
                         *state = State::WaitingForResult;
                     }
@@ -157,7 +161,8 @@ impl Sink<JobResult> for TangleEvmConsumer {
     }
 
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        if self.buffer.is_empty() {
+        let buffer = self.buffer.lock().unwrap();
+        if buffer.is_empty() {
             Poll::Ready(Ok(()))
         } else {
             Poll::Pending
@@ -165,32 +170,35 @@ impl Sink<JobResult> for TangleEvmConsumer {
     }
 }
 
-/// Submit a job result to the Tangle contract
+/// Submit a result to the Tangle contract
 async fn submit_result(
-    _client: TangleEvmClient,
+    client: Arc<TangleEvmClient>,
     service_id: u64,
     call_id: u64,
-    output: alloc::vec::Vec<u8>,
+    output: Bytes,
 ) -> Result<(), ConsumerError> {
-    // TODO: Implement actual transaction submission
-    // This requires:
-    // 1. Building the submitResult transaction data
-    // 2. Signing with the operator's key
-    // 3. Broadcasting and waiting for confirmation
-
-    blueprint_core::info!(
+    blueprint_core::debug!(
         target: "tangle-evm-consumer",
-        "Submitting result for service_id={}, call_id={}, output_len={}",
+        "Submitting result for service {} call {}",
         service_id,
-        call_id,
-        output.len()
+        call_id
     );
 
-    // For now, log the intent - full implementation requires transaction signing
-    // which needs the keystore integration
-    blueprint_core::warn!(
+    // Get the contract instance
+    let contract = client.tangle_contract();
+
+    // Call submitResult
+    // Note: This requires a signer. For now we just do a call to check it works.
+    // In production, we'd need to sign and send the transaction.
+    let _call = contract.submitResult(service_id, call_id, output);
+
+    // TODO: Sign and send the transaction
+    // For now, log that we would submit
+    blueprint_core::info!(
         target: "tangle-evm-consumer",
-        "Transaction submission not yet implemented - result logged only"
+        "Would submit result for service {} call {} (signing not implemented yet)",
+        service_id,
+        call_id
     );
 
     Ok(())

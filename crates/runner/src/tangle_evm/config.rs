@@ -40,8 +40,19 @@ impl Default for TangleEvmProtocolSettings {
 }
 
 impl ProtocolSettingsT for TangleEvmProtocolSettings {
-    fn load(settings: BlueprintSettings) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    fn load(_settings: BlueprintSettings) -> Result<Self, Box<dyn Error + Send + Sync>> {
         use crate::error::ConfigError;
+
+        // Parse blueprint_id from environment
+        let blueprint_id: u64 = std::env::var("BLUEPRINT_ID")
+            .map_err(|_| ConfigError::MissingBlueprintId)?
+            .parse()
+            .map_err(|_| ConfigError::MissingBlueprintId)?;
+
+        // Parse service_id from environment (optional)
+        let service_id: Option<u64> = std::env::var("SERVICE_ID")
+            .ok()
+            .and_then(|s| s.parse().ok());
 
         // Parse contract addresses from environment
         let tangle_contract = std::env::var("TANGLE_CONTRACT")
@@ -55,10 +66,8 @@ impl ProtocolSettingsT for TangleEvmProtocolSettings {
             .unwrap_or(Address::ZERO);
 
         Ok(Self {
-            blueprint_id: settings
-                .blueprint_id
-                .ok_or(ConfigError::MissingBlueprintId)?,
-            service_id: settings.service_id,
+            blueprint_id,
+            service_id,
             tangle_contract,
             restaking_contract,
         })

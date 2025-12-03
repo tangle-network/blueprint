@@ -3,6 +3,8 @@
 //! This module defines the Solidity interfaces for the Tangle v2 EVM contracts
 //! using the `alloy-sol-types` `sol!` macro.
 
+#![allow(missing_docs)]
+
 use alloy_sol_types::sol;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -351,7 +353,5 @@ sol! {
     }
 }
 
-// Re-export contract types
-pub use ITangle::*;
-pub use IMultiAssetDelegation::*;
-pub use IOperatorStatusRegistry::*;
+// Re-export contract modules (not glob to avoid ambiguity)
+// Use ITangle::*, IMultiAssetDelegation::*, IOperatorStatusRegistry::* in consuming code

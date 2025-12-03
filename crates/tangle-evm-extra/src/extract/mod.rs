@@ -175,7 +175,9 @@ impl TryFrom<&mut JobCallParts> for JobIndex {
             .metadata
             .get(Self::METADATA_KEY)
             .ok_or(MissingJobIndex)?;
-        let job_index = job_index_raw.try_into().map_err(|_| InvalidJobIndex)?;
+        // u8 doesn't have a TryFrom<&MetadataValue> impl, so we extract the first byte manually
+        let bytes = job_index_raw.as_bytes();
+        let job_index = *bytes.first().ok_or(InvalidJobIndex)?;
         Ok(JobIndex(job_index))
     }
 }
@@ -307,7 +309,9 @@ impl TryFrom<&mut JobCallParts> for BlockHash {
             .metadata
             .get(Self::METADATA_KEY)
             .ok_or(MissingBlockHash)?;
-        let hash: [u8; 32] = block_hash_raw.try_into().map_err(|_| InvalidBlockHash)?;
+        // [u8; 32] doesn't have a TryFrom<&MetadataValue> impl, so we convert manually
+        let bytes = block_hash_raw.as_bytes();
+        let hash: [u8; 32] = (&bytes[..]).try_into().map_err(|_| InvalidBlockHash)?;
         Ok(BlockHash(hash))
     }
 }
@@ -451,7 +455,9 @@ impl TryFrom<&mut JobCallParts> for Caller {
             .metadata
             .get(Self::METADATA_KEY)
             .ok_or(MissingCaller)?;
-        let addr: [u8; 20] = caller_raw.try_into().map_err(|_| InvalidCaller)?;
+        // [u8; 20] doesn't have a TryFrom<&MetadataValue> impl, so we convert manually
+        let bytes = caller_raw.as_bytes();
+        let addr: [u8; 20] = (&bytes[..]).try_into().map_err(|_| InvalidCaller)?;
         Ok(Caller(addr))
     }
 }

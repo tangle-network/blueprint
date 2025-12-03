@@ -3,6 +3,9 @@
 //! This module provides configuration types for the Tangle EVM client that don't
 //! create cyclic dependencies with the runner crate.
 
+extern crate alloc;
+
+use alloc::string::String;
 use alloy_primitives::Address;
 use blueprint_std::path::PathBuf;
 use serde::{Deserialize, Serialize};
