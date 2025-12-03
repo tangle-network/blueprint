@@ -1,0 +1,55 @@
+[package]
+name = "blueprint-tangle-aggregation-svc"
+version = "0.1.0"
+edition = "2021"
+description = "BLS signature aggregation service for Tangle v2"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP server
+axum = { workspace = true, features = ["json", "tokio", "http1", "http2"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Crypto
+blueprint-crypto-bn254 = { path = "../crypto/bn254" }
+blueprint-crypto-core = { path = "../crypto/core" }
+ark-bn254 = { workspace = true }
+ark-ec = { workspace = true }
+ark-serialize = { workspace = true }
+
+# Alloy/EVM
+alloy-primitives = { workspace = true }
+alloy-provider = { workspace = true }
+alloy-signer = { workspace = true }
+alloy-signer-local = { workspace = true }
+alloy-network = { workspace = true }
+alloy-contract = { workspace = true }
+
+# Tangle client
+blueprint-client-tangle-evm = { path = "../clients/tangle-evm" }
+
+# HTTP client (for client module)
+reqwest = { workspace = true, features = ["json"], optional = true }
+
+# Utilities
+thiserror = { workspace = true }
+tracing = { workspace = true }
+parking_lot = "0.12"
+hex = { workspace = true }
+
+[features]
+default = []
+client = ["reqwest"]
+
+[dev-dependencies]
+tokio-test = "0.4"
+reqwest = { workspace = true, features = ["json"] }
+tempfile = "3.10"

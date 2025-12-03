@@ -17,15 +17,21 @@ blueprint-core.workspace = true
 blueprint-std.workspace = true
 blueprint-client-tangle-evm.workspace = true
 blueprint-runner.workspace = true
+blueprint-tangle-aggregation-svc = { path = "../tangle-aggregation-svc", features = ["client"], optional = true }
+blueprint-crypto-bn254 = { path = "../crypto/bn254", optional = true }
+blueprint-crypto-core = { path = "../crypto/core", optional = true }
 
 alloy-primitives.workspace = true
 alloy-sol-types.workspace = true
 alloy-rpc-types = { workspace = true }
 
+bytes.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
+pin-project-lite.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
+tower.workspace = true
 tracing.workspace = true
 
 [features]
@@ -35,3 +41,4 @@ std = [
     "blueprint-std/std",
     "blueprint-client-tangle-evm/std",
 ]
+aggregation = ["blueprint-tangle-aggregation-svc", "blueprint-crypto-bn254", "blueprint-crypto-core"]
