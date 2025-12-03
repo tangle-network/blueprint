@@ -148,6 +148,16 @@ mod evm_feat {
 #[cfg(any(feature = "evm", feature = "eigenlayer"))]
 pub use evm_feat::*;
 
+#[cfg(feature = "tangle-evm")]
+mod tangle_evm_feat {
+    pub use alloy;
+    pub mod tangle_evm {
+        pub use blueprint_tangle_evm_extra::*;
+    }
+}
+#[cfg(feature = "tangle-evm")]
+pub use tangle_evm_feat::*;
+
 #[cfg(feature = "eigenlayer")]
 pub use eigensdk;
 
