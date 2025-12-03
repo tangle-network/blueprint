@@ -19,6 +19,8 @@ pub mod eigenlayer;
 mod symbiotic;
 #[cfg(feature = "tangle")]
 pub mod tangle;
+#[cfg(feature = "tangle-evm")]
+pub mod tangle_evm;
 
 use crate::error::RunnerError;
 use crate::error::{JobCallError, ProducerError};

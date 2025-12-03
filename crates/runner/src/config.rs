@@ -52,6 +52,8 @@ pub trait ProtocolSettingsT: Sized + 'static {
 pub enum Protocol {
     #[cfg(feature = "tangle")]
     Tangle,
+    #[cfg(feature = "tangle-evm")]
+    TangleEvm,
     #[cfg(feature = "eigenlayer")]
     Eigenlayer,
     #[cfg(feature = "symbiotic")]
@@ -80,6 +82,8 @@ impl Protocol {
         match self {
             #[cfg(feature = "tangle")]
             Self::Tangle => "tangle",
+            #[cfg(feature = "tangle-evm")]
+            Self::TangleEvm => "tangle-evm",
             #[cfg(feature = "eigenlayer")]
             Self::Eigenlayer => "eigenlayer",
             #[cfg(feature = "symbiotic")]
@@ -102,6 +106,8 @@ impl core::str::FromStr for Protocol {
         match s.to_lowercase().as_str() {
             #[cfg(feature = "tangle")]
             "tangle" => Ok(Self::Tangle),
+            #[cfg(feature = "tangle-evm")]
+            "tangle-evm" | "tangle_evm" | "tangleevm" => Ok(Self::TangleEvm),
             #[cfg(feature = "eigenlayer")]
             "eigenlayer" => Ok(Self::Eigenlayer),
             #[cfg(feature = "symbiotic")]
@@ -117,6 +123,8 @@ pub enum ProtocolSettings {
     None,
     #[cfg(feature = "tangle")]
     Tangle(crate::tangle::config::TangleProtocolSettings),
+    #[cfg(feature = "tangle-evm")]
+    TangleEvm(crate::tangle_evm::config::TangleEvmProtocolSettings),
     #[cfg(feature = "eigenlayer")]
     Eigenlayer(crate::eigenlayer::config::EigenlayerProtocolSettings),
     #[cfg(feature = "symbiotic")]
@@ -134,6 +142,12 @@ impl ProtocolSettingsT for ProtocolSettings {
                 use crate::tangle::config::TangleProtocolSettings;
                 let settings = TangleProtocolSettings::load(settings)?;
                 ProtocolSettings::Tangle(settings)
+            }
+            #[cfg(feature = "tangle-evm")]
+            Some(Protocol::TangleEvm) => {
+                use crate::tangle_evm::config::TangleEvmProtocolSettings;
+                let settings = TangleEvmProtocolSettings::load(settings)?;
+                ProtocolSettings::TangleEvm(settings)
             }
             #[cfg(feature = "eigenlayer")]
             Some(Protocol::Eigenlayer) => {
@@ -156,6 +170,8 @@ impl ProtocolSettingsT for ProtocolSettings {
         match self {
             #[cfg(feature = "tangle")]
             ProtocolSettings::Tangle(val) => val.protocol_name(),
+            #[cfg(feature = "tangle-evm")]
+            ProtocolSettings::TangleEvm(val) => val.protocol_name(),
             #[cfg(feature = "eigenlayer")]
             ProtocolSettings::Eigenlayer(val) => val.protocol_name(),
             #[cfg(feature = "symbiotic")]
@@ -169,6 +185,8 @@ impl ProtocolSettingsT for ProtocolSettings {
             ProtocolSettings::None => unreachable!(),
             #[cfg(feature = "tangle")]
             ProtocolSettings::Tangle(_) => Protocol::Tangle,
+            #[cfg(feature = "tangle-evm")]
+            ProtocolSettings::TangleEvm(_) => Protocol::TangleEvm,
             #[cfg(feature = "eigenlayer")]
             ProtocolSettings::Eigenlayer(_) => Protocol::Eigenlayer,
             #[cfg(feature = "symbiotic")]
@@ -205,6 +223,22 @@ impl ProtocolSettings {
         match self {
             Self::Eigenlayer(settings) => Ok(settings),
             _ => Err(ConfigError::UnexpectedProtocol("Eigenlayer")),
+        }
+    }
+
+    /// Attempt to extract the [`TangleEvmProtocolSettings`](crate::tangle_evm::config::TangleEvmProtocolSettings)
+    ///
+    /// # Errors
+    ///
+    /// `self` is not [`ProtocolSettings::TangleEvm`]
+    #[cfg(feature = "tangle-evm")]
+    #[allow(clippy::match_wildcard_for_single_variants)]
+    pub fn tangle_evm(
+        &self,
+    ) -> Result<&crate::tangle_evm::config::TangleEvmProtocolSettings, ConfigError> {
+        match self {
+            Self::TangleEvm(settings) => Ok(settings),
+            _ => Err(ConfigError::UnexpectedProtocol("TangleEvm")),
         }
     }
 

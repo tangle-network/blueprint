@@ -8,3 +8,5 @@ pub mod keystore;
 pub mod services;
 #[cfg(feature = "tangle")]
 pub mod tangle;
+#[cfg(feature = "tangle-evm")]
+pub mod tangle_evm;

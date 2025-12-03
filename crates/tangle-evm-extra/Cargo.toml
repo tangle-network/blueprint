@@ -1,0 +1,37 @@
+[package]
+name = "blueprint-tangle-evm-extra"
+version = "0.1.0"
+description = "Producer/Consumer extras for Tangle EVM (v2) blueprints"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+blueprint-core.workspace = true
+blueprint-std.workspace = true
+blueprint-client-tangle-evm.workspace = true
+blueprint-runner.workspace = true
+
+alloy-primitives.workspace = true
+alloy-sol-types.workspace = true
+alloy-rpc-types = { workspace = true }
+
+futures-core.workspace = true
+futures-util.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+tracing.workspace = true
+
+[features]
+default = ["std"]
+std = [
+    "blueprint-core/std",
+    "blueprint-std/std",
+    "blueprint-client-tangle-evm/std",
+]

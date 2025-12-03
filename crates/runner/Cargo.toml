@@ -60,6 +60,9 @@ eigensdk = { workspace = true, features = [
     "crypto-bls",
 ], optional = true }
 
+# Tangle EVM (v2)
+blueprint-client-tangle-evm = { workspace = true, optional = true }
+
 [dev-dependencies]
 blueprint-sdk = { path = "../sdk", features = ["std", "tangle"] }
 tempfile = "3.8"
@@ -116,6 +119,16 @@ eigenlayer = [
 ##
 ## [Symbiotic]: https://symbiotic.fi
 symbiotic = []
+
+## Enable Tangle EVM (v2) support
+##
+## This is the EVM-native implementation for Tangle v2 contracts.
+tangle-evm = [
+    "dep:blueprint-client-tangle-evm",
+    "dep:alloy-primitives",
+    "blueprint-keystore/ecdsa",
+    "std",
+]
 
 [package.metadata.docs.rs]
 all-features = true

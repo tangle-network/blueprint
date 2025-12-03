@@ -55,6 +55,7 @@ blueprint-runner = { version = "0.1.0-alpha.20", path = "crates/runner", default
 
 # Extras
 blueprint-tangle-extra = { version = "0.1.0-alpha.12", path = "crates/tangle-extra", default-features = false }
+blueprint-tangle-evm-extra = { version = "0.1.0", path = "crates/tangle-evm-extra", default-features = false }
 blueprint-evm-extra = { version = "0.1.0-alpha.8", path = "crates/evm-extra", default-features = false }
 blueprint-eigenlayer-extra = { version = "0.1.0-alpha.13", path = "crates/eigenlayer-extra", default-features = false }
 blueprint-producers-extra = { version = "0.1.0-alpha.6", path = "crates/producers-extra", default-features = false }
@@ -93,6 +94,7 @@ blueprint-client-core = { version = "0.1.0-alpha.4", path = "./crates/clients/co
 blueprint-client-eigenlayer = { version = "0.1.0-alpha.20", path = "./crates/clients/eigenlayer", default-features = false }
 blueprint-client-evm = { version = "0.1.0-alpha.7", path = "./crates/clients/evm", default-features = false }
 blueprint-client-tangle = { version = "0.1.0-alpha.21", path = "./crates/clients/tangle", default-features = false }
+blueprint-client-tangle-evm = { version = "0.1.0", path = "./crates/clients/tangle-evm", default-features = false }
 blueprint-contexts = { version = "0.1.0-alpha.21", path = "./crates/contexts", default-features = false }
 
 # Pricing Engine

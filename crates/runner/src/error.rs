@@ -75,6 +75,13 @@ pub enum RunnerError {
     #[error("Tangle error: {0}")]
     Tangle(#[from] crate::tangle::error::TangleError),
 
+    /// [Tangle EVM] protocol errors (v2)
+    ///
+    /// [Tangle]: https://tangle.tools
+    #[cfg(feature = "tangle-evm")]
+    #[error("Tangle EVM error: {0}")]
+    TangleEvm(#[from] crate::tangle_evm::error::TangleEvmError),
+
     /// [Eigenlayer] protocol errors
     ///
     /// [Eigenlayer]: https://eigenlayer.xyz
