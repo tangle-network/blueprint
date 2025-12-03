@@ -1,8 +1,10 @@
 //! Event producers for EVM
 //!
 //! Provides both polling and subscription-based producers for EVM events.
+//! Includes a specialized `TangleProducer` for listening to Tangle JobSubmitted events.
 
 mod polling;
+mod tangle;
 
 use alloc::collections::BTreeMap;
 
@@ -11,6 +13,7 @@ use alloy_rpc_types::Log;
 use blueprint_core::{JobCall, extensions::Extensions, job::call::Parts, metadata::MetadataMap};
 use bytes::Bytes;
 pub use polling::{PollingConfig, PollingProducer};
+pub use tangle::{JobSubmitted, TangleProducer, TangleProducerConfig};
 
 use crate::extract::{BlockHash, BlockNumber, BlockTimestamp, ContractAddress};
 

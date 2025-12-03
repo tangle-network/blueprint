@@ -1,4 +1,11 @@
 //! EVM Consumer(s)
+//!
+//! Provides consumers for submitting job results and transactions to EVM chains.
+//! Includes a specialized `TangleConsumer` for submitting results to the Tangle Jobs contract.
+
+mod tangle;
+
+pub use tangle::TangleConsumer;
 
 use alloc::collections::VecDeque;
 use alloy_primitives::TxHash;
