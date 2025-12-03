@@ -482,6 +482,7 @@ interface ITangleJobs {
     event JobSubmitted(uint64 indexed serviceId, uint64 indexed callId, uint8 indexed jobIndex, address caller, bytes inputs);
 
     function getJobCall(uint64 serviceId, uint64 callId) external view returns (Types.JobCall memory);
+    function submitAggregatedResult(uint64 serviceId, uint64 callId, bytes memory output, uint256 signerBitmap, uint256[2] memory aggregatedSignature, uint256[4] memory aggregatedPubkey) external;
     function submitJob(uint64 serviceId, uint8 jobIndex, bytes memory inputs) external payable returns (uint64 callId);
     function submitJobs(uint64 serviceId, uint8[] memory jobIndices, bytes[] memory inputs) external payable returns (uint64[] memory callIds);
     function submitResult(uint64 serviceId, uint64 callId, bytes memory result) external;
@@ -547,6 +548,44 @@ interface ITangleJobs {
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "submitAggregatedResult",
+    "inputs": [
+      {
+        "name": "serviceId",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "callId",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "output",
+        "type": "bytes",
+        "internalType": "bytes"
+      },
+      {
+        "name": "signerBitmap",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "aggregatedSignature",
+        "type": "uint256[2]",
+        "internalType": "uint256[2]"
+      },
+      {
+        "name": "aggregatedPubkey",
+        "type": "uint256[4]",
+        "internalType": "uint256[4]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -1406,6 +1445,207 @@ function getJobCall(uint64 serviceId, uint64 callId) external view returns (Type
             }
         }
     };
+    /**Function with signature `submitAggregatedResult(uint64,uint64,bytes,uint256,uint256[2],uint256[4])` and selector `0xc325ae12`.
+```solidity
+function submitAggregatedResult(uint64 serviceId, uint64 callId, bytes memory output, uint256 signerBitmap, uint256[2] memory aggregatedSignature, uint256[4] memory aggregatedPubkey) external;
+```*/
+    #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
+    #[derive(Clone)]
+    pub struct submitAggregatedResultCall {
+        #[allow(missing_docs)]
+        pub serviceId: u64,
+        #[allow(missing_docs)]
+        pub callId: u64,
+        #[allow(missing_docs)]
+        pub output: alloy::sol_types::private::Bytes,
+        #[allow(missing_docs)]
+        pub signerBitmap: alloy::sol_types::private::primitives::aliases::U256,
+        #[allow(missing_docs)]
+        pub aggregatedSignature: [alloy::sol_types::private::primitives::aliases::U256; 2usize],
+        #[allow(missing_docs)]
+        pub aggregatedPubkey: [alloy::sol_types::private::primitives::aliases::U256; 4usize],
+    }
+    ///Container type for the return parameters of the [`submitAggregatedResult(uint64,uint64,bytes,uint256,uint256[2],uint256[4])`](submitAggregatedResultCall) function.
+    #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
+    #[derive(Clone)]
+    pub struct submitAggregatedResultReturn {}
+    #[allow(
+        non_camel_case_types,
+        non_snake_case,
+        clippy::pub_underscore_fields,
+        clippy::style
+    )]
+    const _: () = {
+        use alloy::sol_types as alloy_sol_types;
+        {
+            #[doc(hidden)]
+            type UnderlyingSolTuple<'a> = (
+                alloy::sol_types::sol_data::Uint<64>,
+                alloy::sol_types::sol_data::Uint<64>,
+                alloy::sol_types::sol_data::Bytes,
+                alloy::sol_types::sol_data::Uint<256>,
+                alloy::sol_types::sol_data::FixedArray<
+                    alloy::sol_types::sol_data::Uint<256>,
+                    2usize,
+                >,
+                alloy::sol_types::sol_data::FixedArray<
+                    alloy::sol_types::sol_data::Uint<256>,
+                    4usize,
+                >,
+            );
+            #[doc(hidden)]
+            type UnderlyingRustTuple<'a> = (
+                u64,
+                u64,
+                alloy::sol_types::private::Bytes,
+                alloy::sol_types::private::primitives::aliases::U256,
+                [alloy::sol_types::private::primitives::aliases::U256; 2usize],
+                [alloy::sol_types::private::primitives::aliases::U256; 4usize],
+            );
+            #[cfg(test)]
+            #[allow(dead_code, unreachable_patterns)]
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
+                match _t {
+                    alloy_sol_types::private::AssertTypeEq::<
+                        <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
+                    >(_) => {}
+                }
+            }
+            #[automatically_derived]
+            #[doc(hidden)]
+            impl ::core::convert::From<submitAggregatedResultCall>
+            for UnderlyingRustTuple<'_> {
+                fn from(value: submitAggregatedResultCall) -> Self {
+                    (
+                        value.serviceId,
+                        value.callId,
+                        value.output,
+                        value.signerBitmap,
+                        value.aggregatedSignature,
+                        value.aggregatedPubkey,
+                    )
+                }
+            }
+            #[automatically_derived]
+            #[doc(hidden)]
+            impl ::core::convert::From<UnderlyingRustTuple<'_>>
+            for submitAggregatedResultCall {
+                fn from(tuple: UnderlyingRustTuple<'_>) -> Self {
+                    Self {
+                        serviceId: tuple.0,
+                        callId: tuple.1,
+                        output: tuple.2,
+                        signerBitmap: tuple.3,
+                        aggregatedSignature: tuple.4,
+                        aggregatedPubkey: tuple.5,
+                    }
+                }
+            }
+        }
+        {
+            #[doc(hidden)]
+            type UnderlyingSolTuple<'a> = ();
+            #[doc(hidden)]
+            type UnderlyingRustTuple<'a> = ();
+            #[cfg(test)]
+            #[allow(dead_code, unreachable_patterns)]
+            fn _type_assertion(
+                _t: alloy_sol_types::private::AssertTypeEq<UnderlyingRustTuple>,
+            ) {
+                match _t {
+                    alloy_sol_types::private::AssertTypeEq::<
+                        <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
+                    >(_) => {}
+                }
+            }
+            #[automatically_derived]
+            #[doc(hidden)]
+            impl ::core::convert::From<submitAggregatedResultReturn>
+            for UnderlyingRustTuple<'_> {
+                fn from(value: submitAggregatedResultReturn) -> Self {
+                    ()
+                }
+            }
+            #[automatically_derived]
+            #[doc(hidden)]
+            impl ::core::convert::From<UnderlyingRustTuple<'_>>
+            for submitAggregatedResultReturn {
+                fn from(tuple: UnderlyingRustTuple<'_>) -> Self {
+                    Self {}
+                }
+            }
+        }
+        #[automatically_derived]
+        impl alloy_sol_types::SolCall for submitAggregatedResultCall {
+            type Parameters<'a> = (
+                alloy::sol_types::sol_data::Uint<64>,
+                alloy::sol_types::sol_data::Uint<64>,
+                alloy::sol_types::sol_data::Bytes,
+                alloy::sol_types::sol_data::Uint<256>,
+                alloy::sol_types::sol_data::FixedArray<
+                    alloy::sol_types::sol_data::Uint<256>,
+                    2usize,
+                >,
+                alloy::sol_types::sol_data::FixedArray<
+                    alloy::sol_types::sol_data::Uint<256>,
+                    4usize,
+                >,
+            );
+            type Token<'a> = <Self::Parameters<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
+            type Return = submitAggregatedResultReturn;
+            type ReturnTuple<'a> = ();
+            type ReturnToken<'a> = <Self::ReturnTuple<
+                'a,
+            > as alloy_sol_types::SolType>::Token<'a>;
+            const SIGNATURE: &'static str = "submitAggregatedResult(uint64,uint64,bytes,uint256,uint256[2],uint256[4])";
+            const SELECTOR: [u8; 4] = [195u8, 37u8, 174u8, 18u8];
+            #[inline]
+            fn new<'a>(
+                tuple: <Self::Parameters<'a> as alloy_sol_types::SolType>::RustType,
+            ) -> Self {
+                tuple.into()
+            }
+            #[inline]
+            fn tokenize(&self) -> Self::Token<'_> {
+                (
+                    <alloy::sol_types::sol_data::Uint<
+                        64,
+                    > as alloy_sol_types::SolType>::tokenize(&self.serviceId),
+                    <alloy::sol_types::sol_data::Uint<
+                        64,
+                    > as alloy_sol_types::SolType>::tokenize(&self.callId),
+                    <alloy::sol_types::sol_data::Bytes as alloy_sol_types::SolType>::tokenize(
+                        &self.output,
+                    ),
+                    <alloy::sol_types::sol_data::Uint<
+                        256,
+                    > as alloy_sol_types::SolType>::tokenize(&self.signerBitmap),
+                    <alloy::sol_types::sol_data::FixedArray<
+                        alloy::sol_types::sol_data::Uint<256>,
+                        2usize,
+                    > as alloy_sol_types::SolType>::tokenize(&self.aggregatedSignature),
+                    <alloy::sol_types::sol_data::FixedArray<
+                        alloy::sol_types::sol_data::Uint<256>,
+                        4usize,
+                    > as alloy_sol_types::SolType>::tokenize(&self.aggregatedPubkey),
+                )
+            }
+            #[inline]
+            fn abi_decode_returns(
+                data: &[u8],
+                validate: bool,
+            ) -> alloy_sol_types::Result<Self::Return> {
+                <Self::ReturnTuple<
+                    '_,
+                > as alloy_sol_types::SolType>::abi_decode_sequence(data, validate)
+                    .map(Into::into)
+            }
+        }
+    };
     /**Function with signature `submitJob(uint64,uint8,bytes)` and selector `0x3413e8ee`.
 ```solidity
 function submitJob(uint64 serviceId, uint8 jobIndex, bytes memory inputs) external payable returns (uint64 callId);
@@ -2009,6 +2249,8 @@ function submitResults(uint64 serviceId, uint64[] memory callIds, bytes[] memory
         #[allow(missing_docs)]
         getJobCall(getJobCallCall),
         #[allow(missing_docs)]
+        submitAggregatedResult(submitAggregatedResultCall),
+        #[allow(missing_docs)]
         submitJob(submitJobCall),
         #[allow(missing_docs)]
         submitJobs(submitJobsCall),
@@ -2031,18 +2273,22 @@ function submitResults(uint64 serviceId, uint64[] memory callIds, bytes[] memory
             [52u8, 19u8, 232u8, 238u8],
             [166u8, 114u8, 188u8, 10u8],
             [170u8, 205u8, 186u8, 159u8],
+            [195u8, 37u8, 174u8, 18u8],
         ];
     }
     #[automatically_derived]
     impl alloy_sol_types::SolInterface for ITangleJobsCalls {
         const NAME: &'static str = "ITangleJobsCalls";
         const MIN_DATA_LENGTH: usize = 64usize;
-        const COUNT: usize = 5usize;
+        const COUNT: usize = 6usize;
         #[inline]
         fn selector(&self) -> [u8; 4] {
             match self {
                 Self::getJobCall(_) => {
                     <getJobCallCall as alloy_sol_types::SolCall>::SELECTOR
+                }
+                Self::submitAggregatedResult(_) => {
+                    <submitAggregatedResultCall as alloy_sol_types::SolCall>::SELECTOR
                 }
                 Self::submitJob(_) => {
                     <submitJobCall as alloy_sol_types::SolCall>::SELECTOR
@@ -2142,6 +2388,19 @@ function submitResults(uint64 serviceId, uint64[] memory callIds, bytes[] memory
                     }
                     submitResults
                 },
+                {
+                    fn submitAggregatedResult(
+                        data: &[u8],
+                        validate: bool,
+                    ) -> alloy_sol_types::Result<ITangleJobsCalls> {
+                        <submitAggregatedResultCall as alloy_sol_types::SolCall>::abi_decode_raw(
+                                data,
+                                validate,
+                            )
+                            .map(ITangleJobsCalls::submitAggregatedResult)
+                    }
+                    submitAggregatedResult
+                },
             ];
             let Ok(idx) = Self::SELECTORS.binary_search(&selector) else {
                 return Err(
@@ -2158,6 +2417,11 @@ function submitResults(uint64 serviceId, uint64[] memory callIds, bytes[] memory
             match self {
                 Self::getJobCall(inner) => {
                     <getJobCallCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
+                }
+                Self::submitAggregatedResult(inner) => {
+                    <submitAggregatedResultCall as alloy_sol_types::SolCall>::abi_encoded_size(
+                        inner,
+                    )
                 }
                 Self::submitJob(inner) => {
                     <submitJobCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
@@ -2182,6 +2446,12 @@ function submitResults(uint64 serviceId, uint64[] memory callIds, bytes[] memory
             match self {
                 Self::getJobCall(inner) => {
                     <getJobCallCall as alloy_sol_types::SolCall>::abi_encode_raw(
+                        inner,
+                        out,
+                    )
+                }
+                Self::submitAggregatedResult(inner) => {
+                    <submitAggregatedResultCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner,
                         out,
                     )
@@ -2588,6 +2858,27 @@ the bytecode concatenated with the constructor's ABI-encoded arguments.*/
                 &getJobCallCall {
                     serviceId,
                     callId,
+                },
+            )
+        }
+        ///Creates a new call builder for the [`submitAggregatedResult`] function.
+        pub fn submitAggregatedResult(
+            &self,
+            serviceId: u64,
+            callId: u64,
+            output: alloy::sol_types::private::Bytes,
+            signerBitmap: alloy::sol_types::private::primitives::aliases::U256,
+            aggregatedSignature: [alloy::sol_types::private::primitives::aliases::U256; 2usize],
+            aggregatedPubkey: [alloy::sol_types::private::primitives::aliases::U256; 4usize],
+        ) -> alloy_contract::SolCallBuilder<T, &P, submitAggregatedResultCall, N> {
+            self.call_builder(
+                &submitAggregatedResultCall {
+                    serviceId,
+                    callId,
+                    output,
+                    signerBitmap,
+                    aggregatedSignature,
+                    aggregatedPubkey,
                 },
             )
         }

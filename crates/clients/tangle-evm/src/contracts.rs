@@ -83,6 +83,7 @@ sol! {
         event JobSubmitted(uint64 indexed serviceId, uint64 indexed callId, uint8 jobIndex, address caller, bytes inputs);
         event JobResultSubmitted(uint64 indexed serviceId, uint64 indexed callId, address indexed operator, bytes output);
         event JobCompleted(uint64 indexed serviceId, uint64 indexed callId);
+        event AggregatedResultSubmitted(uint64 indexed serviceId, uint64 indexed callId, uint256 signerBitmap, bytes output);
 
         // ═══════════════════════════════════════════════════════════════════════
         // EVENTS - Payments
@@ -206,6 +207,14 @@ sol! {
 
         function submitJob(uint64 serviceId, uint8 jobIndex, bytes calldata inputs) external payable returns (uint64);
         function submitResult(uint64 serviceId, uint64 callId, bytes calldata output) external;
+        function submitAggregatedResult(
+            uint64 serviceId,
+            uint64 callId,
+            bytes calldata output,
+            uint256 signerBitmap,
+            uint256[2] calldata aggregatedSignature,
+            uint256[4] calldata aggregatedPubkey
+        ) external;
     }
 }
 
@@ -353,5 +362,39 @@ sol! {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// BLUEPRINT SERVICE MANAGER INTERFACE (for aggregation queries)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+sol! {
+    /// Blueprint Service Manager Interface
+    /// Used to query aggregation configuration from the blueprint's manager contract
+    #[sol(rpc)]
+    interface IBlueprintServiceManager {
+        // ═══════════════════════════════════════════════════════════════════════
+        // BLS AGGREGATION
+        // ═══════════════════════════════════════════════════════════════════════
+
+        /// Check if a job requires BLS aggregated results
+        /// @param serviceId The service ID
+        /// @param jobIndex The job index within the blueprint
+        /// @return required True if aggregation is required for this job
+        function requiresAggregation(uint64 serviceId, uint8 jobIndex) external view returns (bool required);
+
+        /// Get the aggregation threshold configuration for a job
+        /// @param serviceId The service ID
+        /// @param jobIndex The job index within the blueprint
+        /// @return thresholdBps Threshold in basis points (6700 = 67%)
+        /// @return thresholdType 0 = CountBased (% of operators), 1 = StakeWeighted (% of total stake)
+        function getAggregationThreshold(uint64 serviceId, uint8 jobIndex) external view returns (uint16 thresholdBps, uint8 thresholdType);
+
+        /// Get the number of results required for job completion (non-aggregated jobs)
+        function getRequiredResultCount(uint64 serviceId, uint8 jobIndex) external view returns (uint32);
+
+        /// Get the developer payment address
+        function getDeveloperPaymentAddress(uint64 serviceId) external view returns (address);
+    }
+}
+
 // Re-export contract modules (not glob to avoid ambiguity)
-// Use ITangle::*, IMultiAssetDelegation::*, IOperatorStatusRegistry::* in consuming code
+// Use ITangle::*, IMultiAssetDelegation::*, IOperatorStatusRegistry::*, IBlueprintServiceManager::* in consuming code

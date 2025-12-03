@@ -2,8 +2,6 @@
 name = "tnt-core-bindings"
 version = "0.1.0"
 edition = "2021"
-description = "Generated Rust bindings for tnt-core v2 Solidity contracts"
-license = "MIT OR Apache-2.0"
 
 [dependencies]
-alloy.workspace = true
+alloy = { git = "https://github.com/alloy-rs/alloy", features = ["sol-types", "contract"] }

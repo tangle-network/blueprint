@@ -22,7 +22,7 @@ use k256::elliptic_curve::sec1::ToEncodedPoint;
 use tokio::sync::Mutex;
 
 use crate::config::TangleEvmClientConfig;
-use crate::contracts::{IMultiAssetDelegation, ITangle};
+use crate::contracts::{IBlueprintServiceManager, IMultiAssetDelegation, ITangle};
 use crate::error::{Error, Result};
 
 /// Type alias for the dynamic provider
@@ -363,6 +363,108 @@ impl TangleEvmClient {
             .await
             .map_err(|e| Error::Contract(e.to_string()))
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BLS AGGREGATION QUERIES
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Get the blueprint manager address for a service
+    pub async fn get_blueprint_manager(&self, service_id: u64) -> Result<Option<Address>> {
+        let service = self.get_service(service_id).await?;
+        let blueprint = self.get_blueprint(service.blueprintId).await?;
+        if blueprint.manager == Address::ZERO {
+            Ok(None)
+        } else {
+            Ok(Some(blueprint.manager))
+        }
+    }
+
+    /// Check if a job requires BLS aggregation
+    ///
+    /// Queries the blueprint's service manager contract to determine if the specified
+    /// job index requires aggregated BLS signatures instead of individual results.
+    pub async fn requires_aggregation(&self, service_id: u64, job_index: u8) -> Result<bool> {
+        let manager = match self.get_blueprint_manager(service_id).await? {
+            Some(m) => m,
+            None => return Ok(false), // No manager means no aggregation required
+        };
+
+        let bsm = IBlueprintServiceManager::new(manager, Arc::clone(&self.provider));
+        match bsm.requiresAggregation(service_id, job_index).call().await {
+            Ok(required) => Ok(required),
+            Err(_) => Ok(false), // If call fails, assume no aggregation required
+        }
+    }
+
+    /// Get the aggregation threshold configuration for a job
+    ///
+    /// Returns (threshold_bps, threshold_type) where:
+    /// - threshold_bps: Threshold in basis points (e.g., 6700 = 67%)
+    /// - threshold_type: 0 = CountBased (% of operators), 1 = StakeWeighted (% of stake)
+    pub async fn get_aggregation_threshold(
+        &self,
+        service_id: u64,
+        job_index: u8,
+    ) -> Result<(u16, u8)> {
+        let manager = match self.get_blueprint_manager(service_id).await? {
+            Some(m) => m,
+            None => return Ok((6700, 0)), // Default: 67% count-based
+        };
+
+        let bsm = IBlueprintServiceManager::new(manager, Arc::clone(&self.provider));
+        match bsm
+            .getAggregationThreshold(service_id, job_index)
+            .call()
+            .await
+        {
+            Ok(result) => Ok((result.thresholdBps, result.thresholdType)),
+            Err(_) => Ok((6700, 0)), // Default if call fails
+        }
+    }
+
+    /// Get the aggregation configuration for a specific job
+    ///
+    /// Returns the full aggregation config including whether it's required and threshold settings
+    pub async fn get_aggregation_config(
+        &self,
+        service_id: u64,
+        job_index: u8,
+    ) -> Result<AggregationConfig> {
+        let requires_aggregation = self.requires_aggregation(service_id, job_index).await?;
+        let (threshold_bps, threshold_type) = self
+            .get_aggregation_threshold(service_id, job_index)
+            .await?;
+
+        Ok(AggregationConfig {
+            required: requires_aggregation,
+            threshold_bps,
+            threshold_type: if threshold_type == 0 {
+                ThresholdType::CountBased
+            } else {
+                ThresholdType::StakeWeighted
+            },
+        })
+    }
+}
+
+/// Threshold type for BLS aggregation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThresholdType {
+    /// Threshold based on number of operators (e.g., 67% of operators must sign)
+    CountBased,
+    /// Threshold based on stake weight (e.g., 67% of total stake must sign)
+    StakeWeighted,
+}
+
+/// Configuration for BLS signature aggregation
+#[derive(Debug, Clone)]
+pub struct AggregationConfig {
+    /// Whether aggregation is required for this job
+    pub required: bool,
+    /// Threshold in basis points (e.g., 6700 = 67%)
+    pub threshold_bps: u16,
+    /// Type of threshold calculation
+    pub threshold_type: ThresholdType,
 }
 
 /// Convert ECDSA public key to Ethereum address
