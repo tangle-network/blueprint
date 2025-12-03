@@ -62,6 +62,7 @@ eigensdk = { workspace = true, features = [
 
 # Tangle EVM (v2)
 blueprint-client-tangle-evm = { workspace = true, optional = true }
+alloy-provider = { workspace = true, optional = true }
 
 [dev-dependencies]
 blueprint-sdk = { path = "../sdk", features = ["std", "tangle"] }
@@ -126,7 +127,12 @@ symbiotic = []
 tangle-evm = [
     "dep:blueprint-client-tangle-evm",
     "dep:alloy-primitives",
+    "dep:alloy-provider",
+    "dep:alloy-signer-local",
+    "dep:alloy-signer",
     "blueprint-keystore/ecdsa",
+    "blueprint-keystore/evm",
+    "blueprint-keystore/eigenlayer",
     "std",
 ]
 

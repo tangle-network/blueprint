@@ -17,7 +17,11 @@ pub enum TangleEvmError {
 
     /// Unable to open/interact with the provided [`Keystore`](blueprint_keystore::Keystore)
     #[error("Keystore error: {0}")]
-    Keystore(#[from] blueprint_keystore::Error),
+    Keystore(String),
+
+    /// Unable to open/interact with the provided [`Keystore`](blueprint_keystore::Keystore)
+    #[error("Keystore error: {0}")]
+    KeystoreError(#[from] blueprint_keystore::Error),
 
     /// Unable to decompress the provided ECDSA key
     #[error("Unable to convert compressed ECDSA key to uncompressed key")]
@@ -30,4 +34,8 @@ pub enum TangleEvmError {
     /// Missing required configuration
     #[error("Missing configuration: {0}")]
     MissingConfig(String),
+
+    /// Transaction failed
+    #[error("Transaction error: {0}")]
+    Transaction(String),
 }

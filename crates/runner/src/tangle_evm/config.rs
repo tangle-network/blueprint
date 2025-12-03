@@ -2,7 +2,7 @@
 //!
 //! Provides configuration for running blueprints on Tangle v2 EVM contracts.
 
-use alloy_primitives::Address;
+use alloy_primitives::{Address, Bytes};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
@@ -162,28 +162,123 @@ async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bool, 
 /// Register the operator on the Tangle EVM contract
 async fn register_impl(rpc_address: &str, env: &BlueprintEnvironment) -> Result<(), RunnerError> {
     use super::error::TangleEvmError;
+    use alloy_primitives::B256;
+    use alloy_provider::ProviderBuilder;
+    use alloy_signer_local::PrivateKeySigner;
+    use blueprint_client_tangle_evm::contracts::ITangle;
+    use blueprint_crypto::k256::K256Ecdsa;
+    use blueprint_keystore::backends::Backend;
+    use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
 
     let settings = env.protocol_settings.tangle_evm()?;
 
-    // For now, we log the registration intent
-    // Full implementation requires transaction signing with alloy
     blueprint_core::info!(
-        "Tangle EVM registration: blueprint_id={}, rpc_address={}, tangle_contract={:?}",
+        "Starting Tangle EVM registration: blueprint_id={}, rpc_address={}, tangle_contract={:?}",
         settings.blueprint_id,
         rpc_address,
         settings.tangle_contract
     );
 
-    // TODO: Implement actual registration transaction
-    // This requires:
-    // 1. Creating a signer from the keystore
-    // 2. Building the registerOperator transaction
-    // 3. Sending and waiting for confirmation
+    // 1. Get ECDSA key from keystore
+    let ecdsa_public = env
+        .keystore()
+        .first_local::<K256Ecdsa>()
+        .map_err(|e| TangleEvmError::Keystore(e.to_string()))?;
 
-    // For now, return an error indicating this is not yet implemented
-    // This allows the code to compile while we implement the full flow
-    Err(TangleEvmError::MissingConfig(
-        "Registration transaction not yet implemented - use manual registration".into(),
-    )
-    .into())
+    let ecdsa_secret = env
+        .keystore()
+        .expose_ecdsa_secret(&ecdsa_public)
+        .map_err(|e| TangleEvmError::Keystore(e.to_string()))?
+        .ok_or_else(|| TangleEvmError::Keystore("No ECDSA secret found in keystore".into()))?;
+
+    // 2. Create wallet/signer from secret key
+    let secret_bytes = ecdsa_secret.0.to_bytes();
+    let secret_b256 = B256::from_slice(&secret_bytes);
+    let wallet = PrivateKeySigner::from_bytes(&secret_b256)
+        .map_err(|e| TangleEvmError::Keystore(format!("Failed to create signer: {e}")))?;
+
+    let operator_address = wallet.address();
+    blueprint_core::info!("Operator address: {}", operator_address);
+
+    // 3. Create provider with signer
+    let provider = ProviderBuilder::new()
+        .wallet(wallet)
+        .connect(env.http_rpc_endpoint.as_str())
+        .await
+        .map_err(|e| TangleEvmError::Contract(format!("Failed to connect to RPC: {e}")))?;
+
+    // 4. Create contract instance with signed provider
+    let tangle_contract = ITangle::new(settings.tangle_contract, &provider);
+
+    // 5. Build and send registerOperator transaction
+    // The preferences field is empty bytes for now (can be extended for custom preferences)
+    let preferences = Bytes::new();
+
+    blueprint_core::info!(
+        "Sending registerOperator transaction for blueprint_id={}",
+        settings.blueprint_id
+    );
+
+    let tx = tangle_contract.registerOperator(settings.blueprint_id, preferences);
+
+    let pending_tx = tx
+        .send()
+        .await
+        .map_err(|e| TangleEvmError::Transaction(format!("Failed to send transaction: {e}")))?;
+
+    blueprint_core::info!(
+        "Transaction sent, waiting for confirmation: {:?}",
+        pending_tx.tx_hash()
+    );
+
+    // 6. Wait for transaction confirmation
+    let receipt = pending_tx
+        .get_receipt()
+        .await
+        .map_err(|e| TangleEvmError::Transaction(format!("Failed to get receipt: {e}")))?;
+
+    if !receipt.status() {
+        return Err(TangleEvmError::Transaction("Transaction reverted".into()).into());
+    }
+
+    blueprint_core::info!(
+        "Registration successful! tx_hash={:?}, block={:?}",
+        receipt.transaction_hash,
+        receipt.block_number
+    );
+
+    // 7. Optionally update RPC address if provided
+    if !rpc_address.is_empty() {
+        blueprint_core::info!(
+            "Updating RPC address to: {} for blueprint_id={}",
+            rpc_address,
+            settings.blueprint_id
+        );
+
+        let rpc_tx = tangle_contract.updateRpcAddress(
+            settings.blueprint_id,
+            rpc_address.to_string(),
+        );
+
+        let pending_rpc_tx = rpc_tx
+            .send()
+            .await
+            .map_err(|e| TangleEvmError::Transaction(format!("Failed to update RPC address: {e}")))?;
+
+        let rpc_receipt = pending_rpc_tx
+            .get_receipt()
+            .await
+            .map_err(|e| TangleEvmError::Transaction(format!("Failed to get RPC update receipt: {e}")))?;
+
+        if !rpc_receipt.status() {
+            blueprint_core::warn!("RPC address update transaction reverted");
+        } else {
+            blueprint_core::info!(
+                "RPC address updated successfully! tx_hash={:?}",
+                rpc_receipt.transaction_hash
+            );
+        }
+    }
+
+    Ok(())
 }

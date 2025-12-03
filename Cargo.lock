@@ -3722,6 +3722,7 @@ version = "0.1.0-alpha.20"
 dependencies = [
  "alloy-contract",
  "alloy-primitives 1.2.1",
+ "alloy-provider",
  "alloy-signer",
  "alloy-signer-local",
  "blueprint-auth",
