@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 # Core dependencies (always included)
-blueprint-crypto.workspace = true
+blueprint-crypto = { workspace = true, default-features = false }
 blueprint-std.workspace = true
 parking_lot.workspace = true
 thiserror.workspace = true
@@ -102,7 +102,7 @@ std = [
     "alloy-primitives?/std",
     "sp-core?/std",
     "sp-io?/std",
-    "tangle-subxt/std",
+    "tangle-subxt?/std",
     "ark-serialize?/std",
     # Conditional std enables for sp-*
     "sp-keystore?/std",
