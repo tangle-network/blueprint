@@ -5,13 +5,31 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-blueprint-sdk = { workspace = true, features = ["std", "tangle", "macros"] }
+blueprint-sdk = { workspace = true, features = ["std", "tangle-evm", "macros"] }
 tokio = { workspace = true, features = ["sync"] }
 
 [dev-dependencies]
-blueprint-sdk = { workspace = true, features = ["testing", "tangle"] }
-tokio = { workspace = true, features = ["macros"] }
+blueprint-sdk = { workspace = true, features = ["testing", "tangle-evm"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 color-eyre = { workspace = true }
+alloy-sol-types = { workspace = true }
+alloy-primitives = "1.2.1"
+bytes = { workspace = true }
+# Aggregation service for integration tests
+blueprint-tangle-aggregation-svc = { path = "../../../crates/tangle-aggregation-svc" }
+# Crypto for BLS keys
+blueprint-crypto-bn254 = { path = "../../../crates/crypto/bn254" }
+blueprint-crypto-core = { path = "../../../crates/crypto/core" }
+ark-bn254 = "0.5"
+ark-ec = "0.5"
+ark-ff = "0.5"
+ark-serialize = "0.5"
+# Serialization
+serde_json = { workspace = true }
+# Random for key generation
+rand = "0.8"
+# Hex encoding
+hex = "0.4"
 
 [package.metadata.blueprint]
 manager = { Evm = "ExperimentalBlueprint" }

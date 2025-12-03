@@ -1,40 +1,54 @@
-use blueprint_sdk::build;
-use blueprint_sdk::tangle::blueprint;
-use incredible_squaring_blueprint_lib::square;
+//! Build script for the Incredible Squaring Blueprint
+//!
+//! This generates blueprint metadata for Tangle EVM (v2) blueprints.
+
 use std::path::Path;
-use std::process;
 
 fn main() {
-    let contract_dirs: Vec<&str> = vec!["./contracts"];
-    build::soldeer_install();
-    build::soldeer_update();
-    build::build_contracts(contract_dirs);
-
     println!("cargo::rerun-if-changed=../incredible-squaring-lib");
 
-    let blueprint = blueprint! {
-        name: "experiment",
-        master_manager_revision: "Latest",
-        manager: { Evm = "ExperimentalBlueprint" },
-        jobs: [square]
-    };
+    // For Tangle EVM (v2) blueprints, we generate metadata manually
+    // The metadata defines the blueprint's jobs and their ABI encoding
+    let blueprint_metadata = serde_json::json!({
+        "name": "incredible-squaring",
+        "description": "A simple blueprint that squares a number",
+        "version": env!("CARGO_PKG_VERSION"),
+        "manager": {
+            "Evm": "IncredibleSquaringBSM"
+        },
+        "master_revision": "Latest",
+        "jobs": [
+            {
+                "name": "square",
+                "job_index": 0,
+                "description": "Square a u64 number (1 operator required)",
+                "inputs": ["uint64"],
+                "outputs": ["uint64"],
+                "required_results": 1
+            },
+            {
+                "name": "verified_square",
+                "job_index": 1,
+                "description": "Square a u64 number (2 operators required for verification)",
+                "inputs": ["uint64"],
+                "outputs": ["uint64"],
+                "required_results": 2
+            },
+            {
+                "name": "consensus_square",
+                "job_index": 2,
+                "description": "Square a u64 number (3 operators required for Byzantine fault tolerance)",
+                "inputs": ["uint64"],
+                "outputs": ["uint64"],
+                "required_results": 3
+            }
+        ]
+    });
 
-    match blueprint {
-        Ok(blueprint) => {
-            // TODO: Should be a helper function probably
-            let json = blueprint_sdk::tangle::metadata::macros::ext::serde_json::to_string_pretty(
-                &blueprint,
-            )
-            .unwrap();
-            std::fs::write(
-                Path::new(env!("CARGO_WORKSPACE_DIR")).join("blueprint.json"),
-                json.as_bytes(),
-            )
-            .unwrap();
-        }
-        Err(e) => {
-            println!("cargo::error={e:?}");
-            process::exit(1);
-        }
-    }
+    let json = serde_json::to_string_pretty(&blueprint_metadata).unwrap();
+    std::fs::write(
+        Path::new(env!("CARGO_WORKSPACE_DIR")).join("blueprint.json"),
+        json.as_bytes(),
+    )
+    .unwrap();
 }

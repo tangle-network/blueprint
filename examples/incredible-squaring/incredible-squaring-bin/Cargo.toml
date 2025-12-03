@@ -7,10 +7,10 @@ rust-version.workspace = true
 [dependencies]
 incredible-squaring-blueprint-lib.workspace = true
 
-blueprint-sdk = { workspace = true, features = ["std", "tangle"] }
+blueprint-sdk = { workspace = true, features = ["std", "tangle-evm"] }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tower.workspace = true
+tracing-subscriber.workspace = true
 
 [build-dependencies]
-incredible-squaring-blueprint-lib.workspace = true
-blueprint-sdk = { workspace = true, features = ["macros", "build", "testing"] }
+serde_json.workspace = true
