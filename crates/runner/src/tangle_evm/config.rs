@@ -126,12 +126,27 @@ impl BlueprintConfig for TangleEvmConfig {
 /// Check if operator registration is required
 async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
     use super::error::TangleEvmError;
-    use blueprint_client_tangle_evm::TangleEvmClient;
+    use blueprint_client_tangle_evm::{TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings};
 
     let settings = env.protocol_settings.tangle_evm()?;
 
+    // Create the client config from environment
+    let client_config = TangleEvmClientConfig {
+        http_rpc_endpoint: env.http_rpc_endpoint.clone(),
+        ws_rpc_endpoint: env.ws_rpc_endpoint.clone(),
+        settings: TangleEvmSettings {
+            blueprint_id: settings.blueprint_id,
+            service_id: settings.service_id,
+            tangle_contract: settings.tangle_contract,
+            restaking_contract: settings.restaking_contract,
+        },
+        keystore_uri: env.keystore_uri.clone(),
+        data_dir: env.data_dir.clone(),
+        test_mode: env.test_mode,
+    };
+
     // Create the EVM client
-    let client = TangleEvmClient::new(env.clone())
+    let client = TangleEvmClient::new(client_config)
         .await
         .map_err(|e| TangleEvmError::Contract(e.to_string()))?;
 
