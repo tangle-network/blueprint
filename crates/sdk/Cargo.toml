@@ -37,6 +37,7 @@ blueprint-context-derive = { workspace = true, optional = true }
 
 # Tangle-specific extras
 blueprint-tangle-extra = { workspace = true, optional = true }
+blueprint-tangle-evm-extra = { workspace = true, optional = true }
 tangle-subxt = { workspace = true, optional = true }
 blueprint-crypto-tangle-pair-signer = { workspace = true, optional = true }
 
@@ -88,9 +89,10 @@ std = [
     "blueprint-context-derive?/std",
     "blueprint-auth/std",
     # Tangle
-    "tangle-subxt/std",
+    "tangle-subxt?/std",
     # Extras
     "blueprint-tangle-extra?/std",
+    "blueprint-tangle-evm-extra?/std",
     "blueprint-evm-extra?/std",
     "blueprint-eigenlayer-extra?/std",
     "blueprint-chain-setup/std",
@@ -139,6 +141,20 @@ evm = [
     "blueprint-context-derive?/evm",
     "blueprint-crypto-tangle-pair-signer?/evm",
     "blueprint-macros?/evm",
+    "blueprint-testing-utils?/anvil",
+    "blueprint-chain-setup?/anvil",
+]
+
+## Enable Tangle EVM (v2) support
+##
+## This enables the EVM-native implementation for Tangle v2 contracts.
+tangle-evm = [
+    "dep:blueprint-tangle-evm-extra",
+    "dep:alloy",
+    "blueprint-clients/tangle-evm",
+    "blueprint-contexts/tangle-evm",
+    "blueprint-context-derive?/tangle-evm",
+    "blueprint-runner/tangle-evm",
     "blueprint-testing-utils?/anvil",
     "blueprint-chain-setup?/anvil",
 ]
@@ -197,5 +213,5 @@ testing = [
 cronjob = ["blueprint-producers-extra/cron"]
 
 [package.metadata.docs.rs]
-features = ["tangle", "evm", "eigenlayer", "networking", "round-based-compat", "local-store", "macros", "build", "testing", "cronjob"]
+features = ["tangle", "tangle-evm", "evm", "eigenlayer", "networking", "round-based-compat", "local-store", "macros", "build", "testing", "cronjob"]
 rustdoc-args = ["--cfg", "docsrs"]

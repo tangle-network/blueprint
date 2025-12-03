@@ -3788,6 +3788,7 @@ dependencies = [
  "blueprint-runner",
  "blueprint-std",
  "blueprint-stores",
+ "blueprint-tangle-evm-extra",
  "blueprint-tangle-extra",
  "blueprint-testing-utils",
  "document-features",
