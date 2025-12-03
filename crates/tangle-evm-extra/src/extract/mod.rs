@@ -2,12 +2,31 @@
 //!
 //! Extractors for job call metadata from Tangle EVM events.
 //! These mirror the extractors in `blueprint-tangle-extra` but for EVM.
+//!
+//! ## Input/Output Extractors
+//!
+//! For ABI-encoded inputs and outputs, use:
+//! - [`TangleEvmArg<T>`] - Extracts and ABI-decodes a single argument from the job call body
+//! - [`TangleEvmResult<T>`] - Wraps a result and ABI-encodes it for return
+//!
+//! ## Example
+//!
+//! ```rust,ignore
+//! use blueprint_tangle_evm_extra::extract::{TangleEvmArg, TangleEvmResult};
+//!
+//! // Job function that takes a u64 and returns its square
+//! async fn square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
+//!     TangleEvmResult(x * x)
+//! }
+//! ```
 
 use alloy_primitives::Address;
+use alloy_sol_types::SolValue;
 use blueprint_core::{
     __composite_rejection as composite_rejection, __define_rejection as define_rejection,
 };
-use blueprint_core::{FromJobCallParts, job::call::Parts as JobCallParts};
+use blueprint_core::{FromJobCall, FromJobCallParts, JobCall, job::call::Parts as JobCallParts};
+use bytes::Bytes;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CALL ID
@@ -473,5 +492,203 @@ where
         _: &Ctx,
     ) -> Result<Self, Self::Rejection> {
         Caller::try_from(parts)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TANGLE EVM ARG - ABI-Encoded Input Extractor
+// ═══════════════════════════════════════════════════════════════════════════════
+
+define_rejection! {
+    #[body = "Failed to ABI-decode the job input"]
+    /// A Rejection type for [`TangleEvmArg`] when ABI decoding fails.
+    pub struct AbiDecodeError;
+}
+
+/// Extracts and ABI-decodes a single argument from the job call body.
+///
+/// This extractor uses Alloy's `SolValue::abi_decode` to decode the raw bytes
+/// from the job call into the specified type.
+///
+/// # Type Parameters
+///
+/// * `T` - The type to decode into. Must implement `SolValue`.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use blueprint_tangle_evm_extra::extract::TangleEvmArg;
+///
+/// async fn my_job(TangleEvmArg(value): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
+///     TangleEvmResult(value * 2)
+/// }
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TangleEvmArg<T>(pub T);
+
+impl<T> core::ops::Deref for TangleEvmArg<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> From<T> for TangleEvmArg<T> {
+    fn from(value: T) -> Self {
+        TangleEvmArg(value)
+    }
+}
+
+impl<T, Ctx> FromJobCall<Ctx> for TangleEvmArg<T>
+where
+    T: SolValue + Send + From<<T::SolType as alloy_sol_types::SolType>::RustType>,
+    Ctx: Send + Sync,
+{
+    type Rejection = AbiDecodeError;
+
+    async fn from_job_call(call: JobCall, _ctx: &Ctx) -> Result<Self, Self::Rejection> {
+        let (_, body) = call.into_parts();
+        let value = T::abi_decode(&body).map_err(|_| AbiDecodeError)?;
+        Ok(TangleEvmArg(value))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TANGLE EVM RESULT - ABI-Encoded Output Wrapper
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Wraps a job result and ABI-encodes it for return.
+///
+/// This wrapper encodes the inner value using Alloy's `SolValue::abi_encode`
+/// so it can be submitted back to the Tangle contract.
+///
+/// # Type Parameters
+///
+/// * `T` - The type to encode. Must implement `SolValue`.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use blueprint_tangle_evm_extra::extract::{TangleEvmArg, TangleEvmResult};
+///
+/// async fn square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
+///     TangleEvmResult(x * x)
+/// }
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TangleEvmResult<T>(pub T);
+
+impl<T> core::ops::Deref for TangleEvmResult<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> From<T> for TangleEvmResult<T> {
+    fn from(value: T) -> Self {
+        TangleEvmResult(value)
+    }
+}
+
+impl<T: SolValue> blueprint_core::IntoJobResult for TangleEvmResult<T> {
+    fn into_job_result(self) -> Option<blueprint_core::JobResult> {
+        let encoded = self.0.abi_encode();
+        Some(blueprint_core::JobResult::Ok {
+            head: blueprint_core::job::result::Parts::new(),
+            body: Bytes::from(encoded),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // JobIndex extraction tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_job_index_extraction() {
+        let mut parts = JobCallParts::new(0);
+        parts.metadata.insert(JobIndex::METADATA_KEY, [5u8]);
+
+        let job_index = JobIndex::try_from(&mut parts).expect("should extract job index");
+        assert_eq!(*job_index, 5);
+    }
+
+    #[test]
+    fn test_job_index_different_values() {
+        // Test job index 0
+        let mut parts0 = JobCallParts::new(0);
+        parts0.metadata.insert(JobIndex::METADATA_KEY, [0u8]);
+        let idx0 = JobIndex::try_from(&mut parts0).unwrap();
+        assert_eq!(*idx0, 0);
+
+        // Test job index 1
+        let mut parts1 = JobCallParts::new(0);
+        parts1.metadata.insert(JobIndex::METADATA_KEY, [1u8]);
+        let idx1 = JobIndex::try_from(&mut parts1).unwrap();
+        assert_eq!(*idx1, 1);
+
+        // Test job index 255 (max u8)
+        let mut parts255 = JobCallParts::new(0);
+        parts255.metadata.insert(JobIndex::METADATA_KEY, [255u8]);
+        let idx255 = JobIndex::try_from(&mut parts255).unwrap();
+        assert_eq!(*idx255, 255);
+
+        // Verify they're different
+        assert_ne!(idx0, idx1);
+        assert_ne!(idx1, idx255);
+    }
+
+    #[test]
+    fn test_job_index_missing() {
+        let mut parts = JobCallParts::new(0);
+        let result = JobIndex::try_from(&mut parts);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_job_index_into_u8() {
+        let job_index = JobIndex(42);
+        let val: u8 = *job_index;
+        assert_eq!(val, 42);
+    }
+
+    #[test]
+    fn test_job_index_metadata_key() {
+        assert_eq!(JobIndex::METADATA_KEY, "X-TANGLE-EVM-JOB-INDEX");
+    }
+
+    #[test]
+    fn test_per_job_routing_simulation() {
+        // Simulate how AggregatingConsumer would differentiate jobs
+        // Job 0: might not require aggregation
+        // Job 1: might require aggregation
+
+        let mut parts_job0 = JobCallParts::new(0);
+        parts_job0.metadata.insert(JobIndex::METADATA_KEY, [0u8]);
+        parts_job0.metadata.insert(ServiceId::METADATA_KEY, 1u64.to_be_bytes());
+
+        let mut parts_job1 = JobCallParts::new(0);
+        parts_job1.metadata.insert(JobIndex::METADATA_KEY, [1u8]);
+        parts_job1.metadata.insert(ServiceId::METADATA_KEY, 1u64.to_be_bytes());
+
+        // Extract both
+        let job_idx0 = JobIndex::try_from(&mut parts_job0).unwrap();
+        let job_idx1 = JobIndex::try_from(&mut parts_job1).unwrap();
+
+        // They should have different indices despite same service_id
+        assert_eq!(*job_idx0, 0);
+        assert_eq!(*job_idx1, 1);
+        assert_ne!(job_idx0, job_idx1);
+
+        // Each would result in different aggregation config lookups
+        // get_aggregation_config(service_id=1, job_index=0) vs
+        // get_aggregation_config(service_id=1, job_index=1)
     }
 }
