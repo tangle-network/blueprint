@@ -48,4 +48,5 @@ networking = []
 std = []
 
 tangle = []
+tangle-evm = []
 evm = []
