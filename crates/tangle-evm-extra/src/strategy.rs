@@ -5,6 +5,12 @@
 //! - HTTP Service: Uses a centralized aggregation service (simpler deployment)
 //! - P2P Gossip: Uses peer-to-peer gossip protocol (fully decentralized)
 //!
+//! ## Threshold Types
+//!
+//! The aggregation system supports two threshold types matching the on-chain configuration:
+//! - `CountBased`: Threshold is based on the number of operators (e.g., 67% of operators must sign)
+//! - `StakeWeighted`: Threshold is based on operator stake exposure (e.g., 67% of total stake must sign)
+//!
 //! ## Usage
 //!
 //! ```rust,ignore
@@ -28,6 +34,25 @@
 
 use alloy_primitives::Bytes;
 use std::time::Duration;
+
+/// Threshold type for BLS aggregation (matches on-chain Types.ThresholdType)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ThresholdType {
+    /// Percentage of operator count (each operator has weight 1)
+    #[default]
+    CountBased,
+    /// Percentage of total stake/exposure (operators weighted by their stake exposure)
+    StakeWeighted,
+}
+
+impl From<u8> for ThresholdType {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => ThresholdType::StakeWeighted,
+            _ => ThresholdType::CountBased,
+        }
+    }
+}
 
 #[cfg(feature = "aggregation")]
 use std::sync::Arc;
@@ -134,16 +159,23 @@ pub struct P2PGossipConfig {
     pub num_aggregators: u16,
     /// Timeout for the aggregation protocol
     pub timeout: Duration,
-    /// Threshold percentage (e.g., 67 for 67%)
-    pub threshold_percentage: u8,
+    /// Threshold in basis points (e.g., 6700 for 67%)
+    /// This matches the on-chain thresholdBps format
+    pub threshold_bps: u16,
+    /// Threshold type (CountBased or StakeWeighted)
+    pub threshold_type: ThresholdType,
     /// Map of participant peer IDs to their public keys
     pub participant_public_keys:
         std::collections::HashMap<libp2p::PeerId, ArkBlsBn254Public>,
+    /// Map of participant peer IDs to their stake weights (exposure in basis points)
+    /// Only used when threshold_type is StakeWeighted
+    /// Values are in basis points (10000 = 100%)
+    pub operator_weights: std::collections::HashMap<libp2p::PeerId, u64>,
 }
 
 #[cfg(feature = "p2p-aggregation")]
 impl P2PGossipConfig {
-    /// Create a new P2P gossip config
+    /// Create a new P2P gossip config with default count-based threshold (67%)
     pub fn new(
         network_handle: blueprint_networking::service_handle::NetworkServiceHandle<ArkBlsBn254>,
         participant_public_keys: std::collections::HashMap<libp2p::PeerId, ArkBlsBn254Public>,
@@ -152,8 +184,10 @@ impl P2PGossipConfig {
             network_handle,
             num_aggregators: 2,
             timeout: Duration::from_secs(30),
-            threshold_percentage: 67,
+            threshold_bps: 6700, // 67% in basis points
+            threshold_type: ThresholdType::CountBased,
             participant_public_keys,
+            operator_weights: std::collections::HashMap::new(),
         }
     }
 
@@ -171,10 +205,64 @@ impl P2PGossipConfig {
         self
     }
 
-    /// Set the threshold percentage
+    /// Set the threshold percentage (convenience method that converts to basis points)
     #[must_use]
     pub fn with_threshold_percentage(mut self, percentage: u8) -> Self {
-        self.threshold_percentage = percentage;
+        self.threshold_bps = u16::from(percentage) * 100;
+        self
+    }
+
+    /// Set the threshold in basis points (e.g., 6700 for 67%)
+    /// This matches the on-chain thresholdBps format directly
+    #[must_use]
+    pub fn with_threshold_bps(mut self, bps: u16) -> Self {
+        self.threshold_bps = bps;
+        self
+    }
+
+    /// Set the threshold type (CountBased or StakeWeighted)
+    #[must_use]
+    pub fn with_threshold_type(mut self, threshold_type: ThresholdType) -> Self {
+        self.threshold_type = threshold_type;
+        self
+    }
+
+    /// Set the operator weights for stake-weighted thresholds
+    ///
+    /// The weights should be the operator's exposure in basis points (from ServiceOperator.exposureBps).
+    /// This is only used when `threshold_type` is `StakeWeighted`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// // Operator 1 has 5000 bps (50%) exposure, operator 2 has 3000 bps (30%)
+    /// let weights = HashMap::from([
+    ///     (peer_id_1, 5000),
+    ///     (peer_id_2, 3000),
+    /// ]);
+    /// config.with_operator_weights(weights)
+    /// ```
+    #[must_use]
+    pub fn with_operator_weights(
+        mut self,
+        weights: std::collections::HashMap<libp2p::PeerId, u64>,
+    ) -> Self {
+        self.operator_weights = weights;
+        self
+    }
+
+    /// Configure for stake-weighted threshold with operator weights
+    ///
+    /// This is a convenience method that sets both the threshold type and weights.
+    #[must_use]
+    pub fn with_stake_weighted_threshold(
+        mut self,
+        threshold_bps: u16,
+        weights: std::collections::HashMap<libp2p::PeerId, u64>,
+    ) -> Self {
+        self.threshold_bps = threshold_bps;
+        self.threshold_type = ThresholdType::StakeWeighted;
+        self.operator_weights = weights;
         self
     }
 }
@@ -372,19 +460,19 @@ async fn aggregate_via_p2p(
     service_id: u64,
     call_id: u64,
     output: Bytes,
-    total_operators: u32,
-    threshold: u32,
+    _total_operators: u32,
+    _threshold: u32,
 ) -> Result<AggregatedSignatureResult, StrategyError> {
     use blueprint_crypto::hashing::blake3_256;
     use blueprint_crypto_core::BytesEncoding;
     use blueprint_networking_agg_sig_gossip_extension::{
-        ProtocolConfig, SignatureAggregationProtocol, EqualWeight,
+        DynamicWeight, ProtocolConfig, SignatureAggregationProtocol,
     };
 
     blueprint_core::debug!(
         target: "aggregation-strategy",
-        "Aggregating via P2P gossip for service {} call {} (threshold: {}/{})",
-        service_id, call_id, threshold, total_operators
+        "Aggregating via P2P gossip for service {} call {} (threshold_bps: {}, type: {:?})",
+        service_id, call_id, config.threshold_bps, config.threshold_type
     );
 
     // Create the message to sign (same format as HTTP)
@@ -404,27 +492,45 @@ async fn aggregate_via_p2p(
         config.timeout,
     );
 
-    // Calculate threshold percentage from the job system parameters
-    // The threshold from the job system is the absolute number of signatures needed
-    // We convert it to a percentage for the weight scheme
-    let threshold_percentage = if total_operators > 0 {
-        // Ceiling division to ensure we meet or exceed the threshold
-        ((threshold as u64 * 100 + total_operators as u64 - 1) / total_operators as u64) as u8
-    } else {
-        config.threshold_percentage // Fallback to config if no operators specified
+    // Create weight scheme based on threshold type
+    // This matches the on-chain logic in Jobs.sol _validateSignersAndThreshold
+    let weight_scheme = match config.threshold_type {
+        ThresholdType::CountBased => {
+            // CountBased: each operator has weight 1, threshold is percentage of operator count
+            let num_participants = config.participant_public_keys.len();
+            let threshold_percentage = (config.threshold_bps / 100) as u8;
+            blueprint_core::debug!(
+                target: "aggregation-strategy",
+                "Using CountBased threshold: {}% of {} participants",
+                threshold_percentage, num_participants
+            );
+            DynamicWeight::equal(num_participants, threshold_percentage)
+        }
+        ThresholdType::StakeWeighted => {
+            // StakeWeighted: operators weighted by their stake exposure (exposureBps)
+            // threshold_weight = (total_weight * threshold_bps) / 10000
+            let total_weight: u64 = config.operator_weights.values().sum();
+            let threshold_weight = (total_weight * u64::from(config.threshold_bps)) / 10000;
+
+            blueprint_core::debug!(
+                target: "aggregation-strategy",
+                "Using StakeWeighted threshold: {} / {} total weight ({}bps)",
+                threshold_weight, total_weight, config.threshold_bps
+            );
+
+            if config.operator_weights.is_empty() {
+                blueprint_core::warn!(
+                    target: "aggregation-strategy",
+                    "StakeWeighted threshold requested but no operator weights provided, falling back to EqualWeight"
+                );
+                let num_participants = config.participant_public_keys.len();
+                let threshold_percentage = (config.threshold_bps / 100) as u8;
+                DynamicWeight::equal(num_participants, threshold_percentage)
+            } else {
+                DynamicWeight::custom(config.operator_weights.clone(), threshold_weight)
+            }
+        }
     };
-
-    blueprint_core::debug!(
-        target: "aggregation-strategy",
-        "Using threshold percentage: {}% (from {}/{} operators)",
-        threshold_percentage, threshold, total_operators
-    );
-
-    // Create weight scheme using the calculated threshold
-    // Note: Currently using EqualWeight where each participant has weight 1
-    // TODO: Integrate with on-chain staking weights via CustomWeight for stake-weighted voting
-    let num_participants = config.participant_public_keys.len();
-    let weight_scheme = EqualWeight::new(num_participants, threshold_percentage);
 
     // Create and run the protocol
     let mut protocol = SignatureAggregationProtocol::new(

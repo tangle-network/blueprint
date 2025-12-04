@@ -48,7 +48,7 @@ pub use layers::TangleEvmLayer;
 pub use producer::TangleEvmProducer;
 
 // Strategy exports
-pub use strategy::{AggregatedSignatureResult, AggregationStrategy, StrategyError};
+pub use strategy::{AggregatedSignatureResult, AggregationStrategy, StrategyError, ThresholdType};
 #[cfg(feature = "aggregation")]
 pub use strategy::HttpServiceConfig;
 #[cfg(feature = "p2p-aggregation")]

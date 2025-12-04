@@ -16,9 +16,8 @@
 //! let service = AggregationService::with_persistence(config, persistence);
 //! ```
 
-use crate::state::{TaskConfig, ThresholdType};
+use crate::state::ThresholdType;
 use crate::types::TaskId;
-use alloy_primitives::U256;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

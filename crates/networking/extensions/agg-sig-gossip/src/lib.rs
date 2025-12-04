@@ -19,7 +19,7 @@ pub use messages::{AggSigMessage, AggregationResult};
 
 // Signature weighting schemes
 mod signature_weight;
-pub use signature_weight::{CustomWeight, EqualWeight, SignatureWeight};
+pub use signature_weight::{CustomWeight, DynamicWeight, EqualWeight, SignatureWeight};
 
 #[cfg(test)]
 mod tests;

@@ -98,3 +98,51 @@ impl SignatureWeight for CustomWeight {
         self.threshold_weight
     }
 }
+
+/// A dynamic weight scheme that can be either equal-weight or custom-weight
+///
+/// This enum allows switching between weight schemes at runtime without
+/// needing to specify the concrete type at compile time.
+pub enum DynamicWeight {
+    /// Equal weight for all participants
+    Equal(EqualWeight),
+    /// Custom weights per participant
+    Custom(CustomWeight),
+}
+
+impl DynamicWeight {
+    /// Create a new equal-weight scheme
+    #[must_use]
+    pub fn equal(total_participants: usize, threshold_percentage: u8) -> Self {
+        Self::Equal(EqualWeight::new(total_participants, threshold_percentage))
+    }
+
+    /// Create a new custom-weight scheme
+    #[must_use]
+    pub fn custom(weights: std::collections::HashMap<PeerId, u64>, threshold_weight: u64) -> Self {
+        Self::Custom(CustomWeight::new(weights, threshold_weight))
+    }
+}
+
+impl SignatureWeight for DynamicWeight {
+    fn weight(&self, participant_id: &PeerId) -> u64 {
+        match self {
+            DynamicWeight::Equal(w) => w.weight(participant_id),
+            DynamicWeight::Custom(w) => w.weight(participant_id),
+        }
+    }
+
+    fn total_weight(&self) -> u64 {
+        match self {
+            DynamicWeight::Equal(w) => w.total_weight(),
+            DynamicWeight::Custom(w) => w.total_weight(),
+        }
+    }
+
+    fn threshold_weight(&self) -> u64 {
+        match self {
+            DynamicWeight::Equal(w) => w.threshold_weight(),
+            DynamicWeight::Custom(w) => w.threshold_weight(),
+        }
+    }
+}

@@ -63,6 +63,10 @@ blueprint-networking = { workspace = true, optional = true }
 # Round-based protocol support
 blueprint-networking-round-based-extension = { workspace = true, optional = true }
 
+# Gossip protocol extensions
+blueprint-gossip-primitives = { workspace = true, optional = true }
+blueprint-networking-agg-sig-gossip-extension = { workspace = true, optional = true }
+
 # Optional dependencies for testing
 blueprint-testing-utils = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
@@ -159,6 +163,19 @@ tangle-evm = [
     "blueprint-chain-setup?/anvil",
 ]
 
+## Enable Tangle EVM with HTTP-based BLS aggregation service
+tangle-evm-aggregation = [
+    "tangle-evm",
+    "blueprint-tangle-evm-extra/aggregation",
+]
+
+## Enable Tangle EVM with P2P gossip-based BLS aggregation
+tangle-evm-p2p-aggregation = [
+    "tangle-evm",
+    "blueprint-tangle-evm-extra/p2p-aggregation",
+    "agg-sig-gossip",
+]
+
 ## Enable [Eigenlayer] support
 ##
 ## [Eigenlayer]: https://eigenlayer.xyz
@@ -187,6 +204,16 @@ networking = [
 ## [round-based]: https://github.com/LFDT-Lockness/round-based
 round-based-compat = ["dep:blueprint-networking-round-based-extension"]
 
+## Enable gossip protocol primitives (deduplication, message store, etc.)
+gossip = ["dep:blueprint-gossip-primitives", "networking"]
+
+## Enable BLS signature aggregation via P2P gossip
+agg-sig-gossip = [
+    "dep:blueprint-networking-agg-sig-gossip-extension",
+    "dep:blueprint-gossip-primitives",
+    "networking",
+]
+
 ##! ### Utilities
 
 ## Enable local KV stores
@@ -213,5 +240,5 @@ testing = [
 cronjob = ["blueprint-producers-extra/cron"]
 
 [package.metadata.docs.rs]
-features = ["tangle", "tangle-evm", "evm", "eigenlayer", "networking", "round-based-compat", "local-store", "macros", "build", "testing", "cronjob"]
+features = ["tangle", "tangle-evm", "tangle-evm-aggregation", "tangle-evm-p2p-aggregation", "evm", "eigenlayer", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]
 rustdoc-args = ["--cfg", "docsrs"]

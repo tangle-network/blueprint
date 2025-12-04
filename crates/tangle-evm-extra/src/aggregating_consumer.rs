@@ -87,8 +87,8 @@ impl State {
 #[cfg(feature = "aggregation")]
 #[derive(Clone)]
 pub struct AggregationServiceConfig {
-    /// HTTP client for the aggregation service
-    pub client: blueprint_tangle_aggregation_svc::AggregationServiceClient,
+    /// HTTP clients for aggregation services (supports multiple for redundancy)
+    pub clients: Vec<blueprint_tangle_aggregation_svc::AggregationServiceClient>,
     /// BLS secret key for signing
     pub bls_secret: Arc<blueprint_crypto_bn254::ArkBlsBn254Secret>,
     /// BLS public key (derived from secret)
@@ -101,11 +101,14 @@ pub struct AggregationServiceConfig {
     pub threshold_timeout: std::time::Duration,
     /// Poll interval when waiting for threshold (default: 1s)
     pub poll_interval: std::time::Duration,
+    /// Whether to try to submit the aggregated result to chain (default: true)
+    /// When true, all operators race to submit; first valid submission wins
+    pub submit_to_chain: bool,
 }
 
 #[cfg(feature = "aggregation")]
 impl AggregationServiceConfig {
-    /// Create a new aggregation service config
+    /// Create a new aggregation service config with a single service URL
     pub fn new(
         service_url: impl Into<String>,
         bls_secret: blueprint_crypto_bn254::ArkBlsBn254Secret,
@@ -116,14 +119,54 @@ impl AggregationServiceConfig {
 
         let bls_public = ArkBlsBn254::public_from_secret(&bls_secret);
         Self {
-            client: blueprint_tangle_aggregation_svc::AggregationServiceClient::new(service_url),
+            clients: vec![blueprint_tangle_aggregation_svc::AggregationServiceClient::new(service_url)],
             bls_secret: Arc::new(bls_secret),
             bls_public: Arc::new(bls_public),
             operator_index,
             wait_for_threshold: false,
             threshold_timeout: std::time::Duration::from_secs(60),
             poll_interval: std::time::Duration::from_secs(1),
+            submit_to_chain: true, // Everyone tries to submit by default
         }
+    }
+
+    /// Create a new aggregation service config with multiple service URLs
+    ///
+    /// This allows submitting to multiple aggregation services for redundancy.
+    /// Signatures will be sent to ALL services, and threshold polling will
+    /// try each service until one succeeds.
+    pub fn with_multiple_services(
+        service_urls: impl IntoIterator<Item = impl Into<String>>,
+        bls_secret: blueprint_crypto_bn254::ArkBlsBn254Secret,
+        operator_index: u32,
+    ) -> Self {
+        use blueprint_crypto_bn254::ArkBlsBn254;
+        use blueprint_crypto_core::KeyType;
+
+        let bls_public = ArkBlsBn254::public_from_secret(&bls_secret);
+        let clients = service_urls
+            .into_iter()
+            .map(|url| blueprint_tangle_aggregation_svc::AggregationServiceClient::new(url))
+            .collect();
+
+        Self {
+            clients,
+            bls_secret: Arc::new(bls_secret),
+            bls_public: Arc::new(bls_public),
+            operator_index,
+            wait_for_threshold: false,
+            threshold_timeout: std::time::Duration::from_secs(60),
+            poll_interval: std::time::Duration::from_secs(1),
+            submit_to_chain: true,
+        }
+    }
+
+    /// Add an additional aggregation service URL
+    pub fn add_service(mut self, service_url: impl Into<String>) -> Self {
+        self.clients.push(
+            blueprint_tangle_aggregation_svc::AggregationServiceClient::new(service_url)
+        );
+        self
     }
 
     /// Set whether to wait for threshold to be met
@@ -136,6 +179,123 @@ impl AggregationServiceConfig {
     pub fn with_threshold_timeout(mut self, timeout: std::time::Duration) -> Self {
         self.threshold_timeout = timeout;
         self
+    }
+
+    /// Set whether to submit the aggregated result to chain
+    ///
+    /// When true (default), this operator will attempt to submit the aggregated
+    /// result to chain once threshold is met. Multiple operators can race to submit;
+    /// the contract ensures only the first valid submission succeeds.
+    pub fn with_submit_to_chain(mut self, submit: bool) -> Self {
+        self.submit_to_chain = submit;
+        self
+    }
+
+    /// Get the first client (for backwards compatibility)
+    pub fn client(&self) -> &blueprint_tangle_aggregation_svc::AggregationServiceClient {
+        self.clients.first().expect("At least one client must be configured")
+    }
+
+    /// Discover aggregation service URLs from operator RPC addresses on chain
+    ///
+    /// This queries `OperatorRpcAddressUpdated` events to discover operator endpoints,
+    /// then converts them to aggregation service URLs using the provided path suffix.
+    ///
+    /// # Arguments
+    /// * `client` - The Tangle EVM client for querying events
+    /// * `blueprint_id` - The blueprint ID to query operators for
+    /// * `aggregation_path` - Path suffix for aggregation service (e.g., "/aggregation" or ":8080")
+    /// * `from_block` - Block to start querying from (None = earliest)
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// // Discover operators and add their aggregation services
+    /// let urls = AggregationServiceConfig::discover_operator_services(
+    ///     &client,
+    ///     blueprint_id,
+    ///     ":9090",  // Aggregation service port
+    ///     None,
+    /// ).await?;
+    ///
+    /// let config = AggregationServiceConfig::with_multiple_services(
+    ///     urls,
+    ///     bls_secret,
+    ///     operator_index,
+    /// );
+    /// ```
+    pub async fn discover_operator_services(
+        client: &TangleEvmClient,
+        blueprint_id: u64,
+        aggregation_path: &str,
+        from_block: Option<u64>,
+    ) -> Result<Vec<String>, AggregatingConsumerError> {
+        use alloy_primitives::{FixedBytes, B256};
+        use alloy_rpc_types::Filter;
+        use alloy_sol_types::SolEvent;
+
+        // Event signature for OperatorRpcAddressUpdated(uint64 indexed blueprintId, address indexed operator, string rpcAddress)
+        // keccak256("OperatorRpcAddressUpdated(uint64,address,string)")
+        let event_sig = blueprint_client_tangle_evm::contracts::ITangle::OperatorRpcAddressUpdated::SIGNATURE_HASH;
+
+        // Create filter for the event
+        let tangle_address = client.config.settings.tangle_contract;
+        let filter = Filter::new()
+            .address(tangle_address)
+            .event_signature(event_sig)
+            .topic1(B256::from(FixedBytes::<32>::left_padding_from(&blueprint_id.to_be_bytes())))
+            .from_block(from_block.unwrap_or(0));
+
+        let logs = client.get_logs(&filter).await.map_err(|e| {
+            AggregatingConsumerError::Client(format!("Failed to query logs: {}", e))
+        })?;
+
+        // Decode events and collect RPC addresses
+        let mut rpc_addresses: std::collections::HashMap<alloy_primitives::Address, String> = std::collections::HashMap::new();
+
+        for log in logs {
+            if let Ok(event) = log.log_decode::<blueprint_client_tangle_evm::contracts::ITangle::OperatorRpcAddressUpdated>() {
+                // Keep the latest RPC address for each operator
+                rpc_addresses.insert(event.inner.operator, event.inner.rpcAddress.clone());
+            }
+        }
+
+        // Convert RPC addresses to aggregation service URLs
+        let urls: Vec<String> = rpc_addresses
+            .values()
+            .filter_map(|rpc| {
+                // Parse the RPC address and append the aggregation path
+                if rpc.is_empty() {
+                    return None;
+                }
+
+                // If the path starts with ":", treat it as a port replacement
+                if aggregation_path.starts_with(':') {
+                    // Replace the port in the URL
+                    if let Some(host_end) = rpc.rfind(':') {
+                        // Check if there's already a port (not just protocol separator)
+                        let before_port = &rpc[..host_end];
+                        if before_port.contains("://") {
+                            return Some(format!("{}{}", before_port, aggregation_path));
+                        }
+                    }
+                    // No port found, just append
+                    Some(format!("{}{}", rpc, aggregation_path))
+                } else {
+                    // Append as a path
+                    let base = rpc.trim_end_matches('/');
+                    Some(format!("{}{}", base, aggregation_path))
+                }
+            })
+            .collect();
+
+        blueprint_core::info!(
+            target: "tangle-evm-aggregating-consumer",
+            "Discovered {} operator aggregation services for blueprint {}",
+            urls.len(),
+            blueprint_id
+        );
+
+        Ok(urls)
     }
 }
 
@@ -173,6 +333,8 @@ pub struct AggregatingConsumer {
     buffer: Mutex<VecDeque<PendingJobResult>>,
     state: Mutex<State>,
     /// Cache of aggregation config by (service_id, job_index)
+    /// TODO: Use this for caching operator service configs from chain
+    #[allow(dead_code)]
     aggregation_cache: Mutex<std::collections::HashMap<(u64, u8), AggregationConfig>>,
     /// Aggregation service configuration (legacy, when feature enabled)
     #[cfg(feature = "aggregation")]
@@ -491,7 +653,13 @@ async fn submit_job_result(
     }
 }
 
-/// Submit using the aggregation service
+/// Submit using the aggregation service(s)
+///
+/// This function:
+/// 1. Signs the output with the operator's BLS key
+/// 2. Sends the signature to ALL configured aggregation services (for redundancy)
+/// 3. Waits for threshold if configured
+/// 4. Submits the aggregated result to chain if enabled (all operators can race to submit)
 #[cfg(feature = "aggregation")]
 async fn submit_aggregated_result(
     client: Arc<TangleEvmClient>,
@@ -507,7 +675,8 @@ async fn submit_aggregated_result(
 
     blueprint_core::debug!(
         target: "tangle-evm-aggregating-consumer",
-        "Submitting signature to aggregation service for service {} call {}",
+        "Submitting signature to {} aggregation service(s) for service {} call {}",
+        agg.clients.len(),
         service_id,
         call_id
     );
@@ -527,72 +696,176 @@ async fn submit_aggregated_result(
     // Calculate threshold from config
     let threshold = calculate_threshold_count(config.threshold_bps, config.threshold_type);
 
-    // Try to initialize the task (may already exist from another operator)
-    let _ = agg.client.init_task(
-        service_id,
-        call_id,
-        &output,
-        threshold, // This should be total operators, but we use threshold as approximation
-        threshold,
-    ).await;
-
-    // Submit our signature
+    // Create the submit request (same for all services)
     let submit_request = SubmitSignatureRequest {
         service_id,
         call_id,
         operator_index: agg.operator_index,
         output: output.to_vec(),
-        signature: sig_bytes,
-        public_key: pubkey_bytes,
+        signature: sig_bytes.clone(),
+        public_key: pubkey_bytes.clone(),
     };
 
-    let response = agg.client.submit_signature(submit_request).await?;
+    // Submit to ALL aggregation services
+    let mut any_success = false;
+    let mut last_response = None;
 
-    blueprint_core::info!(
-        target: "tangle-evm-aggregating-consumer",
-        "Submitted signature to aggregation service: {}/{} signatures (threshold met: {})",
-        response.signatures_collected,
-        response.threshold_required,
-        response.threshold_met
-    );
+    for (idx, service_client) in agg.clients.iter().enumerate() {
+        // Try to initialize the task (may already exist from another operator)
+        let _ = service_client.init_task(
+            service_id,
+            call_id,
+            &output,
+            threshold,
+            threshold,
+        ).await;
 
-    // If configured to wait and threshold is met, submit to chain
-    if agg.wait_for_threshold && response.threshold_met {
-        submit_aggregated_to_chain(client, &agg, service_id, call_id).await?;
+        // Submit our signature
+        match service_client.submit_signature(submit_request.clone()).await {
+            Ok(response) => {
+                blueprint_core::info!(
+                    target: "tangle-evm-aggregating-consumer",
+                    "Submitted signature to aggregation service {}: {}/{} signatures (threshold met: {})",
+                    idx,
+                    response.signatures_collected,
+                    response.threshold_required,
+                    response.threshold_met
+                );
+                any_success = true;
+                last_response = Some(response);
+            }
+            Err(e) => {
+                blueprint_core::warn!(
+                    target: "tangle-evm-aggregating-consumer",
+                    "Failed to submit to aggregation service {}: {}",
+                    idx,
+                    e
+                );
+            }
+        }
+    }
+
+    if !any_success {
+        return Err(AggregatingConsumerError::Client(
+            "Failed to submit to any aggregation service".to_string()
+        ));
+    }
+
+    // Check if we should submit to chain
+    if !agg.submit_to_chain {
+        blueprint_core::debug!(
+            target: "tangle-evm-aggregating-consumer",
+            "submit_to_chain is disabled, not submitting to chain"
+        );
+        return Ok(());
+    }
+
+    // Try to submit to chain
+    let response = last_response.unwrap();
+
+    if response.threshold_met {
+        // Threshold already met, try to submit immediately
+        if let Err(e) = try_submit_aggregated_to_chain(client.clone(), &agg, service_id, call_id).await {
+            blueprint_core::debug!(
+                target: "tangle-evm-aggregating-consumer",
+                "Failed to submit aggregated result (likely already submitted): {}",
+                e
+            );
+        }
     } else if agg.wait_for_threshold {
-        // Wait for threshold to be met
+        // Wait for threshold to be met, then submit
         blueprint_core::debug!(
             target: "tangle-evm-aggregating-consumer",
             "Waiting for threshold to be met..."
         );
 
-        let result = agg.client.wait_for_threshold(
+        // Try to get result from any service
+        let result = wait_for_threshold_any_service(&agg, service_id, call_id).await?;
+
+        // Try to submit to chain (race with other operators)
+        if let Err(e) = submit_aggregated_to_chain_with_result(
+            client,
+            &agg,
             service_id,
             call_id,
-            agg.poll_interval,
-            agg.threshold_timeout,
-        ).await?;
-
-        // Submit to chain
-        submit_aggregated_to_chain_with_result(client, &agg, service_id, call_id, result).await?;
+            result,
+        ).await {
+            blueprint_core::debug!(
+                target: "tangle-evm-aggregating-consumer",
+                "Failed to submit aggregated result (likely already submitted by another operator): {}",
+                e
+            );
+        }
     }
 
     Ok(())
 }
 
-/// Submit the aggregated result to the blockchain
+/// Wait for threshold to be met, trying all configured services
 #[cfg(feature = "aggregation")]
-async fn submit_aggregated_to_chain(
+async fn wait_for_threshold_any_service(
+    agg: &AggregationServiceConfig,
+    service_id: u64,
+    call_id: u64,
+) -> Result<blueprint_tangle_aggregation_svc::AggregatedResultResponse, AggregatingConsumerError> {
+    use std::time::Instant;
+
+    let start = Instant::now();
+    let timeout = agg.threshold_timeout;
+    let poll_interval = agg.poll_interval;
+
+    while start.elapsed() < timeout {
+        // Try each service until one returns a result
+        for client in &agg.clients {
+            match client.get_aggregated(service_id, call_id).await {
+                Ok(Some(result)) => {
+                    return Ok(result);
+                }
+                Ok(None) => {
+                    // Threshold not yet met on this service
+                }
+                Err(e) => {
+                    blueprint_core::trace!(
+                        target: "tangle-evm-aggregating-consumer",
+                        "Error polling aggregation service: {}",
+                        e
+                    );
+                }
+            }
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    }
+
+    Err(AggregatingConsumerError::Client(
+        "Timeout waiting for aggregation threshold".to_string()
+    ))
+}
+
+/// Try to submit the aggregated result to chain, handling "already submitted" gracefully
+#[cfg(feature = "aggregation")]
+async fn try_submit_aggregated_to_chain(
     client: Arc<TangleEvmClient>,
     agg: &AggregationServiceConfig,
     service_id: u64,
     call_id: u64,
 ) -> Result<(), AggregatingConsumerError> {
-    // Fetch the aggregated result
-    let result = agg.client.get_aggregated(service_id, call_id).await?
-        .ok_or_else(|| AggregatingConsumerError::Client("Aggregated result not available".to_string()))?;
+    // Try to get result from any service
+    for service_client in &agg.clients {
+        if let Ok(Some(result)) = service_client.get_aggregated(service_id, call_id).await {
+            return submit_aggregated_to_chain_with_result(
+                client,
+                agg,
+                service_id,
+                call_id,
+                result,
+            ).await;
+        }
+    }
 
-    submit_aggregated_to_chain_with_result(client, agg, service_id, call_id, result).await
+    Err(AggregatingConsumerError::Client(
+        "Aggregated result not available from any service".to_string()
+    ))
 }
 
 /// Submit the aggregated result to the blockchain with a pre-fetched result
@@ -631,8 +904,10 @@ async fn submit_aggregated_to_chain_with_result(
     // Submit to the contract
     aggregated.submit(&Arc::new(client.as_ref().clone())).await?;
 
-    // Mark as submitted in the aggregation service
-    let _ = agg.client.mark_submitted(service_id, call_id).await;
+    // Mark as submitted in all aggregation services
+    for client in &agg.clients {
+        let _ = client.mark_submitted(service_id, call_id).await;
+    }
 
     blueprint_core::info!(
         target: "tangle-evm-aggregating-consumer",

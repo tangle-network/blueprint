@@ -198,6 +198,18 @@ pub mod networking {
     pub use blueprint_networking::*;
     #[cfg(feature = "round-based-compat")]
     pub use blueprint_networking_round_based_extension as round_based_compat;
+
+    /// Gossip protocol primitives (deduplication, message store, etc.)
+    #[cfg(feature = "gossip")]
+    pub mod gossip {
+        pub use blueprint_gossip_primitives::*;
+    }
+
+    /// BLS signature aggregation via P2P gossip protocol
+    #[cfg(feature = "agg-sig-gossip")]
+    pub mod agg_sig_gossip {
+        pub use blueprint_networking_agg_sig_gossip_extension::*;
+    }
 }
 
 #[cfg(feature = "local-store")]
