@@ -50,32 +50,24 @@ pub struct AggregationState<S: AggregatableSignature> {
     /// Set of participants identified as malicious
     pub malicious: HashSet<PeerId>,
 
-    /// Set of participants we've sent ACKs to
-    pub sent_acks: HashSet<PeerId>,
-
     /// Current protocol round
     pub round: ProtocolRound,
 
     /// Verified aggregate result from a completion message
     pub verified_completion: Option<AggregationResult<S>>,
-
-    /// Threshold weight
-    pub threshold_weight: u64,
 }
 
 impl<S: AggregatableSignature> AggregationState<S> {
     /// Create a new aggregation state
     #[must_use]
-    pub fn new(threshold_weight: u64) -> Self {
+    pub fn new() -> Self {
         Self {
             signatures_by_message: HashMap::new(),
             local_message: Vec::new(),
             malicious: HashSet::new(),
             seen_signatures: HashMap::new(),
-            sent_acks: HashSet::new(),
             round: ProtocolRound::Initialization,
             verified_completion: None,
-            threshold_weight,
         }
     }
 
@@ -114,5 +106,11 @@ impl<S: AggregatableSignature> AggregationState<S> {
     #[must_use]
     pub fn is_completed(&self) -> bool {
         self.round == ProtocolRound::Completion
+    }
+}
+
+impl<S: AggregatableSignature> Default for AggregationState<S> {
+    fn default() -> Self {
+        Self::new()
     }
 }

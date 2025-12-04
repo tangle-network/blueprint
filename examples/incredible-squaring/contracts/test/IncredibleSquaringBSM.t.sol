@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import { Test, console } from "forge-std/Test.sol";
 import { IncredibleSquaringBSM } from "../src/IncredibleSquaringBSM.sol";
+import { BlueprintServiceManagerBase } from "@tnt-core/BlueprintServiceManagerBase.sol";
 
 /// @title IncredibleSquaringBSMTest
 /// @notice Comprehensive tests for the IncredibleSquaringBSM hook tracking
@@ -798,5 +799,472 @@ contract IncredibleSquaringBSMTest is Test {
         address[] memory callers = new address[](1);
         callers[0] = serviceRequester;
         bsm.onServiceInitialized(BLUEPRINT_ID, REQUEST_ID, SERVICE_ID, serviceRequester, callers, 1000);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ACCESS CONTROL TESTS - CRITICAL SECURITY
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function test_AccessControl_OnRegister_RejectsUnauthorized() public {
+        _initializeBlueprint();
+
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onRegister(operator1, "");
+    }
+
+    function test_AccessControl_OnUnregister_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        bsm.onRegister(operator1, "");
+
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onUnregister(operator1);
+    }
+
+    function test_AccessControl_OnRequest_RejectsUnauthorized() public {
+        _initializeBlueprint();
+
+        address attacker = makeAddr("attacker");
+        address[] memory operators = new address[](1);
+        operators[0] = operator1;
+
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onRequest(REQUEST_ID, serviceRequester, operators, "", 1000, address(0), 0);
+    }
+
+    function test_AccessControl_OnApprove_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        _createServiceRequest();
+
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onApprove(operator1, REQUEST_ID, 50);
+    }
+
+    function test_AccessControl_OnReject_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        _createServiceRequest();
+
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onReject(operator1, REQUEST_ID);
+    }
+
+    function test_AccessControl_OnServiceInitialized_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        _createServiceRequest();
+        _approveService();
+
+        address attacker = makeAddr("attacker");
+        address[] memory callers = new address[](1);
+        callers[0] = serviceRequester;
+
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onServiceInitialized(BLUEPRINT_ID, REQUEST_ID, SERVICE_ID, serviceRequester, callers, 1000);
+    }
+
+    function test_AccessControl_OnJobCall_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        _setupActiveService();
+
+        address attacker = makeAddr("attacker");
+        bytes memory inputs = abi.encode(uint64(5));
+
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onJobCall(SERVICE_ID, JOB_INDEX, CALL_ID, inputs);
+    }
+
+    function test_AccessControl_OnJobResult_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        _setupActiveService();
+        bytes memory inputs = abi.encode(uint64(5));
+        bsm.onJobCall(SERVICE_ID, JOB_INDEX, CALL_ID, inputs);
+
+        address attacker = makeAddr("attacker");
+        bytes memory outputs = abi.encode(uint64(25));
+
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onJobResult(SERVICE_ID, JOB_INDEX, CALL_ID, operator1, inputs, outputs);
+    }
+
+    function test_AccessControl_OnOperatorJoined_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        _setupActiveService();
+
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onOperatorJoined(SERVICE_ID, operator1, 5000);
+    }
+
+    function test_AccessControl_OnOperatorLeft_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        _setupActiveService();
+        bsm.onOperatorJoined(SERVICE_ID, operator1, 5000);
+
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onOperatorLeft(SERVICE_ID, operator1);
+    }
+
+    function test_AccessControl_OnServiceTermination_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        _setupActiveService();
+
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onServiceTermination(SERVICE_ID, serviceRequester);
+    }
+
+    function test_AccessControl_OnUnappliedSlash_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        _setupActiveService();
+
+        address attacker = makeAddr("attacker");
+        bytes memory offender = abi.encodePacked(operator1);
+
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onUnappliedSlash(SERVICE_ID, offender, 10);
+    }
+
+    function test_AccessControl_OnSlash_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        _setupActiveService();
+
+        address attacker = makeAddr("attacker");
+        bytes memory offender = abi.encodePacked(operator1);
+
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onSlash(SERVICE_ID, offender, 10);
+    }
+
+    function test_AccessControl_OnUpdatePreferences_RejectsUnauthorized() public {
+        _initializeBlueprint();
+        bsm.onRegister(operator1, "initial");
+
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            BlueprintServiceManagerBase.OnlyTangleAllowed.selector,
+            attacker,
+            tangleCore
+        ));
+        bsm.onUpdatePreferences(operator1, "malicious prefs");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DUPLICATE SUBMISSION TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function test_DuplicateSubmission_SameOperatorSubmitsTwice() public {
+        _initializeBlueprint();
+        _setupActiveService();
+
+        bytes memory inputs = abi.encode(uint64(5));
+        bytes memory outputs = abi.encode(uint64(25));
+
+        bsm.onJobCall(SERVICE_ID, JOB_INDEX, CALL_ID, inputs);
+
+        // Operator 1 submits first time
+        bsm.onJobResult(SERVICE_ID, JOB_INDEX, CALL_ID, operator1, inputs, outputs);
+        assertTrue(bsm.operatorSubmittedResult(SERVICE_ID, CALL_ID, operator1));
+        assertEq(bsm.jobResultCount(SERVICE_ID, CALL_ID), 1);
+
+        // Operator 1 tries to submit again (currently allowed - tracks count)
+        // This documents current behavior - may want to add protection
+        bsm.onJobResult(SERVICE_ID, JOB_INDEX, CALL_ID, operator1, inputs, outputs);
+        assertEq(bsm.jobResultCount(SERVICE_ID, CALL_ID), 2);
+
+        console.log("WARNING: Duplicate submissions currently allowed!");
+        console.log("Job result count incremented to:", bsm.jobResultCount(SERVICE_ID, CALL_ID));
+    }
+
+    function test_DuplicateSubmission_TrackingStaysTrue() public {
+        _initializeBlueprint();
+        _setupActiveService();
+
+        bytes memory inputs = abi.encode(uint64(5));
+        bytes memory outputs = abi.encode(uint64(25));
+
+        bsm.onJobCall(SERVICE_ID, JOB_INDEX, CALL_ID, inputs);
+        bsm.onJobResult(SERVICE_ID, JOB_INDEX, CALL_ID, operator1, inputs, outputs);
+
+        // After first submission, tracking is true
+        assertTrue(bsm.operatorSubmittedResult(SERVICE_ID, CALL_ID, operator1));
+
+        // Submit again
+        bsm.onJobResult(SERVICE_ID, JOB_INDEX, CALL_ID, operator1, inputs, outputs);
+
+        // Tracking should still be true (not reset or changed)
+        assertTrue(bsm.operatorSubmittedResult(SERVICE_ID, CALL_ID, operator1));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // THRESHOLD ENFORCEMENT TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function test_Threshold_JobCompletionCheck_BasicSquare() public {
+        _initializeBlueprint();
+        _setupActiveService();
+
+        uint8 jobIndex = 0; // Basic square, requires 1
+        uint64 callId = 100;
+        bytes memory inputs = abi.encode(uint64(5));
+        bytes memory outputs = abi.encode(uint64(25));
+
+        bsm.onJobCall(SERVICE_ID, jobIndex, callId, inputs);
+
+        // Check threshold requirement
+        uint32 required = bsm.getRequiredResultCount(SERVICE_ID, jobIndex);
+        assertEq(required, 1);
+
+        // No results yet - not complete
+        assertEq(bsm.jobResultCount(SERVICE_ID, callId), 0);
+        assertTrue(bsm.jobResultCount(SERVICE_ID, callId) < required);
+
+        // Submit 1 result - should be complete
+        bsm.onJobResult(SERVICE_ID, jobIndex, callId, operator1, inputs, outputs);
+        assertEq(bsm.jobResultCount(SERVICE_ID, callId), 1);
+        assertTrue(bsm.jobResultCount(SERVICE_ID, callId) >= required);
+
+        console.log("Basic square job: threshold met with", bsm.jobResultCount(SERVICE_ID, callId), "results");
+    }
+
+    function test_Threshold_JobCompletionCheck_VerifiedSquare() public {
+        _initializeBlueprint();
+        _setupActiveServiceWithMultipleOperators();
+
+        uint8 jobIndex = 1; // Verified square, requires 2
+        uint64 callId = 100;
+        bytes memory inputs = abi.encode(uint64(7));
+        bytes memory outputs = abi.encode(uint64(49));
+
+        bsm.onJobCall(SERVICE_ID, jobIndex, callId, inputs);
+
+        uint32 required = bsm.getRequiredResultCount(SERVICE_ID, jobIndex);
+        assertEq(required, 2);
+
+        // 1 result - not complete
+        bsm.onJobResult(SERVICE_ID, jobIndex, callId, operator1, inputs, outputs);
+        assertEq(bsm.jobResultCount(SERVICE_ID, callId), 1);
+        assertTrue(bsm.jobResultCount(SERVICE_ID, callId) < required, "Should not be complete with 1/2");
+
+        // 2 results - complete
+        bsm.onJobResult(SERVICE_ID, jobIndex, callId, operator2, inputs, outputs);
+        assertEq(bsm.jobResultCount(SERVICE_ID, callId), 2);
+        assertTrue(bsm.jobResultCount(SERVICE_ID, callId) >= required, "Should be complete with 2/2");
+
+        console.log("Verified square job: threshold met with", bsm.jobResultCount(SERVICE_ID, callId), "results");
+    }
+
+    function test_Threshold_JobCompletionCheck_ConsensusSquare() public {
+        _initializeBlueprint();
+        _setupActiveServiceWithThreeOperators();
+
+        uint8 jobIndex = 2; // Consensus square, requires 3
+        uint64 callId = 100;
+        bytes memory inputs = abi.encode(uint64(6));
+        bytes memory outputs = abi.encode(uint64(36));
+        address operator3 = makeAddr("operator3");
+
+        bsm.onJobCall(SERVICE_ID, jobIndex, callId, inputs);
+
+        uint32 required = bsm.getRequiredResultCount(SERVICE_ID, jobIndex);
+        assertEq(required, 3);
+
+        // 1 result - not complete
+        bsm.onJobResult(SERVICE_ID, jobIndex, callId, operator1, inputs, outputs);
+        assertTrue(bsm.jobResultCount(SERVICE_ID, callId) < required, "1/3 - not complete");
+
+        // 2 results - not complete
+        bsm.onJobResult(SERVICE_ID, jobIndex, callId, operator2, inputs, outputs);
+        assertTrue(bsm.jobResultCount(SERVICE_ID, callId) < required, "2/3 - not complete");
+
+        // 3 results - complete
+        bsm.onJobResult(SERVICE_ID, jobIndex, callId, operator3, inputs, outputs);
+        assertTrue(bsm.jobResultCount(SERVICE_ID, callId) >= required, "3/3 - complete");
+
+        console.log("Consensus square job: threshold met with", bsm.jobResultCount(SERVICE_ID, callId), "results");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // EDGE CASE TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function test_EdgeCase_SubmitToNonExistentService() public {
+        _initializeBlueprint();
+        _setupActiveService();
+
+        uint64 nonExistentServiceId = 999;
+        bytes memory inputs = abi.encode(uint64(5));
+        bytes memory outputs = abi.encode(uint64(25));
+
+        // This currently doesn't revert - it just creates entries
+        // Documenting current behavior
+        bsm.onJobCall(nonExistentServiceId, JOB_INDEX, CALL_ID, inputs);
+        bsm.onJobResult(nonExistentServiceId, JOB_INDEX, CALL_ID, operator1, inputs, outputs);
+
+        // Verify data was stored (even for non-existent service)
+        assertEq(bsm.jobResultCount(nonExistentServiceId, CALL_ID), 1);
+
+        console.log("NOTE: Submitting to non-existent service succeeds - no validation");
+    }
+
+    function test_EdgeCase_SubmitWithoutJobCall() public {
+        _initializeBlueprint();
+        _setupActiveService();
+
+        bytes memory inputs = abi.encode(uint64(5));
+        bytes memory outputs = abi.encode(uint64(25));
+        uint64 uncalledCallId = 999;
+
+        // Submit result without prior job call
+        bsm.onJobResult(SERVICE_ID, JOB_INDEX, uncalledCallId, operator1, inputs, outputs);
+
+        // Currently allowed - documenting behavior
+        assertEq(bsm.jobResultCount(SERVICE_ID, uncalledCallId), 1);
+
+        console.log("NOTE: Submitting result without prior job call succeeds");
+    }
+
+    function test_EdgeCase_MultipleJobsPerService() public {
+        _initializeBlueprint();
+        _setupActiveServiceWithThreeOperators();
+
+        // Submit multiple jobs concurrently
+        for (uint64 callId = 1; callId <= 5; callId++) {
+            bytes memory inputs = abi.encode(uint64(callId));
+            bytes memory outputs = abi.encode(uint64(callId * callId));
+
+            bsm.onJobCall(SERVICE_ID, JOB_INDEX, callId, inputs);
+            bsm.onJobResult(SERVICE_ID, JOB_INDEX, callId, operator1, inputs, outputs);
+        }
+
+        // Verify all jobs tracked independently
+        for (uint64 callId = 1; callId <= 5; callId++) {
+            assertEq(bsm.jobResultCount(SERVICE_ID, callId), 1);
+            assertTrue(bsm.operatorSubmittedResult(SERVICE_ID, callId, operator1));
+        }
+
+        assertEq(bsm.serviceJobCallCount(SERVICE_ID), 5);
+        assertEq(bsm.serviceJobResultCount(SERVICE_ID), 5);
+    }
+
+    function test_EdgeCase_DifferentJobTypesInSequence() public {
+        _initializeBlueprint();
+        _setupActiveServiceWithThreeOperators();
+
+        address operator3 = makeAddr("operator3");
+
+        // Job 0 - Basic square (1 result needed)
+        uint64 callId0 = 1;
+        bsm.onJobCall(SERVICE_ID, 0, callId0, abi.encode(uint64(2)));
+        bsm.onJobResult(SERVICE_ID, 0, callId0, operator1, "", abi.encode(uint64(4)));
+        assertEq(bsm.jobIndices(SERVICE_ID, callId0), 0);
+
+        // Job 1 - Verified square (2 results needed)
+        uint64 callId1 = 2;
+        bsm.onJobCall(SERVICE_ID, 1, callId1, abi.encode(uint64(3)));
+        bsm.onJobResult(SERVICE_ID, 1, callId1, operator1, "", abi.encode(uint64(9)));
+        bsm.onJobResult(SERVICE_ID, 1, callId1, operator2, "", abi.encode(uint64(9)));
+        assertEq(bsm.jobIndices(SERVICE_ID, callId1), 1);
+
+        // Job 2 - Consensus square (3 results needed)
+        uint64 callId2 = 3;
+        bsm.onJobCall(SERVICE_ID, 2, callId2, abi.encode(uint64(4)));
+        bsm.onJobResult(SERVICE_ID, 2, callId2, operator1, "", abi.encode(uint64(16)));
+        bsm.onJobResult(SERVICE_ID, 2, callId2, operator2, "", abi.encode(uint64(16)));
+        bsm.onJobResult(SERVICE_ID, 2, callId2, operator3, "", abi.encode(uint64(16)));
+        assertEq(bsm.jobIndices(SERVICE_ID, callId2), 2);
+
+        // Verify correct job indices stored
+        assertEq(bsm.getRequiredResultCount(SERVICE_ID, 0), 1);
+        assertEq(bsm.getRequiredResultCount(SERVICE_ID, 1), 2);
+        assertEq(bsm.getRequiredResultCount(SERVICE_ID, 2), 3);
+
+        // Verify result counts match requirements
+        assertTrue(bsm.jobResultCount(SERVICE_ID, callId0) >= bsm.getRequiredResultCount(SERVICE_ID, 0));
+        assertTrue(bsm.jobResultCount(SERVICE_ID, callId1) >= bsm.getRequiredResultCount(SERVICE_ID, 1));
+        assertTrue(bsm.jobResultCount(SERVICE_ID, callId2) >= bsm.getRequiredResultCount(SERVICE_ID, 2));
+    }
+
+    function test_EdgeCase_VerifyIsJobComplete() public view {
+        // Helper function concept - check if job is complete
+        // This shows how an external system would check completion
+
+        uint64 serviceId = 1;
+        uint8 jobIndex = 1; // verified_square
+        uint32 required = bsm.getRequiredResultCount(serviceId, jobIndex);
+
+        // In a real scenario, you'd check:
+        // bool isComplete = bsm.jobResultCount(serviceId, callId) >= required;
+
+        assertEq(required, 2);
+        console.log("To check job completion: jobResultCount >= getRequiredResultCount");
     }
 }

@@ -157,9 +157,8 @@ where
         weight_scheme: W,
         participant_public_keys: HashMap<PeerId, S::Public>,
     ) -> Self {
-        // Create default state with threshold weight from the weight scheme
-        let threshold_weight = weight_scheme.threshold_weight();
-        let state = AggregationState::new(threshold_weight);
+        // Create default state
+        let state = AggregationState::new();
 
         // Create aggregator selector with target number from config
         let aggregator_selector = AggregatorSelector::new(config.num_aggregators);

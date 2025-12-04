@@ -215,6 +215,10 @@ pub enum StrategyError {
     #[error("BLS error: {0}")]
     Bls(String),
 
+    /// No aggregation strategy configured
+    #[error("No aggregation strategy configured - enable 'aggregation' or 'p2p-aggregation' feature")]
+    NoAggregationStrategy,
+
     /// Threshold not met
     #[error("Threshold not met: got {got}, need {need}")]
     ThresholdNotMet { got: usize, need: usize },
@@ -254,6 +258,8 @@ impl AggregationStrategy {
             AggregationStrategy::P2PGossip(config) => {
                 aggregate_via_p2p(config.clone(), service_id, call_id, output).await
             }
+            #[allow(unreachable_patterns)]
+            _ => Err(StrategyError::NoAggregationStrategy),
         }
     }
 }
