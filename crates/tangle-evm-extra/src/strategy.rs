@@ -237,6 +237,14 @@ impl AggregationStrategy {
     ///
     /// This signs the output, coordinates with other operators (via HTTP or P2P),
     /// and returns the aggregated result ready for on-chain submission.
+    ///
+    /// # Arguments
+    ///
+    /// * `service_id` - The service ID from the job system
+    /// * `call_id` - The call ID for this specific job invocation
+    /// * `output` - The job output to sign
+    /// * `total_operators` - Total number of operators in the service
+    /// * `threshold` - Minimum number of signatures required (from job system)
     pub async fn aggregate(
         &self,
         service_id: u64,
@@ -245,9 +253,6 @@ impl AggregationStrategy {
         total_operators: u32,
         threshold: u32,
     ) -> Result<AggregatedSignatureResult, StrategyError> {
-        // Suppress unused variable warnings when only one feature is enabled
-        let _ = (total_operators, threshold);
-
         match self {
             #[cfg(feature = "aggregation")]
             AggregationStrategy::HttpService(config) => {
@@ -256,7 +261,7 @@ impl AggregationStrategy {
             }
             #[cfg(feature = "p2p-aggregation")]
             AggregationStrategy::P2PGossip(config) => {
-                aggregate_via_p2p(config.clone(), service_id, call_id, output).await
+                aggregate_via_p2p(config.clone(), service_id, call_id, output, total_operators, threshold).await
             }
             #[allow(unreachable_patterns)]
             _ => Err(StrategyError::NoAggregationStrategy),
@@ -367,6 +372,8 @@ async fn aggregate_via_p2p(
     service_id: u64,
     call_id: u64,
     output: Bytes,
+    total_operators: u32,
+    threshold: u32,
 ) -> Result<AggregatedSignatureResult, StrategyError> {
     use blueprint_crypto::hashing::blake3_256;
     use blueprint_crypto_core::BytesEncoding;
@@ -376,8 +383,8 @@ async fn aggregate_via_p2p(
 
     blueprint_core::debug!(
         target: "aggregation-strategy",
-        "Aggregating via P2P gossip for service {} call {}",
-        service_id, call_id
+        "Aggregating via P2P gossip for service {} call {} (threshold: {}/{})",
+        service_id, call_id, threshold, total_operators
     );
 
     // Create the message to sign (same format as HTTP)
@@ -397,9 +404,27 @@ async fn aggregate_via_p2p(
         config.timeout,
     );
 
-    // Create weight scheme
+    // Calculate threshold percentage from the job system parameters
+    // The threshold from the job system is the absolute number of signatures needed
+    // We convert it to a percentage for the weight scheme
+    let threshold_percentage = if total_operators > 0 {
+        // Ceiling division to ensure we meet or exceed the threshold
+        ((threshold as u64 * 100 + total_operators as u64 - 1) / total_operators as u64) as u8
+    } else {
+        config.threshold_percentage // Fallback to config if no operators specified
+    };
+
+    blueprint_core::debug!(
+        target: "aggregation-strategy",
+        "Using threshold percentage: {}% (from {}/{} operators)",
+        threshold_percentage, threshold, total_operators
+    );
+
+    // Create weight scheme using the calculated threshold
+    // Note: Currently using EqualWeight where each participant has weight 1
+    // TODO: Integrate with on-chain staking weights via CustomWeight for stake-weighted voting
     let num_participants = config.participant_public_keys.len();
-    let weight_scheme = EqualWeight::new(num_participants, config.threshold_percentage);
+    let weight_scheme = EqualWeight::new(num_participants, threshold_percentage);
 
     // Create and run the protocol
     let mut protocol = SignatureAggregationProtocol::new(
