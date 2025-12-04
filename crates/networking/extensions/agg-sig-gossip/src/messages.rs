@@ -29,15 +29,6 @@ pub enum AggSigMessage<S: AggregatableSignature> {
     ProtocolComplete(AggregationResult<S>),
 }
 
-/// Information about aggregators for the current round
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AggregatorInfo {
-    /// Set of designated aggregators for the current round
-    pub aggregators: HashSet<PeerId>,
-    /// Selection seed used to determine aggregators
-    pub selection_seed: Vec<u8>,
-}
-
 /// Result of the aggregation protocol
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound = "S: AggregatableSignature")]
