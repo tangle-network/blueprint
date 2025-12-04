@@ -33,6 +33,7 @@ extern crate alloc;
 
 pub mod aggregating_consumer;
 pub mod aggregation;
+pub mod cache;
 pub mod consumer;
 pub mod extract;
 pub mod layers;
@@ -43,6 +44,11 @@ pub use aggregating_consumer::AggregatingConsumer;
 #[cfg(feature = "aggregation")]
 pub use aggregating_consumer::AggregationServiceConfig;
 pub use aggregation::{AggregatedResult, AggregationError, G1Point, G2Point, SignerBitmap};
+pub use cache::{
+    shared_cache, shared_cache_with_ttl, CacheError, CacheInvalidationEvent, CacheStats,
+    CacheSyncService, OperatorWeights, ServiceConfigCache, ServiceOperators,
+    SharedServiceConfigCache, DEFAULT_CACHE_TTL,
+};
 pub use consumer::TangleEvmConsumer;
 pub use layers::TangleEvmLayer;
 pub use producer::TangleEvmProducer;
