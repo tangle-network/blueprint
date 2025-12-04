@@ -221,28 +221,46 @@ impl AggregatedResult {
     ///
     /// This calls `submitAggregatedResult` on the Tangle contract.
     pub async fn submit(&self, client: &Arc<TangleEvmClient>) -> Result<(), AggregationError> {
-        let contract = client.tangle_contract();
-
-        let _call = contract.submitAggregatedResult(
-            self.service_id,
-            self.call_id,
-            self.output.clone(),
-            self.signer_bitmap.as_u256(),
-            self.signature.to_array(),
-            self.pubkey.to_array(),
-        );
-
-        // TODO: Sign and send the transaction
-        // For now, log that we would submit
-        blueprint_core::info!(
+        blueprint_core::debug!(
             target: "tangle-evm-aggregation",
-            "Would submit aggregated result for service {} call {} with {} signers",
+            "Submitting aggregated result for service {} call {} with {} signers",
             self.service_id,
             self.call_id,
             self.signer_bitmap.count_signers()
         );
 
-        Ok(())
+        let result = client
+            .submit_aggregated_result(
+                self.service_id,
+                self.call_id,
+                self.output.clone(),
+                self.signer_bitmap.as_u256(),
+                self.signature.to_array(),
+                self.pubkey.to_array(),
+            )
+            .await
+            .map_err(|e| {
+                AggregationError::ContractError(format!(
+                    "Failed to submit aggregated result: {e}"
+                ))
+            })?;
+
+        if result.success {
+            blueprint_core::info!(
+                target: "tangle-evm-aggregation",
+                "Successfully submitted aggregated result for service {} call {} with {} signers: tx_hash={:?}",
+                self.service_id,
+                self.call_id,
+                self.signer_bitmap.count_signers(),
+                result.tx_hash
+            );
+            Ok(())
+        } else {
+            Err(AggregationError::ContractError(format!(
+                "Transaction reverted for service {} call {}: tx_hash={:?}",
+                self.service_id, self.call_id, result.tx_hash
+            )))
+        }
     }
 }
 

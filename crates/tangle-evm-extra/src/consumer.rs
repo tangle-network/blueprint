@@ -184,22 +184,24 @@ async fn submit_result(
         call_id
     );
 
-    // Get the contract instance
-    let contract = client.tangle_contract();
+    let result = client
+        .submit_result(service_id, call_id, output)
+        .await
+        .map_err(|e| ConsumerError::Transaction(format!("Failed to submit result: {e}")))?;
 
-    // Call submitResult
-    // Note: This requires a signer. For now we just do a call to check it works.
-    // In production, we'd need to sign and send the transaction.
-    let _call = contract.submitResult(service_id, call_id, output);
-
-    // TODO: Sign and send the transaction
-    // For now, log that we would submit
-    blueprint_core::info!(
-        target: "tangle-evm-consumer",
-        "Would submit result for service {} call {} (signing not implemented yet)",
-        service_id,
-        call_id
-    );
-
-    Ok(())
+    if result.success {
+        blueprint_core::info!(
+            target: "tangle-evm-consumer",
+            "Successfully submitted result for service {} call {}: tx_hash={:?}",
+            service_id,
+            call_id,
+            result.tx_hash
+        );
+        Ok(())
+    } else {
+        Err(ConsumerError::Transaction(format!(
+            "Transaction reverted for service {} call {}: tx_hash={:?}",
+            service_id, call_id, result.tx_hash
+        )))
+    }
 }

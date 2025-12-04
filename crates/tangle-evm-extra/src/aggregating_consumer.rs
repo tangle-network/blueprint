@@ -332,10 +332,8 @@ pub struct AggregatingConsumer {
     client: Arc<TangleEvmClient>,
     buffer: Mutex<VecDeque<PendingJobResult>>,
     state: Mutex<State>,
-    /// Cache of aggregation config by (service_id, job_index)
-    /// TODO: Use this for caching operator service configs from chain
-    #[allow(dead_code)]
-    aggregation_cache: Mutex<std::collections::HashMap<(u64, u8), AggregationConfig>>,
+    /// Shared cache for service configs (aggregation configs, operator weights)
+    cache: crate::cache::SharedServiceConfigCache,
     /// Aggregation service configuration (legacy, when feature enabled)
     #[cfg(feature = "aggregation")]
     aggregation_config: Option<AggregationServiceConfig>,
@@ -345,13 +343,44 @@ pub struct AggregatingConsumer {
 }
 
 impl AggregatingConsumer {
-    /// Create a new aggregating consumer
+    /// Create a new aggregating consumer with default cache (5 minute TTL)
     pub fn new(client: TangleEvmClient) -> Self {
         Self {
             client: Arc::new(client),
             buffer: Mutex::new(VecDeque::new()),
             state: Mutex::new(State::WaitingForResult),
-            aggregation_cache: Mutex::new(std::collections::HashMap::new()),
+            cache: crate::cache::shared_cache(),
+            #[cfg(feature = "aggregation")]
+            aggregation_config: None,
+            #[cfg(any(feature = "aggregation", feature = "p2p-aggregation"))]
+            aggregation_strategy: None,
+        }
+    }
+
+    /// Create a new aggregating consumer with a custom cache
+    ///
+    /// This allows sharing a cache across multiple consumers or
+    /// configuring a custom TTL.
+    ///
+    /// ## Example
+    ///
+    /// ```rust,ignore
+    /// use blueprint_tangle_evm_extra::{AggregatingConsumer, shared_cache_with_ttl};
+    /// use std::time::Duration;
+    ///
+    /// // Create a shared cache with 10 minute TTL
+    /// let cache = shared_cache_with_ttl(Duration::from_secs(600));
+    ///
+    /// // Multiple consumers can share the same cache
+    /// let consumer1 = AggregatingConsumer::with_cache(client1, cache.clone());
+    /// let consumer2 = AggregatingConsumer::with_cache(client2, cache.clone());
+    /// ```
+    pub fn with_cache(client: TangleEvmClient, cache: crate::cache::SharedServiceConfigCache) -> Self {
+        Self {
+            client: Arc::new(client),
+            buffer: Mutex::new(VecDeque::new()),
+            state: Mutex::new(State::WaitingForResult),
+            cache,
             #[cfg(feature = "aggregation")]
             aggregation_config: None,
             #[cfg(any(feature = "aggregation", feature = "p2p-aggregation"))]
@@ -426,16 +455,56 @@ impl AggregatingConsumer {
         &self.client
     }
 
+    /// Get the service config cache
+    ///
+    /// This can be used to:
+    /// - Pre-populate the cache with known values
+    /// - Invalidate cached entries when configs change
+    /// - Share the cache with other components
+    #[must_use]
+    pub fn cache(&self) -> &crate::cache::SharedServiceConfigCache {
+        &self.cache
+    }
+
+    /// Invalidate all cached data for a service
+    ///
+    /// Call this when you know a service's configuration has changed
+    /// (e.g., operator joined/left, threshold changed).
+    pub fn invalidate_service_cache(&self, service_id: u64) {
+        self.cache.invalidate_service(service_id);
+    }
+
     /// Get aggregation config, using cache when available
     async fn get_aggregation_config(
-        client: Arc<TangleEvmClient>,
+        cache: &crate::cache::SharedServiceConfigCache,
+        client: &TangleEvmClient,
         service_id: u64,
         job_index: u8,
     ) -> Result<AggregationConfig, AggregatingConsumerError> {
-        // Note: In production, you'd want to use the cache
-        // For now, always query fresh to ensure correctness
-        client
-            .get_aggregation_config(service_id, job_index)
+        cache
+            .get_aggregation_config(client, service_id, job_index)
+            .await
+            .map_err(|e| AggregatingConsumerError::Client(e.to_string()))
+    }
+
+    /// Get operator weights for a service, using cache when available
+    pub async fn get_operator_weights(
+        &self,
+        service_id: u64,
+    ) -> Result<crate::cache::OperatorWeights, AggregatingConsumerError> {
+        self.cache
+            .get_operator_weights(&self.client, service_id)
+            .await
+            .map_err(|e| AggregatingConsumerError::Client(e.to_string()))
+    }
+
+    /// Get service operators list, using cache when available
+    pub async fn get_service_operators(
+        &self,
+        service_id: u64,
+    ) -> Result<crate::cache::ServiceOperators, AggregatingConsumerError> {
+        self.cache
+            .get_service_operators(&self.client, service_id)
             .await
             .map_err(|e| AggregatingConsumerError::Client(e.to_string()))
     }
@@ -523,6 +592,7 @@ impl Sink<JobResult> for AggregatingConsumer {
                     };
 
                     let client = Arc::clone(&consumer.client);
+                    let cache = Arc::clone(&consumer.cache);
 
                     #[cfg(feature = "aggregation")]
                     let agg_config = consumer.aggregation_config.clone();
@@ -531,6 +601,7 @@ impl Sink<JobResult> for AggregatingConsumer {
                         #[cfg(feature = "aggregation")]
                         {
                             submit_job_result(
+                                cache,
                                 client,
                                 pending.service_id,
                                 pending.call_id,
@@ -543,6 +614,7 @@ impl Sink<JobResult> for AggregatingConsumer {
                         #[cfg(not(feature = "aggregation"))]
                         {
                             submit_job_result(
+                                cache,
                                 client,
                                 pending.service_id,
                                 pending.call_id,
@@ -579,6 +651,7 @@ impl Sink<JobResult> for AggregatingConsumer {
 /// Submit a job result, automatically choosing aggregation if required
 #[cfg(feature = "aggregation")]
 async fn submit_job_result(
+    cache: crate::cache::SharedServiceConfigCache,
     client: Arc<TangleEvmClient>,
     service_id: u64,
     call_id: u64,
@@ -586,9 +659,10 @@ async fn submit_job_result(
     output: Bytes,
     agg_config: Option<AggregationServiceConfig>,
 ) -> Result<(), AggregatingConsumerError> {
-    // Check if aggregation is required
+    // Check if aggregation is required (uses cache)
     let config = AggregatingConsumer::get_aggregation_config(
-        Arc::clone(&client),
+        &cache,
+        &client,
         service_id,
         job_index,
     )
@@ -625,15 +699,17 @@ async fn submit_job_result(
 /// Submit a job result without aggregation feature
 #[cfg(not(feature = "aggregation"))]
 async fn submit_job_result(
+    cache: crate::cache::SharedServiceConfigCache,
     client: Arc<TangleEvmClient>,
     service_id: u64,
     call_id: u64,
     job_index: u8,
     output: Bytes,
 ) -> Result<(), AggregatingConsumerError> {
-    // Check if aggregation is required
+    // Check if aggregation is required (uses cache)
     let config = AggregatingConsumer::get_aggregation_config(
-        Arc::clone(&client),
+        &cache,
+        &client,
         service_id,
         job_index,
     )
@@ -943,17 +1019,25 @@ async fn submit_direct_result(
         call_id
     );
 
-    let contract = client.tangle_contract();
+    let result = client
+        .submit_result(service_id, call_id, output)
+        .await
+        .map_err(|e| AggregatingConsumerError::Transaction(format!("Failed to submit result: {e}")))?;
 
-    let _call = contract.submitResult(service_id, call_id, output);
-
-    // TODO: Sign and send the transaction
-    blueprint_core::info!(
-        target: "tangle-evm-aggregating-consumer",
-        "Would submit direct result for service {} call {} (signing not implemented yet)",
-        service_id,
-        call_id
-    );
+    if result.success {
+        blueprint_core::info!(
+            target: "tangle-evm-aggregating-consumer",
+            "Successfully submitted direct result for service {} call {}: tx_hash={:?}",
+            service_id,
+            call_id,
+            result.tx_hash
+        );
+    } else {
+        return Err(AggregatingConsumerError::Transaction(format!(
+            "Transaction reverted for service {} call {}: tx_hash={:?}",
+            service_id, call_id, result.tx_hash
+        )));
+    }
 
     Ok(())
 }
@@ -1169,5 +1253,197 @@ mod tests {
             Some(&stakes),
         );
         assert_eq!(required, 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // URL conversion tests (for discover_operator_services logic)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Helper function to convert RPC address to aggregation URL
+    /// This mirrors the logic in discover_operator_services
+    fn convert_rpc_to_aggregation_url(rpc: &str, aggregation_path: &str) -> Option<String> {
+        if rpc.is_empty() {
+            return None;
+        }
+
+        if aggregation_path.starts_with(':') {
+            // Replace the port in the URL
+            if let Some(host_end) = rpc.rfind(':') {
+                let before_port = &rpc[..host_end];
+                if before_port.contains("://") {
+                    return Some(format!("{}{}", before_port, aggregation_path));
+                }
+            }
+            // No port found, just append
+            Some(format!("{}{}", rpc, aggregation_path))
+        } else {
+            // Append as a path
+            let base = rpc.trim_end_matches('/');
+            Some(format!("{}{}", base, aggregation_path))
+        }
+    }
+
+    #[test]
+    fn test_url_conversion_port_replacement() {
+        // Test replacing port
+        let url = convert_rpc_to_aggregation_url("http://localhost:8545", ":9090");
+        assert_eq!(url, Some("http://localhost:9090".to_string()));
+
+        let url = convert_rpc_to_aggregation_url("https://operator.example.com:8545", ":9090");
+        assert_eq!(url, Some("https://operator.example.com:9090".to_string()));
+    }
+
+    #[test]
+    fn test_url_conversion_port_append() {
+        // Test appending port when none exists
+        let url = convert_rpc_to_aggregation_url("http://localhost", ":9090");
+        assert_eq!(url, Some("http://localhost:9090".to_string()));
+    }
+
+    #[test]
+    fn test_url_conversion_path_append() {
+        // Test appending path
+        let url = convert_rpc_to_aggregation_url("http://localhost:8545", "/aggregation");
+        assert_eq!(url, Some("http://localhost:8545/aggregation".to_string()));
+
+        let url = convert_rpc_to_aggregation_url("http://localhost:8545/", "/aggregation");
+        assert_eq!(url, Some("http://localhost:8545/aggregation".to_string()));
+    }
+
+    #[test]
+    fn test_url_conversion_empty() {
+        let url = convert_rpc_to_aggregation_url("", ":9090");
+        assert_eq!(url, None);
+    }
+
+    #[test]
+    fn test_url_conversion_complex_urls() {
+        // IPv6 address
+        let url = convert_rpc_to_aggregation_url("http://[::1]:8545", ":9090");
+        assert_eq!(url, Some("http://[::1]:9090".to_string()));
+
+        // URL with path
+        let url = convert_rpc_to_aggregation_url("http://localhost:8545/rpc", "/v1/aggregate");
+        assert_eq!(url, Some("http://localhost:8545/rpc/v1/aggregate".to_string()));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // AggregationServiceConfig multi-service tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[cfg(feature = "aggregation")]
+    mod aggregation_config_tests {
+        use crate::AggregationServiceConfig;
+        use blueprint_crypto_bn254::ArkBlsBn254;
+        use blueprint_crypto_core::KeyType;
+
+        fn test_bls_secret() -> blueprint_crypto_bn254::ArkBlsBn254Secret {
+            // Generate a deterministic test key
+            let seed = [1u8; 32];
+            ArkBlsBn254::generate_with_seed(Some(&seed)).unwrap()
+        }
+
+        #[test]
+        fn test_config_single_service() {
+            let config = AggregationServiceConfig::new(
+                "http://localhost:8080",
+                test_bls_secret(),
+                0,
+            );
+            assert_eq!(config.clients.len(), 1);
+            assert_eq!(config.operator_index, 0);
+            assert!(config.submit_to_chain);
+        }
+
+        #[test]
+        fn test_config_multiple_services() {
+            let config = AggregationServiceConfig::with_multiple_services(
+                vec![
+                    "http://service1:8080",
+                    "http://service2:8080",
+                    "http://service3:8080",
+                ],
+                test_bls_secret(),
+                1,
+            );
+            assert_eq!(config.clients.len(), 3);
+            assert_eq!(config.operator_index, 1);
+        }
+
+        #[test]
+        fn test_config_add_service() {
+            let config = AggregationServiceConfig::new(
+                "http://localhost:8080",
+                test_bls_secret(),
+                0,
+            )
+            .add_service("http://backup:8080")
+            .add_service("http://fallback:8080");
+
+            assert_eq!(config.clients.len(), 3);
+        }
+
+        #[test]
+        fn test_config_with_submit_to_chain() {
+            let config = AggregationServiceConfig::new(
+                "http://localhost:8080",
+                test_bls_secret(),
+                0,
+            );
+            // Default is true
+            assert!(config.submit_to_chain);
+
+            let config = config.with_submit_to_chain(false);
+            assert!(!config.submit_to_chain);
+        }
+
+        #[test]
+        fn test_config_with_wait_for_threshold() {
+            let config = AggregationServiceConfig::new(
+                "http://localhost:8080",
+                test_bls_secret(),
+                0,
+            );
+            // Default is false
+            assert!(!config.wait_for_threshold);
+
+            let config = config.with_wait_for_threshold(true);
+            assert!(config.wait_for_threshold);
+        }
+
+        #[test]
+        fn test_config_with_threshold_timeout() {
+            let config = AggregationServiceConfig::new(
+                "http://localhost:8080",
+                test_bls_secret(),
+                0,
+            )
+            .with_threshold_timeout(std::time::Duration::from_secs(120));
+
+            assert_eq!(config.threshold_timeout, std::time::Duration::from_secs(120));
+        }
+
+        #[test]
+        fn test_config_client_accessor() {
+            let config = AggregationServiceConfig::with_multiple_services(
+                vec!["http://service1:8080", "http://service2:8080"],
+                test_bls_secret(),
+                0,
+            );
+            // client() should return the first one
+            let _client = config.client();
+            // Just verify it doesn't panic
+        }
+
+        #[test]
+        fn test_config_empty_services() {
+            // with_multiple_services should handle empty iterator
+            let config = AggregationServiceConfig::with_multiple_services(
+                Vec::<String>::new(),
+                test_bls_secret(),
+                0,
+            );
+            assert_eq!(config.clients.len(), 0);
+        }
     }
 }
