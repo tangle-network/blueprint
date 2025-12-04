@@ -3891,14 +3891,19 @@ dependencies = [
 name = "blueprint-tangle-evm-extra"
 version = "0.1.0"
 dependencies = [
+ "alloy-network",
  "alloy-primitives 1.2.1",
+ "alloy-provider",
  "alloy-rpc-types",
+ "alloy-signer-local",
  "alloy-sol-types 1.2.1",
+ "anyhow",
  "blueprint-client-tangle-evm",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-bn254",
  "blueprint-crypto-core",
+ "blueprint-keystore",
  "blueprint-networking",
  "blueprint-networking-agg-sig-gossip-extension",
  "blueprint-runner",
@@ -3907,12 +3912,16 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
+ "hex",
  "libp2p",
  "pin-project-lite",
+ "tempfile",
  "thiserror 2.0.17",
  "tokio",
  "tower 0.5.2",
  "tracing",
+ "tracing-subscriber 0.3.20",
+ "url",
 ]
 
 [[package]]
