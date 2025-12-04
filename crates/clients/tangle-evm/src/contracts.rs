@@ -45,6 +45,14 @@ sol! {
             Terminated
         }
 
+        /// Operator's participation in a service
+        struct ServiceOperator {
+            uint16 exposureBps;   // Stake exposure in basis points
+            uint64 joinedAt;      // When operator joined
+            uint64 leftAt;        // When operator left (0 if active)
+            bool active;          // Currently participating
+        }
+
         // ═══════════════════════════════════════════════════════════════════════
         // EVENTS - Blueprints
         // ═══════════════════════════════════════════════════════════════════════
@@ -155,6 +163,8 @@ sol! {
         );
         function getServiceOperators(uint64 serviceId) external view returns (address[] memory);
         function isServiceOperator(uint64 serviceId, address operator) external view returns (bool);
+        function getServiceOperator(uint64 serviceId, address operator) external view returns (ServiceOperator memory);
+        function getServiceTotalExposure(uint64 serviceId) external view returns (uint256);
         function isPermittedCaller(uint64 serviceId, address caller) external view returns (bool);
 
         // ═══════════════════════════════════════════════════════════════════════

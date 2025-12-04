@@ -72,7 +72,10 @@ pub mod error;
 pub mod services;
 
 // Re-exports
-pub use client::{AggregationConfig, EcdsaPublicKey, TangleEvmClient, TangleEvmEvent, ThresholdType};
+pub use client::{
+    AggregationConfig, EcdsaPublicKey, TangleEvmClient, TangleEvmEvent, ThresholdType,
+    TransactionResult,
+};
 pub use config::{TangleEvmClientConfig, TangleEvmSettings};
 pub use contracts::{IBlueprintServiceManager, IMultiAssetDelegation, IOperatorStatusRegistry, ITangle};
 pub use error::{Error, Result};

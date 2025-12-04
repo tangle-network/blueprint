@@ -154,6 +154,44 @@ impl TangleEvmClient {
         &self.keystore
     }
 
+    /// Get the provider
+    #[must_use]
+    pub fn provider(&self) -> &Arc<TangleProvider> {
+        &self.provider
+    }
+
+    /// Get the Tangle contract address
+    #[must_use]
+    pub fn tangle_address(&self) -> Address {
+        self.tangle_address
+    }
+
+    /// Get the ECDSA signing key from the keystore
+    ///
+    /// # Errors
+    /// Returns error if the key is not found in the keystore
+    pub fn ecdsa_signing_key(&self) -> Result<blueprint_crypto::k256::K256SigningKey> {
+        let public = self
+            .keystore
+            .first_local::<K256Ecdsa>()
+            .map_err(Error::Keystore)?;
+        self.keystore
+            .get_secret::<K256Ecdsa>(&public)
+            .map_err(Error::Keystore)
+    }
+
+    /// Get an Ethereum wallet for signing transactions
+    ///
+    /// # Errors
+    /// Returns error if the key is not found or wallet creation fails
+    pub fn wallet(&self) -> Result<alloy_network::EthereumWallet> {
+        let signing_key = self.ecdsa_signing_key()?;
+        let local_signer = signing_key
+            .alloy_key()
+            .map_err(|e| Error::Keystore(blueprint_keystore::Error::Other(e.to_string())))?;
+        Ok(alloy_network::EthereumWallet::from(local_signer))
+    }
+
     /// Get the current block number
     pub async fn block_number(&self) -> Result<u64> {
         self.provider
@@ -320,6 +358,55 @@ impl TangleEvmClient {
             .map_err(|e| Error::Contract(e.to_string()))
     }
 
+    /// Get service operator info including exposure
+    ///
+    /// Returns the `ServiceOperator` struct which contains `exposureBps`.
+    pub async fn get_service_operator(
+        &self,
+        service_id: u64,
+        operator: Address,
+    ) -> Result<ITangle::ServiceOperator> {
+        let contract = self.tangle_contract();
+        contract
+            .getServiceOperator(service_id, operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Get total exposure for a service
+    ///
+    /// Returns the sum of all operator exposureBps values.
+    pub async fn get_service_total_exposure(&self, service_id: u64) -> Result<U256> {
+        let contract = self.tangle_contract();
+        contract
+            .getServiceTotalExposure(service_id)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Get operator weights (exposureBps) for all operators in a service
+    ///
+    /// Returns a map of operator address to their exposure in basis points.
+    /// This is useful for stake-weighted BLS signature threshold calculations.
+    pub async fn get_service_operator_weights(
+        &self,
+        service_id: u64,
+    ) -> Result<BTreeMap<Address, u16>> {
+        let operators = self.get_service_operators(service_id).await?;
+        let mut weights = BTreeMap::new();
+
+        for operator in operators {
+            let op_info = self.get_service_operator(service_id, operator).await?;
+            if op_info.active {
+                weights.insert(operator, op_info.exposureBps);
+            }
+        }
+
+        Ok(weights)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // OPERATOR QUERIES (Restaking)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -445,6 +532,144 @@ impl TangleEvmClient {
             },
         })
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TRANSACTION SUBMISSION
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Submit a job result to the Tangle contract
+    ///
+    /// This sends a signed transaction to submit a single operator's result.
+    ///
+    /// # Arguments
+    /// * `service_id` - The service ID
+    /// * `call_id` - The call/job ID
+    /// * `output` - The encoded result output
+    ///
+    /// # Returns
+    /// The transaction hash and receipt on success
+    pub async fn submit_result(
+        &self,
+        service_id: u64,
+        call_id: u64,
+        output: alloy_primitives::Bytes,
+    ) -> Result<TransactionResult> {
+        use crate::contracts::ITangle::submitResultCall;
+        use alloy_sol_types::SolCall;
+
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+
+        let call = submitResultCall {
+            serviceId: service_id,
+            callId: call_id,
+            output,
+        };
+        let calldata = call.abi_encode();
+
+        let tx_request = alloy_rpc_types::TransactionRequest::default()
+            .to(self.tangle_address)
+            .input(calldata.into());
+
+        let pending_tx = provider
+            .send_transaction(tx_request)
+            .await
+            .map_err(Error::Transport)?;
+
+        let receipt = pending_tx
+            .get_receipt()
+            .await
+            .map_err(Error::PendingTransaction)?;
+
+        Ok(TransactionResult {
+            tx_hash: receipt.transaction_hash,
+            block_number: receipt.block_number,
+            gas_used: receipt.gas_used,
+            success: receipt.status(),
+        })
+    }
+
+    /// Submit an aggregated BLS signature result to the Tangle contract
+    ///
+    /// This sends a signed transaction to submit an aggregated result with BLS signature.
+    ///
+    /// # Arguments
+    /// * `service_id` - The service ID
+    /// * `call_id` - The call/job ID
+    /// * `output` - The encoded result output
+    /// * `signer_bitmap` - Bitmap indicating which operators signed
+    /// * `aggregated_signature` - The aggregated BLS signature [2]
+    /// * `aggregated_pubkey` - The aggregated BLS public key [4]
+    ///
+    /// # Returns
+    /// The transaction hash and receipt on success
+    pub async fn submit_aggregated_result(
+        &self,
+        service_id: u64,
+        call_id: u64,
+        output: alloy_primitives::Bytes,
+        signer_bitmap: U256,
+        aggregated_signature: [U256; 2],
+        aggregated_pubkey: [U256; 4],
+    ) -> Result<TransactionResult> {
+        use crate::contracts::ITangle::submitAggregatedResultCall;
+        use alloy_sol_types::SolCall;
+
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+
+        let call = submitAggregatedResultCall {
+            serviceId: service_id,
+            callId: call_id,
+            output,
+            signerBitmap: signer_bitmap,
+            aggregatedSignature: aggregated_signature,
+            aggregatedPubkey: aggregated_pubkey,
+        };
+        let calldata = call.abi_encode();
+
+        let tx_request = alloy_rpc_types::TransactionRequest::default()
+            .to(self.tangle_address)
+            .input(calldata.into());
+
+        let pending_tx = provider
+            .send_transaction(tx_request)
+            .await
+            .map_err(Error::Transport)?;
+
+        let receipt = pending_tx
+            .get_receipt()
+            .await
+            .map_err(Error::PendingTransaction)?;
+
+        Ok(TransactionResult {
+            tx_hash: receipt.transaction_hash,
+            block_number: receipt.block_number,
+            gas_used: receipt.gas_used,
+            success: receipt.status(),
+        })
+    }
+}
+
+/// Result of a submitted transaction
+#[derive(Debug, Clone)]
+pub struct TransactionResult {
+    /// Transaction hash
+    pub tx_hash: B256,
+    /// Block number the transaction was included in
+    pub block_number: Option<u64>,
+    /// Gas used by the transaction
+    pub gas_used: u64,
+    /// Whether the transaction succeeded
+    pub success: bool,
 }
 
 /// Threshold type for BLS aggregation

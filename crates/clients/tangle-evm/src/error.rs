@@ -16,6 +16,10 @@ pub enum Error {
     #[error("Transport error: {0}")]
     Transport(#[from] alloy_transport::TransportError),
 
+    /// Pending transaction error
+    #[error("Transaction error: {0}")]
+    PendingTransaction(#[from] alloy_provider::PendingTransactionError),
+
     /// Contract call error
     #[error("Contract error: {0}")]
     Contract(String),
