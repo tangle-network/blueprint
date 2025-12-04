@@ -105,19 +105,24 @@ impl<S: AggregatableSignature, W: SignatureWeight> SignatureAggregationProtocol<
     }
 
     /// Check if a participant has equivocated (signed conflicting messages)
-    /// Returns evidence if equivocation is detected
+    /// Returns evidence if equivocation is detected.
+    ///
+    /// Equivocation occurs when the same participant signs two DIFFERENT messages
+    /// in the same protocol round. The signatures will naturally be different
+    /// (as the same key signing different messages produces different signatures).
     pub fn check_for_equivocation(
         &self,
         peer_id: PeerId,
         new_message: &[u8],
         new_signature: &S::Signature,
     ) -> Option<MaliciousEvidence<S>> {
-        if let Some((signature, message)) = self.state.seen_signatures.get(&peer_id) {
-            if signature == new_signature && message != new_message {
+        if let Some((old_signature, old_message)) = self.state.seen_signatures.get(&peer_id) {
+            // Equivocation: signing a DIFFERENT message than what we've seen before
+            if old_message.as_slice() != new_message {
                 return Some(MaliciousEvidence::Equivocation {
-                    signature1: signature.clone(),
+                    signature1: old_signature.clone(),
                     signature2: new_signature.clone(),
-                    message1: message.clone(),
+                    message1: old_message.clone(),
                     message2: new_message.to_vec(),
                 });
             }

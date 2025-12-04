@@ -37,6 +37,7 @@ pub mod consumer;
 pub mod extract;
 pub mod layers;
 pub mod producer;
+pub mod strategy;
 
 pub use aggregating_consumer::AggregatingConsumer;
 #[cfg(feature = "aggregation")]
@@ -45,3 +46,10 @@ pub use aggregation::{AggregatedResult, AggregationError, G1Point, G2Point, Sign
 pub use consumer::TangleEvmConsumer;
 pub use layers::TangleEvmLayer;
 pub use producer::TangleEvmProducer;
+
+// Strategy exports
+pub use strategy::{AggregatedSignatureResult, AggregationStrategy, StrategyError};
+#[cfg(feature = "aggregation")]
+pub use strategy::HttpServiceConfig;
+#[cfg(feature = "p2p-aggregation")]
+pub use strategy::P2PGossipConfig;

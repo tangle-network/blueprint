@@ -61,12 +61,20 @@ where
 
     /// Timeout for collecting signatures
     pub timeout: Duration,
+
+    /// Interval for checking incoming messages (default: 25ms)
+    /// Lower values are more responsive but use more CPU
+    pub message_poll_interval: Duration,
+
+    /// Interval for checking if threshold is met (default: 50ms)
+    pub threshold_check_interval: Duration,
 }
 
 impl<S> ProtocolConfig<S>
 where
     S: AggregatableSignature,
 {
+    /// Create a new protocol config with default poll intervals
     pub fn new(
         network_handle: NetworkServiceHandle<S>,
         num_aggregators: u16,
@@ -76,6 +84,38 @@ where
             network_handle,
             num_aggregators,
             timeout,
+            // Use faster poll intervals by default for better responsiveness
+            message_poll_interval: Duration::from_millis(25),
+            threshold_check_interval: Duration::from_millis(50),
+        }
+    }
+
+    /// Set the message poll interval
+    #[must_use]
+    pub fn with_message_poll_interval(mut self, interval: Duration) -> Self {
+        self.message_poll_interval = interval;
+        self
+    }
+
+    /// Set the threshold check interval
+    #[must_use]
+    pub fn with_threshold_check_interval(mut self, interval: Duration) -> Self {
+        self.threshold_check_interval = interval;
+        self
+    }
+
+    /// Create a config optimized for CI/testing environments
+    /// Uses longer timeouts and intervals to handle resource-constrained environments
+    pub fn for_testing(
+        network_handle: NetworkServiceHandle<S>,
+        num_aggregators: u16,
+    ) -> Self {
+        Self {
+            network_handle,
+            num_aggregators,
+            timeout: Duration::from_secs(30),
+            message_poll_interval: Duration::from_millis(10),
+            threshold_check_interval: Duration::from_millis(25),
         }
     }
 }
@@ -263,14 +303,14 @@ where
         result: AggregationResult<S>,
     ) -> Result<(), AggregationError> {
         // Skip if protocol is already finalized
-        if self.state.round == ProtocolRound::Completion {
+        if self.state.is_completed() {
             return Ok(());
         }
 
         self.verify_result(&result)?;
 
         // All checks passed, mark protocol as completed
-        self.state.round = ProtocolRound::Completion;
+        let _ = self.state.try_transition_to(ProtocolRound::Completion);
         self.state.verified_completion = Some(result);
 
         Ok(())
@@ -350,8 +390,8 @@ where
         // Set the local message first to ensure all operations reference the correct message
         self.state.local_message = message.to_vec();
 
-        // Initialize the signature collection phase - now without a round number
-        self.state.round = ProtocolRound::SignatureCollection;
+        // Initialize the signature collection phase
+        let _ = self.state.try_transition_to(ProtocolRound::SignatureCollection);
 
         // Select aggregators based on the message and public keys
         let _ = self
@@ -373,8 +413,8 @@ where
 
         // Main protocol loop
         let timeout = Instant::now() + self.config.timeout;
-        let mut check_interval = tokio::time::interval(Duration::from_millis(100));
-        let mut message_check_interval = tokio::time::interval(Duration::from_millis(50));
+        let mut check_interval = tokio::time::interval(self.config.threshold_check_interval);
+        let mut message_check_interval = tokio::time::interval(self.config.message_poll_interval);
 
         debug!(
             "Node {} entering main protocol loop",
@@ -384,7 +424,9 @@ where
         loop {
             tokio::select! {
                 _ = message_check_interval.tick() => {
-                    // Check for incoming messages from the network
+                    // Process all available messages from the network
+                    // This loop drains the entire message queue for better responsiveness
+                    let mut messages_processed = 0;
                     while let Some(protocol_msg) = self.config.network_handle.next_protocol_message() {
                         debug!(
                             "Node {} received network message from {}",
@@ -398,6 +440,23 @@ where
                                 "Node {} error handling message: {:?}",
                                 self.config.network_handle.local_peer_id, e
                             );
+                        }
+                        messages_processed += 1;
+                    }
+
+                    // If we processed messages, immediately check if threshold is met
+                    // This avoids waiting for the next check_interval tick
+                    if messages_processed > 0 && self.is_aggregator() {
+                        let (highest_weight_message, highest_weight) = self.get_highest_weight_message();
+                        if highest_weight >= self.weight_scheme.threshold_weight() {
+                            let current_round = self.state.round.clone();
+                            if let Ok(Some(result)) = self.build_result(&highest_weight_message, &current_round) {
+                                if let Err(e) = self.send_completion_message(result.clone()) {
+                                    warn!("Failed to send completion message: {:?}", e);
+                                }
+                                debug!("Protocol completed early after processing {} messages", messages_processed);
+                                return Ok(result);
+                            }
                         }
                     }
                 }
@@ -462,11 +521,11 @@ where
                     debug!("Protocol timed out for node {}", self.config.network_handle.local_peer_id);
 
                     // On timeout, mark as completion round
-                    let completion_round = ProtocolRound::Completion;
-                    self.state.round = completion_round.clone();
+                    let _ = self.state.try_transition_to(ProtocolRound::Completion);
+                    let round = self.state.round.clone();
 
                     // Try to build a result with what we have
-                    return match self.build_result(message, &completion_round) {
+                    return match self.build_result(message, &round) {
                         Ok(Some(result)) => Ok(result),
                         _ => Err(AggregationError::Timeout)
                     };

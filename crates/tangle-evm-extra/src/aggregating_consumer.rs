@@ -145,19 +145,41 @@ impl AggregationServiceConfig {
 /// For jobs that require aggregation, this consumer:
 /// 1. Queries the BSM to check aggregation requirements
 /// 2. Signs the job output with the operator's BLS key
-/// 3. Submits the signature to the aggregation service
-/// 4. Optionally waits for threshold and submits the aggregated result
+/// 3. Coordinates aggregation via the configured strategy (HTTP or P2P)
+/// 4. Submits the aggregated result to the contract
 ///
 /// For jobs that don't require aggregation, it behaves identically to `TangleEvmConsumer`.
+///
+/// ## Aggregation Strategies
+///
+/// The consumer supports two aggregation strategies:
+///
+/// - **HTTP Service** (recommended): Uses a centralized aggregation service
+/// - **P2P Gossip**: Uses peer-to-peer gossip protocol for fully decentralized aggregation
+///
+/// ## Example
+///
+/// ```rust,ignore
+/// use blueprint_tangle_evm_extra::{AggregatingConsumer, AggregationStrategy, HttpServiceConfig};
+///
+/// // Create consumer with HTTP aggregation strategy
+/// let consumer = AggregatingConsumer::new(client)
+///     .with_aggregation_strategy(AggregationStrategy::HttpService(
+///         HttpServiceConfig::new("http://localhost:8080", bls_secret, operator_index)
+///     ));
+/// ```
 pub struct AggregatingConsumer {
     client: Arc<TangleEvmClient>,
     buffer: Mutex<VecDeque<PendingJobResult>>,
     state: Mutex<State>,
     /// Cache of aggregation config by (service_id, job_index)
     aggregation_cache: Mutex<std::collections::HashMap<(u64, u8), AggregationConfig>>,
-    /// Aggregation service configuration (when feature enabled)
+    /// Aggregation service configuration (legacy, when feature enabled)
     #[cfg(feature = "aggregation")]
     aggregation_config: Option<AggregationServiceConfig>,
+    /// Aggregation strategy (new unified approach)
+    #[cfg(any(feature = "aggregation", feature = "p2p-aggregation"))]
+    aggregation_strategy: Option<crate::strategy::AggregationStrategy>,
 }
 
 impl AggregatingConsumer {
@@ -170,7 +192,44 @@ impl AggregatingConsumer {
             aggregation_cache: Mutex::new(std::collections::HashMap::new()),
             #[cfg(feature = "aggregation")]
             aggregation_config: None,
+            #[cfg(any(feature = "aggregation", feature = "p2p-aggregation"))]
+            aggregation_strategy: None,
         }
+    }
+
+    /// Configure the aggregation strategy
+    ///
+    /// This sets the strategy to use for BLS signature aggregation.
+    /// Choose between HTTP service (simpler) or P2P gossip (decentralized).
+    ///
+    /// ## Example
+    ///
+    /// ```rust,ignore
+    /// // HTTP service strategy (recommended)
+    /// let consumer = AggregatingConsumer::new(client)
+    ///     .with_aggregation_strategy(AggregationStrategy::HttpService(
+    ///         HttpServiceConfig::new("http://localhost:8080", bls_secret, 0)
+    ///     ));
+    ///
+    /// // P2P gossip strategy (advanced)
+    /// let consumer = AggregatingConsumer::new(client)
+    ///     .with_aggregation_strategy(AggregationStrategy::P2PGossip(
+    ///         P2PGossipConfig::new(network_handle, participant_keys)
+    ///     ));
+    /// ```
+    #[cfg(any(feature = "aggregation", feature = "p2p-aggregation"))]
+    pub fn with_aggregation_strategy(
+        mut self,
+        strategy: crate::strategy::AggregationStrategy,
+    ) -> Self {
+        self.aggregation_strategy = Some(strategy);
+        self
+    }
+
+    /// Get the configured aggregation strategy
+    #[cfg(any(feature = "aggregation", feature = "p2p-aggregation"))]
+    pub fn aggregation_strategy(&self) -> Option<&crate::strategy::AggregationStrategy> {
+        self.aggregation_strategy.as_ref()
     }
 
     /// Configure the aggregation service for BLS signature aggregation

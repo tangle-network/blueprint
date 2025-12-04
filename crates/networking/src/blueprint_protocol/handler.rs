@@ -92,6 +92,10 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
                             warn!(%peer, "Failed to send handshake response: {:?}", e);
                             return;
                         }
+
+                        // Complete handshake on the responder side too - the initiator
+                        // sent a valid signed request, so we should verify them
+                        self.complete_handshake(&peer, &verification_id_key);
                     }
                     Err(e) => {
                         warn!(%peer, "Invalid handshake request: {:?}", e);

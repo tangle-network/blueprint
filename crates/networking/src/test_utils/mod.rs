@@ -297,6 +297,9 @@ pub async fn wait_for_peer_info<K: KeyType>(
 
 /// Helper to wait for handshake completion between multiple nodes
 ///
+/// Uses exponential backoff with jitter for reliability in CI environments.
+/// Provides detailed diagnostics on which node pairs are failing.
+///
 /// # Arguments
 ///
 /// * `handles` - The handles to wait for handshake completion
@@ -304,41 +307,157 @@ pub async fn wait_for_peer_info<K: KeyType>(
 ///
 /// # Panics
 ///
-/// Panics if the handshake verification timed out
+/// Panics if the handshake verification timed out, with details about which pairs failed
 pub async fn wait_for_all_handshakes<K: KeyType>(
     handles: &[&mut NetworkServiceHandle<K>],
     timeout_length: Duration,
 ) {
-    info!("Starting handshake wait for {} nodes", handles.len());
-    timeout(timeout_length, async {
+    use std::collections::HashMap;
+
+    let num_nodes = handles.len();
+    let total_pairs = num_nodes * (num_nodes - 1);
+    info!(
+        "Starting handshake wait for {} nodes ({} pairs)",
+        num_nodes, total_pairs
+    );
+
+    // Track verification progress for each pair
+    let mut verified_pairs: HashMap<(usize, usize), bool> = HashMap::new();
+    for i in 0..num_nodes {
+        for j in 0..num_nodes {
+            if i != j {
+                verified_pairs.insert((i, j), false);
+            }
+        }
+    }
+
+    // Exponential backoff parameters
+    let initial_delay = Duration::from_millis(50);
+    let max_delay = Duration::from_millis(500);
+    let mut current_delay = initial_delay;
+    let backoff_factor = 1.5f64;
+
+    let start_time = std::time::Instant::now();
+    let mut last_progress_time = start_time;
+    let mut last_verified_count = 0usize;
+
+    let result = timeout(timeout_length, async {
         loop {
-            let mut all_verified = true;
-            for (i, handle1) in handles.iter().enumerate() {
-                for (j, handle2) in handles.iter().enumerate() {
+            let mut _newly_verified = 0usize;
+            let mut pending_pairs = Vec::new();
+
+            // Check all pairs
+            for i in 0..num_nodes {
+                for j in 0..num_nodes {
                     if i != j {
-                        let verified = handle1
-                            .peer_manager
-                            .is_peer_verified(&handle2.local_peer_id);
-                        if !verified {
-                            info!("Node {} -> Node {}: handshake not verified yet", i, j);
-                            all_verified = false;
-                            break;
+                        let was_verified = verified_pairs.get(&(i, j)).copied().unwrap_or(false);
+                        if !was_verified {
+                            let is_verified = handles[i]
+                                .peer_manager
+                                .is_peer_verified(&handles[j].local_peer_id);
+
+                            if is_verified {
+                                verified_pairs.insert((i, j), true);
+                                _newly_verified += 1;
+                                info!(
+                                    "✓ Node {} -> Node {} handshake verified (peer_id: {})",
+                                    i, j, handles[j].local_peer_id
+                                );
+                            } else {
+                                pending_pairs.push((i, j));
+                            }
                         }
                     }
                 }
-                if !all_verified {
-                    break;
+            }
+
+            // Count total verified
+            let verified_count = verified_pairs.values().filter(|&&v| v).count();
+
+            // Check if we made progress
+            if verified_count > last_verified_count {
+                last_progress_time = std::time::Instant::now();
+                last_verified_count = verified_count;
+                // Reset backoff on progress
+                current_delay = initial_delay;
+            }
+
+            // Check for completion
+            if verified_count == total_pairs {
+                info!(
+                    "All {} handshakes completed successfully in {:?}",
+                    total_pairs,
+                    start_time.elapsed()
+                );
+                return Ok::<(), String>(());
+            }
+
+            // Log progress periodically (every 2 seconds of no progress)
+            let stall_duration = last_progress_time.elapsed();
+            if stall_duration > Duration::from_secs(2) && !pending_pairs.is_empty() {
+                info!(
+                    "Handshake progress: {}/{} verified, {} pending. Stalled for {:?}",
+                    verified_count,
+                    total_pairs,
+                    pending_pairs.len(),
+                    stall_duration
+                );
+                // Log first few pending pairs for debugging
+                for (i, j) in pending_pairs.iter().take(3) {
+                    let peer_i = &handles[*i].local_peer_id;
+                    let peer_j = &handles[*j].local_peer_id;
+                    info!("  Pending: Node {} ({}) -> Node {} ({})", i, peer_i, j, peer_j);
                 }
             }
-            if all_verified {
-                info!("All handshakes completed successfully");
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            // Wait with exponential backoff + simple jitter based on time
+            // Use nanoseconds from current time as a simple pseudo-random jitter
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .subsec_nanos();
+            let jitter = Duration::from_millis((nanos % 50) as u64);
+            tokio::time::sleep(current_delay + jitter).await;
+
+            // Increase delay for next iteration (capped at max)
+            current_delay = Duration::from_secs_f64(
+                (current_delay.as_secs_f64() * backoff_factor).min(max_delay.as_secs_f64()),
+            );
         }
     })
-    .await
-    .expect("Handshake verification timed out");
+    .await;
+
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => panic!("Handshake error: {}", e),
+        Err(_) => {
+            // Timeout - provide detailed diagnostics
+            let verified_count = verified_pairs.values().filter(|&&v| v).count();
+            let pending: Vec<_> = verified_pairs
+                .iter()
+                .filter(|entry| !*entry.1)
+                .map(|entry| (entry.0 .0, entry.0 .1))
+                .collect();
+
+            let mut error_msg = format!(
+                "Handshake verification timed out after {:?}. Verified {}/{} pairs.\n",
+                timeout_length, verified_count, total_pairs
+            );
+            error_msg.push_str("Pending handshakes:\n");
+            for (i, j) in pending.iter().take(10) {
+                let peer_i = &handles[*i].local_peer_id;
+                let peer_j = &handles[*j].local_peer_id;
+                error_msg.push_str(&format!(
+                    "  Node {} ({}) -> Node {} ({})\n",
+                    i, peer_i, j, peer_j
+                ));
+            }
+            if pending.len() > 10 {
+                error_msg.push_str(&format!("  ... and {} more\n", pending.len() - 10));
+            }
+            panic!("{}", error_msg);
+        }
+    }
 }
 
 /// Helper to wait for handshake completion between two nodes

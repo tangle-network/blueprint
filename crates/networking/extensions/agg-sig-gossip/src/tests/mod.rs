@@ -1,4 +1,9 @@
 #![allow(clippy::too_many_lines)]
+// IMPORTANT: These tests must be run with --test-threads=1 to avoid mDNS
+// cross-contamination between parallel tests. When tests run in parallel,
+// mDNS discovery can find peers from other test instances, causing handshake
+// failures with mismatched whitelists.
+// Run with: cargo test -p blueprint-networking-agg-sig-gossip-extension --lib -- --test-threads=1
 
 use crate::{
     protocol::{ProtocolConfig, SignatureAggregationProtocol},
@@ -107,11 +112,8 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     let shared_message_hash = blake3_256(message);
 
     for (i, handle) in handles.iter().enumerate().take(num_nodes) {
-        let config = ProtocolConfig {
-            network_handle: handle.clone(),
-            num_aggregators,
-            timeout: protocol_timeout,
-        };
+        // Use the testing config for more reliable CI behavior
+        let config = ProtocolConfig::for_testing(handle.clone(), num_aggregators);
 
         let weight_scheme = EqualWeight::new(num_nodes, threshold_percentage);
         info!(
@@ -164,14 +166,8 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     let mut diagnostics = Vec::new();
 
     for (i, result) in final_results.iter().enumerate() {
-        let config = ProtocolConfig {
-            network_handle: handles[i].clone(),
-            num_aggregators,
-            timeout: protocol_timeout,
-        };
-
         let aggregator_selector =
-            crate::aggregator_selection::AggregatorSelector::new(config.num_aggregators);
+            crate::aggregator_selection::AggregatorSelector::new(num_aggregators);
 
         let is_aggregator = aggregator_selector.is_aggregator::<S>(
             handles[i].local_peer_id,

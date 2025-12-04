@@ -14,8 +14,11 @@ pub trait SignatureWeight {
     fn threshold_weight(&self) -> u64;
 
     /// Calculates the total weight of a set of participants
+    /// Uses saturating arithmetic to prevent overflow
     fn calculate_weight(&self, participants: &HashSet<PeerId>) -> u64 {
-        participants.iter().map(|id| self.weight(id)).sum()
+        participants
+            .iter()
+            .fold(0u64, |acc, id| acc.saturating_add(self.weight(id)))
     }
 
     /// Checks if a set of participants meets the required threshold
@@ -59,7 +62,9 @@ impl SignatureWeight for EqualWeight {
     }
 
     fn threshold_weight(&self) -> u64 {
-        (self.total_participants as u64 * u64::from(self.threshold_percentage)) / 100
+        // Use saturating multiplication to prevent overflow
+        let product = (self.total_participants as u64).saturating_mul(u64::from(self.threshold_percentage));
+        product / 100
     }
 }
 
@@ -85,7 +90,8 @@ impl SignatureWeight for CustomWeight {
     }
 
     fn total_weight(&self) -> u64 {
-        self.weights.values().sum()
+        // Use saturating arithmetic to prevent overflow
+        self.weights.values().fold(0u64, |acc, &w| acc.saturating_add(w))
     }
 
     fn threshold_weight(&self) -> u64 {

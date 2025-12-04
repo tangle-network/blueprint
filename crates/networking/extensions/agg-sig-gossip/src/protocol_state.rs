@@ -78,4 +78,41 @@ impl<S: AggregatableSignature> AggregationState<S> {
             threshold_weight,
         }
     }
+
+    /// Attempt to transition to a new protocol round
+    /// Returns true if the transition was successful, false if already in that state
+    ///
+    /// # Panics
+    ///
+    /// Panics if the transition is invalid (e.g., going backwards)
+    #[must_use]
+    pub fn try_transition_to(&mut self, new_round: ProtocolRound) -> bool {
+        // Idempotent transitions (already in target state)
+        if self.round == new_round {
+            return false;
+        }
+
+        // Validate transition is forward-only
+        let is_valid = match (&self.round, &new_round) {
+            (ProtocolRound::Initialization, ProtocolRound::SignatureCollection) => true,
+            (ProtocolRound::Initialization, ProtocolRound::Completion) => true, // Early completion
+            (ProtocolRound::SignatureCollection, ProtocolRound::Completion) => true,
+            _ => false,
+        };
+
+        assert!(
+            is_valid,
+            "Invalid state transition from {:?} to {:?}",
+            self.round, new_round
+        );
+
+        self.round = new_round;
+        true
+    }
+
+    /// Check if the protocol has completed
+    #[must_use]
+    pub fn is_completed(&self) -> bool {
+        self.round == ProtocolRound::Completion
+    }
 }
