@@ -120,6 +120,7 @@ blueprint-std = { version = "0.1.0-alpha.4", path = "./crates/std", default-feat
 blueprint-networking = { version = "0.1.0-alpha.15", path = "./crates/networking", default-features = false }
 blueprint-networking-round-based-extension = { version = "0.1.0-alpha.16", path = "./crates/networking/extensions/round-based", default-features = false }
 blueprint-networking-agg-sig-gossip-extension = { version = "0.1.0-alpha.15", path = "./crates/networking/extensions/agg-sig-gossip", default-features = false }
+blueprint-gossip-primitives = { version = "0.1.0-alpha.15", path = "./crates/networking/extensions/gossip-primitives", default-features = false }
 
 # Testing utilities
 blueprint-testing-utils = { version = "0.1.0-alpha.20", path = "./crates/testing-utils", default-features = false }
@@ -152,6 +153,7 @@ scale-info = { version = "2.11", default-features = false }
 parity-scale-codec = { version = "3.7", default-features = false }
 
 # Async & Runtime
+async-trait = { version = "0.1", default-features = false }
 crossbeam = { version = "0.8", default-features = false }
 crossbeam-channel = { version = "0.5", default-features = false }
 futures = { version = "0.3.30", default-features = false }

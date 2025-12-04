@@ -3353,6 +3353,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "blueprint-gossip-primitives"
+version = "0.1.0-alpha.15"
+dependencies = [
+ "async-trait",
+ "bincode",
+ "blake3",
+ "blueprint-core",
+ "blueprint-networking",
+ "blueprint-std",
+ "futures",
+ "hashbrown 0.15.5",
+ "libp2p",
+ "lru 0.12.5",
+ "parking_lot 0.12.4",
+ "rand 0.8.5",
+ "serde",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "blueprint-keystore"
 version = "0.1.0-alpha.15"
 dependencies = [
@@ -3551,6 +3573,7 @@ dependencies = [
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-core",
+ "blueprint-gossip-primitives",
  "blueprint-networking",
  "blueprint-std",
  "crossbeam",

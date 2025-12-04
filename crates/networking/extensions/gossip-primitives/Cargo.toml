@@ -1,0 +1,52 @@
+[package]
+name = "blueprint-gossip-primitives"
+version = "0.1.0-alpha.15"
+description = "Reusable gossip protocol primitives for Blueprint SDK networking"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Core dependencies
+blueprint-core = { workspace = true }
+blueprint-std = { workspace = true }
+thiserror = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["sync", "time"] }
+futures = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+bincode = { workspace = true }
+
+# Data structures
+hashbrown = { workspace = true }
+lru = "0.12"
+parking_lot = { workspace = true }
+
+# Networking (optional, for live implementation)
+libp2p = { workspace = true, features = ["identify"], optional = true }
+blueprint-networking = { workspace = true, optional = true }
+
+# Hashing
+blake3 = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+rand = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["blueprint-std/std"]
+# Enable live network implementation with libp2p
+live = ["libp2p", "blueprint-networking"]
+# Enable test utilities
+testing = []
+
+[lints]
+workspace = true

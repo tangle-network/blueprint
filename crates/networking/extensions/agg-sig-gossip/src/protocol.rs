@@ -7,12 +7,13 @@ use crate::{
 };
 use blueprint_core::{debug, error, warn};
 use blueprint_crypto::{aggregation::AggregatableSignature, hashing::blake3_256};
+use blueprint_gossip_primitives::DeduplicationCache;
 use blueprint_networking::{
     service_handle::NetworkServiceHandle,
     types::{MessageRouting, ProtocolMessage},
 };
 use blueprint_std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::Debug,
     time::{Duration, Instant},
 };
@@ -141,8 +142,8 @@ where
     /// Map of public keys for all participants
     pub participant_public_keys: HashMap<PeerId, S::Public>,
 
-    /// Set of messages we've re-gossiped
-    pub messages_re_gossiped: HashSet<[u8; 32]>,
+    /// Deduplication cache for re-gossiped messages (LRU with TTL)
+    pub dedup_cache: DeduplicationCache,
 }
 
 impl<S, W> SignatureAggregationProtocol<S, W>
@@ -163,13 +164,20 @@ where
         // Create aggregator selector with target number from config
         let aggregator_selector = AggregatorSelector::new(config.num_aggregators);
 
+        // Create deduplication cache with capacity for all participants and 5 min TTL
+        // This replaces the simple HashSet with a bounded LRU cache that auto-expires
+        let dedup_cache = DeduplicationCache::new(
+            participant_public_keys.len().max(100) * 10, // Allow multiple messages per participant
+            Duration::from_secs(300), // 5 minute TTL
+        );
+
         Self {
             state,
             config,
             weight_scheme,
             aggregator_selector,
             participant_public_keys,
-            messages_re_gossiped: HashSet::new(),
+            dedup_cache,
         }
     }
 
@@ -245,8 +253,9 @@ where
         self.add_signature(sender_id, &signature, &message);
 
         // Re-gossip the signature to ensure network propagation
+        // Using check_and_mark for atomic dedup check + mark
         let msg_hash = blake3_256(message.as_slice());
-        if !self.messages_re_gossiped.contains(&msg_hash) {
+        if self.dedup_cache.check_and_mark(msg_hash) {
             debug!(
                 "Node {} re-gossiping signature from {}",
                 self.config.network_handle.local_peer_id, sender_id
@@ -257,7 +266,6 @@ where
                 message,
             };
             self.send_message(&share_msg, None)?;
-            self.messages_re_gossiped.insert(msg_hash);
         }
 
         Ok(())
