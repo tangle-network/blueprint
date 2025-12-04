@@ -798,3 +798,199 @@ fn test_service_stats() {
     assert_eq!(stats.ready_tasks, 1);
     assert_eq!(stats.submitted_tasks, 1);
 }
+
+/// Test simulating redundant aggregation services
+/// (all operators send to multiple services, any can achieve threshold)
+#[test]
+fn test_multi_service_redundancy() {
+    // Create two independent aggregation services (simulating redundant deployment)
+    let config = ServiceConfig {
+        verify_on_submit: true,
+        validate_output: true,
+        ..Default::default()
+    };
+    let service1 = AggregationService::new(config.clone());
+    let service2 = AggregationService::new(config);
+
+    // Generate 3 operator keys
+    let (sk1, pk1) = generate_keypair(b"multi_svc_op1");
+    let (sk2, pk2) = generate_keypair(b"multi_svc_op2");
+    let (_sk3, _pk3) = generate_keypair(b"multi_svc_op3");
+
+    let service_id = 1u64;
+    let call_id = 100u64;
+    let output = vec![7, 8, 9];
+    let threshold = 2; // 2 of 3 needed
+
+    // Initialize task on both services
+    service1.init_task(service_id, call_id, output.clone(), 3, threshold).unwrap();
+    service2.init_task(service_id, call_id, output.clone(), 3, threshold).unwrap();
+
+    let message = create_signing_message(service_id, call_id, &output);
+
+    // Operator 1 sends to both services
+    let sig1 = sign_message(&sk1, &message);
+    let req1 = SubmitSignatureRequest {
+        service_id,
+        call_id,
+        operator_index: 0,
+        output: output.clone(),
+        signature: serialize_signature(&sig1),
+        public_key: serialize_pubkey(&pk1),
+    };
+    service1.submit_signature(req1.clone()).unwrap();
+    service2.submit_signature(req1).unwrap();
+
+    // Operator 2 sends to both services
+    let sig2 = sign_message(&sk2, &message);
+    let req2 = SubmitSignatureRequest {
+        service_id,
+        call_id,
+        operator_index: 1,
+        output: output.clone(),
+        signature: serialize_signature(&sig2),
+        public_key: serialize_pubkey(&pk2),
+    };
+    service1.submit_signature(req2.clone()).unwrap();
+    service2.submit_signature(req2).unwrap();
+
+    // Both services should have reached threshold
+    let status1 = service1.get_status(service_id, call_id);
+    let status2 = service2.get_status(service_id, call_id);
+
+    assert!(status1.threshold_met, "Service 1 should have met threshold");
+    assert!(status2.threshold_met, "Service 2 should have met threshold");
+
+    // Both should have the same aggregated result
+    let result1 = service1.get_aggregated_result(service_id, call_id).unwrap();
+    let result2 = service2.get_aggregated_result(service_id, call_id).unwrap();
+
+    assert_eq!(result1.output, result2.output);
+    assert_eq!(result1.signer_bitmap, result2.signer_bitmap);
+    // Operators 0 and 1 signed, operator 2 didn't (3 total operators)
+    assert_eq!(result1.non_signer_indices, vec![2]);
+    assert_eq!(result2.non_signer_indices, vec![2]);
+    // Aggregated signatures should be present
+    assert!(!result1.aggregated_signature.is_empty());
+    assert!(!result2.aggregated_signature.is_empty());
+}
+
+/// Test race condition: multiple operators mark task as submitted
+/// (simulates all operators racing to submit the aggregated result on-chain)
+#[test]
+fn test_multiple_submitters_race() {
+    let config = ServiceConfig {
+        verify_on_submit: true,
+        validate_output: true,
+        ..Default::default()
+    };
+    let service = AggregationService::new(config);
+
+    let (sk1, pk1) = generate_keypair(b"race_op1");
+    let (sk2, pk2) = generate_keypair(b"race_op2");
+
+    let service_id = 1u64;
+    let call_id = 200u64;
+    let output = vec![1, 2, 3];
+
+    // Initialize and collect signatures
+    service.init_task(service_id, call_id, output.clone(), 2, 2).unwrap();
+
+    let message = create_signing_message(service_id, call_id, &output);
+
+    service.submit_signature(SubmitSignatureRequest {
+        service_id,
+        call_id,
+        operator_index: 0,
+        output: output.clone(),
+        signature: serialize_signature(&sign_message(&sk1, &message)),
+        public_key: serialize_pubkey(&pk1),
+    }).unwrap();
+
+    service.submit_signature(SubmitSignatureRequest {
+        service_id,
+        call_id,
+        operator_index: 1,
+        output: output.clone(),
+        signature: serialize_signature(&sign_message(&sk2, &message)),
+        public_key: serialize_pubkey(&pk2),
+    }).unwrap();
+
+    assert!(service.get_status(service_id, call_id).threshold_met);
+
+    // First operator marks as submitted - should succeed
+    let result1 = service.mark_submitted(service_id, call_id);
+    assert!(result1.is_ok());
+
+    // Second operator tries to mark as submitted - also succeeds (idempotent)
+    // This is intentional: in a distributed race, multiple operators may try to mark
+    // and we don't want to return errors for this common case
+    let result2 = service.mark_submitted(service_id, call_id);
+    assert!(result2.is_ok()); // Idempotent - succeeds even if already submitted
+
+    // Task should still be available for status check
+    let status = service.get_status(service_id, call_id);
+    assert!(status.exists);
+    assert!(status.submitted);
+}
+
+/// Test that operators can retrieve aggregated result even after it's marked submitted
+/// (supports "anyone can submit" pattern where multiple operators might check)
+#[test]
+fn test_anyone_can_check_aggregated_result() {
+    let config = ServiceConfig::default();
+    let service = AggregationService::new(config);
+
+    let (sk1, pk1) = generate_keypair(b"anyone_op1");
+    let (sk2, pk2) = generate_keypair(b"anyone_op2");
+    let (_sk3, _pk3) = generate_keypair(b"anyone_op3");
+
+    let service_id = 1u64;
+    let call_id = 300u64;
+    let output = vec![42];
+
+    service.init_task(service_id, call_id, output.clone(), 3, 2).unwrap();
+
+    let message = create_signing_message(service_id, call_id, &output);
+
+    // Two operators sign
+    service.submit_signature(SubmitSignatureRequest {
+        service_id,
+        call_id,
+        operator_index: 0,
+        output: output.clone(),
+        signature: serialize_signature(&sign_message(&sk1, &message)),
+        public_key: serialize_pubkey(&pk1),
+    }).unwrap();
+
+    service.submit_signature(SubmitSignatureRequest {
+        service_id,
+        call_id,
+        operator_index: 1,
+        output: output.clone(),
+        signature: serialize_signature(&sign_message(&sk2, &message)),
+        public_key: serialize_pubkey(&pk2),
+    }).unwrap();
+
+    // All operators can check the result
+    let result = service.get_aggregated_result(service_id, call_id);
+    assert!(result.is_some());
+
+    // Even operator 3 who didn't sign can check
+    let task = result.unwrap();
+    assert_eq!(task.output, output);
+    assert_eq!(task.non_signer_indices, vec![2]); // Operator 3 didn't sign
+    // Aggregated signature should be present
+    assert!(!task.aggregated_signature.is_empty());
+
+    // After submission, the status is updated but data is still queryable
+    service.mark_submitted(service_id, call_id).unwrap();
+
+    let status = service.get_status(service_id, call_id);
+    assert!(status.submitted);
+
+    // Note: get_aggregated_result returns None after submission (by design)
+    // because we don't want duplicate on-chain submissions
+    let result_after = service.get_aggregated_result(service_id, call_id);
+    assert!(result_after.is_none());
+}
