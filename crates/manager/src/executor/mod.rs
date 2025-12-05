@@ -27,7 +27,6 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::task::JoinHandle;
 
-pub(crate) mod event_handler;
 #[cfg(feature = "remote-providers")]
 pub(crate) mod remote_provider_integration;
 
