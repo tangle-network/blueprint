@@ -1,4 +1,4 @@
-use crate::{AGGREGATOR_PRIVATE_KEY, PRIVATE_KEY};
+use crate::AGGREGATOR_PRIVATE_KEY;
 use crate::contexts::aggregator::AggregatorContext;
 use crate::contexts::client::AggregatorClient;
 use crate::contexts::combined::CombinedContext;
@@ -24,14 +24,15 @@ use blueprint_sdk::evm::util::get_provider_ws;
 use blueprint_sdk::evm::util::get_wallet_provider_http;
 use blueprint_sdk::evm::util::{get_provider_from_signer, get_provider_http};
 use blueprint_sdk::runner::BlueprintRunner;
-use blueprint_sdk::runner::eigenlayer::bls::EigenlayerBLSConfig;
+use blueprint_sdk::runner::eigenlayer::{config::EigenlayerProtocolSettings, bls::EigenlayerBLSConfig};
 use blueprint_sdk::std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use blueprint_sdk::testing::chain_setup::anvil::get_receipt;
+use tokio::sync::Notify;
+use blueprint_sdk::testing::chain_setup::anvil::{keys::ANVIL_PRIVATE_KEYS, get_receipt, start_empty_anvil_testnet};
 use blueprint_sdk::testing::utils::anvil::wait_for_responses;
-use blueprint_sdk::testing::utils::eigenlayer::EigenlayerTestHarness;
+use blueprint_sdk::testing::utils::eigenlayer::{EigenlayerTestHarness, get_accounts, get_owner_account, get_task_generator_account, get_aggregator_account};
 use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::{Router, error, info, warn};
 use futures::StreamExt;
@@ -55,14 +56,17 @@ async fn run_eigenlayer_incredible_squaring_test(
 ) {
     setup_log();
 
-    // Initialize test harness
+    // Start empty anvil testnet
+    let testnet = start_empty_anvil_testnet(true).await;
+    let http_endpoint = testnet.http_endpoint.clone();
+    let accounts = get_accounts(http_endpoint.clone()).await;
+    let owner_account = get_owner_account(&accounts);
+    let task_generator_account = get_task_generator_account(&accounts);
+    let aggregator_account = get_aggregator_account(&accounts);
+
+    // Owner account private key
+    let private_key = ANVIL_PRIVATE_KEYS[0].to_string();
     let temp_dir = tempfile::TempDir::new().unwrap();
-    let harness = EigenlayerTestHarness::setup(temp_dir).await.unwrap();
-
-    let env = harness.env().clone();
-    let http_endpoint = harness.http_endpoint.clone();
-
-    let private_key = PRIVATE_KEY.to_string();
 
     let core_config = DeploymentConfigData {
         strategy_manager: StrategyManagerConfig {
@@ -82,7 +86,7 @@ async fn run_eigenlayer_incredible_squaring_test(
             max_retroactive_length: 432000u32,
             max_future_length: 86400u32,
             genesis_rewards_timestamp: 1672531200u32,
-            updater: harness.owner_account(),
+            updater: owner_account,
             activation_delay: 0u32,
             calculation_interval_seconds: 86400u32,
             global_operator_commission_bips: 1000u16,
@@ -92,10 +96,15 @@ async fn run_eigenlayer_incredible_squaring_test(
         },
     };
 
+    // There are 2 options here
+    // - Spawn anvil with anvil state which already include the eigenlayer core contracts
+    // - Spawn empty anvil chain, re-deploy everything
+
+    // Select option 2
     let core_contracts = deploy_core_contracts(
         http_endpoint.as_str(),
         &private_key,
-        harness.owner_account(),
+        owner_account,
         core_config,
         Some(address!("00000000219ab540356cBB839Cbe05303d7705Fa")),
         Some(1_564_000),
@@ -118,9 +127,9 @@ async fn run_eigenlayer_incredible_squaring_test(
     std::fs::write("core_contracts.json", core_contracts_json).unwrap();
 
     let avs_contracts = deploy_avs_contracts(
-        env.http_rpc_endpoint.as_str(),
+        http_endpoint.as_str(),
         &private_key,
-        harness.owner_account(),
+        owner_account,
         1,
         permission_controller_address,
         allocation_manager_address,
@@ -129,8 +138,8 @@ async fn run_eigenlayer_incredible_squaring_test(
         pauser_registry_address,
         rewards_coordinator_address,
         strategy_factory_address,
-        harness.task_generator_account(),
-        harness.aggregator_account(),
+        task_generator_account,
+        aggregator_account,
         10,
     )
     .await
@@ -149,17 +158,10 @@ async fn run_eigenlayer_incredible_squaring_test(
 
     info!("Setting AVS permissions and Metadata...");
     // Extract necessary data from harness before moving it
-    let ws_endpoint = harness.ws_endpoint.to_string();
-    let accounts = harness.accounts().to_vec();
-    let task_generator_address = harness.task_generator_account();
+    let task_generator_address = task_generator_account;
     let signer: PrivateKeySigner = AGGREGATOR_PRIVATE_KEY
         .parse()
         .expect("failed to generate wallet ");
-    warn!("Private key: {private_key}");
-    warn!(
-        "Aggregator private key: {}",
-        AGGREGATOR_PRIVATE_KEY.as_str()
-    );
     let signer_wallet = get_provider_from_signer(&private_key, http_endpoint.clone());
     let wallet = EthereumWallet::from(signer);
     let provider = get_wallet_provider_http(http_endpoint.clone(), wallet.clone());
@@ -168,7 +170,7 @@ async fn run_eigenlayer_incredible_squaring_test(
         &core_contracts,
         &avs_contracts,
         &signer_wallet,
-        harness.owner_account(),
+        owner_account,
         "https://github.com/tangle-network/avs/blob/main/metadata.json".to_string(),
     )
     .await
@@ -179,6 +181,37 @@ async fn run_eigenlayer_incredible_squaring_test(
             panic!("Failed to set up AVS permissions: {e}");
         }
     }
+
+    // Initialize test harness
+    let harness = EigenlayerTestHarness::setup(
+        private_key.as_str(),
+        temp_dir,
+        testnet,
+        Some(EigenlayerProtocolSettings {
+            allocation_manager_address: core_contracts.allocation_manager,
+            registry_coordinator_address,
+            operator_state_retriever_address: avs_contracts.operator_state_retriever,
+            delegation_manager_address: core_contracts.delegation_manager,
+            service_manager_address: avs_contracts.squaring_service_manager,
+            stake_registry_address: avs_contracts.stake_registry,
+            strategy_manager_address: core_contracts.strategy_manager,
+            avs_directory_address: core_contracts.avs_directory,
+            rewards_coordinator_address: core_contracts.rewards_coordinator,
+            permission_controller_address: core_contracts.permission_controller,
+            strategy_address,
+            // Registration parameters (use defaults for testing)
+            allocation_delay: 0,
+            deposit_amount: 5_000_000_000_000_000_000_000,
+            stake_amount: 1_000_000_000_000_000_000,
+            operator_sets: vec![0],
+            staker_opt_out_window_blocks: 50400,
+            metadata_url: "https://github.com/tangle-network/blueprint".to_string(),
+        }),
+    )
+    .await
+    .unwrap();
+
+    let env = harness.env().clone();
 
     let registry_coordinator =
         RegistryCoordinator::new(registry_coordinator_address, signer_wallet.clone());
@@ -231,6 +264,26 @@ async fn run_eigenlayer_incredible_squaring_test(
     let successful_responses_clone = successful_responses.clone();
     let successful_responses_listener_clone = successful_responses.clone();
 
+    // Create registration readiness notifier
+    let registration_ready = Arc::new(Notify::new());
+    let registration_ready_clone = registration_ready.clone();
+    let registration_ready_spawner = registration_ready.clone();
+
+    // Clone endpoints for listeners
+    let ws_endpoint_for_registration = env.ws_rpc_endpoint.to_string();
+    let ws_endpoint_for_responses = env.ws_rpc_endpoint.to_string();
+
+    // Spawn registration listener
+    tokio::spawn(async move {
+        setup_registration_listener(
+            ws_endpoint_for_registration,
+            registry_coordinator_address,
+            owner_account,
+            registration_ready_clone,
+        )
+        .await;
+    });
+
     // Create task spawner
     let task_spawner = setup_task_spawner(
         http_endpoint.clone(),
@@ -238,6 +291,7 @@ async fn run_eigenlayer_incredible_squaring_test(
         task_generator_address,
         accounts,
         task_manager_address,
+        registration_ready_spawner,
     );
 
     tokio::spawn(async move {
@@ -245,7 +299,7 @@ async fn run_eigenlayer_incredible_squaring_test(
     });
     tokio::spawn(async move {
         setup_task_response_listener(
-            ws_endpoint,
+            ws_endpoint_for_responses,
             task_manager_address,
             successful_responses_listener_clone,
         )
@@ -361,6 +415,7 @@ pub fn setup_task_spawner(
     task_generator_address: Address,
     accounts: Vec<Address>,
     task_manager_address: Address,
+    registration_ready: Arc<Notify>,
 ) -> impl std::future::Future<Output = ()> {
     setup_log();
     info!("Setting up task spawner...");
@@ -372,6 +427,11 @@ pub fn setup_task_spawner(
     let operators = vec![vec![accounts[0]]];
     let quorums = Bytes::from(vec![0]);
     async move {
+        // Wait for operator registration to complete before creating tasks
+        info!("Waiting for operator registration...");
+        registration_ready.notified().await;
+        info!("Operator registered! Starting task creation...");
+
         loop {
             // Delay to allow for proper task initialization
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
@@ -448,4 +508,79 @@ pub async fn setup_task_response_listener(
         };
         *counter += 1;
     }
+}
+
+pub async fn setup_registration_listener(
+    ws_endpoint: String,
+    registry_coordinator_address: Address,
+    operator_address: Address,
+    registration_ready: Arc<Notify>,
+) {
+    setup_log();
+    info!(
+        "Setting up registration listener for operator: {:#x}",
+        operator_address
+    );
+
+    let provider = get_provider_ws(&ws_endpoint).await;
+    let registry_coordinator =
+        RegistryCoordinator::new(registry_coordinator_address, provider.clone());
+
+    // First, check if operator is already registered (prevents race condition)
+    match registry_coordinator
+        .getOperatorId(operator_address)
+        .call()
+        .await
+    {
+        Ok(operator_id) => {
+            // If operator_id is not zero bytes, operator is already registered
+            if operator_id != [0u8; 32] {
+                info!(
+                    "✅ Operator already registered! Address: {:#x}, ID: {:#x}",
+                    operator_address, operator_id
+                );
+                registration_ready.notify_one();
+                return;
+            }
+        }
+        Err(e) => {
+            warn!("Failed to check operator registration status: {:?}", e);
+            // Continue to wait for event even if check fails
+        }
+    }
+
+    // Subscribe to OperatorRegistered events
+    let filter = registry_coordinator
+        .OperatorRegistered_filter()
+        .filter
+        .from_block(0u64);
+
+    let mut event_stream = match provider.subscribe_logs(&filter).await {
+        Ok(stream) => stream.into_stream(),
+        Err(e) => {
+            error!("Failed to subscribe to OperatorRegistered events: {:?}", e);
+            return;
+        }
+    };
+
+    info!("Listening for OperatorRegistered event...");
+
+    while let Some(event) = event_stream.next().await {
+        // Try parse OperatorRegistered event
+        if let Ok(log) = event.log_decode::<RegistryCoordinator::OperatorRegistered>() {
+            // Check if this is the operator we're waiting for
+            if log.inner.data.operator == operator_address {
+                info!(
+                    "✅ Operator registered! Address: {:#x}, ID: {:#x}",
+                    log.inner.data.operator, log.inner.data.operatorId
+                );
+
+                // Notify task spawner that registration is complete
+                registration_ready.notify_one();
+                return;
+            }
+        }
+    }
+
+    error!("Registration listener stream ended without receiving OperatorRegistered event");
 }

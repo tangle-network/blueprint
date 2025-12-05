@@ -27,11 +27,11 @@ jobs:
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2025-10-20
           components: rustfmt
 
       - name: Check Formatting
-        run: cargo +nightly fmt -- --check
+        run: cargo +nightly-2025-10-20 fmt -- --check
 
   linting:
     timeout-minutes: 120
@@ -169,9 +169,9 @@ jobs:
         with:
           tool: nextest
 
-      - name: Determine nextest profile
+      - name: Determine nextest profile and features
         run: |
-          SERIAL_CRATES=("blueprint-tangle-testing-utils" "blueprint-client-evm" "blueprint-tangle-extra" "blueprint-networking" "blueprint-qos" "cargo-tangle")
+          SERIAL_CRATES=("blueprint-tangle-testing-utils" "blueprint-client-evm" "blueprint-tangle-extra" "blueprint-networking" "blueprint-qos" "cargo-tangle" "blueprint-manager")
           PROFILE=ci
 
           for crate in "${SERIAL_CRATES[@]}"; do
@@ -184,5 +184,11 @@ jobs:
           echo "cargo_nextest_args=--profile $PROFILE" >> $GITHUB_ENV
 
       # TODO: nextest doesn't support doc tests yet (https://github.com/nextest-rs/nextest/issues/16)
+      # Because blueprint-manage spawns many workers, we should run tests with test-threads=1 to avoid conflicts
       - name: tests
-        run: cargo nextest run --no-tests pass --package ${{ matrix.package }} ${{ env.cargo_nextest_args }} && cargo test --package ${{ matrix.package }} --doc
+        run: |
+          if [[ "${{ matrix.package }}" == "blueprint-manager" ]]; then
+            cargo nextest run --test-threads=1 --no-tests pass --package ${{ matrix.package }} ${{ env.cargo_nextest_args }} && cargo test --package ${{ matrix.package }} --doc
+          else
+            cargo nextest run --no-tests pass --package ${{ matrix.package }} ${{ env.cargo_nextest_args }} && cargo test --package ${{ matrix.package }} --doc
+          fi

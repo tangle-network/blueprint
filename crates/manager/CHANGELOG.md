@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.23](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.22...blueprint-manager-v0.3.0-alpha.23) - 2025-11-03
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.3.0-alpha.22](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.21...blueprint-manager-v0.3.0-alpha.22) - 2025-10-30
+
+### Other
+
+- Add Eigenlayer CLI commands and integrate with blueprint manager (#1193)
+
 ## [0.3.0-alpha.21](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.20...blueprint-manager-v0.3.0-alpha.21) - 2025-10-02
 
 ### Added

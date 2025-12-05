@@ -237,7 +237,7 @@ impl Service {
 
         let instance =
             ContainerInstance::new(ctx, limits, service_name, image, env_vars, arguments, debug)
-                .await;
+                .await?;
 
         Ok(Self {
             runtime: Runtime::Container(instance),
@@ -314,6 +314,7 @@ impl Service {
     ///
     /// * See [`HypervisorInstance::status()`]
     /// * See [`ProcessHandle::status()`]
+    #[allow(clippy::unused_async)]
     pub async fn status(&mut self) -> Result<Status> {
         match &mut self.runtime {
             #[cfg(feature = "vm-sandbox")]
@@ -337,6 +338,7 @@ impl Service {
     /// # Errors
     ///
     /// * See [`HypervisorInstance::start()`]
+    #[allow(clippy::unused_async)]
     pub async fn start(&mut self) -> Result<Option<impl Future<Output = Result<()>> + use<>>> {
         let Some(alive_rx) = self.alive_rx.take() else {
             error!("Service already started!");
@@ -367,13 +369,21 @@ impl Service {
             }
             Runtime::Native(instance) => match instance {
                 NativeProcess::NotStarted(info) => {
-                    // TODO: Resource limits
+                    let args = info.arguments.encode(true);
+                    let env_vars = info.env_vars.encode();
+
+                    info!(
+                        "Spawning native process: {} with args: {:?}",
+                        info.binary_path.display(),
+                        args
+                    );
+
                     let process_handle = tokio::process::Command::new(&info.binary_path)
                         .kill_on_drop(true)
                         .stdin(std::process::Stdio::null())
                         .current_dir(&std::env::current_dir()?)
-                        .envs(info.env_vars.encode())
-                        .args(info.arguments.encode(true))
+                        .envs(env_vars)
+                        .args(args)
                         .spawn()?;
 
                     let handle =
@@ -408,6 +418,7 @@ impl Service {
     ///
     /// * [`HypervisorInstance::shutdown()`]
     /// * [`BridgeHandle::shutdown()`]
+    #[allow(clippy::unused_async)]
     pub async fn shutdown(self) -> Result<()> {
         match self.runtime {
             #[cfg(feature = "vm-sandbox")]
@@ -463,6 +474,7 @@ fn generate_running_process_status_handle(
     let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<Status>();
     let service_name = service_name.to_string();
 
+    let service_name_clone = service_name.clone();
     let task = async move {
         info!("Starting process execution for {service_name}");
         let _ = status_tx.send(Status::Running);
@@ -478,7 +490,9 @@ fn generate_running_process_status_handle(
 
     let task = async move {
         tokio::select! {
-            _ = abort_rx => {},
+            _ = abort_rx => {
+                info!("Abort signal received for {service_name_clone}");
+            },
             () = task => {},
         }
     };

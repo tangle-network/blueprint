@@ -213,6 +213,191 @@ Once the blueprint is deployed, it can now be used on-chain. We have a collectio
 
 Further details on each command, as well as a full demo, can be found on our [Tangle CLI docs page](https://docs.tangle.tools/developers/cli/tangle).
 
+## EigenLayer Multi-AVS Commands
+
+The Tangle CLI provides commands for managing multiple EigenLayer AVS registrations with a single operator.
+
+### Quick Start: EigenLayer
+
+#### 1. Generate Keys
+
+```bash
+# Generate ECDSA key (operator address)
+cargo tangle blueprint generate-keys -k ecdsa -p ./keystore
+
+# Generate BLS key (for aggregation)
+cargo tangle blueprint generate-keys -k bls -p ./keystore
+```
+
+#### 2. Register with an AVS
+
+Create a configuration file `my-avs-config.json`:
+
+```json
+{
+  "service_manager": "0x...",
+  "registry_coordinator": "0x...",
+  "operator_state_retriever": "0x...",
+  "strategy_manager": "0x...",
+  "delegation_manager": "0x...",
+  "avs_directory": "0x...",
+  "rewards_coordinator": "0x...",
+  "permission_controller": "0x...",
+  "allocation_manager": "0x...",
+  "strategy_address": "0x...",
+  "stake_registry": "0x...",
+  "blueprint_path": "/path/to/your/avs/blueprint",
+  "runtime_target": "hypervisor",
+  "allocation_delay": 0,
+  "deposit_amount": 5000000000000000000000,
+  "stake_amount": 1000000000000000000,
+  "operator_sets": [0]
+}
+```
+
+Register:
+
+```bash
+cargo tangle blueprint eigenlayer register \
+  --config my-avs-config.json \
+  --keystore-uri ./keystore
+```
+
+Or override runtime target via CLI:
+
+```bash
+cargo tangle blueprint eigenlayer register \
+  --config my-avs-config.json \
+  --keystore-uri ./keystore \
+  --runtime native
+```
+
+#### 3. List Registrations
+
+```bash
+# List all registrations
+cargo tangle blueprint eigenlayer list
+
+# List only active registrations
+cargo tangle blueprint eigenlayer list --active-only
+
+# JSON output
+cargo tangle blueprint eigenlayer list --format json
+```
+
+#### 4. Run the Manager
+
+```bash
+cargo tangle blueprint run \
+  --protocol eigenlayer \
+  --config ./config.toml
+```
+
+The manager will:
+- Read all active AVS registrations from `~/.tangle/eigenlayer_registrations.json`
+- Spawn a separate blueprint instance for each AVS
+- Monitor rewards and slashing events
+- Auto-restart failed blueprints
+
+#### 5. Deregister from an AVS
+
+```bash
+cargo tangle blueprint eigenlayer deregister \
+  --service-manager 0x... \
+  --keystore-uri ./keystore
+```
+
+### EigenLayer Command Reference
+
+#### `eigenlayer register`
+
+Register with a new EigenLayer AVS.
+
+```bash
+cargo tangle blueprint eigenlayer register \
+  --config <CONFIG_FILE> \
+  --keystore-uri <KEYSTORE_PATH> \
+  [--runtime <RUNTIME>] \
+  [--verify]
+```
+
+**Arguments**:
+- `--config`: Path to JSON configuration file
+- `--keystore-uri`: Keystore path (default: `./keystore`)
+- `--runtime`: Runtime target (`native`, `hypervisor`, `container`) - overrides config file
+- `--verify`: Perform on-chain verification (optional)
+
+**Aliases**: `reg`
+
+#### `eigenlayer deregister`
+
+Deregister from an EigenLayer AVS.
+
+```bash
+cargo tangle blueprint eigenlayer deregister \
+  --service-manager <ADDRESS> \
+  --keystore-uri <KEYSTORE_PATH>
+```
+
+**Arguments**:
+- `--service-manager`: Service manager contract address
+- `--keystore-uri`: Keystore path (default: `./keystore`)
+
+**Aliases**: `dereg`
+
+#### `eigenlayer list`
+
+List all registered AVS services.
+
+```bash
+cargo tangle blueprint eigenlayer list \
+  [--active-only] \
+  [--format <FORMAT>]
+```
+
+**Arguments**:
+- `--active-only`: Show only active registrations
+- `--format`: Output format: `table` (default) or `json`
+
+**Aliases**: `ls`
+
+#### `eigenlayer sync`
+
+Synchronize local registrations with on-chain state.
+
+```bash
+cargo tangle blueprint eigenlayer sync \
+  --http-rpc-url <URL> \
+  --keystore-uri <KEYSTORE_PATH> \
+  [--settings-file <FILE>]
+```
+
+**Arguments**:
+- `--http-rpc-url`: HTTP RPC endpoint (default: `http://127.0.0.1:8545`)
+- `--keystore-uri`: Keystore path (default: `./keystore`)
+- `--settings-file`: Protocol settings file (optional)
+
+### Runtime Targets
+
+Each AVS can specify its execution runtime:
+
+- **`native`** - Bare process (no sandbox)
+  - Fastest startup and lowest overhead
+  - For testing only - no isolation
+  - Direct process execution
+
+- **`hypervisor`** - cloud-hypervisor VM (default)
+  - Production-ready VM isolation
+  - Strong security boundaries
+  - Resource limits enforced
+  - Recommended for production
+
+- **`container`** - Docker/Kata containers (Coming Soon)
+  - Not yet implemented
+  - For now, use `native` for testing or `hypervisor` for production
+
+Set via config file or override via CLI `--runtime` flag.
+
 ## Generating Keys from the Command Line
 
 The following command will generate a keypair for a given key type:

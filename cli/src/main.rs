@@ -4,7 +4,7 @@ use blueprint_runner::config::{BlueprintEnvironment, Protocol, ProtocolSettings,
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use blueprint_runner::error::ConfigError;
 use blueprint_runner::tangle::config::TangleProtocolSettings;
-use cargo_tangle::command::create::{new_blueprint, BlueprintType};
+use cargo_tangle::command::create::{new_blueprint, BlueprintType, TemplateVariables};
 use cargo_tangle::command::deploy::eigenlayer::deploy_eigenlayer;
 use cargo_tangle::command::deploy::tangle::deploy_tangle;
 use cargo_tangle::command::jobs::submit::submit_job;
@@ -163,6 +163,9 @@ pub enum BlueprintCommands {
 
         #[command(flatten)]
         blueprint_type: Option<BlueprintType>,
+
+        #[command(flatten)]
+        template_variables: TemplateVariables,
 
         /// Define a value for template variables (can be used multiple times)
         /// Example: --define gh-username=myusername
@@ -372,6 +375,153 @@ pub enum BlueprintCommands {
         #[arg(short, long, value_name = "VALUE", default_value_t = false)]
         force: bool,
     },
+
+    /// EigenLayer AVS management commands
+    #[command(visible_alias = "el")]
+    Eigenlayer {
+        #[command(subcommand)]
+        command: EigenlayerCommands,
+    },
+}
+
+/// EigenLayer AVS management commands
+#[derive(Subcommand, Debug)]
+pub enum EigenlayerCommands {
+    /// Register with a new EigenLayer AVS
+    #[command(visible_alias = "reg")]
+    Register {
+        /// Path to the AVS registration configuration file (JSON)
+        #[arg(long, value_name = "FILE")]
+        config: PathBuf,
+
+        /// The keystore URI to use
+        #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
+        keystore_uri: String,
+
+        /// Runtime target for blueprint execution (native, hypervisor)
+        /// Defaults to hypervisor for production. Use 'native' for local testing only.
+        /// Note: Hypervisor requires Linux/KVM. Container support coming soon.
+        #[arg(long, value_name = "RUNTIME")]
+        runtime: Option<String>,
+
+        /// Perform on-chain verification after registration
+        #[arg(long)]
+        verify: bool,
+    },
+
+    /// Deregister from an EigenLayer AVS
+    #[command(visible_alias = "dereg")]
+    Deregister {
+        /// Service manager address of the AVS to deregister from
+        #[arg(long, value_name = "ADDRESS")]
+        service_manager: String,
+
+        /// The keystore URI to use
+        #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
+        keystore_uri: String,
+    },
+
+    /// List all registered EigenLayer AVS services
+    #[command(visible_alias = "ls")]
+    List {
+        /// Show only active registrations
+        #[arg(long)]
+        active_only: bool,
+
+        /// Output format (json, table)
+        #[arg(long, default_value = "table")]
+        format: String,
+    },
+
+    /// Synchronize local registrations with on-chain state
+    Sync {
+        /// HTTP RPC endpoint for EigenLayer contracts
+        #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:8545")]
+        http_rpc_url: Url,
+
+        /// The keystore URI to use
+        #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
+        keystore_uri: String,
+
+        /// Path to the protocol settings file
+        #[arg(long, value_name = "FILE")]
+        settings_file: Option<PathBuf>,
+    },
+
+    /// Show rewards for an earner address
+    #[command(visible_alias = "show")]
+    ShowRewards {
+        /// Earner Ethereum address
+        #[arg(long, value_name = "ADDRESS")]
+        earner_address: String,
+
+        /// Sidecar API URL (defaults to mainnet)
+        #[arg(long, value_name = "URL")]
+        sidecar_url: Option<String>,
+
+        /// Network (mainnet or holesky)
+        #[arg(long, default_value = "mainnet")]
+        network: String,
+    },
+
+    /// Claim rewards for an earner
+    #[command(visible_alias = "claim")]
+    ClaimRewards {
+        /// Earner Ethereum address
+        #[arg(long, value_name = "ADDRESS")]
+        earner_address: String,
+
+        /// Recipient address (defaults to earner)
+        #[arg(long, value_name = "ADDRESS")]
+        recipient_address: Option<String>,
+
+        /// Token addresses to claim (empty = all)
+        #[arg(long, value_delimiter = ',')]
+        tokens: Vec<String>,
+
+        /// `RewardsCoordinator` contract address
+        #[arg(long, value_name = "ADDRESS")]
+        rewards_coordinator: String,
+
+        /// Sidecar API URL (defaults to mainnet)
+        #[arg(long, value_name = "URL")]
+        sidecar_url: Option<String>,
+
+        /// Network (mainnet or holesky)
+        #[arg(long, default_value = "mainnet")]
+        network: String,
+
+        /// The keystore URI to use
+        #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
+        keystore_uri: String,
+
+        /// HTTP RPC endpoint
+        #[arg(long, default_value = "http://127.0.0.1:8545")]
+        rpc_url: String,
+
+        /// Batch claim file (YAML)
+        #[arg(long, value_name = "FILE")]
+        batch_file: Option<String>,
+    },
+
+    /// Set claimer address for the operator
+    SetClaimer {
+        /// Claimer Ethereum address
+        #[arg(long, value_name = "ADDRESS")]
+        claimer_address: String,
+
+        /// `RewardsCoordinator` contract address
+        #[arg(long, value_name = "ADDRESS")]
+        rewards_coordinator: String,
+
+        /// The keystore URI to use
+        #[arg(long, env = "KEYSTORE_URI", default_value = "./keystore")]
+        keystore_uri: String,
+
+        /// HTTP RPC endpoint
+        #[arg(long, default_value = "http://127.0.0.1:8545")]
+        rpc_url: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -496,6 +646,7 @@ async fn main() -> color_eyre::Result<()> {
                 name,
                 source,
                 blueprint_type,
+                template_variables,
                 define,
                 template_values_file,
                 skip_prompts,
@@ -505,6 +656,7 @@ async fn main() -> color_eyre::Result<()> {
                     source,
                     blueprint_type,
                     define,
+                    template_variables,
                     &template_values_file,
                     skip_prompts,
                 )?;
@@ -596,7 +748,7 @@ async fn main() -> color_eyre::Result<()> {
                 protocol,
                 rpc_url,
                 keystore_path,
-                binary_path,
+                binary_path: _,
                 network,
                 data_dir,
                 bootnodes,
@@ -691,12 +843,19 @@ async fn main() -> color_eyre::Result<()> {
                     .iter()
                     .filter_map(|addr| addr.parse().ok())
                     .collect();
-                config.protocol_settings = protocol_settings;
+                config.protocol_settings = protocol_settings.clone();
                 config.test_mode = network == "local";
 
                 match protocol {
                     Protocol::Eigenlayer => {
-                        run_eigenlayer_avs(config, chain, binary_path).await?;
+                        run_eigenlayer_avs(
+                            config,
+                            chain,
+                            None, // keystore_path already set in config
+                            data_dir,
+                            allow_unchecked_attestations,
+                        )
+                        .await?;
                     }
                     Protocol::Tangle => {
                         // Create the run options for the Tangle blueprint
@@ -810,6 +969,114 @@ async fn main() -> color_eyre::Result<()> {
             } => {
                 deploy::mbsm::deploy_mbsm(http_rpc_url, force).await?;
             }
+
+            BlueprintCommands::Eigenlayer { command } => match command {
+                EigenlayerCommands::Register {
+                    config,
+                    keystore_uri,
+                    runtime,
+                    verify,
+                } => {
+                    cargo_tangle::command::eigenlayer::register_avs(
+                        &config,
+                        &keystore_uri,
+                        runtime.as_deref(),
+                        verify,
+                    )
+                    .await?;
+                }
+                EigenlayerCommands::Deregister {
+                    service_manager,
+                    keystore_uri,
+                } => {
+                    cargo_tangle::command::eigenlayer::deregister_avs(
+                        &service_manager,
+                        &keystore_uri,
+                    )
+                    .await?;
+                }
+                EigenlayerCommands::List {
+                    active_only,
+                    format,
+                } => {
+                    cargo_tangle::command::eigenlayer::list_avs_registrations(active_only, &format)
+                        .await?;
+                }
+                EigenlayerCommands::Sync {
+                    http_rpc_url,
+                    keystore_uri,
+                    settings_file,
+                } => {
+                    cargo_tangle::command::eigenlayer::sync_avs_registrations(
+                        &http_rpc_url,
+                        &keystore_uri,
+                        settings_file.as_deref(),
+                    )
+                    .await?;
+                }
+                EigenlayerCommands::ShowRewards {
+                    earner_address,
+                    sidecar_url,
+                    network,
+                } => {
+                    cargo_tangle::command::eigenlayer::show_rewards(
+                        &earner_address,
+                        sidecar_url.as_deref(),
+                        Some(&network),
+                    )
+                    .await?;
+                }
+                EigenlayerCommands::ClaimRewards {
+                    earner_address,
+                    recipient_address,
+                    tokens,
+                    rewards_coordinator,
+                    sidecar_url,
+                    network,
+                    keystore_uri,
+                    rpc_url,
+                    batch_file,
+                } => {
+                    use alloy_primitives::Address;
+                    let rewards_coord_addr = Address::parse_checksummed(&rewards_coordinator, None)
+                        .map_err(|e| {
+                            color_eyre::eyre::eyre!("Invalid rewards coordinator address: {}", e)
+                        })?;
+
+                    cargo_tangle::command::eigenlayer::claim_rewards(
+                        &earner_address,
+                        recipient_address.as_deref(),
+                        tokens,
+                        rewards_coord_addr,
+                        sidecar_url.as_deref(),
+                        Some(&network),
+                        &keystore_uri,
+                        &rpc_url,
+                        batch_file.as_deref(),
+                    )
+                    .await?;
+                }
+                EigenlayerCommands::SetClaimer {
+                    claimer_address,
+                    rewards_coordinator,
+                    keystore_uri,
+                    rpc_url,
+                } => {
+                    use alloy_primitives::Address;
+                    let rewards_coord_addr = Address::parse_checksummed(&rewards_coordinator, None)
+                        .map_err(|e| {
+                            color_eyre::eyre::eyre!("Invalid rewards coordinator address: {}", e)
+                        })?;
+
+                    cargo_tangle::command::eigenlayer::set_claimer(
+                        &claimer_address,
+                        rewards_coord_addr,
+                        &keystore_uri,
+                        &rpc_url,
+                    )
+                    .await?;
+                }
+            },
         },
         Commands::Key { command } => match command {
             KeyCommands::Generate {
@@ -1018,6 +1285,29 @@ fn load_protocol_settings(
                     .map_err(|_| {
                         ConfigError::Other("Invalid PERMISSION_CONTROLLER_ADDRESS".into())
                     })?,
+                // Registration parameters (use defaults if not specified)
+                allocation_delay: env::var("ALLOCATION_DELAY")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0),
+                deposit_amount: env::var("DEPOSIT_AMOUNT")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(5_000_000_000_000_000_000_000),
+                stake_amount: env::var("STAKE_AMOUNT")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1_000_000_000_000_000_000),
+                operator_sets: env::var("OPERATOR_SETS")
+                    .ok()
+                    .and_then(|s| s.split(',').map(|v| v.parse().ok()).collect())
+                    .unwrap_or_else(|| vec![0]),
+                staker_opt_out_window_blocks: env::var("STAKER_OPT_OUT_WINDOW_BLOCKS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(50400),
+                metadata_url: env::var("METADATA_URL")
+                    .unwrap_or_else(|_| "https://github.com/tangle-network/blueprint".to_string()),
             };
             Ok(ProtocolSettings::Eigenlayer(addresses))
         }

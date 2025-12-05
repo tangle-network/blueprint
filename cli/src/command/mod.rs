@@ -3,6 +3,7 @@ pub mod cloud;
 pub mod create;
 pub mod debug;
 pub mod deploy;
+pub mod eigenlayer;
 pub mod jobs;
 pub mod keys;
 pub mod list;
