@@ -9,6 +9,21 @@ use blueprint_core::{debug, error, info};
 use blueprint_std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
+/// @dev Loki version is pinned to 3.3.4 to avoid breaking changes
+/// Relating changes:
+/// - LokiClient in `crates/blueprint-remote-providers/src/monitoring/loki.rs`
+/// - CI
+///
+const LOKI_IMAGE_NAME_FULL: &str = "grafana/loki:3.3.4";
+
+/// 
+/// @dev Grafana version is pinned to 10.4.3 to avoid breaking changes
+/// Relating changes:
+/// - LokiClient in `crates/blueprint-remote-providers/src/monitoring/loki.rs`
+/// - CI
+///
+const GRAFANA_IMAGE_NAME_FULL: &str = "grafana/grafana:10.4.3";
+
 /// Loki client for pushing and querying logs
 pub struct LokiClient {
     base_url: String,
@@ -218,7 +233,7 @@ impl LokiClient {
                 "3100:3100",
                 "-v",
                 "/tmp/loki:/loki",
-                "grafana/loki:latest",
+                LOKI_IMAGE_NAME_FULL,
                 "-config.file=/etc/loki/local-config.yaml",
             ])
             .output()
@@ -245,7 +260,7 @@ impl LokiClient {
                 "3000:3000",
                 "--link",
                 "loki:loki",
-                "grafana/grafana:latest",
+                GRAFANA_IMAGE_NAME_FULL,
             ])
             .output()
             .await;

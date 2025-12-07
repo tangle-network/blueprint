@@ -38,10 +38,16 @@ pub struct PrometheusServerConfig {
     pub data_path: Option<String>,
 }
 
+/// @dev Prometheus version is pinned to 3.8.0 to avoid breaking changes
+/// Relating changes:
+/// - PrometheusServer in `crates/qos/src/metrics/prometheus/server.rs`
+/// - CI
+/// - crates/qos/tests/qos_metrics_demo_test.rs
+///
+pub const DEFAULT_PROMETHEUS_DOCKER_IMAGE: &str = "prom/prometheus:v3.4.2";
 // Default values for PrometheusServerConfig
 const DEFAULT_PROMETHEUS_PORT: u16 = 9090;
 const DEFAULT_PROMETHEUS_HOST: &str = "0.0.0.0";
-const DEFAULT_PROMETHEUS_DOCKER_IMAGE: &str = "prom/prometheus:latest";
 const DEFAULT_PROMETHEUS_CONTAINER_NAME: &str = "blueprint-prometheus";
 const PROMETHEUS_DOCKER_HEALTH_TIMEOUT_SECS: u64 = 120;
 

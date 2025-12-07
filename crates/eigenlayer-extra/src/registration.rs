@@ -211,13 +211,24 @@ impl AvsRegistrationConfig {
                 }
             }
             RuntimeTarget::Hypervisor => {
-                // Hypervisor requires Linux (check at compile time for better UX)
+                // Hypervisor requires Linux and vm-sandbox feature
                 #[cfg(not(target_os = "linux"))]
                 {
                     return Err(
                         "Hypervisor runtime requires Linux/KVM. Use 'native' for local testing on macOS/Windows."
                             .to_string(),
                     );
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    #[cfg(not(feature = "vm-sandbox"))]
+                    {
+                        return Err(
+                            "Hypervisor runtime requires the 'vm-sandbox' feature to be enabled. \
+                            Recompile with --features vm-sandbox or use --runtime native for testing."
+                                .to_string(),
+                        );
+                    }
                 }
             }
             RuntimeTarget::Container => {

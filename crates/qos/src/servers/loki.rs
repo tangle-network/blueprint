@@ -11,6 +11,13 @@ use crate::logging::LokiConfig;
 use crate::servers::ServerManager;
 use crate::servers::common::DockerManager;
 
+/// @dev Loki version is pinned to 3.3.4 to avoid breaking changes
+/// Relating changes:
+/// - LokiServer in `crates/qos/src/servers/loki.rs`
+/// - CI
+///
+const LOKI_IMAGE_NAME_FULL: &str = "grafana/loki:3.3.4";
+
 /// Loki server configuration
 #[derive(Clone, Debug)]
 pub struct LokiServerConfig {
@@ -133,7 +140,7 @@ impl ServerManager for LokiServer {
         let container_id = self
             .docker
             .run_container(
-                "grafana/loki:latest",
+                LOKI_IMAGE_NAME_FULL,
                 &self.config.container_name,
                 env_vars,
                 ports,

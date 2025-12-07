@@ -23,7 +23,9 @@ pub mod proto {
 
 pub use logging::{GrafanaClient, GrafanaConfig, LokiConfig};
 pub use servers::{
-    grafana::GrafanaServerConfig, loki::LokiServerConfig, prometheus::PrometheusServerConfig,
+    grafana::GrafanaServerConfig,
+    loki::LokiServerConfig,
+    prometheus::{PrometheusServerConfig, DEFAULT_PROMETHEUS_DOCKER_IMAGE},
 };
 pub use service_builder::QoSServiceBuilder;
 pub use unified_service::QoSService;

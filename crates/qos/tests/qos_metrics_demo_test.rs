@@ -13,7 +13,7 @@ const TEST_LOKI_CONTAINER_NAME: &str = "blueprint-loki";
 const TEST_PROMETHEUS_CONTAINER_NAME: &str = "blueprint-test-prometheus";
 
 use blueprint_qos::{
-    GrafanaServerConfig, LokiServerConfig, PrometheusServerConfig, QoSService, default_qos_config,
+    DEFAULT_PROMETHEUS_DOCKER_IMAGE, GrafanaServerConfig, LokiServerConfig, PrometheusServerConfig, QoSService, default_qos_config,
 };
 use blueprint_testing_utils::tangle::harness::TangleTestHarness;
 
@@ -145,7 +145,7 @@ async fn test_qos_metrics_demo() -> Result<(), TestRunnerError> {
                 port: 9091,
                 host: "0.0.0.0".to_string(),
                 use_docker: false,
-                docker_image: "prom/prometheus:latest".to_string(),
+                docker_image: DEFAULT_PROMETHEUS_DOCKER_IMAGE.to_string(),
                 docker_container_name: "blueprint-embedded-prometheus".to_string(),
                 config_path: None,
                 data_path: None,

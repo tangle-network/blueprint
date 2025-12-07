@@ -183,6 +183,13 @@ jobs:
 
           echo "cargo_nextest_args=--profile $PROFILE" >> $GITHUB_ENV
 
+      - name: Pull Docker images for QoS tests
+        if: matrix.package == 'blueprint-qos'
+        run: |
+          docker pull grafana/grafana:10.4.3
+          docker pull prom/prometheus:v3.4.2
+          docker pull grafana/loki:3.3.4
+
       # TODO: nextest doesn't support doc tests yet (https://github.com/nextest-rs/nextest/issues/16)
       # Because blueprint-manage spawns many workers, we should run tests with test-threads=1 to avoid conflicts
       - name: tests

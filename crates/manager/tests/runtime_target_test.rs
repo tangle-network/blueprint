@@ -135,8 +135,8 @@ mod validation_tests {
         // On Linux without vm-sandbox feature, we get the feature flag error
         #[cfg(target_os = "linux")]
         assert!(
-            err_msg.contains("Pre-compiled binaries are not yet supported for Hypervisor runtime"),
-            "On Linux, Hypervisor runtime with RuntimeTarget::Binary, error should mention that pre-compiled binaries are not supported. Got: {}",
+            err_msg.contains("vm-sandbox"),
+            "On Linux without vm-sandbox feature, error should mention vm-sandbox requirement. Got: {}",
             err_msg
         );
     }

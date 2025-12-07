@@ -10,7 +10,12 @@ use crate::servers::ServerManager;
 use crate::servers::common::DockerManager;
 
 const HEALTH_CHECK_TIMEOUT_SECS: u64 = 90;
-const GRAFANA_IMAGE_NAME_FULL: &str = "grafana/grafana:10.4.3";
+/// @dev Grafana version is pinned to 10.4.3 to avoid breaking changes
+/// Relating changes:
+/// - LokiClient in `crates/blueprint-remote-providers/src/monitoring/loki.rs`
+/// - CI
+///
+pub const GRAFANA_IMAGE_NAME_FULL: &str = "grafana/grafana:10.4.3";
 
 /// Grafana server configuration
 #[derive(Clone, Debug)]
