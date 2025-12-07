@@ -13,7 +13,7 @@ use crate::servers::common::DockerManager;
 
 /// @dev Loki version is pinned to 3.3.4 to avoid breaking changes
 /// Relating changes:
-/// - LokiServer in `crates/qos/src/servers/loki.rs`
+/// - `LokiServer` in `crates/qos/src/servers/loki.rs`
 /// - CI
 const LOKI_IMAGE_NAME_FULL: &str = "grafana/loki:3.3.4";
 
