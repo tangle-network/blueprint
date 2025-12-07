@@ -13,15 +13,13 @@ use serde::{Deserialize, Serialize};
 /// Relating changes:
 /// - LokiClient in `crates/blueprint-remote-providers/src/monitoring/loki.rs`
 /// - CI
-///
 const LOKI_IMAGE_NAME_FULL: &str = "grafana/loki:3.3.4";
 
-/// 
+///
 /// @dev Grafana version is pinned to 10.4.3 to avoid breaking changes
 /// Relating changes:
 /// - LokiClient in `crates/blueprint-remote-providers/src/monitoring/loki.rs`
 /// - CI
-///
 const GRAFANA_IMAGE_NAME_FULL: &str = "grafana/grafana:10.4.3";
 
 /// Loki client for pushing and querying logs

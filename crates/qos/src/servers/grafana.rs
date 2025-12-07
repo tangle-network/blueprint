@@ -14,7 +14,6 @@ const HEALTH_CHECK_TIMEOUT_SECS: u64 = 90;
 /// Relating changes:
 /// - LokiClient in `crates/blueprint-remote-providers/src/monitoring/loki.rs`
 /// - CI
-///
 pub const GRAFANA_IMAGE_NAME_FULL: &str = "grafana/grafana:10.4.3";
 
 /// Grafana server configuration

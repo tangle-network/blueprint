@@ -13,7 +13,8 @@ const TEST_LOKI_CONTAINER_NAME: &str = "blueprint-loki";
 const TEST_PROMETHEUS_CONTAINER_NAME: &str = "blueprint-test-prometheus";
 
 use blueprint_qos::{
-    DEFAULT_PROMETHEUS_DOCKER_IMAGE, GrafanaServerConfig, LokiServerConfig, PrometheusServerConfig, QoSService, default_qos_config,
+    DEFAULT_PROMETHEUS_DOCKER_IMAGE, GrafanaServerConfig, LokiServerConfig, PrometheusServerConfig,
+    QoSService, default_qos_config,
 };
 use blueprint_testing_utils::tangle::harness::TangleTestHarness;
 

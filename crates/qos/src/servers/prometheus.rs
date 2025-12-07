@@ -43,7 +43,6 @@ pub struct PrometheusServerConfig {
 /// - PrometheusServer in `crates/qos/src/metrics/prometheus/server.rs`
 /// - CI
 /// - crates/qos/tests/qos_metrics_demo_test.rs
-///
 pub const DEFAULT_PROMETHEUS_DOCKER_IMAGE: &str = "prom/prometheus:v3.4.2";
 // Default values for PrometheusServerConfig
 const DEFAULT_PROMETHEUS_PORT: u16 = 9090;
