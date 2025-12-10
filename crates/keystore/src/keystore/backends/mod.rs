@@ -9,9 +9,6 @@ cfg_remote! {
     pub mod remote;
 }
 
-#[cfg(feature = "tangle")]
-pub mod tangle;
-
 use super::LocalStorageEntry;
 use crate::error::Result;
 use crate::storage::RawStorage;

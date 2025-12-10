@@ -12,15 +12,15 @@ pub mod aggregation;
 pub enum KeyTypeId {
     #[cfg(feature = "bn254")]
     Bn254,
-    #[cfg(any(feature = "k256", feature = "tangle"))]
+    #[cfg(feature = "k256")]
     Ecdsa,
-    #[cfg(any(feature = "sr25519-schnorrkel", feature = "tangle"))]
+    #[cfg(feature = "sr25519-schnorrkel")]
     Sr25519,
-    #[cfg(any(feature = "bls", feature = "tangle"))]
+    #[cfg(feature = "bls")]
     Bls381,
-    #[cfg(any(feature = "bls", feature = "tangle"))]
+    #[cfg(feature = "bls")]
     Bls377,
-    #[cfg(any(feature = "zebra", feature = "tangle"))]
+    #[cfg(feature = "zebra")]
     Ed25519,
 }
 
@@ -28,15 +28,15 @@ impl KeyTypeId {
     pub const ENABLED: &'static [Self] = &[
         #[cfg(feature = "bn254")]
         Self::Bn254,
-        #[cfg(any(feature = "k256", feature = "tangle"))]
+        #[cfg(feature = "k256")]
         Self::Ecdsa,
-        #[cfg(any(feature = "sr25519-schnorrkel", feature = "tangle"))]
+        #[cfg(feature = "sr25519-schnorrkel")]
         Self::Sr25519,
-        #[cfg(any(feature = "bls", feature = "tangle"))]
+        #[cfg(feature = "bls")]
         Self::Bls381,
-        #[cfg(any(feature = "bls", feature = "tangle"))]
+        #[cfg(feature = "bls")]
         Self::Bls377,
-        #[cfg(any(feature = "zebra", feature = "tangle"))]
+        #[cfg(feature = "zebra")]
         Self::Ed25519,
     ];
 
@@ -44,23 +44,22 @@ impl KeyTypeId {
         match *self {
             #[cfg(feature = "bn254")]
             Self::Bn254 => "bn254",
-            #[cfg(any(feature = "k256", feature = "tangle"))]
+            #[cfg(feature = "k256")]
             Self::Ecdsa => "ecdsa",
-            #[cfg(any(feature = "sr25519-schnorrkel", feature = "tangle"))]
+            #[cfg(feature = "sr25519-schnorrkel")]
             Self::Sr25519 => "sr25519",
-            #[cfg(any(feature = "bls", feature = "tangle"))]
+            #[cfg(feature = "bls")]
             Self::Bls381 => "bls381",
-            #[cfg(any(feature = "bls", feature = "tangle"))]
+            #[cfg(feature = "bls")]
             Self::Bls377 => "bls377",
-            #[cfg(any(feature = "zebra", feature = "tangle"))]
+            #[cfg(feature = "zebra")]
             Self::Ed25519 => "ed25519",
             #[cfg(all(
                 not(feature = "bn254"),
                 not(feature = "k256"),
                 not(feature = "sr25519-schnorrkel"),
                 not(feature = "bls"),
-                not(feature = "zebra"),
-                not(feature = "tangle")
+                not(feature = "zebra")
             ))]
             _ => unreachable!("All possible variants are feature-gated"),
         }

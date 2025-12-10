@@ -11,12 +11,6 @@ mod fs;
 pub use fs::FileStorage;
 mod in_memory;
 pub use in_memory::InMemoryStorage;
-#[cfg(feature = "substrate-keystore")]
-mod substrate;
-/// Substrate keystore storage
-#[cfg(feature = "substrate-keystore")]
-pub use substrate::SubstrateStorage;
-
 // Raw storage trait that can be made into a trait object
 #[allow(missing_docs, clippy::missing_errors_doc)] // TODO: determine if this should be doc(hidden)
 pub trait RawStorage: Send + Sync {
@@ -48,8 +42,7 @@ pub struct TypedStorage<S: RawStorage> {
         feature = "sr25519-schnorrkel",
         feature = "zebra",
         feature = "bls",
-        feature = "bn254",
-        feature = "sp-core"
+        feature = "bn254"
     )),
     allow(unreachable_code, unused_variables, unused_mut)
 )]

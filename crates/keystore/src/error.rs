@@ -69,10 +69,6 @@ pub enum Error {
     #[cfg(any(feature = "ledger-node", feature = "ledger-browser"))]
     #[error(transparent)]
     Ledger(#[from] alloy_signer_ledger::LedgerError),
-    /// Secret string error
-    #[cfg(feature = "tangle")]
-    #[error(transparent)]
-    SecretStringError(#[from] sp_core::crypto::SecretStringError),
     /// Serde json error
     #[error(transparent)]
     #[cfg(feature = "std")]
@@ -110,10 +106,6 @@ pub enum Error {
     #[cfg(feature = "evm")]
     LocalSignerError(#[from] alloy_signer_local::LocalSignerError),
 
-    /// An error occurred during the keystore operation
-    #[error("sp-keystore error")]
-    #[cfg(feature = "substrate-keystore")]
-    SpKeystoreError,
 }
 
 #[macro_export]
@@ -138,8 +130,6 @@ impl_from_for_boxed_error!(gcloud_sdk::error::Error, GCloud);
 impl_from_for_boxed_error!(alloy_signer_gcp::GcpSignerError, GcpSigner);
 #[cfg(any(feature = "ledger-node", feature = "ledger-browser"))]
 impl_from_for_boxed_error!(alloy_signer_ledger::LedgerError, Ledger);
-#[cfg(feature = "tangle")]
-impl_from_for_boxed_error!(sp_core::crypto::SecretStringError, SecretStringError);
 #[cfg(feature = "std")]
 impl_from_for_boxed_error!(serde_json::Error, SerdeJsonError);
 #[cfg(feature = "ecdsa")]

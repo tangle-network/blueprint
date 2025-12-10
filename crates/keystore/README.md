@@ -21,9 +21,6 @@ A flexible and secure keystore implementation supporting multiple key types, sto
 
 - `sr25519-schnorrkel` - Schnorrkel/sr25519 support
 
-  - Substrate's signature scheme
-  - Used for Polkadot/Substrate chains
-
 - `zebra` - Ed25519 implementation from Zebra
 
   - High-performance Ed25519 implementation
@@ -46,11 +43,11 @@ A flexible and secure keystore implementation supporting multiple key types, sto
   - Includes Alloy primitives for EVM compatibility
   - Required for all EVM-based chains
 
-- `tangle` - Tangle protocol support
+- `tangle-evm` - Tangle EVM protocol support
 
-  - Includes Substrate core functionality
-  - Enables BLS381 experimental features
-  - Required for Tangle chain interaction
+  - Alias for the EVM stack used by Tangle contracts
+  - Enables the same key material as other EVM chains
+  - Required for Tangle EVM operators
 
 - `eigenlayer` - EigenLayer protocol support
 
@@ -90,11 +87,6 @@ A flexible and secure keystore implementation supporting multiple key types, sto
 
 ### Feature Bundles
 
-- `tangle-full` - Complete Tangle support
-
-  - Includes `tangle` and `bn254`
-  - All Tangle-specific key types
-
 - `eigenlayer-full` - Complete EigenLayer support
 
   - Includes `eigenlayer`, `sr25519-schnorrkel`, `zebra`, `bls381`, `bn254`
@@ -121,7 +113,7 @@ blueprint-keystore = { version = "0.1", features = ["std", "ecdsa", "remote", "a
 For full functionality:
 
 ```toml
-blueprint-keystore = { version = "0.1", features = ["std", "tangle-full", "eigenlayer-full", "all-remote-signers"] }
+blueprint-keystore = { version = "0.1", features = ["std", "tangle-evm", "eigenlayer-full", "all-remote-signers"] }
 ```
 
 ## Feature Dependencies
@@ -131,4 +123,4 @@ blueprint-keystore = { version = "0.1", features = ["std", "tangle-full", "eigen
 - `ledger-browser` requires `remote` and `evm`
 - `ledger-node` requires `remote` and `evm`
 - `eigenlayer` requires `evm` and `bn254`
-- `tangle-full` requires `tangle` and `bn254`
+- `tangle-evm` requires `evm`

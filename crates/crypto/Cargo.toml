@@ -17,8 +17,6 @@ blueprint-crypto-ed25519 = { workspace = true, optional = true }
 blueprint-crypto-hashing = { workspace = true, optional = true }
 blueprint-crypto-bls = { workspace = true, optional = true }
 blueprint-crypto-bn254 = { workspace = true, optional = true }
-blueprint-crypto-sp-core = { workspace = true, optional = true }
-blueprint-crypto-tangle-pair-signer = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [features]
@@ -29,9 +27,6 @@ default = [
 	"ed25519",
 	"bls",
 	"bn254",
-	"sp-core",
-	"tangle-pair-signer",
-	"evm",
 	"hashing",
 ]
 std = [
@@ -41,20 +36,12 @@ std = [
 	"blueprint-crypto-ed25519?/std",
 	"blueprint-crypto-bls?/std",
 	"blueprint-crypto-bn254?/std",
-	"blueprint-crypto-sp-core?/std",
-	"blueprint-crypto-tangle-pair-signer?/std",
 ]
-web = ["blueprint-crypto-tangle-pair-signer?/web"]
-
 k256 = ["dep:blueprint-crypto-k256", "blueprint-crypto-core/k256"]
 sr25519-schnorrkel = ["dep:blueprint-crypto-sr25519", "blueprint-crypto-core/sr25519-schnorrkel"]
 ed25519 = ["dep:blueprint-crypto-ed25519", "blueprint-crypto-core/zebra"]
 bls = ["dep:blueprint-crypto-bls", "blueprint-crypto-core/bls"]
 bn254 = ["dep:blueprint-crypto-bn254", "blueprint-crypto-core/bn254"]
-sp-core = ["dep:blueprint-crypto-sp-core", "blueprint-crypto-core/tangle"]
-sp-core-bls = ["blueprint-crypto-sp-core/bls", "blueprint-crypto-core/tangle"]
-tangle-pair-signer = ["dep:blueprint-crypto-tangle-pair-signer"]
-evm = ["blueprint-crypto-tangle-pair-signer?/evm"]
 
 hashing = [
 	"blueprint-crypto-hashing/sha2-hasher",
@@ -62,7 +49,6 @@ hashing = [
 	"blueprint-crypto-hashing/blake3-hasher",
 ]
 aggregation = [
-	"blueprint-crypto-sp-core/aggregation",
 	"blueprint-crypto-bls/aggregation",
 	"blueprint-crypto-bn254/aggregation",
 ]

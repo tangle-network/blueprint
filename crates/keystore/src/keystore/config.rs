@@ -42,9 +42,6 @@ pub struct KeystoreConfig {
         feature = "ledger-node"
     ))]
     pub(crate) remote_configs: Vec<crate::remote::RemoteConfig>,
-
-    #[cfg(feature = "substrate-keystore")]
-    pub(crate) substrate: Option<blueprint_std::sync::Arc<sc_keystore::LocalKeystore>>,
 }
 
 impl core::fmt::Debug for KeystoreConfig {
@@ -61,8 +58,6 @@ impl core::fmt::Debug for KeystoreConfig {
             feature = "ledger-node"
         ))]
         let c = c.field("remote_configs", &self.remote_configs);
-        #[cfg(feature = "substrate-keystore")]
-        c.field("substrate", &"substrate");
         c.finish()
     }
 }
@@ -130,35 +125,6 @@ impl KeystoreConfig {
     #[must_use]
     pub fn fs_root<P: AsRef<std::path::Path>>(mut self, path: P) -> Self {
         self.fs_root = Some(path.as_ref().to_path_buf());
-        self
-    }
-
-    /// Register a [`SubstrateStorage`] backend
-    /// See [`SubstrateStorage::new()`] for notes on how `keystore` is used.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// use blueprint_keystore::{Keystore, KeystoreConfig};
-    /// use blueprint_std::sync::Arc;
-    /// use sc_keystore::LocalKeystore;
-    ///
-    /// # fn main() -> blueprint_keystore::Result<()> {
-    /// let keystore = LocalKeystore::in_memory();
-    /// let config = KeystoreConfig::new().substrate(Arc::new(keystore));
-    /// let keystore = Keystore::new(config)?;
-    /// # Ok(()) }
-    /// ```
-    ///
-    /// [`SubstrateStorage`]: crate::storage::SubstrateStorage
-    /// [`SubstrateStorage::new()`]: crate::storage::SubstrateStorage::new
-    #[cfg(feature = "substrate-keystore")]
-    #[must_use]
-    pub fn substrate(
-        mut self,
-        keystore: blueprint_std::sync::Arc<sc_keystore::LocalKeystore>,
-    ) -> Self {
-        self.substrate = Some(keystore);
         self
     }
 

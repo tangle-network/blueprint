@@ -19,12 +19,6 @@ pub use blueprint_crypto_bls as bls;
 #[cfg(feature = "bn254")]
 pub use blueprint_crypto_bn254 as bn254;
 
-#[cfg(feature = "sp-core")]
-pub use blueprint_crypto_sp_core as sp_core;
-
-#[cfg(feature = "tangle-pair-signer")]
-pub use blueprint_crypto_tangle_pair_signer as tangle_pair_signer;
-
 #[cfg(feature = "hashing")]
 pub use blueprint_crypto_hashing as hashing;
 
@@ -45,9 +39,6 @@ pub enum CryptoCoreError {
     #[cfg(feature = "bn254")]
     #[error(transparent)]
     Bn254(#[from] blueprint_crypto_bn254::error::Bn254Error),
-    #[cfg(feature = "sp-core")]
-    #[error(transparent)]
-    SpCore(#[from] blueprint_crypto_sp_core::error::SpCoreError),
 }
 
 pub trait IntoCryptoError {
@@ -86,12 +77,5 @@ impl IntoCryptoError for blueprint_crypto_bls::error::BlsError {
 impl IntoCryptoError for blueprint_crypto_bn254::error::Bn254Error {
     fn into_crypto_error(self) -> CryptoCoreError {
         CryptoCoreError::Bn254(self)
-    }
-}
-
-#[cfg(feature = "sp-core")]
-impl IntoCryptoError for blueprint_crypto_sp_core::error::SpCoreError {
-    fn into_crypto_error(self) -> CryptoCoreError {
-        CryptoCoreError::SpCore(self)
     }
 }

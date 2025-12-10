@@ -97,14 +97,6 @@ impl Keystore {
             }
         }
 
-        #[cfg(feature = "substrate-keystore")]
-        if let Some(inner) = config.substrate {
-            for key_type in KeyTypeId::ENABLED {
-                let backend = crate::storage::SubstrateStorage::new(inner.clone());
-                keystore.register_storage(*key_type, BackendConfig::Local(Box::new(backend)), 0)?;
-            }
-        }
-
         #[cfg(any(
             feature = "aws-signer",
             feature = "gcp-signer",
@@ -158,8 +150,7 @@ impl Keystore {
         feature = "sr25519-schnorrkel",
         feature = "zebra",
         feature = "bls",
-        feature = "bn254",
-        feature = "sp-core"
+        feature = "bn254"
     )),
     allow(unreachable_code, unused_variables, unused_mut)
 )]
@@ -362,7 +353,6 @@ mod tests {
     use blueprint_crypto::bls::bls381::W3fBls381;
     use blueprint_crypto::ed25519::Ed25519Zebra;
     use blueprint_crypto::k256::K256Ecdsa;
-    use blueprint_crypto::sp_core::{SpBls377, SpBls381, SpEcdsa, SpSr25519};
     use blueprint_crypto::sr25519::SchnorrkelSr25519;
 
     #[test]
@@ -384,28 +374,23 @@ mod tests {
     }
 
     macro_rules! local_operations {
-        ($($key_ty:ty),+ $(,)?) => {
+        ($($name:ident => $key_ty:ty),+ $(,)?) => {
             $(
-            paste::paste! {
                 #[tokio::test]
-                async fn [<test_local_ $key_ty:snake>]() -> Result<()> {
+                async fn $name() -> Result<()> {
                     test_local_operations_inner::<$key_ty>()
                 }
-            }
             )+
         }
     }
 
     local_operations!(
-        K256Ecdsa,
-        Ed25519Zebra,
-        W3fBls377,
-        W3fBls381,
-        SchnorrkelSr25519
+        test_local_k256 => K256Ecdsa,
+        test_local_ed25519 => Ed25519Zebra,
+        test_local_bls377 => W3fBls377,
+        test_local_bls381 => W3fBls381,
+        test_local_schnorrkel => SchnorrkelSr25519,
     );
-
-    // sp-core backend
-    local_operations!(SpBls377, SpBls381, SpEcdsa, SpSr25519,);
 
     fn test_local_operations_inner<T: KeyType>() -> Result<()>
     where
