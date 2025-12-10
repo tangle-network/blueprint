@@ -17,14 +17,36 @@ blueprint-core = { workspace = true, features = ["tracing"] }
 blueprint-std = { workspace = true }
 tokio = { workspace = true }
 blueprint-core-testing-utils = { workspace = true }
+blueprint-chain-setup-anvil = { workspace = true }
+blueprint-runner = { workspace = true, features = ["tangle-evm"] }
+blueprint-router = { workspace = true }
+blueprint-client-tangle-evm = { workspace = true, features = ["std"] }
+blueprint-tangle-evm-extra = { workspace = true }
+blueprint-keystore = { workspace = true }
+blueprint-crypto = { workspace = true, features = ["k256"] }
+blueprint-manager-bridge = { workspace = true }
 
 alloy-primitives = { workspace = true }
+alloy-consensus = { workspace = true }
+alloy-network = { workspace = true }
+alloy-eips = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-rpc-types = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
 alloy-transport = { workspace = true }
+alloy-signer-local = { workspace = true }
 url = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+hex = { workspace = true }
+futures-util = { workspace = true }
+anyhow = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio-stream = { workspace = true }
+tonic = { workspace = true }
 
 [features]
 default = ["tracing"]
 tracing = ["blueprint-core/tracing"]
+aggregation = ["blueprint-tangle-evm-extra/aggregation"]

@@ -53,10 +53,12 @@ pub async fn start_anvil_container(state_json: Option<&str>, include_logs: bool)
                 "0",
                 "--gas-price",
                 "0",
+                "--gas-limit",
+                "100000000",
                 "--code-size-limit",
-                "50000",
+                "100000",
                 "--hardfork",
-                "shanghai",
+                "cancun",
             ])
             .start()
             .await
@@ -73,10 +75,12 @@ pub async fn start_anvil_container(state_json: Option<&str>, include_logs: bool)
                 "0",
                 "--gas-price",
                 "0",
+                "--gas-limit",
+                "100000000",
                 "--code-size-limit",
-                "50000",
+                "100000",
                 "--hardfork",
-                "shanghai",
+                "cancun",
             ])
             .start()
             .await
@@ -144,7 +148,11 @@ pub async fn start_default_anvil_testnet(include_logs: bool) -> AnvilTestnet {
 /// # Arguments
 /// * `include_logs` - If true, testnet output will be printed to the console.
 pub async fn start_empty_anvil_testnet(include_logs: bool) -> AnvilTestnet {
-    start_anvil_container(None, include_logs).await
+    if let Some(snapshot) = super::snapshot::snapshot_state_json() {
+        start_anvil_container(Some(snapshot.as_str()), include_logs).await
+    } else {
+        start_anvil_container(None, include_logs).await
+    }
 }
 
 /// Starts an Anvil container for testing with custom state.
