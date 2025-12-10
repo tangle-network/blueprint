@@ -15,7 +15,7 @@ use crate::error::Result;
 use blueprint_runner::config::BlueprintEnvironment;
 
 pub mod eigenlayer;
-pub mod tangle;
+pub mod tangle_evm;
 pub mod types;
 
 pub use types::{ProtocolEvent, ProtocolType};
@@ -24,9 +24,9 @@ pub use types::{ProtocolEvent, ProtocolType};
 ///
 /// Uses enum dispatch for zero-cost abstraction over protocols
 pub enum ProtocolManager {
-    Tangle {
-        client: tangle::TangleProtocolClient,
-        handler: tangle::TangleEventHandler,
+    TangleEvm {
+        client: tangle_evm::TangleEvmProtocolClient,
+        handler: tangle_evm::TangleEvmEventHandler,
     },
     Eigenlayer {
         client: eigenlayer::EigenlayerProtocolClient,
@@ -46,10 +46,10 @@ impl ProtocolManager {
         ctx: &BlueprintManagerContext,
     ) -> Result<Self> {
         match protocol {
-            ProtocolType::Tangle => {
-                let client = tangle::TangleProtocolClient::new(env, ctx).await?;
-                let handler = tangle::TangleEventHandler::new();
-                Ok(Self::Tangle { client, handler })
+            ProtocolType::TangleEvm => {
+                let client = tangle_evm::TangleEvmProtocolClient::new(env, ctx).await?;
+                let handler = tangle_evm::TangleEvmEventHandler::new();
+                Ok(Self::TangleEvm { client, handler })
             }
             ProtocolType::Eigenlayer => {
                 let client = eigenlayer::EigenlayerProtocolClient::new(env, ctx).await?;
@@ -71,7 +71,7 @@ impl ProtocolManager {
         active_blueprints: &mut ActiveBlueprints,
     ) -> Result<()> {
         match self {
-            Self::Tangle { client, handler } => {
+            Self::TangleEvm { client, handler } => {
                 handler
                     .initialize(client, env, ctx, active_blueprints)
                     .await
@@ -87,7 +87,7 @@ impl ProtocolManager {
     /// Get the next event from the protocol
     pub async fn next_event(&mut self) -> Option<ProtocolEvent> {
         match self {
-            Self::Tangle { client, .. } => client.next_event().await,
+            Self::TangleEvm { client, .. } => client.next_event().await,
             Self::Eigenlayer { client, .. } => client.next_event().await,
         }
     }
@@ -105,9 +105,9 @@ impl ProtocolManager {
         active_blueprints: &mut ActiveBlueprints,
     ) -> Result<()> {
         match self {
-            Self::Tangle { handler, .. } => {
+            Self::TangleEvm { client, handler } => {
                 handler
-                    .handle_event(event, env, ctx, active_blueprints)
+                    .handle_event(client, event, env, ctx, active_blueprints)
                     .await
             }
             Self::Eigenlayer { handler, .. } => {
@@ -145,24 +145,28 @@ impl ProtocolManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_primitives::Address;
     use blueprint_runner::config::ProtocolSettings;
-    use blueprint_runner::tangle::config::TangleProtocolSettings;
+    use blueprint_runner::tangle_evm::config::TangleEvmProtocolSettings;
 
     /// Test that `ProtocolType` correctly converts from `ProtocolSettings`
     #[test]
     fn test_protocol_type_from_settings() {
-        // Test Tangle conversion
-        let tangle_settings = ProtocolSettings::Tangle(TangleProtocolSettings {
+        // Test Tangle EVM conversion
+        let tangle_settings = ProtocolSettings::TangleEvm(TangleEvmProtocolSettings {
             blueprint_id: 1,
             service_id: Some(0),
+            tangle_contract: Address::ZERO,
+            restaking_contract: Address::ZERO,
+            status_registry_contract: Address::ZERO,
         });
         let protocol_type: ProtocolType = (&tangle_settings).into();
-        assert!(matches!(protocol_type, ProtocolType::Tangle));
+        assert!(matches!(protocol_type, ProtocolType::TangleEvm));
 
-        // Test None defaults to Tangle
+        // Test None defaults to Tangle EVM
         let none_settings = ProtocolSettings::None;
         let protocol_type: ProtocolType = (&none_settings).into();
-        assert!(matches!(protocol_type, ProtocolType::Tangle));
+        assert!(matches!(protocol_type, ProtocolType::TangleEvm));
     }
 
     /// Test that `ProtocolEvent` correctly identifies its variant
@@ -177,7 +181,7 @@ mod tests {
         });
 
         // Should not be Tangle
-        assert!(eigenlayer_event.as_tangle().is_none());
+        assert!(eigenlayer_event.as_tangle_evm().is_none());
         // Should be EigenLayer
         assert!(eigenlayer_event.as_eigenlayer().is_some());
         // Block number should be preserved

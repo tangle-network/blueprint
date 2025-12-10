@@ -17,18 +17,18 @@ pub mod metrics_server;
 pub mod eigenlayer;
 #[cfg(feature = "symbiotic")]
 mod symbiotic;
-#[cfg(feature = "tangle")]
-pub mod tangle;
 #[cfg(feature = "tangle-evm")]
 pub mod tangle_evm;
 
 use crate::error::RunnerError;
 use crate::error::{JobCallError, ProducerError};
 use blueprint_core::error::BoxError;
+use blueprint_core::metadata::{MetadataMap, MetadataValue};
 use blueprint_core::{JobCall, JobResult};
 use blueprint_qos::heartbeat::HeartbeatConsumer;
 use blueprint_router::Router;
 use config::BlueprintEnvironment;
+use core::convert::TryFrom;
 use core::future::{self, poll_fn};
 use core::pin::Pin;
 use error::RunnerError as Error;
@@ -36,8 +36,12 @@ use futures::{Future, Sink};
 use futures_core::Stream;
 use futures_util::stream::FuturesUnordered;
 use futures_util::{SinkExt, StreamExt, TryStreamExt, stream};
+use std::io;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::fs;
 use tokio::sync::{Mutex, oneshot};
+use tokio::time::sleep;
 use tower::Service;
 
 /// Configuration for the blueprint registration procedure
@@ -67,6 +71,12 @@ pub trait BlueprintConfig: Send + Sync {
         async { Ok(true) }
     }
 
+    /// Allow the runner to inject registration inputs gathered from blueprint output.
+    fn update_registration_inputs(&self, _inputs: Vec<u8>) -> Result<(), Error> {
+        let _ = _inputs;
+        Ok(())
+    }
+
     /// Determines whether the runner should exit after registration
     ///
     /// By default, this will return `true`.
@@ -82,15 +92,11 @@ impl BlueprintConfig for () {}
 
 #[cfg(feature = "tls")]
 fn resolve_service_id(env: &BlueprintEnvironment) -> Result<u64, crate::error::ConfigError> {
-    #[cfg(feature = "tangle")]
-    use config::ProtocolSettings;
-    #[allow(unreachable_patterns)]
-    match &env.protocol_settings {
-        #[cfg(feature = "tangle")]
-        ProtocolSettings::Tangle(settings) => settings
+    match env.protocol_settings.tangle_evm() {
+        Ok(settings) => settings
             .service_id
             .ok_or(crate::error::ConfigError::MissingServiceId),
-        _ => Err(crate::error::ConfigError::MissingServiceId),
+        Err(_) => Err(crate::error::ConfigError::MissingServiceId),
     }
 }
 
@@ -480,11 +486,29 @@ where
         let qos_service_arc = Arc::new(Mutex::new(None::<blueprint_qos::QoSService<C>>));
 
         let builder_task_qos_arc = qos_service_arc.clone();
+        let http_rpc_endpoint = self.env.http_rpc_endpoint.to_string();
+        let keystore_uri = self.env.keystore_uri.clone();
+        #[cfg(feature = "tangle-evm")]
+        let status_registry_address = self
+            .env
+            .protocol_settings
+            .tangle_evm()
+            .map(|settings| settings.status_registry_contract)
+            .ok();
+        #[cfg(not(feature = "tangle-evm"))]
+        let status_registry_address = None;
         tokio::spawn(async move {
             blueprint_core::debug!(target: "blueprint-runner", "QoS Builder Task (Task 1): Initializing QoS Service...");
             let mut builder = blueprint_qos::QoSServiceBuilder::<C>::new()
                 .with_config(config)
                 .manage_servers(true);
+
+            builder = builder.with_http_rpc_endpoint(http_rpc_endpoint);
+            builder = builder.with_keystore_uri(keystore_uri);
+
+            if let Some(address) = status_registry_address {
+                builder = builder.with_status_registry_address(address);
+            }
 
             if let Some(consumer) = heartbeat_consumer {
                 builder = builder.with_heartbeat_consumer(consumer);
@@ -703,25 +727,10 @@ where
 ///
 ///     // Create some producer(s)
 ///     let some_producer = /* ... */
-///     # blueprint_sdk::tangle::producer::TangleProducer::finalized_blocks(todo!()).await.unwrap();
-///     # struct S;
-///     # use blueprint_sdk::tangle::subxt_core::config::{PolkadotConfig, Config};
-///     # impl blueprint_sdk::tangle::subxt_core::tx::signer::Signer<PolkadotConfig> for S {
-///     #     fn account_id(&self) -> <PolkadotConfig as Config>::AccountId {
-///     #         todo!()
-///     #     }
-///     #
-///     #     fn address(&self) -> <PolkadotConfig as Config>::Address {
-///     #         todo!()
-///     #     }
-///     #
-///     #     fn sign(&self, signer_payload: &[u8]) -> <PolkadotConfig as Config>::Signature {
-///     #         todo!()
-///     #     }
-///     # }
+///     # blueprint_sdk::tangle_evm::TangleEvmProducer::new(todo!(), 0);
 ///     // Create some consumer(s)
 ///     let some_consumer = /* ... */
-///     # blueprint_sdk::tangle::consumer::TangleConsumer::<S>::new(todo!(), todo!());
+///     # blueprint_sdk::tangle_evm::TangleEvmConsumer::new(todo!());
 ///
 ///     let result = BlueprintRunner::builder(config, blueprint_env)
 ///         .router(
@@ -789,16 +798,8 @@ where
 {
     #[allow(trivial_casts)]
     async fn run(self) -> Result<(), Error> {
-        if self.config.requires_registration(&self.env).await? {
-            self.config.register(&self.env).await?;
-            if self.config.should_exit_after_registration() {
-                return Ok(());
-            }
-        }
-
-        // TODO: Config is unused
         let FinalizedBlueprintRunner {
-            config: _,
+            config,
             producers,
             mut consumers,
             mut router,
@@ -806,6 +807,32 @@ where
             background_services,
             shutdown_handler,
         } = self;
+
+        let needs_registration = config.requires_registration(&env).await?;
+
+        if env.registration_mode() {
+            let inputs = capture_registration_inputs(&env).await?;
+            if !inputs.is_empty() {
+                config.update_registration_inputs(inputs)?;
+            }
+
+            if env.registration_capture_only() {
+                return Ok(());
+            }
+
+            if needs_registration {
+                config.register(&env).await?;
+            }
+
+            if config.should_exit_after_registration() {
+                return Ok(());
+            }
+        } else if needs_registration {
+            config.register(&env).await?;
+            if config.should_exit_after_registration() {
+                return Ok(());
+            }
+        }
 
         let mut router = router.as_service();
 
@@ -861,18 +888,28 @@ where
 
         let mut pending_jobs = FuturesUnordered::new();
 
-        let bridge = env.bridge().await.map_err(|e| {
-            blueprint_core::error!(
-                "[FATAL] Unable to establish bridge connection, aborting runner: {e}"
+        #[allow(unused_variables)]
+        let bridge = if env.test_mode {
+            blueprint_core::debug!(
+                target: "blueprint-runner",
+                "Test mode enabled; skipping bridge connection"
             );
-            e
-        })?;
-        bridge.ping().await.map_err(|e| {
-            blueprint_core::error!(
-                "[FATAL] Unable to establish bridge connection, aborting runner: {e}"
-            );
-            e
-        })?;
+            None
+        } else {
+            let bridge = env.bridge().await.map_err(|e| {
+                blueprint_core::error!(
+                    "[FATAL] Unable to establish bridge connection, aborting runner: {e}"
+                );
+                e
+            })?;
+            bridge.ping().await.map_err(|e| {
+                blueprint_core::error!(
+                    "[FATAL] Unable to establish bridge connection, aborting runner: {e}"
+                );
+                e
+            })?;
+            Some(bridge)
+        };
 
         // Update TLS configuration if enabled
         #[cfg(feature = "tls")]
@@ -890,23 +927,30 @@ where
                 );
             })?;
 
-            bridge
-                .update_blueprint_service_tls_profile(service_id, Some(tls_profile.clone()))
-                .await
-                .map_err(|e| {
-                    blueprint_core::error!(
-                        target: "blueprint-runner",
-                        service_id,
-                        "[FATAL] Failed to update TLS profile for service {service_id}: {e}"
-                    );
-                    e
-                })?;
+            if let Some(bridge) = bridge.as_ref() {
+                bridge
+                    .update_blueprint_service_tls_profile(service_id, Some(tls_profile.clone()))
+                    .await
+                    .map_err(|e| {
+                        blueprint_core::error!(
+                            target: "blueprint-runner",
+                            service_id,
+                            "[FATAL] Failed to update TLS profile for service {service_id}: {e}"
+                        );
+                        e
+                    })?;
 
-            blueprint_core::info!(
-                target: "blueprint-runner",
-                service_id,
-                "TLS profile updated successfully"
-            );
+                blueprint_core::info!(
+                    target: "blueprint-runner",
+                    service_id,
+                    "TLS profile updated successfully"
+                );
+            } else {
+                blueprint_core::warn!(
+                    target: "blueprint-runner",
+                    "TLS profile provided but bridge unavailable; skipping update"
+                );
+            }
         }
 
         loop {
@@ -915,10 +959,16 @@ where
                 producer_result = producer_stream.next() => {
                     match producer_result {
                         Some(Ok(job_call)) => {
-                            blueprint_core::trace!(
+                            let block_number =
+                                read_metadata_u64(job_call.metadata(), BLOCK_NUMBER_METADATA_KEYS);
+                            let service_id =
+                                read_metadata_u64(job_call.metadata(), SERVICE_ID_METADATA_KEYS);
+                            blueprint_core::info!(
                                 target: "blueprint-runner",
-                                ?job_call,
-                                "Received a job call"
+                                job_id = ?job_call.job_id(),
+                                block_number = ?block_number,
+                                service_id = ?service_id,
+                                "Received job call from producer stream"
                             );
                             pending_jobs.push(tokio::task::spawn(router.call(job_call)));
                         },
@@ -1016,4 +1066,69 @@ where
 
         Ok(())
     }
+}
+
+const REGISTRATION_INPUT_TIMEOUT: Duration = Duration::from_secs(300);
+
+async fn capture_registration_inputs(env: &BlueprintEnvironment) -> Result<Vec<u8>, Error> {
+    let output_path = env.registration_output_path();
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent).await?;
+    }
+
+    blueprint_core::info!(
+        target: "blueprint-runner",
+        path = %output_path.display(),
+        "Waiting for blueprint registration inputs"
+    );
+
+    let mut elapsed = Duration::from_secs(0);
+    loop {
+        match fs::read(&output_path).await {
+            Ok(bytes) if !bytes.is_empty() => {
+                blueprint_core::info!(
+                    target: "blueprint-runner",
+                    path = %output_path.display(),
+                    length = bytes.len(),
+                    "Captured blueprint registration payload"
+                );
+                return Ok(bytes);
+            }
+            Ok(_) => {
+                blueprint_core::debug!(
+                    target: "blueprint-runner",
+                    path = %output_path.display(),
+                    "Registration file empty, waiting for payload"
+                );
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
+
+        if elapsed >= REGISTRATION_INPUT_TIMEOUT {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!(
+                    "Timed out waiting for registration inputs at {}",
+                    output_path.display()
+                ),
+            )
+            .into());
+        }
+
+        sleep(Duration::from_millis(250)).await;
+        elapsed += Duration::from_millis(250);
+    }
+}
+
+const SERVICE_ID_METADATA_KEYS: &[&str] = &["tangle_evm.service_id", "X-TANGLE-EVM-SERVICE-ID"];
+const BLOCK_NUMBER_METADATA_KEYS: &[&str] =
+    &["tangle_evm.block_number", "X-TANGLE-EVM-BLOCK-NUMBER"];
+
+fn read_metadata_u64(metadata: &MetadataMap<MetadataValue>, keys: &[&str]) -> Option<u64> {
+    keys.iter().find_map(|key| {
+        metadata
+            .get(key)
+            .and_then(|value| u64::try_from(value).ok())
+    })
 }

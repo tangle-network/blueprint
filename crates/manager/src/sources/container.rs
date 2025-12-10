@@ -1,14 +1,14 @@
-use super::{BlueprintArgs, BlueprintEnvVars};
 use super::BlueprintSourceHandler;
+use super::{BlueprintArgs, BlueprintEnvVars};
+use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::ImageRegistryFetcher;
-use tokio::process::Command;
+use crate::rt::ResourceLimits;
+use crate::rt::service::Service;
+use crate::sources::types::ImageRegistryFetcher;
 use blueprint_core::info;
 use blueprint_runner::config::BlueprintEnvironment;
 use std::path::{Path, PathBuf};
-use crate::config::BlueprintManagerContext;
-use crate::rt::ResourceLimits;
-use crate::rt::service::Service;
+use tokio::process::Command;
 
 pub struct ContainerSource {
     pub fetcher: ImageRegistryFetcher,
@@ -36,12 +36,9 @@ impl BlueprintSourceHandler for ContainerSource {
             return Ok(PathBuf::from(resolved_image));
         }
 
-        let registry = String::from_utf8(self.fetcher.registry.0.0.clone())
-            .map_err(|e| Error::Other(e.to_string()))?;
-        let image = String::from_utf8(self.fetcher.image.0.0.clone())
-            .map_err(|e| Error::Other(e.to_string()))?;
-        let tag = String::from_utf8(self.fetcher.tag.0.0.clone())
-            .map_err(|e| Error::Other(e.to_string()))?;
+        let registry = self.fetcher.registry.clone();
+        let image = self.fetcher.image.clone();
+        let tag = self.fetcher.tag.clone();
 
         let full = format!("{registry}/{image}:{tag}");
         info!("Pulling image {full}");

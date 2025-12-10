@@ -3,24 +3,6 @@ use blueprint_core::warn;
 use sha2::Digest;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::BoundedString;
-
-/// Converts a `BoundedString` to a `String`
-///
-/// # Arguments
-/// * `string` - The `BoundedString` to convert
-///
-/// # Returns
-/// The `String` representation of the `BoundedString`
-///
-/// # Errors
-/// * If the `BoundedString` cannot be converted to a `String`
-pub fn bounded_string_to_string(string: &BoundedString) -> Result<String> {
-    let bytes: &Vec<u8> = &string.0.0;
-    let ret = String::from_utf8(bytes.clone())?;
-    Ok(ret)
-}
-
 pub fn hash_bytes_to_hex<T: AsRef<[u8]>>(input: T) -> String {
     let mut hasher = sha2::Sha256::default();
     hasher.update(input);

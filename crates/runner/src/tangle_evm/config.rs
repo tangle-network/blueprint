@@ -2,13 +2,14 @@
 //!
 //! Provides configuration for running blueprints on Tangle v2 EVM contracts.
 
-use alloy_primitives::{Address, Bytes};
+use alloy_primitives::Address;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::sync::{Arc, Mutex};
 
+use crate::BlueprintConfig;
 use crate::config::{BlueprintEnvironment, BlueprintSettings, Protocol, ProtocolSettingsT};
 use crate::error::RunnerError;
-use crate::BlueprintConfig;
 
 /// Protocol settings for Tangle EVM (v2)
 ///
@@ -25,6 +26,8 @@ pub struct TangleEvmProtocolSettings {
     pub tangle_contract: Address,
     /// The MultiAssetDelegation (restaking) contract address
     pub restaking_contract: Address,
+    /// The operator status registry contract used for heartbeats
+    pub status_registry_contract: Address,
 }
 
 impl Default for TangleEvmProtocolSettings {
@@ -35,6 +38,7 @@ impl Default for TangleEvmProtocolSettings {
             // Default to zero address - must be configured
             tangle_contract: Address::ZERO,
             restaking_contract: Address::ZERO,
+            status_registry_contract: Address::ZERO,
         }
     }
 }
@@ -65,11 +69,17 @@ impl ProtocolSettingsT for TangleEvmProtocolSettings {
             .and_then(|s| s.parse().ok())
             .unwrap_or(Address::ZERO);
 
+        let status_registry_contract = std::env::var("STATUS_REGISTRY_CONTRACT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(Address::ZERO);
+
         Ok(Self {
             blueprint_id,
             service_id,
             tangle_contract,
             restaking_contract,
+            status_registry_contract,
         })
     }
 
@@ -83,12 +93,20 @@ impl ProtocolSettingsT for TangleEvmProtocolSettings {
 }
 
 /// Runtime configuration for Tangle EVM blueprints
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct TangleEvmConfig {
     /// RPC endpoint for operator registration announcements
     pub rpc_address: String,
     /// Whether to exit after registration
     pub exit_after_register: bool,
+    /// Custom registration inputs supplied by the blueprint
+    registration_inputs: Arc<Mutex<Vec<u8>>>,
+}
+
+impl Default for TangleEvmConfig {
+    fn default() -> Self {
+        Self::new("")
+    }
 }
 
 impl TangleEvmConfig {
@@ -98,6 +116,7 @@ impl TangleEvmConfig {
         Self {
             rpc_address: rpc_address.into(),
             exit_after_register: true,
+            registration_inputs: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -107,11 +126,37 @@ impl TangleEvmConfig {
         self.exit_after_register = should_exit;
         self
     }
+
+    /// Provide custom registration inputs (TLV payload) for the blueprint.
+    #[must_use]
+    pub fn with_registration_inputs(self, inputs: impl Into<Vec<u8>>) -> Self {
+        self.set_registration_inputs(inputs);
+        self
+    }
+
+    /// Update the registration payload in-place.
+    pub fn set_registration_inputs(&self, inputs: impl Into<Vec<u8>>) {
+        let mut guard = self
+            .registration_inputs
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        *guard = inputs.into();
+    }
+
+    /// Accessor for the current registration inputs.
+    #[must_use]
+    pub fn registration_inputs(&self) -> Vec<u8> {
+        match self.registration_inputs.lock() {
+            Ok(guard) => guard.clone(),
+            Err(err) => err.into_inner().clone(),
+        }
+    }
 }
 
 impl BlueprintConfig for TangleEvmConfig {
     async fn register(&self, env: &BlueprintEnvironment) -> Result<(), RunnerError> {
-        register_impl(&self.rpc_address, env).await
+        let inputs = self.registration_inputs();
+        register_impl(&self.rpc_address, &inputs, env).await
     }
 
     async fn requires_registration(&self, env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
@@ -120,6 +165,11 @@ impl BlueprintConfig for TangleEvmConfig {
 
     fn should_exit_after_registration(&self) -> bool {
         self.exit_after_register
+    }
+
+    fn update_registration_inputs(&self, inputs: Vec<u8>) -> Result<(), RunnerError> {
+        self.set_registration_inputs(inputs);
+        Ok(())
     }
 }
 
@@ -139,6 +189,7 @@ async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bool, 
             service_id: settings.service_id,
             tangle_contract: settings.tangle_contract,
             restaking_contract: settings.restaking_contract,
+            status_registry_contract: settings.status_registry_contract,
         },
         keystore_uri: env.keystore_uri.clone(),
         data_dir: env.data_dir.clone(),
@@ -160,9 +211,13 @@ async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bool, 
 }
 
 /// Register the operator on the Tangle EVM contract
-async fn register_impl(rpc_address: &str, env: &BlueprintEnvironment) -> Result<(), RunnerError> {
+async fn register_impl(
+    rpc_address: &str,
+    registration_inputs: &[u8],
+    env: &BlueprintEnvironment,
+) -> Result<(), RunnerError> {
     use super::error::TangleEvmError;
-    use alloy_primitives::B256;
+    use alloy_primitives::{B256, Bytes};
     use alloy_provider::ProviderBuilder;
     use alloy_signer_local::PrivateKeySigner;
     use blueprint_client_tangle_evm::contracts::ITangle;
@@ -210,21 +265,33 @@ async fn register_impl(rpc_address: &str, env: &BlueprintEnvironment) -> Result<
     // 4. Create contract instance with signed provider
     let tangle_contract = ITangle::new(settings.tangle_contract, &provider);
 
-    // 5. Build and send registerOperator transaction
-    // The preferences field is empty bytes for now (can be extended for custom preferences)
-    let preferences = Bytes::new();
+    // 5. Prepare operator preferences
+    let ecdsa_point = ecdsa_public.0.to_encoded_point(false);
+    let ecdsa_bytes = Bytes::copy_from_slice(ecdsa_point.as_bytes());
 
     blueprint_core::info!(
         "Sending registerOperator transaction for blueprint_id={}",
-        settings.blueprint_id
+        settings.blueprint_id,
     );
 
-    let tx = tangle_contract.registerOperator(settings.blueprint_id, preferences);
-
-    let pending_tx = tx
-        .send()
-        .await
-        .map_err(|e| TangleEvmError::Transaction(format!("Failed to send transaction: {e}")))?;
+    let pending_tx = if registration_inputs.is_empty() {
+        tangle_contract
+            .registerOperator_1(settings.blueprint_id, ecdsa_bytes, rpc_address.to_string())
+            .send()
+            .await
+    } else {
+        let inputs = Bytes::copy_from_slice(registration_inputs);
+        tangle_contract
+            .registerOperator_0(
+                settings.blueprint_id,
+                ecdsa_bytes,
+                rpc_address.to_string(),
+                inputs,
+            )
+            .send()
+            .await
+    }
+    .map_err(|e| TangleEvmError::Transaction(format!("Failed to send transaction: {e}")))?;
 
     blueprint_core::info!(
         "Transaction sent, waiting for confirmation: {:?}",
@@ -246,39 +313,6 @@ async fn register_impl(rpc_address: &str, env: &BlueprintEnvironment) -> Result<
         receipt.transaction_hash,
         receipt.block_number
     );
-
-    // 7. Optionally update RPC address if provided
-    if !rpc_address.is_empty() {
-        blueprint_core::info!(
-            "Updating RPC address to: {} for blueprint_id={}",
-            rpc_address,
-            settings.blueprint_id
-        );
-
-        let rpc_tx = tangle_contract.updateRpcAddress(
-            settings.blueprint_id,
-            rpc_address.to_string(),
-        );
-
-        let pending_rpc_tx = rpc_tx
-            .send()
-            .await
-            .map_err(|e| TangleEvmError::Transaction(format!("Failed to update RPC address: {e}")))?;
-
-        let rpc_receipt = pending_rpc_tx
-            .get_receipt()
-            .await
-            .map_err(|e| TangleEvmError::Transaction(format!("Failed to get RPC update receipt: {e}")))?;
-
-        if !rpc_receipt.status() {
-            blueprint_core::warn!("RPC address update transaction reverted");
-        } else {
-            blueprint_core::info!(
-                "RPC address updated successfully! tx_hash={:?}",
-                rpc_receipt.transaction_hash
-            );
-        }
-    }
 
     Ok(())
 }

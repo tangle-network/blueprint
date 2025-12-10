@@ -1,14 +1,14 @@
 use super::{BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler};
-use crate::error::{Error, Result};
-use crate::sdk::utils::make_executable;
-use blueprint_core::trace;
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
-use blueprint_runner::config::BlueprintEnvironment;
 use crate::config::BlueprintManagerContext;
+use crate::error::{Error, Result};
 use crate::rt::ResourceLimits;
 use crate::rt::service::Service;
+use crate::sdk::utils::make_executable;
+use crate::sources::types::TestFetcher;
+use blueprint_core::trace;
+use blueprint_runner::config::BlueprintEnvironment;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
 pub struct TestSourceFetcher {
     pub fetcher: TestFetcher,
@@ -29,15 +29,8 @@ impl TestSourceFetcher {
     }
 
     async fn get_binary(&mut self, _cache_dir: &Path) -> Result<PathBuf> {
-        let TestFetcher {
-            cargo_package,
-            base_path,
-            ..
-        } = &self.fetcher;
-        let cargo_bin = String::from_utf8(cargo_package.0.0.clone())
-            .map_err(|err| Error::Other(format!("Failed to parse `cargo_bin`: {:?}", err)))?;
-        let base_path_str = String::from_utf8(base_path.0.0.clone())
-            .map_err(|err| Error::Other(format!("Failed to parse `base_path`: {:?}", err)))?;
+        let cargo_bin = self.fetcher.cargo_bin.clone();
+        let base_path_str = self.fetcher.base_path.clone();
         let git_repo_root = get_git_repo_root_path_in(&base_path_str).await?;
 
         let profile = if cfg!(debug_assertions) {

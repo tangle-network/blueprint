@@ -1,6 +1,6 @@
 /// Integration tests for the `ProtocolManager` abstraction
 ///
-/// Tests verify that both Tangle and EigenLayer protocols work correctly
+/// Tests verify that EigenLayer protocols work correctly
 /// through the unified `ProtocolManager` interface.
 mod common;
 
@@ -14,36 +14,6 @@ use common::setup_incredible_squaring_avs_harness;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::timeout;
-
-/// Test that ProtocolManager can be constructed for Tangle
-#[tokio::test]
-async fn test_tangle_protocol_manager_initialization() {
-    // This test uses the existing TangleTestHarness infrastructure
-    use blueprint_testing_utils::tangle::harness::TangleTestHarness;
-    let harness_temp_dir = TempDir::new().unwrap();
-    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::setup(harness_temp_dir))
-        .await
-        .unwrap();
-    let env = harness.env().clone();
-
-    let _manager_temp_dir = TempDir::new().unwrap();
-    let ctx = common::create_test_context(env.keystore_uri.clone()).await;
-
-    // Create ProtocolManager with Tangle
-    let result = ProtocolManager::new(ProtocolType::Tangle, env, &ctx).await;
-
-    assert!(
-        result.is_ok(),
-        "Failed to create Tangle ProtocolManager: {:?}",
-        result.err()
-    );
-
-    // Explicitly drop harness to ensure cleanup
-    drop(harness);
-
-    // Cleanup temp manager dirs
-    cleanup_manager_tmp_dirs();
-}
 
 /// Test that ProtocolManager can be constructed for EigenLayer
 #[tokio::test]
@@ -66,59 +36,6 @@ async fn test_eigenlayer_protocol_manager_initialization() {
 
     // Explicitly drop harness to ensure cleanup
     drop(harness);
-}
-
-/// Test that ProtocolManager can initialize and receive events from Tangle
-#[tokio::test]
-async fn test_tangle_protocol_manager_event_flow() {
-    use blueprint_testing_utils::tangle::harness::TangleTestHarness;
-
-    let harness_temp_dir = TempDir::new().unwrap();
-    let harness: TangleTestHarness<()> = Box::pin(TangleTestHarness::setup(harness_temp_dir))
-        .await
-        .unwrap();
-    let env = harness.env().clone();
-
-    let _manager_temp_dir = TempDir::new().unwrap();
-    let ctx = common::create_test_context(env.keystore_uri.clone()).await;
-
-    let mut protocol_manager = ProtocolManager::new(ProtocolType::Tangle, env.clone(), &ctx)
-        .await
-        .unwrap();
-
-    let mut active_blueprints = ActiveBlueprints::default();
-
-    // Initialize the protocol
-    protocol_manager
-        .initialize(&env, &ctx, &mut active_blueprints)
-        .await
-        .expect("Failed to initialize Tangle protocol");
-
-    // Try to get the next event (with timeout)
-    let event_result = timeout(Duration::from_secs(5), protocol_manager.next_event()).await;
-
-    // We expect either:
-    // - A timeout (no events yet, which is ok)
-    // - Or an actual event (if the testnet produced one)
-    match event_result {
-        Ok(Some(event)) => {
-            // Got an event - verify it's a Tangle event
-            assert!(event.as_tangle().is_some(), "Expected Tangle event");
-        }
-        Ok(None) => {
-            panic!("Protocol manager returned None, expected Some or timeout");
-        }
-        Err(_) => {
-            // Timeout is acceptable for this test - just verifying the flow works
-        }
-    }
-
-    // Explicitly drop to ensure cleanup
-    drop(protocol_manager);
-    drop(harness);
-
-    // Cleanup temp manager dirs
-    cleanup_manager_tmp_dirs();
 }
 
 /// Test that ProtocolManager can initialize and receive events from EigenLayer
@@ -270,14 +187,18 @@ async fn test_protocol_type_conversion() {
     use blueprint_manager::protocol::ProtocolType;
     use blueprint_runner::config::ProtocolSettings;
 
-    // Test Tangle conversion
-    let tangle_settings =
-        ProtocolSettings::Tangle(blueprint_runner::tangle::config::TangleProtocolSettings {
+    // Test Tangle EVM conversion
+    let tangle_settings = ProtocolSettings::TangleEvm(
+        blueprint_runner::tangle_evm::config::TangleEvmProtocolSettings {
             blueprint_id: 1,
             service_id: Some(0),
-        });
+            tangle_contract: alloy_primitives::Address::ZERO,
+            restaking_contract: alloy_primitives::Address::ZERO,
+            status_registry_contract: alloy_primitives::Address::ZERO,
+        },
+    );
     let protocol_type: ProtocolType = (&tangle_settings).into();
-    assert!(matches!(protocol_type, ProtocolType::Tangle));
+    assert!(matches!(protocol_type, ProtocolType::TangleEvm));
 
     // Test EigenLayer conversion
     let eigenlayer_settings = ProtocolSettings::Eigenlayer(
@@ -286,8 +207,8 @@ async fn test_protocol_type_conversion() {
     let protocol_type: ProtocolType = (&eigenlayer_settings).into();
     assert!(matches!(protocol_type, ProtocolType::Eigenlayer));
 
-    // Test None defaults to Tangle
+    // Test None defaults to Tangle EVM
     let none_settings = ProtocolSettings::None;
     let protocol_type: ProtocolType = (&none_settings).into();
-    assert!(matches!(protocol_type, ProtocolType::Tangle));
+    assert!(matches!(protocol_type, ProtocolType::TangleEvm));
 }

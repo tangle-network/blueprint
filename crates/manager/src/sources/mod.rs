@@ -9,7 +9,9 @@ use url::Url;
 #[cfg(feature = "containers")]
 pub mod container;
 pub mod github;
+pub mod remote;
 pub mod testing;
+pub mod types;
 
 #[auto_impl::auto_impl(Box)]
 #[dynosaur::dynosaur(pub(crate) DynBlueprintSource)]
@@ -111,6 +113,7 @@ pub struct BlueprintEnvVars {
     pub chain: Option<SupportedChains>,
     pub bootnodes: String,
     pub registration_mode: bool,
+    pub registration_capture_only: bool,
     pub bridge_socket_path: Option<PathBuf>,
 }
 
@@ -146,6 +149,7 @@ impl BlueprintEnvVars {
             chain: None,
             bootnodes,
             registration_mode: blueprint.registration_mode,
+            registration_capture_only: blueprint.registration_capture_only,
             bridge_socket_path: env.bridge_socket_path.clone(),
         }
     }
@@ -165,6 +169,7 @@ impl BlueprintEnvVars {
             chain,
             bootnodes,
             registration_mode,
+            registration_capture_only,
             bridge_socket_path,
         } = self;
 
@@ -198,10 +203,21 @@ impl BlueprintEnvVars {
         }
 
         if *registration_mode {
+            let registration_path = data_dir.join("registration_inputs.bin");
             env_vars.push((
                 "REGISTRATION_MODE_ON".to_string(),
                 registration_mode.to_string(),
             ));
+            env_vars.push((
+                "REGISTRATION_OUTPUT_PATH".to_string(),
+                registration_path.display().to_string(),
+            ));
+            if *registration_capture_only {
+                env_vars.push((
+                    "REGISTRATION_CAPTURE_ONLY".to_string(),
+                    registration_capture_only.to_string(),
+                ));
+            }
         }
 
         env_vars

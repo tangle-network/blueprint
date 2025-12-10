@@ -1,5 +1,3 @@
-use tangle_subxt::subxt::ext::jsonrpsee::core::__reexports::serde_json;
-
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -15,6 +13,12 @@ pub enum Error {
     NoMatchingBinary,
     #[error("Binary hash {expected} mismatched expected hash of {actual}")]
     HashMismatch { expected: String, actual: String },
+    #[error("Download failed from {url}: {reason}")]
+    DownloadFailed { url: String, reason: String },
+    #[error("Archive from {url} exceeded {max} bytes (actual {size})")]
+    ArchiveTooLarge { url: String, size: u64, max: u64 },
+    #[error("IPFS gateway URL must be configured via IPFS_GATEWAY_URL to download {url}")]
+    MissingIpfsGateway { url: String },
     #[error("Failed to build binary: {0:?}")]
     BuildBinary(std::process::Output),
     #[error("Failed to fetch git root: {0:?}")]
@@ -68,7 +72,7 @@ pub enum Error {
     #[error(transparent)]
     Request(#[from] reqwest::Error),
     #[error(transparent)]
-    TangleClient(#[from] blueprint_clients::tangle::error::Error),
+    TangleEvmClient(#[from] blueprint_client_tangle_evm::Error),
     #[error(transparent)]
     Auth(#[from] blueprint_auth::Error),
     #[error(transparent)]

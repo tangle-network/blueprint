@@ -19,15 +19,16 @@ path = "src/main.rs"
 [dependencies]
 blueprint-core = { workspace = true, features = ["tracing"] }
 tracing = { workspace = true }
-blueprint-runner = { workspace = true, features = ["networking", "tangle", "eigenlayer", "std"] }
-blueprint-clients = { workspace = true, features = ["std", "tangle"] }
-blueprint-crypto = { workspace = true, features = ["std", "tangle-pair-signer"] }
-blueprint-keystore = { workspace = true, features = ["std", "tangle"] }
+blueprint-runner = { workspace = true, features = ["networking", "tangle-evm", "eigenlayer", "std"] }
+blueprint-clients = { workspace = true, features = ["std", "tangle-evm"] }
+blueprint-client-tangle-evm = { workspace = true }
+blueprint-crypto = { workspace = true, features = ["std"] }
+blueprint-keystore = { workspace = true, features = ["std", "evm", "eigenlayer"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-auth = { workspace = true, features = ["std"] }
 blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] }
 blueprint-eigenlayer-extra = { workspace = true, features = ["std"]}
-blueprint-testing-utils = { workspace = true, features = ["tangle", "eigenlayer"] }
+blueprint-testing-utils = { workspace = true, features = ["eigenlayer"] }
 blueprint-chain-setup = { workspace = true, features = ["anvil"] }
 
 # Alloy dependencies for EigenLayer protocol
@@ -35,6 +36,7 @@ alloy-provider = { workspace = true }
 alloy-rpc-types = { workspace = true }
 alloy-transport-http = { workspace = true }
 alloy-primitives = { workspace = true }
+alloy-sol-types = { workspace = true }
 
 # EigenLayer SDK for registration verification
 eigensdk = { workspace = true }
@@ -44,13 +46,14 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 document-features.workspace = true
+async-trait = { workspace = true }
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
 docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace", "issue-url"] }
-tangle-subxt = { workspace = true }
 toml = { workspace = true, features = ["parse", "serde"] }
 hex = { workspace = true }
+blake3 = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "process", "io-util", "signal", "macros"] }
 reqwest = { workspace = true }
 sha2 = { workspace = true }
@@ -59,7 +62,6 @@ thiserror.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "ansi", "tracing-log"] }
 auto_impl = { workspace = true }
 dynosaur = { workspace = true }
-sp-core = { workspace = true }
 url.workspace = true
 hyper.workspace = true
 hyperlocal.workspace = true
@@ -70,7 +72,6 @@ walkdir.workspace = true
 tempfile = { workspace = true }
 rand = { workspace = true }
 rustls = { workspace = true, features = ["aws-lc-rs"] }
-
 
 # Binary extraction
 cargo-dist-schema.workspace = true
@@ -95,7 +96,7 @@ netdev = { workspace = true, features = ["gateway"], optional = true }
 nftables = { workspace = true, optional = true }
 
 [features]
-default = []
+default = ["containers"]
 
 ## Enable the VM sandbox
 ##
@@ -117,3 +118,19 @@ containers = ["dep:kube", "dep:k8s-openapi"]
 
 [package.metadata.dist]
 dist = false
+
+[dev-dependencies]
+alloy-network = { workspace = true }
+alloy-provider = { workspace = true }
+alloy-rpc-types = { workspace = true }
+alloy-signer-local = { workspace = true }
+blueprint-auth = { workspace = true }
+blueprint-manager-bridge = { workspace = true }
+futures-util = { workspace = true }
+tower = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+blueprint-anvil-testing-utils = { workspace = true }
+blueprint-router = { workspace = true }
+blueprint-tangle-evm-extra = { workspace = true }
+xz2 = "0.1"

@@ -6,15 +6,10 @@ use crate::rt::hypervisor::net;
 use crate::sdk::entry::SendFuture;
 use blueprint_auth::db::RocksDb;
 use blueprint_core::{error, info};
-use blueprint_crypto::sp_core::{SpEcdsa, SpSr25519};
-use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
-use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_runner::config::BlueprintEnvironment;
-use blueprint_runner::config::ProtocolSettingsT;
 use color_eyre::Report;
 use color_eyre::eyre::OptionExt;
-use sp_core::{Pair, ecdsa, sr25519};
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
@@ -27,8 +22,6 @@ pub struct BlueprintManagerHandle {
     start_tx: Option<tokio::sync::oneshot::Sender<()>>,
     running_task: JoinHandle<color_eyre::Result<()>>,
     span: tracing::Span,
-    sr25519_id: TanglePairSigner<sr25519::Pair>,
-    ecdsa_id: TanglePairSigner<ecdsa::Pair>,
     keystore_uri: String,
 }
 
@@ -53,18 +46,6 @@ impl BlueprintManagerHandle {
             },
             None => Err(Report::msg("Blueprint Manager Already Started")),
         }
-    }
-
-    /// Returns the SR25519 keypair for this blueprint manager
-    #[must_use]
-    pub fn sr25519_id(&self) -> &TanglePairSigner<sr25519::Pair> {
-        &self.sr25519_id
-    }
-
-    /// Returns the ECDSA keypair for this blueprint manager
-    #[must_use]
-    pub fn ecdsa_id(&self) -> &TanglePairSigner<ecdsa::Pair> {
-        &self.ecdsa_id
     }
 
     /// Shutdown the blueprint manager
@@ -143,14 +124,10 @@ impl Future for BlueprintManagerHandle {
 /// # Errors
 ///
 /// * If the blueprint manager fails to start
-///
-/// # Panics
-///
-/// * If the SR25519 or ECDSA keypair cannot be found
 #[allow(clippy::used_underscore_binding)]
 pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     #[allow(unused_mut)] mut ctx: BlueprintManagerContext,
-    keystore: Keystore,
+    _keystore: Keystore,
     env: BlueprintEnvironment,
     shutdown_cmd: F,
 ) -> color_eyre::Result<BlueprintManagerHandle> {
@@ -169,27 +146,6 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let (db, auth_proxy_task) =
         run_auth_proxy(ctx.data_dir().to_path_buf(), ctx.auth_proxy_opts.clone()).await?;
     ctx.set_db(db).await;
-
-    // TODO: Actual error handling
-    let (tangle_key, ecdsa_key) = {
-        // Only require SR25519 when protocol is tangle; otherwise, use an ephemeral default
-        let sr_key = if env.protocol_settings.protocol_name() == "tangle" {
-            let sr_key_pub = keystore.first_local::<SpSr25519>()?;
-            let sr_pair = keystore.get_secret::<SpSr25519>(&sr_key_pub)?;
-            TanglePairSigner::new(sr_pair.0)
-        } else {
-            // Ephemeral default signer for non-tangle protocols (unused but required by types)
-            let default_sr = sr25519::Pair::from_seed_slice(&[0u8; 32])
-                .map_err(|e| Error::Other(format!("Failed to create default sr25519 pair: {e}")))?;
-            TanglePairSigner::new(default_sr)
-        };
-
-        let ecdsa_key_pub = keystore.first_local::<SpEcdsa>()?;
-        let ecdsa_pair = keystore.get_secret::<SpEcdsa>(&ecdsa_key_pub)?;
-        let ecdsa_key = TanglePairSigner::new(ecdsa_pair.0);
-
-        (sr_key, ecdsa_key)
-    };
 
     let mut active_blueprints = HashMap::new();
 
@@ -264,8 +220,6 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
         shutdown_call: Some(tx_stop),
         running_task: handle,
         span,
-        sr25519_id: tangle_key,
-        ecdsa_id: ecdsa_key,
         keystore_uri,
     };
 
@@ -287,10 +241,6 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 /// # Errors
 ///
 /// * If the blueprint manager fails to start
-///
-/// # Panics
-///
-/// * If the SR25519 or ECDSA keypair cannot be found
 #[allow(clippy::used_underscore_binding)]
 pub async fn run_blueprint_manager<F: SendFuture<'static, ()>>(
     ctx: BlueprintManagerContext,

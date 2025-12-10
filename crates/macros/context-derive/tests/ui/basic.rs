@@ -1,16 +1,12 @@
-use blueprint_context_derive::{
-    EVMProviderContext, KeystoreContext, ServicesContext, TangleClientContext,
-};
-use blueprint_sdk::clients::BlueprintServicesClient as _;
+use blueprint_context_derive::{EVMProviderContext, KeystoreContext, TangleEvmClientContext};
 use blueprint_sdk::contexts::instrumented_evm_client::EvmInstrumentedClientContext as _;
 use blueprint_sdk::contexts::keystore::KeystoreContext as _;
-use blueprint_sdk::contexts::services::ServicesContext as _;
-use blueprint_sdk::contexts::tangle::TangleClientContext as _;
+use blueprint_sdk::contexts::tangle_evm::TangleEvmClientContext as _;
 use blueprint_sdk::runner::config::BlueprintEnvironment;
 use blueprint_sdk::std::sync::Arc;
 use blueprint_sdk::stores::local_database::LocalDatabase;
 
-#[derive(KeystoreContext, EVMProviderContext, TangleClientContext, ServicesContext)]
+#[derive(KeystoreContext, EVMProviderContext, TangleEvmClientContext)]
 #[allow(dead_code)]
 struct MyContext {
     foo: String,
@@ -34,19 +30,7 @@ fn main() {
         // Test existing context functions
         let _keystore = ctx.keystore();
         let _evm_provider = ctx.evm_client();
-        let tangle_client = ctx.tangle_client().await.unwrap();
-        let _services_client = ctx.services_client().await;
-        let _services = tangle_client
-            .services_client()
-            .current_service_operators([0; 32], 0)
-            .await
-            .unwrap();
-
-        // Test blueprint ID retrieval
-        let _blueprint_id = tangle_client.blueprint_id();
-
-        // Test party index and operators retrieval
-        let _party_idx_ops = tangle_client.get_party_index_and_operators().await;
+        let _tangle_client = ctx.tangle_evm_client().await.unwrap();
     };
 
     drop(body);

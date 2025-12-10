@@ -21,6 +21,7 @@ blueprint-crypto = { workspace = true }
 blueprint-qos = { workspace = true }
 blueprint-manager-bridge = { workspace = true, features = ["client"] }
 blueprint-auth = { workspace = true, optional = true }
+k256 = { workspace = true, optional = true }
 
 futures-core.workspace = true
 futures-util.workspace = true
@@ -39,12 +40,6 @@ document-features = { workspace = true, features = ["default"] }
 crossbeam-channel = { workspace = true, optional = true }
 blueprint-networking = { workspace = true, optional = true }
 libp2p = { workspace = true, optional = true }
-
-# Tangle
-blueprint-tangle-extra = { workspace = true, optional = true }
-tangle-subxt = { workspace = true, optional = true }
-k256 = { workspace = true, optional = true }
-sc-keystore = { workspace = true, optional = true }
 
 # Eigenlayer
 blueprint-evm-extra = { workspace = true, optional = true }
@@ -65,7 +60,7 @@ blueprint-client-tangle-evm = { workspace = true, optional = true }
 alloy-provider = { workspace = true, optional = true }
 
 [dev-dependencies]
-blueprint-sdk = { path = "../sdk", features = ["std", "tangle"] }
+blueprint-sdk = { path = "../sdk", features = ["std"] }
 tempfile = "3.8"
 serde_json = "1.0"
 
@@ -75,7 +70,7 @@ default = ["std", "networking"]
 #! ### Core
 
 ## Enable standard library support
-std = ["blueprint-tangle-extra?/std", "blueprint-evm-extra?/std", "blueprint-keystore/std", "blueprint-std/std", "blueprint-qos/std"]
+std = ["blueprint-evm-extra?/std", "blueprint-keystore/std", "blueprint-std/std", "blueprint-qos/std"]
 
 ## Enable networking support for [`BlueprintEnvironment`](crate::config::BlueprintEnvironment)
 networking = ["dep:blueprint-networking", "dep:crossbeam-channel", "dep:libp2p", "blueprint-keystore/zebra"]
@@ -87,19 +82,6 @@ tee = []
 tls = ["dep:blueprint-auth"]
 
 #! ### Protocols
-
-## Enable [Tangle] support
-##
-## [Tangle]: https://tangle.tools
-tangle = [
-    "dep:tangle-subxt",
-    "dep:blueprint-tangle-extra",
-    "dep:k256",
-    "blueprint-crypto/sp-core",
-    "blueprint-crypto/tangle-pair-signer",
-    "blueprint-keystore/tangle",
-    "dep:sc-keystore",
-]
 
 ## Enable [Eigenlayer] support
 ##
@@ -130,6 +112,7 @@ tangle-evm = [
     "dep:alloy-provider",
     "dep:alloy-signer-local",
     "dep:alloy-signer",
+    "dep:k256",
     "blueprint-keystore/ecdsa",
     "blueprint-keystore/evm",
     "blueprint-keystore/eigenlayer",

@@ -40,12 +40,19 @@ mod validation_tests {
     #[tokio::test]
     #[cfg(not(target_os = "linux"))]
     async fn test_hypervisor_requires_linux_platform() {
+        let blueprint_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/incredible-squaring-eigenlayer");
+
+        if !blueprint_dir.exists() {
+            eprintln!(
+                "Skipping test_hypervisor_requires_linux_platform: incredible-squaring example missing"
+            );
+            return;
+        }
+
         let testnet = start_empty_anvil_testnet(false).await;
         let (harness, _) = common::setup_incredible_squaring_avs_harness(testnet).await;
         let env = harness.env().clone();
-
-        let blueprint_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../examples/incredible-squaring-eigenlayer");
 
         let settings = env
             .protocol_settings

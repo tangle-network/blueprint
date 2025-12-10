@@ -50,8 +50,6 @@ pub trait ProtocolSettingsT: Sized + 'static {
 )]
 #[non_exhaustive]
 pub enum Protocol {
-    #[cfg(feature = "tangle")]
-    Tangle,
     #[cfg(feature = "tangle-evm")]
     TangleEvm,
     #[cfg(feature = "eigenlayer")]
@@ -80,8 +78,6 @@ impl Protocol {
     pub fn as_str(&self) -> &'static str {
         #[allow(unreachable_patterns)]
         match self {
-            #[cfg(feature = "tangle")]
-            Self::Tangle => "tangle",
             #[cfg(feature = "tangle-evm")]
             Self::TangleEvm => "tangle-evm",
             #[cfg(feature = "eigenlayer")]
@@ -104,8 +100,6 @@ impl core::str::FromStr for Protocol {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            #[cfg(feature = "tangle")]
-            "tangle" => Ok(Self::Tangle),
             #[cfg(feature = "tangle-evm")]
             "tangle-evm" | "tangle_evm" | "tangleevm" => Ok(Self::TangleEvm),
             #[cfg(feature = "eigenlayer")]
@@ -121,8 +115,6 @@ impl core::str::FromStr for Protocol {
 pub enum ProtocolSettings {
     #[default]
     None,
-    #[cfg(feature = "tangle")]
-    Tangle(crate::tangle::config::TangleProtocolSettings),
     #[cfg(feature = "tangle-evm")]
     TangleEvm(crate::tangle_evm::config::TangleEvmProtocolSettings),
     #[cfg(feature = "eigenlayer")]
@@ -137,12 +129,6 @@ impl ProtocolSettingsT for ProtocolSettings {
     ) -> Result<Self, Box<dyn core::error::Error + Send + Sync>> {
         #[allow(unreachable_patterns)]
         let protocol_settings = match settings.protocol {
-            #[cfg(feature = "tangle")]
-            Some(Protocol::Tangle) => {
-                use crate::tangle::config::TangleProtocolSettings;
-                let settings = TangleProtocolSettings::load(settings)?;
-                ProtocolSettings::Tangle(settings)
-            }
             #[cfg(feature = "tangle-evm")]
             Some(Protocol::TangleEvm) => {
                 use crate::tangle_evm::config::TangleEvmProtocolSettings;
@@ -168,8 +154,6 @@ impl ProtocolSettingsT for ProtocolSettings {
 
     fn protocol_name(&self) -> &'static str {
         match self {
-            #[cfg(feature = "tangle")]
-            ProtocolSettings::Tangle(val) => val.protocol_name(),
             #[cfg(feature = "tangle-evm")]
             ProtocolSettings::TangleEvm(val) => val.protocol_name(),
             #[cfg(feature = "eigenlayer")]
@@ -183,8 +167,6 @@ impl ProtocolSettingsT for ProtocolSettings {
     fn protocol(&self) -> Protocol {
         match self {
             ProtocolSettings::None => unreachable!(),
-            #[cfg(feature = "tangle")]
-            ProtocolSettings::Tangle(_) => Protocol::Tangle,
             #[cfg(feature = "tangle-evm")]
             ProtocolSettings::TangleEvm(_) => Protocol::TangleEvm,
             #[cfg(feature = "eigenlayer")]
@@ -196,17 +178,19 @@ impl ProtocolSettingsT for ProtocolSettings {
 }
 
 impl ProtocolSettings {
-    /// Attempt to extract the [`TangleProtocolSettings`](crate::tangle::config::TangleProtocolSettings)
+    /// Attempt to extract the [`TangleEvmProtocolSettings`](crate::tangle_evm::config::TangleEvmProtocolSettings)
     ///
     /// # Errors
     ///
-    /// `self` is not [`ProtocolSettings::Tangle`]
-    #[cfg(feature = "tangle")]
+    /// `self` is not [`ProtocolSettings::TangleEvm`]
+    #[cfg(feature = "tangle-evm")]
     #[allow(clippy::match_wildcard_for_single_variants)]
-    pub fn tangle(&self) -> Result<&crate::tangle::config::TangleProtocolSettings, ConfigError> {
+    pub fn tangle_evm(
+        &self,
+    ) -> Result<&crate::tangle_evm::config::TangleEvmProtocolSettings, ConfigError> {
         match self {
-            Self::Tangle(settings) => Ok(settings),
-            _ => Err(ConfigError::UnexpectedProtocol("Tangle")),
+            Self::TangleEvm(settings) => Ok(settings),
+            _ => Err(ConfigError::UnexpectedProtocol("Tangle EVM")),
         }
     }
 
@@ -223,22 +207,6 @@ impl ProtocolSettings {
         match self {
             Self::Eigenlayer(settings) => Ok(settings),
             _ => Err(ConfigError::UnexpectedProtocol("Eigenlayer")),
-        }
-    }
-
-    /// Attempt to extract the [`TangleEvmProtocolSettings`](crate::tangle_evm::config::TangleEvmProtocolSettings)
-    ///
-    /// # Errors
-    ///
-    /// `self` is not [`ProtocolSettings::TangleEvm`]
-    #[cfg(feature = "tangle-evm")]
-    #[allow(clippy::match_wildcard_for_single_variants)]
-    pub fn tangle_evm(
-        &self,
-    ) -> Result<&crate::tangle_evm::config::TangleEvmProtocolSettings, ConfigError> {
-        match self {
-            Self::TangleEvm(settings) => Ok(settings),
-            _ => Err(ConfigError::UnexpectedProtocol("TangleEvm")),
         }
     }
 
@@ -276,6 +244,11 @@ pub struct BlueprintEnvironment {
     pub bridge_socket_path: Option<PathBuf>,
     #[serde(skip)]
     bridge: Arc<Mutex<Option<Arc<Bridge>>>>,
+    /// Indicates that the blueprint is running in preregistration mode.
+    pub registration_mode: bool,
+    /// When true, the runner will only capture registration inputs and exit without registering.
+    pub registration_capture_only: bool,
+    registration_output_path: Option<PathBuf>,
 
     /// KMS HTTP endpoint
     #[cfg(feature = "tee")]
@@ -311,6 +284,9 @@ impl Default for BlueprintEnvironment {
             test_mode: false,
             bridge_socket_path: None,
             bridge: Arc::new(Mutex::new(None)),
+            registration_mode: false,
+            registration_capture_only: false,
+            registration_output_path: None,
 
             #[cfg(feature = "tee")]
             kms_url: default_kms_url(),
@@ -358,12 +334,27 @@ impl BlueprintEnvironment {
     #[allow(clippy::missing_panics_doc)] // TODO: Should return errors
     pub fn keystore(&self) -> Keystore {
         let config = KeystoreConfig::new().fs_root(self.keystore_uri.clone());
-        #[cfg(feature = "tangle")]
-        let substrate_keystore = sc_keystore::LocalKeystore::open(self.keystore_uri.clone(), None)
-            .expect("Failed to open keystore");
-        #[cfg(feature = "tangle")]
-        let config = config.substrate(blueprint_std::sync::Arc::new(substrate_keystore));
         Keystore::new(config).expect("Failed to create keystore")
+    }
+
+    /// Returns true if preregistration mode is enabled.
+    #[must_use]
+    pub fn registration_mode(&self) -> bool {
+        self.registration_mode
+    }
+
+    /// Returns true if the runner should only capture inputs and exit.
+    #[must_use]
+    pub fn registration_capture_only(&self) -> bool {
+        self.registration_capture_only
+    }
+
+    /// Returns the expected registration output path.
+    #[must_use]
+    pub fn registration_output_path(&self) -> PathBuf {
+        self.registration_output_path
+            .clone()
+            .unwrap_or_else(|| self.data_dir.join("registration_inputs.bin"))
     }
 }
 
@@ -379,6 +370,12 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
     let ws_rpc_url = settings.ws_rpc_url.clone();
     let keystore_uri = settings.keystore_uri.clone();
     let bridge_socket_path = settings.bridge_socket_path.clone();
+    let registration_mode = env_flag("REGISTRATION_MODE_ON");
+    let registration_capture_only = env_flag("REGISTRATION_CAPTURE_ONLY");
+    let registration_output_path = std::env::var("REGISTRATION_OUTPUT_PATH")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| registration_mode.then(|| data_dir.join("registration_inputs.bin")));
 
     #[cfg(feature = "tee")]
     let kms_url = settings.kms_url.clone();
@@ -409,6 +406,9 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         protocol_settings,
         bridge_socket_path,
         bridge: Arc::new(Mutex::new(None)),
+        registration_mode,
+        registration_capture_only,
+        registration_output_path,
 
         #[cfg(feature = "tee")]
         kms_url,
@@ -426,6 +426,15 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
         #[cfg(feature = "tls")]
         tls_profile,
     })
+}
+
+fn env_flag(name: &str) -> bool {
+    std::env::var(name)
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            matches!(normalized.as_str(), "1" | "true" | "yes")
+        })
+        .unwrap_or(false)
 }
 
 #[cfg(feature = "tls")]
@@ -611,21 +620,13 @@ impl BlueprintEnvironment {
         using_evm_address_for_handshake_verification: bool,
     ) -> Result<blueprint_networking::NetworkConfig<K>, crate::error::RunnerError> {
         use blueprint_keystore::backends::Backend;
-        #[cfg(not(feature = "tangle"))]
         use blueprint_keystore::crypto::ed25519::Ed25519Zebra as LibP2PKeyType;
-        #[cfg(feature = "tangle")]
-        use blueprint_keystore::crypto::sp_core::SpEd25519 as LibP2PKeyType;
 
         let keystore_config = blueprint_keystore::KeystoreConfig::new().fs_root(&self.keystore_uri);
         let keystore = blueprint_keystore::Keystore::new(keystore_config)?;
         let ed25519_pub_key = keystore.first_local::<LibP2PKeyType>()?;
         let ed25519_pair = keystore.get_secret::<LibP2PKeyType>(&ed25519_pub_key)?;
 
-        #[cfg(feature = "tangle")]
-        let network_identity = libp2p::identity::Keypair::ed25519_from_bytes(ed25519_pair.seed())
-            .expect("should be valid");
-
-        #[cfg(not(feature = "tangle"))]
         let network_identity = {
             // `ed25519_from_bytes` takes an `AsMut<[u8]>` for seemingly no reason??
             let bytes = ed25519_pair.0.as_ref().to_vec();
@@ -742,17 +743,6 @@ impl ContextConfig {
         #[cfg(feature = "eigenlayer")]
         let strategy = eigenlayer_settings.as_ref().map(|s| s.strategy_address);
 
-        // Tangle settings
-        #[cfg(feature = "tangle")]
-        let tangle_settings = match &protocol_settings {
-            ProtocolSettings::Tangle(settings) => Some(settings),
-            _ => None,
-        };
-        #[cfg(feature = "tangle")]
-        let blueprint_id = tangle_settings.map(|s| s.blueprint_id);
-        #[cfg(feature = "tangle")]
-        let service_id = tangle_settings.and_then(|s| s.service_id);
-
         #[cfg(feature = "networking")]
         let enable_mdns = cfg!(debug_assertions);
         #[cfg(feature = "networking")]
@@ -783,10 +773,6 @@ impl ContextConfig {
                 protocol: Some(protocol),
                 bridge_socket_path,
                 ws_rpc_url,
-                #[cfg(feature = "tangle")]
-                blueprint_id,
-                #[cfg(feature = "tangle")]
-                service_id,
                 #[cfg(feature = "eigenlayer")]
                 allocation_manager,
                 #[cfg(feature = "eigenlayer")]
@@ -909,40 +895,6 @@ impl ContextConfig {
             ProtocolSettings::Eigenlayer(eigenlayer_contract_addresses),
         )
     }
-
-    /// Creates a new context config with defaults for Tangle
-    #[cfg(feature = "tangle")]
-    #[must_use]
-    #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::too_many_arguments)]
-    pub fn create_tangle_config(
-        http_rpc_url: Url,
-        ws_rpc_url: Url,
-        keystore_uri: String,
-        keystore_password: Option<String>,
-        data_dir: PathBuf,
-        bridge_socket_path: Option<PathBuf>,
-        chain: SupportedChains,
-        blueprint_id: u64,
-        service_id: Option<u64>,
-    ) -> Self {
-        use crate::tangle::config::TangleProtocolSettings;
-
-        Self::create_config_with_defaults(
-            http_rpc_url,
-            ws_rpc_url,
-            keystore_uri,
-            keystore_password,
-            data_dir,
-            bridge_socket_path,
-            chain,
-            Protocol::Tangle,
-            ProtocolSettings::Tangle(TangleProtocolSettings {
-                blueprint_id,
-                service_id,
-            }),
-        )
-    }
 }
 
 #[derive(Debug, Clone, clap::Parser, Serialize, Deserialize)]
@@ -1020,28 +972,6 @@ pub struct BlueprintSettings {
     #[arg(long, env, default_value_t = default_kms_url())]
     #[serde(default = "default_kms_url")]
     pub kms_url: Url,
-
-    // =======
-    // TANGLE
-    // =======
-    #[cfg(feature = "tangle")]
-    /// The blueprint ID for Tangle protocol
-    #[arg(
-        long,
-        value_name = "ID",
-        env = "BLUEPRINT_ID",
-        required_if_eq("protocol", Protocol::Tangle.as_str())
-    )]
-    pub blueprint_id: Option<u64>,
-    #[cfg(feature = "tangle")]
-    /// The service ID for Tangle protocol
-    #[arg(
-        long,
-        value_name = "ID",
-        env = "SERVICE_ID",
-        required_if_eq("protocol", Protocol::Tangle.as_str())
-    )]
-    pub service_id: Option<u64>,
 
     // ========
     // EIGENLAYER
@@ -1259,14 +1189,6 @@ impl Default for BlueprintSettings {
             // ========
             #[cfg(feature = "tee")]
             kms_url: default_kms_url(),
-
-            // =======
-            // TANGLE
-            // =======
-            #[cfg(feature = "tangle")]
-            blueprint_id: None,
-            #[cfg(feature = "tangle")]
-            service_id: None,
 
             // ========
             // EIGENLAYER

@@ -17,19 +17,11 @@ use crate::protocol::eigenlayer::{RegistrationStateManager, RegistrationStatus};
 use crate::protocol::types::ProtocolEvent;
 use crate::rt::ResourceLimits;
 use crate::rt::service::Status;
-use crate::sources::{BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler, DynBlueprintSource};
 use crate::sources::testing::TestSourceFetcher;
+use crate::sources::types::{BlueprintSource, TestFetcher};
+use crate::sources::{BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler, DynBlueprintSource};
 use blueprint_core::{error, info, warn};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol};
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::BoundedString;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::BlueprintSource;
-
-/// Helper function to create a `BoundedString` from any type that can be converted to String
-fn new_bounded_string<S: Into<String>>(s: S) -> BoundedString {
-    let s = s.into();
-    BoundedString(BoundedVec(s.into_bytes()))
-}
 
 /// Read the package name from a Cargo.toml file in the given directory
 ///
@@ -185,6 +177,14 @@ impl EigenlayerEventHandler {
             }
 
             // Spawn the AVS blueprint
+            //
+            // TODO(TANGLE-EVM):
+            //   When blueprint metadata/source descriptions are reimplemented on the
+            //   Tangle‑EVM side we need to re-evaluate how operators discover and
+            //   download binaries here.  At the moment we assume the CLI has already
+            //   written a registration entry on disk.  Once on-chain sources exist,
+            //   update this logic to mirror the new discovery mechanism so operators
+            //   can fetch binaries directly from Tangle‑EVM metadata.
             info!(
                 "Starting AVS blueprint for service_manager {} (blueprint_id={})",
                 registration.config.service_manager, blueprint_id
@@ -251,9 +251,6 @@ impl EigenlayerEventHandler {
             )));
         };
 
-        // Create appropriate fetcher based on blueprint path type
-        use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::TestFetcher;
-
         // Check if path is a pre-compiled binary (not yet supported)
         if registration.config.blueprint_path.is_file() {
             // Pre-compiled binary support
@@ -270,9 +267,9 @@ impl EigenlayerEventHandler {
 
         // Rust project directory - use TestSourceFetcher to build it
         let test_fetcher = TestFetcher {
-            cargo_package: new_bounded_string(&blueprint_name),
-            cargo_bin: new_bounded_string(&blueprint_name),
-            base_path: new_bounded_string(blueprint_dir.clone()),
+            cargo_package: blueprint_name.clone(),
+            cargo_bin: blueprint_name.clone(),
+            base_path: blueprint_dir.clone(),
         };
         let mut fetcher: Box<DynBlueprintSource<'static>> = {
             let fetcher =
@@ -366,6 +363,7 @@ impl EigenlayerEventHandler {
                 sources: vec![BlueprintSource::Testing(test_fetcher.clone())],
                 name: blueprint_name.clone(),
                 registration_mode: false,
+                registration_capture_only: false,
                 protocol: Protocol::Eigenlayer,
             },
             &service_str,

@@ -1,22 +1,21 @@
-use std::fs::File;
 use super::{BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler};
-use crate::error::{Error, Result};
 use crate::blueprint::native::get_blueprint_binary;
-use crate::sdk::utils::{make_executable, valid_file_exists};
-use blueprint_core::info;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use cargo_dist_schema::{ArtifactKind, AssetKind, DistManifest};
-use tangle_subxt::subxt::ext::jsonrpsee::core::__reexports::serde_json;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::sources::{BlueprintBinary, GithubFetcher};
-use tar::Archive;
-use tokio::io::AsyncWriteExt;
-use blueprint_core::{error, warn};
-use xz::read::XzDecoder;
-use blueprint_runner::config::BlueprintEnvironment;
 use crate::config::BlueprintManagerContext;
+use crate::error::{Error, Result};
 use crate::rt::ResourceLimits;
 use crate::rt::service::Service;
+use crate::sdk::utils::{make_executable, valid_file_exists};
+use crate::sources::types::{BlueprintBinary, GithubFetcher};
+use blueprint_core::{error, info, warn};
+use blueprint_runner::config::BlueprintEnvironment;
+use cargo_dist_schema::{ArtifactKind, AssetKind, DistManifest};
+use serde_json;
+use std::fs::File;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use tar::Archive;
+use tokio::io::AsyncWriteExt;
+use xz::read::XzDecoder;
 
 pub struct GithubBinaryFetcher {
     pub fetcher: GithubFetcher,
@@ -47,16 +46,13 @@ impl GithubBinaryFetcher {
 
     async fn get_binary(&mut self, cache_dir: &Path) -> Result<PathBuf> {
         let relevant_binary =
-            get_blueprint_binary(&self.fetcher.binaries.0).ok_or(Error::NoMatchingBinary)?;
+            get_blueprint_binary(&self.fetcher.binaries).ok_or(Error::NoMatchingBinary)?;
 
-        let tag_str = std::str::from_utf8(&self.fetcher.tag.0.0).map_or_else(
-            |_| self.fetcher.tag.0.0.escape_ascii().to_string(),
-            ToString::to_string,
-        );
+        let tag_str = &self.fetcher.tag;
 
         const DIST_MANIFEST_NAME: &str = "dist.json";
 
-        let relevant_binary_name = String::from_utf8(relevant_binary.name.0.0.clone())?;
+        let relevant_binary_name = relevant_binary.name.clone();
 
         let archive_file_name = format!("archive-{tag_str}");
         let archive_download_path = cache_dir.join(archive_file_name);
@@ -157,10 +153,8 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
 
         let archive_path = self.get_binary(cache_dir).await?;
 
-        let owner =
-            String::from_utf8(self.fetcher.owner.0.0.clone()).expect("Should be a valid owner");
-        let repo =
-            String::from_utf8(self.fetcher.repo.0.0.clone()).expect("Should be a valid repo");
+        let owner = self.fetcher.owner.clone();
+        let repo = self.fetcher.repo.clone();
 
         match verify_attestation(&owner, &repo, &archive_path) {
             AttestationResult::Ok => {}
@@ -250,13 +244,12 @@ struct DownloadUrls {
 
 impl DownloadUrls {
     fn new(binary: &BlueprintBinary, fetcher: &GithubFetcher) -> Self {
-        let owner = String::from_utf8(fetcher.owner.0.0.clone()).expect("Should be a valid owner");
-        let repo = String::from_utf8(fetcher.repo.0.0.clone()).expect("Should be a valid repo");
-        let tag = String::from_utf8(fetcher.tag.0.0.clone()).expect("Should be a valid tag");
-        let binary_name =
-            String::from_utf8(binary.name.0.0.clone()).expect("Should be a valid binary name");
-        let os_name = format!("{:?}", binary.os).to_lowercase();
-        let arch_name = format!("{:?}", binary.arch).to_lowercase();
+        let owner = fetcher.owner.clone();
+        let repo = fetcher.repo.clone();
+        let tag = fetcher.tag.clone();
+        let binary_name = binary.name.clone();
+        let os_name = binary.os.to_lowercase();
+        let arch_name = binary.arch.to_lowercase();
 
         // TODO: This is NOT the correct format for cargo-dist. Need the target triple onchain
         let binary_archive_url = format!(

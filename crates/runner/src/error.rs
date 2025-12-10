@@ -68,13 +68,6 @@ pub enum RunnerError {
     Consumer(BoxError),
 
     // Protocols
-    /// [Tangle] protocol errors
-    ///
-    /// [Tangle]: https://tangle.tools
-    #[cfg(feature = "tangle")]
-    #[error("Tangle error: {0}")]
-    Tangle(#[from] crate::tangle::error::TangleError),
-
     /// [Tangle EVM] protocol errors (v2)
     ///
     /// [Tangle]: https://tangle.tools
@@ -99,9 +92,6 @@ pub enum RunnerError {
 pub enum ConfigError {
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
-    /// Missing `RPC_URL` environment variable.
-    #[error("Missing Tangle RPC endpoint")]
-    MissingTangleRpcEndpoint,
     /// Missing `KEYSTORE_URI` environment
     #[error("Missing keystore URI")]
     MissingKeystoreUri,
@@ -128,12 +118,6 @@ pub enum ConfigError {
     /// [`ProtocolSettings`]: crate::config::ProtocolSettings
     #[error("Unexpect protocol, expected {0}")]
     UnexpectedProtocol(&'static str),
-    /// No Sr25519 keypair found in the keystore.
-    #[error("No Sr25519 keypair found in the keystore")]
-    NoSr25519Keypair,
-    /// Invalid Sr25519 keypair found in the keystore.
-    #[error("Invalid Sr25519 keypair found in the keystore")]
-    InvalidSr25519Keypair,
     /// No ECDSA keypair found in the keystore.
     #[error("No ECDSA keypair found in the keystore")]
     NoEcdsaKeypair,
