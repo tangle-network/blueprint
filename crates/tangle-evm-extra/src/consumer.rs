@@ -5,13 +5,16 @@
 use crate::extract;
 use alloy_primitives::Bytes;
 use blueprint_client_tangle_evm::TangleEvmClient;
-use blueprint_core::error::BoxError;
 use blueprint_core::JobResult;
+use blueprint_core::error::BoxError;
+use blueprint_std::boxed::Box;
+use blueprint_std::collections::VecDeque;
+use blueprint_std::format;
+use blueprint_std::string::String;
+use blueprint_std::sync::{Arc, Mutex};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use futures_util::Sink;
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
 
 /// Error type for the consumer
 #[derive(Debug, thiserror::Error)]
@@ -106,11 +109,15 @@ impl Sink<JobResult> for TangleEvmConsumer {
             .try_into()
             .map_err(|_| ConsumerError::InvalidMetadata("service_id"))?;
 
-        self.get_mut().buffer.lock().unwrap().push_back(DerivedJobResult {
-            service_id,
-            call_id,
-            output: Bytes::copy_from_slice(body),
-        });
+        self.get_mut()
+            .buffer
+            .lock()
+            .unwrap()
+            .push_back(DerivedJobResult {
+                service_id,
+                call_id,
+                output: Bytes::copy_from_slice(body),
+            });
         Ok(())
     }
 

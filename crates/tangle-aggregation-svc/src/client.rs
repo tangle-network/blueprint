@@ -12,7 +12,15 @@
 //! let client = AggregationServiceClient::new("http://localhost:8080");
 //!
 //! // Initialize a task
-//! client.init_task(service_id, call_id, &output, operator_count, threshold).await?;
+//! client
+//!     .init_task(
+//!         service_id,
+//!         call_id,
+//!         &output,
+//!         operator_count,
+//!         ThresholdConfig::Count { required_signers: 2 },
+//!     )
+//!     .await?;
 //!
 //! // Submit a signature
 //! let response = client.submit_signature(request).await?;
@@ -93,7 +101,7 @@ impl AggregationServiceClient {
         call_id: u64,
         output: &[u8],
         operator_count: u32,
-        threshold: u32,
+        threshold: ThresholdConfig,
     ) -> Result<(), ClientError> {
         let url = format!("{}/v1/tasks/init", self.base_url);
         let request = InitTaskRequest {
@@ -117,7 +125,9 @@ impl AggregationServiceClient {
             Ok(())
         } else {
             Err(ClientError::Server(
-                response.error.unwrap_or_else(|| "Unknown error".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "Unknown error".to_string()),
             ))
         }
     }
@@ -128,14 +138,22 @@ impl AggregationServiceClient {
         request: SubmitSignatureRequest,
     ) -> Result<SubmitSignatureResponse, ClientError> {
         let url = format!("{}/v1/tasks/submit", self.base_url);
-        let response: SubmitSignatureResponse =
-            self.client.post(&url).json(&request).send().await?.json().await?;
+        let response: SubmitSignatureResponse = self
+            .client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await?
+            .json()
+            .await?;
 
         if response.accepted {
             Ok(response)
         } else {
             Err(ClientError::Server(
-                response.error.unwrap_or_else(|| "Signature rejected".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "Signature rejected".to_string()),
             ))
         }
     }
@@ -152,8 +170,14 @@ impl AggregationServiceClient {
             call_id,
         };
 
-        let response: GetStatusResponse =
-            self.client.post(&url).json(&request).send().await?.json().await?;
+        let response: GetStatusResponse = self
+            .client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await?
+            .json()
+            .await?;
 
         if !response.exists {
             return Err(ClientError::NotFound);
@@ -192,11 +216,7 @@ impl AggregationServiceClient {
     }
 
     /// Mark a task as submitted to the chain
-    pub async fn mark_submitted(
-        &self,
-        service_id: u64,
-        call_id: u64,
-    ) -> Result<(), ClientError> {
+    pub async fn mark_submitted(&self, service_id: u64, call_id: u64) -> Result<(), ClientError> {
         let url = format!("{}/v1/tasks/mark-submitted", self.base_url);
         let request = GetStatusRequest {
             service_id,
@@ -208,7 +228,10 @@ impl AggregationServiceClient {
         if !response.status().is_success() {
             let error: serde_json::Value = response.json().await?;
             return Err(ClientError::Server(
-                error["error"].as_str().unwrap_or("Unknown error").to_string(),
+                error["error"]
+                    .as_str()
+                    .unwrap_or("Unknown error")
+                    .to_string(),
             ));
         }
 

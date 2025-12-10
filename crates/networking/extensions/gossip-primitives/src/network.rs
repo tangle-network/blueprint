@@ -8,7 +8,7 @@ use alloc::{boxed::Box, vec::Vec};
 use async_trait::async_trait;
 use core::fmt::Debug;
 use futures::Stream;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 /// A peer identifier (abstracted from libp2p::PeerId)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

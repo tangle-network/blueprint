@@ -14,11 +14,6 @@ pub enum Error {
     #[error("Other Error: {0}")]
     Other(String),
 
-    // Specific to Tangle
-    #[cfg(feature = "tangle")]
-    #[error("Tangle Subxt error: {0}")]
-    TangleSubxt(#[from] tangle_subxt::subxt::Error),
-
     // EVM and EigenLayer
     #[cfg(any(feature = "evm", feature = "eigenlayer"))]
     #[error("EVM error: {0}")]
@@ -74,7 +69,6 @@ macro_rules! implement_client_error {
 }
 implement_client_error!("eigenlayer", blueprint_clients::eigenlayer::error::Error);
 implement_client_error!("evm", blueprint_clients::evm::error::Error);
-implement_client_error!("tangle", blueprint_clients::tangle::error::Error);
 
 #[cfg(any(feature = "evm", feature = "eigenlayer"))]
 macro_rules! implement_from_alloy_error {

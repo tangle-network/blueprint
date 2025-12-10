@@ -8,7 +8,7 @@ use crate::{
     types::{MessageRouting, ProtocolMessage},
 };
 use blueprint_core::info;
-use blueprint_crypto::{KeyType, sp_core::SpEcdsa};
+use blueprint_crypto::{KeyType, k256::K256Ecdsa};
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, time::Duration};
@@ -64,11 +64,11 @@ async fn test_summation_protocol_basic() {
     info!("Starting summation protocol test");
 
     // Create nodes with whitelisted keys
-    let instance_key_pair2 = SpEcdsa::generate_with_seed(None).unwrap();
+    let instance_key_pair2 = K256Ecdsa::generate_with_seed(None).unwrap();
     let mut allowed_keys1 = HashSet::new();
     allowed_keys1.insert(instance_key_pair2.public());
 
-    let mut node1 = TestNode::<SpEcdsa>::new(
+    let mut node1 = TestNode::<K256Ecdsa>::new(
         "test-net",
         "sum-test",
         AllowedKeys::InstancePublicKeys(allowed_keys1),
@@ -78,7 +78,7 @@ async fn test_summation_protocol_basic() {
 
     let mut allowed_keys2 = HashSet::new();
     allowed_keys2.insert(node1.instance_key_pair.public());
-    let mut node2 = TestNode::<SpEcdsa>::new_with_keys(
+    let mut node2 = TestNode::<K256Ecdsa>::new_with_keys(
         "test-net",
         "sum-test",
         AllowedKeys::InstancePublicKeys(allowed_keys2),
@@ -236,7 +236,7 @@ async fn test_summation_protocol_multi_node() {
     // Create 3 nodes with whitelisted keys
     info!("Creating whitelisted nodes");
     let mut nodes =
-        create_whitelisted_nodes::<SpEcdsa>(3, "summation-test", "test-instance", false);
+        create_whitelisted_nodes::<K256Ecdsa>(3, "summation-test", "test-instance", false);
     info!("Created {} nodes successfully", nodes.len());
 
     // Start all nodes
@@ -250,7 +250,7 @@ async fn test_summation_protocol_multi_node() {
 
     // Convert handles to mutable references
     info!("Converting handles to mutable references");
-    let mut handles: Vec<&mut NetworkServiceHandle<SpEcdsa>> = handles.iter_mut().collect();
+    let mut handles: Vec<&mut NetworkServiceHandle<K256Ecdsa>> = handles.iter_mut().collect();
     let handles_len = handles.len();
     info!("Converted {} handles", handles_len);
 

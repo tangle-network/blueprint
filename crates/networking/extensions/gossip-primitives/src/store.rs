@@ -11,10 +11,10 @@ use core::time::Duration;
 use hashbrown::HashMap;
 use parking_lot::RwLock;
 
-#[cfg(feature = "std")]
-use std::time::Instant;
 #[cfg(not(feature = "std"))]
 use blueprint_std::time::Instant;
+#[cfg(feature = "std")]
+use std::time::Instant;
 
 /// Entry in the message store
 #[derive(Debug, Clone)]
@@ -134,7 +134,11 @@ impl<M: Clone> MessageStore<M> {
         // Update sender index
         if self.config.index_by_sender {
             if let Some(peer_id) = sender {
-                self.by_sender.write().entry(peer_id).or_default().push(hash);
+                self.by_sender
+                    .write()
+                    .entry(peer_id)
+                    .or_default()
+                    .push(hash);
             }
         }
 
@@ -272,7 +276,11 @@ impl<M: Clone> MessageStore<M> {
         }
 
         // Remove from insertion order
-        let times_to_remove: Vec<_> = insertion_order.iter().take(to_evict).map(|(t, _)| *t).collect();
+        let times_to_remove: Vec<_> = insertion_order
+            .iter()
+            .take(to_evict)
+            .map(|(t, _)| *t)
+            .collect();
         for time in times_to_remove {
             insertion_order.remove(&time);
         }

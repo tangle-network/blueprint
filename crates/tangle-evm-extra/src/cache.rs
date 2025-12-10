@@ -7,7 +7,7 @@
 //!
 //! ```rust,ignore
 //! use blueprint_tangle_evm_extra::cache::ServiceConfigCache;
-//! use std::time::Duration;
+//! use blueprint_std::time::Duration;
 //!
 //! // Create cache with 5 minute TTL
 //! let cache = ServiceConfigCache::new(Duration::from_secs(300));
@@ -23,10 +23,15 @@
 //! ```
 
 use alloy_primitives::Address;
-use blueprint_client_tangle_evm::{AggregationConfig, TangleEvmClient};
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use blueprint_client_tangle_evm::{AggregationConfig, OperatorMetadata, TangleEvmClient};
+use blueprint_std::collections::HashMap;
+use blueprint_std::format;
+use blueprint_std::string::{String, ToString};
+use blueprint_std::sync::{Arc, RwLock};
+use blueprint_std::time::{Duration, Instant};
+use blueprint_std::vec::Vec;
+use core::fmt;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Default cache TTL (5 minutes)
 pub const DEFAULT_CACHE_TTL: Duration = Duration::from_secs(300);
@@ -184,6 +189,8 @@ pub struct ServiceConfigCache {
     operator_weights: RwLock<HashMap<u64, CacheEntry<OperatorWeights>>>,
     /// Service operators cache: service_id -> operators
     service_operators: RwLock<HashMap<u64, CacheEntry<ServiceOperators>>>,
+    /// Operator metadata cache: (blueprint_id, operator) -> metadata
+    operator_metadata: RwLock<HashMap<(u64, Address), CacheEntry<OperatorMetadata>>>,
 }
 
 impl ServiceConfigCache {
@@ -194,6 +201,7 @@ impl ServiceConfigCache {
             aggregation_configs: RwLock::new(HashMap::new()),
             operator_weights: RwLock::new(HashMap::new()),
             service_operators: RwLock::new(HashMap::new()),
+            operator_metadata: RwLock::new(HashMap::new()),
         }
     }
 
@@ -442,6 +450,56 @@ impl ServiceConfigCache {
         Ok(operators)
     }
 
+    /// Get metadata for a specific operator (cached by blueprint + operator)
+    pub async fn get_operator_metadata(
+        &self,
+        client: &TangleEvmClient,
+        blueprint_id: u64,
+        operator: Address,
+    ) -> Result<OperatorMetadata, CacheError> {
+        let key = (blueprint_id, operator);
+        if let Some(entry) = self
+            .operator_metadata
+            .read()
+            .map_err(|_| CacheError::LockPoisoned)?
+            .get(&key)
+            .cloned()
+        {
+            if !entry.is_expired(self.ttl) {
+                return Ok(entry.value);
+            }
+        }
+
+        let metadata = client
+            .get_operator_metadata(blueprint_id, operator)
+            .await
+            .map_err(|e| CacheError::FetchError(e.to_string()))?;
+        let mut guard = self
+            .operator_metadata
+            .write()
+            .map_err(|_| CacheError::LockPoisoned)?;
+        guard.insert(key, CacheEntry::new(metadata.clone()));
+        Ok(metadata)
+    }
+
+    /// Get metadata for all operators in a service.
+    pub async fn get_service_operator_metadata(
+        &self,
+        client: &TangleEvmClient,
+        blueprint_id: u64,
+        service_id: u64,
+    ) -> Result<HashMap<Address, OperatorMetadata>, CacheError> {
+        let operators = self.get_service_operators(client, service_id).await?;
+        let mut result = HashMap::with_capacity(operators.len());
+        for operator in operators.iter() {
+            let metadata = self
+                .get_operator_metadata(client, blueprint_id, *operator)
+                .await?;
+            result.insert(*operator, metadata);
+        }
+        Ok(result)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CACHE MANAGEMENT
     // ═══════════════════════════════════════════════════════════════════════════
@@ -548,8 +606,8 @@ pub struct CacheStats {
     pub ttl: Duration,
 }
 
-impl std::fmt::Display for CacheStats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for CacheStats {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "ServiceConfigCache {{ aggregation_configs: {}, operator_weights: {}, service_operators: {}, ttl: {:?} }}",
@@ -588,14 +646,28 @@ pub enum CacheInvalidationEvent {
     ServiceActivated { service_id: u64 },
 }
 
-impl std::fmt::Display for CacheInvalidationEvent {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for CacheInvalidationEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::OperatorJoined { service_id, operator } => {
-                write!(f, "OperatorJoined(service={}, operator={})", service_id, operator)
+            Self::OperatorJoined {
+                service_id,
+                operator,
+            } => {
+                write!(
+                    f,
+                    "OperatorJoined(service={}, operator={})",
+                    service_id, operator
+                )
             }
-            Self::OperatorLeft { service_id, operator } => {
-                write!(f, "OperatorLeft(service={}, operator={})", service_id, operator)
+            Self::OperatorLeft {
+                service_id,
+                operator,
+            } => {
+                write!(
+                    f,
+                    "OperatorLeft(service={}, operator={})",
+                    service_id, operator
+                )
             }
             Self::ServiceTerminated { service_id } => {
                 write!(f, "ServiceTerminated(service={})", service_id)
@@ -620,7 +692,10 @@ impl ServiceConfigCache {
         );
 
         match event {
-            CacheInvalidationEvent::OperatorJoined { service_id, operator } => {
+            CacheInvalidationEvent::OperatorJoined {
+                service_id,
+                operator,
+            } => {
                 blueprint_core::info!(
                     target: "service-config-cache",
                     "🔄 Invalidating cache: operator {} joined service {}",
@@ -629,7 +704,10 @@ impl ServiceConfigCache {
                 );
                 self.invalidate_operator_data(*service_id);
             }
-            CacheInvalidationEvent::OperatorLeft { service_id, operator } => {
+            CacheInvalidationEvent::OperatorLeft {
+                service_id,
+                operator,
+            } => {
                 blueprint_core::info!(
                     target: "service-config-cache",
                     "🔄 Invalidating cache: operator {} left service {}",
@@ -695,7 +773,7 @@ pub struct CacheSyncService {
     /// Services to watch (None = watch all)
     watched_services: Option<Vec<u64>>,
     /// Last processed block
-    last_block: std::sync::atomic::AtomicU64,
+    last_block: AtomicU64,
 }
 
 impl CacheSyncService {
@@ -705,7 +783,7 @@ impl CacheSyncService {
             client,
             cache,
             watched_services: None,
-            last_block: std::sync::atomic::AtomicU64::new(0),
+            last_block: AtomicU64::new(0),
         }
     }
 
@@ -717,7 +795,7 @@ impl CacheSyncService {
 
     /// Set the starting block for polling
     pub fn from_block(self, block: u64) -> Self {
-        self.last_block.store(block, std::sync::atomic::Ordering::Relaxed);
+        self.last_block.store(block, Ordering::Relaxed);
         self
     }
 
@@ -734,10 +812,9 @@ impl CacheSyncService {
     /// Returns the number of events processed.
     pub async fn poll_and_sync(&self) -> Result<usize, CacheError> {
         use alloy_rpc_types::Filter;
-        use alloy_sol_types::SolEvent;
         use blueprint_client_tangle_evm::contracts::ITangle;
 
-        let from_block = self.last_block.load(std::sync::atomic::Ordering::Relaxed);
+        let from_block = self.last_block.load(Ordering::Relaxed);
         let tangle_address = self.client.config.settings.tangle_contract;
 
         // Create filter for relevant events
@@ -745,22 +822,24 @@ impl CacheSyncService {
             .address(tangle_address)
             .from_block(from_block)
             .events([
-                ITangle::OperatorJoinedService::SIGNATURE_HASH,
-                ITangle::OperatorLeftService::SIGNATURE_HASH,
-                ITangle::ServiceTerminated::SIGNATURE_HASH,
-                ITangle::ServiceActivated::SIGNATURE_HASH,
+                <ITangle::OperatorJoinedService as alloy_sol_types::SolEvent>::SIGNATURE_HASH,
+                <ITangle::OperatorLeftService as alloy_sol_types::SolEvent>::SIGNATURE_HASH,
+                <ITangle::ServiceTerminated as alloy_sol_types::SolEvent>::SIGNATURE_HASH,
+                <ITangle::ServiceActivated as alloy_sol_types::SolEvent>::SIGNATURE_HASH,
             ]);
 
-        let logs = self.client.get_logs(&filter).await.map_err(|e| {
-            CacheError::FetchError(format!("Failed to fetch logs: {}", e))
-        })?;
+        let logs = self
+            .client
+            .get_logs(&filter)
+            .await
+            .map_err(|e| CacheError::FetchError(format!("Failed to fetch logs: {}", e)))?;
 
         let count = self.process_logs(&logs);
 
         // Update last block
         if let Some(last_log) = logs.last() {
             if let Some(block_num) = last_log.block_number {
-                self.last_block.store(block_num + 1, std::sync::atomic::Ordering::Relaxed);
+                self.last_block.store(block_num + 1, Ordering::Relaxed);
             }
         }
 
@@ -791,7 +870,6 @@ impl CacheSyncService {
 
     /// Parse a log into a cache invalidation event
     pub fn parse_log(&self, log: &alloy_rpc_types::Log) -> Option<CacheInvalidationEvent> {
-        use alloy_sol_types::SolEvent;
         use blueprint_client_tangle_evm::contracts::ITangle;
 
         // Try to decode each event type
@@ -831,7 +909,7 @@ impl CacheSyncService {
 
     /// Get the last processed block number
     pub fn last_block(&self) -> u64 {
-        self.last_block.load(std::sync::atomic::Ordering::Relaxed)
+        self.last_block.load(Ordering::Relaxed)
     }
 }
 

@@ -2,20 +2,14 @@ use crate::benchmark_cache::BenchmarkCache;
 use crate::config::OperatorConfig;
 use crate::pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
 use crate::pricing::calculate_price;
-use crate::pricing_engine::asset::AssetType;
-use crate::signer::{OperatorSigner, SignedQuote as SignerSignedQuote};
-use crate::utils::bytes_to_u128;
+use crate::signer::{OperatorSigner, SignableQuote, SignedQuote as SignerSignedQuote};
+use blueprint_core::{error, info, warn};
 use blueprint_crypto::BytesEncoding;
-use blueprint_crypto::sp_core::SpEcdsa;
 use chrono::Utc;
 use rust_decimal::prelude::ToPrimitive;
-use tangle_subxt::subxt::utils::H160;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::sp_arithmetic::per_things::Percent;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::{Asset, AssetSecurityRequirement};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, transport::Server};
-use blueprint_core::{error, info, warn};
 
 use crate::pricing_engine::{
     AssetSecurityCommitment, GetPriceRequest, GetPriceResponse, QuoteDetails,
@@ -28,7 +22,7 @@ pub struct PricingEngineService {
     benchmark_cache: Arc<BenchmarkCache>,
     pricing_config:
         Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
-    signer: Arc<Mutex<OperatorSigner<SpEcdsa>>>,
+    signer: Arc<Mutex<OperatorSigner>>,
 }
 
 impl PricingEngineService {
@@ -38,54 +32,13 @@ impl PricingEngineService {
         pricing_config: Arc<
             Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
         >,
-        signer: Arc<Mutex<OperatorSigner<SpEcdsa>>>,
+        signer: Arc<Mutex<OperatorSigner>>,
     ) -> Self {
         Self {
             config,
             benchmark_cache,
             pricing_config,
             signer,
-        }
-    }
-
-    // Create a security commitment from a security requirement using the minimum exposure percent
-    fn create_security_commitment(
-        requirement: &crate::pricing_engine::AssetSecurityRequirements,
-    ) -> AssetSecurityCommitment {
-        AssetSecurityCommitment {
-            asset: requirement.asset.clone(),
-            exposure_percent: requirement.minimum_exposure_percent,
-        }
-    }
-
-    fn create_security_requirement(
-        requirement: &crate::pricing_engine::AssetSecurityRequirements,
-    ) -> AssetSecurityRequirement<u128> {
-        let asset = requirement.asset.clone().unwrap().asset_type.unwrap();
-        let asset = match asset {
-            AssetType::Custom(asset_type) => {
-                let chain_asset_type = bytes_to_u128(&asset_type);
-                Asset::Custom(chain_asset_type)
-            }
-            AssetType::Erc20(asset_type) => Asset::Erc20(H160::from_slice(&asset_type)),
-        };
-        let minimum_percent = Percent(
-            requirement
-                .minimum_exposure_percent
-                .try_into()
-                .unwrap_or_default(),
-        );
-        let maximum_percent = Percent(
-            requirement
-                .maximum_exposure_percent
-                .try_into()
-                .unwrap_or_default(),
-        );
-
-        AssetSecurityRequirement {
-            asset,
-            min_exposure_percent: minimum_percent,
-            max_exposure_percent: maximum_percent,
         }
     }
 }
@@ -161,8 +114,6 @@ impl PricingEngine for PricingEngineService {
             }
         };
 
-        let security_requirement = Self::create_security_requirement(&security_requirements);
-
         // Get the pricing configuration
         let pricing_config = self.pricing_config.lock().await;
 
@@ -172,7 +123,7 @@ impl PricingEngine for PricingEngineService {
             &pricing_config,
             Some(blueprint_id),
             ttl_blocks,
-            Some(security_requirement),
+            Some(security_requirements.clone()),
         ) {
             Ok(model) => model,
             Err(e) => {
@@ -185,17 +136,23 @@ impl PricingEngine for PricingEngineService {
         };
 
         // Get the total cost from the price model
-        let total_cost = price_model.total_cost;
+        let crate::pricing::PriceModel {
+            resources: price_resources,
+            total_cost,
+            ..
+        } = price_model;
 
-        let security_commitment = Self::create_security_commitment(&security_requirements);
+        let security_commitment = AssetSecurityCommitment {
+            asset: security_requirements.asset.clone(),
+            exposure_percent: security_requirements.minimum_exposure_percent,
+        };
 
         // Prepare the response
         let expiry_time = Utc::now().timestamp() as u64 + self.config.quote_validity_duration_secs;
         let timestamp = Utc::now().timestamp() as u64;
 
         // Convert our internal resource pricing to proto resource pricing
-        let proto_resources: Vec<ProtoResourcePricing> = price_model
-            .resources
+        let proto_resources: Vec<ProtoResourcePricing> = price_resources
             .iter()
             .map(|rp| ProtoResourcePricing {
                 kind: format!("{:?}", rp.kind),
@@ -214,8 +171,16 @@ impl PricingEngine for PricingEngineService {
             timestamp,
             expiry: expiry_time,
             resources: proto_resources,
-            security_commitments: Some(security_commitment),
+            security_commitments: vec![security_commitment],
         };
+
+        let signable_quote = SignableQuote::new(quote_details, total_cost).map_err(|e| {
+            error!(
+                "Failed to prepare signable quote for blueprint ID {}: {}",
+                blueprint_id, e
+            );
+            Status::internal("Failed to build signable quote")
+        })?;
 
         // Generate proof of work for the response
         let response_pow = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY)
@@ -226,11 +191,11 @@ impl PricingEngine for PricingEngineService {
             })?;
 
         // Sign the quote using the hash-based approach
-        let signed_quote: SignerSignedQuote<SpEcdsa> = match self
+        let signed_quote: SignerSignedQuote = match self
             .signer
             .lock()
             .await
-            .sign_quote(quote_details.clone(), response_pow.clone())
+            .sign_quote(signable_quote, response_pow.clone())
         {
             Ok(quote) => quote,
             Err(e) => {
@@ -241,7 +206,7 @@ impl PricingEngine for PricingEngineService {
 
         // Create the response
         let response = GetPriceResponse {
-            quote_details: Some(signed_quote.quote_details),
+            quote_details: Some(signed_quote.quote_details.clone()),
             signature: signed_quote.signature.to_bytes().to_vec(),
             operator_id: signed_quote.operator_id.0.to_vec(),
             proof_of_work: signed_quote.proof_of_work,
@@ -259,7 +224,7 @@ pub async fn run_rpc_server(
     pricing_config: Arc<
         Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
     >,
-    signer: Arc<Mutex<OperatorSigner<SpEcdsa>>>,
+    signer: Arc<Mutex<OperatorSigner>>,
 ) -> anyhow::Result<()> {
     let addr = format!("{}:{}", config.rpc_bind_address, config.rpc_port).parse()?;
     info!("gRPC server listening on {}", addr);

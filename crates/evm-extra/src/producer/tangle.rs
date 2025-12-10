@@ -8,12 +8,12 @@ use alloc::collections::VecDeque;
 use alloy_primitives::Address;
 use alloy_provider::Provider;
 use alloy_rpc_types::{Filter, Log};
-use alloy_sol_types::{sol, SolEvent};
+use alloy_sol_types::{SolEvent, sol};
 use alloy_transport::TransportError;
+use blueprint_core::JobCall;
 use blueprint_core::extensions::Extensions;
 use blueprint_core::job::call::Parts;
 use blueprint_core::metadata::MetadataMap;
-use blueprint_core::JobCall;
 use blueprint_std::sync::{Arc, Mutex};
 use bytes::Bytes;
 use core::{
@@ -161,7 +161,10 @@ impl<P: Provider> TangleProducer<P> {
     ///
     /// # Errors
     /// Returns a transport error if unable to fetch the current block number
-    pub async fn new(provider: Arc<P>, mut config: TangleProducerConfig) -> Result<Self, TransportError> {
+    pub async fn new(
+        provider: Arc<P>,
+        mut config: TangleProducerConfig,
+    ) -> Result<Self, TransportError> {
         if let StartBlockSource::Current(current_block) = &mut config.start_block {
             *current_block = provider.get_block_number().await?;
         }
@@ -378,7 +381,10 @@ fn logs_to_tangle_job_calls(logs: Vec<Log>) -> Vec<JobCall> {
             .with_metadata(metadata)
             .with_extensions(extensions);
 
-        job_calls.push(JobCall::from_parts(parts, Bytes::copy_from_slice(&data.inputs)));
+        job_calls.push(JobCall::from_parts(
+            parts,
+            Bytes::copy_from_slice(&data.inputs),
+        ));
 
         blueprint_core::trace!(
             target: "tangle-evm-producer",

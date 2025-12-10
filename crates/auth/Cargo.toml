@@ -26,6 +26,7 @@ crc32fast = { workspace = true }
 
 k256 = { workspace = true, features = ["ecdsa", "alloc", "serde", "pem"] }
 schnorrkel = { workspace = true }
+blueprint-crypto = { workspace = true, features = ["bn254"] }
 serde_json = { workspace = true }
 pasetors = { workspace = true, default-features = false, features = ["v4", "serde_json", "std"] }
 uuid = { workspace = true, features = ["v4", "serde"] }
@@ -80,7 +81,7 @@ tonic-build = { workspace = true, features = ["prost"] }
 
 [features]
 default = ["std", "tracing"]
-std = ["blueprint-std/std", "crc32fast/std", "k256/std", "schnorrkel/std", "base64/std", "prost/std"]
+std = ["blueprint-std/std", "crc32fast/std", "k256/std", "schnorrkel/std", "base64/std", "prost/std", "blueprint-crypto/std"]
 standalone = ["tempfile", "axum/http1", "axum/http2", "axum/tokio"]
 tracing = []
 

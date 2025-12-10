@@ -1,11 +1,10 @@
 use crate::benchmark::BenchmarkProfile;
 use crate::error::Result;
+use crate::pricing_engine::AssetSecurityRequirements;
 use crate::types::ResourceUnit;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tangle_subxt::tangle_testnet_runtime::api::assets::events::created::AssetId;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::types::AssetSecurityRequirement;
 use toml;
 
 /// The average block time in seconds
@@ -48,7 +47,7 @@ fn calculate_ttl_price_adjustment(time_blocks: u64) -> Decimal {
 
 /// Function that applies security requirement adjustments to the cost
 fn calculate_security_rate_adjustment(
-    _security_requirements: &Option<AssetSecurityRequirement<AssetId>>,
+    _security_requirements: &Option<AssetSecurityRequirements>,
 ) -> Decimal {
     // TODO: Implement security requirement adjustments
     Decimal::ONE
@@ -60,7 +59,7 @@ pub fn calculate_resource_price(
     count: u64,
     price_per_unit_rate: Decimal,
     ttl_blocks: u64,
-    security_requirements: Option<AssetSecurityRequirement<AssetId>>,
+    security_requirements: Option<AssetSecurityRequirements>,
 ) -> Decimal {
     let adjusted_base_cost = calculate_base_resource_cost(count, price_per_unit_rate);
     let adjusted_time_cost = calculate_ttl_price_adjustment(ttl_blocks);
@@ -75,7 +74,7 @@ pub fn calculate_price(
     pricing_config: &HashMap<Option<u64>, Vec<ResourcePricing>>,
     blueprint_id: Option<u64>,
     ttl_blocks: u64,
-    security_requirements: Option<AssetSecurityRequirement<AssetId>>,
+    security_requirements: Option<AssetSecurityRequirements>,
 ) -> Result<PriceModel> {
     let mut resources = Vec::new();
     let mut total_cost = Decimal::ZERO;

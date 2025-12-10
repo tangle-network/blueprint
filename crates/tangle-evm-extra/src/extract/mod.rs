@@ -26,6 +26,7 @@ use blueprint_core::{
     __composite_rejection as composite_rejection, __define_rejection as define_rejection,
 };
 use blueprint_core::{FromJobCall, FromJobCallParts, JobCall, job::call::Parts as JobCallParts};
+use blueprint_std::string::{String, ToString};
 use bytes::Bytes;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -257,7 +258,9 @@ impl TryFrom<&mut JobCallParts> for BlockNumber {
             .metadata
             .get(Self::METADATA_KEY)
             .ok_or(MissingBlockNumber)?;
-        let block_number = block_number_raw.try_into().map_err(|_| InvalidBlockNumber)?;
+        let block_number = block_number_raw
+            .try_into()
+            .map_err(|_| InvalidBlockNumber)?;
         Ok(BlockNumber(block_number))
     }
 }
@@ -444,7 +447,7 @@ impl From<[u8; 20]> for Caller {
 
 impl From<Address> for Caller {
     fn from(addr: Address) -> Self {
-        Caller(addr.0 .0)
+        Caller(addr.0.0)
     }
 }
 
@@ -672,11 +675,15 @@ mod tests {
 
         let mut parts_job0 = JobCallParts::new(0);
         parts_job0.metadata.insert(JobIndex::METADATA_KEY, [0u8]);
-        parts_job0.metadata.insert(ServiceId::METADATA_KEY, 1u64.to_be_bytes());
+        parts_job0
+            .metadata
+            .insert(ServiceId::METADATA_KEY, 1u64.to_be_bytes());
 
         let mut parts_job1 = JobCallParts::new(0);
         parts_job1.metadata.insert(JobIndex::METADATA_KEY, [1u8]);
-        parts_job1.metadata.insert(ServiceId::METADATA_KEY, 1u64.to_be_bytes());
+        parts_job1
+            .metadata
+            .insert(ServiceId::METADATA_KEY, 1u64.to_be_bytes());
 
         // Extract both
         let job_idx0 = JobIndex::try_from(&mut parts_job0).unwrap();

@@ -219,11 +219,11 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
 // BLS Tests
 mod bls_tests {
     use super::*;
-    use blueprint_crypto::{sp_core::SpBls377, sp_core::SpBls381};
+    use blueprint_crypto::bls::{bls377::W3fBls377, bls381::W3fBls381};
 
     #[tokio::test]
     async fn test_bls381_basic_aggregation() {
-        run_signature_aggregation_test::<SpBls381>(
+        run_signature_aggregation_test::<W3fBls381>(
             3,  // 3 nodes
             67, // 67% threshold (2 out of 3)
             "basic_bls381_aggregation",
@@ -234,7 +234,7 @@ mod bls_tests {
 
     #[tokio::test]
     async fn test_bls377_basic_aggregation() {
-        run_signature_aggregation_test::<SpBls377>(
+        run_signature_aggregation_test::<W3fBls377>(
             3,  // 3 nodes
             67, // 67% threshold (2 out of 3)
             "basic_bls377_aggregation",

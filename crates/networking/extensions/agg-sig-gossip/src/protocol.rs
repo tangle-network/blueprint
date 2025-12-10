@@ -107,10 +107,7 @@ where
 
     /// Create a config optimized for CI/testing environments
     /// Uses longer timeouts and intervals to handle resource-constrained environments
-    pub fn for_testing(
-        network_handle: NetworkServiceHandle<S>,
-        num_aggregators: u16,
-    ) -> Self {
+    pub fn for_testing(network_handle: NetworkServiceHandle<S>, num_aggregators: u16) -> Self {
         Self {
             network_handle,
             num_aggregators,
@@ -167,7 +164,7 @@ where
         // This replaces the simple HashSet with a bounded LRU cache that auto-expires
         let dedup_cache = DeduplicationCache::new(
             participant_public_keys.len().max(100) * 10, // Allow multiple messages per participant
-            Duration::from_secs(300), // 5 minute TTL
+            Duration::from_secs(300),                    // 5 minute TTL
         );
 
         Self {
@@ -398,7 +395,9 @@ where
         self.state.local_message = message.to_vec();
 
         // Initialize the signature collection phase
-        let _ = self.state.try_transition_to(ProtocolRound::SignatureCollection);
+        let _ = self
+            .state
+            .try_transition_to(ProtocolRound::SignatureCollection);
 
         // Select aggregators based on the message and public keys
         let _ = self

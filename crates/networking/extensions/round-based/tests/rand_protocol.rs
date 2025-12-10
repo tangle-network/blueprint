@@ -182,7 +182,7 @@ mod tests {
     use std::time::Duration;
 
     use blueprint_core::{debug, info};
-    use blueprint_crypto::sp_core::SpEcdsa;
+    use blueprint_crypto::k256::K256Ecdsa;
     use blueprint_networking::service_handle::NetworkServiceHandle;
     use blueprint_networking::test_utils::{create_whitelisted_nodes, wait_for_all_handshakes};
     use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
@@ -245,7 +245,7 @@ mod tests {
         let network_name = "rand-test-network";
         let instance_id = "rand-test-instance";
         // Create whitelisted nodes
-        let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, network_name, instance_id, false);
+        let mut nodes = create_whitelisted_nodes::<K256Ecdsa>(2, network_name, instance_id, false);
         info!("Created {} nodes successfully", nodes.len());
 
         let parties = HashMap::from_iter([(0, nodes[0].peer_id), (1, nodes[1].peer_id)]);
@@ -260,7 +260,7 @@ mod tests {
         }
 
         // Convert handles to mutable references for wait_for_all_handshakes
-        let handle_refs: Vec<&mut NetworkServiceHandle<SpEcdsa>> = handles.iter_mut().collect();
+        let handle_refs: Vec<&mut NetworkServiceHandle<K256Ecdsa>> = handles.iter_mut().collect();
 
         // *** Add a small delay to allow initial network stabilization ***
         tokio::time::sleep(Duration::from_millis(500)).await;

@@ -36,10 +36,7 @@ blueprint-macros = { workspace = true, optional = true }
 blueprint-context-derive = { workspace = true, optional = true }
 
 # Tangle-specific extras
-blueprint-tangle-extra = { workspace = true, optional = true }
 blueprint-tangle-evm-extra = { workspace = true, optional = true }
-tangle-subxt = { workspace = true, optional = true }
-blueprint-crypto-tangle-pair-signer = { workspace = true, optional = true }
 
 # Eigenlayer and EVM-specific extras
 blueprint-evm-extra = { workspace = true, optional = true }
@@ -92,20 +89,11 @@ std = [
     "blueprint-crypto/std",
     "blueprint-context-derive?/std",
     "blueprint-auth/std",
-    # Tangle
-    "tangle-subxt?/std",
     # Extras
-    "blueprint-tangle-extra?/std",
     "blueprint-tangle-evm-extra?/std",
     "blueprint-evm-extra?/std",
     "blueprint-eigenlayer-extra?/std",
     "blueprint-chain-setup/std",
-]
-
-## Enable support for web targets
-web = [
-    # Tangle
-    "tangle-subxt/web",
 ]
 
 ## Enable [tracing] support
@@ -115,25 +103,9 @@ tracing = [
     "blueprint-core/tracing",
     "blueprint-router/tracing",
     "blueprint-producers-extra/tracing",
-    "blueprint-tangle-extra?/tracing",
 ]
 
 ##! ### Protocol Support
-
-## Enable [Tangle] support
-##
-## [Tangle]: https://tangle.tools
-tangle = [
-    "dep:blueprint-tangle-extra",
-    "dep:tangle-subxt",
-    "dep:blueprint-crypto-tangle-pair-signer",
-    "blueprint-clients/tangle",
-    "blueprint-contexts/tangle",
-    "blueprint-context-derive?/tangle",
-    "blueprint-testing-utils?/tangle",
-    "blueprint-runner/tangle",
-    "blueprint-chain-setup?/tangle",
-]
 
 ## Enable EVM support
 evm = [
@@ -143,7 +115,6 @@ evm = [
     "blueprint-clients/evm",
     "blueprint-contexts/evm",
     "blueprint-context-derive?/evm",
-    "blueprint-crypto-tangle-pair-signer?/evm",
     "blueprint-macros?/evm",
     "blueprint-testing-utils?/anvil",
     "blueprint-chain-setup?/anvil",
@@ -220,7 +191,7 @@ agg-sig-gossip = [
 local-store = ["blueprint-stores/local"]
 
 ## Enable all macros of subcrates
-macros = ["dep:blueprint-macros", "dep:blueprint-context-derive", "blueprint-tangle-extra?/macros"]
+macros = ["dep:blueprint-macros", "dep:blueprint-context-derive"]
 
 ## Enable build-time utilities
 build = ["dep:blueprint-build-utils", "macros"]
@@ -240,5 +211,5 @@ testing = [
 cronjob = ["blueprint-producers-extra/cron"]
 
 [package.metadata.docs.rs]
-features = ["tangle", "tangle-evm", "tangle-evm-aggregation", "tangle-evm-p2p-aggregation", "evm", "eigenlayer", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]
+features = ["tangle-evm", "tangle-evm-aggregation", "tangle-evm-p2p-aggregation", "evm", "eigenlayer", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]
 rustdoc-args = ["--cfg", "docsrs"]

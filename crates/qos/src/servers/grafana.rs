@@ -8,6 +8,7 @@ use crate::logging::GrafanaConfig;
 use crate::logging::loki::LokiConfig;
 use crate::servers::ServerManager;
 use crate::servers::common::DockerManager;
+use reqwest::StatusCode;
 
 const HEALTH_CHECK_TIMEOUT_SECS: u64 = 90;
 const GRAFANA_IMAGE_NAME_FULL: &str = "grafana/grafana:10.4.3";
@@ -38,6 +39,9 @@ pub struct GrafanaServerConfig {
 
     /// Optional Loki configuration to be used by the Grafana client.
     pub loki_config: Option<LokiConfig>,
+
+    /// Maximum time to wait for Grafana API readiness
+    pub health_check_timeout_secs: u64,
 }
 
 impl Default for GrafanaServerConfig {
@@ -51,6 +55,7 @@ impl Default for GrafanaServerConfig {
             data_dir: "/var/lib/grafana".to_string(),
             container_name: "blueprint-grafana".to_string(),
             loki_config: None,
+            health_check_timeout_secs: HEALTH_CHECK_TIMEOUT_SECS,
         }
     }
 }
@@ -161,7 +166,8 @@ impl ServerManager for GrafanaServer {
             *id = Some(container_id.clone());
         }
 
-        self.wait_until_ready(HEALTH_CHECK_TIMEOUT_SECS).await?;
+        self.wait_until_ready(self.config.health_check_timeout_secs)
+            .await?;
 
         info!("Grafana server started successfully");
         Ok(())
@@ -246,6 +252,18 @@ impl ServerManager for GrafanaServer {
             match client.get(&url).send().await {
                 Ok(response) if response.status().is_success() => {
                     info!("Grafana API is responsive.");
+                    return Ok(());
+                }
+                Ok(response)
+                    if matches!(
+                        response.status(),
+                        StatusCode::UNAUTHORIZED | StatusCode::NOT_FOUND
+                    ) =>
+                {
+                    info!(
+                        "Grafana API responded with {}, considering it ready.",
+                        response.status()
+                    );
                     return Ok(());
                 }
                 Ok(response) => {

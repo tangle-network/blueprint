@@ -1,14 +1,20 @@
+use alloy_primitives::Address;
+use blueprint_client_tangle_evm::{TangleEvmClientConfig, TangleEvmSettings};
 use blueprint_core::info;
 use clap::Parser;
 use std::path::PathBuf;
+use std::str::FromStr;
 use tokio::sync::mpsc;
+use url::Url;
 
 // Import functions from the library
 use blueprint_pricing_engine_lib::{
-    cleanup, error::Result, init_benchmark_cache, init_operator_signer, init_pricing_config,
-    load_operator_config, service::blockchain::event::BlockchainEvent,
-    service::rpc::server::run_rpc_server, spawn_event_processor, start_blockchain_listener,
-    wait_for_shutdown,
+    cleanup,
+    error::{PricingError, Result},
+    init_benchmark_cache, init_operator_signer, init_pricing_config, load_operator_config,
+    service::blockchain::event::BlockchainEvent,
+    service::rpc::server::run_rpc_server,
+    spawn_event_processor, start_blockchain_listener, wait_for_shutdown,
 };
 
 /// Operator RFQ Pricing Engine Server CLI
@@ -38,10 +44,45 @@ pub struct Cli {
     #[arg(
         long,
         value_name = "URL",
-        env = "OPERATOR_NODE_URL",
-        default_value = "ws://127.0.0.1:9944"
+        env = "OPERATOR_HTTP_RPC",
+        default_value = "http://127.0.0.1:8545"
     )]
-    pub node_url: String,
+    pub http_rpc_endpoint: String,
+
+    #[arg(
+        long,
+        value_name = "URL",
+        env = "OPERATOR_WS_RPC",
+        default_value = "ws://127.0.0.1:8545"
+    )]
+    pub ws_rpc_endpoint: String,
+
+    #[arg(long, env = "OPERATOR_BLUEPRINT_ID", default_value_t = 0)]
+    pub blueprint_id: u64,
+
+    #[arg(long, env = "OPERATOR_SERVICE_ID")]
+    pub service_id: Option<u64>,
+
+    #[arg(
+        long,
+        env = "OPERATOR_TANGLE_CONTRACT",
+        default_value = "0x0000000000000000000000000000000000000000"
+    )]
+    pub tangle_contract: String,
+
+    #[arg(
+        long,
+        env = "OPERATOR_RESTAKING_CONTRACT",
+        default_value = "0x0000000000000000000000000000000000000000"
+    )]
+    pub restaking_contract: String,
+
+    #[arg(
+        long,
+        env = "OPERATOR_STATUS_REGISTRY_CONTRACT",
+        default_value = "0x0000000000000000000000000000000000000000"
+    )]
+    pub status_registry_contract: String,
 
     /// Log level (e.g., info, debug, trace)
     #[arg(long, value_name = "LEVEL", env = "RUST_LOG", default_value = "info")]
@@ -52,14 +93,46 @@ pub struct Cli {
 pub async fn run_app(cli: Cli) -> Result<()> {
     info!("Starting Tangle Cloud Pricing Engine");
 
+    // Load configuration (already returns Arc<OperatorConfig>)
+    let config = load_operator_config(&cli.config).await?;
+
+    let tangle_contract = parse_address(&cli.tangle_contract)?;
+    let restaking_contract = parse_address(&cli.restaking_contract)?;
+    let status_registry_contract = parse_address(&cli.status_registry_contract)?;
+
+    let evm_settings = TangleEvmSettings {
+        blueprint_id: cli.blueprint_id,
+        service_id: cli.service_id,
+        tangle_contract,
+        restaking_contract,
+        status_registry_contract,
+    };
+
+    let http_rpc_endpoint = Url::parse(&cli.http_rpc_endpoint).map_err(|e| {
+        PricingError::Config(format!(
+            "invalid HTTP RPC endpoint {}: {e}",
+            cli.http_rpc_endpoint
+        ))
+    })?;
+    let ws_rpc_endpoint = Url::parse(&cli.ws_rpc_endpoint).map_err(|e| {
+        PricingError::Config(format!(
+            "invalid WS RPC endpoint {}: {e}",
+            cli.ws_rpc_endpoint
+        ))
+    })?;
+
+    let evm_config = TangleEvmClientConfig::new(
+        http_rpc_endpoint,
+        ws_rpc_endpoint,
+        config.keystore_path.to_string_lossy().to_string(),
+        evm_settings,
+    );
+
     // Create a channel for blockchain events
     let (event_tx, event_rx) = mpsc::channel::<BlockchainEvent>(100);
 
-    // Start blockchain event listener if the feature is enabled
-    let listener_handle = start_blockchain_listener(cli.node_url.clone(), event_tx).await;
-
-    // Load configuration (already returns Arc<OperatorConfig>)
-    let config = load_operator_config(&cli.config).await?;
+    // Start blockchain event listener
+    let listener_handle = start_blockchain_listener(evm_config, event_tx).await;
 
     // Initialize benchmark cache
     let benchmark_cache = init_benchmark_cache(&config).await?;
@@ -98,6 +171,11 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     server_handle.abort();
 
     Ok(())
+}
+
+fn parse_address(input: &str) -> Result<Address> {
+    Address::from_str(input)
+        .map_err(|e| PricingError::Config(format!("invalid address {}: {e}", input)))
 }
 
 #[tokio::main]

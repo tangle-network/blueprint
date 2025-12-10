@@ -2,22 +2,25 @@
 //!
 //! Produces [`JobCall`]s from Tangle EVM contract events.
 
-use alloc::collections::VecDeque;
-use alloy_primitives::Address;
-use alloy_rpc_types::Log;
-use alloy_sol_types::SolEvent;
-use blueprint_client_tangle_evm::contracts::ITangle;
+use alloy_primitives::{Address, B256, U256, hex_literal::hex};
+use alloy_rpc_types::{BlockNumberOrTag, Filter, Log};
 use blueprint_client_tangle_evm::TangleEvmClient;
+use blueprint_core::JobCall;
 use blueprint_core::extensions::Extensions;
 use blueprint_core::job::call::Parts;
 use blueprint_core::metadata::MetadataMap;
-use blueprint_core::JobCall;
+use blueprint_std::boxed::Box;
+use blueprint_std::collections::{BTreeMap, VecDeque};
+use blueprint_std::string::{String, ToString};
+use blueprint_std::sync::Mutex;
+use blueprint_std::vec::Vec;
+use core::convert::TryFrom;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
+use core::time::Duration;
 use futures_core::Stream;
-use std::sync::Mutex;
-use std::time::Duration;
+use tokio::time::sleep;
 
 use crate::extract;
 
@@ -43,7 +46,8 @@ pub struct TangleEvmProducer {
 struct ProducerState {
     last_block: u64,
     buffer: VecDeque<JobCall>,
-    poll_future: Option<Pin<Box<dyn Future<Output = Result<Vec<JobCall>, ProducerError>> + Send>>>,
+    poll_future:
+        Option<Pin<Box<dyn Future<Output = Result<ProducerPollResult, ProducerError>> + Send>>>,
 }
 
 impl ProducerState {
@@ -54,6 +58,11 @@ impl ProducerState {
             poll_future: None,
         }
     }
+}
+
+struct ProducerPollResult {
+    jobs: Vec<JobCall>,
+    last_block: u64,
 }
 
 impl TangleEvmProducer {
@@ -117,8 +126,9 @@ impl Stream for TangleEvmProducer {
             // Check if there's an ongoing poll
             if let Some(fut) = state.poll_future.as_mut() {
                 match fut.as_mut().poll(cx) {
-                    Poll::Ready(Ok(jobs)) => {
-                        state.buffer.extend(jobs);
+                    Poll::Ready(Ok(result)) => {
+                        state.last_block = result.last_block;
+                        state.buffer.extend(result.jobs);
                         state.poll_future = None;
 
                         if let Some(job) = state.buffer.pop_front() {
@@ -139,9 +149,7 @@ impl Stream for TangleEvmProducer {
             let service_id = producer.service_id;
             let last_block = state.last_block;
 
-            let fut = Box::pin(async move {
-                poll_for_jobs(client, service_id, last_block).await
-            });
+            let fut = Box::pin(async move { poll_for_jobs(client, service_id, last_block).await });
             state.poll_future = Some(fut);
         }
     }
@@ -152,79 +160,359 @@ async fn poll_for_jobs(
     client: TangleEvmClient,
     service_id: u64,
     from_block: u64,
-) -> Result<Vec<JobCall>, ProducerError> {
-    // Get the latest event
-    let event = match client.next_event().await {
-        Some(e) => e,
-        None => return Ok(Vec::new()),
-    };
+) -> Result<ProducerPollResult, ProducerError> {
+    let mut block_number_failures = 0u32;
+    let mut get_logs_failures = 0u32;
+    let mut block_fetch_failures = 0u32;
 
-    if event.block_number <= from_block {
-        return Ok(Vec::new());
-    }
-
-    let mut jobs = Vec::new();
-
-    for log in &event.logs {
-        // Try to decode as JobSubmitted event
-        if let Ok(job_event) = decode_job_submitted(log) {
-            // Filter by service ID
-            if job_event.service_id != service_id {
+    'poll_loop: loop {
+        let latest_block = match client.block_number().await {
+            Ok(number) => {
+                if block_number_failures > 0 {
+                    blueprint_core::info!(
+                        target: "tangle-evm-producer",
+                        rpc = "eth_blockNumber",
+                        attempts = block_number_failures,
+                        "RPC recovered after retries"
+                    );
+                    block_number_failures = 0;
+                }
+                number
+            }
+            Err(err) => {
+                block_number_failures += 1;
+                let delay = rpc_retry_delay(block_number_failures);
+                if block_number_failures >= RPC_ERROR_ESCALATION_ATTEMPTS {
+                    blueprint_core::error!(
+                        target: "tangle-evm-producer",
+                        rpc = "eth_blockNumber",
+                        attempts = block_number_failures,
+                        delay_ms = delay.as_millis() as u64,
+                        "Failed to read block number: {err}"
+                    );
+                } else {
+                    blueprint_core::warn!(
+                        target: "tangle-evm-producer",
+                        rpc = "eth_blockNumber",
+                        attempts = block_number_failures,
+                        delay_ms = delay.as_millis() as u64,
+                        "Failed to read block number: {err}; retrying"
+                    );
+                }
+                sleep(delay).await;
                 continue;
             }
+        };
 
-            let job_call = job_submitted_to_call(
-                job_event,
-                event.block_number,
-                event.block_hash.0,
-                event.timestamp,
-            );
-            jobs.push(job_call);
+        if latest_block <= from_block {
+            sleep(Duration::from_millis(250)).await;
+            continue;
         }
-    }
 
-    if !jobs.is_empty() {
-        blueprint_core::trace!(
-            target: "tangle-evm-producer",
-            "Found {} job(s) in block #{}",
-            jobs.len(),
-            event.block_number
-        );
-    }
+        let query_from = from_block.saturating_add(1);
+        let filter = Filter::new()
+            .address(client.tangle_address())
+            .from_block(query_from)
+            .to_block(latest_block);
 
-    Ok(jobs)
+        let logs = match client.get_logs(&filter).await {
+            Ok(logs) => {
+                if get_logs_failures > 0 {
+                    blueprint_core::info!(
+                        target: "tangle-evm-producer",
+                        rpc = "eth_getLogs",
+                        attempts = get_logs_failures,
+                        from = query_from,
+                        to = latest_block,
+                        "RPC recovered after retries"
+                    );
+                    get_logs_failures = 0;
+                }
+                logs
+            }
+            Err(err) => {
+                get_logs_failures += 1;
+                let delay = rpc_retry_delay(get_logs_failures);
+                if get_logs_failures >= RPC_ERROR_ESCALATION_ATTEMPTS {
+                    blueprint_core::error!(
+                        target: "tangle-evm-producer",
+                        rpc = "eth_getLogs",
+                        attempts = get_logs_failures,
+                        from = query_from,
+                        to = latest_block,
+                        delay_ms = delay.as_millis() as u64,
+                        "Failed to fetch logs: {err}"
+                    );
+                } else {
+                    blueprint_core::warn!(
+                        target: "tangle-evm-producer",
+                        rpc = "eth_getLogs",
+                        attempts = get_logs_failures,
+                        from = query_from,
+                        to = latest_block,
+                        delay_ms = delay.as_millis() as u64,
+                        "Failed to fetch logs: {err}; retrying"
+                    );
+                }
+                sleep(delay).await;
+                continue;
+            }
+        };
+
+        let mut jobs = Vec::new();
+        let mut block_timestamps = BTreeMap::new();
+
+        for log in &logs {
+            match decode_job_submitted(log) {
+                Ok(job_event) => {
+                    if job_event.service_id != service_id {
+                        continue;
+                    }
+
+                    let log_block = job_event.block_number;
+                    let timestamp = if let Some(ts) = log.block_timestamp {
+                        block_timestamps.insert(log_block, ts);
+                        ts
+                    } else {
+                        match block_timestamps.get(&log_block) {
+                            Some(ts) => *ts,
+                            None => {
+                                match client
+                                    .get_block(BlockNumberOrTag::Number(log_block.into()))
+                                    .await
+                                {
+                                    Ok(Some(block)) => {
+                                        if block_fetch_failures > 0 {
+                                            blueprint_core::info!(
+                                                target: "tangle-evm-producer",
+                                                rpc = "eth_getBlockByNumber",
+                                                attempts = block_fetch_failures,
+                                                block = log_block,
+                                                "RPC recovered after retries"
+                                            );
+                                        }
+                                        block_fetch_failures = 0;
+                                        let ts = block.header.timestamp;
+                                        block_timestamps.insert(log_block, ts);
+                                        ts
+                                    }
+                                    Ok(None) => {
+                                        block_fetch_failures += 1;
+                                        let delay = rpc_retry_delay(block_fetch_failures);
+                                        if block_fetch_failures >= RPC_ERROR_ESCALATION_ATTEMPTS {
+                                            blueprint_core::error!(
+                                                target: "tangle-evm-producer",
+                                                rpc = "eth_getBlockByNumber",
+                                                attempts = block_fetch_failures,
+                                                block = log_block,
+                                                delay_ms = delay.as_millis() as u64,
+                                                "Missing block data while deriving timestamp"
+                                            );
+                                        } else {
+                                            blueprint_core::warn!(
+                                                target: "tangle-evm-producer",
+                                                rpc = "eth_getBlockByNumber",
+                                                attempts = block_fetch_failures,
+                                                block = log_block,
+                                                delay_ms = delay.as_millis() as u64,
+                                                "Missing block data while deriving timestamp; retrying"
+                                            );
+                                        }
+                                        sleep(delay).await;
+                                        continue 'poll_loop;
+                                    }
+                                    Err(err) => {
+                                        block_fetch_failures += 1;
+                                        let delay = rpc_retry_delay(block_fetch_failures);
+                                        if block_fetch_failures >= RPC_ERROR_ESCALATION_ATTEMPTS {
+                                            blueprint_core::error!(
+                                                target: "tangle-evm-producer",
+                                                rpc = "eth_getBlockByNumber",
+                                                attempts = block_fetch_failures,
+                                                block = log_block,
+                                                delay_ms = delay.as_millis() as u64,
+                                                "Failed to read block data: {err}"
+                                            );
+                                        } else {
+                                            blueprint_core::warn!(
+                                                target: "tangle-evm-producer",
+                                                rpc = "eth_getBlockByNumber",
+                                                attempts = block_fetch_failures,
+                                                block = log_block,
+                                                delay_ms = delay.as_millis() as u64,
+                                                "Failed to read block data: {err}; retrying"
+                                            );
+                                        }
+                                        sleep(delay).await;
+                                        continue 'poll_loop;
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    let block_hash = job_event.block_hash;
+                    let job_call =
+                        job_submitted_to_call(job_event, log_block, block_hash.0, timestamp);
+                    jobs.push(job_call);
+                }
+                Err(err) => {
+                    blueprint_core::trace!(
+                        target: "tangle-evm-producer",
+                        "Failed to decode log {:?}: {err}",
+                        log
+                    );
+                }
+            }
+        }
+
+        if jobs.is_empty() {
+            blueprint_core::trace!(
+                target: "tangle-evm-producer",
+                from = from_block + 1,
+                to = latest_block,
+                "No jobs discovered during this poll"
+            );
+        } else {
+            for job in &jobs {
+                let block_number = job
+                    .metadata()
+                    .get(extract::BlockNumber::METADATA_KEY)
+                    .and_then(|value| u64::try_from(value).ok());
+                let service_id = job
+                    .metadata()
+                    .get(extract::ServiceId::METADATA_KEY)
+                    .and_then(|value| u64::try_from(value).ok());
+                blueprint_core::info!(
+                    target: "tangle-evm-producer",
+                    job_id = ?job.job_id(),
+                    block_number = ?block_number,
+                    service_id = ?service_id,
+                    "Returning job in producer batch"
+                );
+            }
+        }
+
+        return Ok(ProducerPollResult {
+            jobs,
+            last_block: latest_block,
+        });
+    }
 }
 
 /// Decoded JobSubmitted event
+#[derive(Clone)]
 struct JobSubmittedEvent {
     service_id: u64,
     call_id: u64,
     job_index: u8,
     caller: Address,
     inputs: alloc::vec::Vec<u8>,
+    block_number: u64,
+    block_hash: B256,
 }
+
+const JOB_SUBMITTED_SIG: [u8; 32] =
+    hex!("de37cc48d21778e1c9a075c4e41c5aff6918c3ea6151221f0af3ce8121a29db5");
+const RPC_RETRY_BASE_DELAY_MS: u64 = 250;
+const RPC_RETRY_MAX_DELAY_MS: u64 = 5_000;
+const RPC_ERROR_ESCALATION_ATTEMPTS: u32 = 5;
 
 /// Decode a JobSubmitted event from a log
 fn decode_job_submitted(log: &Log) -> Result<JobSubmittedEvent, ProducerError> {
-    // Convert alloy_rpc_types::Log to alloy_primitives::Log for decoding
-    let primitive_log = alloy_primitives::Log::new(
-        log.address(),
-        log.topics().to_vec(),
-        log.data().data.clone(),
-    )
-    .ok_or_else(|| ProducerError::Decoding("Failed to create primitive log".to_string()))?;
+    let topics = log.topics();
+    if topics.is_empty() || topics[0].0 != JOB_SUBMITTED_SIG {
+        return Err(ProducerError::Decoding("not a JobSubmitted log".into()));
+    }
+    if topics.len() < 3 {
+        return Err(ProducerError::Decoding("topic list length mismatch".into()));
+    }
+    let service_id = read_u64_topic(&topics[1]);
+    let call_id = read_u64_topic(&topics[2]);
 
-    // The JobSubmitted event signature
-    let event = ITangle::JobSubmitted::decode_log(&primitive_log)
-        .map_err(|e| ProducerError::Decoding(e.to_string()))?;
+    let data = log.data().data.as_ref();
+    let (job_index, caller, inputs) = decode_job_submitted_data(data)?;
+    let job_index = if topics.len() > 3 {
+        read_u64_topic(&topics[3]) as u8
+    } else {
+        job_index
+    };
+
+    let block_number = log
+        .block_number
+        .ok_or_else(|| ProducerError::Decoding("log missing block number".to_string()))?;
+    let block_hash = log
+        .block_hash
+        .ok_or_else(|| ProducerError::Decoding("log missing block hash".to_string()))?;
 
     Ok(JobSubmittedEvent {
-        service_id: event.serviceId,
-        call_id: event.callId,
-        job_index: event.jobIndex,
-        caller: event.caller,
-        inputs: event.inputs.to_vec(),
+        service_id,
+        call_id,
+        job_index,
+        caller,
+        inputs,
+        block_number,
+        block_hash,
     })
+}
+
+fn decode_job_submitted_data(
+    data: &[u8],
+) -> Result<(u8, Address, alloc::vec::Vec<u8>), ProducerError> {
+    const MIN_FIXED_SIZE: usize = 96;
+    if data.len() < MIN_FIXED_SIZE {
+        return Err(ProducerError::Decoding(
+            "JobSubmitted data too short for fixed fields".into(),
+        ));
+    }
+
+    let mut buf = [0u8; 32];
+    buf.copy_from_slice(&data[0..32]);
+    let job_index = U256::from_be_bytes(buf)
+        .to::<u64>()
+        .try_into()
+        .map_err(|_| ProducerError::Decoding("job index out of range".into()))?;
+
+    buf.copy_from_slice(&data[32..64]);
+    let mut caller_bytes = [0u8; 20];
+    caller_bytes.copy_from_slice(&buf[12..32]);
+    let caller = Address::from_slice(&caller_bytes);
+
+    buf.copy_from_slice(&data[64..96]);
+    let offset = U256::from_be_bytes(buf).to::<u64>() as usize;
+    if data.len() < offset + 32 {
+        return Err(ProducerError::Decoding(
+            "JobSubmitted inputs offset out of range".into(),
+        ));
+    }
+
+    buf.copy_from_slice(&data[offset..offset + 32]);
+    let inputs_len = U256::from_be_bytes(buf).to::<u64>() as usize;
+    let start = offset + 32;
+    let end = start
+        .checked_add(inputs_len)
+        .ok_or_else(|| ProducerError::Decoding("JobSubmitted inputs length overflow".into()))?;
+    if end > data.len() {
+        return Err(ProducerError::Decoding(
+            "JobSubmitted inputs length exceeds log data".into(),
+        ));
+    }
+
+    blueprint_core::trace!(
+        target: "tangle-evm-producer",
+        job_index,
+        offset,
+        inputs_len,
+        data_len = data.len(),
+        "Decoded JobSubmitted payload"
+    );
+    Ok((job_index, caller, data[start..end].to_vec()))
+}
+
+fn read_u64_topic(topic: &B256) -> u64 {
+    let mut buf = [0u8; 32];
+    buf.copy_from_slice(topic.as_slice());
+    U256::from_be_bytes(buf).to::<u64>()
 }
 
 /// Convert a JobSubmitted event to a JobCall
@@ -242,7 +530,7 @@ fn job_submitted_to_call(
     metadata.insert(extract::BlockNumber::METADATA_KEY, block_number);
     metadata.insert(extract::BlockHash::METADATA_KEY, block_hash);
     metadata.insert(extract::Timestamp::METADATA_KEY, timestamp);
-    metadata.insert(extract::Caller::METADATA_KEY, event.caller.0 .0);
+    metadata.insert(extract::Caller::METADATA_KEY, event.caller.0.0);
 
     let extensions = Extensions::new();
     let parts = Parts::new(event.job_index)
@@ -250,4 +538,11 @@ fn job_submitted_to_call(
         .with_extensions(extensions);
 
     JobCall::from_parts(parts, event.inputs.into())
+}
+
+fn rpc_retry_delay(attempt: u32) -> Duration {
+    let capped = attempt
+        .max(1)
+        .min((RPC_RETRY_MAX_DELAY_MS / RPC_RETRY_BASE_DELAY_MS) as u32);
+    Duration::from_millis(RPC_RETRY_BASE_DELAY_MS * u64::from(capped))
 }

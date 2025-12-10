@@ -3,7 +3,7 @@ use crate::test_utils::TestNode;
 use crate::test_utils::create_whitelisted_nodes;
 use crate::test_utils::setup_log;
 use blueprint_core::info;
-use blueprint_crypto::sp_core::SpEcdsa;
+use blueprint_crypto::k256::K256Ecdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
@@ -16,7 +16,8 @@ async fn test_automatic_handshake() {
     info!("Starting automatic handshake test");
 
     // Create nodes with whitelisted keys
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, "test-network", "test-instance", false);
+    let mut nodes =
+        create_whitelisted_nodes::<K256Ecdsa>(2, "test-network", "test-instance", false);
     let mut node2 = nodes.pop().unwrap();
     let mut node1 = nodes.pop().unwrap();
 
@@ -68,7 +69,7 @@ async fn test_handshake_with_invalid_peer() {
     let instance_id = "test-instance";
 
     // Create node1 with empty whitelist
-    let mut node1 = TestNode::<SpEcdsa>::new(
+    let mut node1 = TestNode::<K256Ecdsa>::new(
         network_name,
         instance_id,
         AllowedKeys::InstancePublicKeys(HashSet::new()),
@@ -79,7 +80,7 @@ async fn test_handshake_with_invalid_peer() {
     // Create node2 with node1's key whitelisted (but node2's key is not whitelisted by node1)
     let mut allowed_keys2 = HashSet::new();
     allowed_keys2.insert(node1.instance_key_pair.public());
-    let mut node2 = TestNode::<SpEcdsa>::new(
+    let mut node2 = TestNode::<K256Ecdsa>::new(
         network_name,
         instance_id,
         AllowedKeys::InstancePublicKeys(allowed_keys2),

@@ -65,8 +65,7 @@ features = [
 
 [dev-dependencies]
 blueprint-networking = { path = ".", features = ["testing"] }
-blueprint-crypto = { path = "../crypto", features = ["sp-core"] }
-blueprint-crypto-core = { path = "../crypto/core", features = ["tangle"] }
+blueprint-crypto = { path = "../crypto", features = ["k256"] }
 tracing-subscriber = { workspace = true }
 serial_test = { workspace = true }
 

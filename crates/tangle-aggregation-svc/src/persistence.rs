@@ -182,8 +182,7 @@ impl FilePersistence {
             return Ok(HashMap::new());
         }
 
-        serde_json::from_str(&contents)
-            .map_err(|e| PersistenceError::Serialization(e.to_string()))
+        serde_json::from_str(&contents).map_err(|e| PersistenceError::Serialization(e.to_string()))
     }
 
     fn write_all(&self, tasks: &HashMap<String, PersistedTaskState>) -> Result<()> {
@@ -313,13 +312,7 @@ mod tests {
                 (1, "0xpk2".to_string()),
                 (2, "0xpk3".to_string()),
             ]),
-            operator_stakes: HashMap::from([
-                (0, 100),
-                (1, 100),
-                (2, 100),
-                (3, 100),
-                (4, 100),
-            ]),
+            operator_stakes: HashMap::from([(0, 100), (1, 100), (2, 100), (3, 100), (4, 100)]),
             total_stake: 500,
             submitted: false,
             created_at_ms: 1700000000000,

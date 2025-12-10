@@ -1,57 +1,43 @@
 #![allow(dead_code, clippy::unused_async)]
 
+use std::sync::Arc;
+
+use anyhow::{Context, Result};
 use blueprint_qos::error::Error as QosError;
 use blueprint_qos::heartbeat::{HeartbeatConsumer, HeartbeatStatus};
 use blueprint_qos::proto::qos_metrics_client::QosMetricsClient;
-use blueprint_std::pin::Pin;
-use blueprint_std::sync::{Arc, Mutex};
-use blueprint_tangle_extra::extract::{TangleArg, TangleResult};
-use blueprint_testing_utils::Error;
+use blueprint_tangle_evm_extra::extract::{TangleEvmArg, TangleEvmResult};
+use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
-// Square job ID
+/// Square job ID exercised in the QoS integration tests.
 pub const XSQUARE_JOB_ID: u8 = 0;
 
-/// A copy of the `square` function from the `incredible-squaring` crate used for testing
-pub async fn square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
-    let result = x * x;
-
-    // The result is then converted into a `JobResult` to be sent back to the caller.
-    TangleResult(result)
+/// Minimal job handler used by the integration tests.
+pub async fn square(TangleEvmArg(value): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
+    TangleEvmResult(value * value)
 }
 
-/// Mock implementation of the `HeartbeatConsumer` for testing
+/// Mock heartbeat consumer that records every heartbeat locally.
 #[derive(Clone, Default)]
 pub struct MockHeartbeatConsumer {
-    pub heartbeats: Arc<Mutex<Vec<HeartbeatStatus>>>,
+    heartbeats: Arc<Mutex<Vec<HeartbeatStatus>>>,
 }
 
 impl MockHeartbeatConsumer {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            heartbeats: Arc::new(Mutex::new(Vec::new())),
-        }
+        Self::default()
     }
 
-    /// Returns the number of heartbeats received
-    ///
-    /// # Panics
-    ///
-    /// Panics if the heartbeats mutex is poisoned
     #[must_use]
-    pub fn heartbeat_count(&self) -> usize {
-        self.heartbeats.lock().unwrap().len()
+    pub async fn heartbeat_count(&self) -> usize {
+        self.heartbeats.lock().await.len()
     }
 
-    /// Gets a copy of all received heartbeat statuses
-    ///
-    /// # Panics
-    ///
-    /// Panics if the heartbeats mutex is poisoned
     #[must_use]
-    pub fn get_heartbeats(&self) -> Vec<HeartbeatStatus> {
-        self.heartbeats.lock().unwrap().clone()
+    pub async fn latest_heartbeat(&self) -> Option<HeartbeatStatus> {
+        self.heartbeats.lock().await.last().cloned()
     }
 }
 
@@ -59,28 +45,26 @@ impl HeartbeatConsumer for MockHeartbeatConsumer {
     fn send_heartbeat(
         &self,
         status: &HeartbeatStatus,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<(), QosError>> + Send>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), QosError>> + Send>> {
         let status = status.clone();
-        let heartbeats = self.heartbeats.clone();
+        let heartbeats = Arc::clone(&self.heartbeats);
 
         Box::pin(async move {
-            heartbeats.lock().unwrap().push(status);
+            heartbeats.lock().await.push(status);
             Ok(())
         })
     }
 }
 
-/// Connect to the `QoS` metrics gRPC service
-///
-/// # Errors
-///
-/// Returns an error if connection to the gRPC service fails
-pub async fn connect_to_qos_metrics(addr: &str) -> Result<QosMetricsClient<Channel>, Error> {
-    let endpoint = tonic::transport::Endpoint::new(format!("http://{}", addr))
-        .map_err(|e| Error::Setup(format!("Failed to create endpoint: {}", e)))?;
+/// Connects to the QoS metrics gRPC service exposed by the tests.
+pub async fn connect_to_qos_metrics(addr: &str) -> Result<QosMetricsClient<Channel>> {
+    let endpoint = format!("http://{addr}")
+        .parse::<tonic::transport::Endpoint>()
+        .context("invalid QoS metrics endpoint")?;
+
     let channel = endpoint
         .connect()
         .await
-        .map_err(|e| Error::Setup(format!("Failed to connect to endpoint: {}", e)))?;
+        .context("failed to connect to QoS metrics endpoint")?;
     Ok(QosMetricsClient::new(channel))
 }

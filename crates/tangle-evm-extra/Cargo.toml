@@ -16,7 +16,6 @@ workspace = true
 blueprint-core.workspace = true
 blueprint-std.workspace = true
 blueprint-client-tangle-evm.workspace = true
-blueprint-runner.workspace = true
 blueprint-tangle-aggregation-svc = { path = "../tangle-aggregation-svc", features = ["client"], optional = true }
 blueprint-crypto-bn254 = { path = "../crypto/bn254", optional = true }
 blueprint-crypto-core = { path = "../crypto/core", optional = true }
@@ -45,13 +44,17 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 alloy-provider = { workspace = true }
 alloy-signer-local = { workspace = true }
 alloy-network = { workspace = true }
+blueprint-anvil-testing-utils = { path = "../testing-utils/anvil" }
 blueprint-keystore = { workspace = true, features = ["evm"] }
 blueprint-crypto = { workspace = true, features = ["k256"] }
+blueprint-chain-setup-anvil = { path = "../chain-setup/anvil" }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
 anyhow = { workspace = true }
 hex = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 
 [features]
 default = ["std"]

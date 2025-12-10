@@ -63,7 +63,8 @@ impl SignatureWeight for EqualWeight {
 
     fn threshold_weight(&self) -> u64 {
         // Use saturating multiplication to prevent overflow
-        let product = (self.total_participants as u64).saturating_mul(u64::from(self.threshold_percentage));
+        let product =
+            (self.total_participants as u64).saturating_mul(u64::from(self.threshold_percentage));
         product / 100
     }
 }
@@ -91,7 +92,9 @@ impl SignatureWeight for CustomWeight {
 
     fn total_weight(&self) -> u64 {
         // Use saturating arithmetic to prevent overflow
-        self.weights.values().fold(0u64, |acc, &w| acc.saturating_add(w))
+        self.weights
+            .values()
+            .fold(0u64, |acc, &w| acc.saturating_add(w))
     }
 
     fn threshold_weight(&self) -> u64 {

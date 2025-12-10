@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use core::fmt::Debug;
 use futures::stream;
 use parking_lot::{Mutex, RwLock};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::collections::{HashMap, VecDeque};
 use tokio::sync::broadcast;
 
@@ -295,12 +295,14 @@ impl<M: Clone + Send + Sync + 'static> MockNetwork<M> {
 
     /// Connect this peer to another peer
     pub fn connect_to(&self, other: &MockNetwork<M>) {
-        self.hub.connect_peers(self.local_peer_id, other.local_peer_id);
+        self.hub
+            .connect_peers(self.local_peer_id, other.local_peer_id);
     }
 
     /// Disconnect from another peer
     pub fn disconnect_from(&self, other: &MockNetwork<M>) {
-        self.hub.disconnect_peers(self.local_peer_id, other.local_peer_id);
+        self.hub
+            .disconnect_peers(self.local_peer_id, other.local_peer_id);
     }
 
     /// Get all messages sent through this hub
@@ -501,10 +503,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_network_basic() {
-        let networks: Vec<MockNetwork<TestMessage>> = MockNetwork::new_hub(MockNetworkConfig::ideal())
-            .add_peers(2)
-            .fully_connected()
-            .build();
+        let networks: Vec<MockNetwork<TestMessage>> =
+            MockNetwork::new_hub(MockNetworkConfig::ideal())
+                .add_peers(2)
+                .fully_connected()
+                .build();
 
         let peer0 = &networks[0];
         let peer1 = &networks[1];
@@ -513,7 +516,10 @@ mod tests {
         let msg = TestMessage {
             content: "hello".to_string(),
         };
-        peer0.send_to(peer1.local_peer_id(), msg.clone()).await.unwrap();
+        peer0
+            .send_to(peer1.local_peer_id(), msg.clone())
+            .await
+            .unwrap();
 
         // Check message log
         let log = peer0.get_message_log();
@@ -524,10 +530,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_network_broadcast() {
-        let networks: Vec<MockNetwork<TestMessage>> = MockNetwork::new_hub(MockNetworkConfig::ideal())
-            .add_peers(4)
-            .fully_connected()
-            .build();
+        let networks: Vec<MockNetwork<TestMessage>> =
+            MockNetwork::new_hub(MockNetworkConfig::ideal())
+                .add_peers(4)
+                .fully_connected()
+                .build();
 
         let sender = &networks[0];
         let msg = TestMessage {
@@ -544,10 +551,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_network_not_connected() {
-        let networks: Vec<MockNetwork<TestMessage>> = MockNetwork::new_hub(MockNetworkConfig::ideal())
-            .add_peers(2)
-            // NOT calling fully_connected()
-            .build();
+        let networks: Vec<MockNetwork<TestMessage>> =
+            MockNetwork::new_hub(MockNetworkConfig::ideal())
+                .add_peers(2)
+                // NOT calling fully_connected()
+                .build();
 
         let peer0 = &networks[0];
         let peer1 = &networks[1];
@@ -563,10 +571,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_network_ring_topology() {
-        let networks: Vec<MockNetwork<TestMessage>> = MockNetwork::new_hub(MockNetworkConfig::ideal())
-            .add_peers(4)
-            .ring_topology()
-            .build();
+        let networks: Vec<MockNetwork<TestMessage>> =
+            MockNetwork::new_hub(MockNetworkConfig::ideal())
+                .add_peers(4)
+                .ring_topology()
+                .build();
 
         // In ring: 0-1-2-3-0
         // Peer 0 is connected to 1 and 3
@@ -578,10 +587,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_network_disconnect() {
-        let networks: Vec<MockNetwork<TestMessage>> = MockNetwork::new_hub(MockNetworkConfig::ideal())
-            .add_peers(2)
-            .fully_connected()
-            .build();
+        let networks: Vec<MockNetwork<TestMessage>> =
+            MockNetwork::new_hub(MockNetworkConfig::ideal())
+                .add_peers(2)
+                .fully_connected()
+                .build();
 
         let peer0 = &networks[0];
         let peer1 = &networks[1];

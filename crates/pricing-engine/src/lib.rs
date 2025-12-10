@@ -40,9 +40,8 @@ pub use handlers::handle_blueprint_update;
 pub use pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
 pub use pricing::{PriceModel, ResourcePricing, calculate_price, load_pricing_from_toml};
 pub use service::blockchain::event::BlockchainEvent;
-pub use service::blockchain::listener::EventListener;
 pub use service::rpc::server::{PricingEngineService, run_rpc_server};
-pub use signer::{OperatorId, OperatorSigner, SignedQuote};
+pub use signer::{OperatorId, OperatorSigner, SignableQuote, SignedQuote};
 
 use blueprint_core::info;
 use std::collections::HashMap;

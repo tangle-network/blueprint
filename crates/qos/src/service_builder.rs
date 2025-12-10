@@ -9,7 +9,8 @@ use crate::metrics::types::MetricsConfig;
 use crate::servers::{
     grafana::GrafanaServerConfig, loki::LokiServerConfig, prometheus::PrometheusServerConfig,
 };
-use crate::unified_service::QoSService;
+use crate::unified_service::{HeartbeatContext, QoSService};
+use alloy_primitives::Address;
 
 /// Fluent builder for assembling a `QoSService`.
 ///
@@ -26,8 +27,8 @@ pub struct QoSServiceBuilder<C: HeartbeatConsumer + Send + Sync + 'static> {
     loki_datasource: Option<String>,
     create_dashboard: bool,
     http_rpc_endpoint: Option<String>,
-    ws_rpc_endpoint: Option<String>,
     keystore_uri: Option<String>,
+    status_registry_address: Option<Address>,
 }
 
 impl<C: HeartbeatConsumer + Send + Sync + 'static> Default for QoSServiceBuilder<C> {
@@ -54,8 +55,8 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
             loki_datasource: None,
             create_dashboard: false,
             http_rpc_endpoint: None,
-            ws_rpc_endpoint: None,
             keystore_uri: None,
+            status_registry_address: None,
         }
     }
 
@@ -250,17 +251,17 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
         self
     }
 
-    /// Set the WebSocket RPC endpoint for `HeartbeatService`
-    #[must_use]
-    pub fn with_ws_rpc_endpoint(mut self, endpoint: String) -> Self {
-        self.ws_rpc_endpoint = Some(endpoint);
-        self
-    }
-
     /// Set the Keystore URI for `HeartbeatService`
     #[must_use]
     pub fn with_keystore_uri(mut self, uri: String) -> Self {
         self.keystore_uri = Some(uri);
+        self
+    }
+
+    /// Set the status registry contract address for `HeartbeatService`
+    #[must_use]
+    pub fn with_status_registry_address(mut self, address: Address) -> Self {
+        self.status_registry_address = Some(address);
         self
     }
 
@@ -269,24 +270,45 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
     /// # Errors
     /// Returns an error if the heartbeat consumer is not provided or if the service initialization fails
     pub async fn build(self) -> Result<QoSService<C>> {
-        let heartbeat_consumer = self.heartbeat_consumer.ok_or_else(|| {
-            crate::error::Error::Other("Heartbeat consumer is required".to_string())
-        })?;
+        let heartbeat_context = if self.config.heartbeat.is_some() {
+            let consumer = self.heartbeat_consumer.clone().ok_or_else(|| {
+                crate::error::Error::Other(
+                    "Heartbeat consumer is required when heartbeat is enabled".to_string(),
+                )
+            })?;
 
-        let ws_rpc = self.ws_rpc_endpoint.unwrap_or_default();
-        let keystore = self.keystore_uri.unwrap_or_default();
+            let http = self.http_rpc_endpoint.clone().ok_or_else(|| {
+                crate::error::Error::Other(
+                    "HTTP RPC endpoint is required when heartbeat is enabled".to_string(),
+                )
+            })?;
+
+            let keystore = self.keystore_uri.clone().ok_or_else(|| {
+                crate::error::Error::Other(
+                    "Keystore URI is required when heartbeat is enabled".to_string(),
+                )
+            })?;
+
+            let status_registry = self.status_registry_address.ok_or_else(|| {
+                crate::error::Error::Other(
+                    "Status registry address is required when heartbeat is enabled".to_string(),
+                )
+            })?;
+
+            Some(HeartbeatContext {
+                consumer,
+                http_rpc_endpoint: http,
+                keystore_uri: keystore,
+                status_registry_address: status_registry,
+            })
+        } else {
+            None
+        };
 
         if let Some(otel_config) = self.otel_config {
-            QoSService::with_otel_config(
-                self.config,
-                heartbeat_consumer,
-                ws_rpc,
-                keystore,
-                otel_config,
-            )
-            .await
+            QoSService::with_otel_config(self.config, heartbeat_context, otel_config).await
         } else {
-            QoSService::new(self.config, heartbeat_consumer, ws_rpc, keystore).await
+            QoSService::new(self.config, heartbeat_context).await
         }
     }
 }

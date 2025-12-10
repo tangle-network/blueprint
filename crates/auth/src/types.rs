@@ -182,10 +182,12 @@ where
 #[repr(i32)]
 pub enum KeyType {
     Unknown = 0,
-    /// Ecdsa key type
+    /// ECDSA (secp256k1) key type
     Ecdsa = 1,
-    /// Sr25519 key type
+    /// Sr25519 (Schnorrkel) key type
     Sr25519 = 2,
+    /// BN254 BLS key type
+    Bn254Bls = 3,
 }
 
 /// Represents the challenge request sent from the client to the server to request a challenge.
@@ -344,10 +346,13 @@ mod tests {
         assert_eq!(KeyType::Unknown as i32, 0);
         assert_eq!(KeyType::Ecdsa as i32, 1);
         assert_eq!(KeyType::Sr25519 as i32, 2);
+        assert_eq!(KeyType::Bn254Bls as i32, 3);
 
         // Test i32 to KeyType conversion (using transmute for simplicity in tests)
         let key_type: KeyType = unsafe { std::mem::transmute(1i32) };
         assert_eq!(key_type, KeyType::Ecdsa);
+        let key_type: KeyType = unsafe { std::mem::transmute(3i32) };
+        assert_eq!(key_type, KeyType::Bn254Bls);
     }
 
     #[test]

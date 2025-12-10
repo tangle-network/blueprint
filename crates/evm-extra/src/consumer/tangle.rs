@@ -8,7 +8,7 @@ use alloy_primitives::{Address, Bytes as AlloyBytes, TxHash};
 use alloy_provider::fillers::{FillProvider, JoinFill, RecommendedFillers, WalletFiller};
 use alloy_provider::network::{Ethereum, EthereumWallet, NetworkWallet};
 use alloy_provider::{Network, Provider, RootProvider};
-use alloy_sol_types::{sol, SolCall};
+use alloy_sol_types::{SolCall, sol};
 use alloy_transport::TransportError;
 use blueprint_core::JobResult;
 use blueprint_core::error::BoxError;

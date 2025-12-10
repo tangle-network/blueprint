@@ -406,7 +406,10 @@ pub async fn wait_for_all_handshakes<K: KeyType>(
                 for (i, j) in pending_pairs.iter().take(3) {
                     let peer_i = &handles[*i].local_peer_id;
                     let peer_j = &handles[*j].local_peer_id;
-                    info!("  Pending: Node {} ({}) -> Node {} ({})", i, peer_i, j, peer_j);
+                    info!(
+                        "  Pending: Node {} ({}) -> Node {} ({})",
+                        i, peer_i, j, peer_j
+                    );
                 }
             }
 
@@ -436,7 +439,7 @@ pub async fn wait_for_all_handshakes<K: KeyType>(
             let pending: Vec<_> = verified_pairs
                 .iter()
                 .filter(|entry| !*entry.1)
-                .map(|entry| (entry.0 .0, entry.0 .1))
+                .map(|entry| (entry.0.0, entry.0.1))
                 .collect();
 
             let mut error_msg = format!(

@@ -12,8 +12,35 @@ pub struct TaskId {
 
 impl TaskId {
     pub fn new(service_id: u64, call_id: u64) -> Self {
-        Self { service_id, call_id }
+        Self {
+            service_id,
+            call_id,
+        }
     }
+}
+
+/// Description of how many signatures are required for a task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ThresholdConfig {
+    /// Require a fixed number of operators to sign.
+    Count { required_signers: u32 },
+    /// Require stake-weighted participation. Carries the per-index stakes.
+    StakeWeighted {
+        /// Basis points (0-10000) of total stake required.
+        threshold_bps: u32,
+        /// Stake weight for each operator index.
+        operator_stakes: Vec<OperatorStake>,
+    },
+}
+
+/// Stake weight for a specific operator index.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperatorStake {
+    /// Operator index within the service operator set.
+    pub operator_index: u32,
+    /// Relative stake or weight used for aggregation.
+    pub stake: u64,
 }
 
 /// Request to submit a signature for aggregation
@@ -92,8 +119,8 @@ pub struct InitTaskRequest {
     pub call_id: u64,
     /// Number of operators in the service
     pub operator_count: u32,
-    /// Required threshold (number of signatures needed)
-    pub threshold: u32,
+    /// Threshold definition (count or stake-weighted)
+    pub threshold: ThresholdConfig,
     /// The output to be signed
     #[serde(with = "hex_bytes")]
     pub output: Vec<u8>,

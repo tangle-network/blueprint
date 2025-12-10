@@ -94,7 +94,7 @@ message QuoteDetails {
   // Resource pricing details
   repeated ResourcePricing resources = 6;
   // Security commitments for assets
-  AssetSecurityCommitment security_commitments = 7;
+  repeated AssetSecurityCommitment security_commitments = 7;
 }
 
 // Pricing for a specific resource type

@@ -33,7 +33,10 @@
 //! ```
 
 use alloy_primitives::Bytes;
-use std::time::Duration;
+use blueprint_std::string::String;
+#[cfg(any(feature = "aggregation", feature = "p2p-aggregation"))]
+use blueprint_std::time::Duration;
+use blueprint_std::vec::Vec;
 
 /// Threshold type for BLS aggregation (matches on-chain Types.ThresholdType)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -55,13 +58,16 @@ impl From<u8> for ThresholdType {
 }
 
 #[cfg(feature = "aggregation")]
-use std::sync::Arc;
+use blueprint_std::sync::Arc;
 
 #[cfg(feature = "aggregation")]
 use blueprint_crypto_bn254::{ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Secret};
 
 #[cfg(all(feature = "p2p-aggregation", not(feature = "aggregation")))]
 use blueprint_crypto_bn254::{ArkBlsBn254, ArkBlsBn254Public};
+
+#[cfg(feature = "p2p-aggregation")]
+use blueprint_std::collections::HashMap;
 
 /// Strategy for how to aggregate BLS signatures
 ///
@@ -165,12 +171,11 @@ pub struct P2PGossipConfig {
     /// Threshold type (CountBased or StakeWeighted)
     pub threshold_type: ThresholdType,
     /// Map of participant peer IDs to their public keys
-    pub participant_public_keys:
-        std::collections::HashMap<libp2p::PeerId, ArkBlsBn254Public>,
+    pub participant_public_keys: HashMap<libp2p::PeerId, ArkBlsBn254Public>,
     /// Map of participant peer IDs to their stake weights (exposure in basis points)
     /// Only used when threshold_type is StakeWeighted
     /// Values are in basis points (10000 = 100%)
-    pub operator_weights: std::collections::HashMap<libp2p::PeerId, u64>,
+    pub operator_weights: HashMap<libp2p::PeerId, u64>,
 }
 
 #[cfg(feature = "p2p-aggregation")]
@@ -178,7 +183,7 @@ impl P2PGossipConfig {
     /// Create a new P2P gossip config with default count-based threshold (67%)
     pub fn new(
         network_handle: blueprint_networking::service_handle::NetworkServiceHandle<ArkBlsBn254>,
-        participant_public_keys: std::collections::HashMap<libp2p::PeerId, ArkBlsBn254Public>,
+        participant_public_keys: HashMap<libp2p::PeerId, ArkBlsBn254Public>,
     ) -> Self {
         Self {
             network_handle,
@@ -187,7 +192,7 @@ impl P2PGossipConfig {
             threshold_bps: 6700, // 67% in basis points
             threshold_type: ThresholdType::CountBased,
             participant_public_keys,
-            operator_weights: std::collections::HashMap::new(),
+            operator_weights: HashMap::new(),
         }
     }
 
@@ -243,10 +248,7 @@ impl P2PGossipConfig {
     /// config.with_operator_weights(weights)
     /// ```
     #[must_use]
-    pub fn with_operator_weights(
-        mut self,
-        weights: std::collections::HashMap<libp2p::PeerId, u64>,
-    ) -> Self {
+    pub fn with_operator_weights(mut self, weights: HashMap<libp2p::PeerId, u64>) -> Self {
         self.operator_weights = weights;
         self
     }
@@ -258,7 +260,7 @@ impl P2PGossipConfig {
     pub fn with_stake_weighted_threshold(
         mut self,
         threshold_bps: u16,
-        weights: std::collections::HashMap<libp2p::PeerId, u64>,
+        weights: HashMap<libp2p::PeerId, u64>,
     ) -> Self {
         self.threshold_bps = threshold_bps;
         self.threshold_type = ThresholdType::StakeWeighted;
@@ -304,7 +306,9 @@ pub enum StrategyError {
     Bls(String),
 
     /// No aggregation strategy configured
-    #[error("No aggregation strategy configured - enable 'aggregation' or 'p2p-aggregation' feature")]
+    #[error(
+        "No aggregation strategy configured - enable 'aggregation' or 'p2p-aggregation' feature"
+    )]
     NoAggregationStrategy,
 
     /// Threshold not met
@@ -320,6 +324,7 @@ pub enum StrategyError {
     Serialization(String),
 }
 
+#[cfg(any(feature = "aggregation", feature = "p2p-aggregation"))]
 impl AggregationStrategy {
     /// Execute the aggregation strategy for a job result
     ///
@@ -344,16 +349,45 @@ impl AggregationStrategy {
         match self {
             #[cfg(feature = "aggregation")]
             AggregationStrategy::HttpService(config) => {
-                aggregate_via_http(config, service_id, call_id, output, total_operators, threshold)
-                    .await
+                aggregate_via_http(
+                    config,
+                    service_id,
+                    call_id,
+                    output,
+                    total_operators,
+                    threshold,
+                )
+                .await
             }
             #[cfg(feature = "p2p-aggregation")]
             AggregationStrategy::P2PGossip(config) => {
-                aggregate_via_p2p(config.clone(), service_id, call_id, output, total_operators, threshold).await
+                aggregate_via_p2p(
+                    config.clone(),
+                    service_id,
+                    call_id,
+                    output,
+                    total_operators,
+                    threshold,
+                )
+                .await
             }
             #[allow(unreachable_patterns)]
             _ => Err(StrategyError::NoAggregationStrategy),
         }
+    }
+}
+
+#[cfg(not(any(feature = "aggregation", feature = "p2p-aggregation")))]
+impl AggregationStrategy {
+    pub async fn aggregate(
+        &self,
+        _service_id: u64,
+        _call_id: u64,
+        _output: Bytes,
+        _total_operators: u32,
+        _threshold: u32,
+    ) -> Result<AggregatedSignatureResult, StrategyError> {
+        Err(StrategyError::NoAggregationStrategy)
     }
 }
 
@@ -368,7 +402,9 @@ async fn aggregate_via_http(
     threshold: u32,
 ) -> Result<AggregatedSignatureResult, StrategyError> {
     use blueprint_crypto_core::{BytesEncoding, KeyType};
-    use blueprint_tangle_aggregation_svc::{create_signing_message, SubmitSignatureRequest};
+    use blueprint_tangle_aggregation_svc::{
+        SubmitSignatureRequest, ThresholdConfig, create_signing_message,
+    };
 
     blueprint_core::debug!(
         target: "aggregation-strategy",
@@ -389,9 +425,18 @@ async fn aggregate_via_http(
     let sig_bytes = signature.to_bytes();
 
     // Try to initialize the task (may already exist)
+    let threshold_config = ThresholdConfig::Count {
+        required_signers: threshold.max(1),
+    };
     let _ = config
         .client
-        .init_task(service_id, call_id, &output, total_operators, threshold)
+        .init_task(
+            service_id,
+            call_id,
+            &output,
+            total_operators,
+            threshold_config,
+        )
         .await;
 
     // Submit our signature
@@ -425,7 +470,12 @@ async fn aggregate_via_http(
         } else {
             config
                 .client
-                .wait_for_threshold(service_id, call_id, config.poll_interval, config.threshold_timeout)
+                .wait_for_threshold(
+                    service_id,
+                    call_id,
+                    config.poll_interval,
+                    config.threshold_timeout,
+                )
                 .await?
         }
     } else if response.threshold_met {
@@ -477,9 +527,7 @@ async fn aggregate_via_p2p(
 
     // Create the message to sign (same format as HTTP)
     let message = crate::aggregating_consumer::integration::create_signing_message(
-        service_id,
-        call_id,
-        &output,
+        service_id, call_id, &output,
     );
 
     // Hash the message for the protocol

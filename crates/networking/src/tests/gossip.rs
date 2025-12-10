@@ -8,7 +8,7 @@ use crate::{
     types::MessageRouting,
 };
 use blueprint_core::info;
-use blueprint_crypto::sp_core::SpEcdsa;
+use blueprint_crypto::k256::K256Ecdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
@@ -24,7 +24,7 @@ async fn test_gossip_between_verified_peers() {
     info!("Starting gossip test between verified peers");
 
     // Create nodes with whitelisted keys
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, NETWORK_NAME, INSTANCE_NAME, false);
+    let mut nodes = create_whitelisted_nodes::<K256Ecdsa>(2, NETWORK_NAME, INSTANCE_NAME, false);
     let mut node2 = nodes.pop().unwrap();
     let mut node1 = nodes.pop().unwrap();
 
@@ -83,7 +83,7 @@ async fn test_multi_node_gossip() {
     info!("Starting multi-node gossip test");
 
     // Create three nodes with all keys whitelisted
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(3, NETWORK_NAME, INSTANCE_NAME, false);
+    let mut nodes = create_whitelisted_nodes::<K256Ecdsa>(3, NETWORK_NAME, INSTANCE_NAME, false);
 
     info!("Starting all nodes");
     let mut handles: Vec<_> = Vec::new();
@@ -92,7 +92,7 @@ async fn test_multi_node_gossip() {
     }
 
     info!("Waiting for all handshakes to complete");
-    let handles_refs: Vec<&mut NetworkServiceHandle<SpEcdsa>> = handles.iter_mut().collect();
+    let handles_refs: Vec<&mut NetworkServiceHandle<K256Ecdsa>> = handles.iter_mut().collect();
     wait_for_all_handshakes(&handles_refs, TEST_TIMEOUT).await;
 
     // Create test message
@@ -146,14 +146,14 @@ async fn test_unverified_peer_gossip() {
     info!("Starting unverified peer gossip test");
 
     // Create two nodes with no whitelisted keys
-    let mut node1 = TestNode::<SpEcdsa>::new(
+    let mut node1 = TestNode::<K256Ecdsa>::new(
         "test-net",
         "gossip-test",
         AllowedKeys::InstancePublicKeys(HashSet::new()),
         vec![],
         false,
     );
-    let mut node2 = TestNode::<SpEcdsa>::new(
+    let mut node2 = TestNode::<K256Ecdsa>::new(
         "test-net",
         "gossip-test",
         AllowedKeys::InstancePublicKeys(HashSet::new()),

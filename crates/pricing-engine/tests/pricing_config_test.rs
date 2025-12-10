@@ -9,10 +9,6 @@ use blueprint_pricing_engine_lib::{
     types::ResourceUnit,
 };
 use rust_decimal::Decimal;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::{
-    sp_arithmetic::per_things::Percent,
-    tangle_primitives::services::types::{Asset, AssetSecurityRequirement},
-};
 
 #[tokio::test]
 async fn test_default_pricing_config() -> Result<()> {
@@ -161,11 +157,19 @@ async fn test_resource_price_calculation() -> Result<()> {
     info!("  Calculated price: ${}", price_no_security);
 
     // Test with security requirements
-    let security_requirements = AssetSecurityRequirement {
-        asset: Asset::Custom(0),
-        min_exposure_percent: Percent(50),
-        max_exposure_percent: Percent(80),
-    };
+    let security_requirements =
+        blueprint_pricing_engine_lib::pricing_engine::AssetSecurityRequirements {
+            asset: Some(blueprint_pricing_engine_lib::pricing_engine::Asset {
+                asset_type: Some(
+                    blueprint_pricing_engine_lib::pricing_engine::asset::AssetType::Custom(vec![
+                        0u8;
+                        16
+                    ]),
+                ),
+            }),
+            minimum_exposure_percent: 50,
+            maximum_exposure_percent: 80,
+        };
 
     let price_with_security = calculate_resource_price(
         count,

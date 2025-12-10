@@ -1,15 +1,16 @@
 //! HTTP API endpoints for the aggregation service
 
 use crate::service::AggregationService;
+use crate::state::{TaskConfig, ThresholdType};
 use crate::types::*;
 use axum::{
-    Json,
     extract::State,
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Router,
+    Json, Router,
 };
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Build the API router
@@ -35,12 +36,34 @@ async fn init_task(
     State(service): State<Arc<AggregationService>>,
     Json(req): Json<InitTaskRequest>,
 ) -> impl IntoResponse {
-    match service.init_task(
+    let (threshold_type, operator_stakes) = match req.threshold {
+        ThresholdConfig::Count { required_signers } => {
+            (ThresholdType::Count(required_signers), None)
+        }
+        ThresholdConfig::StakeWeighted {
+            threshold_bps,
+            operator_stakes,
+        } => {
+            let stakes = operator_stakes
+                .into_iter()
+                .map(|stake| (stake.operator_index, stake.stake))
+                .collect::<HashMap<_, _>>();
+            (ThresholdType::StakeWeighted(threshold_bps), Some(stakes))
+        }
+    };
+
+    let config = TaskConfig {
+        threshold_type,
+        operator_stakes,
+        ..Default::default()
+    };
+
+    match service.init_task_with_config(
         req.service_id,
         req.call_id,
         req.output,
         req.operator_count,
-        req.threshold,
+        config,
     ) {
         Ok(()) => Json(InitTaskResponse {
             success: true,
@@ -104,10 +127,7 @@ async fn mark_submitted(
     Json(req): Json<GetStatusRequest>,
 ) -> impl IntoResponse {
     match service.mark_submitted(req.service_id, req.call_id) {
-        Ok(()) => (
-            StatusCode::OK,
-            Json(serde_json::json!({ "success": true })),
-        ),
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))),
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "success": false, "error": e.to_string() })),

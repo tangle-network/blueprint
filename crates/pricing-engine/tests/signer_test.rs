@@ -1,11 +1,11 @@
-use blueprint_crypto::KeyType;
-use blueprint_crypto::k256::K256Ecdsa;
+use alloy_primitives::U256;
+use blueprint_crypto::{KeyType, k256::K256Ecdsa};
 use blueprint_pricing_engine_lib::{
     OperatorSigner,
     error::{PricingError, Result},
-    signer::verify_quote,
+    signer::{SignableQuote, verify_quote},
 };
-use tangle_subxt::tangle_testnet_runtime::api::runtime_apis::rewards_api::types::query_user_rewards::AccountId;
+use rust_decimal::prelude::FromPrimitive;
 
 mod utils;
 
@@ -18,19 +18,24 @@ async fn test_sign_and_verify_quote() -> Result<()> {
     let secret = K256Ecdsa::generate_with_seed(None)
         .map_err(|e| PricingError::Other(format!("Failed to generate keypair: {e}")))?;
 
-    let mut signer = OperatorSigner::<K256Ecdsa>::new(&config, secret, AccountId::from([0u8; 32]))?;
+    let mut signer = OperatorSigner::new(&config, secret)?;
 
     // Create a deterministic QuoteDetails message
     let quote_details = utils::create_test_quote_details();
+    let signable_quote = SignableQuote::new(
+        quote_details.clone(),
+        rust_decimal::Decimal::from_f64(quote_details.total_cost_rate)
+            .ok_or_else(|| PricingError::Other("invalid decimal".to_string()))?,
+    )?;
 
     // Create proof of work
     let proof_of_work = vec![1, 2, 3, 4];
 
     // Sign the quote
-    let signed_quote = signer.sign_quote(quote_details.clone(), proof_of_work)?;
+    let signed_quote = signer.sign_quote(signable_quote, proof_of_work)?;
 
     // Verify the signature
-    let public_key = signer.public_key();
+    let public_key = signer.verifying_key();
     let is_valid = verify_quote(&signed_quote, &public_key)?;
 
     // Verify that the signature is valid
@@ -52,7 +57,7 @@ async fn test_sign_and_verify_quote() -> Result<()> {
 
     // Tamper with the quote details and verify the signature is no longer valid
     let mut tampered_quote = signed_quote.clone();
-    tampered_quote.quote_details.total_cost_rate += 1.0;
+    tampered_quote.abi_details.totalCost += U256::from(1u8);
 
     let is_valid_tampered = verify_quote(&tampered_quote, &public_key)?;
     assert!(

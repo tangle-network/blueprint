@@ -43,11 +43,11 @@
 //! ### Producers
 //!
 //! * `evm-polling-producer` - [`PollingProducer`]
-//! * `tangle-producer` - [`TangleProducer`]
+//! * `tangle-evm-producer` - [`TangleEvmProducer`]
 //!
 //! ### Consumers
 //!
-//! * `tangle-consumer` - [`TangleConsumer`]
+//! * `tangle-evm-consumer` - [`TangleEvmConsumer`]
 //!
 //! ### Runner
 //!
@@ -57,17 +57,16 @@
 //!
 //! ### Other
 //!
-//! * `tangle-node` - The stdout of a local Tangle node
-//!     * These are spawned by both the [`TangleTestHarness`] and [`cargo tangle`] local testing commands.
+//! * `tangle-evm-node` - The stdout of a local Anvil/Tangle EVM node
+//!     * These are spawned by `cargo tangle blueprint run --protocol tangle-evm` when targeting local testnets.
 //! * `build-output` - The stderr of `cargo build` when deploying with [`cargo tangle`]
 //!     * By default, the output of `cargo build` is hidden. If diagnosing a build error, use `RUST_LOG=build-output=debug`.
 //!
 //! [RUST_LOG]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives
 //! [`PollingProducer`]: evm::producer::PollingProducer
-//! [`TangleProducer`]: tangle::producer::TangleProducer
-//! [`TangleConsumer`]: tangle::consumer::TangleConsumer
+//! [`TangleEvmProducer`]: tangle_evm::producer::TangleEvmProducer
+//! [`TangleEvmConsumer`]: tangle_evm::consumer::TangleEvmConsumer
 //! [`BlueprintRunner`]: runner::BlueprintRunner
-//! [`TangleTestHarness`]: testing::utils::tangle::TangleTestHarness
 //! [`cargo tangle`]: https://docs.rs/cargo_tangle
 
 // == Core utilities ==
@@ -116,6 +115,8 @@ pub mod producers {
 pub use blueprint_router as router;
 pub use blueprint_router::Router;
 
+pub mod registration;
+
 #[cfg(feature = "macros")]
 pub mod macros {
     pub mod context {
@@ -127,20 +128,11 @@ pub mod macros {
 
 // == Protocol-specific utilities ==
 
-#[cfg(feature = "tangle")]
-mod tangle_feat {
-    pub mod tangle {
-        pub use blueprint_tangle_extra::*;
-    }
-
-    pub use tangle_subxt;
-}
-#[cfg(feature = "tangle")]
-pub use tangle_feat::*;
+#[cfg(any(feature = "evm", feature = "eigenlayer", feature = "tangle-evm"))]
+pub use alloy;
 
 #[cfg(any(feature = "evm", feature = "eigenlayer"))]
 mod evm_feat {
-    pub use alloy;
     pub mod evm {
         pub use blueprint_evm_extra::*;
     }
@@ -150,7 +142,6 @@ pub use evm_feat::*;
 
 #[cfg(feature = "tangle-evm")]
 mod tangle_evm_feat {
-    pub use alloy;
     pub mod tangle_evm {
         pub use blueprint_tangle_evm_extra::*;
     }

@@ -14,9 +14,19 @@ use crate::{
         ServerManager, grafana::GrafanaServer, loki::LokiServer, prometheus::PrometheusServer,
     },
 };
+use alloy_primitives::Address;
 use blueprint_core::{error, info};
 use std::sync::Arc;
 use tokio::sync::{Mutex, oneshot};
+
+/// Runtime context required for enabling the heartbeat service.
+#[derive(Clone)]
+pub struct HeartbeatContext<C: HeartbeatConsumer + Send + Sync + 'static> {
+    pub consumer: Arc<C>,
+    pub http_rpc_endpoint: String,
+    pub keystore_uri: String,
+    pub status_registry_address: Address,
+}
 
 /// Unified Quality of Service (`QoS`) service that integrates heartbeat monitoring, metrics collection,
 /// logging, and dashboard visualization into a single cohesive system.
@@ -62,23 +72,26 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
     /// Common initialization logic for `QoSService`.
     async fn initialize(
         config: QoSConfig,
-        heartbeat_consumer: Arc<C>,
-        ws_rpc_endpoint: String,
-        keystore_uri: String,
+        heartbeat_ctx: Option<HeartbeatContext<C>>,
         otel_config: Option<OpenTelemetryConfig>,
     ) -> Result<Self> {
-        let heartbeat_service = config.heartbeat.clone().map(|hc| {
-            let ws_rpc = ws_rpc_endpoint.clone();
-            Arc::new(HeartbeatService::new(
+        let heartbeat_service = match (config.heartbeat.clone(), heartbeat_ctx) {
+            (Some(hc), Some(ctx)) => Some(Arc::new(HeartbeatService::new(
                 hc.clone(),
-                heartbeat_consumer.clone(),
-                ws_rpc,
-                keystore_uri.clone(),
+                ctx.consumer.clone(),
+                ctx.http_rpc_endpoint,
+                ctx.keystore_uri,
+                ctx.status_registry_address,
                 hc.service_id,
                 hc.blueprint_id,
-            ))
-        });
-
+            )?)),
+            (Some(_), None) => {
+                return Err(qos_error::Error::Other(
+                    "Heartbeat configuration provided without runtime context".to_string(),
+                ));
+            }
+            (None, _) => None,
+        };
         let metrics_service = match (config.metrics.clone(), otel_config) {
             (Some(mc), Some(oc)) => Some(Arc::new(MetricsService::with_otel_config(mc, &oc)?)),
             (Some(mc), None) => Some(Arc::new(MetricsService::new(mc)?)),
@@ -203,18 +216,9 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
     /// Returns an error if initialization of any underlying service fails.
     pub async fn new(
         config: QoSConfig,
-        heartbeat_consumer: Arc<C>,
-        ws_rpc_endpoint: String,
-        keystore_uri: String,
+        heartbeat_ctx: Option<HeartbeatContext<C>>,
     ) -> Result<Self> {
-        Self::initialize(
-            config,
-            heartbeat_consumer,
-            ws_rpc_endpoint,
-            keystore_uri,
-            None,
-        )
-        .await
+        Self::initialize(config, heartbeat_ctx, None).await
     }
 
     /// # Errors
@@ -222,19 +226,10 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
     /// Returns an error if initialization of any underlying service fails.
     pub async fn with_otel_config(
         config: QoSConfig,
-        heartbeat_consumer: Arc<C>,
-        ws_rpc_endpoint: String,
-        keystore_uri: String,
+        heartbeat_ctx: Option<HeartbeatContext<C>>,
         otel_config: OpenTelemetryConfig,
     ) -> Result<Self> {
-        Self::initialize(
-            config,
-            heartbeat_consumer,
-            ws_rpc_endpoint,
-            keystore_uri,
-            Some(otel_config),
-        )
-        .await
+        Self::initialize(config, heartbeat_ctx, Some(otel_config)).await
     }
 
     pub fn debug_server_status(&self) {

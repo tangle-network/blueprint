@@ -1,127 +1,99 @@
-# Operator RFQ Pricing Server
+# Operator RFQ Pricing Server (Tangle EVM)
 
-This system defines a simplified decentralized pricing mechanism in which each **operator** runs a **local RPC server** to respond to **user price requests**. Prices are generated based on **benchmarking configurations** for specific blueprints and cached in a local **key-value store**. When a user requests a quote, the operator returns a **signed price quote** that includes an **expiry block number** or **timestamp** for on-chain verification.
+The pricing engine watches the Tangle v2 EVM contracts for blueprint/service events, benchmarks the node, computes prices from the local policy file, and responds to `GetPrice` RPC calls with ITangle-compatible signed quotes. It replaces the legacy Substrate/Tangle stack.
 
----
+## Runtime Flow
 
-## 🔄 System Flow Diagram
+1. **Bootstrap**
+   - `pricing-engine-server` reads `operator.toml`, loads the pricing table, and initialises the RocksDB benchmark cache.
+   - `init_operator_signer` ensures a `k256` key exists in the keystore and derives the operator’s Ethereum address.
+   - The CLI arguments (or environment variables) provide the HTTP/WS RPC URLs plus the `ITangle`, `MultiAssetDelegation`, and `OperatorStatusRegistry` contract addresses.
+2. **Event ingestion**
+   - `EvmEventListener` polls `ITangle::ServiceActivated` / `ServiceTerminated` logs via `blueprint-client-tangle-evm`.
+   - For each activation we enqueue a benchmarking task so the cache always has a recent profile per blueprint.
+3. **RPC handling**
+   - `GetPriceRequest` includes PoW (`proof_of_work` + `challenge_timestamp`), TTL, and security requirements.
+   - `PricingEngineService` verifies PoW, loads the cached benchmark profile, and runs `calculate_price`.
+   - The resulting `QuoteDetails` are converted to both the proto response and the ABI payload expected by `ITangle::createServiceFromQuotes`.
+4. **Signing**
+   - `SignableQuote` hashes the ABI-encoded `ITangleTypes::QuoteDetails` (keccak256) and `OperatorSigner` signs with the EVM key (`K256Ecdsa`).
+   - The response returns the proto `QuoteDetails`, the ECDSA signature (65 bytes), the operator address, and a fresh PoW solution for the client.
 
-```mermaid
-graph TD
-  subgraph Operator
-    A1["Blueprint Registered or Price Updated"] --> B1["Run Benchmark"]
-    B1 --> C1["Compute Price for Blueprint"]
-    C1 --> D1["Store Price in Cache (KV DB)"]
+## Components
 
-    E1["Incoming Price Request"] --> F1["Lookup Price in Cache"]
-    F1 --> G1["Sign Price with Expiry"]
-    G1 --> H1["Send Price Response"]
-  end
+| Module | Responsibility |
+| --- | --- |
+| `app.rs` | Bootstraps the service, spawns the event listener and RPC server. |
+| `service/blockchain/evm_listener.rs` | Polls Alloy logs for ITangle events and pushes `BlockchainEvent`s. |
+| `benchmark/*` | Runs CPU/memory/storage benchmarks and persists them in `BenchmarkCache`. |
+| `pricing.rs` | Applies the configured resource rates + TTL/security adjustments. |
+| `signer.rs` | Builds ABI-compatible `QuoteDetails`, hashes them, and signs with `k256`. |
+| `service/rpc/server.rs` | Implements the gRPC surface defined in `proto/pricing.proto`. |
 
-  subgraph User
-    H1 --> I1["Verify Signature"]
-    I1 --> J1["Submit Quote On-chain"]
-  end
-```
+## Quote Format
 
----
+`proto/pricing.proto` now exposes the same structure as `ITangle.SignedQuote`. Security commitments are arrays, matching the Solidity ABI:
 
-## 🔧 Technologies Used
-
--   **Rust** (Operator server and benchmarking engine)
--   **Tonic** (gRPC server)
--   **SQLite / RocksDB / Sled** (for local price cache)
--   **ed25519 / secp256k1** (signature scheme)
--   **SHA256** (message hashing)
--   **Web3 library** (optional: for on-chain verification testing)
-
----
-
-## 📁 File Structure
-
-```
-operator_rfq/
-├── Cargo.toml
-├── src/
-│   ├── main.rs         # RPC server + request handler
-│   ├── benchmark.rs    # Benchmarking logic per blueprint
-│   ├── pricing.rs      # Price computation engine
-│   ├── cache.rs        # Local DB wrapper (RocksDB or SQLite)
-│   ├── signer.rs       # Signature generation + verification
-│   └── proto/          # gRPC proto definitions
-└── README.md           # This file
-```
-
----
-
-## ✍️ Example Flow
-
-### Blueprint Registration or Price Update:
-
-1. Operator receives new blueprint registration.
-2. Runs a benchmark (e.g. CPU time, memory, disk I/O).
-3. Calculates pricing model (e.g. linear or exponential curve).
-4. Stores result in local database: `price_cache[blueprint_hash] = PriceModel { price_per_unit, timestamp }`
-
-### User Request:
-
-1. User sends a `GetPrice(blueprint_hash)` RPC request.
-2. Operator fetches cached price.
-3. Signs the quote with:
-    - Price amount
-    - Blueprint hash
-    - Timestamp or block number
-4. Sends back `SignedQuote { price, blueprint_hash, timestamp, signature }`
-
-### On-Chain Verification:
-
-1. Smart contract checks:
-    - Signature is valid.
-    - Block number is within expiry.
-    - The quoted blueprint matches user job.
-
----
-
-## ⚡ Quote Signature Format
-
-```rust
-struct QuotePayload {
-    blueprint_hash: [u8; 32],
-    price_wei: u128,
-    timestamp_or_block: u64,
+```proto
+message QuoteDetails {
+  uint64 blueprint_id = 1;
+  uint64 ttl_blocks = 2;
+  double total_cost_rate = 3;
+  uint64 timestamp = 4;
+  uint64 expiry = 5;
+  repeated ResourcePricing resources = 6;
+  repeated AssetSecurityCommitment security_commitments = 7;
 }
 ```
 
-Hash with `sha256`, sign with `ed25519`:
+The signer converts these proto structs into `ITangleTypes::QuoteDetails` with:
 
-```rust
-let msg = sha256(encode(&QuotePayload));
-let sig = keypair.sign(&msg);
-```
+* `totalCost` stored as a scaled `U256` (10⁻⁹ precision via `decimal_to_scaled_amount`).
+* `securityCommitments[i].asset` encoded as `{ kind: ERC20 (1), token: Address }`.
+* `securityCommitments[i].exposureBps` derived from the requested exposure percent (×100).
 
----
+## CLI and Environment
 
-## 🚀 Quick Start
+`pricing-engine-server --help` exposes all runtime inputs. The important env vars:
+
+| Flag | Env | Description |
+| --- | --- | --- |
+| `--config` | `OPERATOR_CONFIG_PATH` | Path to `operator.toml`. |
+| `--pricing-config` | `PRICING_CONFIG_PATH` | Resource pricing table (TOML). |
+| `--http-rpc-endpoint` | `OPERATOR_HTTP_RPC` | HTTPS endpoint for the Tangle EVM RPC. |
+| `--ws-rpc-endpoint` | `OPERATOR_WS_RPC` | WebSocket endpoint for real-time logs. |
+| `--blueprint-id` | `OPERATOR_BLUEPRINT_ID` | Blueprint to watch for activations. |
+| `--service-id` | `OPERATOR_SERVICE_ID` | Optional fixed service to benchmark. |
+| `--tangle-contract` | `OPERATOR_TANGLE_CONTRACT` | ITangle contract address. |
+| `--restaking-contract` | `OPERATOR_RESTAKING_CONTRACT` | MultiAssetDelegation contract. |
+| `--status-registry-contract` | `OPERATOR_STATUS_REGISTRY_CONTRACT` | OperatorStatusRegistry contract. |
+
+`operator.toml` controls the local node behaviour (cache paths, RPC bind addr, benchmark cadence, etc.). See the updated sample in `crates/pricing-engine/operator.toml`.
+
+## Building and Testing
 
 ```bash
-# Build the server
-cargo build --release
+# Format proto + rebuild bindings
+cargo fmt -p blueprint-pricing-engine
 
-# Run the gRPC server
-cargo run --bin operator_rfq
+# Unit tests (signer + pricing config)
+cargo test -p blueprint-pricing-engine signer_test
+
+# Run the daemon with env vars
+OPERATOR_HTTP_RPC=https://rpc.tangle.tools \
+OPERATOR_WS_RPC=wss://rpc.tangle.tools \
+OPERATOR_TANGLE_CONTRACT=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 \
+OPERATOR_RESTAKING_CONTRACT=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 \
+OPERATOR_STATUS_REGISTRY_CONTRACT=0xdC64a140Aa3E981100a9BecA4E685f962f0CF6C9 \
+cargo run -p blueprint-pricing-engine --bin pricing-engine-server
 ```
 
----
+## Security Notes
 
-## ✅ Future Extensions
+- Quotes are protected by:
+  - Proof-of-work challenge (`sha2`-based) to prevent RPC abuse.
+  - k256 ECDSA signatures hashed over the ABI payload (keccak256) so they can be submitted directly to `ITangle`.
+  - Explicit TTL (`ttl_blocks`) and expiry timestamp to avoid replays.
+- The keystore lives under `OperatorConfig.keystore_path`. Keys are generated with `blueprint-keystore` and never leave disk.
 
--   Add support for **multi-resource pricing** (CPU + RAM + storage).
--   Implement **on-chain validation smart contract**.
--   Add **gossip/pubsub** for broadcasting available blueprints.
--   Add **reputation system** to weigh operator reliability.
-
----
-
-## 📅 License
-
-MIT or Apache 2.0
+Keep the contract addresses and keystore directory private; the RPC server does **not** expose signing endpoints beyond `GetPrice`.

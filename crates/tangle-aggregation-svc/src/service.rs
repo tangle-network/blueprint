@@ -5,7 +5,7 @@ use crate::types::*;
 use alloy_primitives::U256;
 use ark_serialize::CanonicalDeserialize;
 use blueprint_crypto_bn254::{ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Signature};
-use blueprint_crypto_core::{KeyType, aggregation::AggregatableSignature};
+use blueprint_crypto_core::{aggregation::AggregatableSignature, KeyType};
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -180,7 +180,10 @@ impl AggregationService {
     }
 
     /// Submit a signature for aggregation
-    pub fn submit_signature(&self, req: SubmitSignatureRequest) -> Result<SubmitSignatureResponse, ServiceError> {
+    pub fn submit_signature(
+        &self,
+        req: SubmitSignatureRequest,
+    ) -> Result<SubmitSignatureResponse, ServiceError> {
         debug!(
             service_id = req.service_id,
             call_id = req.call_id,
@@ -303,7 +306,11 @@ impl AggregationService {
     }
 
     /// Get aggregated result if threshold is met
-    pub fn get_aggregated_result(&self, service_id: u64, call_id: u64) -> Option<AggregatedResultResponse> {
+    pub fn get_aggregated_result(
+        &self,
+        service_id: u64,
+        call_id: u64,
+    ) -> Option<AggregatedResultResponse> {
         let task = self.state.get_for_aggregation(service_id, call_id)?;
 
         // Aggregate signatures and public keys

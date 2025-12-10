@@ -236,7 +236,9 @@ impl TaskState {
     }
 
     /// Get all signatures and public keys in order for aggregation
-    pub fn get_signatures_for_aggregation(&self) -> (Vec<ArkBlsBn254Signature>, Vec<ArkBlsBn254Public>) {
+    pub fn get_signatures_for_aggregation(
+        &self,
+    ) -> (Vec<ArkBlsBn254Signature>, Vec<ArkBlsBn254Public>) {
         let mut sigs = Vec::with_capacity(self.signatures.len());
         let mut pks = Vec::with_capacity(self.public_keys.len());
 
@@ -562,13 +564,17 @@ mod tests {
         let mut state = TaskState::new(1, 100, vec![], 5, 3);
 
         // Add first signature
-        assert!(state.add_signature(0, dummy_signature(), dummy_public_key()).is_ok());
+        assert!(state
+            .add_signature(0, dummy_signature(), dummy_public_key())
+            .is_ok());
         assert!(state.has_signed(0));
         assert!(!state.has_signed(1));
         assert_eq!(state.signature_count(), 1);
 
         // Add second signature
-        assert!(state.add_signature(2, dummy_signature(), dummy_public_key()).is_ok());
+        assert!(state
+            .add_signature(2, dummy_signature(), dummy_public_key())
+            .is_ok());
         assert!(state.has_signed(2));
         assert_eq!(state.signature_count(), 2);
     }
@@ -577,7 +583,9 @@ mod tests {
     fn test_task_state_duplicate_signature() {
         let mut state = TaskState::new(1, 100, vec![], 5, 3);
 
-        assert!(state.add_signature(0, dummy_signature(), dummy_public_key()).is_ok());
+        assert!(state
+            .add_signature(0, dummy_signature(), dummy_public_key())
+            .is_ok());
         let result = state.add_signature(0, dummy_signature(), dummy_public_key());
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "Operator already signed");
@@ -598,13 +606,19 @@ mod tests {
 
         assert!(!state.threshold_met());
 
-        state.add_signature(0, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .add_signature(0, dummy_signature(), dummy_public_key())
+            .unwrap();
         assert!(!state.threshold_met());
 
-        state.add_signature(1, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .add_signature(1, dummy_signature(), dummy_public_key())
+            .unwrap();
         assert!(!state.threshold_met());
 
-        state.add_signature(2, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .add_signature(2, dummy_signature(), dummy_public_key())
+            .unwrap();
         assert!(state.threshold_met());
     }
 
@@ -612,9 +626,15 @@ mod tests {
     fn test_task_state_bitmap() {
         let mut state = TaskState::new(1, 100, vec![], 10, 3);
 
-        state.add_signature(0, dummy_signature(), dummy_public_key()).unwrap();
-        state.add_signature(3, dummy_signature(), dummy_public_key()).unwrap();
-        state.add_signature(7, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .add_signature(0, dummy_signature(), dummy_public_key())
+            .unwrap();
+        state
+            .add_signature(3, dummy_signature(), dummy_public_key())
+            .unwrap();
+        state
+            .add_signature(7, dummy_signature(), dummy_public_key())
+            .unwrap();
 
         // Bitmap should be 0b10001001 = 137
         assert_eq!(state.signer_bitmap, U256::from(137));
@@ -624,9 +644,15 @@ mod tests {
     fn test_task_state_non_signers() {
         let mut state = TaskState::new(1, 100, vec![], 5, 3);
 
-        state.add_signature(0, dummy_signature(), dummy_public_key()).unwrap();
-        state.add_signature(2, dummy_signature(), dummy_public_key()).unwrap();
-        state.add_signature(4, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .add_signature(0, dummy_signature(), dummy_public_key())
+            .unwrap();
+        state
+            .add_signature(2, dummy_signature(), dummy_public_key())
+            .unwrap();
+        state
+            .add_signature(4, dummy_signature(), dummy_public_key())
+            .unwrap();
 
         let non_signers = state.get_non_signers();
         assert_eq!(non_signers, vec![1, 3]);
@@ -659,13 +685,17 @@ mod tests {
         assert!(!state.threshold_met());
 
         // Add operator 3 (40%)
-        state.add_signature(3, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .add_signature(3, dummy_signature(), dummy_public_key())
+            .unwrap();
         assert_eq!(state.signed_stake(), 4000);
         assert_eq!(state.signed_stake_bps(), 4000);
         assert!(!state.threshold_met());
 
         // Add operator 1 (20%) -> now 60%
-        state.add_signature(1, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .add_signature(1, dummy_signature(), dummy_public_key())
+            .unwrap();
         assert_eq!(state.signed_stake(), 6000);
         assert_eq!(state.signed_stake_bps(), 6000);
         assert!(state.threshold_met());
@@ -792,8 +822,12 @@ mod tests {
         assert!(state.get_for_aggregation(1, 100).is_none());
 
         // Add signatures to meet threshold
-        state.submit_signature(1, 100, 0, dummy_signature(), dummy_public_key()).unwrap();
-        state.submit_signature(1, 100, 1, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .submit_signature(1, 100, 0, dummy_signature(), dummy_public_key())
+            .unwrap();
+        state
+            .submit_signature(1, 100, 1, dummy_signature(), dummy_public_key())
+            .unwrap();
 
         let task = state.get_for_aggregation(1, 100).unwrap();
         assert_eq!(task.service_id, 1);
@@ -808,8 +842,12 @@ mod tests {
     fn test_aggregation_state_get_for_aggregation_submitted() {
         let state = AggregationState::new();
         state.init_task(1, 100, vec![], 5, 2).unwrap();
-        state.submit_signature(1, 100, 0, dummy_signature(), dummy_public_key()).unwrap();
-        state.submit_signature(1, 100, 1, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .submit_signature(1, 100, 0, dummy_signature(), dummy_public_key())
+            .unwrap();
+        state
+            .submit_signature(1, 100, 1, dummy_signature(), dummy_public_key())
+            .unwrap();
 
         // Should return aggregation data
         assert!(state.get_for_aggregation(1, 100).is_some());
@@ -844,7 +882,9 @@ mod tests {
         state.init_task(2, 100, vec![3], 5, 3).unwrap();
 
         // Each task is independent
-        state.submit_signature(1, 100, 0, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .submit_signature(1, 100, 0, dummy_signature(), dummy_public_key())
+            .unwrap();
 
         assert_eq!(state.get_status(1, 100).unwrap().signatures_collected, 1);
         assert_eq!(state.get_status(1, 101).unwrap().signatures_collected, 0);
@@ -856,17 +896,19 @@ mod tests {
         let state = AggregationState::new();
 
         // Create expired task
-        state.init_task_with_config(
-            1,
-            100,
-            vec![],
-            5,
-            TaskConfig {
-                threshold_type: ThresholdType::Count(3),
-                ttl: Some(Duration::from_millis(10)),
-                ..Default::default()
-            },
-        ).unwrap();
+        state
+            .init_task_with_config(
+                1,
+                100,
+                vec![],
+                5,
+                TaskConfig {
+                    threshold_type: ThresholdType::Count(3),
+                    ttl: Some(Duration::from_millis(10)),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
         // Create non-expired task
         state.init_task(1, 101, vec![], 5, 3).unwrap();
@@ -889,7 +931,9 @@ mod tests {
         state.init_task(1, 100, vec![], 5, 1).unwrap();
         state.init_task(1, 101, vec![], 5, 1).unwrap();
 
-        state.submit_signature(1, 100, 0, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .submit_signature(1, 100, 0, dummy_signature(), dummy_public_key())
+            .unwrap();
         state.mark_submitted(1, 100).unwrap();
 
         assert_eq!(state.task_count(), 2);
@@ -909,11 +953,15 @@ mod tests {
 
         // Ready task (threshold met)
         state.init_task(1, 101, vec![], 5, 1).unwrap();
-        state.submit_signature(1, 101, 0, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .submit_signature(1, 101, 0, dummy_signature(), dummy_public_key())
+            .unwrap();
 
         // Submitted task
         state.init_task(1, 102, vec![], 5, 1).unwrap();
-        state.submit_signature(1, 102, 0, dummy_signature(), dummy_public_key()).unwrap();
+        state
+            .submit_signature(1, 102, 0, dummy_signature(), dummy_public_key())
+            .unwrap();
         state.mark_submitted(1, 102).unwrap();
 
         let counts = state.task_counts();

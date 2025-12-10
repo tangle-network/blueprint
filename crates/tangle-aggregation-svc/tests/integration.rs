@@ -5,11 +5,13 @@
 
 use alloy_primitives::U256;
 use ark_serialize::CanonicalSerialize;
-use blueprint_crypto_bn254::{ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Secret, ArkBlsBn254Signature};
-use blueprint_crypto_core::{KeyType, aggregation::AggregatableSignature};
+use blueprint_crypto_bn254::{
+    ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Secret, ArkBlsBn254Signature,
+};
+use blueprint_crypto_core::{aggregation::AggregatableSignature, KeyType};
 use blueprint_tangle_aggregation_svc::{
-    AggregationService, ServiceConfig, SubmitSignatureRequest, TaskConfig, ThresholdType,
-    create_signing_message,
+    create_signing_message, AggregationService, ServiceConfig, SubmitSignatureRequest, TaskConfig,
+    ThresholdType,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -224,7 +226,9 @@ fn test_basic_square_single_operator() {
     let output = 25u64.to_be_bytes().to_vec(); // 5^2 = 25
 
     // Initialize with threshold of 1
-    service.init_task(service_id, call_id, output.clone(), 1, 1).unwrap();
+    service
+        .init_task(service_id, call_id, output.clone(), 1, 1)
+        .unwrap();
 
     // Create message and sign
     let message = create_signing_message(service_id, call_id, &output);
@@ -269,7 +273,9 @@ fn test_verified_square_two_operators() {
     let output = 64u64.to_be_bytes().to_vec(); // 8^2 = 64
 
     // Initialize with threshold of 2
-    service.init_task(service_id, call_id, output.clone(), 2, 2).unwrap();
+    service
+        .init_task(service_id, call_id, output.clone(), 2, 2)
+        .unwrap();
 
     let message = create_signing_message(service_id, call_id, &output);
 
@@ -322,7 +328,9 @@ fn test_duplicate_submission_rejected() {
     let call_id = 3u64;
     let output = vec![1, 2, 3];
 
-    service.init_task(service_id, call_id, output.clone(), 3, 2).unwrap();
+    service
+        .init_task(service_id, call_id, output.clone(), 3, 2)
+        .unwrap();
 
     let message = create_signing_message(service_id, call_id, &output);
     let sig = sign_message(&sk, &message);
@@ -370,8 +378,12 @@ fn test_multiple_concurrent_tasks() {
     let output2 = vec![2];
 
     // Initialize two tasks
-    service.init_task(service_id, 1, output1.clone(), 2, 1).unwrap();
-    service.init_task(service_id, 2, output2.clone(), 2, 1).unwrap();
+    service
+        .init_task(service_id, 1, output1.clone(), 2, 1)
+        .unwrap();
+    service
+        .init_task(service_id, 2, output2.clone(), 2, 1)
+        .unwrap();
 
     // Submit to task 1
     let msg1 = create_signing_message(service_id, 1, &output1);
@@ -424,7 +436,9 @@ fn test_invalid_signature_rejected() {
     let call_id = 100u64;
     let output = vec![42u8; 32];
 
-    service.init_task(service_id, call_id, output.clone(), 1, 1).unwrap();
+    service
+        .init_task(service_id, call_id, output.clone(), 1, 1)
+        .unwrap();
 
     // Create the proper signing message
     let message = create_signing_message(service_id, call_id, &output);
@@ -463,7 +477,9 @@ fn test_valid_signature_accepted() {
     let call_id = 100u64;
     let output = vec![42u8; 32];
 
-    service.init_task(service_id, call_id, output.clone(), 1, 1).unwrap();
+    service
+        .init_task(service_id, call_id, output.clone(), 1, 1)
+        .unwrap();
 
     // Create the proper signing message
     let message = create_signing_message(service_id, call_id, &output);
@@ -823,8 +839,12 @@ fn test_multi_service_redundancy() {
     let threshold = 2; // 2 of 3 needed
 
     // Initialize task on both services
-    service1.init_task(service_id, call_id, output.clone(), 3, threshold).unwrap();
-    service2.init_task(service_id, call_id, output.clone(), 3, threshold).unwrap();
+    service1
+        .init_task(service_id, call_id, output.clone(), 3, threshold)
+        .unwrap();
+    service2
+        .init_task(service_id, call_id, output.clone(), 3, threshold)
+        .unwrap();
 
     let message = create_signing_message(service_id, call_id, &output);
 
@@ -894,27 +914,33 @@ fn test_multiple_submitters_race() {
     let output = vec![1, 2, 3];
 
     // Initialize and collect signatures
-    service.init_task(service_id, call_id, output.clone(), 2, 2).unwrap();
+    service
+        .init_task(service_id, call_id, output.clone(), 2, 2)
+        .unwrap();
 
     let message = create_signing_message(service_id, call_id, &output);
 
-    service.submit_signature(SubmitSignatureRequest {
-        service_id,
-        call_id,
-        operator_index: 0,
-        output: output.clone(),
-        signature: serialize_signature(&sign_message(&sk1, &message)),
-        public_key: serialize_pubkey(&pk1),
-    }).unwrap();
+    service
+        .submit_signature(SubmitSignatureRequest {
+            service_id,
+            call_id,
+            operator_index: 0,
+            output: output.clone(),
+            signature: serialize_signature(&sign_message(&sk1, &message)),
+            public_key: serialize_pubkey(&pk1),
+        })
+        .unwrap();
 
-    service.submit_signature(SubmitSignatureRequest {
-        service_id,
-        call_id,
-        operator_index: 1,
-        output: output.clone(),
-        signature: serialize_signature(&sign_message(&sk2, &message)),
-        public_key: serialize_pubkey(&pk2),
-    }).unwrap();
+    service
+        .submit_signature(SubmitSignatureRequest {
+            service_id,
+            call_id,
+            operator_index: 1,
+            output: output.clone(),
+            signature: serialize_signature(&sign_message(&sk2, &message)),
+            public_key: serialize_pubkey(&pk2),
+        })
+        .unwrap();
 
     assert!(service.get_status(service_id, call_id).threshold_met);
 
@@ -949,28 +975,34 @@ fn test_anyone_can_check_aggregated_result() {
     let call_id = 300u64;
     let output = vec![42];
 
-    service.init_task(service_id, call_id, output.clone(), 3, 2).unwrap();
+    service
+        .init_task(service_id, call_id, output.clone(), 3, 2)
+        .unwrap();
 
     let message = create_signing_message(service_id, call_id, &output);
 
     // Two operators sign
-    service.submit_signature(SubmitSignatureRequest {
-        service_id,
-        call_id,
-        operator_index: 0,
-        output: output.clone(),
-        signature: serialize_signature(&sign_message(&sk1, &message)),
-        public_key: serialize_pubkey(&pk1),
-    }).unwrap();
+    service
+        .submit_signature(SubmitSignatureRequest {
+            service_id,
+            call_id,
+            operator_index: 0,
+            output: output.clone(),
+            signature: serialize_signature(&sign_message(&sk1, &message)),
+            public_key: serialize_pubkey(&pk1),
+        })
+        .unwrap();
 
-    service.submit_signature(SubmitSignatureRequest {
-        service_id,
-        call_id,
-        operator_index: 1,
-        output: output.clone(),
-        signature: serialize_signature(&sign_message(&sk2, &message)),
-        public_key: serialize_pubkey(&pk2),
-    }).unwrap();
+    service
+        .submit_signature(SubmitSignatureRequest {
+            service_id,
+            call_id,
+            operator_index: 1,
+            output: output.clone(),
+            signature: serialize_signature(&sign_message(&sk2, &message)),
+            public_key: serialize_pubkey(&pk2),
+        })
+        .unwrap();
 
     // All operators can check the result
     let result = service.get_aggregated_result(service_id, call_id);
@@ -980,7 +1012,7 @@ fn test_anyone_can_check_aggregated_result() {
     let task = result.unwrap();
     assert_eq!(task.output, output);
     assert_eq!(task.non_signer_indices, vec![2]); // Operator 3 didn't sign
-    // Aggregated signature should be present
+                                                  // Aggregated signature should be present
     assert!(!task.aggregated_signature.is_empty());
 
     // After submission, the status is updated but data is still queryable

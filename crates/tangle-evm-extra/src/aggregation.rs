@@ -30,7 +30,9 @@
 
 use alloy_primitives::{Bytes, U256};
 use blueprint_client_tangle_evm::TangleEvmClient;
-use std::sync::Arc;
+use blueprint_std::format;
+use blueprint_std::string::String;
+use blueprint_std::sync::Arc;
 use thiserror::Error;
 
 /// Error types for aggregation operations
@@ -240,9 +242,7 @@ impl AggregatedResult {
             )
             .await
             .map_err(|e| {
-                AggregationError::ContractError(format!(
-                    "Failed to submit aggregated result: {e}"
-                ))
+                AggregationError::ContractError(format!("Failed to submit aggregated result: {e}"))
             })?;
 
         if result.success {

@@ -1,8 +1,6 @@
+use blueprint_client_tangle_evm::{TangleEvmClient, TangleEvmClientConfig};
 use blueprint_core::{error, info};
-use blueprint_crypto::{
-    sp_core::{SpEcdsa, SpSr25519},
-    tangle_pair_signer::TanglePairSigner,
-};
+use blueprint_crypto::k256::K256Ecdsa;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
@@ -13,9 +11,8 @@ use crate::{
     config::{OperatorConfig, load_config_from_path},
     error::{PricingError, Result},
     handlers::handle_blueprint_update,
-    service::blockchain::{event::BlockchainEvent, listener::EventListener},
+    service::blockchain::{event::BlockchainEvent, evm_listener::EvmEventListener},
 };
-use tangle_subxt::subxt::tx::Signer;
 
 use blueprint_keystore::{Keystore, KeystoreConfig};
 
@@ -23,26 +20,22 @@ use blueprint_keystore::backends::Backend;
 
 /// Start the blockchain event listener if the feature is enabled
 pub async fn start_blockchain_listener(
-    node_url: String,
+    evm_config: TangleEvmClientConfig,
     event_tx: mpsc::Sender<BlockchainEvent>,
 ) -> Option<tokio::task::JoinHandle<()>> {
-    if cfg!(feature = "tangle-listener") {
-        info!("Starting blockchain event listener");
-        Some(tokio::spawn(async move {
-            match EventListener::new(node_url, event_tx).await {
-                Ok(listener) => {
-                    if let Err(e) = listener.run().await {
-                        error!("Blockchain listener error: {e}");
-                    }
+    match TangleEvmClient::new(evm_config).await {
+        Ok(client) => {
+            let listener = EvmEventListener::new(Arc::new(client), event_tx);
+            Some(tokio::spawn(async move {
+                if let Err(e) = listener.run().await {
+                    error!("Blockchain listener error: {e}");
                 }
-                Err(e) => {
-                    error!("Failed to create blockchain listener: {e}");
-                }
-            }
-        }))
-    } else {
-        info!("Blockchain event listener feature not enabled");
-        None
+            }))
+        }
+        Err(e) => {
+            error!("Failed to start blockchain listener: {}", e);
+            None
+        }
     }
 }
 
@@ -69,7 +62,7 @@ pub async fn init_benchmark_cache(config: &Arc<OperatorConfig>) -> Result<Arc<Be
 pub fn init_operator_signer<P: AsRef<std::path::Path>>(
     config: &OperatorConfig,
     keystore_path: P,
-) -> Result<Arc<Mutex<OperatorSigner<SpEcdsa>>>> {
+) -> Result<Arc<Mutex<OperatorSigner>>> {
     info!("Initializing operator signer with ECDSA");
 
     let keystore_path = keystore_path.as_ref();
@@ -78,11 +71,10 @@ pub fn init_operator_signer<P: AsRef<std::path::Path>>(
         std::fs::create_dir_all(keystore_path)?;
     }
 
-    // Initialize the keystore
     let keystore_config = KeystoreConfig::new().fs_root(keystore_path);
     let keystore = Keystore::new(keystore_config)?;
 
-    let ecdsa_public_key = match keystore.list_local::<SpEcdsa>()? {
+    let ecdsa_public_key = match keystore.list_local::<K256Ecdsa>()? {
         keys if !keys.is_empty() => {
             info!("Using existing ECDSA operator key");
             keys[0]
@@ -90,27 +82,11 @@ pub fn init_operator_signer<P: AsRef<std::path::Path>>(
         _ => {
             info!("Generating new ECDSA operator key");
             // Generate a new keypair
-            keystore.generate::<SpEcdsa>(None)?
+            keystore.generate::<K256Ecdsa>(None)?
         }
     };
-    let ecdsa_keypair = keystore.get_secret::<SpEcdsa>(&ecdsa_public_key)?;
-
-    let sr25519_public_key = match keystore.list_local::<SpSr25519>()? {
-        keys if !keys.is_empty() => {
-            info!("Using existing SR25519 operator key");
-            keys[0]
-        }
-        _ => {
-            info!("Generating new SR25519 operator key");
-            // Generate a new keypair
-            keystore.generate::<SpSr25519>(None)?
-        }
-    };
-    let sr25519_keypair = keystore.get_secret::<SpSr25519>(&sr25519_public_key)?;
-    let signer = TanglePairSigner::new(sr25519_keypair.0);
-    let operator_id = signer.account_id();
-
-    let signer = OperatorSigner::new(config, ecdsa_keypair, operator_id)?;
+    let ecdsa_keypair = keystore.get_secret::<K256Ecdsa>(&ecdsa_public_key)?;
+    let signer = OperatorSigner::new(config, ecdsa_keypair)?;
 
     Ok(Arc::new(Mutex::new(signer)))
 }
@@ -126,21 +102,13 @@ pub fn spawn_event_processor(
         while let Some(event) = event_rx.recv().await {
             info!("Received blockchain event: {:?}", event);
 
-            let (blueprint_id, update_pricing) = match event {
-                BlockchainEvent::Registered(e) => (Some(e.blueprint_id), true),
-                _ => (None, false),
-            };
-
-            if update_pricing {
-                if let Some(id) = blueprint_id {
-                    info!("Updating pricing for blueprint ID: {}", id);
-
-                    // Handle the blueprint update
-                    if let Err(e) =
-                        handle_blueprint_update(id, benchmark_cache.clone(), config.clone()).await
-                    {
-                        error!("Failed to update pricing: {}", e);
-                    }
+            if let BlockchainEvent::ServiceActivated { blueprint_id, .. } = event {
+                info!("Updating pricing for blueprint ID: {}", blueprint_id);
+                if let Err(e) =
+                    handle_blueprint_update(blueprint_id, benchmark_cache.clone(), config.clone())
+                        .await
+                {
+                    error!("Failed to update pricing: {}", e);
                 }
             }
         }

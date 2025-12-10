@@ -4,10 +4,11 @@
 
 use crate::extract;
 use blueprint_core::{JobCall, JobResult};
-use core::pin::Pin;
-use pin_project_lite::pin_project;
-use std::task::{Context, Poll, ready};
 use core::future::Future;
+use core::pin::Pin;
+use core::task::ready;
+use core::task::{Context, Poll};
+use pin_project_lite::pin_project;
 use tower::{Layer, Service};
 
 /// A layer service that attaches Tangle EVM metadata to job results

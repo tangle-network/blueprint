@@ -21,15 +21,25 @@
 
 use crate::aggregation::AggregationError;
 use crate::extract;
-use alloy_primitives::Bytes;
-use blueprint_client_tangle_evm::{AggregationConfig, TangleEvmClient, ThresholdType};
-use blueprint_core::error::BoxError;
+use alloy_primitives::{Address, Bytes};
+use blueprint_client_tangle_evm::{
+    AggregationConfig, OperatorMetadata, TangleEvmClient, ThresholdType,
+};
 use blueprint_core::JobResult;
+use blueprint_core::error::BoxError;
+use blueprint_std::boxed::Box;
+use blueprint_std::collections::{HashMap, VecDeque};
+use blueprint_std::format;
+use blueprint_std::string::{String, ToString};
+use blueprint_std::sync::{Arc, Mutex};
+#[cfg(any(feature = "aggregation", feature = "p2p-aggregation"))]
+use blueprint_std::time::Duration;
+use blueprint_std::vec::Vec;
+#[cfg(feature = "aggregation")]
+use blueprint_tangle_aggregation_svc::{OperatorStake, ThresholdConfig};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use futures_util::Sink;
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
 
 /// Error type for the aggregating consumer
 #[derive(Debug, thiserror::Error)]
@@ -98,9 +108,9 @@ pub struct AggregationServiceConfig {
     /// Whether to wait for threshold to be met before returning
     pub wait_for_threshold: bool,
     /// Timeout for waiting for threshold (default: 60s)
-    pub threshold_timeout: std::time::Duration,
+    pub threshold_timeout: Duration,
     /// Poll interval when waiting for threshold (default: 1s)
-    pub poll_interval: std::time::Duration,
+    pub poll_interval: Duration,
     /// Whether to try to submit the aggregated result to chain (default: true)
     /// When true, all operators race to submit; first valid submission wins
     pub submit_to_chain: bool,
@@ -119,13 +129,15 @@ impl AggregationServiceConfig {
 
         let bls_public = ArkBlsBn254::public_from_secret(&bls_secret);
         Self {
-            clients: vec![blueprint_tangle_aggregation_svc::AggregationServiceClient::new(service_url)],
+            clients: vec![
+                blueprint_tangle_aggregation_svc::AggregationServiceClient::new(service_url),
+            ],
             bls_secret: Arc::new(bls_secret),
             bls_public: Arc::new(bls_public),
             operator_index,
             wait_for_threshold: false,
-            threshold_timeout: std::time::Duration::from_secs(60),
-            poll_interval: std::time::Duration::from_secs(1),
+            threshold_timeout: Duration::from_secs(60),
+            poll_interval: Duration::from_secs(1),
             submit_to_chain: true, // Everyone tries to submit by default
         }
     }
@@ -155,17 +167,16 @@ impl AggregationServiceConfig {
             bls_public: Arc::new(bls_public),
             operator_index,
             wait_for_threshold: false,
-            threshold_timeout: std::time::Duration::from_secs(60),
-            poll_interval: std::time::Duration::from_secs(1),
+            threshold_timeout: Duration::from_secs(60),
+            poll_interval: Duration::from_secs(1),
             submit_to_chain: true,
         }
     }
 
     /// Add an additional aggregation service URL
     pub fn add_service(mut self, service_url: impl Into<String>) -> Self {
-        self.clients.push(
-            blueprint_tangle_aggregation_svc::AggregationServiceClient::new(service_url)
-        );
+        self.clients
+            .push(blueprint_tangle_aggregation_svc::AggregationServiceClient::new(service_url));
         self
     }
 
@@ -176,7 +187,7 @@ impl AggregationServiceConfig {
     }
 
     /// Set the timeout for waiting for threshold
-    pub fn with_threshold_timeout(mut self, timeout: std::time::Duration) -> Self {
+    pub fn with_threshold_timeout(mut self, timeout: Duration) -> Self {
         self.threshold_timeout = timeout;
         self
     }
@@ -193,19 +204,22 @@ impl AggregationServiceConfig {
 
     /// Get the first client (for backwards compatibility)
     pub fn client(&self) -> &blueprint_tangle_aggregation_svc::AggregationServiceClient {
-        self.clients.first().expect("At least one client must be configured")
+        self.clients
+            .first()
+            .expect("At least one client must be configured")
     }
 
-    /// Discover aggregation service URLs from operator RPC addresses on chain
+    /// Discover aggregation service URLs by reading operator metadata on chain.
     ///
-    /// This queries `OperatorRpcAddressUpdated` events to discover operator endpoints,
-    /// then converts them to aggregation service URLs using the provided path suffix.
+    /// This queries the Tangle contract for registered operators, fetches their
+    /// metadata (ECDSA key + RPC endpoint), and converts those RPC endpoints into
+    /// aggregation service URLs using the provided path suffix.
     ///
     /// # Arguments
-    /// * `client` - The Tangle EVM client for querying events
+    /// * `client` - Tangle EVM client used to query on-chain metadata
     /// * `blueprint_id` - The blueprint ID to query operators for
+    /// * `service_id` - Service whose operator set should be scanned
     /// * `aggregation_path` - Path suffix for aggregation service (e.g., "/aggregation" or ":8080")
-    /// * `from_block` - Block to start querying from (None = earliest)
     ///
     /// # Example
     /// ```rust,ignore
@@ -213,8 +227,8 @@ impl AggregationServiceConfig {
     /// let urls = AggregationServiceConfig::discover_operator_services(
     ///     &client,
     ///     blueprint_id,
+    ///     service_id,
     ///     ":9090",  // Aggregation service port
-    ///     None,
     /// ).await?;
     ///
     /// let config = AggregationServiceConfig::with_multiple_services(
@@ -226,42 +240,27 @@ impl AggregationServiceConfig {
     pub async fn discover_operator_services(
         client: &TangleEvmClient,
         blueprint_id: u64,
+        service_id: u64,
         aggregation_path: &str,
-        from_block: Option<u64>,
     ) -> Result<Vec<String>, AggregatingConsumerError> {
-        use alloy_primitives::{FixedBytes, B256};
-        use alloy_rpc_types::Filter;
-        use alloy_sol_types::SolEvent;
-
-        // Event signature for OperatorRpcAddressUpdated(uint64 indexed blueprintId, address indexed operator, string rpcAddress)
-        // keccak256("OperatorRpcAddressUpdated(uint64,address,string)")
-        let event_sig = blueprint_client_tangle_evm::contracts::ITangle::OperatorRpcAddressUpdated::SIGNATURE_HASH;
-
-        // Create filter for the event
-        let tangle_address = client.config.settings.tangle_contract;
-        let filter = Filter::new()
-            .address(tangle_address)
-            .event_signature(event_sig)
-            .topic1(B256::from(FixedBytes::<32>::left_padding_from(&blueprint_id.to_be_bytes())))
-            .from_block(from_block.unwrap_or(0));
-
-        let logs = client.get_logs(&filter).await.map_err(|e| {
-            AggregatingConsumerError::Client(format!("Failed to query logs: {}", e))
-        })?;
-
-        // Decode events and collect RPC addresses
-        let mut rpc_addresses: std::collections::HashMap<alloy_primitives::Address, String> = std::collections::HashMap::new();
-
-        for log in logs {
-            if let Ok(event) = log.log_decode::<blueprint_client_tangle_evm::contracts::ITangle::OperatorRpcAddressUpdated>() {
-                // Keep the latest RPC address for each operator
-                rpc_addresses.insert(event.inner.operator, event.inner.rpcAddress.clone());
+        let operators = client
+            .get_service_operators(service_id)
+            .await
+            .map_err(|e| AggregatingConsumerError::Client(e.to_string()))?;
+        let mut rpc_addresses = Vec::with_capacity(operators.len());
+        for operator in operators {
+            let metadata = client
+                .get_operator_metadata(blueprint_id, operator)
+                .await
+                .map_err(|e| AggregatingConsumerError::Client(e.to_string()))?;
+            if !metadata.rpc_endpoint.is_empty() {
+                rpc_addresses.push(metadata.rpc_endpoint);
             }
         }
 
         // Convert RPC addresses to aggregation service URLs
         let urls: Vec<String> = rpc_addresses
-            .values()
+            .iter()
             .filter_map(|rpc| {
                 // Parse the RPC address and append the aggregation path
                 if rpc.is_empty() {
@@ -366,7 +365,7 @@ impl AggregatingConsumer {
     ///
     /// ```rust,ignore
     /// use blueprint_tangle_evm_extra::{AggregatingConsumer, shared_cache_with_ttl};
-    /// use std::time::Duration;
+    /// use blueprint_std::time::Duration;
     ///
     /// // Create a shared cache with 10 minute TTL
     /// let cache = shared_cache_with_ttl(Duration::from_secs(600));
@@ -375,7 +374,10 @@ impl AggregatingConsumer {
     /// let consumer1 = AggregatingConsumer::with_cache(client1, cache.clone());
     /// let consumer2 = AggregatingConsumer::with_cache(client2, cache.clone());
     /// ```
-    pub fn with_cache(client: TangleEvmClient, cache: crate::cache::SharedServiceConfigCache) -> Self {
+    pub fn with_cache(
+        client: TangleEvmClient,
+        cache: crate::cache::SharedServiceConfigCache,
+    ) -> Self {
         Self {
             client: Arc::new(client),
             buffer: Mutex::new(VecDeque::new()),
@@ -505,6 +507,21 @@ impl AggregatingConsumer {
     ) -> Result<crate::cache::ServiceOperators, AggregatingConsumerError> {
         self.cache
             .get_service_operators(&self.client, service_id)
+            .await
+            .map_err(|e| AggregatingConsumerError::Client(e.to_string()))
+    }
+
+    /// Get operator metadata for all operators in a service.
+    pub async fn get_service_operator_metadata(
+        &self,
+        service_id: u64,
+    ) -> Result<HashMap<Address, OperatorMetadata>, AggregatingConsumerError> {
+        self.cache
+            .get_service_operator_metadata(
+                &self.client,
+                self.client.config.settings.blueprint_id,
+                service_id,
+            )
             .await
             .map_err(|e| AggregatingConsumerError::Client(e.to_string()))
     }
@@ -660,13 +677,8 @@ async fn submit_job_result(
     agg_config: Option<AggregationServiceConfig>,
 ) -> Result<(), AggregatingConsumerError> {
     // Check if aggregation is required (uses cache)
-    let config = AggregatingConsumer::get_aggregation_config(
-        &cache,
-        &client,
-        service_id,
-        job_index,
-    )
-    .await?;
+    let config =
+        AggregatingConsumer::get_aggregation_config(&cache, &client, service_id, job_index).await?;
 
     if config.required {
         blueprint_core::info!(
@@ -682,18 +694,128 @@ async fn submit_job_result(
         let agg = agg_config.ok_or(AggregatingConsumerError::AggregationNotConfigured)?;
 
         submit_aggregated_result(
-            client,
-            service_id,
-            call_id,
-            output,
-            config,
-            agg,
+            cache, client, service_id, call_id, job_index, output, config, agg,
         )
         .await
     } else {
         // No aggregation needed, submit directly
         submit_direct_result(client, service_id, call_id, output).await
     }
+}
+
+#[cfg(feature = "aggregation")]
+struct AggregationTaskInit {
+    operator_count: u32,
+    threshold: ThresholdConfig,
+}
+
+#[cfg(feature = "aggregation")]
+async fn prepare_aggregation_task(
+    cache: &crate::cache::SharedServiceConfigCache,
+    client: &TangleEvmClient,
+    service_id: u64,
+    job_index: u8,
+    config: &AggregationConfig,
+) -> Result<AggregationTaskInit, AggregatingConsumerError> {
+    let operators = cache
+        .get_service_operators(client, service_id)
+        .await
+        .map_err(|e| AggregatingConsumerError::Client(e.to_string()))?;
+
+    if operators.is_empty() {
+        return Err(AggregatingConsumerError::Client(format!(
+            "No operators registered for service {service_id}"
+        )));
+    }
+
+    let operator_count = operators.len() as u32;
+
+    let threshold = match config.threshold_type {
+        ThresholdType::CountBased => {
+            let required = integration::calculate_required_signers(
+                operators.len(),
+                config.threshold_bps,
+                ThresholdType::CountBased,
+                None,
+            );
+            ThresholdConfig::Count {
+                required_signers: required as u32,
+            }
+        }
+        ThresholdType::StakeWeighted => {
+            let weights = cache
+                .get_operator_weights(client, service_id)
+                .await
+                .map_err(|e| AggregatingConsumerError::Client(e.to_string()))?;
+
+            if weights.is_empty() {
+                blueprint_core::warn!(
+                    target: "tangle-evm-aggregating-consumer",
+                    service_id,
+                    job_index,
+                    "No operator weights found for service {}; falling back to count-based threshold",
+                    service_id
+                );
+                let required = integration::calculate_required_signers(
+                    operators.len(),
+                    config.threshold_bps,
+                    ThresholdType::CountBased,
+                    None,
+                );
+                ThresholdConfig::Count {
+                    required_signers: required as u32,
+                }
+            } else {
+                let mut stakes = Vec::with_capacity(operators.len());
+                let mut numeric_stakes = Vec::with_capacity(operators.len());
+                for (idx, operator) in operators.iter().enumerate() {
+                    let weight = u64::from(*weights.weights.get(operator).unwrap_or(&0));
+                    stakes.push(OperatorStake {
+                        operator_index: idx as u32,
+                        stake: weight,
+                    });
+                    numeric_stakes.push(weight);
+                }
+
+                if numeric_stakes.iter().all(|stake| *stake == 0) {
+                    blueprint_core::warn!(
+                        target: "tangle-evm-aggregating-consumer",
+                        service_id,
+                        job_index,
+                        "Operator weights for service {} are zero; falling back to count-based threshold",
+                        service_id
+                    );
+                    let required = integration::calculate_required_signers(
+                        operators.len(),
+                        config.threshold_bps,
+                        ThresholdType::CountBased,
+                        None,
+                    );
+                    ThresholdConfig::Count {
+                        required_signers: required as u32,
+                    }
+                } else {
+                    blueprint_core::trace!(
+                        target: "tangle-evm-aggregating-consumer",
+                        service_id,
+                        job_index,
+                        stakes = ?numeric_stakes,
+                        "Prepared stake-weighted threshold"
+                    );
+
+                    ThresholdConfig::StakeWeighted {
+                        threshold_bps: u32::from(config.threshold_bps),
+                        operator_stakes: stakes,
+                    }
+                }
+            }
+        }
+    };
+
+    Ok(AggregationTaskInit {
+        operator_count,
+        threshold,
+    })
 }
 
 /// Submit a job result without aggregation feature
@@ -707,13 +829,8 @@ async fn submit_job_result(
     output: Bytes,
 ) -> Result<(), AggregatingConsumerError> {
     // Check if aggregation is required (uses cache)
-    let config = AggregatingConsumer::get_aggregation_config(
-        &cache,
-        &client,
-        service_id,
-        job_index,
-    )
-    .await?;
+    let config =
+        AggregatingConsumer::get_aggregation_config(&cache, &client, service_id, job_index).await?;
 
     if config.required {
         blueprint_core::warn!(
@@ -738,16 +855,31 @@ async fn submit_job_result(
 /// 4. Submits the aggregated result to chain if enabled (all operators can race to submit)
 #[cfg(feature = "aggregation")]
 async fn submit_aggregated_result(
+    cache: crate::cache::SharedServiceConfigCache,
     client: Arc<TangleEvmClient>,
     service_id: u64,
     call_id: u64,
+    job_index: u8,
     output: Bytes,
     config: AggregationConfig,
     agg: AggregationServiceConfig,
 ) -> Result<(), AggregatingConsumerError> {
     use blueprint_crypto_bn254::ArkBlsBn254;
     use blueprint_crypto_core::{BytesEncoding, KeyType};
-    use blueprint_tangle_aggregation_svc::{create_signing_message, SubmitSignatureRequest};
+    use blueprint_tangle_aggregation_svc::{SubmitSignatureRequest, create_signing_message};
+
+    let task_init =
+        prepare_aggregation_task(&cache, &client, service_id, job_index, &config).await?;
+
+    blueprint_core::debug!(
+        target: "tangle-evm-aggregating-consumer",
+        service_id,
+        call_id,
+        job_index,
+        operator_count = task_init.operator_count,
+        threshold = ?task_init.threshold,
+        "Prepared aggregation task initialization payload"
+    );
 
     blueprint_core::debug!(
         target: "tangle-evm-aggregating-consumer",
@@ -769,9 +901,6 @@ async fn submit_aggregated_result(
     let pubkey_bytes = agg.bls_public.to_bytes();
     let sig_bytes = signature.to_bytes();
 
-    // Calculate threshold from config
-    let threshold = calculate_threshold_count(config.threshold_bps, config.threshold_type);
-
     // Create the submit request (same for all services)
     let submit_request = SubmitSignatureRequest {
         service_id,
@@ -788,16 +917,21 @@ async fn submit_aggregated_result(
 
     for (idx, service_client) in agg.clients.iter().enumerate() {
         // Try to initialize the task (may already exist from another operator)
-        let _ = service_client.init_task(
-            service_id,
-            call_id,
-            &output,
-            threshold,
-            threshold,
-        ).await;
+        let _ = service_client
+            .init_task(
+                service_id,
+                call_id,
+                output.as_ref(),
+                task_init.operator_count,
+                task_init.threshold.clone(),
+            )
+            .await;
 
         // Submit our signature
-        match service_client.submit_signature(submit_request.clone()).await {
+        match service_client
+            .submit_signature(submit_request.clone())
+            .await
+        {
             Ok(response) => {
                 blueprint_core::info!(
                     target: "tangle-evm-aggregating-consumer",
@@ -823,7 +957,7 @@ async fn submit_aggregated_result(
 
     if !any_success {
         return Err(AggregatingConsumerError::Client(
-            "Failed to submit to any aggregation service".to_string()
+            "Failed to submit to any aggregation service".to_string(),
         ));
     }
 
@@ -841,7 +975,9 @@ async fn submit_aggregated_result(
 
     if response.threshold_met {
         // Threshold already met, try to submit immediately
-        if let Err(e) = try_submit_aggregated_to_chain(client.clone(), &agg, service_id, call_id).await {
+        if let Err(e) =
+            try_submit_aggregated_to_chain(client.clone(), &agg, service_id, call_id).await
+        {
             blueprint_core::debug!(
                 target: "tangle-evm-aggregating-consumer",
                 "Failed to submit aggregated result (likely already submitted): {}",
@@ -859,13 +995,9 @@ async fn submit_aggregated_result(
         let result = wait_for_threshold_any_service(&agg, service_id, call_id).await?;
 
         // Try to submit to chain (race with other operators)
-        if let Err(e) = submit_aggregated_to_chain_with_result(
-            client,
-            &agg,
-            service_id,
-            call_id,
-            result,
-        ).await {
+        if let Err(e) =
+            submit_aggregated_to_chain_with_result(client, &agg, service_id, call_id, result).await
+        {
             blueprint_core::debug!(
                 target: "tangle-evm-aggregating-consumer",
                 "Failed to submit aggregated result (likely already submitted by another operator): {}",
@@ -884,7 +1016,7 @@ async fn wait_for_threshold_any_service(
     service_id: u64,
     call_id: u64,
 ) -> Result<blueprint_tangle_aggregation_svc::AggregatedResultResponse, AggregatingConsumerError> {
-    use std::time::Instant;
+    use blueprint_std::time::Instant;
 
     let start = Instant::now();
     let timeout = agg.threshold_timeout;
@@ -914,7 +1046,7 @@ async fn wait_for_threshold_any_service(
     }
 
     Err(AggregatingConsumerError::Client(
-        "Timeout waiting for aggregation threshold".to_string()
+        "Timeout waiting for aggregation threshold".to_string(),
     ))
 }
 
@@ -930,17 +1062,14 @@ async fn try_submit_aggregated_to_chain(
     for service_client in &agg.clients {
         if let Ok(Some(result)) = service_client.get_aggregated(service_id, call_id).await {
             return submit_aggregated_to_chain_with_result(
-                client,
-                agg,
-                service_id,
-                call_id,
-                result,
-            ).await;
+                client, agg, service_id, call_id, result,
+            )
+            .await;
         }
     }
 
     Err(AggregatingConsumerError::Client(
-        "Aggregated result not available from any service".to_string()
+        "Aggregated result not available from any service".to_string(),
     ))
 }
 
@@ -978,7 +1107,9 @@ async fn submit_aggregated_to_chain_with_result(
     );
 
     // Submit to the contract
-    aggregated.submit(&Arc::new(client.as_ref().clone())).await?;
+    aggregated
+        .submit(&Arc::new(client.as_ref().clone()))
+        .await?;
 
     // Mark as submitted in all aggregation services
     for client in &agg.clients {
@@ -993,16 +1124,6 @@ async fn submit_aggregated_to_chain_with_result(
     );
 
     Ok(())
-}
-
-/// Calculate threshold count from basis points
-#[cfg(feature = "aggregation")]
-fn calculate_threshold_count(threshold_bps: u16, _threshold_type: ThresholdType) -> u32 {
-    // This is an approximation - in practice, we'd need the actual operator count
-    // For now, assume a reasonable default and let the aggregation service handle the actual threshold
-    let assumed_operators = 10u32;
-    let required = (assumed_operators as u64 * threshold_bps as u64) / 10000;
-    std::cmp::max(1, required as u32)
 }
 
 /// Submit a result directly without aggregation
@@ -1022,7 +1143,9 @@ async fn submit_direct_result(
     let result = client
         .submit_result(service_id, call_id, output)
         .await
-        .map_err(|e| AggregatingConsumerError::Transaction(format!("Failed to submit result: {e}")))?;
+        .map_err(|e| {
+            AggregatingConsumerError::Transaction(format!("Failed to submit result: {e}"))
+        })?;
 
     if result.success {
         blueprint_core::info!(
@@ -1070,24 +1193,53 @@ pub mod integration {
         threshold_type: ThresholdType,
         operator_stakes: Option<&[u64]>,
     ) -> usize {
-        match threshold_type {
-            ThresholdType::CountBased => {
-                let required = (total_operators as u64 * threshold_bps as u64) / 10000;
-                std::cmp::max(1, required as usize)
+        fn count_based(total: usize, threshold_bps: u16) -> usize {
+            if total == 0 {
+                return 1;
             }
+            let mut required = (total as u64 * threshold_bps as u64) / 10000;
+            if required == 0 {
+                required = 1;
+            }
+            let required = required as usize;
+            required.min(total).max(1)
+        }
+
+        match threshold_type {
+            ThresholdType::CountBased => count_based(total_operators, threshold_bps),
             ThresholdType::StakeWeighted => {
-                // For stake-weighted, we'd need the actual stakes
-                // For now, fall back to count-based
                 if let Some(stakes) = operator_stakes {
-                    let total_stake: u64 = stakes.iter().sum();
-                    let required_stake = (total_stake * threshold_bps as u64) / 10000;
-                    // This is a simplification - in practice you'd sort by stake
-                    // and count until threshold is met
-                    let avg_stake = total_stake / stakes.len() as u64;
-                    std::cmp::max(1, (required_stake / avg_stake) as usize)
+                    if stakes.is_empty() || stakes.iter().all(|stake| *stake == 0) {
+                        return count_based(total_operators, threshold_bps);
+                    }
+
+                    let total_stake: u128 = stakes.iter().map(|s| *s as u128).sum();
+                    if total_stake == 0 {
+                        return count_based(total_operators, threshold_bps);
+                    }
+
+                    let mut required_stake = (total_stake * threshold_bps as u128) / 10000u128;
+                    if required_stake == 0 {
+                        required_stake = 1;
+                    }
+
+                    let mut sorted: Vec<u64> = stakes.to_vec();
+                    sorted.sort_by(|a, b| b.cmp(a));
+
+                    let mut accumulated: u128 = 0;
+                    let mut required_signers = 0usize;
+
+                    for stake in sorted {
+                        required_signers += 1;
+                        accumulated += stake as u128;
+                        if accumulated >= required_stake {
+                            break;
+                        }
+                    }
+
+                    required_signers.min(total_operators.max(1)).max(1)
                 } else {
-                    let required = (total_operators as u64 * threshold_bps as u64) / 10000;
-                    std::cmp::max(1, required as usize)
+                    count_based(total_operators, threshold_bps)
                 }
             }
         }
@@ -1156,48 +1308,42 @@ mod tests {
     #[test]
     fn test_calculate_required_signers_count_based_67_percent() {
         // 67% of 3 operators = 2.01 -> 2
-        let required =
-            calculate_required_signers(3, 6700, ThresholdType::CountBased, None);
+        let required = calculate_required_signers(3, 6700, ThresholdType::CountBased, None);
         assert_eq!(required, 2);
     }
 
     #[test]
     fn test_calculate_required_signers_count_based_50_percent() {
         // 50% of 4 operators = 2
-        let required =
-            calculate_required_signers(4, 5000, ThresholdType::CountBased, None);
+        let required = calculate_required_signers(4, 5000, ThresholdType::CountBased, None);
         assert_eq!(required, 2);
     }
 
     #[test]
     fn test_calculate_required_signers_count_based_100_percent() {
         // 100% of 5 operators = 5
-        let required =
-            calculate_required_signers(5, 10000, ThresholdType::CountBased, None);
+        let required = calculate_required_signers(5, 10000, ThresholdType::CountBased, None);
         assert_eq!(required, 5);
     }
 
     #[test]
     fn test_calculate_required_signers_count_based_minimum_one() {
         // Very low threshold should still require at least 1
-        let required =
-            calculate_required_signers(10, 100, ThresholdType::CountBased, None); // 1%
+        let required = calculate_required_signers(10, 100, ThresholdType::CountBased, None); // 1%
         assert_eq!(required, 1);
     }
 
     #[test]
     fn test_calculate_required_signers_count_based_single_operator() {
         // Single operator, any threshold should require 1
-        let required =
-            calculate_required_signers(1, 6700, ThresholdType::CountBased, None);
+        let required = calculate_required_signers(1, 6700, ThresholdType::CountBased, None);
         assert_eq!(required, 1);
     }
 
     #[test]
     fn test_calculate_required_signers_count_based_large_set() {
         // 67% of 100 operators = 67
-        let required =
-            calculate_required_signers(100, 6700, ThresholdType::CountBased, None);
+        let required = calculate_required_signers(100, 6700, ThresholdType::CountBased, None);
         assert_eq!(required, 67);
     }
 
@@ -1208,8 +1354,7 @@ mod tests {
     #[test]
     fn test_calculate_required_signers_stake_weighted_no_stakes() {
         // Without stakes, should fall back to count-based
-        let required =
-            calculate_required_signers(3, 6700, ThresholdType::StakeWeighted, None);
+        let required = calculate_required_signers(3, 6700, ThresholdType::StakeWeighted, None);
         assert_eq!(required, 2);
     }
 
@@ -1218,12 +1363,8 @@ mod tests {
         // 3 operators with equal stakes (10 each), 67% threshold
         // Total stake = 30, required = 20.1, avg = 10, required signers = 2
         let stakes = [10u64, 10, 10];
-        let required = calculate_required_signers(
-            3,
-            6700,
-            ThresholdType::StakeWeighted,
-            Some(&stakes),
-        );
+        let required =
+            calculate_required_signers(3, 6700, ThresholdType::StakeWeighted, Some(&stakes));
         assert_eq!(required, 2);
     }
 
@@ -1233,12 +1374,8 @@ mod tests {
         // Total = 10 ETH, 67% = 6.7 ETH required
         // Avg stake = 3.33, signers needed ≈ 2
         let stakes = [5u64, 3, 2];
-        let required = calculate_required_signers(
-            3,
-            6700,
-            ThresholdType::StakeWeighted,
-            Some(&stakes),
-        );
+        let required =
+            calculate_required_signers(3, 6700, ThresholdType::StakeWeighted, Some(&stakes));
         assert_eq!(required, 2);
     }
 
@@ -1324,7 +1461,10 @@ mod tests {
 
         // URL with path
         let url = convert_rpc_to_aggregation_url("http://localhost:8545/rpc", "/v1/aggregate");
-        assert_eq!(url, Some("http://localhost:8545/rpc/v1/aggregate".to_string()));
+        assert_eq!(
+            url,
+            Some("http://localhost:8545/rpc/v1/aggregate".to_string())
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1345,11 +1485,8 @@ mod tests {
 
         #[test]
         fn test_config_single_service() {
-            let config = AggregationServiceConfig::new(
-                "http://localhost:8080",
-                test_bls_secret(),
-                0,
-            );
+            let config =
+                AggregationServiceConfig::new("http://localhost:8080", test_bls_secret(), 0);
             assert_eq!(config.clients.len(), 1);
             assert_eq!(config.operator_index, 0);
             assert!(config.submit_to_chain);
@@ -1372,24 +1509,18 @@ mod tests {
 
         #[test]
         fn test_config_add_service() {
-            let config = AggregationServiceConfig::new(
-                "http://localhost:8080",
-                test_bls_secret(),
-                0,
-            )
-            .add_service("http://backup:8080")
-            .add_service("http://fallback:8080");
+            let config =
+                AggregationServiceConfig::new("http://localhost:8080", test_bls_secret(), 0)
+                    .add_service("http://backup:8080")
+                    .add_service("http://fallback:8080");
 
             assert_eq!(config.clients.len(), 3);
         }
 
         #[test]
         fn test_config_with_submit_to_chain() {
-            let config = AggregationServiceConfig::new(
-                "http://localhost:8080",
-                test_bls_secret(),
-                0,
-            );
+            let config =
+                AggregationServiceConfig::new("http://localhost:8080", test_bls_secret(), 0);
             // Default is true
             assert!(config.submit_to_chain);
 
@@ -1399,11 +1530,8 @@ mod tests {
 
         #[test]
         fn test_config_with_wait_for_threshold() {
-            let config = AggregationServiceConfig::new(
-                "http://localhost:8080",
-                test_bls_secret(),
-                0,
-            );
+            let config =
+                AggregationServiceConfig::new("http://localhost:8080", test_bls_secret(), 0);
             // Default is false
             assert!(!config.wait_for_threshold);
 
@@ -1413,14 +1541,11 @@ mod tests {
 
         #[test]
         fn test_config_with_threshold_timeout() {
-            let config = AggregationServiceConfig::new(
-                "http://localhost:8080",
-                test_bls_secret(),
-                0,
-            )
-            .with_threshold_timeout(std::time::Duration::from_secs(120));
+            let config =
+                AggregationServiceConfig::new("http://localhost:8080", test_bls_secret(), 0)
+                    .with_threshold_timeout(Duration::from_secs(120));
 
-            assert_eq!(config.threshold_timeout, std::time::Duration::from_secs(120));
+            assert_eq!(config.threshold_timeout, Duration::from_secs(120));
         }
 
         #[test]

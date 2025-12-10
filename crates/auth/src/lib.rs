@@ -84,9 +84,14 @@ pub enum Error {
     /// Error related to the ECDSA signature verification.
     #[error("k256 error: {0}")]
     K256(k256::ecdsa::Error),
+
     /// Error related to the SR25519 signature verification.
     #[error("Schnorrkel error: {0}")]
     Schnorrkel(schnorrkel::SignatureError),
+
+    /// Error related to the BN254 BLS signature verification.
+    #[error("BN254 BLS error: {0}")]
+    Bn254Bls(String),
 
     #[error(transparent)]
     RocksDB(#[from] rocksdb::Error),
@@ -145,6 +150,7 @@ pub fn verify_challenge(
         types::KeyType::Unknown => Err(Error::UnknownKeyType),
         types::KeyType::Ecdsa => verify_challenge_ecdsa(challenge, signature, pub_key),
         types::KeyType::Sr25519 => verify_challenge_sr25519(challenge, signature, pub_key),
+        types::KeyType::Bn254Bls => verify_challenge_bn254_bls(challenge, signature, pub_key),
     }
 }
 
@@ -162,17 +168,36 @@ fn verify_challenge_ecdsa(
 
 /// Verifies the challenge solution using SR25519.
 ///
-/// Note: the signing context is `tangle` and the challenge is passed as bytes, not hashed.
+/// Note: the signing context is `substrate` and the challenge is passed as bytes, not hashed.
 fn verify_challenge_sr25519(
     challenge: &[u8; 32],
     signature: &[u8],
     pub_key: &[u8],
 ) -> Result<bool, Error> {
-    // We must make sure that this is the same as declared in the substrate source code.
     const CTX: &[u8] = b"substrate";
     let pub_key = schnorrkel::PublicKey::from_bytes(pub_key).map_err(Error::Schnorrkel)?;
     let signature = schnorrkel::Signature::from_bytes(signature).map_err(Error::Schnorrkel)?;
     Ok(pub_key.verify_simple(CTX, challenge, &signature).is_ok())
+}
+
+/// Verifies the challenge solution using BN254 BLS.
+///
+/// The public key is expected to be a compressed G2Affine point.
+/// The signature is expected to be a compressed G1Affine point.
+fn verify_challenge_bn254_bls(
+    challenge: &[u8; 32],
+    signature: &[u8],
+    pub_key: &[u8],
+) -> Result<bool, Error> {
+    use blueprint_crypto::bn254::{ArkBlsBn254Public, ArkBlsBn254Signature};
+    use blueprint_crypto::BytesEncoding;
+
+    let public_key = ArkBlsBn254Public::from_bytes(pub_key)
+        .map_err(|e| Error::Bn254Bls(format!("Invalid public key: {e:?}")))?;
+    let sig = ArkBlsBn254Signature::from_bytes(signature)
+        .map_err(|e| Error::Bn254Bls(format!("Invalid signature: {e:?}")))?;
+
+    Ok(blueprint_crypto::bn254::verify(public_key.0, challenge, sig.0))
 }
 
 #[cfg(test)]

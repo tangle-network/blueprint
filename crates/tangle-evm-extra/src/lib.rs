@@ -45,17 +45,17 @@ pub use aggregating_consumer::AggregatingConsumer;
 pub use aggregating_consumer::AggregationServiceConfig;
 pub use aggregation::{AggregatedResult, AggregationError, G1Point, G2Point, SignerBitmap};
 pub use cache::{
-    shared_cache, shared_cache_with_ttl, CacheError, CacheInvalidationEvent, CacheStats,
-    CacheSyncService, OperatorWeights, ServiceConfigCache, ServiceOperators,
-    SharedServiceConfigCache, DEFAULT_CACHE_TTL,
+    CacheError, CacheInvalidationEvent, CacheStats, CacheSyncService, DEFAULT_CACHE_TTL,
+    OperatorWeights, ServiceConfigCache, ServiceOperators, SharedServiceConfigCache, shared_cache,
+    shared_cache_with_ttl,
 };
 pub use consumer::TangleEvmConsumer;
 pub use layers::TangleEvmLayer;
 pub use producer::TangleEvmProducer;
 
 // Strategy exports
-pub use strategy::{AggregatedSignatureResult, AggregationStrategy, StrategyError, ThresholdType};
 #[cfg(feature = "aggregation")]
 pub use strategy::HttpServiceConfig;
 #[cfg(feature = "p2p-aggregation")]
 pub use strategy::P2PGossipConfig;
+pub use strategy::{AggregatedSignatureResult, AggregationStrategy, StrategyError, ThresholdType};

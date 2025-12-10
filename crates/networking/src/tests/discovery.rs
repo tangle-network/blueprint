@@ -3,7 +3,7 @@ use crate::test_utils::{
 };
 use crate::{service::AllowedKeys, test_utils::TestNode};
 use blueprint_core::info;
-use blueprint_crypto::sp_core::SpEcdsa;
+use blueprint_crypto::k256::K256Ecdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
@@ -16,14 +16,14 @@ async fn test_peer_discovery_mdns() {
     let instance_id = "test-instance";
 
     // Create two nodes
-    let mut node1 = TestNode::<SpEcdsa>::new(
+    let mut node1 = TestNode::<K256Ecdsa>::new(
         network_name,
         instance_id,
         AllowedKeys::InstancePublicKeys(HashSet::new()),
         vec![],
         false,
     );
-    let mut node2 = TestNode::<SpEcdsa>::new(
+    let mut node2 = TestNode::<K256Ecdsa>::new(
         network_name,
         instance_id,
         AllowedKeys::InstancePublicKeys(HashSet::new()),
@@ -50,7 +50,7 @@ async fn test_peer_discovery_kademlia() {
     let instance_id = "test-instance";
 
     // Create the first node (bootstrap node)
-    let mut node1 = TestNode::<SpEcdsa>::new(
+    let mut node1 = TestNode::<K256Ecdsa>::new(
         network_name,
         instance_id,
         AllowedKeys::InstancePublicKeys(HashSet::new()),
@@ -64,14 +64,14 @@ async fn test_peer_discovery_kademlia() {
 
     // Create two more nodes that will bootstrap from node1
     let bootstrap_peers = vec![node1_addr.clone()];
-    let mut node2 = TestNode::<SpEcdsa>::new(
+    let mut node2 = TestNode::<K256Ecdsa>::new(
         network_name,
         instance_id,
         AllowedKeys::InstancePublicKeys(HashSet::new()),
         bootstrap_peers.clone(),
         false,
     );
-    let mut node3 = TestNode::<SpEcdsa>::new(
+    let mut node3 = TestNode::<K256Ecdsa>::new(
         network_name,
         instance_id,
         AllowedKeys::InstancePublicKeys(HashSet::new()),
@@ -116,7 +116,7 @@ async fn test_peer_info_updates() {
 
     info!("Creating test nodes...");
     // Create nodes with whitelisted keys
-    let mut nodes = create_whitelisted_nodes::<SpEcdsa>(2, "peer-info", "test-instance", false);
+    let mut nodes = create_whitelisted_nodes::<K256Ecdsa>(2, "peer-info", "test-instance", false);
     let mut node2 = nodes.pop().unwrap();
     let mut node1 = nodes.pop().unwrap();
 

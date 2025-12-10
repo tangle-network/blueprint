@@ -52,8 +52,7 @@ libp2p = { workspace = true, features = [
   "upnp",
 ] }
 blueprint-networking = { workspace = true, features = ["testing"] }
-blueprint-crypto = { path = "../../../crypto", features = ["sp-core"] }
-blueprint-crypto-core = { path = "../../../crypto/core", features = ["tangle"] }
+blueprint-crypto = { path = "../../../crypto", features = ["k256"] }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 sha2 = { workspace = true }

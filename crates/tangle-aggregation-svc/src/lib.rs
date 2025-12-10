@@ -56,13 +56,13 @@ pub mod types;
 
 #[cfg(feature = "client")]
 pub use client::{AggregationServiceClient, ClientError};
-pub use service::{
-    AggregationService, CleanupWorkerHandle, ServiceConfig, ServiceError, ServiceStats,
-    create_signing_message,
-};
 pub use persistence::{
-    FilePersistence, NoPersistence, PersistedTaskState, PersistedThresholdType,
-    PersistenceBackend, PersistenceError,
+    FilePersistence, NoPersistence, PersistedTaskState, PersistedThresholdType, PersistenceBackend,
+    PersistenceError,
+};
+pub use service::{
+    create_signing_message, AggregationService, CleanupWorkerHandle, ServiceConfig, ServiceError,
+    ServiceStats,
 };
 pub use state::{
     AggregationState, OperatorInfo, TaskConfig, TaskCounts, TaskForAggregation, TaskState,
