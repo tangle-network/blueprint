@@ -314,7 +314,7 @@ async fn with_context_converts_router_type() {
 
     #[derive(Clone)]
     struct TestContext {
-        value: u32,
+        _value: u32,
     }
 
     // Router<TestContext> requires context to be provided
@@ -322,7 +322,7 @@ async fn with_context_converts_router_type() {
         .route(1u32, || async { "no context needed for this job" });
 
     // Providing context converts Router<TestContext> to Router<()>
-    let ctx = TestContext { value: 42 };
+    let ctx = TestContext { _value: 42 };
     let mut router: Router<()> = router_needing_context.with_context(ctx);
 
     // Now it can be called
