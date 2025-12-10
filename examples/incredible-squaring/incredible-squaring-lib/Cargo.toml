@@ -7,6 +7,9 @@ rust-version.workspace = true
 [dependencies]
 blueprint-sdk = { workspace = true, features = ["std", "tangle-evm", "macros"] }
 tokio = { workspace = true, features = ["sync"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_bytes = "0.11"
 
 [dev-dependencies]
 anyhow = { workspace = true }
@@ -36,6 +39,14 @@ rand = "0.8"
 # Hex encoding
 hex = "0.4"
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+# FaaS testing
+blueprint-faas = { workspace = true, features = ["custom"] }
+blueprint-profiling.workspace = true
+serial_test = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+
+[features]
+faas = []
 
 [package.metadata.blueprint]
 manager = { Evm = "ExperimentalBlueprint" }

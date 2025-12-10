@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 fn main() {
     println!("cargo::rerun-if-changed=../incredible-squaring-lib");
+    println!("cargo::rerun-if-changed=../../target/blueprint-profiles.json");
 
     // For Tangle EVM (v2) blueprints, we generate metadata manually
     // The metadata defines the blueprint's jobs and their ABI encoding
@@ -21,10 +22,11 @@ fn main() {
             {
                 "name": "square",
                 "job_index": 0,
-                "description": "Square a u64 number (1 operator required)",
+                "description": "Square a u64 number (1 operator required, local execution)",
                 "inputs": ["uint64"],
                 "outputs": ["uint64"],
-                "required_results": 1
+                "required_results": 1,
+                "execution": "local"
             },
             {
                 "name": "verified_square",
@@ -32,7 +34,8 @@ fn main() {
                 "description": "Square a u64 number (2 operators required for verification)",
                 "inputs": ["uint64"],
                 "outputs": ["uint64"],
-                "required_results": 2
+                "required_results": 2,
+                "execution": "local"
             },
             {
                 "name": "consensus_square",
@@ -40,7 +43,26 @@ fn main() {
                 "description": "Square a u64 number (3 operators required for Byzantine fault tolerance)",
                 "inputs": ["uint64"],
                 "outputs": ["uint64"],
-                "required_results": 3
+                "required_results": 3,
+                "execution": "local"
+            },
+            {
+                "name": "square_faas",
+                "job_index": 3,
+                "description": "Square a u64 number via FaaS (1 result, serverless)",
+                "inputs": ["uint64"],
+                "outputs": ["uint64"],
+                "required_results": 1,
+                "execution": "faas"
+            },
+            {
+                "name": "verified_square_faas",
+                "job_index": 4,
+                "description": "Square a u64 number via FaaS (2 results, serverless)",
+                "inputs": ["uint64"],
+                "outputs": ["uint64"],
+                "required_results": 2,
+                "execution": "faas"
             }
         ]
     });

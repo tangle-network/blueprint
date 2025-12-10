@@ -3,13 +3,15 @@
 //! This is the main entry point for the incredible squaring blueprint.
 //! It sets up the EVM-based producer/consumer pattern for Tangle v2.
 //!
-//! ## Jobs
+//! ## Job Matrix (Execution × Aggregation)
 //!
-//! This blueprint provides three job variants with different aggregation requirements:
-//!
-//! - **Job 0 (square)**: Basic squaring, requires 1 operator result
-//! - **Job 1 (verified_square)**: Requires 2 operator results for redundancy
-//! - **Job 2 (consensus_square)**: Requires 3 operator results for Byzantine fault tolerance
+//! | Execution | Aggregation | Job ID | Function |
+//! |-----------|-------------|--------|----------|
+//! | Local     | Single (1)  | 0      | `square` |
+//! | Local     | Multi (2)   | 1      | `verified_square` |
+//! | Local     | Multi (3)   | 2      | `consensus_square` |
+//! | FaaS      | Single (1)  | 3      | `square_faas` |
+//! | FaaS      | Multi (2)   | 4      | `verified_square_faas` |
 
 use blueprint_sdk::contexts::tangle_evm::TangleEvmClientContext;
 use blueprint_sdk::runner::BlueprintRunner;
@@ -18,7 +20,8 @@ use blueprint_sdk::runner::tangle_evm::config::TangleEvmConfig;
 use blueprint_sdk::tangle_evm::{TangleEvmConsumer, TangleEvmProducer};
 use blueprint_sdk::{error, info};
 use incredible_squaring_blueprint_lib::{
-    CONSENSUS_XSQUARE_JOB_ID, FooBackgroundService, VERIFIED_XSQUARE_JOB_ID, XSQUARE_JOB_ID, router,
+    CONSENSUS_XSQUARE_JOB_ID, FooBackgroundService, VERIFIED_XSQUARE_FAAS_JOB_ID,
+    VERIFIED_XSQUARE_JOB_ID, XSQUARE_FAAS_JOB_ID, XSQUARE_JOB_ID, router,
 };
 
 /// Initialize logging
@@ -30,6 +33,7 @@ fn setup_log() {
 
 #[tokio::main]
 async fn main() -> Result<(), blueprint_sdk::Error> {
+    // Initialize logging - can be configured via RUST_LOG environment variable
     setup_log();
 
     info!("Starting the incredible squaring blueprint (EVM v2)!");
@@ -61,16 +65,14 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     let tangle_config = TangleEvmConfig::default();
 
     info!("Connected to Tangle EVM. Service ID: {}", service_id);
-    info!("Registered jobs:");
-    info!("  - Job {}: square (1 operator required)", XSQUARE_JOB_ID);
-    info!(
-        "  - Job {}: verified_square (2 operators required)",
-        VERIFIED_XSQUARE_JOB_ID
-    );
-    info!(
-        "  - Job {}: consensus_square (3 operators required)",
-        CONSENSUS_XSQUARE_JOB_ID
-    );
+    info!("Registered jobs (Execution × Aggregation matrix):");
+    info!("  Local execution:");
+    info!("    - Job {}: square (1 result)", XSQUARE_JOB_ID);
+    info!("    - Job {}: verified_square (2 results)", VERIFIED_XSQUARE_JOB_ID);
+    info!("    - Job {}: consensus_square (3 results)", CONSENSUS_XSQUARE_JOB_ID);
+    info!("  FaaS execution:");
+    info!("    - Job {}: square_faas (1 result)", XSQUARE_FAAS_JOB_ID);
+    info!("    - Job {}: verified_square_faas (2 results)", VERIFIED_XSQUARE_FAAS_JOB_ID);
 
     let result = BlueprintRunner::builder(tangle_config, env)
         .router(router())

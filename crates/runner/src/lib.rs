@@ -11,6 +11,7 @@ extern crate alloc;
 
 pub mod config;
 pub mod error;
+pub mod faas;
 pub mod metrics_server;
 
 #[cfg(feature = "eigenlayer")]
@@ -152,6 +153,7 @@ pub struct BlueprintRunnerBuilder<F> {
     router: Option<Router>,
     background_services: Vec<Box<DynBackgroundService<'static>>>,
     shutdown_handler: F,
+    faas_registry: faas::FaasRegistry,
 }
 
 impl<F> BlueprintRunnerBuilder<F>
@@ -633,6 +635,32 @@ where
     ///     // ...
     /// }
     /// ```
+    #[must_use]
+    pub fn with_faas_executor(
+        mut self,
+        job_id: u32,
+        executor: impl faas::FaasExecutor + 'static,
+    ) -> Self {
+        self.faas_registry.register(job_id, Arc::new(executor));
+        self
+    }
+
+    /// Register multiple jobs to use `FaaS` execution
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use blueprint_runner::BlueprintRunner;
+    /// use blueprint_faas_lambda::LambdaExecutor;
+    ///
+    /// let lambda = LambdaExecutor::new("us-east-1").await?;
+    ///
+    /// BlueprintRunner::builder(config, env)
+    ///     .router(router)
+    ///     .with_faas_executor(0, lambda.clone())  // Job 0 runs on Lambda
+    ///     .with_faas_executor(3, lambda.clone())  // Job 3 runs on Lambda
+    ///     .run().await
+    /// ```
     pub fn with_shutdown_handler<F2>(self, handler: F2) -> BlueprintRunnerBuilder<F2>
     where
         F2: Future<Output = ()> + Send + 'static,
@@ -645,6 +673,7 @@ where
             router: self.router,
             background_services: self.background_services,
             shutdown_handler: handler,
+            faas_registry: self.faas_registry,
         }
     }
 
@@ -673,6 +702,7 @@ where
             env: self.env,
             background_services: self.background_services,
             shutdown_handler: self.shutdown_handler,
+            faas_registry: self.faas_registry,
         };
 
         runner.run().await
@@ -778,6 +808,7 @@ impl BlueprintRunner {
             router: None,
             background_services: Vec::new(),
             shutdown_handler: future::pending(),
+            faas_registry: faas::FaasRegistry::new(),
         }
     }
 }
@@ -790,6 +821,7 @@ struct FinalizedBlueprintRunner<F> {
     env: BlueprintEnvironment,
     background_services: Vec<Box<DynBackgroundService<'static>>>,
     shutdown_handler: F,
+    faas_registry: faas::FaasRegistry,
 }
 
 impl<F> FinalizedBlueprintRunner<F>
@@ -806,6 +838,7 @@ where
             env,
             background_services,
             shutdown_handler,
+            faas_registry,
         } = self;
 
         let needs_registration = config.requires_registration(&env).await?;
@@ -970,7 +1003,38 @@ where
                                 service_id = ?service_id,
                                 "Received job call from producer stream"
                             );
-                            pending_jobs.push(tokio::task::spawn(router.call(job_call)));
+
+                            // Check if this job should be delegated to FaaS
+                            let job_id: u32 = job_call.job_id().into();
+                            if faas_registry.is_faas_job(job_id) {
+                                let executor = faas_registry.get(job_id)
+                                    .expect("FaaS executor exists for registered job ID")
+                                    .clone();
+
+                                blueprint_core::info!(
+                                    target: "blueprint-runner",
+                                    job_id = %job_call.job_id(),
+                                    provider = executor.provider_name(),
+                                    "Delegating job to FaaS executor"
+                                );
+
+                                pending_jobs.push(tokio::task::spawn(async move {
+                                    match executor.invoke(job_call).await {
+                                        Ok(result) => Ok(Some(vec![result])),
+                                        Err(e) => {
+                                            blueprint_core::error!(
+                                                target: "blueprint-runner",
+                                                error = %e,
+                                                "FaaS invocation failed"
+                                            );
+                                            Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                                        }
+                                    }
+                                }));
+                            } else {
+                                // Normal local execution via router
+                                pending_jobs.push(tokio::task::spawn(router.call(job_call)));
+                            }
                         },
                         Some(Err(e)) => {
                             blueprint_core::error!(target: "blueprint-runner", "Producer error: {:?}", e);

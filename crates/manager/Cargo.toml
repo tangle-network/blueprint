@@ -30,6 +30,10 @@ blueprint-manager-bridge = { workspace = true, features = ["tracing", "server"] 
 blueprint-eigenlayer-extra = { workspace = true, features = ["std"]}
 blueprint-testing-utils = { workspace = true, features = ["eigenlayer"] }
 blueprint-chain-setup = { workspace = true, features = ["anvil"] }
+blueprint-remote-providers = { workspace = true, optional = true }
+blueprint-qos = { workspace = true, optional = true }
+blueprint-pricing-engine = { workspace = true, optional = true }
+blueprint-profiling = { workspace = true, optional = true }
 
 # Alloy dependencies for EigenLayer protocol
 alloy-provider = { workspace = true }
@@ -44,10 +48,11 @@ eigenlayer-contract-deployer = { workspace = true }
 
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-chrono = { workspace = true, features = ["serde"] }
+chrono = { workspace = true, features = ["serde", "clock"] }
 document-features.workspace = true
 async-trait = { workspace = true }
 axum = { workspace = true, default-features = false, features = ["json", "tokio", "http2"] }
+prometheus = { workspace = true }
 docktopus = { workspace = true, features = ["deploy"] }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 color-eyre = { workspace = true, features = ["tracing-error", "color-spantrace", "issue-url"] }
@@ -63,6 +68,9 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "ansi", "trac
 auto_impl = { workspace = true }
 dynosaur = { workspace = true }
 url.workspace = true
+base64 = "0.22"
+flate2 = "1.0"
+uuid = { workspace = true, features = ["v4"] }
 hyper.workspace = true
 hyperlocal.workspace = true
 hyper-util.workspace = true
@@ -70,7 +78,6 @@ http-body-util.workspace = true
 dirs.workspace = true
 walkdir.workspace = true
 tempfile = { workspace = true }
-rand = { workspace = true }
 rustls = { workspace = true, features = ["aws-lc-rs"] }
 
 # Binary extraction
@@ -98,6 +105,18 @@ nftables = { workspace = true, optional = true }
 [features]
 default = ["containers"]
 
+## Enable remote cloud deployment functionality
+##
+## This feature enables deployment to cloud providers like AWS, GCP, Azure, DigitalOcean, and Vultr.
+## It includes real SDK integrations for provisioning instances and deploying Blueprint services.
+remote-providers = ["dep:blueprint-remote-providers", "dep:blueprint-pricing-engine", "dep:blueprint-profiling"]
+
+## Enable QoS monitoring for local and remote instances
+qos = ["dep:blueprint-qos"]
+
+## macOS-friendly development feature (excludes Linux-only vm-sandbox)
+macos-dev = ["remote-providers", "qos"]
+
 ## Enable the VM sandbox
 ##
 ## **NOTE**: This is only supported on Linux
@@ -115,6 +134,15 @@ tee = ["blueprint-runner/tee"]
 ## [kubernetes]: https://kubernetes.io/
 ## [kata-containers]: https://katacontainers.io/
 containers = ["dep:kube", "dep:k8s-openapi"]
+
+# Optional integrations toggled by remote serverless modules
+tangle-client = []
+blueprint-faas = []
+aws = []
+gcp = []
+azure = []
+custom = []
+digitalocean = []
 
 [package.metadata.dist]
 dist = false
