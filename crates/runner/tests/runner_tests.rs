@@ -261,53 +261,21 @@ async fn builder_accepts_shutdown_handler() {
 // BLUEPRINT CONFIG TESTS
 // =============================================================================
 
-/// Config that doesn't require registration and doesn't exit after
-struct NoRegistrationConfig;
-
-impl blueprint_runner::BlueprintConfig for NoRegistrationConfig {
-    async fn requires_registration(
-        &self,
-        _env: &BlueprintEnvironment,
-    ) -> Result<bool, RunnerError> {
-        Ok(false)
-    }
-
-    fn should_exit_after_registration(&self) -> bool {
-        false
-    }
-}
-
-/// Config that requires registration but exits immediately after
-struct ExitAfterRegistrationConfig;
-
-impl blueprint_runner::BlueprintConfig for ExitAfterRegistrationConfig {
-    async fn requires_registration(
-        &self,
-        _env: &BlueprintEnvironment,
-    ) -> Result<bool, RunnerError> {
-        Ok(false) // Skip actual registration
-    }
-
-    fn should_exit_after_registration(&self) -> bool {
-        true
-    }
-}
-
 #[tokio::test]
 async fn custom_config_is_accepted() {
     let env = test_env();
     let router = Router::new().route(0u32, || async { "test" });
 
-    // This should compile and accept the custom config
+    // This should compile and accept the custom config (reusing ContinueRunningConfig)
     let handle = tokio::spawn(async move {
-        BlueprintRunner::builder(NoRegistrationConfig, env)
+        BlueprintRunner::builder(ContinueRunningConfig, env)
             .router(router)
             .producer(PendingProducer)
             .run()
             .await
     });
 
-    // Give a moment
+    // Give a moment to verify it's running
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Clean up
