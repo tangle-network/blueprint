@@ -3138,6 +3138,7 @@ dependencies = [
  "blueprint-router",
  "blueprint-sdk",
  "blueprint-std",
+ "bytes",
  "clap",
  "crossbeam-channel",
  "document-features",

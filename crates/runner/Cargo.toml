@@ -63,6 +63,7 @@ alloy-provider = { workspace = true, optional = true }
 blueprint-sdk = { path = "../sdk", features = ["std"] }
 tempfile = "3.8"
 serde_json = "1.0"
+bytes = "1.0"
 
 [features]
 default = ["std", "networking"]
