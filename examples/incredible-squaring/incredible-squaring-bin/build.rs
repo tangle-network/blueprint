@@ -2,7 +2,7 @@
 //!
 //! This generates blueprint metadata for Tangle EVM (v2) blueprints.
 
-use std::path::Path;
+use std::path::PathBuf;
 
 fn main() {
     println!("cargo::rerun-if-changed=../incredible-squaring-lib");
@@ -46,9 +46,15 @@ fn main() {
     });
 
     let json = serde_json::to_string_pretty(&blueprint_metadata).unwrap();
-    std::fs::write(
-        Path::new(env!("CARGO_WORKSPACE_DIR")).join("blueprint.json"),
-        json.as_bytes(),
-    )
-    .unwrap();
+
+    // Use CARGO_MANIFEST_DIR and navigate to workspace root
+    // Path: examples/incredible-squaring/incredible-squaring-bin -> workspace root (3 levels up)
+    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let workspace_root = manifest_dir
+        .parent() // incredible-squaring
+        .and_then(|p| p.parent()) // examples
+        .and_then(|p| p.parent()) // workspace root
+        .expect("Failed to find workspace root");
+
+    std::fs::write(workspace_root.join("blueprint.json"), json.as_bytes()).unwrap();
 }

@@ -1476,6 +1476,7 @@ mod tests {
         use crate::AggregationServiceConfig;
         use blueprint_crypto_bn254::ArkBlsBn254;
         use blueprint_crypto_core::KeyType;
+        use std::time::Duration;
 
         fn test_bls_secret() -> blueprint_crypto_bn254::ArkBlsBn254Secret {
             // Generate a deterministic test key

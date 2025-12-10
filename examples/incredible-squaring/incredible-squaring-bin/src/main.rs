@@ -11,6 +11,7 @@
 //! - **Job 1 (verified_square)**: Requires 2 operator results for redundancy
 //! - **Job 2 (consensus_square)**: Requires 3 operator results for Byzantine fault tolerance
 
+use blueprint_sdk::contexts::tangle_evm::TangleEvmClientContext;
 use blueprint_sdk::runner::BlueprintRunner;
 use blueprint_sdk::runner::config::BlueprintEnvironment;
 use blueprint_sdk::runner::tangle_evm::config::TangleEvmConfig;

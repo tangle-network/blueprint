@@ -810,6 +810,10 @@ fn coerce_value(value: &Value, schema: &SchemaParam) -> Result<DynSolValue> {
             raw.copy_from_slice(&data);
             Ok(DynSolValue::Function(Function::from(raw)))
         }
+        #[allow(unreachable_patterns)]
+        other => {
+            Err(eyre!("unsupported type {other:?} for job parameters"))
+        }
     }
 }
 
