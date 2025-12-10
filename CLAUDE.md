@@ -36,7 +36,10 @@ cargo install cargo-tangle --git https://github.com/tangle-network/blueprint --f
 cargo tangle blueprint create --name <blueprint_name>
 
 # Deploy to devnet (auto-starts local testnet)
-cargo tangle blueprint deploy tangle --devnet --package <package_name>
+cargo tangle blueprint deploy tangle --network devnet
+
+# Deploy to testnet/mainnet using a definition manifest
+cargo tangle blueprint deploy tangle --network testnet --definition ./path/to/definition.json
 
 # Generate keys
 cargo tangle blueprint generate-keys -k <KEY_TYPE> -p <PATH> -s <SURI/SEED>

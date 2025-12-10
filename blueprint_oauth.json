@@ -1,0 +1,37 @@
+{
+  "description": "OAuth-protected document storage blueprint",
+  "jobs": [
+    {
+      "description": "Persist a document for a tenant",
+      "inputs": [
+        "string",
+        "string",
+        "string"
+      ],
+      "job_index": 0,
+      "name": "write_doc",
+      "outputs": [
+        "tuple(bool,string,string)"
+      ],
+      "required_results": 1
+    },
+    {
+      "description": "Purge all documents for a tenant",
+      "inputs": [
+        "string"
+      ],
+      "job_index": 1,
+      "name": "admin_purge",
+      "outputs": [
+        "tuple(bool,string)"
+      ],
+      "required_results": 1
+    }
+  ],
+  "manager": {
+    "Evm": "OauthBlueprintBSM"
+  },
+  "master_revision": "Latest",
+  "name": "oauth-blueprint",
+  "version": "0.1.0"
+}
