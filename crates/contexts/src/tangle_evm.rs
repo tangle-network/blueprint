@@ -3,8 +3,8 @@
 //! Provides the TangleEvmClientContext trait for accessing the TangleEvmClient
 //! from the blueprint environment.
 
-pub use blueprint_client_tangle_evm::TangleEvmClient;
 pub use blueprint_client_tangle_evm::Error;
+pub use blueprint_client_tangle_evm::TangleEvmClient;
 pub use blueprint_client_tangle_evm::TangleEvmClientConfig;
 pub use blueprint_client_tangle_evm::TangleEvmSettings;
 use blueprint_runner::config::BlueprintEnvironment;
@@ -12,7 +12,9 @@ use blueprint_runner::config::BlueprintEnvironment;
 /// TangleEvmClientContext trait provides access to the Tangle EVM client from the context.
 pub trait TangleEvmClientContext {
     /// Returns the Tangle EVM client instance
-    fn tangle_evm_client(&self) -> impl core::future::Future<Output = Result<TangleEvmClient, Error>> + Send;
+    fn tangle_evm_client(
+        &self,
+    ) -> impl core::future::Future<Output = Result<TangleEvmClient, Error>> + Send;
 }
 
 impl TangleEvmClientContext for BlueprintEnvironment {
@@ -20,7 +22,8 @@ impl TangleEvmClientContext for BlueprintEnvironment {
         let keystore = self.keystore();
 
         // Get the tangle-evm protocol settings from environment
-        let settings = self.protocol_settings
+        let settings = self
+            .protocol_settings
             .tangle_evm()
             .map_err(|e| Error::Config(e.to_string()))?;
 
@@ -35,6 +38,7 @@ impl TangleEvmClientContext for BlueprintEnvironment {
                 service_id: settings.service_id,
                 tangle_contract: settings.tangle_contract,
                 restaking_contract: settings.restaking_contract,
+                status_registry_contract: settings.status_registry_contract,
             },
             test_mode: self.test_mode,
         };

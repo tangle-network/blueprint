@@ -4,9 +4,5 @@ pub mod eigenlayer;
 pub mod instrumented_evm_client;
 #[cfg(feature = "keystore")]
 pub mod keystore;
-#[cfg(feature = "tangle")]
-pub mod services;
-#[cfg(feature = "tangle")]
-pub mod tangle;
 #[cfg(feature = "tangle-evm")]
 pub mod tangle_evm;

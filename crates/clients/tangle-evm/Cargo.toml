@@ -21,6 +21,7 @@ blueprint-keystore = { workspace = true, default-features = false }
 blueprint-crypto = { workspace = true, default-features = false, features = ["k256"] }
 url = { workspace = true, features = ["serde"] }
 k256 = { workspace = true }
+tnt-core-bindings.workspace = true
 
 # Alloy (EVM interaction)
 alloy-primitives = { workspace = true, features = ["serde"] }
@@ -50,6 +51,10 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+blueprint-chain-setup-anvil = { workspace = true }
+blueprint-anvil-testing-utils = { workspace = true }
+anyhow = { workspace = true }
+hex = { workspace = true }
 
 [features]
 default = ["std"]

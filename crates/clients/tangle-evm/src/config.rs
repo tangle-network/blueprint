@@ -7,8 +7,8 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloy_primitives::Address;
-use blueprint_std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use url::Url;
 
 /// Protocol settings for Tangle EVM (v2)
@@ -26,6 +26,8 @@ pub struct TangleEvmSettings {
     pub tangle_contract: Address,
     /// The MultiAssetDelegation (restaking) contract address
     pub restaking_contract: Address,
+    /// Operator status registry contract used for heartbeats
+    pub status_registry_contract: Address,
 }
 
 impl Default for TangleEvmSettings {
@@ -36,6 +38,7 @@ impl Default for TangleEvmSettings {
             // Default to zero address - must be configured
             tangle_contract: Address::ZERO,
             restaking_contract: Address::ZERO,
+            status_registry_contract: Address::ZERO,
         }
     }
 }
@@ -89,7 +92,6 @@ impl TangleEvmClientConfig {
 
     /// Get keystore configuration
     pub fn keystore_config(&self) -> blueprint_keystore::KeystoreConfig {
-        blueprint_keystore::KeystoreConfig::new()
-            .fs_root(self.keystore_uri.replace("file://", ""))
+        blueprint_keystore::KeystoreConfig::new().fs_root(self.keystore_uri.replace("file://", ""))
     }
 }

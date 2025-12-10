@@ -5,25 +5,36 @@
 extern crate alloc;
 
 use alloc::format;
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 use alloc::vec;
 use alloy_network::Ethereum;
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{Address, B256, Bytes, TxKind, U256, keccak256};
 use alloy_provider::{DynProvider, Provider, ProviderBuilder};
-use alloy_rpc_types::{Block, BlockNumberOrTag, Filter, Log};
+use alloy_rpc_types::{
+    Block, BlockNumberOrTag, Filter, Log, TransactionReceipt,
+    transaction::{TransactionInput, TransactionRequest},
+};
+use alloy_sol_types::SolType;
 use blueprint_client_core::{BlueprintServicesClient, OperatorSet};
-use blueprint_crypto::k256::K256Ecdsa;
-use blueprint_keystore::backends::Backend;
+use blueprint_crypto::{BytesEncoding, k256::K256Ecdsa};
 use blueprint_keystore::Keystore;
+use blueprint_keystore::backends::Backend;
 use blueprint_std::collections::BTreeMap;
 use blueprint_std::sync::Arc;
 use blueprint_std::vec::Vec;
+use core::time::Duration;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use tokio::sync::Mutex;
 
 use crate::config::TangleEvmClientConfig;
-use crate::contracts::{IBlueprintServiceManager, IMultiAssetDelegation, ITangle};
+use crate::contracts::{
+    IBlueprintServiceManager, IMultiAssetDelegation, IOperatorStatusRegistry, ITangle, ITangleTypes,
+};
 use crate::error::{Error, Result};
+use crate::services::ServiceRequestParams;
+use IMultiAssetDelegation::MultiAssetDelegationInstance;
+use IOperatorStatusRegistry::IOperatorStatusRegistryInstance;
+use ITangle::ITangleInstance;
 
 /// Type alias for the dynamic provider
 pub type TangleProvider = DynProvider<Ethereum>;
@@ -33,6 +44,69 @@ pub type EcdsaPublicKey = [u8; 65];
 
 /// Type alias for compressed ECDSA public key (33 bytes)
 pub type CompressedEcdsaPublicKey = [u8; 33];
+
+/// Restaking-specific metadata for an operator.
+#[derive(Debug, Clone)]
+pub struct RestakingMetadata {
+    /// Operator self-stake amount (in wei).
+    pub stake: U256,
+    /// Number of delegations attached to this operator.
+    pub delegation_count: u32,
+    /// Whether the operator is active inside MultiAssetDelegation.
+    pub status: RestakingStatus,
+    /// Round when the operator scheduled a voluntary exit.
+    pub leaving_round: u64,
+}
+
+/// Restaking status reported by MultiAssetDelegation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestakingStatus {
+    /// Operator is active.
+    Active,
+    /// Operator is inactive (e.g., kicked or never joined).
+    Inactive,
+    /// Operator scheduled a leave operation.
+    Leaving,
+    /// Unknown status value (future-proofing).
+    Unknown(u8),
+}
+
+impl From<u8> for RestakingStatus {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => RestakingStatus::Active,
+            1 => RestakingStatus::Inactive,
+            2 => RestakingStatus::Leaving,
+            other => RestakingStatus::Unknown(other),
+        }
+    }
+}
+
+/// Metadata associated with a registered operator.
+#[derive(Debug, Clone)]
+pub struct OperatorMetadata {
+    /// Operator's uncompressed ECDSA public key used for gossip/aggregation.
+    pub public_key: EcdsaPublicKey,
+    /// Operator-provided RPC endpoint.
+    pub rpc_endpoint: String,
+    /// Restaking information pulled from MultiAssetDelegation.
+    pub restaking: RestakingMetadata,
+}
+
+/// Snapshot of an operator's heartbeat/status entry.
+#[derive(Debug, Clone)]
+pub struct OperatorStatusSnapshot {
+    /// Service being inspected.
+    pub service_id: u64,
+    /// Operator address.
+    pub operator: Address,
+    /// Raw status code recorded on-chain.
+    pub status_code: u8,
+    /// Last heartbeat timestamp (Unix seconds).
+    pub last_heartbeat: u64,
+    /// Whether the operator is currently marked online.
+    pub online: bool,
+}
 
 /// Event from Tangle EVM contracts
 #[derive(Clone, Debug)]
@@ -56,6 +130,8 @@ pub struct TangleEvmClient {
     tangle_address: Address,
     /// MultiAssetDelegation contract address
     restaking_address: Address,
+    /// Operator status registry contract address
+    status_registry_address: Address,
     /// Operator's account address
     account: Address,
     /// Client configuration
@@ -73,6 +149,7 @@ impl core::fmt::Debug for TangleEvmClient {
         f.debug_struct("TangleEvmClient")
             .field("tangle_address", &self.tangle_address)
             .field("restaking_address", &self.restaking_address)
+            .field("status_registry_address", &self.status_registry_address)
             .field("account", &self.account)
             .finish()
     }
@@ -124,6 +201,7 @@ impl TangleEvmClient {
             provider: Arc::new(dyn_provider),
             tangle_address: config.settings.tangle_contract,
             restaking_address: config.settings.restaking_contract,
+            status_registry_address: config.settings.status_registry_contract,
             account,
             config,
             keystore: Arc::new(keystore),
@@ -133,13 +211,21 @@ impl TangleEvmClient {
     }
 
     /// Get the Tangle contract instance
-    pub fn tangle_contract(&self) -> ITangle::ITangleInstance<Arc<TangleProvider>> {
-        ITangle::new(self.tangle_address, Arc::clone(&self.provider))
+    pub fn tangle_contract(&self) -> ITangleInstance<Arc<TangleProvider>> {
+        ITangleInstance::new(self.tangle_address, Arc::clone(&self.provider))
     }
 
     /// Get the MultiAssetDelegation contract instance
-    pub fn restaking_contract(&self) -> IMultiAssetDelegation::IMultiAssetDelegationInstance<Arc<TangleProvider>> {
-        IMultiAssetDelegation::new(self.restaking_address, Arc::clone(&self.provider))
+    pub fn restaking_contract(&self) -> MultiAssetDelegationInstance<Arc<TangleProvider>> {
+        MultiAssetDelegationInstance::new(self.restaking_address, Arc::clone(&self.provider))
+    }
+
+    /// Get the operator status registry contract instance
+    pub fn status_registry_contract(&self) -> IOperatorStatusRegistryInstance<Arc<TangleProvider>> {
+        IOperatorStatusRegistryInstance::new(
+            self.status_registry_address,
+            Arc::clone(&self.provider),
+        )
     }
 
     /// Get the operator's account address
@@ -218,42 +304,46 @@ impl TangleEvmClient {
 
     /// Get the next event (polls for new blocks)
     pub async fn next_event(&self) -> Option<TangleEvmEvent> {
-        let current_block = self.block_number().await.ok()?;
+        loop {
+            let current_block = self.block_number().await.ok()?;
 
-        let mut last_block = self.block_subscription.lock().await;
-        let from_block = last_block.map(|b| b + 1).unwrap_or(current_block);
+            let mut last_block = self.block_subscription.lock().await;
+            let from_block = last_block.map(|b| b + 1).unwrap_or(current_block);
 
-        if from_block > current_block {
-            return None;
+            if from_block > current_block {
+                drop(last_block);
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+
+            // Get block info
+            let block = self
+                .get_block(BlockNumberOrTag::Number(current_block))
+                .await
+                .ok()??;
+
+            // Create filter for Tangle contract events
+            let filter = Filter::new()
+                .address(self.tangle_address)
+                .from_block(from_block)
+                .to_block(current_block);
+
+            let logs = self.get_logs(&filter).await.ok()?;
+
+            *last_block = Some(current_block);
+
+            let event = TangleEvmEvent {
+                block_number: current_block,
+                block_hash: block.header.hash,
+                timestamp: block.header.timestamp,
+                logs,
+            };
+
+            // Update latest
+            *self.latest_block.lock().await = Some(event.clone());
+
+            return Some(event);
         }
-
-        // Get block info
-        let block = self
-            .get_block(BlockNumberOrTag::Number(current_block))
-            .await
-            .ok()??;
-
-        // Create filter for Tangle contract events
-        let filter = Filter::new()
-            .address(self.tangle_address)
-            .from_block(from_block)
-            .to_block(current_block);
-
-        let logs = self.get_logs(&filter).await.ok()?;
-
-        *last_block = Some(current_block);
-
-        let event = TangleEvmEvent {
-            block_number: current_block,
-            block_hash: block.header.hash,
-            timestamp: block.header.timestamp,
-            logs,
-        };
-
-        // Update latest
-        *self.latest_block.lock().await = Some(event.clone());
-
-        Some(event)
     }
 
     /// Get the latest observed event
@@ -278,26 +368,78 @@ impl TangleEvmClient {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Get blueprint information
-    pub async fn get_blueprint(&self, blueprint_id: u64) -> Result<ITangle::getBlueprintReturn> {
+    pub async fn get_blueprint(&self, blueprint_id: u64) -> Result<ITangleTypes::Blueprint> {
         let contract = self.tangle_contract();
-        contract
+        let result = contract
             .getBlueprint(blueprint_id)
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(result)
+    }
+
+    /// Fetch the raw ABI-encoded blueprint definition bytes.
+    pub async fn get_raw_blueprint_definition(&self, blueprint_id: u64) -> Result<Vec<u8>> {
+        let mut data = Vec::with_capacity(4 + 32);
+        let method_hash = keccak256("getBlueprintDefinition(uint64)".as_bytes());
+        data.extend_from_slice(&method_hash[..4]);
+        let mut arg = [0u8; 32];
+        arg[24..].copy_from_slice(&blueprint_id.to_be_bytes());
+        data.extend_from_slice(&arg);
+
+        let mut request = TransactionRequest::default();
+        request.to = Some(TxKind::Call(self.tangle_address));
+        request.input = TransactionInput::new(Bytes::from(data));
+
+        let response = self
+            .provider
+            .call(request)
+            .await
+            .map_err(Error::Transport)?;
+
+        Ok(response.to_vec())
     }
 
     /// Get blueprint configuration
     pub async fn get_blueprint_config(
         &self,
         blueprint_id: u64,
-    ) -> Result<ITangle::getBlueprintConfigReturn> {
+    ) -> Result<ITangleTypes::BlueprintConfig> {
         let contract = self.tangle_contract();
-        contract
+        let result = contract
             .getBlueprintConfig(blueprint_id)
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(result)
+    }
+
+    /// Create a new blueprint from an encoded definition.
+    pub async fn create_blueprint(
+        &self,
+        encoded_definition: Vec<u8>,
+    ) -> Result<(TransactionResult, u64)> {
+        let definition = ITangleTypes::BlueprintDefinition::abi_decode(encoded_definition.as_ref())
+            .map_err(|err| {
+                Error::Contract(format!("failed to decode blueprint definition: {err}"))
+            })?;
+
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+        let pending_tx = contract
+            .createBlueprint(definition)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        let receipt = pending_tx.get_receipt().await?;
+        let blueprint_id = self.extract_blueprint_id(&receipt)?;
+
+        Ok((transaction_result_from_receipt(&receipt), blueprint_id))
     }
 
     /// Check if operator is registered for blueprint
@@ -314,28 +456,19 @@ impl TangleEvmClient {
             .map_err(|e| Error::Contract(e.to_string()))
     }
 
-    /// Get all operators registered for a blueprint
-    pub async fn get_blueprint_operators(&self, blueprint_id: u64) -> Result<Vec<Address>> {
-        let contract = self.tangle_contract();
-        contract
-            .getBlueprintOperators(blueprint_id)
-            .call()
-            .await
-            .map_err(|e| Error::Contract(e.to_string()))
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // SERVICE QUERIES
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Get service information
-    pub async fn get_service(&self, service_id: u64) -> Result<ITangle::getServiceReturn> {
+    pub async fn get_service(&self, service_id: u64) -> Result<ITangleTypes::Service> {
         let contract = self.tangle_contract();
-        contract
+        let result = contract
             .getService(service_id)
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(result)
     }
 
     /// Get service operators
@@ -365,13 +498,14 @@ impl TangleEvmClient {
         &self,
         service_id: u64,
         operator: Address,
-    ) -> Result<ITangle::ServiceOperator> {
+    ) -> Result<ITangleTypes::ServiceOperator> {
         let contract = self.tangle_contract();
-        contract
+        let result = contract
             .getServiceOperator(service_id, operator)
             .call()
             .await
-            .map_err(|e| Error::Contract(e.to_string()))
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(result)
     }
 
     /// Get total exposure for a service
@@ -379,11 +513,22 @@ impl TangleEvmClient {
     /// Returns the sum of all operator exposureBps values.
     pub async fn get_service_total_exposure(&self, service_id: u64) -> Result<U256> {
         let contract = self.tangle_contract();
-        contract
-            .getServiceTotalExposure(service_id)
-            .call()
-            .await
-            .map_err(|e| Error::Contract(e.to_string()))
+        match contract.getServiceTotalExposure(service_id).call().await {
+            Ok(total) => Ok(total),
+            Err(err) => {
+                tracing::warn!(
+                    "getServiceTotalExposure revert for service {service_id}: {err}; falling back to summing operator exposures"
+                );
+                let mut total = U256::ZERO;
+                for operator in self.get_service_operators(service_id).await? {
+                    let op_info = self.get_service_operator(service_id, operator).await?;
+                    if op_info.active {
+                        total = total.saturating_add(U256::from(op_info.exposureBps));
+                    }
+                }
+                Ok(total)
+            }
+        }
     }
 
     /// Get operator weights (exposureBps) for all operators in a service
@@ -405,6 +550,372 @@ impl TangleEvmClient {
         }
 
         Ok(weights)
+    }
+
+    /// Register the current operator for a blueprint.
+    pub async fn register_operator(
+        &self,
+        blueprint_id: u64,
+        rpc_endpoint: impl Into<String>,
+        registration_inputs: Option<Bytes>,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let signing_key = self.ecdsa_signing_key()?;
+        let verifying = signing_key.verifying_key();
+        let ecdsa_bytes = Bytes::copy_from_slice(&verifying.to_bytes());
+        let rpc_endpoint = rpc_endpoint.into();
+
+        let receipt = if let Some(inputs) = registration_inputs {
+            contract
+                .registerOperator_0(
+                    blueprint_id,
+                    ecdsa_bytes.clone(),
+                    rpc_endpoint.clone(),
+                    inputs,
+                )
+                .send()
+                .await
+                .map_err(|e| Error::Contract(e.to_string()))?
+                .get_receipt()
+                .await?
+        } else {
+            contract
+                .registerOperator_1(blueprint_id, ecdsa_bytes.clone(), rpc_endpoint.clone())
+                .send()
+                .await
+                .map_err(|e| Error::Contract(e.to_string()))?
+                .get_receipt()
+                .await?
+        };
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Unregister the current operator from a blueprint.
+    pub async fn unregister_operator(&self, blueprint_id: u64) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let receipt = contract
+            .unregisterOperator(blueprint_id)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Get the number of registered blueprints.
+    pub async fn blueprint_count(&self) -> Result<u64> {
+        let contract = self.tangle_contract();
+        contract
+            .blueprintCount()
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Get the number of registered services.
+    pub async fn service_count(&self) -> Result<u64> {
+        let contract = self.tangle_contract();
+        contract
+            .serviceCount()
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Get a service request by ID.
+    pub async fn get_service_request(
+        &self,
+        request_id: u64,
+    ) -> Result<ITangleTypes::ServiceRequest> {
+        let contract = self.tangle_contract();
+        contract
+            .getServiceRequest(request_id)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Get the total number of service requests ever created.
+    pub async fn service_request_count(&self) -> Result<u64> {
+        let mut data = Vec::with_capacity(4);
+        let selector = keccak256("serviceRequestCount()".as_bytes());
+        data.extend_from_slice(&selector[..4]);
+
+        let mut request = TransactionRequest::default();
+        request.to = Some(TxKind::Call(self.tangle_address));
+        request.input = TransactionInput::new(Bytes::from(data));
+
+        let response = self
+            .provider
+            .call(request)
+            .await
+            .map_err(Error::Transport)?;
+
+        if response.len() < 32 {
+            return Err(Error::Contract(
+                "serviceRequestCount returned malformed data".into(),
+            ));
+        }
+
+        let raw = response.as_ref();
+        let mut buf = [0u8; 8];
+        buf.copy_from_slice(&raw[24..32]);
+        Ok(u64::from_be_bytes(buf))
+    }
+
+    /// Fetch metadata recorded for a specific job call.
+    pub async fn get_job_call(
+        &self,
+        service_id: u64,
+        call_id: u64,
+    ) -> Result<ITangleTypes::JobCall> {
+        let contract = self.tangle_contract();
+        contract
+            .getJobCall(service_id, call_id)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Fetch operator metadata (ECDSA public key + RPC endpoint) for a blueprint.
+    pub async fn get_operator_metadata(
+        &self,
+        blueprint_id: u64,
+        operator: Address,
+    ) -> Result<OperatorMetadata> {
+        let contract = self.tangle_contract();
+        let prefs = contract
+            .getOperatorPreferences(blueprint_id, operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(format!("getOperatorPreferences failed: {e}")))?;
+        let restaking_meta = self
+            .restaking_contract()
+            .getOperatorMetadata(operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(format!("getOperatorMetadata failed: {e}")))?;
+        let public_key = normalize_public_key(&prefs.ecdsaPublicKey.0)?;
+        Ok(OperatorMetadata {
+            public_key,
+            rpc_endpoint: prefs.rpcAddress.to_string(),
+            restaking: RestakingMetadata {
+                stake: restaking_meta.stake,
+                delegation_count: restaking_meta.delegationCount,
+                status: RestakingStatus::from(u8::from(restaking_meta.status)),
+                leaving_round: restaking_meta.leavingRound,
+            },
+        })
+    }
+
+    /// Submit a service request.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn request_service(
+        &self,
+        params: ServiceRequestParams,
+    ) -> Result<(TransactionResult, u64)> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let ServiceRequestParams {
+            blueprint_id,
+            operators,
+            operator_exposures,
+            permitted_callers,
+            config,
+            ttl,
+            payment_token,
+            payment_amount,
+            security_requirements,
+        } = params;
+
+        let pending_tx = if !security_requirements.is_empty() {
+            contract
+                .requestServiceWithSecurity(
+                    blueprint_id,
+                    operators.clone(),
+                    security_requirements.clone(),
+                    config.clone(),
+                    permitted_callers.clone(),
+                    ttl,
+                    payment_token,
+                    payment_amount,
+                )
+                .send()
+                .await
+        } else if let Some(exposures) = operator_exposures {
+            contract
+                .requestServiceWithExposure(
+                    blueprint_id,
+                    operators.clone(),
+                    exposures,
+                    config.clone(),
+                    permitted_callers.clone(),
+                    ttl,
+                    payment_token,
+                    payment_amount,
+                )
+                .send()
+                .await
+        } else {
+            contract
+                .requestService(
+                    blueprint_id,
+                    operators.clone(),
+                    config.clone(),
+                    permitted_callers.clone(),
+                    ttl,
+                    payment_token,
+                    payment_amount,
+                )
+                .send()
+                .await
+        }
+        .map_err(|e| Error::Contract(e.to_string()))?;
+
+        let receipt = pending_tx.get_receipt().await?;
+        let request_id = self.extract_request_id(&receipt)?;
+
+        Ok((transaction_result_from_receipt(&receipt), request_id))
+    }
+
+    /// Join a dynamic service with the requested exposure.
+    pub async fn join_service(
+        &self,
+        service_id: u64,
+        exposure_bps: u16,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let receipt = contract
+            .joinService(service_id, exposure_bps)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Leave a dynamic service using the legacy immediate exit helper.
+    pub async fn leave_service(&self, service_id: u64) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let receipt = contract
+            .leaveService(service_id)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Approve a pending service request with a simple restaking percentage.
+    pub async fn approve_service(
+        &self,
+        request_id: u64,
+        restaking_percent: u8,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let receipt = contract
+            .approveService(request_id, restaking_percent)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Approve a service request with explicit security commitments.
+    pub async fn approve_service_with_commitments(
+        &self,
+        request_id: u64,
+        commitments: Vec<ITangleTypes::AssetSecurityCommitment>,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let receipt = contract
+            .approveServiceWithCommitments(request_id, commitments)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Reject a pending service request.
+    pub async fn reject_service(&self, request_id: u64) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let receipt = contract
+            .rejectService(request_id)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -449,6 +960,44 @@ impl TangleEvmClient {
             .call()
             .await
             .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Fetch status registry metadata for an operator/service pair.
+    pub async fn operator_status(
+        &self,
+        service_id: u64,
+        operator: Address,
+    ) -> Result<OperatorStatusSnapshot> {
+        if self.status_registry_address.is_zero() {
+            return Err(Error::MissingStatusRegistry);
+        }
+        let contract = self.status_registry_contract();
+
+        let last_heartbeat = contract
+            .getLastHeartbeat(service_id, operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        let status_code = contract
+            .getOperatorStatus(service_id, operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        let online = contract
+            .isOnline(service_id, operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+
+        let last_heartbeat = u64::try_from(last_heartbeat).unwrap_or(u64::MAX);
+
+        Ok(OperatorStatusSnapshot {
+            service_id,
+            operator,
+            status_code,
+            last_heartbeat,
+            online,
+        })
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -537,6 +1086,89 @@ impl TangleEvmClient {
     // TRANSACTION SUBMISSION
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// Submit a job invocation to the Tangle contract.
+    pub async fn submit_job(
+        &self,
+        service_id: u64,
+        job_index: u8,
+        inputs: Bytes,
+    ) -> Result<JobSubmissionResult> {
+        use crate::contracts::ITangle::submitJobCall;
+        use alloy_sol_types::SolCall;
+
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+
+        let call = submitJobCall {
+            serviceId: service_id,
+            jobIndex: job_index,
+            inputs,
+        };
+        let calldata = call.abi_encode();
+
+        let tx_request = TransactionRequest::default()
+            .to(self.tangle_address)
+            .input(calldata.into());
+
+        let pending_tx = provider
+            .send_transaction(tx_request)
+            .await
+            .map_err(Error::Transport)?;
+
+        let receipt = pending_tx
+            .get_receipt()
+            .await
+            .map_err(Error::PendingTransaction)?;
+
+        let tx = TransactionResult {
+            tx_hash: receipt.transaction_hash,
+            block_number: receipt.block_number,
+            gas_used: receipt.gas_used,
+            success: receipt.status(),
+        };
+
+        let job_submitted_sig = keccak256("JobSubmitted(uint64,uint64,uint8,address,bytes)");
+        let call_id = receipt
+            .logs()
+            .iter()
+            .find_map(|log| {
+                let topics = log.topics();
+                if log.address() != self.tangle_address || topics.len() < 3 {
+                    return None;
+                }
+                if topics[0].0 != job_submitted_sig {
+                    return None;
+                }
+                let mut buf = [0u8; 32];
+                buf.copy_from_slice(topics[2].as_slice());
+                Some(U256::from_be_bytes(buf).to::<u64>())
+            })
+            .ok_or_else(|| {
+                let status = receipt.status();
+                let log_count = receipt.logs().len();
+                let topics: Vec<String> = receipt
+                    .logs()
+                    .iter()
+                    .map(|log| {
+                        log.topics()
+                            .iter()
+                            .map(|topic| format!("{topic:#x}"))
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    })
+                    .collect();
+                Error::Contract(format!(
+                    "submitJob receipt missing JobSubmitted event (status={status:?}, logs={log_count}, topics={topics:?})"
+                ))
+            })?;
+
+        Ok(JobSubmissionResult { tx, call_id })
+    }
+
     /// Submit a job result to the Tangle contract
     ///
     /// This sends a signed transaction to submit a single operator's result.
@@ -552,7 +1184,7 @@ impl TangleEvmClient {
         &self,
         service_id: u64,
         call_id: u64,
-        output: alloy_primitives::Bytes,
+        output: Bytes,
     ) -> Result<TransactionResult> {
         use crate::contracts::ITangle::submitResultCall;
         use alloy_sol_types::SolCall;
@@ -567,11 +1199,11 @@ impl TangleEvmClient {
         let call = submitResultCall {
             serviceId: service_id,
             callId: call_id,
-            output,
+            result: output,
         };
         let calldata = call.abi_encode();
 
-        let tx_request = alloy_rpc_types::TransactionRequest::default()
+        let tx_request = TransactionRequest::default()
             .to(self.tangle_address)
             .input(calldata.into());
 
@@ -611,7 +1243,7 @@ impl TangleEvmClient {
         &self,
         service_id: u64,
         call_id: u64,
-        output: alloy_primitives::Bytes,
+        output: Bytes,
         signer_bitmap: U256,
         aggregated_signature: [U256; 2],
         aggregated_pubkey: [U256; 4],
@@ -636,7 +1268,7 @@ impl TangleEvmClient {
         };
         let calldata = call.abi_encode();
 
-        let tx_request = alloy_rpc_types::TransactionRequest::default()
+        let tx_request = TransactionRequest::default()
             .to(self.tangle_address)
             .input(calldata.into());
 
@@ -657,6 +1289,55 @@ impl TangleEvmClient {
             success: receipt.status(),
         })
     }
+
+    fn extract_request_id(&self, receipt: &TransactionReceipt) -> Result<u64> {
+        let requested_sig = keccak256(
+            "ServiceRequested(uint64,uint64,address,address[],bytes,uint64,address,uint256)"
+                .as_bytes(),
+        );
+        let requested_with_security_sig = keccak256(
+            "ServiceRequestedWithSecurity(uint64,uint64,address,address[],((uint8,address),uint16,uint16)[])"
+                .as_bytes(),
+        );
+
+        for log in receipt.logs() {
+            if log.address() != self.tangle_address {
+                continue;
+            }
+            let topics = log.topics();
+            if topics.is_empty() {
+                continue;
+            }
+            let sig = topics[0].0;
+            if sig != requested_sig && sig != requested_with_security_sig {
+                continue;
+            }
+            if topics.len() < 2 {
+                continue;
+            }
+
+            let mut buf = [0u8; 32];
+            buf.copy_from_slice(topics[1].as_slice());
+            let id = U256::from_be_bytes(buf).to::<u64>();
+            return Ok(id);
+        }
+
+        Err(Error::Contract(
+            "requestService receipt missing ServiceRequested event".into(),
+        ))
+    }
+
+    fn extract_blueprint_id(&self, receipt: &TransactionReceipt) -> Result<u64> {
+        for log in receipt.logs() {
+            if let Ok(event) = log.log_decode::<ITangle::BlueprintCreated>() {
+                return Ok(event.inner.blueprintId);
+            }
+        }
+
+        Err(Error::Contract(
+            "createBlueprint receipt missing BlueprintCreated event".into(),
+        ))
+    }
 }
 
 /// Result of a submitted transaction
@@ -670,6 +1351,15 @@ pub struct TransactionResult {
     pub gas_used: u64,
     /// Whether the transaction succeeded
     pub success: bool,
+}
+
+/// Result of submitting a job via `submitJob`.
+#[derive(Debug, Clone)]
+pub struct JobSubmissionResult {
+    /// Transaction metadata.
+    pub tx: TransactionResult,
+    /// Call identifier assigned by the contract.
+    pub call_id: u64,
 }
 
 /// Threshold type for BLS aggregation
@@ -699,8 +1389,8 @@ fn ecdsa_public_key_to_address(pubkey: &[u8]) -> Result<Address> {
     // Handle both compressed (33 bytes) and uncompressed (65 bytes) keys
     let uncompressed = if pubkey.len() == 33 {
         // Decompress the key using k256
-        use k256::elliptic_curve::sec1::FromEncodedPoint;
         use k256::EncodedPoint;
+        use k256::elliptic_curve::sec1::FromEncodedPoint;
 
         let point = EncodedPoint::from_bytes(pubkey)
             .map_err(|e| Error::InvalidAddress(format!("Invalid compressed key: {e}")))?;
@@ -728,6 +1418,53 @@ fn ecdsa_public_key_to_address(pubkey: &[u8]) -> Result<Address> {
 
     // Take the last 20 bytes as the address
     Ok(Address::from_slice(&hash[12..]))
+}
+
+fn normalize_public_key(raw: &[u8]) -> Result<EcdsaPublicKey> {
+    match raw.len() {
+        65 => {
+            let mut key = [0u8; 65];
+            key.copy_from_slice(raw);
+            Ok(key)
+        }
+        64 => {
+            let mut key = [0u8; 65];
+            key[0] = 0x04;
+            key[1..].copy_from_slice(raw);
+            Ok(key)
+        }
+        33 => {
+            use k256::EncodedPoint;
+            use k256::elliptic_curve::sec1::FromEncodedPoint;
+
+            let point = EncodedPoint::from_bytes(raw)
+                .map_err(|e| Error::InvalidAddress(format!("Invalid compressed key: {e}")))?;
+            let public_key: k256::PublicKey =
+                Option::from(k256::PublicKey::from_encoded_point(&point)).ok_or_else(|| {
+                    Error::InvalidAddress("Failed to decompress public key".into())
+                })?;
+            let encoded = public_key.to_encoded_point(false);
+            let bytes = encoded.as_bytes();
+            let mut key = [0u8; 65];
+            key.copy_from_slice(bytes);
+            Ok(key)
+        }
+        0 => Err(Error::Other(
+            "Operator has not published an ECDSA public key".into(),
+        )),
+        len => Err(Error::InvalidAddress(format!(
+            "Unexpected operator key length: {len}"
+        ))),
+    }
+}
+
+fn transaction_result_from_receipt(receipt: &TransactionReceipt) -> TransactionResult {
+    TransactionResult {
+        tx_hash: receipt.transaction_hash,
+        block_number: receipt.block_number,
+        gas_used: receipt.gas_used,
+        success: receipt.status(),
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -759,24 +1496,19 @@ impl BlueprintServicesClient for TangleEvmClient {
         let mut map = BTreeMap::new();
 
         for operator in operators {
-            // For now, we use the address directly
-            // In a full implementation, we'd query operator preferences for their ECDSA key
-            // The preferences contain the uncompressed ECDSA public key
-
-            // Placeholder: convert address to a dummy 65-byte key
-            // TODO: Query actual ECDSA keys from operator preferences
-            let mut key = [0u8; 65];
-            key[0] = 0x04; // Uncompressed prefix
-            key[1..21].copy_from_slice(operator.as_slice());
-
-            map.insert(operator, key);
+            let metadata = self
+                .get_operator_metadata(self.config.settings.blueprint_id, operator)
+                .await?;
+            map.insert(operator, metadata.public_key);
         }
 
         Ok(map)
     }
 
     /// Get the current operator's ECDSA public key
-    async fn operator_id(&self) -> core::result::Result<Self::PublicApplicationIdentity, Self::Error> {
+    async fn operator_id(
+        &self,
+    ) -> core::result::Result<Self::PublicApplicationIdentity, Self::Error> {
         let key = self
             .keystore
             .first_local::<K256Ecdsa>()

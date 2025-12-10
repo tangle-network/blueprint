@@ -8,9 +8,6 @@ pub enum Error {
     #[error(transparent)]
     #[cfg(feature = "evm")]
     Evm(#[from] blueprint_client_evm::error::Error),
-    #[error(transparent)]
-    #[cfg(feature = "tangle")]
-    Tangle(#[from] blueprint_client_tangle::error::Error),
 }
 
 impl Error {

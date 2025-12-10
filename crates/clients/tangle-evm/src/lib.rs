@@ -73,15 +73,18 @@ pub mod services;
 
 // Re-exports
 pub use client::{
-    AggregationConfig, EcdsaPublicKey, TangleEvmClient, TangleEvmEvent, ThresholdType,
-    TransactionResult,
+    AggregationConfig, EcdsaPublicKey, JobSubmissionResult, OperatorMetadata,
+    OperatorStatusSnapshot, RestakingMetadata, RestakingStatus, TangleEvmClient, TangleEvmEvent,
+    ThresholdType, TransactionResult,
 };
 pub use config::{TangleEvmClientConfig, TangleEvmSettings};
-pub use contracts::{IBlueprintServiceManager, IMultiAssetDelegation, IOperatorStatusRegistry, ITangle};
+pub use contracts::{
+    IBlueprintServiceManager, IMultiAssetDelegation, IOperatorStatusRegistry, ITangle,
+};
 pub use error::{Error, Result};
 pub use services::{
     BlueprintConfig, BlueprintInfo, MembershipModel, OperatorSecurityCommitment, PricingModel,
-    ServiceInfo, ServiceStatus,
+    ServiceInfo, ServiceRequestInfo, ServiceRequestParams, ServiceStatus,
 };
 
 /// Trait for clients that provide events

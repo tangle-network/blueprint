@@ -60,6 +60,10 @@ pub enum Error {
     #[error("Current party not found in operators list")]
     PartyNotFound,
 
+    /// Missing status registry configuration
+    #[error("Status registry contract address not configured")]
+    MissingStatusRegistry,
+
     /// Invalid address format
     #[error("Invalid address: {0}")]
     InvalidAddress(String),

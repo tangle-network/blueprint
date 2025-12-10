@@ -7,11 +7,11 @@
 extern crate alloc;
 
 use alloc::string::ToString;
-use alloy_primitives::{Address, U256};
+use alloy_primitives::{Address, Bytes, U256};
 use blueprint_std::vec::Vec;
 
 use crate::client::TangleEvmClient;
-use crate::contracts::ITangle;
+use crate::contracts::ITangleTypes;
 use crate::error::{Error, Result};
 
 /// Service information from the Tangle contract
@@ -78,34 +78,133 @@ pub enum ServiceStatus {
     Terminated,
 }
 
-impl From<ITangle::MembershipModel> for MembershipModel {
-    fn from(model: ITangle::MembershipModel) -> Self {
-        match model {
-            ITangle::MembershipModel::Fixed => MembershipModel::Fixed,
-            ITangle::MembershipModel::Dynamic => MembershipModel::Dynamic,
-            _ => MembershipModel::Fixed, // Default for unknown values
+/// Parameters for submitting a new service request.
+#[derive(Debug, Clone)]
+pub struct ServiceRequestParams {
+    /// Blueprint being requested.
+    pub blueprint_id: u64,
+    /// Candidate operators for the service.
+    pub operators: Vec<Address>,
+    /// Optional exposure (in basis points) for each operator.
+    pub operator_exposures: Option<Vec<u16>>,
+    /// Additional permitted callers (beyond the requester).
+    pub permitted_callers: Vec<Address>,
+    /// Arbitrary configuration blob expected by the blueprint manager.
+    pub config: Bytes,
+    /// Time-to-live in blocks.
+    pub ttl: u64,
+    /// Payment token (zero address for ETH).
+    pub payment_token: Address,
+    /// Payment amount.
+    pub payment_amount: U256,
+    /// Optional security requirements (falls back to simple exposure flow when empty).
+    pub security_requirements: Vec<ITangleTypes::AssetSecurityRequirement>,
+}
+
+impl ServiceRequestParams {
+    /// Create a new parameter set without security requirements.
+    pub fn new(
+        blueprint_id: u64,
+        operators: Vec<Address>,
+        permitted_callers: Vec<Address>,
+        config: Bytes,
+        ttl: u64,
+        payment_token: Address,
+        payment_amount: U256,
+    ) -> Self {
+        Self {
+            blueprint_id,
+            operators,
+            operator_exposures: None,
+            permitted_callers,
+            config,
+            ttl,
+            payment_token,
+            payment_amount,
+            security_requirements: Vec::new(),
         }
     }
 }
 
-impl From<ITangle::PricingModel> for PricingModel {
-    fn from(model: ITangle::PricingModel) -> Self {
-        match model {
-            ITangle::PricingModel::PayOnce => PricingModel::PayOnce,
-            ITangle::PricingModel::Subscription => PricingModel::Subscription,
-            ITangle::PricingModel::EventDriven => PricingModel::EventDriven,
-            _ => PricingModel::PayOnce, // Default for unknown values
+/// Details about a service request stored on-chain.
+#[derive(Debug, Clone)]
+pub struct ServiceRequestInfo {
+    /// Request identifier.
+    pub request_id: u64,
+    /// Blueprint being requested.
+    pub blueprint_id: u64,
+    /// Address that created the request.
+    pub requester: Address,
+    /// Block timestamp when request was created.
+    pub created_at: u64,
+    /// Request time-to-live in blocks.
+    pub ttl: u64,
+    /// Number of operators requested.
+    pub operator_count: u32,
+    /// Number of approvals the request has received.
+    pub approval_count: u32,
+    /// ERC-20 token used for payment (zero address for ETH).
+    pub payment_token: Address,
+    /// Payment amount for the request.
+    pub payment_amount: U256,
+    /// Membership model requested.
+    pub membership: MembershipModel,
+    /// Minimum operators allowed.
+    pub min_operators: u32,
+    /// Maximum operators allowed.
+    pub max_operators: u32,
+    /// Whether the request has been rejected.
+    pub rejected: bool,
+}
+
+impl ServiceRequestInfo {
+    fn from_contract(id: u64, request: ITangleTypes::ServiceRequest) -> Self {
+        Self {
+            request_id: id,
+            blueprint_id: request.blueprintId,
+            requester: request.requester,
+            created_at: request.createdAt,
+            ttl: request.ttl,
+            operator_count: request.operatorCount,
+            approval_count: request.approvalCount,
+            payment_token: request.paymentToken,
+            payment_amount: request.paymentAmount,
+            membership: ITangleTypes::MembershipModel::from_underlying(request.membership).into(),
+            min_operators: request.minOperators,
+            max_operators: request.maxOperators,
+            rejected: request.rejected,
         }
     }
 }
 
-impl From<ITangle::ServiceStatus> for ServiceStatus {
-    fn from(status: ITangle::ServiceStatus) -> Self {
-        match status {
-            ITangle::ServiceStatus::Pending => ServiceStatus::Pending,
-            ITangle::ServiceStatus::Active => ServiceStatus::Active,
-            ITangle::ServiceStatus::Terminated => ServiceStatus::Terminated,
-            _ => ServiceStatus::Pending, // Default for unknown values
+impl From<ITangleTypes::MembershipModel> for MembershipModel {
+    fn from(model: ITangleTypes::MembershipModel) -> Self {
+        match model.into_underlying() {
+            0 => MembershipModel::Fixed,
+            1 => MembershipModel::Dynamic,
+            _ => MembershipModel::Fixed,
+        }
+    }
+}
+
+impl From<ITangleTypes::PricingModel> for PricingModel {
+    fn from(model: ITangleTypes::PricingModel) -> Self {
+        match model.into_underlying() {
+            0 => PricingModel::PayOnce,
+            1 => PricingModel::Subscription,
+            2 => PricingModel::EventDriven,
+            _ => PricingModel::PayOnce,
+        }
+    }
+}
+
+impl From<ITangleTypes::ServiceStatus> for ServiceStatus {
+    fn from(status: ITangleTypes::ServiceStatus) -> Self {
+        match status.into_underlying() {
+            0 => ServiceStatus::Pending,
+            1 => ServiceStatus::Active,
+            2 => ServiceStatus::Terminated,
+            _ => ServiceStatus::Pending,
         }
     }
 }
@@ -126,9 +225,9 @@ impl TangleEvmClient {
             operator_count: result.operatorCount,
             min_operators: result.minOperators,
             max_operators: result.maxOperators,
-            membership: result.membership.into(),
-            pricing: result.pricing.into(),
-            status: result.status.into(),
+            membership: ITangleTypes::MembershipModel::from_underlying(result.membership).into(),
+            pricing: ITangleTypes::PricingModel::from_underlying(result.pricing).into(),
+            status: ITangleTypes::ServiceStatus::from_underlying(result.status).into(),
         })
     }
 
@@ -141,8 +240,8 @@ impl TangleEvmClient {
             manager: result.manager,
             created_at: result.createdAt,
             operator_count: result.operatorCount,
-            membership: result.membership.into(),
-            pricing: result.pricing.into(),
+            membership: ITangleTypes::MembershipModel::from_underlying(result.membership).into(),
+            pricing: ITangleTypes::PricingModel::from_underlying(result.pricing).into(),
             active: result.active,
         })
     }
@@ -152,8 +251,8 @@ impl TangleEvmClient {
         let result = self.get_blueprint_config(blueprint_id).await?;
 
         Ok(BlueprintConfig {
-            membership: result.membership.into(),
-            pricing: result.pricing.into(),
+            membership: ITangleTypes::MembershipModel::from_underlying(result.membership).into(),
+            pricing: ITangleTypes::PricingModel::from_underlying(result.pricing).into(),
             min_operators: result.minOperators,
             max_operators: result.maxOperators,
             subscription_rate: result.subscriptionRate,
@@ -187,7 +286,8 @@ impl TangleEvmClient {
     /// Check if current operator is registered for the configured blueprint
     pub async fn is_registered_for_blueprint(&self) -> Result<bool> {
         let blueprint_id = self.config.settings.blueprint_id;
-        self.is_operator_registered(blueprint_id, self.account()).await
+        self.is_operator_registered(blueprint_id, self.account())
+            .await
     }
 
     /// Check if current operator is active in the restaking system
@@ -198,6 +298,78 @@ impl TangleEvmClient {
     /// Get current operator's stake
     pub async fn get_own_stake(&self) -> Result<U256> {
         self.get_operator_stake(self.account()).await
+    }
+
+    /// Fetch all blueprint summaries.
+    pub async fn list_blueprints(&self) -> Result<Vec<(u64, BlueprintInfo)>> {
+        let total = self.blueprint_count().await?;
+        let capacity = usize::try_from(total).unwrap_or(usize::MAX);
+        let mut blueprints = Vec::with_capacity(capacity);
+
+        for blueprint_id in 0..total {
+            match self.get_blueprint_info(blueprint_id).await {
+                Ok(info) => blueprints.push((blueprint_id, info)),
+                Err(err) => {
+                    tracing::warn!(
+                        %blueprint_id,
+                        error = %err,
+                        "failed to fetch blueprint info"
+                    );
+                }
+            }
+        }
+
+        Ok(blueprints)
+    }
+
+    /// Fetch all services registered on-chain.
+    pub async fn list_services(&self) -> Result<Vec<(u64, ServiceInfo)>> {
+        let total = self.service_count().await?;
+        let capacity = usize::try_from(total).unwrap_or(usize::MAX);
+        let mut services = Vec::with_capacity(capacity);
+
+        for service_id in 0..total {
+            match self.get_service_info(service_id).await {
+                Ok(info) => services.push((service_id, info)),
+                Err(err) => {
+                    tracing::warn!(
+                        %service_id,
+                        error = %err,
+                        "failed to fetch service info"
+                    );
+                }
+            }
+        }
+
+        Ok(services)
+    }
+
+    /// Fetch a single service request.
+    pub async fn get_service_request_info(&self, request_id: u64) -> Result<ServiceRequestInfo> {
+        let request = self.get_service_request(request_id).await?;
+        Ok(ServiceRequestInfo::from_contract(request_id, request))
+    }
+
+    /// List all service requests ever recorded on-chain.
+    pub async fn list_service_requests(&self) -> Result<Vec<ServiceRequestInfo>> {
+        let total = self.service_request_count().await?;
+        let capacity = usize::try_from(total).unwrap_or(usize::MAX);
+        let mut requests = Vec::with_capacity(capacity);
+
+        for request_id in 0..total {
+            match self.get_service_request(request_id).await {
+                Ok(info) => requests.push(ServiceRequestInfo::from_contract(request_id, info)),
+                Err(err) => {
+                    tracing::warn!(
+                        %request_id,
+                        error = %err,
+                        "failed to fetch service request"
+                    );
+                }
+            }
+        }
+
+        Ok(requests)
     }
 }
 
