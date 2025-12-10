@@ -1,23 +1,18 @@
 use bip39::{Language, Mnemonic};
-use blueprint_crypto::bn254::{ArkBlsBn254Public, ArkBlsBn254Secret};
-use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
-use blueprint_crypto::sp_core::{
-    SpBls377, SpBls377Pair, SpBls377Public, SpBls381, SpBls381Pair, SpBls381Public, SpEcdsa,
-    SpEcdsaPair, SpEcdsaPublic, SpEd25519, SpEd25519Pair, SpEd25519Public, SpSr25519,
-    SpSr25519Pair, SpSr25519Public,
-};
-use blueprint_crypto::{KeyTypeId, bn254::ArkBlsBn254};
+use blueprint_crypto::bn254::{ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Secret};
+use blueprint_crypto::k256::{K256Ecdsa, K256VerifyingKey};
 use blueprint_crypto_core::{BytesEncoding, KeyType};
 use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_runner::config::Protocol;
 use blueprint_std::path::Path;
-use color_eyre::eyre::Result;
+use clap::ValueEnum;
+use color_eyre::eyre::{Result, eyre};
 use dialoguer::{Input, Select};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Unknown key type: {0}")]
-    UnknownKeyType(String),
+    #[error("Unsupported key type")]
+    UnsupportedKey,
     #[error("Keystore error: {0}")]
     KeystoreError(#[from] blueprint_keystore::error::Error),
     #[error("Invalid key format: {0}")]
@@ -26,23 +21,32 @@ pub enum Error {
     InvalidWordCount(u32),
 }
 
+/// Key algorithms supported by the CLI.
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq)]
+pub enum SupportedKey {
+    /// secp256k1/ECDSA key used for operator identities.
+    Ecdsa,
+    /// BLS12-377 key used for BN254 aggregation.
+    Bn254,
+}
+
+impl SupportedKey {
+    fn all() -> &'static [SupportedKey] {
+        &[SupportedKey::Ecdsa, SupportedKey::Bn254]
+    }
+}
+
 #[allow(clippy::missing_errors_doc)]
-pub fn prompt_for_keys(key_types: Vec<KeyTypeId>) -> color_eyre::Result<Vec<(KeyTypeId, String)>> {
+pub fn prompt_for_keys(
+    key_types: Vec<SupportedKey>,
+) -> color_eyre::Result<Vec<(SupportedKey, String)>> {
     let mut collected_keys = Vec::new();
-    let all_key_types = [
-        KeyTypeId::Bn254,
-        KeyTypeId::Ecdsa,
-        KeyTypeId::Sr25519,
-        KeyTypeId::Ed25519,
-        KeyTypeId::Bls381,
-        KeyTypeId::Bls377,
-    ];
 
     if key_types.is_empty() {
         loop {
-            let mut options = all_key_types
+            let mut options = SupportedKey::all()
                 .iter()
-                .map(|kt| format!("Enter key for {:?}", kt))
+                .map(|kt| format!("Enter key for {kt:?}"))
                 .collect::<Vec<_>>();
             options.push("Continue".to_string());
 
@@ -53,24 +57,21 @@ pub fn prompt_for_keys(key_types: Vec<KeyTypeId>) -> color_eyre::Result<Vec<(Key
                 .interact()?;
 
             if selection == options.len() - 1 {
-                // User selected "Continue"
                 break;
             }
 
-            let key_type = all_key_types[selection];
+            let key_type = SupportedKey::all()[selection];
             let key: String = Input::new()
-                .with_prompt(format!("Enter private key for {:?}", key_type))
+                .with_prompt(format!("Enter private key for {key_type:?}"))
                 .interact_text()?;
 
             collected_keys.push((key_type, key));
         }
     } else {
-        // When specific key types are provided, just prompt for each one
         for key_type in key_types {
             let key: String = Input::new()
-                .with_prompt(format!("Enter private key for {:?}", key_type))
+                .with_prompt(format!("Enter private key for {key_type:?}"))
                 .interact_text()?;
-
             collected_keys.push((key_type, key));
         }
     }
@@ -78,20 +79,12 @@ pub fn prompt_for_keys(key_types: Vec<KeyTypeId>) -> color_eyre::Result<Vec<(Key
     Ok(collected_keys)
 }
 
-/// Import a key into the keystore
-///
-/// # Errors
-///
-/// If `output` is provided:
-/// * The keystore may fail to be created. See [`KeystoreConfig::fs_root()`].
-/// * The keystore may fail to write the new key. See [`Backend::insert()`].
 pub fn generate_key(
-    key_type: KeyTypeId,
+    key_type: SupportedKey,
     output: Option<&impl AsRef<Path>>,
     seed: Option<&[u8]>,
     show_secret: bool,
 ) -> Result<(String, Option<String>)> {
-    // Create keystore configuration
     let mut config = KeystoreConfig::new();
     if let Some(path) = output {
         if !path.as_ref().exists() {
@@ -102,39 +95,14 @@ pub fn generate_key(
 
     let keystore = Keystore::new(config)?;
 
-    // Generate key based on type
     let (public_bytes, secret_bytes) = match key_type {
-        KeyTypeId::Sr25519 => {
-            let public = keystore.generate::<SpSr25519>(seed)?;
-            let secret = keystore.get_secret::<SpSr25519>(&public)?;
-            keystore.insert::<SpSr25519>(&secret)?;
+        SupportedKey::Ecdsa => {
+            let public = keystore.generate::<K256Ecdsa>(seed)?;
+            let secret = keystore.get_secret::<K256Ecdsa>(&public)?;
+            keystore.insert::<K256Ecdsa>(&secret)?;
             (public.to_bytes(), secret.to_bytes())
         }
-        KeyTypeId::Ed25519 => {
-            let public = keystore.generate::<SpEd25519>(seed)?;
-            let secret = keystore.get_secret::<SpEd25519>(&public)?;
-            keystore.insert::<SpEd25519>(&secret)?;
-            (public.to_bytes(), secret.to_bytes())
-        }
-        KeyTypeId::Ecdsa => {
-            let public = keystore.generate::<SpEcdsa>(seed)?;
-            let secret = keystore.get_secret::<SpEcdsa>(&public)?;
-            keystore.insert::<SpEcdsa>(&secret)?;
-            (public.to_bytes(), secret.to_bytes())
-        }
-        KeyTypeId::Bls381 => {
-            let public = keystore.generate::<SpBls381>(seed)?;
-            let secret = keystore.get_secret::<SpBls381>(&public)?;
-            keystore.insert::<SpBls381>(&secret)?;
-            (public.to_bytes(), secret.to_bytes())
-        }
-        KeyTypeId::Bls377 => {
-            let public = keystore.generate::<SpBls377>(seed)?;
-            let secret = keystore.get_secret::<SpBls377>(&public)?;
-            keystore.insert::<SpBls377>(&secret)?;
-            (public.to_bytes(), secret.to_bytes())
-        }
-        KeyTypeId::Bn254 => {
+        SupportedKey::Bn254 => {
             let public = keystore.generate::<ArkBlsBn254>(seed)?;
             let secret = keystore.get_secret::<ArkBlsBn254>(&public)?;
             keystore.insert::<ArkBlsBn254>(&secret)?;
@@ -143,7 +111,6 @@ pub fn generate_key(
     };
 
     let (public, secret) = (hex::encode(public_bytes), hex::encode(secret_bytes));
-
     let mut secret = Some(secret);
     if !show_secret {
         secret = None;
@@ -152,13 +119,6 @@ pub fn generate_key(
     Ok((public, secret))
 }
 
-/// Generate a new mnemonic
-///
-/// If no `word_count` is provided, it defaults to 12.
-///
-/// # Errors
-///
-/// The word count is not in the range of `12..=24` or is not divisible by 3
 pub fn generate_mnemonic(word_count: Option<u32>) -> Result<String> {
     let count = match word_count {
         Some(count) if !(12..=24).contains(&count) || count % 3 != 0 => {
@@ -168,154 +128,93 @@ pub fn generate_mnemonic(word_count: Option<u32>) -> Result<String> {
         None => 12,
     };
     let mut rng = bip39::rand::thread_rng();
-    let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, count as usize)?;
+    let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, count as usize)
+        .map_err(|e| eyre!(e.to_string()))?;
     Ok(mnemonic.to_string())
 }
 
-/// Import a key into the keystore
-///
-/// # Errors
-///
-/// * The key is not a valid hex string
-/// * The key is not a valid representation of the given `key_type`
-/// * The keystore, depending on the backend, may fail to open and/or write this new key
 pub fn import_key(
-    protocol: Protocol,
-    key_type: KeyTypeId,
+    _protocol: Protocol,
+    key_type: SupportedKey,
     secret: &str,
     keystore_path: &Path,
 ) -> Result<String> {
-    let mut config = KeystoreConfig::new();
-    config = config.fs_root(keystore_path);
+    let config = KeystoreConfig::new().fs_root(keystore_path);
     let keystore = Keystore::new(config)?;
 
-    let secret_bytes = hex::decode(secret).map_err(|e| Error::InvalidKeyFormat(e.to_string()))?;
-
-    let public_key = match key_type {
-        KeyTypeId::Sr25519 => {
-            let key = SpSr25519Pair::from_bytes(&secret_bytes)?;
-            keystore.insert::<SpSr25519>(&key)?;
-            hex::encode(key.public().to_bytes())
+    let public_bytes = match key_type {
+        SupportedKey::Ecdsa => {
+            let signing_key = K256Ecdsa::generate_with_string(secret.to_string())?;
+            keystore.insert::<K256Ecdsa>(&signing_key)?;
+            K256Ecdsa::public_from_secret(&signing_key).to_bytes()
         }
-        KeyTypeId::Ed25519 => {
-            let key = SpEd25519Pair::from_bytes(&secret_bytes)?;
-            keystore.insert::<SpEd25519>(&key)?;
-            hex::encode(key.public().to_bytes())
-        }
-        KeyTypeId::Ecdsa => match protocol {
-            Protocol::Tangle => {
-                let key = SpEcdsaPair::from_bytes(&secret_bytes)?;
-                keystore.insert::<SpEcdsa>(&key)?;
-                hex::encode(key.public().to_bytes())
-            }
-            _ => {
-                let key = K256SigningKey::from_bytes(&secret_bytes)?;
-                keystore.insert::<K256Ecdsa>(&key)?;
-                hex::encode(key.public().to_bytes())
-            }
-        },
-        KeyTypeId::Bls381 => {
-            let key = SpBls381Pair::from_bytes(&secret_bytes)?;
-            keystore.insert::<SpBls381>(&key)?;
-            hex::encode(key.public().to_bytes())
-        }
-        KeyTypeId::Bls377 => {
-            let key = SpBls377Pair::from_bytes(&secret_bytes)?;
-            keystore.insert::<SpBls377>(&key)?;
-            hex::encode(key.public().to_bytes())
-        }
-        KeyTypeId::Bn254 => {
-            let key = ArkBlsBn254Secret::from_bytes(&secret_bytes)?;
-            keystore.insert::<ArkBlsBn254>(&key)?;
-            let public = ArkBlsBn254::public_from_secret(&key);
-            hex::encode(public.to_bytes())
+        SupportedKey::Bn254 => {
+            let signing_key = parse_bn254_secret(secret)?;
+            keystore.insert::<ArkBlsBn254>(&signing_key)?;
+            ArkBlsBn254::public_from_secret(&signing_key).to_bytes()
         }
     };
 
-    Ok(public_key)
+    Ok(hex::encode(public_bytes))
 }
 
-/// Get the hex encoded secret for a given public key
-///
-/// # Errors
-///
-/// * `public` is not a valid hex string
-/// * See [`Keystore::get_secret()`]
-pub fn export_key(key_type: KeyTypeId, public: &str, keystore_path: &Path) -> Result<String> {
-    let mut config = KeystoreConfig::new();
-    config = config.fs_root(keystore_path);
+pub fn export_key(key_type: SupportedKey, public: &str, keystore_path: &Path) -> Result<String> {
+    let config = KeystoreConfig::new().fs_root(keystore_path);
     let keystore = Keystore::new(config)?;
-
     let public_bytes = hex::decode(public).map_err(|e| Error::InvalidKeyFormat(e.to_string()))?;
 
     let secret = match key_type {
-        KeyTypeId::Sr25519 => {
-            let public = SpSr25519Public::from_bytes(&public_bytes)?;
-            let secret = keystore.get_secret::<SpSr25519>(&public)?;
-            hex::encode(secret.to_bytes())
+        SupportedKey::Ecdsa => {
+            let public = K256VerifyingKey::from_bytes(&public_bytes)
+                .map_err(|e| Error::InvalidKeyFormat(e.to_string()))?;
+            let secret = keystore
+                .get_secret::<K256Ecdsa>(&public)
+                .map_err(Error::KeystoreError)?;
+            secret.to_bytes()
         }
-        KeyTypeId::Ed25519 => {
-            let public = SpEd25519Public::from_bytes(&public_bytes)?;
-            let secret = keystore.get_secret::<SpEd25519>(&public)?;
-            hex::encode(secret.to_bytes())
-        }
-        KeyTypeId::Ecdsa => {
-            let public = SpEcdsaPublic::from_bytes(&public_bytes)?;
-            let secret = keystore.get_secret::<SpEcdsa>(&public)?;
-            hex::encode(secret.to_bytes())
-        }
-        KeyTypeId::Bls381 => {
-            let public = SpBls381Public::from_bytes(&public_bytes)?;
-            let secret = keystore.get_secret::<SpBls381>(&public)?;
-            hex::encode(secret.to_bytes())
-        }
-        KeyTypeId::Bls377 => {
-            let public = SpBls377Public::from_bytes(&public_bytes)?;
-            let secret = keystore.get_secret::<SpBls377>(&public)?;
-            hex::encode(secret.to_bytes())
-        }
-        KeyTypeId::Bn254 => {
-            let public = ArkBlsBn254Public::from_bytes(&public_bytes)?;
-            let secret = keystore.get_secret::<ArkBlsBn254>(&public)?;
-            hex::encode(secret.to_bytes())
+        SupportedKey::Bn254 => {
+            let public = ArkBlsBn254Public::from_bytes(&public_bytes)
+                .map_err(|e| Error::InvalidKeyFormat(e.to_string()))?;
+            let secret = keystore
+                .get_secret::<ArkBlsBn254>(&public)
+                .map_err(Error::KeystoreError)?;
+            secret.to_bytes()
         }
     };
 
-    Ok(secret)
+    Ok(hex::encode(secret))
 }
 
-/// Collect all keys from the keystore at `keystore_path`
-///
-/// # Errors
-///
-/// * See [`KeystoreConfig::fs_root()`] for potential IO errors
-/// * As this uses the filesystem, the keystore may fail to read the keys, for any reason.
-pub fn list_keys(keystore_path: &Path) -> Result<Vec<(KeyTypeId, String)>> {
-    let mut config = KeystoreConfig::new();
-    config = config.fs_root(keystore_path);
+pub fn list_keys(keystore_path: &Path) -> Result<Vec<(SupportedKey, String)>> {
+    let config = KeystoreConfig::new().fs_root(keystore_path);
     let keystore = Keystore::new(config)?;
 
     let mut keys = Vec::new();
-
-    // List keys for each type
-    for key in keystore.list_local::<SpSr25519>()? {
-        keys.push((KeyTypeId::Sr25519, hex::encode(key.to_bytes())));
+    if let Ok(list) = keystore.list_local::<K256Ecdsa>() {
+        keys.extend(
+            list.into_iter()
+                .map(|key| (SupportedKey::Ecdsa, hex::encode(key.to_bytes()))),
+        );
     }
-    for key in keystore.list_local::<SpEd25519>()? {
-        keys.push((KeyTypeId::Ed25519, hex::encode(key.to_bytes())));
-    }
-    for key in keystore.list_local::<SpEcdsa>()? {
-        keys.push((KeyTypeId::Ecdsa, hex::encode(key.to_bytes())));
-    }
-    for key in keystore.list_local::<SpBls381>()? {
-        keys.push((KeyTypeId::Bls381, hex::encode(key.to_bytes())));
-    }
-    for key in keystore.list_local::<SpBls377>()? {
-        keys.push((KeyTypeId::Bls377, hex::encode(key.to_bytes())));
-    }
-    for key in keystore.list_local::<ArkBlsBn254>()? {
-        keys.push((KeyTypeId::Bn254, hex::encode(key.to_bytes())));
+    if let Ok(list) = keystore.list_local::<ArkBlsBn254>() {
+        keys.extend(
+            list.into_iter()
+                .map(|key| (SupportedKey::Bn254, hex::encode(key.to_bytes()))),
+        );
     }
 
     Ok(keys)
+}
+
+fn parse_bn254_secret(secret: &str) -> Result<ArkBlsBn254Secret> {
+    let trimmed = secret.trim();
+    let maybe_hex = trimmed.strip_prefix("0x").unwrap_or(trimmed);
+    let looks_hex = trimmed.starts_with("0x") || maybe_hex.len() == 64;
+    if looks_hex && maybe_hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        let bytes = hex::decode(maybe_hex).map_err(|e| Error::InvalidKeyFormat(e.to_string()))?;
+        ArkBlsBn254Secret::from_bytes(&bytes)
+            .map_err(|e| Error::InvalidKeyFormat(e.to_string()).into())
+    } else {
+        Ok(ArkBlsBn254::generate_with_string(trimmed.to_string())?)
+    }
 }

@@ -129,6 +129,7 @@ pub fn new_blueprint(
         other_args: Option::default(),
         continue_on_error: false,
         quiet: false,
+        no_workspace: false,
     })
     .map_err(Error::GenerationFailed)?;
 

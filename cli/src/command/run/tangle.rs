@@ -1,12 +1,13 @@
-use alloy_signer_local::PrivateKeySigner;
-use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
-use blueprint_manager::config::{BlueprintManagerConfig, BlueprintManagerContext, Paths};
+use alloy_primitives::Address;
+use blueprint_manager::config::{
+    BlueprintManagerConfig, BlueprintManagerContext, Paths, SourceType,
+};
 use blueprint_manager::executor::run_blueprint_manager;
-use blueprint_runner::config::BlueprintEnvironment;
-use color_eyre::eyre::{Result, eyre};
+use blueprint_runner::config::{BlueprintEnvironment, ProtocolSettings};
+use blueprint_runner::tangle_evm::config::TangleEvmProtocolSettings;
+use color_eyre::eyre::Result;
 use dialoguer::console::style;
 use indicatif::{ProgressBar, ProgressStyle};
-use sp_core::sr25519;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::signal;
@@ -14,59 +15,40 @@ use url::Url;
 
 #[derive(Clone)]
 pub struct RunOpts {
-    /// The HTTP RPC URL of the Tangle Network
     pub http_rpc_url: Url,
-    /// The WS RPC URL of the Tangle Network
     pub ws_rpc_url: Url,
-    /// The signer for Tangle operations
-    pub signer: Option<TanglePairSigner<sr25519::Pair>>,
-    /// The signer for EVM operations
-    pub signer_evm: Option<PrivateKeySigner>,
-    /// The blueprint ID to run
-    pub blueprint_id: Option<u64>,
-    /// The keystore path
-    pub keystore_path: Option<String>,
-    /// The data directory path
+    pub blueprint_id: u64,
+    pub service_id: Option<u64>,
+    pub tangle_contract: Address,
+    pub restaking_contract: Address,
+    pub status_registry_contract: Address,
+    pub keystore_path: String,
     pub data_dir: Option<PathBuf>,
-    /// Whether to allow invalid GitHub attestations (binary integrity checks)
-    ///
-    /// This will also allow for running the manager without the GitHub CLI installed.
     pub allow_unchecked_attestations: bool,
+    pub registration_mode: bool,
+    pub registration_capture_only: bool,
+    pub preferred_source: SourceType,
+    pub use_vm: bool,
 }
 
-/// Runs a blueprint using the blueprint manager
-///
-/// # Arguments
-///
-/// * `opts` - Options for running the blueprint
-///
-/// # Errors
-///
-/// Returns an error if:
-/// * Blueprint ID is not provided
-/// * Failed to create or configure the blueprint manager
-/// * Failed to run the blueprint
-#[allow(clippy::missing_panics_doc)]
 pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
-    let blueprint_id = opts
-        .blueprint_id
-        .ok_or_else(|| eyre!("Blueprint ID is required"))?;
-
     let mut blueprint_config = BlueprintEnvironment::default();
     blueprint_config.http_rpc_endpoint = opts.http_rpc_url;
     blueprint_config.ws_rpc_endpoint = opts.ws_rpc_url;
-
-    if let Some(keystore_path) = opts.keystore_path {
-        blueprint_config.keystore_uri = keystore_path;
-    }
-
-    blueprint_config.keystore_uri = std::path::absolute(&blueprint_config.keystore_uri)?
-        .display()
-        .to_string();
-
+    blueprint_config.keystore_uri = opts.keystore_path;
     blueprint_config.data_dir = opts.data_dir.unwrap_or_else(|| PathBuf::from("./data"));
+    blueprint_config.registration_mode = opts.registration_mode;
+    blueprint_config.registration_capture_only = opts.registration_capture_only;
+    blueprint_config.protocol_settings = ProtocolSettings::TangleEvm(TangleEvmProtocolSettings {
+        blueprint_id: opts.blueprint_id,
+        service_id: opts.service_id,
+        tangle_contract: opts.tangle_contract,
+        restaking_contract: opts.restaking_contract,
+        status_registry_contract: opts.status_registry_contract,
+    });
 
-    let blueprint_manager_config = BlueprintManagerConfig {
+    #[allow(unused_mut)]
+    let mut blueprint_manager_config = BlueprintManagerConfig {
         paths: Paths {
             keystore_uri: blueprint_config.keystore_uri.clone(),
             data_dir: blueprint_config.data_dir.clone(),
@@ -74,10 +56,16 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         },
         verbose: 2,
         pretty: true,
-        instance_id: Some(format!("Blueprint-{}", blueprint_id)),
+        instance_id: Some(format!("Blueprint-{}", opts.blueprint_id)),
         allow_unchecked_attestations: opts.allow_unchecked_attestations,
+        preferred_source: opts.preferred_source,
         ..Default::default()
     };
+
+    #[cfg(feature = "vm-debug")]
+    {
+        blueprint_manager_config.vm_sandbox_options.no_vm = !opts.use_vm;
+    }
 
     let ctx = BlueprintManagerContext::new(blueprint_manager_config).await?;
 
@@ -85,7 +73,7 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         "{}",
         style(format!(
             "Starting blueprint manager for blueprint ID: {}",
-            blueprint_id
+            opts.blueprint_id
         ))
         .cyan()
         .bold()

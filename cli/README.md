@@ -1,202 +1,203 @@
 # Tangle CLI
 
-Create and Deploy blueprints on Tangle Network.
-
-## Table of Contents
-
-- [Tangle CLI](#tangle-cli)
-  - [Table of Contents](#table-of-contents)
-  - [Overview](#overview)
-  - [Installation](#installation)
-    - [Feature flags](#feature-flags)
-  - [Creating a New Blueprint](#creating-a-new-blueprint)
-    - [Example](#example)
-  - [Build The Blueprint](#build-the-blueprint)
-  - [Unit Testing](#unit-testing)
-  - [Deploying the Blueprint to a Local Tangle Node](#deploying-the-blueprint-to-a-local-tangle-node)
-    - [Example](#example-1)
-  - [Required Environment Variables for Deployment](#required-environment-variables-for-deployment)
-    - [Example of ENV Variables](#example-of-env-variables)
-  - [Generating Keys from the Command Line](#generating-keys-from-the-command-line)
-    - [Flags](#flags)
+Create, run, and operate blueprints on the Tangle EVM and EigenLayer.
 
 ## Overview
 
-The Tangle CLI is a command-line tool that allows you to create and deploy blueprints on the Tangle network. It
-provides a simple and efficient way to manage your blueprints, making it easy to get started with Tangle
-Blueprints.
+The CLI bundles every workflow needed for the EVM-only SDK:
+
+- `cargo tangle blueprint create` scaffolds a new blueprint from the templates.
+- `cargo tangle blueprint run --protocol tangle-evm` boots a manager connected to the Tangle v2 contracts.
+- `cargo tangle blueprint register-tangle-evm` registers an operator against `ITangle`, `MultiAssetDelegation`, and `OperatorStatusRegistry`.
+- `cargo tangle key *` manages local and remote k256 keys via `blueprint-keystore`.
+
+All Substrate helpers have been removed; the CLI now targets EVM-first flows only.
 
 ## Installation
 
-To install the Tangle CLI, run the following command:
-
-> Supported on Linux, MacOS, and Windows (WSL2)
+> Linux, macOS, and Windows (WSL2) are supported.
 
 ```bash
 cargo install cargo-tangle --git https://github.com/tangle-network/blueprint --force
 ```
 
-## Creating a New Tangle Blueprint
-
-To create a new blueprint using the Tangle CLI, use the following command:
-
-```bash
-cargo tangle blueprint create --name <blueprint_name>
-```
-
-Replace `<blueprint_name>` with the desired name for your blueprint.
-
-### Example
+## Creating a New Blueprint
 
 ```bash
 cargo tangle blueprint create --name my_blueprint
 ```
 
-## Build The Blueprint
+The scaffold asks for a source template, optional variables, and whether to skip prompts. The generated workspace already depends on `blueprint-sdk` with the `tangle-evm` feature.
 
-To build the blueprint, you can simply use cargo as you would with any rust project:
+## Running a Blueprint on Tangle EVM
 
-```bash
-cargo build
-```
-
-## Unit Testing
-
-To run the unit tests, use the following command:
+The runner expects RPC URLs, a keystore, and the EVM contract coordinates. You can provide them via CLI flags or a `settings.env` file that the command loads before boot.
 
 ```bash
-cargo test
+BLUEPRINT_ID=0 \
+SERVICE_ID=0 \
+TANGLE_CONTRACT=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 \
+RESTAKING_CONTRACT=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 \
+STATUS_REGISTRY_CONTRACT=0xdC64a140Aa3E981100a9BecA4E685f962f0CF6C9 \
+cargo tangle blueprint run \
+  --protocol tangle-evm \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./keystore \
+  --settings-file ./settings.env
 ```
 
-## Deploying the Blueprint to a Local Tangle Node
+| Variable | Description |
+| --- | --- |
+| `BLUEPRINT_ID` | Blueprint registered on `ITangle`. |
+| `SERVICE_ID` | Optional fixed service (leave unset to process all). |
+| `TANGLE_CONTRACT` | `ITangle` contract address. |
+| `RESTAKING_CONTRACT` | `MultiAssetDelegation` contract. |
+| `STATUS_REGISTRY_CONTRACT` | `OperatorStatusRegistry` heartbeat contract. |
 
-To deploy the blueprint to a local Tangle node, use the following command:
+The CLI automatically ensures an ECDSA key exists under `--keystore-path` and derives the operator address from it.
+
+## Registering an Operator
+
+`register-tangle-evm` performs the on-chain registration + announcement flow in one command:
 
 ```bash
-cargo tangle blueprint deploy tangle --devnet --package <package_name>
+cargo tangle blueprint register-tangle-evm \
+  --http-rpc-url https://rpc.tangle.tools \
+  --ws-rpc-url wss://rpc.tangle.tools \
+  --keystore-path ./keystore \
+  --tangle-contract 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 \
+  --restaking-contract 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 \
+  --status-registry-contract 0xdC64a140Aa3E981100a9BecA4E685f962f0CF6C9 \
+  --blueprint-id 0 \
+  --registration-inputs ./registration.tlv
 ```
 
-Replace `<package_name>` with the name of the package to deploy, or it can be omitted if the workspace has only one package. Using the devnet flag automatically starts a local Tangle testnet
-and creates a keystore for you. The deployment keystore is generated at `./deploy-keystore` with Bob's account keys. Additionally, it generates a second keystore for testing purposes at `./test-keystore` with Alice's account keys.
+You can optionally set `--rpc-endpoint` to push metadata to a remote operator directory service during registration.
 
-### Example
+## Service Lifecycle Commands
+
+The `cargo tangle blueprint service` namespace mirrors everything exposed in `Tangle.sol`:
+
+- `service request` submits a pending service with per-operator exposures, rich config payloads, and optional asset security requirements.
+- `service approve` / `service reject` lets operators respond to a request; approvals can include explicit asset commitments when the request included requirements.
+- `service join` / `service leave` let operators participate in dynamic membership services; leaving succeeds when the service's exit queue allows the legacy helper.
+- `service list` and `service requests` surface active services vs. pending requests, with a `--json` toggle for scripting.
+
+### Requesting a Service
 
 ```bash
-cargo tangle blueprint deploy tangle --ws-rpc-url ws://localhost:9944 --keystore-path ./my-keystore --package my_blueprint
+cargo tangle blueprint service request \
+  --blueprint-id 1 \
+  --operator 0x... --operator 0x... \
+  --operator-exposure-bps 7000 --operator-exposure-bps 3000 \
+  --permitted-caller 0xdeadbeef... \
+  --config-file ./service-config.bin \
+  --ttl 86400 \
+  --payment-token 0x0000000000000000000000000000000000000000 \
+  --payment-amount 1000000000000000000 \
+  --security-requirement native:_ :5000:10000
 ```
 
-Expected output:
+- Provide one `--operator-exposure-bps` per operator (basis points, 10_000 = 100%). Leave unset to fall back to the default BPS of 100% per operator.
+- Security requirements use the format `KIND:TOKEN:MIN:MAX` where `KIND` is `native` or `erc20`. Use `_`/`0` for the native token placeholder.
+- TTLs are expressed in seconds to match the `Tangle.sol` schema.
 
-```
-Blueprint #0 created successfully by 5F3sa2TJAWMqDhXG6jhV4N8ko9rUjC2q7z6z5V5s5V5s5V5s with extrinsic hash: 0x1234567890abcdef
-```
-
-## Optional Environment Variables for Deployment
-
-The following environment variables are optional for deploying the blueprint:
-
-- `SIGNER`: The SURI of the signer account.
-- `EVM_SIGNER`: The SURI of the EVM signer account.
-
-These environment variables can be specified instead of supplying a keystore when deploying a blueprint. It should be noted that these environment variables are not prioritized over a supplied keystore.
-
-### Example of ENV Variables
+### Approving or Rejecting
 
 ```bash
-export SIGNER="//Alice" # Substrate Signer account
-export EVM_SIGNER="0xcb6df9de1efca7a3998a8ead4e02159d5fa99c3e0d4fd6432667390bb4726854" # EVM signer account
+# Simple restaking approval
+cargo tangle blueprint service approve \
+  --request-id 42 \
+  --restaking-percent 50
+
+# Approval that matches request-level security requirements
+cargo tangle blueprint service approve \
+  --request-id 42 \
+  --security-commitment native:_ :6000
 ```
 
-## Interacting with a deployed Blueprint
+- `--security-commitment` mirrors the `KIND:TOKEN:EXPOSURE` structure expected by `approveServiceWithCommitments`.
+- Use `service reject --request-id <ID>` to decline participation.
 
-Once the blueprint is deployed, it can now be used on-chain. We have a collection of CLI commands that are useful for interacting with Blueprints, including the ones covered above:
-
-- Create: `cargo tangle blueprint create`
-- Deploy: `cargo tangle blueprint deploy`
-- List Service Requests: `cargo tangle blueprint list-requests`
-- List Blueprints: `cargo tangle blueprint list-blueprints`
-- Register: `cargo tangle blueprint register`
-- Request Service: `cargo tangle blueprint request-service`
-- Accept Service Request: `cargo tangle blueprint accept`
-- Reject Service Request: `cargo tangle blueprint reject`
-- Run Blueprint: `cargo tangle blueprint run`
-- Submit Job: `cargo tangle blueprint submit`
-
-Further details on each command, as well as a full demo, can be found on our [Tangle CLI docs page](https://docs.tangle.tools/developers/cli/tangle).
-
-## EigenLayer Multi-AVS Commands
-
-The Tangle CLI provides commands for managing multiple EigenLayer AVS registrations with a single operator.
-
-### Quick Start: EigenLayer
-
-#### 1. Generate Keys
+### Listing Services/Requests
 
 ```bash
-# Generate ECDSA key (operator address)
-cargo tangle blueprint generate-keys -k ecdsa -p ./keystore
-
-# Generate BLS key (for aggregation)
-cargo tangle blueprint generate-keys -k bls -p ./keystore
+cargo tangle blueprint service list --json
+cargo tangle blueprint service requests --json
 ```
 
-#### 2. Register with an AVS
+Both commands read via `TangleEvmClient::{list_services,list_service_requests}` and print either friendly tables or JSON for automation.
 
-Create a configuration file `my-avs-config.json`:
+### Spawning a Service Runtime
 
-```json
-{
-  "service_manager": "0x...",
-  "registry_coordinator": "0x...",
-  "operator_state_retriever": "0x...",
-  "strategy_manager": "0x...",
-  "delegation_manager": "0x...",
-  "avs_directory": "0x...",
-  "rewards_coordinator": "0x...",
-  "permission_controller": "0x...",
-  "allocation_manager": "0x...",
-  "strategy_address": "0x...",
-  "stake_registry": "0x...",
-  "blueprint_path": "/path/to/your/avs/blueprint",
-  "runtime_target": "hypervisor",
-  "allocation_delay": 0,
-  "deposit_amount": 5000000000000000000000,
-  "stake_amount": 1000000000000000000,
-  "operator_sets": [0]
-}
-```
-
-Register:
+Kick off the blueprint manager using a specific runtime without re-running the full deploy flow:
 
 ```bash
-cargo tangle blueprint eigenlayer register \
-  --config my-avs-config.json \
-  --keystore-uri ./keystore
+cargo tangle blueprint service spawn \
+  --http-rpc-url https://rpc.tangle.tools \
+  --ws-rpc-url wss://rpc.tangle.tools \
+  --keystore-path ./keystore \
+  --tangle-contract 0xCf7E... \
+  --restaking-contract 0xe7f1... \
+  --status-registry-contract 0xdC64... \
+  --blueprint-id 1 \
+  --service-id 2 \
+  --spawn-method vm \
+  --data-dir ./data \
+  --allow-unchecked-attestations
 ```
 
-Or override runtime target via CLI:
+The command reuses the same manager wiring as `cargo tangle blueprint run`, so any RPC endpoint + runtime combo works (VM/native/container). For devnet, omit the overrides and the defaults point at the local harness.
+
+## Key Management
+
+All keys are EVM-native. Use the `cargo tangle key` subcommands to handle k256 material:
 
 ```bash
-cargo tangle blueprint eigenlayer register \
-  --config my-avs-config.json \
-  --keystore-uri ./keystore \
-  --runtime native
+# Generate a new operator key
+cargo tangle key generate --key-type ecdsa --output ./keystore
+
+# Import an existing hex secret into the keystore
+cargo tangle key import --key-type ecdsa \
+  --secret 0x0123... \
+  --keystore-path ./keystore \
+  --protocol tangle-evm
+
+# List local keys
+cargo tangle key list --keystore-path ./keystore
 ```
 
-#### 3. List Registrations
+The keystore supports filesystem, in-memory, and remote HSM backends through `blueprint-keystore`.
+
+## EigenLayer Helpers
+
+EigenLayer support remains available under `cargo tangle blueprint eigenlayer <subcommand>`. Use it to register AVSs, list allocations, or run the EigenLayer manager by supplying the addresses exported from the EigenLayer contracts.
+
+## Operator Status
+
+Inspect the latest heartbeat/online status from `OperatorStatusRegistry`:
 
 ```bash
-# List all registrations
-cargo tangle blueprint eigenlayer list
-
-# List only active registrations
-cargo tangle blueprint eigenlayer list --active-only
-
-# JSON output
-cargo tangle blueprint eigenlayer list --format json
+cargo tangle operator status \
+  --http-rpc-url https://rpc.tangle.tools \
+  --ws-rpc-url wss://rpc.tangle.tools \
+  --keystore-path ./keystore \
+  --tangle-contract 0xCf7E... \
+  --restaking-contract 0xe7f1... \
+  --status-registry-contract 0xdC64... \
+  --blueprint-id 1 \
+  --service-id 2 \
+  --operator 0xdeadbeef... \
+  --json
 ```
 
-#### 4. Run the Manager
+Omit `--operator` to query the locally configured operator. Add `--json` for machine-friendly output (timestamp, raw status code, online boolean).
+
+## Need More?
+
+- End-to-end demos and advanced options live on the [CLI reference](https://docs.tangle.tools/developers/cli/reference).
+- For pricing/QoS flows, combine the CLI with `crates/pricing-engine` and the new `OPERATOR_*` env vars described in that README.
 
 ```bash
 cargo tangle blueprint run \

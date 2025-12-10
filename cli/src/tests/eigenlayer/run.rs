@@ -8,13 +8,14 @@ use blueprint_std::collections::HashMap;
 use blueprint_std::fs;
 use blueprint_std::process::Command;
 use blueprint_testing_utils::setup_log;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{Result, eyre};
 use std::io::Write;
 use tempfile::TempDir;
 
 use crate::command::deploy::eigenlayer::EigenlayerDeployOpts;
 use crate::command::deploy::eigenlayer::deploy_avs_contracts;
 use crate::command::run::run_eigenlayer_avs;
+use crate::utils::workspace_root;
 
 #[tokio::test]
 async fn test_run_eigenlayer_avs() -> Result<()> {
@@ -114,11 +115,7 @@ evm_version = 'shanghai'",
     fs::create_dir_all(&binary_dir)?;
 
     // Create Cargo.toml for the binary
-    let repo_root = std::env::current_dir()?;
-    let repo_root = repo_root
-        .ancestors()
-        .find(|p| p.ends_with("blueprint"))
-        .expect("Could not find repository root");
+    let repo_root = workspace_root().ok_or_else(|| eyre!("Could not find repository root"))?;
 
     let sdk_package_path = repo_root.join("crates").join("sdk");
     let sdk_absolute_path = fs::canonicalize(&sdk_package_path)?;

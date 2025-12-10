@@ -1,704 +1,1083 @@
-use blueprint_chain_setup::tangle::InputValue;
-use blueprint_tangle_extra::serde::{BoundedVec, Field, from_field, new_bounded_string};
-use color_eyre::Result;
-use color_eyre::eyre::bail;
-use dialoguer::console::style;
-use serde_json;
+use crate::command::deploy::definition::{BlueprintDefinition, decode_blueprint_definition};
+use alloy_dyn_abi::{DynSolType, DynSolValue, Specifier};
+use alloy_json_abi::Param;
+use alloy_primitives::{Address, Bytes, Function, I256, U256, hex};
+use alloy_sol_types::Word;
+use blueprint_client_tangle_evm::TangleEvmClient;
+use color_eyre::eyre::{Context, Result, ensure, eyre};
+use dialoguer::{Input, console::style};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::fmt;
+use std::fs;
+use std::path::Path;
 use std::str::FromStr;
-use tangle_subxt::subxt::utils::AccountId32;
-use tangle_subxt::tangle_testnet_runtime::api::runtime_types::tangle_primitives::services::field::FieldType;
 
-pub(crate) fn print_job_results(result_types: &[FieldType], i: usize, field: Field<AccountId32>) {
-    let expected_type = result_types[i].clone();
-    let print_output = match expected_type {
-        FieldType::Void => "void".to_string(),
-        FieldType::Bool => {
-            let output: bool = from_field(field).unwrap();
-            output.to_string()
+/// Load the on-chain job schema for the specified blueprint/job pair.
+pub async fn load_job_schema(
+    client: &TangleEvmClient,
+    blueprint_id: u64,
+    job_index: u8,
+) -> Result<JobSchema> {
+    let definition = fetch_blueprint_definition(client, blueprint_id).await?;
+    JobSchema::from_definition(&definition, job_index)
+}
+
+/// Fetch and decode the blueprint definition stored on-chain.
+pub async fn fetch_blueprint_definition(
+    client: &TangleEvmClient,
+    blueprint_id: u64,
+) -> Result<BlueprintDefinition> {
+    let raw_definition = client
+        .get_raw_blueprint_definition(blueprint_id)
+        .await
+        .map_err(|e| eyre!(e.to_string()))?;
+    let definition = decode_blueprint_definition(&raw_definition)?;
+    warn_if_unverified_sources(&definition);
+    Ok(definition)
+}
+
+/// Parsed ABI schema for a blueprint job.
+#[derive(Debug, Clone)]
+pub struct JobSchema {
+    job_index: u8,
+    job_name: String,
+    params: Vec<SchemaParam>,
+    results: Vec<SchemaParam>,
+}
+
+impl JobSchema {
+    fn from_definition(definition: &BlueprintDefinition, job: u8) -> Result<Self> {
+        let jobs = &definition.jobs;
+        let job_definition = jobs.get(job as usize).ok_or_else(|| {
+            eyre!(
+                "job index {} is not defined ({} total jobs)",
+                job,
+                jobs.len()
+            )
+        })?;
+
+        let params = parse_schema_payload(job_definition.paramsSchema.as_ref(), false)?;
+        let results = parse_schema_payload(job_definition.resultSchema.as_ref(), true)?;
+
+        Ok(Self {
+            job_index: job,
+            job_name: job_definition.name.clone(),
+            params,
+            results,
+        })
+    }
+
+    /// Associated job index.
+    #[must_use]
+    pub fn job_index(&self) -> u8 {
+        self.job_index
+    }
+
+    /// Human-readable job name, when provided in the definition.
+    #[must_use]
+    pub fn job_name(&self) -> &str {
+        &self.job_name
+    }
+
+    /// Whether this job definition includes a parameter schema.
+    #[must_use]
+    pub fn has_params(&self) -> bool {
+        !self.params.is_empty()
+    }
+
+    /// Whether this job definition includes a result schema.
+    #[must_use]
+    pub fn has_results(&self) -> bool {
+        !self.results.is_empty()
+    }
+
+    /// Human-readable parameter descriptions (`name: type`).
+    #[must_use]
+    pub fn describe_params(&self) -> Vec<String> {
+        describe_schema(&self.params)
+    }
+
+    /// Human-readable result descriptions (`name: type`).
+    #[must_use]
+    pub fn describe_results(&self) -> Vec<String> {
+        describe_schema(&self.results)
+    }
+
+    fn require_params(&self) -> Result<&[SchemaParam]> {
+        ensure!(
+            !self.params.is_empty(),
+            "job {} does not define a parameter schema",
+            self.job_index
+        );
+        Ok(&self.params)
+    }
+
+    /// Encode arguments from a JSON file matching the job schema.
+    pub fn encode_params_from_file(&self, path: &Path) -> Result<Bytes> {
+        let params = self.require_params()?;
+        let json = fs::read_to_string(path)
+            .with_context(|| format!("failed to read parameter file {}", path.display()))?;
+        let value: Value = serde_json::from_str(&json)
+            .with_context(|| format!("failed to parse JSON from {}", path.display()))?;
+
+        let inputs = match value {
+            Value::Array(items) => {
+                ensure!(
+                    items.len() == params.len(),
+                    "expected {} arguments but file contains {} values",
+                    params.len(),
+                    items.len()
+                );
+                items
+            }
+            Value::Object(map) => {
+                let mut ordered = Vec::with_capacity(params.len());
+                for (index, schema) in params.iter().enumerate() {
+                    let name = schema.name.as_ref().ok_or_else(|| {
+                        eyre!(
+                            "parameter {} is unnamed; provide an array instead of an object",
+                            index
+                        )
+                    })?;
+                    let value = map.get(name).ok_or_else(|| {
+                        eyre!(
+                            "parameter file {} is missing the `{}` field",
+                            path.display(),
+                            name
+                        )
+                    })?;
+                    ordered.push(value.clone());
+                }
+                ordered
+            }
+            other => {
+                return Err(eyre!(
+                    "parameters file {} must be a JSON array or object, found {}",
+                    path.display(),
+                    other
+                ));
+            }
+        };
+
+        self.encode_params_from_values(inputs)
+    }
+
+    /// Prompt the operator for each parameter interactively.
+    pub fn prompt_for_params(&self) -> Result<Bytes> {
+        let params = self.require_params()?;
+        if params.is_empty() {
+            return Ok(Bytes::new());
         }
-        FieldType::Uint8 => {
-            let output: u8 = from_field(field).unwrap();
-            output.to_string()
-        }
-        FieldType::Int8 => {
-            let output: i8 = from_field(field).unwrap();
-            output.to_string()
-        }
-        FieldType::Uint16 => {
-            let output: u16 = from_field(field).unwrap();
-            output.to_string()
-        }
-        FieldType::Int16 => {
-            let output: i16 = from_field(field).unwrap();
-            output.to_string()
-        }
-        FieldType::Uint32 => {
-            let output: u32 = from_field(field).unwrap();
-            output.to_string()
-        }
-        FieldType::Int32 => {
-            let output: i32 = from_field(field).unwrap();
-            output.to_string()
-        }
-        FieldType::Uint64 => {
-            let output: u64 = from_field(field).unwrap();
-            output.to_string()
-        }
-        FieldType::Int64 => {
-            let output: i64 = from_field(field).unwrap();
-            output.to_string()
-        }
-        FieldType::String => {
-            let output: String = from_field(field).unwrap();
-            output.to_string()
-        }
-        FieldType::Optional(_field_type) => {
-            let output: Option<FieldType> = from_field(field.clone()).unwrap();
-            if output.is_some() {
-                let output: FieldType = output.unwrap();
-                print_job_results(&[output], 0, field);
-                "Some".to_string()
+
+        println!(
+            "Enter parameter values for job `{}` (index {}). Use Solidity literal syntax for arrays/tuples.",
+            self.job_name, self.job_index
+        );
+
+        let mut values = Vec::with_capacity(params.len());
+        for (index, schema) in params.iter().enumerate() {
+            let prompt = format!("{} [{}]", schema.display_name(index), schema.type_label());
+            let input: String = Input::new()
+                .with_prompt(prompt)
+                .allow_empty(true)
+                .interact_text()?;
+            let literal = if input.is_empty() && matches!(schema.ty, DynSolType::String) {
+                "\"\"".to_string()
             } else {
-                "None".to_string()
-            }
+                input
+            };
+            let value = schema.ty.coerce_str(&literal).map_err(|e| {
+                eyre!(
+                    "failed to parse value `{literal}` as {}: {e}",
+                    schema.type_label()
+                )
+            })?;
+            values.push(value);
         }
-        FieldType::Array(_, _field_type) => {
-            let output: Vec<FieldType> = from_field(field.clone()).unwrap();
-            for (i, inner_type) in output.iter().enumerate() {
-                print_job_results(&[inner_type.clone()], i, field.clone());
-            }
-            "Array".to_string()
+
+        Ok(encode_arguments(values))
+    }
+
+    /// Encode parameters from parsed JSON values.
+    fn encode_params_from_values(&self, values: Vec<Value>) -> Result<Bytes> {
+        let params = self.require_params()?;
+        let mut encoded = Vec::with_capacity(params.len());
+        for (schema, value) in params.iter().zip(values.iter()) {
+            encoded.push(coerce_value(value, schema)?);
         }
-        FieldType::List(_field_type) => {
-            let output: BoundedVec<FieldType> = from_field(field.clone()).unwrap();
-            for (i, inner_type) in output.0.iter().enumerate() {
-                print_job_results(&[inner_type.clone()], i, field.clone());
-            }
-            "List".to_string()
+        Ok(encode_arguments(encoded))
+    }
+
+    /// Attempt to decode and pretty-print job results based on the schema.
+    pub fn decode_and_format_results(&self, data: &[u8]) -> Result<Option<Vec<String>>> {
+        if self.results.is_empty() {
+            return Ok(None);
         }
-        FieldType::Struct(_bounded_vec) => {
-            let output: BoundedVec<FieldType> = from_field(field.clone()).unwrap();
-            for (i, inner_type) in output.0.iter().enumerate() {
-                print_job_results(&[inner_type.clone()], i, field.clone());
-            }
-            "Struct".to_string()
+
+        let types: Vec<DynSolType> = self.results.iter().map(|param| param.ty.clone()).collect();
+        if types.is_empty() {
+            return Ok(None);
         }
-        FieldType::AccountId => {
-            let output: AccountId32 = from_field(field).unwrap();
-            output.to_string()
-        }
-    };
-    println!(
-        "{}: {}",
-        style(format!("Output {}", i + 1)).green().bold(),
-        style(format!("{:?}", print_output)).green()
+
+        let tuple_type = DynSolType::Tuple(types);
+        let decoded = if data.is_empty() {
+            DynSolValue::Tuple(Vec::new())
+        } else {
+            tuple_type
+                .abi_decode_params(data)
+                .map_err(|e| eyre!("failed to decode result payload: {e}"))?
+        };
+
+        let values = match decoded {
+            DynSolValue::Tuple(items) => items,
+            other => vec![other],
+        };
+
+        let formatted = values
+            .iter()
+            .enumerate()
+            .map(|(idx, value)| {
+                let label = self
+                    .results
+                    .get(idx)
+                    .and_then(|param| param.name.as_deref())
+                    .map(|name| name.to_string())
+                    .unwrap_or_else(|| format!("result[{idx}]"));
+                let ty = self
+                    .results
+                    .get(idx)
+                    .map(|param: &SchemaParam| param.type_label())
+                    .unwrap_or_else(|| "unknown".to_string());
+                format!("{label} ({ty}) = {}", format_dyn_value(value))
+            })
+            .collect();
+
+        Ok(Some(formatted))
+    }
+}
+
+fn warn_if_unverified_sources(definition: &BlueprintDefinition) {
+    let missing_indices = definition
+        .sources
+        .iter()
+        .enumerate()
+        .filter(|(_, source)| source.binaries.is_empty())
+        .map(|(idx, _)| idx + 1)
+        .collect::<Vec<_>>();
+    if missing_indices.is_empty() {
+        return;
+    }
+    let label = missing_indices
+        .iter()
+        .map(|idx| format!("#{idx}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    eprintln!(
+        "{} blueprint definition includes source entries without binary hashes ({label}); \
+         operator downloads cannot be verified until the blueprint is redeployed with hashes.",
+        style("warning").yellow().bold()
     );
 }
 
-/// Load job arguments from a JSON file
-///
-/// # Arguments
-///
-/// * `file_path` - Path to the JSON file
-/// * `param_types` - Types of parameters expected
-///
-/// # Returns
-///
-/// A vector of input values parsed from the file.
-///
-/// # Errors
-///
-/// Returns an error if:
-/// * File not found
-/// * File content is not valid JSON
-/// * JSON is not an array
-/// * Number of arguments doesn't match expected parameters
-/// * Arguments don't match expected types
-pub(crate) fn load_job_args_from_file(
-    file_path: &str,
-    param_types: &[FieldType],
-) -> Result<Vec<InputValue>> {
-    use std::fs;
-    use std::path::Path;
-
-    let path = Path::new(file_path);
-    if !path.exists() {
-        return Err(color_eyre::eyre::eyre!(
-            "Parameters file not found: {}",
-            file_path
-        ));
-    }
-
-    let content = fs::read_to_string(path)?;
-    let json_values: serde_json::Value = serde_json::from_str(&content)?;
-
-    if !json_values.is_array() {
-        return Err(color_eyre::eyre::eyre!(
-            "Job arguments must be provided as a JSON array"
-        ));
-    }
-
-    let args = json_values.as_array().unwrap();
-
-    if args.len() != param_types.len() {
-        return Err(color_eyre::eyre::eyre!(
-            "Expected {} arguments but got {}",
-            param_types.len(),
-            args.len()
-        ));
-    }
-
-    // Parse each argument according to the expected parameter type
-    let input_values = json_to_input_value(param_types, args, 0)?;
-
-    Ok(input_values)
+#[derive(Debug, Clone)]
+struct SchemaParam {
+    name: Option<String>,
+    ty: DynSolType,
+    components: Vec<SchemaParam>,
 }
 
-/// Prompt the user for job parameters based on the parameter types
-pub(crate) fn prompt_for_job_params(param_types: &[FieldType]) -> Result<Vec<InputValue>> {
-    use dialoguer::Input;
+impl SchemaParam {
+    fn from_param(param: &Param) -> Result<Self> {
+        let ty = param
+            .resolve()
+            .map_err(|e| eyre!("failed to parse ABI type `{}`: {e}", param.ty))?;
+        let components = if param.components.is_empty() {
+            Vec::new()
+        } else {
+            param
+                .components
+                .iter()
+                .map(SchemaParam::from_param)
+                .collect::<Result<Vec<_>>>()?
+        };
 
-    let mut args = Vec::new();
+        let name = param.name.trim();
+        Ok(Self {
+            name: if name.is_empty() {
+                None
+            } else {
+                Some(name.to_string())
+            },
+            ty,
+            components,
+        })
+    }
 
-    for (i, param_type) in param_types.iter().enumerate() {
-        println!("Parameter {}: {:?}", i + 1, param_type);
+    fn display_name(&self, index: usize) -> String {
+        self.name
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| format!("arg_{index}"))
+    }
 
-        match param_type {
-            FieldType::Uint8 => {
-                let value: u8 = Input::new()
-                    .with_prompt(format!("Enter u8 value for parameter {}", i + 1))
-                    .interact()?;
-                args.push(InputValue::Uint8(value));
-            }
-            FieldType::Uint16 => {
-                let value: u16 = Input::new()
-                    .with_prompt(format!("Enter u16 value for parameter {}", i + 1))
-                    .interact()?;
-                args.push(InputValue::Uint16(value));
-            }
-            FieldType::Uint32 => {
-                let value: u32 = Input::new()
-                    .with_prompt(format!("Enter u32 value for parameter {}", i + 1))
-                    .interact()?;
-                args.push(InputValue::Uint32(value));
-            }
-            FieldType::Uint64 => {
-                let value: u64 = Input::new()
-                    .with_prompt(format!("Enter u64 value for parameter {}", i + 1))
-                    .interact()?;
-                args.push(InputValue::Uint64(value));
-            }
-            FieldType::Int8 => {
-                let value: i8 = Input::new()
-                    .with_prompt(format!("Enter i8 value for parameter {}", i + 1))
-                    .interact()?;
-                args.push(InputValue::Int8(value));
-            }
-            FieldType::Int16 => {
-                let value: i16 = Input::new()
-                    .with_prompt(format!("Enter i16 value for parameter {}", i + 1))
-                    .interact()?;
-                args.push(InputValue::Int16(value));
-            }
-            FieldType::Int32 => {
-                let value: i32 = Input::new()
-                    .with_prompt(format!("Enter i32 value for parameter {}", i + 1))
-                    .interact()?;
-                args.push(InputValue::Int32(value));
-            }
-            FieldType::Int64 => {
-                let value: i64 = Input::new()
-                    .with_prompt(format!("Enter i64 value for parameter {}", i + 1))
-                    .interact()?;
-                args.push(InputValue::Int64(value));
-            }
-            FieldType::Bool => {
-                let value: bool = Input::new()
-                    .with_prompt(format!(
-                        "Enter boolean value (true/false) for parameter {}",
-                        i + 1
-                    ))
-                    .interact()?;
-                args.push(InputValue::Bool(value));
-            }
-            FieldType::String => {
-                let value: String = Input::new()
-                    .with_prompt(format!("Enter string value for parameter {}", i + 1))
-                    .interact()?;
-                args.push(InputValue::String(new_bounded_string(value)));
-            }
-            FieldType::Void => {
-                println!("Void parameter, no input required");
-            }
-            FieldType::Optional(field_type) => {
-                use dialoguer::Confirm;
+    fn type_label(&self) -> String {
+        self.ty.sol_type_name().into_owned()
+    }
 
-                let include_value = Confirm::new()
-                    .with_prompt(format!("Include a value for optional parameter {}?", i + 1))
-                    .default(false)
-                    .interact()?;
+    fn describe(&self, index: usize) -> String {
+        format!("{}: {}", self.display_name(index), self.type_label())
+    }
 
-                if include_value {
-                    // Recursively prompt for the inner type
-                    let inner_values = prompt_for_job_params(&[*field_type.clone()])?;
-                    if let Some(inner_value) = inner_values.first() {
-                        args.push(InputValue::Optional(
-                            (**field_type).clone(),
-                            Box::new(Some(inner_value.clone())),
-                        ));
-                    }
-                } else {
-                    args.push(InputValue::Optional((**field_type).clone(), Box::new(None)));
-                }
-            }
-            FieldType::Array(size, field_type) => {
-                println!("Enter {} values for array parameter {}", size, i + 1);
-                let mut array_values = Vec::new();
+    fn tuple_components(&self) -> Vec<SchemaParam> {
+        if !self.components.is_empty() {
+            return self.components.clone();
+        }
 
-                for j in 0..*size {
-                    println!("Array element {} of {}", j + 1, size);
-                    let inner_values = prompt_for_job_params(&[*field_type.clone()])?;
-                    if let Some(inner_value) = inner_values.first() {
-                        array_values.push(inner_value.clone());
-                    }
-                }
-
-                let values = BoundedVec(array_values);
-                args.push(InputValue::Array(*field_type.clone(), values));
-            }
-            FieldType::List(field_type) => {
-                use dialoguer::Input;
-
-                let count: usize = Input::new()
-                    .with_prompt(format!("How many elements for list parameter {}?", i + 1))
-                    .default(0)
-                    .interact()?;
-
-                let mut list_values = Vec::new();
-
-                for j in 0..count {
-                    println!("List element {} of {}", j + 1, count);
-                    let inner_values = prompt_for_job_params(&[*field_type.clone()])?;
-                    if let Some(inner_value) = inner_values.first() {
-                        list_values.push(inner_value.clone());
-                    }
-                }
-
-                let values = BoundedVec(list_values);
-                args.push(InputValue::List(*field_type.clone(), values));
-            }
-            FieldType::Struct(_bounded_vec) => {
-                todo!();
-            }
-            FieldType::AccountId => {
-                let value: String = Input::new()
-                    .with_prompt(format!(
-                        "Enter AccountId for parameter {} (SS58 format)",
-                        i + 1
-                    ))
-                    .interact()?;
-
-                // Parse the account ID from the string
-                match AccountId32::from_str(&value) {
-                    Ok(account_id) => args.push(InputValue::AccountId(account_id)),
-                    Err(_) => return Err(color_eyre::eyre::eyre!("Invalid AccountId format")),
-                }
-            }
+        match &self.ty {
+            DynSolType::Tuple(inner) => inner
+                .iter()
+                .map(|ty| SchemaParam {
+                    name: None,
+                    ty: ty.clone(),
+                    components: Vec::new(),
+                })
+                .collect(),
+            _ => Vec::new(),
         }
     }
 
-    Ok(args)
+    fn element_schema(&self, ty: DynSolType) -> SchemaParam {
+        SchemaParam {
+            name: None,
+            ty,
+            components: self.components.clone(),
+        }
+    }
 }
 
-/// build `InputValue` from JSON values
-pub(crate) fn json_to_input_value(
-    types: &[FieldType],
-    values: &[serde_json::Value],
-    depth: usize,
-) -> Result<Vec<InputValue>> {
-    let mut args = Vec::new();
+fn describe_schema(params: &[SchemaParam]) -> Vec<String> {
+    params
+        .iter()
+        .enumerate()
+        .map(|(index, param)| param.describe(index))
+        .collect()
+}
 
-    for (i, value) in values.iter().enumerate() {
-        let field_type = &types[i];
-        match field_type {
-            FieldType::Uint8 => {
-                let v = value
-                    .as_u64()
-                    .ok_or_else(|| {
-                        color_eyre::eyre::eyre!(
-                            "Expected u8 value for parameter {} (depth: {depth})",
-                            i + 1
-                        )
-                    })?
-                    .try_into()
-                    .map_err(|_| {
-                        color_eyre::eyre::eyre!("Value out of range for u8 (depth: {depth})")
-                    })?;
-                args.push(InputValue::Uint8(v));
-            }
-            FieldType::Uint16 => {
-                let v = value
-                    .as_u64()
-                    .ok_or_else(|| {
-                        color_eyre::eyre::eyre!(
-                            "Expected u16 value for parameter {} (depth: {depth})",
-                            i + 1
-                        )
-                    })?
-                    .try_into()
-                    .map_err(|_| {
-                        color_eyre::eyre::eyre!("Value out of range for u16 (depth: {depth})")
-                    })?;
-                args.push(InputValue::Uint16(v));
-            }
-            FieldType::Uint32 => {
-                let v = value
-                    .as_u64()
-                    .ok_or_else(|| {
-                        color_eyre::eyre::eyre!(
-                            "Expected u32 value for parameter {} (depth: {depth})",
-                            i + 1
-                        )
-                    })?
-                    .try_into()
-                    .map_err(|_| {
-                        color_eyre::eyre::eyre!("Value out of range for u32 (depth: {depth})")
-                    })?;
-                args.push(InputValue::Uint32(v));
-            }
-            FieldType::Uint64 => {
-                let v = value.as_u64().ok_or_else(|| {
-                    color_eyre::eyre::eyre!(
-                        "Expected u64 value for parameter {} (depth: {depth})",
-                        i + 1
-                    )
-                })?;
-                args.push(InputValue::Uint64(v));
-            }
-            FieldType::Int8 => {
-                let v = value
-                    .as_i64()
-                    .ok_or_else(|| {
-                        color_eyre::eyre::eyre!(
-                            "Expected i8 value for parameter {} (depth: {depth})",
-                            i + 1
-                        )
-                    })?
-                    .try_into()
-                    .map_err(|_| {
-                        color_eyre::eyre::eyre!("Value out of range for i8 (depth: {depth})")
-                    })?;
-                args.push(InputValue::Int8(v));
-            }
-            FieldType::Int16 => {
-                let v = value
-                    .as_i64()
-                    .ok_or_else(|| {
-                        color_eyre::eyre::eyre!(
-                            "Expected i16 value for parameter {} (depth: {depth})",
-                            i + 1
-                        )
-                    })?
-                    .try_into()
-                    .map_err(|_| {
-                        color_eyre::eyre::eyre!("Value out of range for i16 (depth: {depth})")
-                    })?;
-                args.push(InputValue::Int16(v));
-            }
-            FieldType::Int32 => {
-                let v = value
-                    .as_i64()
-                    .ok_or_else(|| {
-                        color_eyre::eyre::eyre!(
-                            "Expected i32 value for parameter {} (depth: {depth})",
-                            i + 1
-                        )
-                    })?
-                    .try_into()
-                    .map_err(|_| {
-                        color_eyre::eyre::eyre!("Value out of range for i32 (depth: {depth})")
-                    })?;
-                args.push(InputValue::Int32(v));
-            }
-            FieldType::Int64 => {
-                let v = value.as_i64().ok_or_else(|| {
-                    color_eyre::eyre::eyre!(
-                        "Expected i64 value for parameter {} (depth: {depth})",
-                        i + 1
-                    )
-                })?;
-                args.push(InputValue::Int64(v));
-            }
-            FieldType::Bool => {
-                let v = value.as_bool().ok_or_else(|| {
-                    color_eyre::eyre::eyre!(
-                        "Expected bool value for parameter {} (depth: {depth})",
-                        i + 1
-                    )
-                })?;
-                args.push(InputValue::Bool(v));
-            }
-            FieldType::String => {
-                let v = value.as_str().ok_or_else(|| {
-                    color_eyre::eyre::eyre!(
-                        "Expected string value for parameter {} (depth: {depth})",
-                        i + 1
-                    )
-                })?;
-                args.push(InputValue::String(new_bounded_string(v)));
-            }
-            FieldType::Void => {
-                // Void parameter, no input required
-            }
-            FieldType::Optional(field_type) => {
-                if value.is_null() {
-                    args.push(InputValue::Optional((**field_type).clone(), Box::new(None)));
-                } else {
-                    // Recursively prompt for the inner type.
-                    let inner_values =
-                        json_to_input_value(&[*field_type.clone()], &[value.clone()], depth + 1)?;
-                    for val in inner_values {
-                        args.push(InputValue::Optional(
-                            (**field_type).clone(),
-                            Box::new(Some(val)),
-                        ));
-                    }
-                }
-            }
-            FieldType::Array(size, field_type) => {
-                let mut array_values = Vec::new();
-                let v = value.as_array().ok_or_else(|| {
-                    color_eyre::eyre::eyre!(
-                        "Expected array value for parameter {} (depth: {depth})",
-                        i + 1
-                    )
-                })?;
+/// Summary of a single job definition stored in a blueprint.
+#[derive(Debug, Clone, Serialize)]
+pub struct JobSummary {
+    pub index: u8,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub metadata_uri: Option<String>,
+    pub parameters: SchemaDescription,
+    pub results: SchemaDescription,
+}
 
-                if v.len() as u64 != *size {
-                    bail!(
-                        "Expected {} elements in array for parameter {} (depth {}), but got {}",
-                        size,
-                        i + 1,
-                        depth,
-                        v.len()
-                    );
-                }
-                for x in v {
-                    let inner_values =
-                        json_to_input_value(&[*field_type.clone()], &[x.clone()], depth + 1)?;
-                    if let Some(inner_value) = inner_values.first() {
-                        array_values.push(inner_value.clone());
-                    }
-                }
+/// Schema details for job inputs or outputs.
+#[derive(Debug, Clone, Serialize)]
+pub struct SchemaDescription {
+    pub defined: bool,
+    pub fields: Vec<String>,
+}
 
-                let values = BoundedVec(array_values);
-                args.push(InputValue::Array(*field_type.clone(), values));
-            }
-            FieldType::List(field_type) => {
-                let mut list_values = Vec::new();
-
-                let v = value.as_array().ok_or_else(|| {
-                    color_eyre::eyre::eyre!(
-                        "Expected list value for parameter {} (depth: {depth})",
-                        i + 1
-                    )
-                })?;
-
-                for x in v {
-                    let inner_values =
-                        json_to_input_value(&[*field_type.clone()], &[x.clone()], depth + 1)?;
-                    if let Some(inner_value) = inner_values.first() {
-                        list_values.push(inner_value.clone());
-                    }
-                }
-
-                let values = BoundedVec(list_values);
-                args.push(InputValue::List(*field_type.clone(), values));
-            }
-            FieldType::Struct(field_types) => {
-                let mut struct_values = Vec::new();
-                let v = value.as_object().ok_or_else(|| {
-                    color_eyre::eyre::eyre!(
-                        "Expected struct value for parameter {} (depth: {depth})",
-                        i + 1
-                    )
-                })?;
-
-                let mut obj = v.iter();
-                for field_type in &field_types.0 {
-                    if let Some((key, val)) = obj.next() {
-                        let inner_values =
-                            json_to_input_value(&[field_type.clone()], &[val.clone()], depth + 1)?;
-                        if let Some(inner_value) = inner_values.first() {
-                            struct_values.push((new_bounded_string(key), inner_value.clone()));
-                        }
-                    }
-                }
-
-                let values = BoundedVec(struct_values);
-                args.push(InputValue::Struct(
-                    new_bounded_string(format!("struct_{}", i + depth)),
-                    Box::new(values),
-                ));
-            }
-            FieldType::AccountId => {
-                let v = value.as_str().ok_or_else(|| {
-                    color_eyre::eyre::eyre!(
-                        "Expected AccountId value for parameter {} (depth: {depth})",
-                        i + 1
-                    )
-                })?;
-                // Parse the account ID from the string
-                match AccountId32::from_str(v) {
-                    Ok(account_id) => args.push(InputValue::AccountId(account_id)),
-                    Err(_) => {
-                        return Err(color_eyre::eyre::eyre!(
-                            "Invalid AccountId format (depth: {depth})"
-                        ));
-                    }
-                }
-            }
+impl SchemaDescription {
+    fn not_defined() -> Self {
+        Self {
+            defined: false,
+            fields: Vec::new(),
         }
     }
 
-    Ok(args)
+    fn from_fields(defined: bool, fields: Vec<String>, error: Option<String>) -> Self {
+        if !defined {
+            return Self::not_defined();
+        }
+        let mut rendered = fields;
+        if rendered.is_empty() {
+            if let Some(message) = error {
+                rendered.push(format!("(failed to decode schema: {message})"));
+            }
+        }
+        Self {
+            defined,
+            fields: rendered,
+        }
+    }
+}
+
+/// Detailed metadata for a specific job call.
+#[derive(Debug, Clone, Serialize)]
+pub struct JobCallDetails {
+    pub service_id: u64,
+    pub call_id: u64,
+    pub blueprint_id: u64,
+    pub job_index: u8,
+    pub job_name: Option<String>,
+    pub job_description: Option<String>,
+    pub job_metadata_uri: Option<String>,
+    pub caller: String,
+    pub created_at: u64,
+    pub result_count: u32,
+    pub payment_wei: String,
+    pub completed: bool,
+    pub parameters: SchemaDescription,
+    pub results: SchemaDescription,
+}
+
+/// Fetch and summarize all jobs defined under a blueprint.
+pub async fn list_jobs(client: &TangleEvmClient, blueprint_id: u64) -> Result<Vec<JobSummary>> {
+    let definition = fetch_blueprint_definition(client, blueprint_id).await?;
+    let mut jobs = Vec::with_capacity(definition.jobs.len());
+    for (index, job) in definition.jobs.iter().enumerate() {
+        let schema = JobSchema::from_definition(&definition, index as u8);
+        let (param_fields, result_fields, schema_err) = match schema {
+            Ok(schema) => (
+                schema.describe_params(),
+                schema.describe_results(),
+                None::<String>,
+            ),
+            Err(err) => (Vec::new(), Vec::new(), Some(err.to_string())),
+        };
+        let params_defined = !job.paramsSchema.is_empty();
+        let results_defined = !job.resultSchema.is_empty();
+        jobs.push(JobSummary {
+            index: index as u8,
+            name: optional_field(job.name.as_ref()),
+            description: optional_field(job.description.as_ref()),
+            metadata_uri: optional_field(job.metadataUri.as_ref()),
+            parameters: SchemaDescription::from_fields(
+                params_defined,
+                param_fields,
+                schema_err.clone(),
+            ),
+            results: SchemaDescription::from_fields(
+                results_defined,
+                result_fields,
+                schema_err.clone(),
+            ),
+        });
+    }
+    Ok(jobs)
+}
+
+/// Print job definitions as either human-readable text or JSON.
+pub fn print_job_summaries(jobs: &[JobSummary], json_output: bool) {
+    if json_output {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(jobs).expect("serialize job summaries to json")
+        );
+        return;
+    }
+
+    if jobs.is_empty() {
+        println!("{}", style("No jobs found for this blueprint").yellow());
+        return;
+    }
+
+    println!("\n{}", style("Jobs").cyan().bold());
+    println!(
+        "{}",
+        style("=============================================").dim()
+    );
+
+    for job in jobs {
+        println!(
+            "{} {}",
+            style("Job").green().bold(),
+            style(job.index).green()
+        );
+        if let Some(name) = &job.name {
+            println!("  {} {}", style("Name:").green(), name);
+        }
+        if let Some(description) = &job.description {
+            println!("  {} {}", style("Description:").green(), description);
+        }
+        if let Some(uri) = &job.metadata_uri {
+            println!("  {} {}", style("Metadata URI:").green(), uri);
+        }
+        print_schema_block("Parameters", &job.parameters);
+        print_schema_block("Results", &job.results);
+        println!(
+            "{}",
+            style("=============================================").dim()
+        );
+    }
+}
+
+/// Load metadata for a job call, including job definition context.
+pub async fn load_job_call_details(
+    client: &TangleEvmClient,
+    blueprint_id: u64,
+    service_id: u64,
+    call_id: u64,
+) -> Result<JobCallDetails> {
+    let call = client
+        .get_job_call(service_id, call_id)
+        .await
+        .map_err(|e| eyre!(e.to_string()))?;
+    let definition = fetch_blueprint_definition(client, blueprint_id).await?;
+    let job_index = call.jobIndex;
+    let job_entry = definition.jobs.get(job_index as usize);
+
+    let schema = JobSchema::from_definition(&definition, job_index);
+    let (param_fields, result_fields, schema_err) = match schema {
+        Ok(schema) => (schema.describe_params(), schema.describe_results(), None),
+        Err(err) => (Vec::new(), Vec::new(), Some(err.to_string())),
+    };
+
+    let (job_name, job_description, job_metadata_uri, params_defined, results_defined) =
+        if let Some(job) = job_entry {
+            (
+                optional_field(job.name.as_ref()),
+                optional_field(job.description.as_ref()),
+                optional_field(job.metadataUri.as_ref()),
+                !job.paramsSchema.is_empty(),
+                !job.resultSchema.is_empty(),
+            )
+        } else {
+            (None, None, None, false, false)
+        };
+
+    Ok(JobCallDetails {
+        service_id,
+        call_id,
+        blueprint_id,
+        job_index,
+        job_name,
+        job_description,
+        job_metadata_uri,
+        caller: format!("{:#x}", call.caller),
+        created_at: call.createdAt,
+        result_count: call.resultCount,
+        payment_wei: call.payment.to_string(),
+        completed: call.completed,
+        parameters: SchemaDescription::from_fields(
+            params_defined,
+            param_fields,
+            schema_err.clone(),
+        ),
+        results: SchemaDescription::from_fields(results_defined, result_fields, schema_err),
+    })
+}
+
+/// Print job call metadata in a human-readable format (or JSON).
+pub fn print_job_call_details(details: &JobCallDetails, json_output: bool) {
+    if json_output {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(details).expect("serialize job call details to json")
+        );
+        return;
+    }
+
+    println!(
+        "\n{}",
+        style(format!("Job Call {}", details.call_id)).cyan().bold()
+    );
+    println!("{} {}", style("Service ID:").green(), details.service_id);
+    println!(
+        "{} {}",
+        style("Blueprint ID:").green(),
+        details.blueprint_id
+    );
+    println!("{} {}", style("Job Index:").green(), details.job_index);
+    if let Some(name) = &details.job_name {
+        println!("{} {}", style("Job Name:").green(), name);
+    }
+    if let Some(description) = &details.job_description {
+        println!("{} {}", style("Description:").green(), description);
+    }
+    if let Some(uri) = &details.job_metadata_uri {
+        println!("{} {}", style("Metadata URI:").green(), uri);
+    }
+    println!("{} {}", style("Caller:").green(), details.caller);
+    println!("{} {}", style("Created At:").green(), details.created_at);
+    println!(
+        "{} {}",
+        style("Result Count:").green(),
+        details.result_count
+    );
+    println!(
+        "{} {}",
+        style("Payment (wei):").green(),
+        details.payment_wei
+    );
+    println!("{} {}", style("Completed:").green(), details.completed);
+    print_schema_block("Parameters", &details.parameters);
+    print_schema_block("Results", &details.results);
+    println!(
+        "{}",
+        style("=============================================").dim()
+    );
+}
+
+fn print_schema_block(label: &str, schema: &SchemaDescription) {
+    if !schema.defined {
+        println!(
+            "  {} {}",
+            style(format!("{label}:")).green(),
+            "(not provided)"
+        );
+        return;
+    }
+
+    if schema.fields.is_empty() {
+        println!("  {} {}", style(format!("{label}:")).green(), "(none)");
+        return;
+    }
+
+    println!("  {} ", style(format!("{label}:")).green());
+    for entry in &schema.fields {
+        println!("    - {}", entry);
+    }
+}
+
+fn optional_field(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn encode_arguments(arguments: Vec<DynSolValue>) -> Bytes {
+    if arguments.is_empty() {
+        Bytes::new()
+    } else {
+        let tuple = DynSolValue::Tuple(arguments);
+        Bytes::from(tuple.abi_encode_params())
+    }
+}
+
+fn parse_schema_payload(bytes: &[u8], prefer_outputs: bool) -> Result<Vec<SchemaParam>> {
+    if bytes.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    if let Ok(params) = serde_json::from_slice::<Vec<Param>>(bytes) {
+        return params.iter().map(SchemaParam::from_param).collect();
+    }
+
+    if let Ok(doc) = serde_json::from_slice::<SchemaDocument>(bytes) {
+        let params = doc.into_params(prefer_outputs);
+        return params.iter().map(SchemaParam::from_param).collect();
+    }
+
+    let text =
+        std::str::from_utf8(bytes).map_err(|_| eyre!("schema payload is not valid UTF-8"))?;
+    parse_schema_text(text, prefer_outputs)
+}
+
+fn parse_schema_text(text: &str, prefer_outputs: bool) -> Result<Vec<SchemaParam>> {
+    let trimmed = text.trim().trim_matches(|c| c == '"' || c == '\'');
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    if let Some(hex_payload) = trimmed.strip_prefix("0x") {
+        let decoded =
+            hex::decode(hex_payload).map_err(|e| eyre!("invalid hex schema payload: {e}"))?;
+        return parse_schema_payload(&decoded, prefer_outputs);
+    }
+
+    if let Ok(params) = serde_json::from_str::<Vec<Param>>(trimmed) {
+        return params.iter().map(SchemaParam::from_param).collect();
+    }
+
+    if let Ok(doc) = serde_json::from_str::<SchemaDocument>(trimmed) {
+        let params = doc.into_params(prefer_outputs);
+        return params.iter().map(SchemaParam::from_param).collect();
+    }
+
+    // Fallback to comma-separated Solidity types.
+    let mut resolved = Vec::new();
+    for raw in trimmed.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        let ty = raw
+            .resolve()
+            .map_err(|e| eyre!("failed to parse `{raw}` as a Solidity type: {e}"))?;
+        resolved.push(SchemaParam {
+            name: None,
+            ty,
+            components: Vec::new(),
+        });
+    }
+
+    if resolved.is_empty() {
+        Err(eyre!("unable to parse schema payload"))
+    } else {
+        Ok(resolved)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SchemaDocument {
+    #[serde(default)]
+    inputs: Vec<Param>,
+    #[serde(default)]
+    outputs: Vec<Param>,
+    #[serde(default)]
+    params: Vec<Param>,
+}
+
+impl SchemaDocument {
+    fn into_params(self, prefer_outputs: bool) -> Vec<Param> {
+        if prefer_outputs {
+            if !self.outputs.is_empty() {
+                return self.outputs;
+            }
+            if !self.inputs.is_empty() {
+                return self.inputs;
+            }
+        } else if !self.inputs.is_empty() {
+            return self.inputs;
+        } else if !self.outputs.is_empty() {
+            return self.outputs;
+        }
+
+        if !self.params.is_empty() {
+            self.params
+        } else {
+            Vec::new()
+        }
+    }
+}
+
+fn coerce_value(value: &Value, schema: &SchemaParam) -> Result<DynSolValue> {
+    match &schema.ty {
+        DynSolType::Bool => Ok(DynSolValue::Bool(parse_bool(value)?)),
+        DynSolType::Uint(size) => {
+            let number = parse_uint(value)?;
+            Ok(DynSolValue::Uint(number, *size))
+        }
+        DynSolType::Int(size) => {
+            let number = parse_int(value)?;
+            Ok(DynSolValue::Int(number, *size))
+        }
+        DynSolType::Address => Ok(DynSolValue::Address(parse_address(value)?)),
+        DynSolType::String => Ok(DynSolValue::String(parse_string(value)?)),
+        DynSolType::Bytes => Ok(DynSolValue::Bytes(parse_bytes(value)?)),
+        DynSolType::FixedBytes(len) => {
+            let len = *len;
+            let data = parse_bytes(value)?;
+            ensure!(
+                data.len() == len,
+                "expected {len} bytes but received {}",
+                data.len()
+            );
+            let mut word = Word::default();
+            word[..len].copy_from_slice(&data);
+            Ok(DynSolValue::FixedBytes(word, len))
+        }
+        DynSolType::Array(inner) => {
+            let arr = value
+                .as_array()
+                .ok_or_else(|| eyre!("expected an array for parameter {}", schema.type_label()))?;
+            let mut values = Vec::with_capacity(arr.len());
+            let element_schema = schema.element_schema((**inner).clone());
+            for item in arr {
+                values.push(coerce_value(item, &element_schema)?);
+            }
+            Ok(DynSolValue::Array(values))
+        }
+        DynSolType::FixedArray(inner, len) => {
+            let arr = value
+                .as_array()
+                .ok_or_else(|| eyre!("expected an array for parameter {}", schema.type_label()))?;
+            ensure!(
+                arr.len() == *len,
+                "expected {len} elements but received {}",
+                arr.len()
+            );
+            let mut values = Vec::with_capacity(*len);
+            let element_schema = schema.element_schema((**inner).clone());
+            for item in arr {
+                values.push(coerce_value(item, &element_schema)?);
+            }
+            Ok(DynSolValue::FixedArray(values))
+        }
+        DynSolType::Tuple(_) => Ok(DynSolValue::Tuple(parse_tuple(value, schema)?)),
+        DynSolType::Function => {
+            let data = parse_bytes(value)?;
+            ensure!(
+                data.len() == 24,
+                "function values must be 24 bytes (address + selector)"
+            );
+            let mut raw = [0u8; 24];
+            raw.copy_from_slice(&data);
+            Ok(DynSolValue::Function(Function::from(raw)))
+        }
+    }
+}
+
+fn parse_tuple(value: &Value, schema: &SchemaParam) -> Result<Vec<DynSolValue>> {
+    let component_types = schema.tuple_components();
+    let mut values = Vec::with_capacity(component_types.len());
+
+    match value {
+        Value::Array(items) => {
+            ensure!(
+                items.len() == component_types.len(),
+                "expected {} tuple fields but received {}",
+                component_types.len(),
+                items.len()
+            );
+            for (item, component_schema) in items.iter().zip(component_types.iter()) {
+                values.push(coerce_value(item, component_schema)?);
+            }
+        }
+        Value::Object(map) => {
+            for component_schema in &component_types {
+                let name = component_schema.name.as_ref().ok_or_else(|| {
+                    eyre!("tuple component is unnamed; provide an array instead of an object")
+                })?;
+                let entry = map
+                    .get(name)
+                    .ok_or_else(|| eyre!("missing tuple field `{name}`"))?;
+                values.push(coerce_value(entry, component_schema)?);
+            }
+        }
+        _ => {
+            return Err(eyre!(
+                "tuples must be provided as JSON arrays or objects in parameter files"
+            ));
+        }
+    }
+
+    Ok(values)
+}
+
+fn parse_bool(value: &Value) -> Result<bool> {
+    match value {
+        Value::Bool(b) => Ok(*b),
+        Value::Number(num) => {
+            if let Some(int) = num.as_u64() {
+                match int {
+                    0 => Ok(false),
+                    1 => Ok(true),
+                    _ => Err(eyre!("boolean numbers must be 0 or 1")),
+                }
+            } else {
+                Err(eyre!("boolean numbers must be integers"))
+            }
+        }
+        Value::String(s) => match s.trim().to_lowercase().as_str() {
+            "true" => Ok(true),
+            "false" => Ok(false),
+            "1" => Ok(true),
+            "0" => Ok(false),
+            other => Err(eyre!("unable to parse `{other}` as a boolean")),
+        },
+        _ => Err(eyre!("boolean values must be true/false or 0/1")),
+    }
+}
+
+fn parse_uint(value: &Value) -> Result<U256> {
+    match value {
+        Value::Number(num) => num.as_u64().map(U256::from).ok_or_else(|| {
+            eyre!("unsigned integers must fit within u64 or be provided as strings")
+        }),
+        Value::String(s) => parse_uint_from_str(s),
+        _ => Err(eyre!("unsigned integers must be numbers or strings")),
+    }
+}
+
+fn parse_uint_from_str(value: &str) -> Result<U256> {
+    let trimmed = value.trim();
+    if let Some(hex) = trimmed.strip_prefix("0x") {
+        U256::from_str_radix(hex, 16).map_err(|e| eyre!("invalid hex integer `{trimmed}`: {e}"))
+    } else {
+        U256::from_str_radix(trimmed, 10).map_err(|e| eyre!("invalid integer `{trimmed}`: {e}"))
+    }
+}
+
+fn parse_int(value: &Value) -> Result<I256> {
+    match value {
+        Value::Number(num) => {
+            if let Some(int) = num.as_i64() {
+                I256::from_dec_str(&int.to_string())
+                    .map_err(|e| eyre!("invalid integer `{int}`: {e}"))
+            } else {
+                Err(eyre!(
+                    "signed integers must fit within i64 or be provided as strings"
+                ))
+            }
+        }
+        Value::String(s) => parse_int_from_str(s),
+        _ => Err(eyre!("signed integers must be numbers or strings")),
+    }
+}
+
+fn parse_int_from_str(value: &str) -> Result<I256> {
+    let trimmed = value.trim();
+    if let Some(hex) = trimmed.strip_prefix("0x") {
+        let unsigned = U256::from_str_radix(hex, 16)
+            .map_err(|e| eyre!("invalid hex integer `{trimmed}`: {e}"))?;
+        Ok(I256::from_raw(unsigned))
+    } else {
+        I256::from_dec_str(trimmed).map_err(|e| eyre!("invalid integer `{trimmed}`: {e}"))
+    }
+}
+
+fn parse_address(value: &Value) -> Result<Address> {
+    let s = value
+        .as_str()
+        .ok_or_else(|| eyre!("addresses must be provided as strings"))?;
+    Address::from_str(s).map_err(|_| eyre!("invalid address `{s}`"))
+}
+
+fn parse_string(value: &Value) -> Result<String> {
+    match value {
+        Value::String(s) => Ok(s.clone()),
+        Value::Number(n) => Ok(n.to_string()),
+        Value::Bool(b) => Ok(b.to_string()),
+        _ => Err(eyre!("strings must be provided as JSON strings")),
+    }
+}
+
+fn parse_bytes(value: &Value) -> Result<Vec<u8>> {
+    match value {
+        Value::String(s) => parse_bytes_from_str(s),
+        Value::Array(items) => {
+            let mut bytes = Vec::with_capacity(items.len());
+            for item in items {
+                let number = item
+                    .as_u64()
+                    .ok_or_else(|| eyre!("byte arrays must contain numbers between 0 and 255"))?;
+                ensure!(number <= 0xFF, "byte values must be between 0 and 255");
+                bytes.push(number as u8);
+            }
+            Ok(bytes)
+        }
+        _ => Err(eyre!("byte values must be strings or arrays of numbers")),
+    }
+}
+
+fn parse_bytes_from_str(value: &str) -> Result<Vec<u8>> {
+    let trimmed = value.trim_matches('"');
+    if let Some(hex) = trimmed.strip_prefix("0x") {
+        hex::decode(hex).map_err(|e| eyre!("invalid hex string `{trimmed}`: {e}"))
+    } else {
+        Ok(trimmed.as_bytes().to_vec())
+    }
+}
+
+#[allow(unreachable_patterns)]
+fn format_dyn_value(value: &DynSolValue) -> String {
+    match value {
+        DynSolValue::Bool(b) => b.to_string(),
+        DynSolValue::Uint(v, _) => format!("{v}"),
+        DynSolValue::Int(v, _) => format!("{v}"),
+        DynSolValue::Address(addr) => format!("{addr:#x}"),
+        DynSolValue::String(s) => format!("\"{s}\""),
+        DynSolValue::Bytes(bytes) => format!("0x{}", hex::encode(bytes)),
+        DynSolValue::FixedBytes(word, size) => format!("0x{}", hex::encode(&word[..*size])),
+        DynSolValue::Array(values) | DynSolValue::FixedArray(values) => {
+            let inner = values
+                .iter()
+                .map(format_dyn_value)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("[{inner}]")
+        }
+        DynSolValue::Tuple(values) => {
+            let inner = values
+                .iter()
+                .map(format_dyn_value)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({inner})")
+        }
+        DynSolValue::Function(func) => format!("0x{}", hex::encode(func.as_slice())),
+        _ => format!("{value:?}"),
+    }
+}
+
+impl fmt::Display for JobSchema {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "JobSchema(index={}, name={})",
+            self.job_index, self.job_name
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use tangle_subxt::FieldExt;
-
     use super::*;
+    use serde_json::json;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
-    fn it_converts_json_to_field() {
-        let input = serde_json::json!({
-            "a": 1,
-            "b": true,
-            "c": "hello",
-            "d": [1, 2, 3],
-            "e": {
-                "f": 4,
-                "g": [5, 6]
-            },
-            "h": null,
-            "i": [1, 3, 5, 7],
-            "j": {
-                "k": {
-                    "l": "world"
-                }
+    fn encodes_inputs_from_json_objects() -> Result<()> {
+        let schema_bytes = br#"
+        [
+            {"name":"value","type":"uint64"},
+            {"name":"config","type":"tuple","components":[
+                {"name":"account","type":"address"},
+                {"name":"values","type":"uint256[]"}
+            ]}
+        ]"#;
+        let params = parse_schema_payload(schema_bytes, false)?;
+        let results = parse_schema_payload(br#"[]"#, true)?;
+        let schema = JobSchema {
+            job_index: 0,
+            job_name: "test".to_string(),
+            params,
+            results,
+        };
+
+        let mut tmp = NamedTempFile::new()?;
+        let payload = json!({
+            "value": 5,
+            "config": {
+                "account": "0x0000000000000000000000000000000000000001",
+                "values": ["0x2a", 3]
             }
         });
-        let expected = vec![InputValue::Struct(
-            new_bounded_string("struct_0"),
-            Box::new(BoundedVec(vec![
-                (new_bounded_string("a"), InputValue::Uint32(1)),
-                (new_bounded_string("b"), InputValue::Bool(true)),
-                (
-                    new_bounded_string("c"),
-                    InputValue::String(new_bounded_string("hello")),
-                ),
-                (
-                    new_bounded_string("d"),
-                    InputValue::Array(
-                        FieldType::Uint32,
-                        BoundedVec(vec![
-                            InputValue::Uint32(1),
-                            InputValue::Uint32(2),
-                            InputValue::Uint32(3),
-                        ]),
-                    ),
-                ),
-                (
-                    new_bounded_string("e"),
-                    InputValue::Struct(
-                        new_bounded_string("struct_1"),
-                        Box::new(BoundedVec(vec![
-                            (new_bounded_string("f"), InputValue::Uint32(4)),
-                            (
-                                new_bounded_string("g"),
-                                InputValue::Array(
-                                    FieldType::Uint32,
-                                    BoundedVec(vec![InputValue::Uint32(5), InputValue::Uint32(6)]),
-                                ),
-                            ),
-                        ])),
-                    ),
-                ),
-                (
-                    new_bounded_string("h"),
-                    InputValue::Optional(FieldType::String, Box::new(None)),
-                ),
-                (
-                    new_bounded_string("i"),
-                    InputValue::List(
-                        FieldType::Uint32,
-                        BoundedVec(vec![
-                            InputValue::Uint32(1),
-                            InputValue::Uint32(3),
-                            InputValue::Uint32(5),
-                            InputValue::Uint32(7),
-                        ]),
-                    ),
-                ),
-                (
-                    new_bounded_string("j"),
-                    InputValue::Struct(
-                        new_bounded_string("struct_1"),
-                        Box::new(BoundedVec(vec![(
-                            new_bounded_string("k"),
-                            InputValue::Struct(
-                                new_bounded_string("struct_2"),
-                                Box::new(BoundedVec(vec![(
-                                    new_bounded_string("l"),
-                                    InputValue::String(new_bounded_string("world")),
-                                )])),
-                            ),
-                        )])),
-                    ),
-                ),
-            ])),
-        )];
+        write!(tmp, "{payload}")?;
 
-        let param_types = vec![FieldType::Struct(Box::new(BoundedVec(vec![
-            FieldType::Uint32,
-            FieldType::Bool,
-            FieldType::String,
-            FieldType::Array(3, Box::new(FieldType::Uint32)),
-            FieldType::Struct(Box::new(BoundedVec(vec![
-                FieldType::Uint32,
-                FieldType::Array(2, Box::new(FieldType::Uint32)),
-            ]))),
-            FieldType::Optional(Box::new(FieldType::String)),
-            FieldType::List(Box::new(FieldType::Uint32)),
-            FieldType::Struct(Box::new(BoundedVec(vec![FieldType::Struct(Box::new(
-                BoundedVec(vec![FieldType::String]),
-            ))]))),
-        ])))];
-        let result = json_to_input_value(&param_types, &[input], 0).unwrap();
+        let encoded = schema.encode_params_from_file(tmp.path())?;
+        let types: Vec<DynSolType> = schema.params.iter().map(|param| param.ty.clone()).collect();
+        let decoded = DynSolType::Tuple(types)
+            .abi_decode_params(encoded.as_ref())
+            .expect("decode params");
+        let DynSolValue::Tuple(values) = decoded else {
+            panic!("expected tuple");
+        };
+        assert_eq!(values.len(), 2);
+        assert_eq!(format_dyn_value(&values[0]), "5");
         assert_eq!(
-            result,
-            expected,
-            "Expected: {}, but got: {}",
-            serde_json::to_string_pretty(
-                &from_field::<serde_json::Value>(expected[0].clone()).unwrap()
-            )
-            .unwrap(),
-            serde_json::to_string_pretty(
-                &from_field::<serde_json::Value>(result[0].clone()).unwrap()
-            )
-            .unwrap()
+            format_dyn_value(&values[1]),
+            "(0x0000000000000000000000000000000000000001, [42, 3])"
         );
-        // sainty check
-        for (i, (param_type, value)) in param_types.iter().zip(result.iter()).enumerate() {
-            assert_eq!(
-                param_type,
-                &value.field_type(),
-                "Parameter type mismatch at index {}: expected {:?}, got {:?}",
-                i,
-                param_type,
-                value.field_type()
-            );
-        }
+        Ok(())
+    }
+
+    #[test]
+    fn decodes_and_formats_results() -> Result<()> {
+        let schema_bytes = br#"[{"name":"result","type":"uint256"}]"#;
+        let params = parse_schema_payload(br#"[]"#, false)?;
+        let results = parse_schema_payload(schema_bytes, true)?;
+        let schema = JobSchema {
+            job_index: 1,
+            job_name: "result-test".to_string(),
+            params,
+            results,
+        };
+
+        let value = DynSolValue::Tuple(vec![DynSolValue::Uint(U256::from(123u64), 256)]);
+        let bytes = Bytes::from(value.abi_encode_params());
+        let formatted = schema
+            .decode_and_format_results(bytes.as_ref())
+            .expect("decode schema")
+            .expect("formatted results");
+        assert_eq!(formatted, vec!["result (uint256) = 123"]);
+        Ok(())
     }
 }

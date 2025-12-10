@@ -1,9 +1,8 @@
-use crate::command::keys::{generate_key, import_key};
+use crate::command::keys::{SupportedKey, generate_key, import_key};
 use crate::utils::{print_info, print_section_header, print_success};
 use alloy_primitives::Address;
 use blueprint_chain_setup::anvil::start_default_anvil_testnet;
 use blueprint_core::debug;
-use blueprint_crypto::KeyTypeId;
 use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
@@ -63,7 +62,7 @@ impl EigenlayerDeployOpts {
             // For local testnet with no specified keystore, use a temporary directory
             let temp_dir = tempfile::tempdir()
                 .expect("Failed to create temporary directory")
-                .into_path();
+                .keep();
             temp_dir.to_string_lossy().to_string()
         } else {
             keystore_path.map_or_else(
@@ -104,7 +103,7 @@ impl EigenlayerDeployOpts {
                     "No ECDSA key found at {}. Let's set one up.",
                     self.keystore_path
                 );
-                let keys = crate::command::keys::prompt_for_keys(vec![KeyTypeId::Ecdsa])?;
+                let keys = crate::command::keys::prompt_for_keys(vec![SupportedKey::Ecdsa])?;
                 let (key_type, secret) = keys
                     .first()
                     .ok_or(color_eyre::eyre::eyre!("No ECDSA key found in keystore."))?;
@@ -145,11 +144,11 @@ pub fn initialize_test_keystore() -> Result<()> {
     // TODO: Add support for Tangle here, taking the protocol as an input and controlling the key type and key input(s)
     import_key(
         Protocol::Eigenlayer,
-        KeyTypeId::Ecdsa,
+        SupportedKey::Ecdsa,
         "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
         keystore_path,
     )?;
-    generate_key(KeyTypeId::Bn254, Some(&keystore_path), None, false)?;
+    generate_key(SupportedKey::Bn254, Some(&keystore_path), None, false)?;
     Ok(())
 }
 

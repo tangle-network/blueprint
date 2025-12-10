@@ -1,91 +1,98 @@
-use std::str::FromStr;
+use std::path::{Path, PathBuf};
 
+use alloy_primitives::{Address, B256, Bytes};
 use alloy_signer_local::PrivateKeySigner;
-use blueprint_crypto::tangle_pair_signer::TanglePairSigner;
-use color_eyre::{Result, Section, eyre::Context};
-use sp_core::Pair;
-use tangle_subxt::subxt_signer::ExposeSecret;
-use tangle_subxt::subxt_signer::SecretUri;
-use tangle_subxt::subxt_signer::bip39;
+use blueprint_crypto::BytesEncoding;
+use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
+use blueprint_keystore::backends::Backend;
+use blueprint_keystore::{Keystore, KeystoreConfig};
+use color_eyre::eyre::{Context, Result, eyre};
 
-pub(crate) const SIGNER_ENV: &str = "SIGNER";
-pub(crate) const EVM_SIGNER_ENV: &str = "EVM_SIGNER";
+/// Environment variable pointing at the default keystore directory.
+pub const KEYSTORE_PATH_ENV: &str = "BLUEPRINT_KEYSTORE_URI";
 
-const SURI_HELP_MSG: &str = r#"
-The `SURI` can be parsed from a string. The string takes this form:
-```text
-phrase/path0/path1///password
-111111 22222 22222   33333333
-```
-///
-Where:
-- 1 denotes a phrase or hex string. If this is not provided, the [`DEV_PHRASE`] is used
-  instead.
-- 2's denote optional "derivation junctions" which are used to derive keys. Each of these is
-  separated by "/". A derivation junction beginning with "/" (ie "//" in the original string)
-  is a "hard" path.
-- 3 denotes an optional password which is used in conjunction with the phrase provided in 1
-  to generate an initial key. If hex is provided for 1, it's ignored.
-
-# Notes:
-- If 1 is a `0x` prefixed 64-digit hex string, then we'll interpret it as hex, and treat the hex bytes
-  as a seed/MiniSecretKey directly, ignoring any password.
-- Else if the phrase part is a valid BIP-39 phrase, we'll use the phrase (and password, if provided)
-  to generate a seed/MiniSecretKey.
-- Uris like "//Alice" correspond to keys derived from a DEV_PHRASE, since no phrase part is given.
-
-There is no correspondence mapping between `SURI` strings and the keys they represent.
-Two different non-identical strings can actually lead to the same secret being derived.
-Notably, integer junction indices may be legally prefixed with arbitrary number of zeros.
-Similarly an empty password (ending the `SURI` with `///`) is perfectly valid and will
-generally be equivalent to no password at all.
-"#;
-
-/// Loads the Substrate Signer from the environment.
-///
-/// # Errors
-///
-/// * The `SIGNER` environment variable isn't set
-/// * The `SIGNER` envionment variable isn't a valid SURI
-pub fn load_signer_from_env() -> Result<TanglePairSigner<sp_core::sr25519::Pair>> {
-    let s = std::env::var(SIGNER_ENV)
-        .with_suggestion(|| {
-            format!(
-                "Please set the signer SURI in the environment using the `{SIGNER_ENV}` variable.",
-            )
-        })
-        .note(SURI_HELP_MSG)?;
-
-    let sp_core_keypair = sp_core::sr25519::Pair::from_string(&s, None)?;
-    Ok(TanglePairSigner::new(sp_core_keypair))
+/// Minimal metadata required to sign Tangle EVM transactions.
+#[derive(Debug, Clone)]
+pub struct EvmSigner {
+    /// Derived operator address.
+    pub operator_address: Address,
+    /// Local signer usable with Alloy providers.
+    pub signer: PrivateKeySigner,
+    /// Uncompressed 65-byte ECDSA public key.
+    pub public_key: Bytes,
 }
 
-/// Loads the EVM Signer from the environment.
-///
-/// # Errors
-///
-/// * The `SIGNER` environment variable isn't set
-/// * The `SIGNER` envionment variable isn't a valid SURI
-pub fn load_evm_signer_from_env() -> Result<PrivateKeySigner> {
-    let secret = std::env::var(EVM_SIGNER_ENV).with_suggestion(|| {
-        format!(
-            "Please set the EVM signer SURI in the environment using the `{EVM_SIGNER_ENV}` variable.",
-        )
+impl EvmSigner {
+    fn from_signing_key(key: &K256SigningKey) -> Result<Self> {
+        let secret = key.to_bytes();
+        let signer = PrivateKeySigner::from_bytes(&B256::from_slice(&secret))
+            .map_err(|e| eyre!("failed to create signer: {e}"))?;
+        let operator_address = signer.address();
+        let public_key = Bytes::copy_from_slice(&key.public().to_bytes());
+
+        Ok(Self {
+            operator_address,
+            signer,
+            public_key,
+        })
+    }
+}
+
+/// Artifacts required for `registerOperator`.
+#[derive(Debug, Clone)]
+pub struct RegistrationPayload {
+    /// Signing metadata (address + public key).
+    pub signer: EvmSigner,
+    /// RPC endpoint advertised during registration.
+    pub rpc_endpoint: String,
+    /// Optional opaque registration inputs passed through to the contract.
+    pub registration_inputs: Bytes,
+}
+
+/// Resolve the keystore path from `BLUEPRINT_KEYSTORE_URI`.
+pub fn keystore_path_from_env() -> Result<PathBuf> {
+    std::env::var(KEYSTORE_PATH_ENV)
+        .wrap_err_with(|| format!("{KEYSTORE_PATH_ENV} is not set – point it at your keystore"))
+        .map(PathBuf::from)
+}
+
+/// Load the on-disk keystore.
+pub fn load_keystore(path: impl AsRef<Path>) -> Result<Keystore> {
+    let config = KeystoreConfig::new().fs_root(path);
+    Keystore::new(config).context("failed to open keystore")
+}
+
+/// Fetch the first local ECDSA signing key from the keystore.
+pub fn load_ecdsa_signing_key(keystore: &Keystore) -> Result<K256SigningKey> {
+    let public = keystore
+        .first_local::<K256Ecdsa>()
+        .context("keystore does not contain an ECDSA key")?;
+
+    keystore
+        .get_secret::<K256Ecdsa>(&public)
+        .context("failed to load ECDSA secret")
+}
+
+/// Load an EVM signer (address + alloy-compatible signer) from a keystore path.
+pub fn load_evm_signer(keystore_path: impl AsRef<Path>) -> Result<EvmSigner> {
+    let keystore = load_keystore(keystore_path)?;
+    let signing_key = load_ecdsa_signing_key(&keystore)?;
+    EvmSigner::from_signing_key(&signing_key)
+}
+
+/// Construct the payload needed when calling `registerOperator`.
+pub fn build_registration_payload(
+    keystore_path: impl AsRef<Path>,
+    rpc_endpoint: impl Into<String>,
+    registration_inputs: Option<Vec<u8>>,
+) -> Result<RegistrationPayload> {
+    let keystore = load_keystore(keystore_path)?;
+    let signing_key = load_ecdsa_signing_key(&keystore)?;
+    let signer = EvmSigner::from_signing_key(&signing_key)?;
+
+    Ok(RegistrationPayload {
+        signer,
+        rpc_endpoint: rpc_endpoint.into(),
+        registration_inputs: Bytes::copy_from_slice(&registration_inputs.unwrap_or_default()),
     })
-    .note(SURI_HELP_MSG)?;
-
-    let uri = SecretUri::from_str(&secret)
-        .with_context(|| "Parsing the SURI into a Secret Key")
-        .note(SURI_HELP_MSG)?;
-    let key = if let Some(hex_str) = uri.phrase.expose_secret().strip_prefix("0x") {
-        PrivateKeySigner::from_str(hex_str)
-            .context("Parsing the hex string into a PrivateKeySigner")?
-    } else {
-        let phrase = bip39::Mnemonic::from_str(uri.phrase.expose_secret())?;
-        let secret_bytes = phrase.to_entropy();
-        PrivateKeySigner::from_slice(secret_bytes.as_slice())
-            .context("Creating a PrivateKeySigner from the mnemonic phrase")?
-    };
-
-    Ok(key)
 }
