@@ -56,14 +56,16 @@ fn bls_sign(secret: Fr, message: &[u8]) -> G1Affine {
 /// Serialize a BLS signature (G1 point)
 fn serialize_signature(sig: &G1Affine) -> Vec<u8> {
     let mut bytes = Vec::new();
-    sig.serialize_compressed(&mut bytes).expect("serialize signature");
+    sig.serialize_compressed(&mut bytes)
+        .expect("serialize signature");
     bytes
 }
 
 /// Serialize a BLS public key (G2 point)
 fn serialize_public_key(pk: &G2Affine) -> Vec<u8> {
     let mut bytes = Vec::new();
-    pk.serialize_compressed(&mut bytes).expect("serialize public key");
+    pk.serialize_compressed(&mut bytes)
+        .expect("serialize public key");
     bytes
 }
 
@@ -129,7 +131,10 @@ async fn test_single_operator_aggregation() -> Result<()> {
     let response = service.submit_signature(submit_req)?;
 
     assert!(response.accepted, "Signature should be accepted");
-    assert!(response.threshold_met, "Threshold should be met with 1/1 signatures");
+    assert!(
+        response.threshold_met,
+        "Threshold should be met with 1/1 signatures"
+    );
     assert_eq!(response.signatures_collected, 1);
     assert_eq!(response.threshold_required, 1);
 
@@ -186,7 +191,10 @@ async fn test_two_operator_aggregation() -> Result<()> {
 
     // Operator 0 submits
     let sig0 = bls_sign(operators[0].secret, &message);
-    assert!(verify_bls_signature(&sig0, &operators[0].public, &message), "Operator 0 sig valid");
+    assert!(
+        verify_bls_signature(&sig0, &operators[0].public, &message),
+        "Operator 0 sig valid"
+    );
 
     let submit_req0 = SubmitSignatureRequest {
         service_id,
@@ -197,8 +205,14 @@ async fn test_two_operator_aggregation() -> Result<()> {
         public_key: serialize_public_key(&operators[0].public),
     };
     let response0 = service.submit_signature(submit_req0)?;
-    assert!(response0.accepted, "Operator 0 signature should be accepted");
-    assert!(!response0.threshold_met, "Threshold should NOT be met with 1/2 signatures");
+    assert!(
+        response0.accepted,
+        "Operator 0 signature should be accepted"
+    );
+    assert!(
+        !response0.threshold_met,
+        "Threshold should NOT be met with 1/2 signatures"
+    );
     assert_eq!(response0.signatures_collected, 1);
 
     // Aggregated result should NOT be available yet
@@ -209,7 +223,10 @@ async fn test_two_operator_aggregation() -> Result<()> {
 
     // Operator 1 submits
     let sig1 = bls_sign(operators[1].secret, &message);
-    assert!(verify_bls_signature(&sig1, &operators[1].public, &message), "Operator 1 sig valid");
+    assert!(
+        verify_bls_signature(&sig1, &operators[1].public, &message),
+        "Operator 1 sig valid"
+    );
 
     let submit_req1 = SubmitSignatureRequest {
         service_id,
@@ -220,8 +237,14 @@ async fn test_two_operator_aggregation() -> Result<()> {
         public_key: serialize_public_key(&operators[1].public),
     };
     let response1 = service.submit_signature(submit_req1)?;
-    assert!(response1.accepted, "Operator 1 signature should be accepted");
-    assert!(response1.threshold_met, "Threshold SHOULD be met with 2/2 signatures");
+    assert!(
+        response1.accepted,
+        "Operator 1 signature should be accepted"
+    );
+    assert!(
+        response1.threshold_met,
+        "Threshold SHOULD be met with 2/2 signatures"
+    );
     assert_eq!(response1.signatures_collected, 2);
 
     // Get and verify aggregated result
@@ -272,7 +295,11 @@ async fn test_three_operator_consensus_aggregation() -> Result<()> {
     // Submit all 3 signatures
     for (i, keypair) in operators.iter().enumerate() {
         let sig = bls_sign(keypair.secret, &message);
-        assert!(verify_bls_signature(&sig, &keypair.public, &message), "Op {} sig valid", i);
+        assert!(
+            verify_bls_signature(&sig, &keypair.public, &message),
+            "Op {} sig valid",
+            i
+        );
 
         let submit_req = SubmitSignatureRequest {
             service_id,
@@ -308,7 +335,7 @@ async fn test_three_operator_consensus_aggregation() -> Result<()> {
     assert!(result.signer_bitmap.bit(2));
 
     // Verify output decodes correctly
-    let decoded = u64::abi_decode(&result.output, true)?;
+    let decoded = u64::abi_decode(&result.output)?;
     assert_eq!(decoded, 36);
 
     println!("  Three operators signed, aggregated signature valid");
@@ -363,7 +390,10 @@ async fn test_invalid_signature_wrong_key_rejected() -> Result<()> {
 
     // Verify task is still pending (signature wasn't accepted)
     let status = service.get_status(service_id, call_id);
-    assert_eq!(status.signatures_collected, 0, "No signatures should be collected");
+    assert_eq!(
+        status.signatures_collected, 0,
+        "No signatures should be collected"
+    );
 
     println!("\n=== Test Passed! Invalid signature was rejected ===");
     Ok(())
@@ -741,7 +771,11 @@ async fn test_signer_bitmap_tracking() -> Result<()> {
         result.non_signer_indices.contains(&3),
         "Op 3 should be in non-signers"
     );
-    assert_eq!(result.non_signer_indices.len(), 2, "Should have 2 non-signers");
+    assert_eq!(
+        result.non_signer_indices.len(),
+        2,
+        "Should have 2 non-signers"
+    );
 
     // Verify aggregated signature is valid
     let agg_sig = G1Affine::deserialize_compressed(&result.aggregated_signature[..]).unwrap();
@@ -786,7 +820,10 @@ async fn test_submit_to_nonexistent_task() -> Result<()> {
         public_key: serialize_public_key(&keypair.public),
     });
 
-    assert!(result.is_err(), "Should reject submission to non-existent task");
+    assert!(
+        result.is_err(),
+        "Should reject submission to non-existent task"
+    );
     match result.unwrap_err() {
         ServiceError::TaskNotFound => println!("  Correctly rejected: TaskNotFound"),
         e => panic!("Expected TaskNotFound, got: {:?}", e),
@@ -817,7 +854,10 @@ async fn test_full_e2e_aggregation_flow() -> Result<()> {
     let call_id = 10000u64;
     let input: u64 = 9;
 
-    println!("Job: consensus_square({}) - requires 3 operator results", input);
+    println!(
+        "Job: consensus_square({}) - requires 3 operator results",
+        input
+    );
 
     // Step 1: Operators compute results
     println!("\nStep 1: Compute results...");
@@ -874,7 +914,7 @@ async fn test_full_e2e_aggregation_flow() -> Result<()> {
     let result = service.get_aggregated_result(service_id, call_id).unwrap();
 
     // Verify output
-    let final_output = u64::abi_decode(&result.output, true)?;
+    let final_output = u64::abi_decode(&result.output)?;
     assert_eq!(final_output, expected_output);
     println!("  Output: {} ✓", final_output);
 
@@ -895,8 +935,14 @@ async fn test_full_e2e_aggregation_flow() -> Result<()> {
         verify_aggregated_signature(&agg_sig, &agg_pk, &message),
         "Aggregated signature must be valid"
     );
-    println!("  Aggregated signature: {} bytes, VALID ✓", result.aggregated_signature.len());
-    println!("  Aggregated pubkey: {} bytes ✓", result.aggregated_pubkey.len());
+    println!(
+        "  Aggregated signature: {} bytes, VALID ✓",
+        result.aggregated_signature.len()
+    );
+    println!(
+        "  Aggregated pubkey: {} bytes ✓",
+        result.aggregated_pubkey.len()
+    );
 
     println!("\n=== Full E2E Test Passed! ===");
     println!("All cryptographic proofs verified.");

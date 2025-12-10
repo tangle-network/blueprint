@@ -1,40 +1,42 @@
-use apikey_blueprint_lib::{purchase_api_key, write_resource};
-use blueprint_sdk::build;
-use blueprint_sdk::tangle::blueprint;
+use std::path::Path;
 
 fn main() {
-    if std::env::var("BUILD_CONTRACTS").is_ok() {
-        let contract_dirs: Vec<&str> = vec!["./contracts"];
-        build::soldeer_install();
-        build::soldeer_update();
-        build::build_contracts(contract_dirs);
-    }
-
     println!("cargo::rerun-if-changed=../apikey-blueprint-lib");
 
-    // Re-run triggers
-    println!("cargo:rerun-if-changed=contracts/src");
-    println!("cargo:rerun-if-changed=remappings.txt");
-    println!("cargo:rerun-if-changed=foundry.toml");
-    println!("cargo:rerun-if-changed=../apikey-blueprint-lib");
+    let metadata = serde_json::json!({
+        "name": "apikey-blueprint",
+        "description": "API key issuance and resource blueprint",
+        "version": env!("CARGO_PKG_VERSION"),
+        "master_revision": "Latest",
+        "manager": { "Evm": "ApikeyBlueprintBSM" },
+        "jobs": [
+            {
+                "name": "write_resource",
+                "job_index": WRITE_RESOURCE_JOB_ID,
+                "inputs": ["string", "string", "address"],
+                "outputs": ["tuple(bool,string,string)"],
+                "required_results": 1
+            },
+            {
+                "name": "purchase_api_key",
+                "job_index": PURCHASE_API_KEY_JOB_ID,
+                "inputs": ["string", "address"],
+                "outputs": ["tuple(bool,string)"],
+                "required_results": 1
+            }
+        ]
+    });
 
-    // Produce blueprint.json describing jobs in this blueprint
-    let blueprint = blueprint! {
-        name: "apikey-blueprint",
-        master_manager_revision: "Latest",
-        manager: { Evm = "ExperimentalBlueprint" },
-        jobs: [write_resource, purchase_api_key]
-    };
-
-    if let Ok(blueprint) = blueprint {
-        let json =
-            blueprint_sdk::tangle::metadata::macros::ext::serde_json::to_string_pretty(&blueprint)
-                .unwrap();
-        let root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        std::fs::write(
-            std::path::Path::new(&root).join("blueprint.json"),
-            json.as_bytes(),
-        )
-        .unwrap();
-    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("..");
+    std::fs::write(
+        root.join("blueprint_apikey.json"),
+        serde_json::to_string_pretty(&metadata).unwrap(),
+    )
+    .unwrap();
 }
+
+const WRITE_RESOURCE_JOB_ID: u8 = apikey_blueprint_lib::WRITE_RESOURCE_JOB_ID;
+const PURCHASE_API_KEY_JOB_ID: u8 = apikey_blueprint_lib::PURCHASE_API_KEY_JOB_ID;

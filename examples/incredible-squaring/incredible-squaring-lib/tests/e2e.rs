@@ -4,12 +4,12 @@
 //! They test ABI encoding/decoding and the job function logic directly.
 
 use alloy_sol_types::SolValue;
-use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::IntoJobResult;
+use blueprint_sdk::testing::utils::setup_log;
 use color_eyre::Result;
 use incredible_squaring_blueprint_lib::{
-    square, verified_square, consensus_square,
-    XSQUARE_JOB_ID, VERIFIED_XSQUARE_JOB_ID, CONSENSUS_XSQUARE_JOB_ID,
+    CONSENSUS_XSQUARE_JOB_ID, VERIFIED_XSQUARE_JOB_ID, XSQUARE_JOB_ID, consensus_square, square,
+    verified_square,
 };
 use std::sync::Once;
 
@@ -27,8 +27,14 @@ fn init_test() {
 #[test]
 fn test_job_ids() {
     assert_eq!(XSQUARE_JOB_ID, 0, "Square job should have index 0");
-    assert_eq!(VERIFIED_XSQUARE_JOB_ID, 1, "Verified square job should have index 1");
-    assert_eq!(CONSENSUS_XSQUARE_JOB_ID, 2, "Consensus square job should have index 2");
+    assert_eq!(
+        VERIFIED_XSQUARE_JOB_ID, 1,
+        "Verified square job should have index 1"
+    );
+    assert_eq!(
+        CONSENSUS_XSQUARE_JOB_ID, 2,
+        "Consensus square job should have index 2"
+    );
 }
 
 /// Test that all job IDs are unique
@@ -50,7 +56,7 @@ fn test_abi_roundtrip_u64() {
     assert_eq!(encoded.len(), 32, "ABI-encoded u64 should be 32 bytes");
 
     // Decode it back
-    let decoded = u64::abi_decode(&encoded, true).expect("Should decode successfully");
+    let decoded = u64::abi_decode(&encoded).expect("Should decode successfully");
     assert_eq!(decoded, input, "Decoded value should match original");
 }
 
@@ -81,7 +87,7 @@ async fn test_square_function() -> Result<()> {
         // The extractor would normally extract from the job call
         // For direct testing, we can decode the body manually
         let (_, body) = job_call.into_parts();
-        let decoded_input = u64::abi_decode(&body, true).expect("Should decode input");
+        let decoded_input = u64::abi_decode(&body).expect("Should decode input");
         assert_eq!(decoded_input, input, "Decoded input should match");
 
         // Call the square function with the extracted argument
@@ -89,14 +95,18 @@ async fn test_square_function() -> Result<()> {
         let result: TangleEvmResult<u64> = square(TangleEvmArg(input)).await;
 
         // Verify the result
-        assert_eq!(*result, expected, "Square of {} should be {}", input, expected);
+        assert_eq!(
+            *result, expected,
+            "Square of {} should be {}",
+            input, expected
+        );
 
         // Convert to JobResult and verify ABI encoding
         let job_result = result.into_job_result();
         assert!(job_result.is_some(), "Should produce a job result");
 
         if let Some(blueprint_sdk::JobResult::Ok { body, .. }) = job_result {
-            let decoded_output = u64::abi_decode(&body, true).expect("Should decode output");
+            let decoded_output = u64::abi_decode(&body).expect("Should decode output");
             assert_eq!(
                 decoded_output, expected,
                 "Decoded output should match expected"
@@ -164,7 +174,7 @@ fn test_tangle_evm_result_encoding() {
 
     if let Some(blueprint_sdk::JobResult::Ok { body, .. }) = job_result {
         // Verify it's valid ABI encoding
-        let decoded = u64::abi_decode(&body, true).expect("Should decode");
+        let decoded = u64::abi_decode(&body).expect("Should decode");
         assert_eq!(decoded, 12345);
 
         // Verify the encoding is 32 bytes
@@ -203,7 +213,7 @@ async fn test_full_job_flow() -> Result<()> {
     // 6. TangleEvmConsumer would submit this to the contract
     if let blueprint_sdk::JobResult::Ok { body, .. } = job_result {
         // The contract would decode this
-        let contract_received = u64::abi_decode(&body, true)?;
+        let contract_received = u64::abi_decode(&body)?;
         assert_eq!(contract_received, 49);
     }
 
@@ -238,24 +248,26 @@ async fn test_verified_square_function() -> Result<()> {
     use blueprint_sdk::tangle_evm::extract::{TangleEvmArg, TangleEvmResult};
 
     // Test various input values
-    let test_cases: Vec<(u64, u64)> = vec![
-        (0, 0),
-        (1, 1),
-        (5, 25),
-        (100, 10000),
-    ];
+    let test_cases: Vec<(u64, u64)> = vec![(0, 0), (1, 1), (5, 25), (100, 10000)];
 
     for (input, expected) in test_cases {
         let result: TangleEvmResult<u64> = verified_square(TangleEvmArg(input)).await;
-        assert_eq!(*result, expected, "Verified square of {} should be {}", input, expected);
+        assert_eq!(
+            *result, expected,
+            "Verified square of {} should be {}",
+            input, expected
+        );
 
         // Convert to JobResult and verify ABI encoding
         let job_result = result.into_job_result();
         assert!(job_result.is_some(), "Should produce a job result");
 
         if let Some(blueprint_sdk::JobResult::Ok { body, .. }) = job_result {
-            let decoded_output = u64::abi_decode(&body, true).expect("Should decode output");
-            assert_eq!(decoded_output, expected, "Decoded output should match expected");
+            let decoded_output = u64::abi_decode(&body).expect("Should decode output");
+            assert_eq!(
+                decoded_output, expected,
+                "Decoded output should match expected"
+            );
         } else {
             panic!("Expected Ok job result");
         }
@@ -272,24 +284,26 @@ async fn test_consensus_square_function() -> Result<()> {
     use blueprint_sdk::tangle_evm::extract::{TangleEvmArg, TangleEvmResult};
 
     // Test various input values
-    let test_cases: Vec<(u64, u64)> = vec![
-        (0, 0),
-        (1, 1),
-        (7, 49),
-        (1000, 1000000),
-    ];
+    let test_cases: Vec<(u64, u64)> = vec![(0, 0), (1, 1), (7, 49), (1000, 1000000)];
 
     for (input, expected) in test_cases {
         let result: TangleEvmResult<u64> = consensus_square(TangleEvmArg(input)).await;
-        assert_eq!(*result, expected, "Consensus square of {} should be {}", input, expected);
+        assert_eq!(
+            *result, expected,
+            "Consensus square of {} should be {}",
+            input, expected
+        );
 
         // Convert to JobResult and verify ABI encoding
         let job_result = result.into_job_result();
         assert!(job_result.is_some(), "Should produce a job result");
 
         if let Some(blueprint_sdk::JobResult::Ok { body, .. }) = job_result {
-            let decoded_output = u64::abi_decode(&body, true).expect("Should decode output");
-            assert_eq!(decoded_output, expected, "Decoded output should match expected");
+            let decoded_output = u64::abi_decode(&body).expect("Should decode output");
+            assert_eq!(
+                decoded_output, expected,
+                "Decoded output should match expected"
+            );
         } else {
             panic!("Expected Ok job result");
         }
@@ -322,12 +336,16 @@ async fn test_verified_square_job_flow() -> Result<()> {
         bytes::Bytes::from(abi_encoded_input),
     );
 
-    let TangleEvmArg(x2): TangleEvmArg<u64> = TangleEvmArg::from_job_call(job_call_op2, &()).await?;
+    let TangleEvmArg(x2): TangleEvmArg<u64> =
+        TangleEvmArg::from_job_call(job_call_op2, &()).await?;
     let result_op2: TangleEvmResult<u64> = verified_square(TangleEvmArg(x2)).await;
     assert_eq!(*result_op2, 64);
 
     // Both operators should produce identical results
-    assert_eq!(*result_op1, *result_op2, "Both operators should produce the same result");
+    assert_eq!(
+        *result_op1, *result_op2,
+        "Both operators should produce the same result"
+    );
 
     // In the real system, the BSM's getRequiredResultCount returns 2 for this job,
     // so both results would need to be submitted before the job is considered complete.
@@ -401,9 +419,21 @@ async fn test_all_jobs_consistent() -> Result<()> {
 
         let expected = input * input;
 
-        assert_eq!(*result_basic, expected, "Basic square failed for input {}", input);
-        assert_eq!(*result_verified, expected, "Verified square failed for input {}", input);
-        assert_eq!(*result_consensus, expected, "Consensus square failed for input {}", input);
+        assert_eq!(
+            *result_basic, expected,
+            "Basic square failed for input {}",
+            input
+        );
+        assert_eq!(
+            *result_verified, expected,
+            "Verified square failed for input {}",
+            input
+        );
+        assert_eq!(
+            *result_consensus, expected,
+            "Consensus square failed for input {}",
+            input
+        );
 
         // All should be equal
         assert_eq!(*result_basic, *result_verified);

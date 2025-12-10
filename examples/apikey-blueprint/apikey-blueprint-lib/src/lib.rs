@@ -1,87 +1,101 @@
+use alloy_primitives::Address;
+use alloy_sol_types::sol;
 use axum::body::Body;
 use axum::http::{HeaderMap, Request};
 use axum::{
-    Json, Router,
+    Json, Router as HttpRouter,
     extract::Path,
     http::StatusCode,
     middleware,
     response::IntoResponse,
     routing::{get, post},
 };
-use blueprint_sdk::contexts::tangle::TangleClient;
-use blueprint_sdk::extract::Context;
 use blueprint_sdk::macros::debug_job;
 use blueprint_sdk::runner::BackgroundService;
 use blueprint_sdk::runner::error::RunnerError;
-use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
+use blueprint_sdk::tangle_evm::TangleEvmLayer;
+use blueprint_sdk::tangle_evm::extract::{TangleEvmArg, TangleEvmResult};
+use blueprint_sdk::{Job, Router as BlueprintRouter};
+use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
-use tokio::sync::oneshot;
-use tokio::sync::oneshot::Receiver;
+use tokio::sync::oneshot::{self, Receiver};
 
-pub const WRITE_RESOURCE_JOB_ID: u32 = 0;
-pub const PURCHASE_API_KEY_JOB_ID: u32 = 1;
+pub const WRITE_RESOURCE_JOB_ID: u8 = 0;
+pub const PURCHASE_API_KEY_JOB_ID: u8 = 1;
 
-#[derive(Clone)]
-pub struct ApiKeyBlueprintContext {
-    pub tangle_client: Arc<TangleClient>,
+sol! {
+    struct WriteResourceResult {
+        bool ok;
+        string resourceId;
+        string account;
+    }
+
+    struct PurchaseApiKeyResult {
+        bool ok;
+        string apiKeyHash;
+    }
 }
-
-// ===== Tangle Jobs (NO AUTH - just blockchain events) =====
 
 #[debug_job]
 pub async fn write_resource(
-    Context(_ctx): Context<ApiKeyBlueprintContext>,
-    TangleArg((resource_id, data, account)): TangleArg<(String, String, String)>,
-) -> TangleResult<serde_json::Value> {
-    // This is triggered by blockchain tx - no auth needed
-    // The account comes from the transaction data
-
+    TangleEvmArg((resource_id, data, account)): TangleEvmArg<(String, String, Address)>,
+) -> TangleEvmResult<WriteResourceResult> {
+    let account_hex = format_address(account);
     let store = resource_store();
     let mut guard = store.write().await;
-    let entry = guard.entry(account.clone()).or_default();
-    entry.insert(resource_id.clone(), data.clone());
+    guard
+        .entry(account_hex.clone())
+        .or_default()
+        .insert(resource_id.clone(), data.clone());
 
-    TangleResult(serde_json::json!({
-        "ok": true,
-        "resource_id": resource_id,
-        "account": account,
-    }))
+    TangleEvmResult(WriteResourceResult {
+        ok: true,
+        resourceId: resource_id,
+        account: account_hex,
+    })
 }
 
 #[debug_job]
 pub async fn purchase_api_key(
-    Context(_ctx): Context<ApiKeyBlueprintContext>,
-    TangleArg((tier, account)): TangleArg<(String, String)>,
-) -> TangleResult<serde_json::Value> {
-    // Generate API key for the blockchain account
+    TangleEvmArg((tier, account)): TangleEvmArg<(String, Address)>,
+) -> TangleEvmResult<PurchaseApiKeyResult> {
     let api_key = format!("sk_{}_{}", tier, uuid::Uuid::new_v4());
 
-    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(api_key.as_bytes());
-    let api_key_hash = format!("{:x}", hasher.finalize());
+    let hash = format!("{:x}", hasher.finalize());
 
+    let account_hex = format_address(account);
     let store = api_key_store();
     let mut guard = store.write().await;
     guard.insert(
-        api_key_hash.clone(),
-        serde_json::json!({
+        hash.clone(),
+        json!({
             "tier": tier,
-            "account": account,
+            "account": account_hex,
             "active": true,
         }),
     );
 
-    TangleResult(serde_json::json!({
-        "ok": true,
-        "api_key_hash": api_key_hash,
-        "tier": tier,
-    }))
+    TangleEvmResult(PurchaseApiKeyResult {
+        ok: true,
+        apiKeyHash: hash,
+    })
 }
 
-// ===== Off-chain API Service (WITH AUTH) =====
+/// Router wiring the API key jobs onto the runner.
+#[must_use]
+pub fn router() -> BlueprintRouter {
+    BlueprintRouter::new()
+        .route(WRITE_RESOURCE_JOB_ID, write_resource.layer(TangleEvmLayer))
+        .route(
+            PURCHASE_API_KEY_JOB_ID,
+            purchase_api_key.layer(TangleEvmLayer),
+        )
+}
 
 #[derive(Clone)]
 pub struct ApiKeyProtectedService;
@@ -91,15 +105,15 @@ impl BackgroundService for ApiKeyProtectedService {
         let (tx, rx) = oneshot::channel();
 
         tokio::spawn(async move {
-            let app = Router::new()
+            let app = HttpRouter::new()
                 .route("/health", get(|| async { Json("ok") }))
                 .route("/api/resources", post(create_resource))
-                .route("/api/resources/:id", get(get_resource))
+                .route("/api/resources/{id}", get(get_resource))
                 .layer(middleware::from_fn(api_auth));
 
             let listener = tokio::net::TcpListener::bind("127.0.0.1:8081")
                 .await
-                .unwrap();
+                .expect("failed to bind listener");
 
             let _ = tx.send(Ok(()));
             let _ = axum::serve(listener, app).await;
@@ -121,23 +135,21 @@ async fn api_auth(
 ) -> Result<impl IntoResponse, StatusCode> {
     let api_key = headers
         .get("X-API-Key")
-        .and_then(|h| h.to_str().ok())
+        .and_then(|v| v.to_str().ok())
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(api_key.as_bytes());
     let hash = format!("{:x}", hasher.finalize());
 
     let store = api_key_store();
     let guard = store.read().await;
-    let data = guard.get(&hash).ok_or(StatusCode::UNAUTHORIZED)?;
+    let entry = guard.get(&hash).ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let auth = ApiKeyAuth {
-        account: data["account"].as_str().unwrap_or("").to_string(),
-    };
+    req.extensions_mut().insert(ApiKeyAuth {
+        account: entry["account"].as_str().unwrap_or_default().to_string(),
+    });
 
-    req.extensions_mut().insert(auth);
     Ok(next.run(req).await)
 }
 
@@ -150,106 +162,166 @@ async fn create_resource(
 
     let store = resource_store();
     let mut guard = store.write().await;
-    let resources = guard.entry(auth.account.clone()).or_default();
-    resources.insert(id.clone(), data);
+    guard
+        .entry(auth.account.clone())
+        .or_default()
+        .insert(id.clone(), data);
 
-    Json(serde_json::json!({"id": id, "account": auth.account}))
+    Json(json!({ "id": id, "account": auth.account }))
 }
 
 async fn get_resource(
     axum::Extension(auth): axum::Extension<ApiKeyAuth>,
     Path(id): Path<String>,
-) -> impl IntoResponse {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     let store = resource_store();
     let guard = store.read().await;
+    guard
+        .get(&auth.account)
+        .and_then(|r| r.get(&id))
+        .map(|data| Json(json!({ "id": id, "data": data })))
+        .ok_or(StatusCode::NOT_FOUND)
+}
 
-    match guard.get(&auth.account).and_then(|r| r.get(&id)) {
-        Some(data) => Json(serde_json::json!({"id": id, "data": data})),
-        None => Json(serde_json::json!({"error": "not found"})),
+type ResourceStore = Arc<RwLock<HashMap<String, HashMap<String, String>>>>;
+type ApiKeyStore = Arc<RwLock<HashMap<String, serde_json::Value>>>;
+
+fn resource_store() -> &'static ResourceStore {
+    static STORE: OnceLock<ResourceStore> = OnceLock::new();
+    STORE.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
+}
+
+fn api_key_store() -> &'static ApiKeyStore {
+    static STORE: OnceLock<ApiKeyStore> = OnceLock::new();
+    STORE.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
+}
+
+fn format_address(address: Address) -> String {
+    format!("{address:#x}")
+}
+
+/// Produce a demo TLV payload describing how operators can request API keys.
+#[must_use]
+pub fn registration_payload() -> Vec<u8> {
+    const ENDPOINT_TLV_TYPE: u8 = 0x01;
+    const CONTACT_TLV_TYPE: u8 = 0x02;
+    const CONTACT: &str = "ops@tangle.tools";
+    const ENDPOINT: &str = "https://operator.example.com/api-keys/register";
+
+    fn write_tlv(buffer: &mut Vec<u8>, tlv_type: u8, value: &str) {
+        buffer.push(tlv_type);
+        let len: u16 = value.len().try_into().unwrap_or(u16::MAX);
+        buffer.extend_from_slice(&len.to_be_bytes());
+        buffer.extend_from_slice(value.as_bytes());
     }
+
+    let mut payload = Vec::with_capacity(ENDPOINT.len() + CONTACT.len() + 8);
+    write_tlv(&mut payload, ENDPOINT_TLV_TYPE, ENDPOINT);
+    write_tlv(&mut payload, CONTACT_TLV_TYPE, CONTACT);
+    payload
 }
 
-// Storage
-type ResourceMap = Arc<RwLock<HashMap<String, HashMap<String, String>>>>;
-type ApiKeyMap = Arc<RwLock<HashMap<String, serde_json::Value>>>;
-
-fn resource_store() -> &'static ResourceMap {
-    static STORE: OnceLock<ResourceMap> = OnceLock::new();
-    STORE.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
-}
-
-fn api_key_store() -> &'static ApiKeyMap {
-    static STORE: OnceLock<ApiKeyMap> = OnceLock::new();
-    STORE.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
+/// Clear in-memory stores between tests/integration runs.
+pub async fn reset_state_for_tests() {
+    resource_store().write().await.clear();
+    api_key_store().write().await.clear();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_primitives::Address;
+    use axum::http::HeaderValue;
+    use axum::routing::get;
+    use tower::ServiceExt;
 
     #[tokio::test]
-    async fn test_purchase_api_key_job() {
-        // Test the job directly - no auth needed
-        let result = purchase_api_key(
-            Context(ApiKeyBlueprintContext {
-                tangle_client: Arc::new(TangleClient::default()),
-            }),
-            TangleArg(("premium".to_string(), "0x123".to_string())),
-        )
-        .await;
+    async fn purchase_and_use_api_key() {
+        api_key_store().write().await.clear();
+        let result = purchase_api_key(TangleEvmArg(("pro".into(), Address::ZERO))).await;
+        assert!(result.ok);
+        let api_key_hash = result.apiKeyHash.clone();
 
-        assert_eq!(result.0["ok"], true);
-        assert_eq!(result.0["tier"], "premium");
-        assert!(
-            result.0["api_key"]
-                .as_str()
-                .unwrap()
-                .starts_with("sk_premium_")
-        );
-    }
-
-    #[tokio::test]
-    async fn test_write_resource_job() {
-        let result = write_resource(
-            Context(ApiKeyBlueprintContext {
-                tangle_client: Arc::new(TangleClient::default()),
-            }),
-            TangleArg((
-                "resource_1".to_string(),
-                "test data".to_string(),
-                "0x456".to_string(),
-            )),
-        )
-        .await;
-
-        assert_eq!(result.0["ok"], true);
-        assert_eq!(result.0["resource_id"], "resource_1");
-        assert_eq!(result.0["account"], "0x456");
-
-        // Verify it was stored
-        let store = resource_store();
-        let guard = store.read().await;
-        assert_eq!(
-            guard.get("0x456").unwrap().get("resource_1").unwrap(),
-            "test data"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_api_service_auth() {
-        // First create an API key
-        let _ = purchase_api_key(
-            Context(ApiKeyBlueprintContext {
-                tangle_client: Arc::new(TangleClient::default()),
-            }),
-            TangleArg(("basic".to_string(), "test_account".to_string())),
-        )
-        .await;
-
-        // Now test that the API key works in the service
-        // (In a real test, we'd make HTTP requests to the service)
         let store = api_key_store();
         let guard = store.read().await;
-        assert!(!guard.is_empty());
+        assert!(guard.contains_key(&api_key_hash));
+    }
+
+    #[tokio::test]
+    async fn write_resource_records_data() {
+        resource_store().write().await.clear();
+        write_resource(TangleEvmArg((
+            "doc".into(),
+            "payload".into(),
+            Address::ZERO,
+        )))
+        .await;
+
+        let guard = resource_store().read().await;
+        assert_eq!(
+            guard
+                .get(&format_address(Address::ZERO))
+                .unwrap()
+                .get("doc")
+                .unwrap(),
+            "payload"
+        );
+    }
+
+    #[tokio::test]
+    async fn middleware_rejects_missing_key() {
+        api_key_store().write().await.clear();
+        let app = HttpRouter::new()
+            .route(
+                "/",
+                get(
+                    |axum::Extension(auth): axum::Extension<ApiKeyAuth>| async move {
+                        Json(json!({ "account": auth.account }))
+                    },
+                ),
+            )
+            .layer(middleware::from_fn(api_auth));
+
+        let response = app
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn middleware_accepts_valid_key() {
+        api_key_store().write().await.clear();
+        let api_key = "sk_test_valid";
+        let mut hasher = Sha256::new();
+        hasher.update(api_key.as_bytes());
+        let hash = format!("{:x}", hasher.finalize());
+        api_key_store()
+            .write()
+            .await
+            .insert(hash.clone(), json!({ "account": "acct", "tier": "tier" }));
+
+        let app = HttpRouter::new()
+            .route(
+                "/",
+                get(
+                    |axum::Extension(auth): axum::Extension<ApiKeyAuth>| async move {
+                        Json(json!({ "account": auth.account }))
+                    },
+                ),
+            )
+            .layer(middleware::from_fn(api_auth));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("X-API-Key", HeaderValue::from_static(api_key))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

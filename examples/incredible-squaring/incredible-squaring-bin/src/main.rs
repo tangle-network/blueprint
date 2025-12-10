@@ -11,22 +11,13 @@
 //! - **Job 1 (verified_square)**: Requires 2 operator results for redundancy
 //! - **Job 2 (consensus_square)**: Requires 3 operator results for Byzantine fault tolerance
 
-use blueprint_sdk::Job;
-use blueprint_sdk::Router;
-use blueprint_sdk::{info, error};
-use blueprint_sdk::contexts::tangle_evm::TangleEvmClientContext;
 use blueprint_sdk::runner::BlueprintRunner;
 use blueprint_sdk::runner::config::BlueprintEnvironment;
 use blueprint_sdk::runner::tangle_evm::config::TangleEvmConfig;
-use blueprint_sdk::tangle_evm::{TangleEvmConsumer, TangleEvmLayer, TangleEvmProducer};
+use blueprint_sdk::tangle_evm::{TangleEvmConsumer, TangleEvmProducer};
+use blueprint_sdk::{error, info};
 use incredible_squaring_blueprint_lib::{
-    FooBackgroundService,
-    XSQUARE_JOB_ID,
-    VERIFIED_XSQUARE_JOB_ID,
-    CONSENSUS_XSQUARE_JOB_ID,
-    square,
-    verified_square,
-    consensus_square,
+    CONSENSUS_XSQUARE_JOB_ID, FooBackgroundService, VERIFIED_XSQUARE_JOB_ID, XSQUARE_JOB_ID, router,
 };
 
 /// Initialize logging
@@ -46,11 +37,14 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     let env = BlueprintEnvironment::load()?;
 
     // Get Tangle EVM client from context
-    let tangle_client = env.tangle_evm_client().await
+    let tangle_client = env
+        .tangle_evm_client()
+        .await
         .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?;
 
     // Get service ID from protocol settings
-    let service_id = env.protocol_settings
+    let service_id = env
+        .protocol_settings
         .tangle_evm()
         .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?
         .service_id
@@ -68,29 +62,17 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     info!("Connected to Tangle EVM. Service ID: {}", service_id);
     info!("Registered jobs:");
     info!("  - Job {}: square (1 operator required)", XSQUARE_JOB_ID);
-    info!("  - Job {}: verified_square (2 operators required)", VERIFIED_XSQUARE_JOB_ID);
-    info!("  - Job {}: consensus_square (3 operators required)", CONSENSUS_XSQUARE_JOB_ID);
+    info!(
+        "  - Job {}: verified_square (2 operators required)",
+        VERIFIED_XSQUARE_JOB_ID
+    );
+    info!(
+        "  - Job {}: consensus_square (3 operators required)",
+        CONSENSUS_XSQUARE_JOB_ID
+    );
 
     let result = BlueprintRunner::builder(tangle_config, env)
-        .router(
-            // Router configuration
-            //
-            // Each route maps a job index to a job function. The job index corresponds
-            // to the `jobIndex` field in the JobSubmitted event from the Tangle contract.
-            //
-            // The TangleEvmLayer adds metadata (call_id, service_id) to JobResults,
-            // making them visible to the TangleEvmConsumer.
-            //
-            // Note: The aggregation requirements (how many operator results are needed)
-            // are configured in the BSM contract via `getRequiredResultCount()`.
-            Router::new()
-                // Job 0: Basic square - 1 operator result required
-                .route(XSQUARE_JOB_ID, square.layer(TangleEvmLayer))
-                // Job 1: Verified square - 2 operator results required
-                .route(VERIFIED_XSQUARE_JOB_ID, verified_square.layer(TangleEvmLayer))
-                // Job 2: Consensus square - 3 operator results required
-                .route(CONSENSUS_XSQUARE_JOB_ID, consensus_square.layer(TangleEvmLayer)),
-        )
+        .router(router())
         .background_service(FooBackgroundService)
         // Add the producer
         //

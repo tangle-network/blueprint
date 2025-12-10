@@ -17,13 +17,13 @@
 //! - Simple jobs where aggregation overhead isn't justified
 
 use alloy_sol_types::SolValue;
-use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::tangle_evm::extract::{TangleEvmArg, TangleEvmResult};
+use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::{IntoJobResult, JobResult};
 use color_eyre::Result;
 use incredible_squaring_blueprint_lib::{
-    consensus_square, square, verified_square, CONSENSUS_XSQUARE_JOB_ID, VERIFIED_XSQUARE_JOB_ID,
-    XSQUARE_JOB_ID,
+    CONSENSUS_XSQUARE_JOB_ID, VERIFIED_XSQUARE_JOB_ID, XSQUARE_JOB_ID, consensus_square, square,
+    verified_square,
 };
 use std::sync::Once;
 
@@ -112,7 +112,11 @@ async fn test_multi_operator_direct_submission_square() -> Result<()> {
         let result = operator.compute_square(input).await;
 
         // Verify computation is correct
-        assert_eq!(*result, expected_output, "Operator {} computed wrong result", operator.id);
+        assert_eq!(
+            *result, expected_output,
+            "Operator {} computed wrong result",
+            operator.id
+        );
 
         // Convert to JobResult (what TangleEvmConsumer would receive)
         let job_result = result.into_job_result();
@@ -120,7 +124,7 @@ async fn test_multi_operator_direct_submission_square() -> Result<()> {
 
         if let Some(JobResult::Ok { body, .. }) = job_result {
             // Verify the ABI-encoded output
-            let decoded = u64::abi_decode(&body, true)?;
+            let decoded = u64::abi_decode(&body)?;
             assert_eq!(decoded, expected_output);
 
             // Simulate what would be submitted
@@ -151,7 +155,10 @@ async fn test_multi_operator_direct_submission_square() -> Result<()> {
     }
 
     println!("\n=== Test Passed! ===");
-    println!("All {} operators computed and would submit identical results", operators.len());
+    println!(
+        "All {} operators computed and would submit identical results",
+        operators.len()
+    );
 
     Ok(())
 }
@@ -172,7 +179,10 @@ async fn test_multi_operator_direct_submission_verified_square() -> Result<()> {
     let input: u64 = 7;
     let expected_output: u64 = 49;
 
-    println!("Job: verified_square({}) = {} (requires 2 results)", input, expected_output);
+    println!(
+        "Job: verified_square({}) = {} (requires 2 results)",
+        input, expected_output
+    );
     println!("Operators running: {}", operators.len());
     println!();
 
@@ -197,7 +207,10 @@ async fn test_multi_operator_direct_submission_verified_square() -> Result<()> {
     // All 3 operators submitted, but only 2 are required
     assert_eq!(submitted_results.len(), 3);
     println!("\nContract would receive 3 results (2 required for verification)");
-    println!("  - Result count meets requirement: {} >= 2", submitted_results.len());
+    println!(
+        "  - Result count meets requirement: {} >= 2",
+        submitted_results.len()
+    );
 
     Ok(())
 }
@@ -217,7 +230,10 @@ async fn test_multi_operator_direct_submission_consensus_square() -> Result<()> 
     let input: u64 = 6;
     let expected_output: u64 = 36;
 
-    println!("Job: consensus_square({}) = {} (requires 3 results)", input, expected_output);
+    println!(
+        "Job: consensus_square({}) = {} (requires 3 results)",
+        input, expected_output
+    );
     println!("Operators running: {}", operators.len());
     println!();
 
@@ -240,7 +256,10 @@ async fn test_multi_operator_direct_submission_consensus_square() -> Result<()> 
 
     assert_eq!(submitted_results.len(), 5);
     println!("Contract would receive 5 results (3 required for consensus)");
-    println!("  - Consensus requirement met: {} >= 3", submitted_results.len());
+    println!(
+        "  - Consensus requirement met: {} >= 3",
+        submitted_results.len()
+    );
 
     Ok(())
 }
@@ -271,8 +290,14 @@ async fn test_direct_submission_job_ids() -> Result<()> {
 
     println!("All job types produce valid results:");
     println!("  - square (job_id={}) -> {}", XSQUARE_JOB_ID, 100);
-    println!("  - verified_square (job_id={}) -> {}", VERIFIED_XSQUARE_JOB_ID, 100);
-    println!("  - consensus_square (job_id={}) -> {}", CONSENSUS_XSQUARE_JOB_ID, 100);
+    println!(
+        "  - verified_square (job_id={}) -> {}",
+        VERIFIED_XSQUARE_JOB_ID, 100
+    );
+    println!(
+        "  - consensus_square (job_id={}) -> {}",
+        CONSENSUS_XSQUARE_JOB_ID, 100
+    );
 
     Ok(())
 }
@@ -306,7 +331,10 @@ async fn test_track_operator_submissions() -> Result<()> {
         if result.into_job_result().is_some() {
             operator_submitted.insert(operator.id, true);
             result_count += 1;
-            println!("  Operator {} submitted (total: {})", operator.id, result_count);
+            println!(
+                "  Operator {} submitted (total: {})",
+                operator.id, result_count
+            );
         }
     }
 
@@ -320,9 +348,21 @@ async fn test_track_operator_submissions() -> Result<()> {
     println!("\nSubmission tracking:");
     for i in 0..5 {
         let submitted = operator_submitted.get(&i).copied().unwrap_or(false);
-        println!("  Operator {}: {}", i, if submitted { "SUBMITTED" } else { "not submitted" });
+        println!(
+            "  Operator {}: {}",
+            i,
+            if submitted {
+                "SUBMITTED"
+            } else {
+                "not submitted"
+            }
+        );
     }
-    println!("\nTotal results: {} / {} operators", result_count, operators.len());
+    println!(
+        "\nTotal results: {} / {} operators",
+        result_count,
+        operators.len()
+    );
 
     Ok(())
 }
@@ -338,12 +378,16 @@ async fn test_direct_vs_aggregated_comparison() -> Result<()> {
     println!("\n=== Direct Submission vs Aggregation Comparison ===\n");
 
     let num_operators = 5;
-    let operators: Vec<SimulatedOperator> = (0..num_operators).map(SimulatedOperator::new).collect();
+    let operators: Vec<SimulatedOperator> =
+        (0..num_operators).map(SimulatedOperator::new).collect();
 
     let input: u64 = 8;
     let expected: u64 = 64;
 
-    println!("Scenario: {} operators, square({}) = {}\n", num_operators, input, expected);
+    println!(
+        "Scenario: {} operators, square({}) = {}\n",
+        num_operators, input, expected
+    );
 
     // Direct submission: each operator submits
     println!("DIRECT SUBMISSION (no aggregation):");
@@ -367,7 +411,10 @@ async fn test_direct_vs_aggregated_comparison() -> Result<()> {
     println!("  - Transactions required: 1");
 
     println!("\nTRADE-OFFS:");
-    println!("  Direct:     Simpler, no coordination, but {} txs", num_operators);
+    println!(
+        "  Direct:     Simpler, no coordination, but {} txs",
+        num_operators
+    );
     println!("  Aggregated: More complex, requires coordination, but 1 tx");
     println!("  Gas savings with aggregation: ~{}x", num_operators);
 
@@ -389,7 +436,10 @@ async fn test_many_operators_direct_submission() -> Result<()> {
     let input: u64 = 12;
     let expected: u64 = 144;
 
-    println!("Simulating {} operators computing square({})", num_operators, input);
+    println!(
+        "Simulating {} operators computing square({})",
+        num_operators, input
+    );
 
     let mut all_results_correct = true;
     let mut result_count = 0;
@@ -406,8 +456,14 @@ async fn test_many_operators_direct_submission() -> Result<()> {
         }
     }
 
-    assert!(all_results_correct, "All operators should compute correct result");
-    assert_eq!(result_count, num_operators, "All operators should produce job results");
+    assert!(
+        all_results_correct,
+        "All operators should compute correct result"
+    );
+    assert_eq!(
+        result_count, num_operators,
+        "All operators should produce job results"
+    );
 
     println!("All {} operators computed correct results", num_operators);
     println!("All {} operators would submit to chain", result_count);

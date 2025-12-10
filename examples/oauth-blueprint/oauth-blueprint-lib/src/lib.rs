@@ -1,71 +1,82 @@
+use alloy_sol_types::sol;
 use axum::body::Body;
 use axum::http::{HeaderMap, Request};
 use axum::{
-    Json, Router,
+    Json, Router as HttpRouter,
     extract::Path,
     http::StatusCode,
     middleware,
     response::IntoResponse,
     routing::{delete, get, post},
 };
-use blueprint_sdk::contexts::tangle::TangleClient;
-use blueprint_sdk::extract::Context;
 use blueprint_sdk::macros::debug_job;
 use blueprint_sdk::runner::BackgroundService;
-
 use blueprint_sdk::runner::error::RunnerError;
-use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
+use blueprint_sdk::tangle_evm::TangleEvmLayer;
+use blueprint_sdk::tangle_evm::extract::{TangleEvmArg, TangleEvmResult};
+use blueprint_sdk::{Job, Router as BlueprintRouter};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
-use tokio::sync::oneshot;
-use tokio::sync::oneshot::Receiver;
+use tokio::sync::oneshot::{self, Receiver};
 
-#[derive(Clone)]
-pub struct OAuthBlueprintContext {
-    pub tangle_client: Arc<TangleClient>,
+pub const WRITE_DOC_JOB_ID: u8 = 0;
+pub const ADMIN_PURGE_JOB_ID: u8 = 1;
+
+sol! {
+    struct WriteDocResult {
+        bool ok;
+        string docId;
+        string account;
+    }
+
+    struct AdminPurgeResult {
+        bool purged;
+        string target;
+    }
 }
 
-pub const WRITE_DOC_JOB_ID: u32 = 0;
-pub const ADMIN_PURGE_JOB_ID: u32 = 1;
-
-// ===== Tangle Jobs (NO AUTH - just blockchain events) =====
+// ===== On-chain jobs (triggered by contract events) =====
 
 #[debug_job]
 pub async fn write_doc(
-    Context(_ctx): Context<OAuthBlueprintContext>,
-    TangleArg((doc_id, content, account)): TangleArg<(String, String, String)>,
-) -> TangleResult<serde_json::Value> {
-    // Blockchain tx - no auth, just store data
+    TangleEvmArg((doc_id, content, account)): TangleEvmArg<(String, String, String)>,
+) -> TangleEvmResult<WriteDocResult> {
     let store = docs_store();
     let mut guard = store.write().await;
     let entry = guard.entry(account.clone()).or_default();
     entry.insert(doc_id.clone(), content);
 
-    TangleResult(serde_json::json!({
-        "ok": true,
-        "doc_id": doc_id,
-        "account": account,
-    }))
+    TangleEvmResult(WriteDocResult {
+        ok: true,
+        docId: doc_id,
+        account,
+    })
 }
 
 #[debug_job]
 pub async fn admin_purge(
-    Context(_ctx): Context<OAuthBlueprintContext>,
-    TangleArg(target_account): TangleArg<String>,
-) -> TangleResult<serde_json::Value> {
-    // Admin action via blockchain - no OAuth here
+    TangleEvmArg(target_account): TangleEvmArg<String>,
+) -> TangleEvmResult<AdminPurgeResult> {
     let store = docs_store();
     let mut guard = store.write().await;
     let removed = guard.remove(&target_account).is_some();
 
-    TangleResult(serde_json::json!({
-        "purged": removed,
-        "target": target_account,
-    }))
+    TangleEvmResult(AdminPurgeResult {
+        purged: removed,
+        target: target_account,
+    })
 }
 
-// ===== Off-chain OAuth Protected API Service =====
+/// Router wiring the OAuth jobs for reuse across binaries/tests.
+#[must_use]
+pub fn router() -> BlueprintRouter {
+    BlueprintRouter::new()
+        .route(WRITE_DOC_JOB_ID, write_doc.layer(TangleEvmLayer))
+        .route(ADMIN_PURGE_JOB_ID, admin_purge.layer(TangleEvmLayer))
+}
+
+// ===== Off-chain OAuth-protected HTTP API =====
 
 #[derive(Clone)]
 pub struct OAuthProtectedApiService;
@@ -75,17 +86,17 @@ impl BackgroundService for OAuthProtectedApiService {
         let (tx, rx) = oneshot::channel();
 
         tokio::spawn(async move {
-            let app = Router::new()
+            let app = HttpRouter::new()
                 .route("/health", get(|| async { Json("ok") }))
                 .route("/docs", post(create_doc))
-                .route("/docs/:id", get(read_doc))
-                .route("/docs/:id", delete(delete_doc))
+                .route("/docs/{id}", get(read_doc))
+                .route("/docs/{id}", delete(delete_doc))
                 .route("/docs", get(list_docs))
                 .layer(middleware::from_fn(oauth_auth));
 
             let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
                 .await
-                .unwrap();
+                .expect("failed to bind listener");
 
             let _ = tx.send(Ok(()));
             let _ = axum::serve(listener, app).await;
@@ -112,23 +123,19 @@ async fn oauth_auth(
         .and_then(|h| h.strip_prefix("Bearer "))
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    // In production: validate with OAuth provider
-    // For demo: simple token parsing
     let ctx = if token.starts_with("admin_") {
         OAuthContext {
-            tenant: "admin".to_string(),
-            scopes: vec!["docs:read", "docs:write", "docs:admin"]
-                .into_iter()
-                .map(String::from)
-                .collect(),
+            tenant: "admin".into(),
+            scopes: HashSet::from([
+                "docs:read".to_string(),
+                "docs:write".to_string(),
+                "docs:admin".to_string(),
+            ]),
         }
     } else {
         OAuthContext {
             tenant: token.to_string(),
-            scopes: vec!["docs:read", "docs:write"]
-                .into_iter()
-                .map(String::from)
-                .collect(),
+            scopes: HashSet::from(["docs:read".to_string(), "docs:write".to_string()]),
         }
     };
 
@@ -139,7 +146,7 @@ async fn oauth_auth(
 async fn create_doc(
     axum::Extension(auth): axum::Extension<OAuthContext>,
     Json(payload): Json<HashMap<String, String>>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     if !auth.scopes.contains("docs:write") {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -149,50 +156,47 @@ async fn create_doc(
 
     let store = docs_store();
     let mut guard = store.write().await;
-    let docs = guard.entry(auth.tenant.clone()).or_default();
-    docs.insert(id.clone(), content);
+    guard
+        .entry(auth.tenant.clone())
+        .or_default()
+        .insert(id.clone(), content);
 
-    Ok(Json(serde_json::json!({"id": id, "tenant": auth.tenant})))
+    Ok(Json(serde_json::json!({ "id": id, "tenant": auth.tenant })))
 }
 
 async fn read_doc(
     axum::Extension(auth): axum::Extension<OAuthContext>,
     Path(id): Path<String>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     if !auth.scopes.contains("docs:read") {
         return Err(StatusCode::FORBIDDEN);
     }
 
     let store = docs_store();
     let guard = store.read().await;
-
-    match guard.get(&auth.tenant).and_then(|d| d.get(&id)) {
-        Some(content) => Ok(Json(serde_json::json!({"id": id, "content": content}))),
-        None => Err(StatusCode::NOT_FOUND),
-    }
+    guard
+        .get(&auth.tenant)
+        .and_then(|docs| docs.get(&id))
+        .map(|content| Json(serde_json::json!({ "id": id, "content": content })))
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 async fn delete_doc(
     axum::Extension(auth): axum::Extension<OAuthContext>,
     Path(id): Path<String>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     if !auth.scopes.contains("docs:write") {
         return Err(StatusCode::FORBIDDEN);
     }
 
     let store = docs_store();
     let mut guard = store.write().await;
-
     let removed = guard
         .get_mut(&auth.tenant)
-        .and_then(|d| d.remove(&id))
+        .and_then(|docs| docs.remove(&id))
         .is_some();
 
-    if removed {
-        Ok(Json(serde_json::json!({"deleted": true})))
-    } else {
-        Err(StatusCode::NOT_FOUND)
-    }
+    Ok(Json(serde_json::json!({ "deleted": removed })))
 }
 
 async fn list_docs(
@@ -204,91 +208,99 @@ async fn list_docs(
 
     let store = docs_store();
     let guard = store.read().await;
-
-    let ids: Vec<String> = guard
+    let docs = guard
         .get(&auth.tenant)
         .map(|d| d.keys().cloned().collect())
-        .unwrap_or_default();
+        .unwrap_or_else(Vec::new);
 
-    Ok(Json(serde_json::json!({"documents": ids})))
+    Ok(Json(serde_json::json!({ "documents": docs })))
 }
 
-// Storage
-type DocMap = Arc<RwLock<HashMap<String, HashMap<String, String>>>>;
+type DocStore = Arc<RwLock<HashMap<String, HashMap<String, String>>>>;
 
-fn docs_store() -> &'static DocMap {
-    static STORE: OnceLock<DocMap> = OnceLock::new();
+fn docs_store() -> &'static DocStore {
+    static STORE: OnceLock<DocStore> = OnceLock::new();
     STORE.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
+}
+
+/// Clear the in-memory document store before running integration tests.
+pub async fn reset_state_for_tests() {
+    docs_store().write().await.clear();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    async fn create_test_context() -> OAuthBlueprintContext {
-        use blueprint_testing_utils::tangle::TangleTestHarness;
-        use tempfile::TempDir;
-
-        // Set up test harness with proper TangleClient
-        let tmp_dir = TempDir::new().expect("Failed to create temp dir");
-        let harness = TangleTestHarness::setup(tmp_dir)
-            .await
-            .expect("Failed to setup test harness");
-
-        OAuthBlueprintContext {
-            tangle_client: Arc::new(harness.client().clone()),
-        }
-    }
+    use axum::http::HeaderValue;
+    use axum::routing::get;
+    use tokio::time::{Duration, timeout};
+    use tower::ServiceExt;
 
     #[tokio::test]
-    async fn test_write_doc_job() {
-        let result = write_doc(
-            Context(create_test_context().await),
-            TangleArg((
-                "doc1".to_string(),
-                "content here".to_string(),
-                "account_123".to_string(),
-            )),
-        )
-        .await;
-
-        assert_eq!(result.0["ok"], true);
-        assert_eq!(result.0["doc_id"], "doc1");
-
-        // Verify storage
-        let store = docs_store();
-        let guard = store.read().await;
-        assert_eq!(
-            guard.get("account_123").unwrap().get("doc1").unwrap(),
-            "content here"
+    async fn background_service_starts() {
+        let service = OAuthProtectedApiService;
+        let signal = service.start().await.unwrap();
+        assert!(
+            timeout(Duration::from_secs(1), signal)
+                .await
+                .unwrap()
+                .unwrap()
+                .is_ok()
         );
     }
 
     #[tokio::test]
-    async fn test_admin_purge_job() {
-        // First create a doc
-        write_doc(
-            Context(create_test_context().await),
-            TangleArg((
-                "doc2".to_string(),
-                "data".to_string(),
-                "target_account".to_string(),
-            )),
-        )
+    async fn oauth_middleware_accepts_and_rejects_tokens() {
+        let app = HttpRouter::new()
+            .route(
+                "/",
+                get(
+                    |axum::Extension(ctx): axum::Extension<OAuthContext>| async move {
+                        Json(serde_json::json!({ "tenant": ctx.tenant }))
+                    },
+                ),
+            )
+            .layer(middleware::from_fn(oauth_auth));
+
+        let authed = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header(
+                        "Authorization",
+                        HeaderValue::from_static("Bearer admin_token"),
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(authed.status(), StatusCode::OK);
+
+        let rejected = app
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn write_doc_and_purge_jobs_modify_state() {
+        docs_store().write().await.clear();
+        write_doc(TangleEvmArg((
+            "doc1".into(),
+            "secret".into(),
+            "tenant".into(),
+        )))
         .await;
+        {
+            let guard = docs_store().read().await;
+            assert_eq!(guard.get("tenant").unwrap().get("doc1").unwrap(), "secret");
+        }
 
-        // Now purge it
-        let result = admin_purge(
-            Context(create_test_context().await),
-            TangleArg("target_account".to_string()),
-        )
-        .await;
-
-        assert_eq!(result.0["purged"], true);
-
-        // Verify it's gone
-        let store = docs_store();
-        let guard = store.read().await;
-        assert!(!guard.contains_key("target_account"));
+        admin_purge(TangleEvmArg("tenant".into())).await;
+        let guard = docs_store().read().await;
+        assert!(guard.get("tenant").is_none());
     }
 }

@@ -1,0 +1,19 @@
+[package]
+name = "hello-tangle-blueprint"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+alloy-sol-types = { workspace = true }
+alloy-primitives = { workspace = true }
+blueprint-router = { workspace = true }
+blueprint-tangle-evm-extra = { workspace = true }
+once_cell = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+blueprint-anvil-testing-utils = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

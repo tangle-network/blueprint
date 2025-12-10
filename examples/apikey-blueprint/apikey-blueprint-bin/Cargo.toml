@@ -5,11 +5,10 @@ edition = "2024"
 
 [dependencies]
 apikey-blueprint-lib = { path = "../apikey-blueprint-lib" }
-blueprint-sdk = { path = "../../../crates/sdk", features = ["std", "tangle"] }
+blueprint-sdk = { path = "../../../crates/sdk", features = ["std", "tangle-evm"] }
 tokio = { version = "^1", features = ["rt-multi-thread", "macros"] }
-tower = { version = "0.5.2" }
-tracing-subscriber = { version = "0.3" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
+serde_json = "1"
 apikey-blueprint-lib = { path = "../apikey-blueprint-lib" }
-blueprint-sdk = { path = "../../../crates/sdk", features = ["macros", "build", "testing"] }

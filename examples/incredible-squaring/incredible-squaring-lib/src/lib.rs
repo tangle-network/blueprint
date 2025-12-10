@@ -7,7 +7,9 @@
 
 use blueprint_sdk::runner::BackgroundService;
 use blueprint_sdk::runner::error::RunnerError;
+use blueprint_sdk::tangle_evm::TangleEvmLayer;
 use blueprint_sdk::tangle_evm::extract::{TangleEvmArg, TangleEvmResult};
+use blueprint_sdk::{Job, Router};
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Receiver;
 
@@ -98,6 +100,28 @@ pub async fn verified_square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmRes
 pub async fn consensus_square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
     let result = x * x;
     TangleEvmResult(result)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROUTER
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Router wiring the squaring jobs onto the Tangle EVM layer.
+///
+/// Reused by the binary and the Anvil harness test so we have a single source
+/// of truth for job registration and aggregation semantics.
+#[must_use]
+pub fn router() -> Router {
+    Router::new()
+        .route(XSQUARE_JOB_ID, square.layer(TangleEvmLayer))
+        .route(
+            VERIFIED_XSQUARE_JOB_ID,
+            verified_square.layer(TangleEvmLayer),
+        )
+        .route(
+            CONSENSUS_XSQUARE_JOB_ID,
+            consensus_square.layer(TangleEvmLayer),
+        )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

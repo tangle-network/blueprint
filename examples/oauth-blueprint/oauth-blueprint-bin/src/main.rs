@@ -1,83 +1,66 @@
-use blueprint_sdk::Job;
-use blueprint_sdk::Router;
-use blueprint_sdk::{info, error};
-use blueprint_sdk::contexts::tangle::TangleClientContext;
-use std::sync::Arc;
-use blueprint_sdk::crypto::sp_core::SpSr25519;
-use blueprint_sdk::crypto::tangle_pair_signer::TanglePairSigner;
-use blueprint_sdk::keystore::backends::Backend;
+use blueprint_sdk::contexts::tangle_evm::TangleEvmClientContext;
 use blueprint_sdk::runner::BlueprintRunner;
 use blueprint_sdk::runner::config::BlueprintEnvironment;
-use blueprint_sdk::runner::tangle::config::TangleConfig;
-use blueprint_sdk::tangle::consumer::TangleConsumer;
-use blueprint_sdk::tangle::filters::MatchesServiceId;
-use blueprint_sdk::tangle::layers::TangleLayer;
-use blueprint_sdk::tangle::producer::TangleProducer;
+use blueprint_sdk::runner::tangle_evm::config::TangleEvmConfig;
+use blueprint_sdk::tangle_evm::{TangleEvmConsumer, TangleEvmLayer, TangleEvmProducer};
+use blueprint_sdk::{Job, Router, error, info};
 use oauth_blueprint_lib::{
-    OAuthBlueprintContext,
-    OAuthProtectedApiService,
-    WRITE_DOC_JOB_ID, write_doc,
-    ADMIN_PURGE_JOB_ID, admin_purge,
+    ADMIN_PURGE_JOB_ID, OAuthProtectedApiService, WRITE_DOC_JOB_ID, admin_purge, write_doc,
 };
-use tower::filter::FilterLayer;
 
 fn setup_log() {
-    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    use tracing_subscriber::prelude::*;
+    use tracing_subscriber::{EnvFilter, fmt};
+    if tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .try_init()
+        .is_err()
+    {
+        // logging already initialized
+    }
 }
 
 #[tokio::main]
-#[allow(clippy::result_large_err)]
 async fn main() -> Result<(), blueprint_sdk::Error> {
     setup_log();
 
-    info!("Starting the OAuth Blueprint!");
-
     let env = BlueprintEnvironment::load()?;
-    let keystore = env.keystore();
-    let sr25519_signer = keystore.first_local::<SpSr25519>()?;
-    let sr25519_pair = keystore.get_secret::<SpSr25519>(&sr25519_signer)?;
-    let st25519_signer = TanglePairSigner::new(sr25519_pair.0);
+    let tangle_client = env
+        .tangle_evm_client()
+        .await
+        .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?;
 
-    let tangle_client = env.tangle_client().await?;
-    let tangle_producer =
-        TangleProducer::finalized_blocks(tangle_client.rpc_client.clone()).await?;
-    let tangle_consumer = TangleConsumer::new(tangle_client.rpc_client.clone(), st25519_signer);
+    let service_id = env
+        .protocol_settings
+        .tangle_evm()
+        .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?
+        .service_id
+        .ok_or_else(|| blueprint_sdk::Error::Other("SERVICE_ID not configured".into()))?;
 
-    let tangle_config = TangleConfig::default();
+    info!("Starting OAuth blueprint for service {service_id}");
 
-    let service_id = env.protocol_settings.tangle()?.service_id.unwrap();
-
-    // Create the context with tangle client
-    let context = OAuthBlueprintContext {
-        tangle_client: Arc::new(tangle_client.clone()),
-    };
+    let tangle_producer = TangleEvmProducer::new(tangle_client.clone(), service_id);
+    let tangle_consumer = TangleEvmConsumer::new(tangle_client);
+    let tangle_config = TangleEvmConfig::default();
 
     let result = BlueprintRunner::builder(tangle_config, env)
         .router(
             Router::new()
-                // Only state-changing jobs
-                .route(WRITE_DOC_JOB_ID, write_doc.layer(TangleLayer))
-                .route(ADMIN_PURGE_JOB_ID, admin_purge.layer(TangleLayer))
-                .layer(FilterLayer::new(MatchesServiceId(service_id)))
-                .with_context(context),
+                .route(WRITE_DOC_JOB_ID, write_doc.layer(TangleEvmLayer))
+                .route(ADMIN_PURGE_JOB_ID, admin_purge.layer(TangleEvmLayer)),
         )
-        // OAuth protected API service for off-chain operations
         .background_service(OAuthProtectedApiService)
         .producer(tangle_producer)
         .consumer(tangle_consumer)
-        .with_shutdown_handler(async { println!("Shutting down OAuth Blueprint!") })
+        .with_shutdown_handler(async {
+            info!("Shutting down OAuth blueprint");
+        })
         .run()
         .await;
 
     if let Err(e) = result {
-        error!("Runner failed! {e:?}");
+        error!("Runner failed: {e:?}");
     }
 
     Ok(())

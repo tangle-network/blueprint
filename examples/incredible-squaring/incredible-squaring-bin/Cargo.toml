@@ -1,12 +1,11 @@
 [package]
 name = "incredible-squaring-blueprint-bin"
-version.workspace = true
+version = "0.1.1"
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-incredible-squaring-blueprint-lib.workspace = true
-
+incredible-squaring-blueprint-lib = { path = "../incredible-squaring-lib" }
 blueprint-sdk = { workspace = true, features = ["std", "tangle-evm"] }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tower.workspace = true

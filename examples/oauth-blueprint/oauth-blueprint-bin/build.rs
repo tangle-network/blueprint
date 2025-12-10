@@ -1,40 +1,44 @@
-use blueprint_sdk::build;
-use blueprint_sdk::tangle::blueprint;
-use oauth_blueprint_lib::{write_doc, admin_purge};
+use std::path::Path;
 
 fn main() {
-    if std::env::var("BUILD_CONTRACTS").is_ok() {
-        let contract_dirs: Vec<&str> = vec!["./contracts"];
-        build::soldeer_install();
-        build::soldeer_update();
-        build::build_contracts(contract_dirs);
-    }
-
     println!("cargo::rerun-if-changed=../oauth-blueprint-lib");
 
-    // Re-run triggers
-    println!("cargo:rerun-if-changed=contracts/src");
-    println!("cargo:rerun-if-changed=remappings.txt");
-    println!("cargo:rerun-if-changed=foundry.toml");
-    println!("cargo:rerun-if-changed=../oauth-blueprint-lib");
+    let metadata = serde_json::json!({
+        "name": "oauth-blueprint",
+        "description": "OAuth-protected document storage blueprint",
+        "version": env!("CARGO_PKG_VERSION"),
+        "master_revision": "Latest",
+        "manager": { "Evm": "OauthBlueprintBSM" },
+        "jobs": [
+            {
+                "name": "write_doc",
+                "job_index": WRITE_DOC_JOB_ID,
+                "inputs": ["string", "string", "string"],
+                "outputs": ["tuple(bool,string,string)"],
+                "required_results": 1,
+                "description": "Persist a document for a tenant"
+            },
+            {
+                "name": "admin_purge",
+                "job_index": ADMIN_PURGE_JOB_ID,
+                "inputs": ["string"],
+                "outputs": ["tuple(bool,string)"],
+                "required_results": 1,
+                "description": "Purge all documents for a tenant"
+            }
+        ]
+    });
 
-    // Produce blueprint.json describing jobs in this blueprint
-    let blueprint = blueprint! {
-        name: "oauth-blueprint",
-        master_manager_revision: "Latest",
-        manager: { Evm = "ExperimentalBlueprint" },
-        jobs: [write_doc, admin_purge]
-    };
-
-    if let Ok(blueprint) = blueprint {
-        let json =
-            blueprint_sdk::tangle::metadata::macros::ext::serde_json::to_string_pretty(&blueprint)
-                .unwrap();
-        let root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        std::fs::write(
-            std::path::Path::new(&root).join("blueprint.json"),
-            json.as_bytes(),
-        )
-        .unwrap();
-    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("..");
+    std::fs::write(
+        root.join("blueprint_oauth.json"),
+        serde_json::to_string_pretty(&metadata).unwrap(),
+    )
+    .unwrap();
 }
+
+const WRITE_DOC_JOB_ID: u8 = oauth_blueprint_lib::WRITE_DOC_JOB_ID;
+const ADMIN_PURGE_JOB_ID: u8 = oauth_blueprint_lib::ADMIN_PURGE_JOB_ID;
