@@ -2992,9 +2992,11 @@ dependencies = [
 name = "blueprint-pricing-engine"
 version = "0.2.5"
 dependencies = [
+ "alloy-network",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-types",
+ "alloy-signer-local",
  "alloy-sol-types",
  "anyhow",
  "async-trait",
