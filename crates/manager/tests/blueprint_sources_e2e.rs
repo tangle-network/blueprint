@@ -523,10 +523,11 @@ fn test_binary(name: &str) -> BlueprintBinary {
 }
 
 fn format_os(os: &str) -> String {
+    // Must match get_formatted_os_string() from sdk/utils.rs
     match os {
-        "macos" => "macos".to_string(),
-        "linux" => "linux".to_string(),
-        "windows" => "windows".to_string(),
+        "macos" => "apple-darwin".to_string(),
+        "linux" => "unknown-linux-gnu".to_string(),
+        "windows" => "pc-windows-msvc".to_string(),
         other => other.to_string(),
     }
 }

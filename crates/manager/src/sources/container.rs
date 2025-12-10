@@ -43,12 +43,19 @@ impl BlueprintSourceHandler for ContainerSource {
         let full = format!("{registry}/{image}:{tag}");
         info!("Pulling image {full}");
 
-        Command::new("docker")
+        let status = Command::new("docker")
             .arg("pull")
             .arg(&full)
             .status()
             .await
             .map_err(|e| Error::Other(e.to_string()))?;
+
+        if !status.success() {
+            return Err(Error::Other(format!(
+                "Docker pull failed for image {full} with exit code: {:?}",
+                status.code()
+            )));
+        }
 
         let ret = PathBuf::from(&full);
         self.resolved_image = Some(full);
