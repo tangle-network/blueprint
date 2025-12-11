@@ -103,13 +103,13 @@ impl RemoteProviderManager {
 
         match self
             .provisioner
-            .provision(provider, &resource_spec, region)
+            .provision(provider.clone(), &resource_spec, region)
             .await
         {
             Ok(instance) => {
                 info!(
                     "Service deployed to {}: instance={}",
-                    provider, instance.instance_id
+                    provider, instance.id
                 );
 
                 // Register with TTL manager for automatic cleanup

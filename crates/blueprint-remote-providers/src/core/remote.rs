@@ -185,7 +185,7 @@ impl Default for KubernetesClusterConfig {
 
 /// Re-export CloudProvider from pricing-engine
 /// This is now the single source of truth for cloud provider types
-pub use blueprint_pricing_engine_lib::CloudProvider;
+pub use blueprint_pricing_engine_lib::types::CloudProvider;
 
 /// Extension trait for Kubernetes-specific functionality
 pub trait CloudProviderExt {

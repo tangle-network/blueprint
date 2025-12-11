@@ -5,6 +5,7 @@ use crate::error::{Error, Result};
 use blueprint_core::{error, info, warn};
 use blueprint_remote_providers::deployment::manager_integration::RemoteDeploymentConfig;
 use blueprint_remote_providers::deployment::tracker::DeploymentTracker;
+use blueprint_remote_providers::deployment::tracker::DeploymentStatus;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -40,19 +41,32 @@ impl RemoteServiceInstance {
 
         // The deployment was already created in try_remote_deployment
         // Just verify it's running
-        match self.tracker.get_deployment(&self.config.instance_id).await {
-            Ok(Some(deployment)) if deployment.is_running() => {
+        match self.tracker.get_deployment_status(&self.config.instance_id).await {
+            Some(DeploymentStatus::Active) => {
                 *self.status.write().await = Status::Running;
                 Ok(())
             }
-            Ok(Some(_)) => {
-                *self.status.write().await = Status::Error;
-                Err(Error::Other("Remote deployment is not running".into()))
+            Some(DeploymentStatus::Terminating) => {
+                *self.status.write().await = Status::Pending;
+                Ok(())
             }
-            _ => {
+            Some(DeploymentStatus::Terminated) => {
+                *self.status.write().await = Status::Finished;
+                Ok(())
+            }
+            Some(DeploymentStatus::Failed) => {
+                *self.status.write().await = Status::Error;
+                Err(Error::Other("Remote deployment failed".into()))
+            }
+            Some(DeploymentStatus::Unknown) => {
                 *self.status.write().await = Status::Unknown;
+                Err(Error::Other("Remote deployment status unknown".into()))
+            }
+            None => {
+                *self.status.write().await = Status::Error;
                 Err(Error::Other("Remote deployment not found".into()))
             }
+
         }
     }
 
@@ -74,7 +88,7 @@ impl RemoteServiceInstance {
 
         // Mark for termination in tracker
         self.tracker
-            .mark_for_termination(&self.config.instance_id)
+            .handle_termination(&self.config.instance_id)
             .await?;
 
         *self.status.write().await = Status::Finished;

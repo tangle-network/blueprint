@@ -289,7 +289,8 @@ impl RemoteDeploymentService {
             // Get region from policy or use default
             let region = self
                 .policy
-                .regional_preferences
+                .regions
+                .preferred_regions
                 .first()
                 .cloned()
                 .unwrap_or_else(|| match provider {

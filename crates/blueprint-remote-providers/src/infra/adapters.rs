@@ -22,6 +22,7 @@ impl AdapterFactory {
     /// Create a cloud provider adapter for the specified provider
     pub async fn create_adapter(provider: CloudProvider) -> Result<Arc<dyn CloudProviderAdapter>> {
         match provider {
+            #[cfg(feature = "aws")]
             CloudProvider::AWS => {
                 let adapter = AwsAdapter::new().await?;
                 Ok(Arc::new(adapter))

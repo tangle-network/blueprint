@@ -112,6 +112,16 @@ impl TtlManager {
         );
     }
 
+    /// Unregister a service from TTL
+    pub async fn unregister_ttl(&self, blueprint_id: u64, service_id: u64) {
+        let mut registry = self.ttl_registry.write().await;
+        registry.remove(&(blueprint_id, service_id));
+        info!(
+            "Unregistered TTL for blueprint {} service {}",
+            blueprint_id, service_id
+        );
+    }
+
     /// Check for expired services and trigger cleanup
     pub async fn check_expired_services(&self) -> Result<Vec<(u64, u64)>> {
         let now = Utc::now();
