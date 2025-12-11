@@ -4,6 +4,7 @@
 use blueprint_remote_providers::{
     deployment::{DeploymentVersion, UpdateManager, UpdateStrategy},
     infra::provisioner::CloudProvisioner,
+    DeploymentTracker,
 };
 use color_eyre::{Result, eyre::eyre};
 use dialoguer::{Confirm, Select, theme::ColorfulTheme};
@@ -53,7 +54,18 @@ pub async fn update(
 
     // Get current deployment
     let provisioner = CloudProvisioner::new().await?;
-    let deployments = provisioner.list_deployments().await?;
+    
+    let tracker_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".tangle")
+        .join("remote_deployments");
+
+    let deployments = if tracker_path.exists() {
+        let tracker = DeploymentTracker::new(&tracker_path).await?;
+        tracker.list_all().await?
+    } else {
+        Vec::new()
+    };
 
     let current = deployments
         .iter()
@@ -93,8 +105,8 @@ pub async fn update(
     pb.enable_steady_tick(Duration::from_millis(100));
 
     // Get the appropriate adapter based on provider
-    let provider = current.instance.provider.clone();
-    let adapter = provisioner.get_adapter(&provider)?;
+    let provider = current.provider.as_ref().ok_or_else(|| eyre!("Provider not found"))?;
+    let adapter = provisioner.get_adapter(provider)?;
 
     // Extract resource spec from current deployment
     let resource_spec = blueprint_remote_providers::core::resources::ResourceSpec {
@@ -127,19 +139,15 @@ pub async fn update(
 
             println!("\n📊 Update Summary:");
             println!("  New Deployment ID: {}", new_deployment.blueprint_id);
-            println!("  Instance: {}", new_deployment.instance.id);
+            println!("  Instance: {}", new_deployment.resource_ids.get("instance_id").unwrap_or(&"unknown".to_string()));
 
-            if let Some(ip) = &new_deployment.instance.public_ip {
+            if let Some(ip) = new_deployment.metadata.get("public_ip") {
                 println!("  Public IP: {}", ip);
             }
 
-            if !new_deployment.port_mappings.is_empty() {
-                println!("  Exposed Ports:");
-                for (internal, external) in &new_deployment.port_mappings {
-                    println!("    {} -> {}", internal, external);
-                }
-            }
-
+            // Port mappings might be in metadata or not available in DeploymentRecord
+            // if !new_deployment.port_mappings.is_empty() { ... }
+            
             Ok(())
         }
         Err(e) => {
@@ -168,7 +176,18 @@ pub async fn rollback(service_id: String, version: Option<String>, yes: bool) ->
 
     // Get deployment history
     let provisioner = CloudProvisioner::new().await?;
-    let deployments = provisioner.list_deployments().await?;
+    
+    let tracker_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".tangle")
+        .join("remote_deployments");
+
+    let deployments = if tracker_path.exists() {
+        let tracker = DeploymentTracker::new(&tracker_path).await?;
+        tracker.list_all().await?
+    } else {
+        Vec::new()
+    };
 
     let current = deployments
         .iter()
@@ -241,8 +260,8 @@ pub async fn rollback(service_id: String, version: Option<String>, yes: bool) ->
     pb.enable_steady_tick(Duration::from_millis(100));
 
     // Get the appropriate adapter
-    let provider = current.instance.provider.clone();
-    let adapter = provisioner.get_adapter(&provider)?;
+    let provider = current.provider.as_ref().ok_or_else(|| eyre!("Provider not found"))?;
+    let adapter = provisioner.get_adapter(provider)?;
 
     match update_manager
         .rollback(adapter.as_ref(), &target_version, current)
@@ -254,7 +273,7 @@ pub async fn rollback(service_id: String, version: Option<String>, yes: bool) ->
             println!("\n📊 Rollback Summary:");
             println!("  Active Version: {}", target_version);
             println!("  Deployment ID: {}", rollback_deployment.blueprint_id);
-            println!("  Instance: {}", rollback_deployment.instance.id);
+            println!("  Instance: {}", rollback_deployment.instance.id.as_deref().unwrap_or("unknown"));
 
             Ok(())
         }

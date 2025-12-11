@@ -77,6 +77,13 @@ impl CloudProvisioner {
         })
     }
 
+    /// Get the adapter for a specific provider
+    pub fn get_adapter(&self, provider: &CloudProvider) -> Result<&Box<dyn CloudProviderAdapter>> {
+        self.providers
+            .get(provider)
+            .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))
+    }
+
     /// Provision infrastructure on specified provider with retry logic
     pub async fn provision(
         &self,

@@ -3,6 +3,7 @@
 #[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::{
     deployment::ssh::SshDeploymentClient,
+    DeploymentTracker,
     infra::provisioner::CloudProvisioner,
     monitoring::logs::{LogAggregator, LogFilters, LogLevel, LogSource, LogStreamer},
 };
@@ -43,8 +44,17 @@ pub async fn stream_logs(
         .map(|d| SystemTime::now() - d);
 
     // Get deployment information
-    let provisioner = CloudProvisioner::new().await?;
-    let deployments = provisioner.list_deployments().await?;
+    let tracker_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".tangle")
+        .join("remote_deployments");
+
+    let deployments = if tracker_path.exists() {
+        let tracker = DeploymentTracker::new(&tracker_path).await?;
+        tracker.list_all().await?
+    } else {
+        Vec::new()
+    };
 
     let deployment = deployments
         .iter()
@@ -192,7 +202,7 @@ fn print_log_entry(entry: &blueprint_remote_providers::monitoring::logs::LogEntr
 
 /// Determine the log source for a deployment
 async fn determine_log_source(
-    deployment: &blueprint_remote_providers::infra::traits::BlueprintDeploymentResult,
+    deployment: &blueprint_remote_providers::deployment::tracker::DeploymentRecord,
 ) -> Result<LogSource> {
     use blueprint_remote_providers::core::remote::CloudProvider;
 
@@ -254,16 +264,19 @@ async fn determine_log_source(
 
 /// Determine provider-specific log source
 fn determine_provider_log_source(
-    deployment: &blueprint_remote_providers::infra::traits::BlueprintDeploymentResult,
+    deployment: &blueprint_remote_providers::deployment::tracker::DeploymentRecord,
 ) -> Result<LogSource> {
     use blueprint_remote_providers::core::remote::CloudProvider;
 
-    match deployment.instance.provider {
+    let provider = deployment.provider.as_ref().ok_or_else(|| eyre!("Provider not found in deployment"))?;
+    let instance_id = deployment.id.clone();
+
+    match provider {
         #[cfg(feature = "aws")]
         CloudProvider::AWS => {
             // CloudWatch logs
             Ok(LogSource::CloudWatch {
-                log_group: format!("/aws/ec2/{}", deployment.instance.id),
+                log_group: format!("/aws/ec2/{}", instance_id),
                 log_stream: deployment.blueprint_id.clone(),
             })
         }
@@ -277,16 +290,15 @@ fn determine_provider_log_source(
                     .unwrap_or(&"default-project".to_string())
                     .clone(),
                 resource_type: "gce_instance".to_string(),
-                resource_id: deployment.instance.id.clone(),
+                resource_id: instance_id.clone(),
             })
         }
         _ => {
             // Default to file-based logs
             let host = deployment
-                .instance
-                .public_ip
-                .as_ref()
-                .or(deployment.instance.private_ip.as_ref())
+                .metadata
+                .get("public_ip")
+                .or(deployment.metadata.get("private_ip"))
                 .ok_or_else(|| eyre!("No IP address found for deployment"))?
                 .clone();
 

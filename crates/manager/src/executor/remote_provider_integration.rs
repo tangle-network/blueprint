@@ -35,8 +35,6 @@ impl RemoteProviderManager {
             return Ok(None);
         }
 
-        let config = cloud_config.unwrap();
-
         // Create deployment tracker
         let tracker_path = ctx.data_dir().join("remote_deployments");
         let tracker = Arc::new(DeploymentTracker::new(&tracker_path).await?);

@@ -257,7 +257,7 @@ pub async fn terminate(deployment_id: Option<String>, all: bool, yes: bool) -> R
                     spinner.set_message("Terminating instance...");
                     // TODO: Get provider from deployment tracker
                     // For now, we need to load deployment info to get the provider
-                    if let Err(e) = terminate_real_deployment(&provisioner, id).await {
+                    if let Err(e) = terminate_real_deployment(&provisioner, &id).await {
                         spinner
                             .finish_with_message(format!("❌ Failed to terminate {}: {}", id, e));
                         return Ok(());
@@ -335,31 +335,42 @@ async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
             Err(_) => Some("❓ Unknown".to_string()),
         };
 
-        let status_icon = match deployment.status.as_str() {
-            "running" => "🟢",
-            "starting" => "🟡",
-            "stopped" | "terminated" => "🔴",
-            _ => "⚪",
+        use blueprint_remote_providers::deployment::tracker::DeploymentStatus as DS;
+        let status_icon = match deployment.status {
+            DS::Active => "🟢",
+            DS::Terminating => "🟡",
+            DS::Terminated => "🔴",
+            DS::Failed => "🔴",
+            DS::Unknown => "⚪",
+        };
+        
+        let status_str = match deployment.status {
+            DS::Active => "active",
+            DS::Terminating => "terminating",
+            DS::Terminated => "terminated",
+            DS::Failed => "failed",
+            DS::Unknown => "unknown",
         };
 
+        let duration = chrono::Utc::now().signed_duration_since(deployment.deployed_at);
         let uptime = format!(
             "{}h {}m",
-            deployment.created_at.elapsed().as_secs() / 3600,
-            (deployment.created_at.elapsed().as_secs() % 3600) / 60
+            duration.num_hours(),
+            duration.num_minutes() % 60
         );
 
         deployments.push(DeploymentStatus {
-            id: deployment.instance_id,
+            id: deployment.id.clone(),
             provider: format!("{:?}", deployment.provider),
-            region: deployment.region,
-            status: format!("{} {}", status_icon, deployment.status),
+            region: deployment.region.clone().unwrap_or_else(|| "unknown".to_string()),
+            status: format!("{} {}", status_icon, status_str),
             health: health_status,
             ip: deployment
-                .public_ip
+                .metadata.get("public_ip").cloned()
                 .unwrap_or_else(|| "Pending".to_string()),
             uptime,
             ttl: deployment
-                .ttl_expires_at
+                .expires_at
                 .map(|expires| {
                     let remaining = expires.signed_duration_since(chrono::Utc::now());
                     if remaining.num_seconds() > 0 {
@@ -407,10 +418,13 @@ async fn terminate_real_deployment(
         .ok_or_else(|| color_eyre::eyre::eyre!("Deployment {} not found", instance_id))?;
 
     // Terminate the instance
-    provisioner
-        .terminate(deployment.provider, instance_id)
-        .await
-        .map_err(|e| color_eyre::eyre::eyre!("Failed to terminate instance: {}", e))?;
+    if let Some(provider) = deployment.provider {
+        let cloud_id = deployment.resource_ids.get("instance_id").map(|s| s.as_str()).unwrap_or(instance_id);
+        provisioner
+            .terminate(provider, cloud_id)
+            .await
+            .map_err(|e| color_eyre::eyre::eyre!("Failed to terminate instance: {}", e))?;
+    }
 
     // Remove from tracker
     tracker

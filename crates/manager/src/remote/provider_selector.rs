@@ -12,6 +12,8 @@ pub enum CloudProvider {
     Azure,
     DigitalOcean,
     Vultr,
+    /// Generic provider (e.g. for Kubernetes)
+    Generic,
 }
 
 impl std::fmt::Display for CloudProvider {
@@ -22,6 +24,7 @@ impl std::fmt::Display for CloudProvider {
             Self::Azure => write!(f, "Azure"),
             Self::DigitalOcean => write!(f, "DigitalOcean"),
             Self::Vultr => write!(f, "Vultr"),
+            Self::Generic => write!(f, "Generic"),
         }
     }
 }

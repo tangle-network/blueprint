@@ -323,6 +323,38 @@ impl DeploymentTracker {
             .collect())
     }
 
+    /// List all deployment records (values only)
+    pub async fn list_all(&self) -> Result<Vec<DeploymentRecord>> {
+        let deployments = self.deployments.read().await;
+        Ok(deployments.values().cloned().collect())
+    }
+
+    /// Get a deployment by instance ID (linear search)
+    pub async fn get_by_instance_id(&self, instance_id: &str) -> Result<Option<DeploymentRecord>> {
+        let deployments = self.deployments.read().await;
+        Ok(deployments
+            .values()
+            .find(|d| d.id == instance_id)
+            .cloned())
+    }
+
+    /// Remove a deployment by instance ID
+    pub async fn remove_by_instance_id(&self, instance_id: &str) -> Result<()> {
+        let mut deployments = self.deployments.write().await;
+        // Find the key for this instance_id
+        let key = deployments
+            .iter()
+            .find(|(_, d)| d.id == instance_id)
+            .map(|(k, _)| k.clone());
+            
+        if let Some(k) = key {
+            deployments.remove(&k);
+            drop(deployments);
+            self.save_state().await?;
+        }
+        Ok(())
+    }
+
     /// Get a specific deployment
     pub async fn get(&self, deployment_id: &str) -> Result<Option<DeploymentRecord>> {
         let deployments = self.deployments.read().await;

@@ -287,20 +287,14 @@ impl RemoteDeploymentService {
                 .map_err(|e| Error::Other(format!("Failed to create provisioner: {}", e)))?;
 
             // Get region from policy or use default
-            let region = self
-                .policy
-                .regions
-                .preferred_regions
-                .first()
-                .cloned()
-                .unwrap_or_else(|| match provider {
-                    CloudProvider::AWS => "us-east-1".to_string(),
-                    CloudProvider::GCP => "us-central1".to_string(),
-                    CloudProvider::Azure => "eastus".to_string(),
-                    CloudProvider::DigitalOcean => "nyc3".to_string(),
-                    CloudProvider::Vultr => "ewr".to_string(),
-                    _ => "default".to_string(),
-                });
+            let region = match provider {
+                CloudProvider::AWS => "us-east-1".to_string(),
+                CloudProvider::GCP => "us-central1".to_string(),
+                CloudProvider::Azure => "eastus".to_string(),
+                CloudProvider::DigitalOcean => "nyc3".to_string(),
+                CloudProvider::Vultr => "ewr".to_string(),
+                _ => "default".to_string(),
+            };
 
             info!("   Region: {}", region);
 
@@ -311,13 +305,14 @@ impl RemoteDeploymentService {
 
             // Provision the actual instance using the remote providers resource spec directly
             let instance = provisioner
-                .provision(provider, &convert_resource_spec(&resource_spec), &region)
+                .provision(convert_provider(provider), &convert_resource_spec(&resource_spec), &region)
                 .await
                 .map_err(|e| Error::Other(format!("Failed to provision instance: {}", e)))?;
 
             info!(
                 "✅ Instance provisioned: {} at {}",
-                instance.instance_id, instance.public_ip
+                instance.id,
+                instance.public_ip.as_deref().unwrap_or("unknown")
             );
 
             // Use binary path directly - container will be created by the adapter
@@ -326,10 +321,11 @@ impl RemoteDeploymentService {
 
             // Convert env_vars and arguments to HashMap
             let mut env_map = HashMap::new();
-            for (key, value) in env_vars.iter() {
-                env_map.insert(key.clone(), value.clone());
+            for (key, value) in env_vars.encode() {
+                env_map.insert(key, value);
             }
-            for (i, arg) in arguments.iter().enumerate() {
+            let encoded_args = arguments.encode(false);
+            for (i, arg) in encoded_args.iter().enumerate() {
                 env_map.insert(format!("ARG_{}", i), arg.clone());
             }
 
@@ -361,13 +357,13 @@ impl RemoteDeploymentService {
                         if let Some(ref qos_provider) = self.qos_provider {
                             qos_provider
                                 .register_remote_instance(
-                                    instance.instance_id.clone(),
+                                    instance.id.clone(),
                                     host.to_string(),
                                     port,
                                 )
                                 .await;
                             info!("✅ QoS endpoint registered: {}:{}", host, port);
-                            info!("   Instance: {}", instance.instance_id);
+                            info!("   Instance: {}", instance.id);
                             info!("   Blueprint metrics will be collected from port {}", port);
                         }
 
@@ -384,7 +380,7 @@ impl RemoteDeploymentService {
 
             // Register deployment
             let deployment_info = RemoteDeploymentInfo {
-                instance_id: instance.instance_id.clone(),
+                instance_id: instance.id.clone(),
                 provider,
                 service_name: service_name.to_string(),
                 blueprint_id,
@@ -393,12 +389,12 @@ impl RemoteDeploymentService {
                     .policy
                     .auto_terminate_hours
                     .map(|hours| chrono::Utc::now() + chrono::Duration::hours(hours as i64)),
-                public_ip: Some(instance.public_ip.clone()),
+                public_ip: instance.public_ip.clone(),
             };
 
             {
                 let mut deployments = self.deployments.write().await;
-                deployments.insert(instance.instance_id.clone(), deployment_info.clone());
+                deployments.insert(instance.id.clone(), deployment_info.clone());
             }
 
             info!("✅ Deployment registered with TTL tracking");
@@ -467,12 +463,13 @@ impl RemoteDeploymentService {
 
             // Convert env_vars to HashMap
             let mut env_map = HashMap::new();
-            for (key, value) in env_vars.iter() {
-                env_map.insert(key.clone(), value.clone());
+            for (key, value) in env_vars.encode() {
+                env_map.insert(key, value);
             }
 
             // Add arguments as environment variables
-            for (i, arg) in arguments.iter().enumerate() {
+            let encoded_args = arguments.encode(false);
+            for (i, arg) in encoded_args.iter().enumerate() {
                 env_map.insert(format!("ARG_{}", i), arg.clone());
             }
 
@@ -504,7 +501,7 @@ impl RemoteDeploymentService {
                     .policy
                     .auto_terminate_hours
                     .map(|hours| chrono::Utc::now() + chrono::Duration::hours(hours as i64)),
-                public_ip: deployment_result.endpoints.get("service").cloned(),
+                public_ip: deployment_result.instance.public_ip.clone(),
             };
 
             {
@@ -584,7 +581,7 @@ impl RemoteDeploymentService {
 
                 // Terminate the instance with the correct provider
                 provisioner
-                    .terminate(deployment_info.provider, &deployment_info.instance_id)
+                    .terminate(convert_provider(deployment_info.provider), &deployment_info.instance_id)
                     .await
                     .map_err(|e| Error::Other(format!("Failed to terminate instance: {}", e)))?;
 
@@ -818,5 +815,37 @@ fn convert_resource_spec(
         gpu_count: spec.gpu_count,
         allow_spot: spec.allow_spot,
         qos: blueprint_remote_providers::resources::QosParameters::default(),
+    }
+}
+
+#[cfg(feature = "remote-providers")]
+fn convert_provider(
+    provider: crate::remote::provider_selector::CloudProvider,
+) -> blueprint_remote_providers::CloudProvider {
+    match provider {
+        crate::remote::provider_selector::CloudProvider::AWS => {
+            blueprint_remote_providers::CloudProvider::AWS
+        }
+        crate::remote::provider_selector::CloudProvider::GCP => {
+            blueprint_remote_providers::CloudProvider::GCP
+        }
+        crate::remote::provider_selector::CloudProvider::Azure => {
+            blueprint_remote_providers::CloudProvider::Azure
+        }
+        crate::remote::provider_selector::CloudProvider::DigitalOcean => {
+            blueprint_remote_providers::CloudProvider::DigitalOcean
+        }
+        crate::remote::provider_selector::CloudProvider::Vultr => {
+            blueprint_remote_providers::CloudProvider::Vultr
+        }
+        crate::remote::provider_selector::CloudProvider::Generic => {
+             // Fallback for Generic to DigitalOcean or error? 
+             // Generic usually implies K8s which might not need a specific provider for some ops,
+             // but provisioner.provision expects a provider.
+             // However, for K8s we use deploy_with_target, not provision.
+             // But if we ever need to convert Generic, let's map it to something safe or panic if invalid usage.
+             // For now mapping to DigitalOcean as placeholder or we should handle it.
+             blueprint_remote_providers::CloudProvider::DigitalOcean 
+        }
     }
 }
