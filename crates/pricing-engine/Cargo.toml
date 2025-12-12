@@ -80,6 +80,8 @@ blueprint-networking = { path = "../networking", features = ["testing"] }
 blueprint-testing-utils = { path = "../testing-utils" }
 blueprint-anvil-testing-utils = { path = "../testing-utils/anvil" }
 tempfile = { workspace = true }
+alloy-network = { workspace = true }
+alloy-signer-local = { workspace = true }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
