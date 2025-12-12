@@ -142,9 +142,9 @@ impl UpdateManager {
     }
 
     /// Update blueprint with new version
-    pub async fn update_blueprint<A: CloudProviderAdapter>(
+    pub async fn update_blueprint(
         &mut self,
-        adapter: &A,
+        adapter: &dyn CloudProviderAdapter,
         new_image: &str,
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
@@ -224,9 +224,9 @@ impl UpdateManager {
     }
 
     /// Blue-green deployment update
-    async fn blue_green_update<A: CloudProviderAdapter>(
+    async fn blue_green_update(
         &mut self,
-        adapter: &A,
+        adapter: &dyn CloudProviderAdapter,
         params: &UpdateParams,
         current_deployment: &BlueprintDeploymentResult,
         _switch_timeout: Duration,
@@ -336,9 +336,9 @@ impl UpdateManager {
     }
 
     /// Rolling update deployment
-    async fn rolling_update<A: CloudProviderAdapter>(
+    async fn rolling_update(
         &mut self,
-        adapter: &A,
+        adapter: &dyn CloudProviderAdapter,
         params: &RollingUpdateParams,
         current_deployment: &BlueprintDeploymentResult,
     ) -> Result<BlueprintDeploymentResult> {
@@ -389,9 +389,9 @@ impl UpdateManager {
     }
 
     /// Canary deployment update
-    async fn canary_update<A: CloudProviderAdapter>(
+    async fn canary_update(
         &mut self,
-        adapter: &A,
+        adapter: &dyn CloudProviderAdapter,
         params: &CanaryUpdateParams,
         current_deployment: &BlueprintDeploymentResult,
     ) -> Result<BlueprintDeploymentResult> {
@@ -465,9 +465,9 @@ impl UpdateManager {
     }
 
     /// Recreate deployment (fast but with downtime)
-    async fn recreate_update<A: CloudProviderAdapter>(
+    async fn recreate_update(
         &mut self,
-        adapter: &A,
+        adapter: &dyn CloudProviderAdapter,
         version: &str,
         new_image: &str,
         resource_spec: &ResourceSpec,
@@ -510,9 +510,9 @@ impl UpdateManager {
     }
 
     /// Rollback to a previous version
-    pub async fn rollback<A: CloudProviderAdapter>(
+    pub async fn rollback(
         &mut self,
-        adapter: &A,
+        adapter: &dyn CloudProviderAdapter,
         target_version: &str,
         current_deployment: &BlueprintDeploymentResult,
     ) -> Result<BlueprintDeploymentResult> {
@@ -569,10 +569,10 @@ impl UpdateManager {
     }
 
     /// Wait for deployment to become healthy
-    async fn wait_for_healthy<A: CloudProviderAdapter>(
+    async fn wait_for_healthy(
         &self,
         deployment: &BlueprintDeploymentResult,
-        adapter: &A,
+        adapter: &dyn CloudProviderAdapter,
     ) -> Result<bool> {
         let max_attempts = 30;
         let check_interval = Duration::from_secs(10);
@@ -637,9 +637,9 @@ impl UpdateManager {
     }
 
     /// Clean up old inactive versions
-    pub async fn cleanup_old_versions<A: CloudProviderAdapter>(
+    pub async fn cleanup_old_versions(
         &mut self,
-        adapter: &A,
+        adapter: &dyn CloudProviderAdapter,
         keep_count: usize,
     ) -> Result<()> {
         let inactive_versions: Vec<_> = self

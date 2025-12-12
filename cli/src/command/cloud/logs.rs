@@ -73,8 +73,8 @@ pub async fn stream_logs(
     let mut aggregator = LogAggregator::new();
 
     let mut filters = LogFilters::default();
-    filters.level_min = level_filter;
-    filters.search_text = search;
+    filters.level_min = level_filter.clone();
+    filters.search_text = search.clone();
     filters.since = since_time;
 
     aggregator.set_filters(filters);
@@ -269,7 +269,7 @@ fn determine_provider_log_source(
     use blueprint_remote_providers::core::remote::CloudProvider;
 
     let provider = deployment.provider.as_ref().ok_or_else(|| eyre!("Provider not found in deployment"))?;
-    let instance_id = deployment.id.clone();
+    let _instance_id = deployment.id.clone();
 
     match provider {
         #[cfg(feature = "aws")]

@@ -2,8 +2,8 @@
 
 #[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::{
-    deployment::{DeploymentVersion, UpdateManager, UpdateStrategy},
-    infra::provisioner::CloudProvisioner,
+    deployment::{DeploymentVersion, UpdateManager, UpdateStrategy, DeploymentRecord},
+    infra::{provisioner::CloudProvisioner, traits::BlueprintDeploymentResult, types::{ProvisionedInstance, InstanceStatus}},
     DeploymentTracker,
 };
 use color_eyre::{Result, eyre::eyre};
@@ -130,8 +130,11 @@ pub async fn update(
         qos: Default::default(),
     };
 
+    // Convert DeploymentRecord to BlueprintDeploymentResult
+    let current_deployment = deployment_record_to_blueprint_result(current)?;
+    
     match update_manager
-        .update_blueprint(adapter.as_ref(), &image, &resource_spec, env_vars, current)
+        .update_blueprint(adapter.as_ref(), &image, &resource_spec, env_vars, &current_deployment)
         .await
     {
         Ok(new_deployment) => {
@@ -139,14 +142,18 @@ pub async fn update(
 
             println!("\n📊 Update Summary:");
             println!("  New Deployment ID: {}", new_deployment.blueprint_id);
-            println!("  Instance: {}", new_deployment.resource_ids.get("instance_id").unwrap_or(&"unknown".to_string()));
+            println!("  Instance: {}", new_deployment.instance.id);
 
-            if let Some(ip) = new_deployment.metadata.get("public_ip") {
+            if let Some(ip) = &new_deployment.instance.public_ip {
                 println!("  Public IP: {}", ip);
             }
 
-            // Port mappings might be in metadata or not available in DeploymentRecord
-            // if !new_deployment.port_mappings.is_empty() { ... }
+            if !new_deployment.port_mappings.is_empty() {
+                println!("  Port Mappings:");
+                for (internal, external) in &new_deployment.port_mappings {
+                    println!("    {} -> {}", internal, external);
+                }
+            }
             
             Ok(())
         }
@@ -263,8 +270,11 @@ pub async fn rollback(service_id: String, version: Option<String>, yes: bool) ->
     let provider = current.provider.as_ref().ok_or_else(|| eyre!("Provider not found"))?;
     let adapter = provisioner.get_adapter(provider)?;
 
+    // Convert DeploymentRecord to BlueprintDeploymentResult
+    let current_deployment = deployment_record_to_blueprint_result(current)?;
+
     match update_manager
-        .rollback(adapter.as_ref(), &target_version, current)
+        .rollback(adapter.as_ref(), &target_version, &current_deployment)
         .await
     {
         Ok(rollback_deployment) => {
@@ -273,7 +283,7 @@ pub async fn rollback(service_id: String, version: Option<String>, yes: bool) ->
             println!("\n📊 Rollback Summary:");
             println!("  Active Version: {}", target_version);
             println!("  Deployment ID: {}", rollback_deployment.blueprint_id);
-            println!("  Instance: {}", rollback_deployment.instance.id.as_deref().unwrap_or("unknown"));
+            println!("  Instance: {}", rollback_deployment.instance.id);
 
             Ok(())
         }
@@ -340,6 +350,43 @@ pub async fn history(service_id: String, limit: usize) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Convert DeploymentRecord to BlueprintDeploymentResult for update operations
+fn deployment_record_to_blueprint_result(record: &DeploymentRecord) -> Result<BlueprintDeploymentResult> {
+    let provider = record.provider.as_ref()
+        .ok_or_else(|| eyre!("Provider not found in deployment record"))?;
+    
+    let instance = ProvisionedInstance {
+        id: record.id.clone(),
+        provider: provider.clone(),
+        instance_type: record.metadata.get("instance_type")
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string()),
+        region: record.region.clone().unwrap_or_else(|| "unknown".to_string()),
+        public_ip: record.metadata.get("public_ip").cloned(),
+        private_ip: record.metadata.get("private_ip").cloned(),
+        status: InstanceStatus::Running,
+    };
+    
+    // Extract port mappings from metadata
+    let mut port_mappings = HashMap::new();
+    for (key, value) in &record.metadata {
+        if key.starts_with("port_") {
+            if let Ok(internal) = key.strip_prefix("port_").unwrap().parse::<u16>() {
+                if let Ok(external) = value.parse::<u16>() {
+                    port_mappings.insert(internal, external);
+                }
+            }
+        }
+    }
+    
+    Ok(BlueprintDeploymentResult {
+        instance,
+        blueprint_id: record.blueprint_id.clone(),
+        port_mappings,
+        metadata: record.metadata.clone(),
+    })
 }
 
 /// Parse environment variables from KEY=VALUE format

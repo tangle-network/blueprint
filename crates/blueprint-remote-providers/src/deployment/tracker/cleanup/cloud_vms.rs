@@ -1,7 +1,7 @@
 //! Cloud VM cleanup handlers
 
 use super::super::types::{CleanupHandler, DeploymentRecord};
-use crate::core::error::{Error, Result};
+use crate::core::error::Result;
 use blueprint_core::info;
 
 /// AWS cleanup

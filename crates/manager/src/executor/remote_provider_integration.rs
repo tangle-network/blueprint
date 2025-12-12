@@ -6,16 +6,10 @@ use crate::config::BlueprintManagerContext;
 use crate::error::Result;
 use blueprint_core::{error, info};
 use blueprint_remote_providers::deployment::manager_integration::{
-    RemoteDeploymentRegistry, RemoteEventHandler, TtlManager,
+    RemoteDeploymentRegistry, TtlManager,
 };
-use blueprint_remote_providers::{
-    AwsConfig, AzureConfig, CloudConfig, CloudProvider, DigitalOceanConfig, GcpConfig,
-    ResourceSpec, VultrConfig,
-};
-use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker};
-use blueprint_std::collections::HashMap;
+use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker, CloudProvider, ResourceSpec};
 use blueprint_std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// Remote provider manager that handles cloud deployments
 pub struct RemoteProviderManager {

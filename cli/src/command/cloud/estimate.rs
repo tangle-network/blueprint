@@ -97,7 +97,7 @@ pub async fn estimate(opts: EstimateOptions) -> Result<()> {
 
     #[cfg(feature = "remote-providers")]
     let discovery_result = {
-        let mut discovery = MachineTypeDiscovery::new();
+        let discovery = MachineTypeDiscovery::new();
         let credentials = CloudCredentials::default(); // TODO: Load real credentials
         Some((discovery, credentials))
     };

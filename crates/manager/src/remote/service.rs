@@ -443,7 +443,7 @@ impl RemoteDeploymentService {
         {
             use blueprint_remote_providers::{
                 CloudProvisioner,
-                core::deployment_target::{ContainerRuntime, DeploymentTarget},
+                core::deployment_target::DeploymentTarget,
             };
 
             // Create provisioner

@@ -2,7 +2,7 @@
 
 use super::service::Status;
 use crate::error::{Error, Result};
-use blueprint_core::{error, info, warn};
+use blueprint_core::info;
 use blueprint_remote_providers::deployment::manager_integration::RemoteDeploymentConfig;
 use blueprint_remote_providers::deployment::tracker::DeploymentTracker;
 use blueprint_remote_providers::deployment::tracker::DeploymentStatus;
