@@ -12,4 +12,5 @@ pub mod blueprint_ssh_deployment_tests;
 // pub mod property_tests; // DISABLED: missing dependencies
 // pub mod qos_integration; // DISABLED: missing dependencies
 pub mod real_blueprint_tests;
-// pub mod ssh_container_tests; // DISABLED: missing dependencies
+pub mod ssh_container_tests;
+pub mod ssh_deployment_integration;

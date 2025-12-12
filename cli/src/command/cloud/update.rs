@@ -132,7 +132,7 @@ pub async fn update(
 
     // Convert DeploymentRecord to BlueprintDeploymentResult
     let current_deployment = deployment_record_to_blueprint_result(current)?;
-    
+
     match update_manager
         .update_blueprint(adapter.as_ref(), &image, &resource_spec, env_vars, &current_deployment)
         .await
