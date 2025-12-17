@@ -31,3 +31,6 @@ docs/
 # Blueprint metadata
 blueprint.json
 blueprint.lock
+
+# keystore
+keystore

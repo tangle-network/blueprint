@@ -242,7 +242,7 @@ enum KeyCommands {
         output: Option<PathBuf>,
         #[arg(long)]
         seed: Option<Vec<u8>>,
-        #[arg(short = 'v', long)]
+        #[arg(long)]
         show_secret: bool,
     },
     /// Import a key into the keystore

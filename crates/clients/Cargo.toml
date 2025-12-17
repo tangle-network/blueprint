@@ -19,6 +19,7 @@ blueprint-client-tangle-evm = { workspace = true, optional = true }
 blueprint-client-core = { workspace = true }
 blueprint-std.workspace = true
 
+tnt-core-bindings.workspace = true
 thiserror.workspace = true
 
 [features]

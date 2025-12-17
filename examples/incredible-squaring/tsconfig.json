@@ -6,7 +6,7 @@
     "lib": [
       "ESNext"
     ],
-    "moduleResolution": "Node",
+    "moduleResolution": "NodeNext",
     "strict": true,
     "resolveJsonModule": true,
     "isolatedModules": true,

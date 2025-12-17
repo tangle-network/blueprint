@@ -111,10 +111,13 @@ pub fn generate_key(
     };
 
     let (public, secret) = (hex::encode(public_bytes), hex::encode(secret_bytes));
-    let mut secret = Some(secret);
-    if !show_secret {
-        secret = None;
-    }
+    // Only hide secret if show_secret is false AND we're saving to a file
+    // If output is None, we must show the secret (user has no other way to see it)
+    let secret = if !show_secret && output.is_some() {
+        None
+    } else {
+        Some(secret)
+    };
 
     Ok((public, secret))
 }

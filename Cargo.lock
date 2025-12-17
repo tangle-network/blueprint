@@ -2449,6 +2449,7 @@ dependencies = [
  "blueprint-client-tangle-evm",
  "blueprint-std",
  "thiserror 2.0.17",
+ "tnt-core-bindings",
 ]
 
 [[package]]
@@ -12259,7 +12260,9 @@ dependencies = [
 
 [[package]]
 name = "tnt-core-bindings"
-version = "0.3.0"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a09a57c202d803b528a7e5872d04aa71a150d16d5d31075edc5d86ad317437c"
 dependencies = [
  "alloy",
  "alloy-contract",
