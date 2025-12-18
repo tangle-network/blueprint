@@ -9,6 +9,7 @@
 //! - **Producer**: Polls for `JobSubmitted` events and converts them to `JobCall` streams
 //! - **Consumer**: Submits job results via the `submitResult` contract function
 //! - **Extractors**: Extract metadata from job calls (call_id, service_id, etc.)
+//! - **Keepers**: Background services for lifecycle automation (epoch, round, stream)
 //!
 //! ## Usage
 //!
@@ -26,6 +27,25 @@
 //!     // Process jobs with the blueprint runner...
 //! }
 //! ```
+//!
+//! ## Keepers (feature: `keepers`)
+//!
+//! Background services that automate lifecycle operations:
+//!
+//! ```rust,ignore
+//! use blueprint_tangle_evm_extra::services::{
+//!     EpochKeeper, RoundKeeper, StreamKeeper, KeeperConfig, BackgroundKeeper,
+//! };
+//!
+//! // Configure keepers
+//! let config = KeeperConfig::new(rpc_url, keystore)
+//!     .with_inflation_pool(inflation_pool_address)
+//!     .with_multi_asset_delegation(mad_address);
+//!
+//! // Start background services
+//! let epoch_handle = EpochKeeper::start(config.clone(), shutdown.subscribe());
+//! let round_handle = RoundKeeper::start(config.clone(), shutdown.subscribe());
+//! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -39,6 +59,12 @@ pub mod extract;
 pub mod layers;
 pub mod producer;
 pub mod strategy;
+
+/// Lifecycle automation services (keepers)
+///
+/// Requires the `keepers` feature to be enabled.
+#[cfg(feature = "keepers")]
+pub mod services;
 
 pub use aggregating_consumer::AggregatingConsumer;
 #[cfg(feature = "aggregation")]

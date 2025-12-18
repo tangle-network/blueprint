@@ -23,8 +23,12 @@ blueprint-crypto-core = { path = "../crypto/core", optional = true }
 # P2P aggregation dependencies
 blueprint-networking = { workspace = true, optional = true }
 blueprint-networking-agg-sig-gossip-extension = { path = "../networking/extensions/agg-sig-gossip", optional = true }
-blueprint-crypto = { workspace = true, features = ["aggregation"], optional = true }
+blueprint-crypto = { workspace = true, optional = true }
 libp2p = { workspace = true, features = ["identify"], optional = true }
+
+# Keeper dependencies (optional)
+blueprint-keystore = { workspace = true, features = ["evm"], optional = true }
+alloy = { workspace = true, features = ["sol-types", "contract", "provider-http", "signer-local", "network"], optional = true }
 
 alloy-primitives.workspace = true
 alloy-sol-types.workspace = true
@@ -67,8 +71,10 @@ aggregation = ["blueprint-tangle-aggregation-svc", "blueprint-crypto-bn254", "bl
 p2p-aggregation = [
     "blueprint-networking",
     "blueprint-networking-agg-sig-gossip-extension",
-    "blueprint-crypto",
+    "blueprint-crypto/aggregation",
     "blueprint-crypto-bn254",
     "blueprint-crypto-core",
     "libp2p",
 ]
+# Lifecycle automation keepers for epoch/round/stream management
+keepers = ["blueprint-keystore", "blueprint-crypto/k256", "alloy"]
