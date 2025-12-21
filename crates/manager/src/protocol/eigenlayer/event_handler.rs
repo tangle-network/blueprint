@@ -298,7 +298,7 @@ impl EigenlayerEventHandler {
 
         // Prepare environment variables and arguments
         let service_str = fetcher.name();
-        let mut args = BlueprintArgs::new(ctx);
+        let mut args = BlueprintArgs::new(ctx).with_dry_run(env.dry_run);
 
         // Add AVS-specific contract addresses from registration config
         let avs_config = &registration.config;

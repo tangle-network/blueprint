@@ -29,6 +29,7 @@ pub struct RunOpts {
     pub registration_capture_only: bool,
     pub preferred_source: SourceType,
     pub use_vm: bool,
+    pub dry_run: bool,
 }
 
 pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
@@ -39,6 +40,7 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
     blueprint_config.data_dir = opts.data_dir.unwrap_or_else(|| PathBuf::from("./data"));
     blueprint_config.registration_mode = opts.registration_mode;
     blueprint_config.registration_capture_only = opts.registration_capture_only;
+    blueprint_config.dry_run = opts.dry_run;
     blueprint_config.protocol_settings = ProtocolSettings::TangleEvm(TangleEvmProtocolSettings {
         blueprint_id: opts.blueprint_id,
         service_id: opts.service_id,

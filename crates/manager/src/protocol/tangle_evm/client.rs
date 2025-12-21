@@ -38,6 +38,7 @@ impl TangleEvmProtocolClient {
                 status_registry_contract: settings.status_registry_contract,
             },
             test_mode: env.test_mode,
+            dry_run: env.dry_run,
         };
 
         let keystore = Keystore::new(KeystoreConfig::new().fs_root(&env.keystore_uri))?;

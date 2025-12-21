@@ -255,6 +255,7 @@ pub fn run_opts_from_stack(
         registration_capture_only: false,
         preferred_source: method.preferred_source(),
         use_vm: method.use_vm(),
+        dry_run: false,
     }
 }
 

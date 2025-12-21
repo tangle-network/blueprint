@@ -241,6 +241,9 @@ pub struct BlueprintEnvironment {
     pub protocol_settings: ProtocolSettings,
     /// Whether the blueprint is in test mode
     pub test_mode: bool,
+    /// When true, avoid on-chain submissions from the runtime (dry run).
+    #[serde(default)]
+    pub dry_run: bool,
     pub bridge_socket_path: Option<PathBuf>,
     #[serde(skip)]
     bridge: Arc<Mutex<Option<Arc<Bridge>>>>,
@@ -282,6 +285,7 @@ impl Default for BlueprintEnvironment {
             data_dir: PathBuf::default(),
             protocol_settings: ProtocolSettings::default(),
             test_mode: false,
+            dry_run: false,
             bridge_socket_path: None,
             bridge: Arc::new(Mutex::new(None)),
             registration_mode: false,
@@ -366,6 +370,7 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
 
     let data_dir = settings.data_dir.clone();
     let test_mode = settings.test_mode;
+    let dry_run = settings.dry_run;
     let http_rpc_url = settings.http_rpc_url.clone();
     let ws_rpc_url = settings.ws_rpc_url.clone();
     let keystore_uri = settings.keystore_uri.clone();
@@ -399,6 +404,7 @@ fn load_inner(config: ContextConfig) -> Result<BlueprintEnvironment, ConfigError
 
     Ok(BlueprintEnvironment {
         test_mode,
+        dry_run,
         http_rpc_endpoint: http_rpc_url,
         ws_rpc_endpoint: ws_rpc_url,
         keystore_uri,
@@ -751,6 +757,7 @@ impl ContextConfig {
         ContextConfig {
             blueprint_core_settings: BlueprintCliCoreSettings::Run(BlueprintSettings {
                 test_mode: false,
+                dry_run: false,
                 http_rpc_url,
                 #[cfg(feature = "networking")]
                 bootnodes: None,
@@ -913,6 +920,9 @@ impl Default for BlueprintCliCoreSettings {
 pub struct BlueprintSettings {
     #[arg(long, short = 't', env)]
     pub test_mode: bool,
+    #[arg(long)]
+    #[serde(default)]
+    pub dry_run: bool,
     #[arg(long, env, default_value_t = default_http_rpc_url())]
     #[serde(default = "default_http_rpc_url")]
     pub http_rpc_url: Url,
@@ -1161,6 +1171,7 @@ impl Default for BlueprintSettings {
     fn default() -> Self {
         Self {
             test_mode: false,
+            dry_run: false,
             http_rpc_url: default_http_rpc_url(),
             ws_rpc_url: default_ws_rpc_url(),
             keystore_uri: String::new(),

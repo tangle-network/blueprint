@@ -226,7 +226,7 @@ impl TangleEvmEventHandler {
                 &filtered,
                 &metadata.name,
             );
-            let args = BlueprintArgs::new(ctx);
+            let args = BlueprintArgs::new(ctx).with_dry_run(env.dry_run);
             let limits = ResourceLimits::default();
             let service_idx = metadata.service_id.try_into().unwrap_or(u32::MAX);
 

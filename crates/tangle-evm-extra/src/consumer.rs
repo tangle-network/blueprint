@@ -191,6 +191,16 @@ async fn submit_result(
         call_id
     );
 
+    if client.config.dry_run {
+        blueprint_core::info!(
+            target: "tangle-evm-consumer",
+            "Dry run enabled; skipping on-chain result submission for service {} call {}",
+            service_id,
+            call_id
+        );
+        return Ok(());
+    }
+
     let result = client
         .submit_result(service_id, call_id, output)
         .await

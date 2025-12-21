@@ -58,6 +58,9 @@ pub struct TangleEvmClientConfig {
     pub settings: TangleEvmSettings,
     /// Whether the client is in test mode
     pub test_mode: bool,
+    /// When true, avoid on-chain submissions from this client.
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 impl TangleEvmClientConfig {
@@ -75,6 +78,7 @@ impl TangleEvmClientConfig {
             data_dir: PathBuf::default(),
             settings,
             test_mode: false,
+            dry_run: false,
         }
     }
 
@@ -87,6 +91,12 @@ impl TangleEvmClientConfig {
     /// Set test mode
     pub fn test_mode(mut self, test_mode: bool) -> Self {
         self.test_mode = test_mode;
+        self
+    }
+
+    /// Set dry-run mode
+    pub fn dry_run(mut self, dry_run: bool) -> Self {
+        self.dry_run = dry_run;
         self
     }
 

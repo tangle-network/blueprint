@@ -45,6 +45,7 @@ pub struct BlueprintArgs {
     pub test_mode: bool,
     pub pretty: bool,
     pub verbose: u8,
+    pub dry_run: bool,
     /// Protocol-specific extra arguments (e.g., EigenLayer contract addresses)
     pub extra_args: Vec<(String, String)>,
 }
@@ -65,8 +66,15 @@ impl BlueprintArgs {
             test_mode: manager_config.test_mode,
             pretty: manager_config.pretty,
             verbose: manager_config.verbose,
+            dry_run: false,
             extra_args: Vec::new(),
         }
+    }
+
+    #[must_use]
+    pub fn with_dry_run(mut self, dry_run: bool) -> Self {
+        self.dry_run = dry_run;
+        self
     }
 
     #[must_use]
@@ -87,6 +95,10 @@ impl BlueprintArgs {
         // Uses occurrences of clap short -v
         if self.verbose > 0 {
             arguments.push(format!("-{}", "v".repeat(self.verbose as usize)));
+        }
+
+        if self.dry_run {
+            arguments.push("--dry-run".to_string());
         }
 
         // Add protocol-specific extra arguments (e.g., EigenLayer contract addresses)

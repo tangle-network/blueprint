@@ -26,6 +26,7 @@ pub struct HeartbeatContext<C: HeartbeatConsumer + Send + Sync + 'static> {
     pub http_rpc_endpoint: String,
     pub keystore_uri: String,
     pub status_registry_address: Address,
+    pub dry_run: bool,
 }
 
 /// Unified Quality of Service (`QoS`) service that integrates heartbeat monitoring, metrics collection,
@@ -82,6 +83,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
                 ctx.http_rpc_endpoint,
                 ctx.keystore_uri,
                 ctx.status_registry_address,
+                ctx.dry_run,
                 hc.service_id,
                 hc.blueprint_id,
             )?)),

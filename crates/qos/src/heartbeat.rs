@@ -92,6 +92,7 @@ struct HeartbeatRuntimeConfig {
     http_rpc_endpoint: String,
     keystore_uri: String,
     status_registry_address: Address,
+    dry_run: bool,
 }
 
 struct HeartbeatTaskContext<C: HeartbeatConsumer + Send + Sync + 'static> {
@@ -157,6 +158,15 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
 
         consumer.send_heartbeat(&status).await?;
         *last_heartbeat_lock.lock().await = Some(status.clone());
+
+        if runtime.dry_run {
+            info!(
+                service_id = config_service_id,
+                blueprint_id = config_blueprint_id,
+                "Dry run enabled; skipping on-chain heartbeat submission"
+            );
+            return Ok(());
+        }
 
         info!(
             service_id = config_service_id,
@@ -250,6 +260,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         http_rpc_endpoint: String,
         keystore_uri: String,
         status_registry_address: Address,
+        dry_run: bool,
         service_id: u64,
         blueprint_id: u64,
     ) -> Result<Self> {
@@ -275,6 +286,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
                 http_rpc_endpoint,
                 keystore_uri,
                 status_registry_address,
+                dry_run,
             }),
             service_id,
             blueprint_id,

@@ -41,6 +41,7 @@ impl TangleEvmClientContext for BlueprintEnvironment {
                 status_registry_contract: settings.status_registry_contract,
             },
             test_mode: self.test_mode,
+            dry_run: self.dry_run,
         };
 
         TangleEvmClient::with_keystore(config, keystore).await

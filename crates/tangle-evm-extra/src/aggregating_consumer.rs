@@ -1084,6 +1084,16 @@ async fn submit_aggregated_to_chain_with_result(
 ) -> Result<(), AggregatingConsumerError> {
     use crate::aggregation::{AggregatedResult, G1Point, G2Point, SignerBitmap};
 
+    if client.config.dry_run {
+        blueprint_core::info!(
+            target: "tangle-evm-aggregating-consumer",
+            "Dry run enabled; skipping aggregated result submission for service {} call {}",
+            service_id,
+            call_id
+        );
+        return Ok(());
+    }
+
     blueprint_core::info!(
         target: "tangle-evm-aggregating-consumer",
         "Submitting aggregated result to chain for service {} call {}",
@@ -1139,6 +1149,16 @@ async fn submit_direct_result(
         service_id,
         call_id
     );
+
+    if client.config.dry_run {
+        blueprint_core::info!(
+            target: "tangle-evm-aggregating-consumer",
+            "Dry run enabled; skipping direct result submission for service {} call {}",
+            service_id,
+            call_id
+        );
+        return Ok(());
+    }
 
     let result = client
         .submit_result(service_id, call_id, output)

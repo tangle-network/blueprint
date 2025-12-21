@@ -194,6 +194,7 @@ async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bool, 
         keystore_uri: env.keystore_uri.clone(),
         data_dir: env.data_dir.clone(),
         test_mode: env.test_mode,
+        dry_run: env.dry_run,
     };
 
     // Create the EVM client

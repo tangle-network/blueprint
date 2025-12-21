@@ -29,6 +29,7 @@ pub struct QoSServiceBuilder<C: HeartbeatConsumer + Send + Sync + 'static> {
     http_rpc_endpoint: Option<String>,
     keystore_uri: Option<String>,
     status_registry_address: Option<Address>,
+    dry_run: bool,
 }
 
 impl<C: HeartbeatConsumer + Send + Sync + 'static> Default for QoSServiceBuilder<C> {
@@ -57,6 +58,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
             http_rpc_endpoint: None,
             keystore_uri: None,
             status_registry_address: None,
+            dry_run: false,
         }
     }
 
@@ -265,6 +267,13 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
         self
     }
 
+    /// Skip on-chain heartbeat submissions (dry run).
+    #[must_use]
+    pub fn with_dry_run(mut self, dry_run: bool) -> Self {
+        self.dry_run = dry_run;
+        self
+    }
+
     /// Build the `QoS` service
     ///
     /// # Errors
@@ -300,6 +309,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
                 http_rpc_endpoint: http,
                 keystore_uri: keystore,
                 status_registry_address: status_registry,
+                dry_run: self.dry_run,
             })
         } else {
             None

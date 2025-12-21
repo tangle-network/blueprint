@@ -275,16 +275,24 @@ where
     /// let config = HeartbeatConfig::default();
     /// let consumer = Arc::new(MyHeartbeatConsumer);
     /// // Extract values from environment
-    /// let ws_rpc_endpoint = env.ws_rpc_endpoint.to_string();
+    /// let http_rpc_endpoint = env.http_rpc_endpoint.to_string();
     /// let keystore_uri = env.keystore_uri.clone();
+    /// let status_registry_address = env
+    ///     .protocol_settings
+    ///     .tangle_evm()
+    ///     .map(|settings| settings.status_registry_contract)
+    ///     .unwrap_or_default();
     /// // Use constant values for doc tests
     /// let service_id = 0;
     /// let blueprint_id = 0;
+    /// let dry_run = false;
     /// let heartbeat_service = HeartbeatService::new(
     ///     config,
     ///     consumer,
-    ///     ws_rpc_endpoint,
+    ///     http_rpc_endpoint,
     ///     keystore_uri,
+    ///     status_registry_address,
+    ///     dry_run,
     ///     service_id,
     ///     blueprint_id,
     /// );
@@ -501,7 +509,8 @@ where
             blueprint_core::debug!(target: "blueprint-runner", "QoS Builder Task (Task 1): Initializing QoS Service...");
             let mut builder = blueprint_qos::QoSServiceBuilder::<C>::new()
                 .with_config(config)
-                .manage_servers(true);
+                .manage_servers(true)
+                .with_dry_run(self.env.dry_run);
 
             builder = builder.with_http_rpc_endpoint(http_rpc_endpoint);
             builder = builder.with_keystore_uri(keystore_uri);
@@ -809,6 +818,7 @@ where
         } = self;
 
         let needs_registration = config.requires_registration(&env).await?;
+        let skip_registration = env.dry_run;
 
         if env.registration_mode() {
             let inputs = capture_registration_inputs(&env).await?;
@@ -820,18 +830,28 @@ where
                 return Ok(());
             }
 
-            if needs_registration {
+            if needs_registration && !skip_registration {
                 config.register(&env).await?;
+            } else if needs_registration && skip_registration {
+                blueprint_core::info!(
+                    target: "blueprint-runner",
+                    "Dry run enabled; skipping operator registration"
+                );
             }
 
             if config.should_exit_after_registration() {
                 return Ok(());
             }
-        } else if needs_registration {
+        } else if needs_registration && !skip_registration {
             config.register(&env).await?;
             if config.should_exit_after_registration() {
                 return Ok(());
             }
+        } else if needs_registration && skip_registration {
+            blueprint_core::info!(
+                target: "blueprint-runner",
+                "Dry run enabled; skipping operator registration"
+            );
         }
 
         let mut router = router.as_service();

@@ -420,6 +420,9 @@ enum ServiceCommands {
         /// Allow unchecked attestations when spinning up the manager.
         #[arg(long)]
         allow_unchecked_attestations: bool,
+        /// Run without submitting on-chain transactions.
+        #[arg(long)]
+        dry_run: bool,
         /// Override the manager's preferred blueprint source.
         #[arg(long, value_enum)]
         preferred_source: Option<PreferredSourceArg>,
@@ -682,6 +685,7 @@ async fn main() -> Result<()> {
                             registration_capture_only: false,
                             preferred_source: preferred_source_value,
                             use_vm: use_vm_value,
+                            dry_run: false,
                         };
                         run_blueprint(run_opts).await?;
                     }
@@ -785,6 +789,7 @@ async fn main() -> Result<()> {
                     registration_capture_only: true,
                     preferred_source: preferred_source_value,
                     use_vm: use_vm_value,
+                    dry_run: false,
                 };
 
                 run_blueprint(run_opts).await?;
@@ -1113,6 +1118,7 @@ async fn main() -> Result<()> {
                     spawn_method,
                     data_dir,
                     allow_unchecked_attestations,
+                    dry_run,
                     preferred_source,
                     vm,
                     no_vm,
@@ -1141,6 +1147,7 @@ async fn main() -> Result<()> {
                         registration_capture_only: false,
                         preferred_source: preferred_source_value,
                         use_vm: use_vm_value,
+                        dry_run,
                     };
                     run_blueprint(run_opts).await?;
                 }
