@@ -3,9 +3,18 @@ use std::path::{Path, PathBuf};
 
 const DEFAULT_SNAPSHOT_RELATIVE: &str = "snapshots/localtestnet-state.json";
 
+/// Return the default snapshot path bundled with this crate.
+#[must_use]
+pub fn default_snapshot_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join(DEFAULT_SNAPSHOT_RELATIVE)
+}
+
 pub fn snapshot_state_json() -> Option<String> {
-    let path = snapshot_path()?;
-    match fs::read_to_string(&path) {
+    snapshot_state_json_from_path(&default_snapshot_path())
+}
+
+pub fn snapshot_state_json_from_path(path: &Path) -> Option<String> {
+    match fs::read_to_string(path) {
         Ok(data) => Some(data),
         Err(err) => {
             eprintln!(
@@ -18,7 +27,7 @@ pub fn snapshot_state_json() -> Option<String> {
 }
 
 pub fn snapshot_available() -> bool {
-    snapshot_path().is_some()
+    default_snapshot_path().exists()
 }
 
 #[cfg(test)]
@@ -29,14 +38,5 @@ mod tests {
             super::snapshot_available(),
             "expected localtestnet snapshot to exist"
         );
-    }
-}
-
-fn snapshot_path() -> Option<PathBuf> {
-    let default = Path::new(env!("CARGO_MANIFEST_DIR")).join(DEFAULT_SNAPSHOT_RELATIVE);
-    if default.exists() {
-        Some(default)
-    } else {
-        None
     }
 }

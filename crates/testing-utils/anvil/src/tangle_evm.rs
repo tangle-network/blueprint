@@ -8,7 +8,11 @@ use alloy_primitives::{Address, TxKind};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::TransactionRequest;
 use anyhow::{Context, Result};
-use blueprint_chain_setup_anvil::{AnvilTestnet, snapshot_available, start_empty_anvil_testnet};
+use blueprint_chain_setup_anvil::{
+    AnvilTestnet,
+    snapshot::{default_snapshot_path, snapshot_state_json_from_path},
+    start_anvil_container,
+};
 use blueprint_client_tangle_evm::{
     ServiceStatus, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
 };
@@ -156,6 +160,8 @@ impl TangleEvmHarness {
 pub struct TangleEvmHarnessBuilder {
     include_anvil_logs: bool,
     seed_from_broadcast: bool,
+    snapshot_path: Option<PathBuf>,
+    broadcast_path: Option<PathBuf>,
 }
 
 impl Default for TangleEvmHarnessBuilder {
@@ -163,6 +169,8 @@ impl Default for TangleEvmHarnessBuilder {
         Self {
             include_anvil_logs: false,
             seed_from_broadcast: true,
+            snapshot_path: None,
+            broadcast_path: None,
         }
     }
 }
@@ -182,17 +190,35 @@ impl TangleEvmHarnessBuilder {
         self
     }
 
+    /// Override the snapshot path used to seed Anvil.
+    #[must_use]
+    pub fn snapshot_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.snapshot_path = Some(path.into());
+        self
+    }
+
+    /// Override the broadcast path used to seed the local chain state.
+    #[must_use]
+    pub fn broadcast_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.broadcast_path = Some(path.into());
+        self
+    }
+
     /// Boot the harness.
     pub async fn spawn(self) -> Result<TangleEvmHarness> {
         let TangleEvmHarnessBuilder {
             include_anvil_logs,
             seed_from_broadcast,
+            snapshot_path,
+            broadcast_path,
         } = self;
 
-        let snapshot_loaded = snapshot_available();
-        let testnet = start_empty_anvil_testnet(include_anvil_logs).await;
+        let snapshot_path = snapshot_path.unwrap_or_else(default_snapshot_path);
+        let snapshot_json = snapshot_state_json_from_path(&snapshot_path);
+        let snapshot_loaded = snapshot_json.is_some();
+        let testnet = start_anvil_container(snapshot_json.as_deref(), include_anvil_logs).await;
         if seed_from_broadcast && !snapshot_loaded {
-            let broadcast = load_broadcast_file()?;
+            let broadcast = load_broadcast_file(broadcast_path.as_deref())?;
             seed_local_state(testnet.http_endpoint.as_str(), &broadcast).await?;
         }
 
@@ -209,7 +235,7 @@ impl TangleEvmHarnessBuilder {
                     blueprint_core::warn!(
                         "Anvil snapshot missing seeded service, replaying broadcast: {err}"
                     );
-                    let broadcast = load_broadcast_file()?;
+                    let broadcast = load_broadcast_file(broadcast_path.as_deref())?;
                     seed_local_state(harness.http_endpoint().as_str(), &broadcast).await?;
                     harness.assert_seeded_service_active().await?;
                 } else {
@@ -468,17 +494,20 @@ async fn verify_contract(provider: &impl Provider, addr: &str) -> Result<()> {
     Ok(())
 }
 
-fn load_broadcast_file() -> Result<BroadcastFile> {
-    let path = broadcast_artifact_path()?;
+fn load_broadcast_file(path_override: Option<&Path>) -> Result<BroadcastFile> {
+    let path = broadcast_artifact_path(path_override)?;
     let data =
         fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
     let parsed = serde_json::from_str(&data).context("failed to parse broadcast json")?;
     Ok(parsed)
 }
 
-fn broadcast_artifact_path() -> Result<PathBuf> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../chain-setup/anvil/snapshots/localtestnet-broadcast.json");
+fn broadcast_artifact_path(path_override: Option<&Path>) -> Result<PathBuf> {
+    let path = match path_override {
+        Some(path) => path.to_path_buf(),
+        None => Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../chain-setup/anvil/snapshots/localtestnet-broadcast.json"),
+    };
     if path.exists() {
         Ok(path)
     } else {
