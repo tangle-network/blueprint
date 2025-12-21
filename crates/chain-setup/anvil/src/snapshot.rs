@@ -1,8 +1,6 @@
-use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const SNAPSHOT_ENV: &str = "ANVIL_SNAPSHOT_PATH";
 const DEFAULT_SNAPSHOT_RELATIVE: &str = "snapshots/localtestnet-state.json";
 
 pub fn snapshot_state_json() -> Option<String> {
@@ -35,27 +33,10 @@ mod tests {
 }
 
 fn snapshot_path() -> Option<PathBuf> {
-    if let Some(from_env) = env_snapshot_path() {
-        return Some(from_env);
-    }
     let default = Path::new(env!("CARGO_MANIFEST_DIR")).join(DEFAULT_SNAPSHOT_RELATIVE);
     if default.exists() {
         Some(default)
     } else {
-        None
-    }
-}
-
-fn env_snapshot_path() -> Option<PathBuf> {
-    let env_value = env::var_os(SNAPSHOT_ENV)?;
-    let path = PathBuf::from(env_value);
-    if path.exists() {
-        Some(path)
-    } else {
-        eprintln!(
-            "warning: ANVIL_SNAPSHOT_PATH={} does not exist",
-            path.display()
-        );
         None
     }
 }

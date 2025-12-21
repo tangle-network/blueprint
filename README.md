@@ -257,7 +257,7 @@ cargo test -p hello-tangle-blueprint --test anvil
 
 Each suite boots its own Anvil container via `testcontainers`, so Docker is required when running locally or in CI.
 
-> **Note:** The harness loads `crates/chain-setup/anvil/snapshots/localtestnet-state.json` (override via `ANVIL_SNAPSHOT_PATH`) and falls back to the bundled `localtestnet-broadcast.json` if the snapshot is missing or fails validation. Set `TNT_BROADCAST_PATH=/path/to/broadcast.json` to override the broadcast, set `RUN_TNT_E2E=1` to opt into the longer suites, and export `BLUEPRINT_ANVIL_LOGS=1` if you want to stream Anvil’s stdout/stderr while debugging.
+> **Note:** The harness loads `crates/chain-setup/anvil/snapshots/localtestnet-state.json` and falls back to the bundled `localtestnet-broadcast.json` if the snapshot is missing or fails validation. Refresh fixtures with `scripts/fetch-localtestnet-fixtures.sh`, and set `RUN_TNT_E2E=1` to opt into the longer suites.
 
 For a keystore-to-runner walkthrough (keys, env vars, harness commands, and manual
 `TangleEvmClient` snippets) see [`docs/operators/anvil.md`](docs/operators/anvil.md).

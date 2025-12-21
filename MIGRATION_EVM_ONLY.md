@@ -29,7 +29,7 @@ This document outlines the migration of blueprint-sdk from Tangle Substrate to E
 - Track removal of any dormant Substrate context helpers (`crates/contexts/src/tangle.rs`, legacy macros) if they resurface downstream.
 - Wire the new OAuth/API-key EVM blueprints into CI or operator docs so users have verified EigenLayer + Tangle EVM flows.
 - Continue guarding against `sp-core`, `tangle_subxt`, or `tangle-pair` dependencies via the existing `rg` CI gate.
-- Publish clear instructions for using `TNT_BROADCAST_PATH` when overriding the bundled LocalTestnet broadcast.
+- Publish clear instructions for refreshing the bundled LocalTestnet fixtures.
 
 ### Latest additions
 
@@ -45,13 +45,10 @@ This document outlines the migration of blueprint-sdk from Tangle Substrate to E
 
 ### Snapshots
 
-- The canonical Anvil snapshot lives at `crates/chain-setup/anvil/snapshots/localtestnet-state.json`; override it with
-  `ANVIL_SNAPSHOT_PATH` when testing alternate states.
-- Regenerate snapshots via `scripts/update-anvil-snapshot.sh`. The script spins up Anvil (`--hardfork cancun`,
-  `--disable-code-size-limit`), runs `LocalTestnet.s.sol`, and dumps the resulting state. Preserve the printed Forge/Anvil
-  logs when debugging (`KEEP_SNAPSHOT_LOGS=1`) so you can tie a snapshot back to the `tnt-core` commit that produced it.
+- The canonical Anvil snapshot lives at `crates/chain-setup/anvil/snapshots/localtestnet-state.json`.
+- Refresh snapshots via `scripts/update-anvil-snapshot.sh`, which pulls the latest fixtures from `tnt-core-fixtures`.
 - Harnesses automatically prefer the snapshot and only fall back to replaying the bundled broadcast when the snapshot is
-  missing or fails validation. Override the broadcast path with `TNT_BROADCAST_PATH` if needed.
+  missing or fails validation.
 
 ## Target Architecture
 

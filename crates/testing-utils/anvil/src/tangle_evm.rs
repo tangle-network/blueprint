@@ -2,8 +2,7 @@
 //!
 //! These helpers replay the broadcast artifacts generated from
 //! `tnt-core/script/v2/LocalTestnet.s.sol` so all tests run against the same contract
-//! addresses the SDK expects in production. The broadcast file is bundled with the SDK
-//! and can be overridden via `TNT_BROADCAST_PATH` if needed.
+//! addresses the SDK expects in production. The broadcast file is bundled with the SDK.
 
 use alloy_primitives::{Address, TxKind};
 use alloy_provider::{Provider, ProviderBuilder};
@@ -22,7 +21,6 @@ use serde::Deserialize;
 use serde_json::{self, Value, json};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -46,7 +44,7 @@ const OPERATOR1_PRIVATE_KEY: &str =
 /// Errors raised while preparing the deterministic harness.
 #[derive(Debug, Error)]
 pub enum HarnessError {
-    #[error("LocalTestnet broadcast artifact missing at {0}. Set TNT_BROADCAST_PATH to override.")]
+    #[error("LocalTestnet broadcast artifact missing at {0}. Run scripts/fetch-localtestnet-fixtures.sh to refresh fixtures.")]
     MissingBroadcast(PathBuf),
 }
 
@@ -72,12 +70,10 @@ pub struct TangleEvmHarness {
 
 pub type SeededTangleEvmTestnet = TangleEvmHarness;
 
-/// Build the canonical harness configured entirely via env vars.
+/// Build the canonical harness used across test suites.
 ///
 /// Callers should prefer this helper over [`TangleEvmHarness::builder`] so new
-/// knobs automatically fan out. Today it honors `BLUEPRINT_ANVIL_LOGS=1` to
-/// stream Anvil stdout/stderr and can grow additional env-based settings in the
-/// future without touching every test.
+/// knobs automatically fan out without touching every test.
 #[must_use]
 pub fn harness_builder_from_env() -> TangleEvmHarnessBuilder {
     TangleEvmHarness::builder().include_anvil_logs(true)
@@ -481,27 +477,12 @@ fn load_broadcast_file() -> Result<BroadcastFile> {
 }
 
 fn broadcast_artifact_path() -> Result<PathBuf> {
-    if let Some(path) = env_broadcast_path() {
-        return Ok(path);
-    }
-
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../chain-setup/anvil/snapshots/localtestnet-broadcast.json");
     if path.exists() {
         Ok(path)
     } else {
         Err(HarnessError::MissingBroadcast(path).into())
-    }
-}
-
-fn env_broadcast_path() -> Option<PathBuf> {
-    let env_value = env::var_os("TNT_BROADCAST_PATH")?;
-    let path = PathBuf::from(env_value);
-    if path.exists() {
-        Some(path)
-    } else {
-        eprintln!("warning: TNT_BROADCAST_PATH={} does not exist", path.display());
-        None
     }
 }
 

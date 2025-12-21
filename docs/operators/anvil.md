@@ -43,9 +43,8 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-> **NOTE:** The harness loads `crates/chain-setup/anvil/snapshots/localtestnet-state.json` by default so startup is instant. Override the path via `ANVIL_SNAPSHOT_PATH` when you need a custom dump, and set `BLUEPRINT_ANVIL_LOGS=1` if you want Anvil stdout/stderr in your test output. The fallback broadcast is bundled at `crates/chain-setup/anvil/snapshots/localtestnet-broadcast.json` and can be overridden via `TNT_BROADCAST_PATH`. `RUN_TNT_E2E=1` only gates the long-running integration tests—export it when you want to opt in.
+> **NOTE:** The harness loads `crates/chain-setup/anvil/snapshots/localtestnet-state.json` by default so startup is instant. The fallback broadcast is bundled at `crates/chain-setup/anvil/snapshots/localtestnet-broadcast.json`. Refresh fixtures with `scripts/fetch-localtestnet-fixtures.sh`. `RUN_TNT_E2E=1` only gates the long-running integration tests—export it when you want to opt in.
 > ```bash
-> export TNT_BROADCAST_PATH=/full/path/to/localtestnet-broadcast.json
 > export RUN_TNT_E2E=1
 > ```
 
@@ -122,24 +121,13 @@ running operators locally.
 
 Every Anvil-based suite now seeds state from the JSON snapshot stored at
 `crates/chain-setup/anvil/snapshots/localtestnet-state.json`. The harness
-loads this file automatically (or from `ANVIL_SNAPSHOT_PATH` if you override it)
-and only replays the Foundry broadcast when the snapshot is missing or fails
-validation.
+loads this file automatically and only replays the Foundry broadcast when the
+snapshot is missing or fails validation.
 
-Regenerate the snapshot whenever the protocol deployment changes:
+Refresh the snapshot whenever the protocol deployment changes:
 
-1. Run `scripts/update-anvil-snapshot.sh`. Pass `KEEP_SNAPSHOT_LOGS=1` when
-   debugging so you can inspect the Forge/Anvil transcripts.
-2. The script prints the generated addresses plus the temp log paths; keep the
-   log handy with `KEEP_SNAPSHOT_LOGS=1` so you can correlate the snapshot with
-   the exact protocol commit used to generate it.
-
-Teams that maintain multiple snapshots can store them anywhere on disk and set
-`ANVIL_SNAPSHOT_PATH=/path/to/custom-state.json` before running tests. The
-helpers will surface warnings if the env var points at a missing file and will
-fall back to replaying `LocalTestnet.s.sol` when necessary. Use
-`BLUEPRINT_ANVIL_LOGS=1` to forward the embedded Anvil logs when validating new
-snapshots in CI.
+1. Run `scripts/update-anvil-snapshot.sh` to pull the latest fixtures from
+   `tnt-core-fixtures`.
 
 ## 7. Generating preregistration payloads
 

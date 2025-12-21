@@ -11,10 +11,9 @@ direct submission, aggregation logic, and full Anvil-backed end-to-end flows.
 
 ## Requirements
 
-The harness boots Anvil using the snapshot in `crates/chain-setup/anvil/snapshots/localtestnet-state.json` (override via
-`ANVIL_SNAPSHOT_PATH`). The `LocalTestnet.s.sol` broadcast is bundled in
-`crates/chain-setup/anvil/snapshots/localtestnet-broadcast.json` and can be overridden with `TNT_BROADCAST_PATH` if you
-need to replay a custom deployment. Opt-in to the heavy integration tests with:
+The harness boots Anvil using the snapshot in `crates/chain-setup/anvil/snapshots/localtestnet-state.json`. The
+`LocalTestnet.s.sol` broadcast is bundled in `crates/chain-setup/anvil/snapshots/localtestnet-broadcast.json`.
+Refresh fixtures with `scripts/fetch-localtestnet-fixtures.sh`. Opt-in to the heavy integration tests with:
 
 ```bash
 export RUN_TNT_E2E=1
