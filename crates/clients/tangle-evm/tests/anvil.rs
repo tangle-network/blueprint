@@ -1,8 +1,7 @@
 //! Integration tests for `TangleEvmClient` backed by a real Anvil testnet.
 //!
-//! These tests boot a temporary Anvil container, seed it with the broadcast
-//! produced by `tnt-core/script/v2/LocalTestnet.s.sol`, and exercise the client
-//! APIs end-to-end. No mocks.
+//! These tests boot a temporary Anvil container, seed it with the bundled
+//! `LocalTestnet.s.sol` broadcast, and exercise the client APIs end-to-end. No mocks.
 
 use alloy_primitives::{Address, Bytes, U256};
 use anyhow::{Context, Result};

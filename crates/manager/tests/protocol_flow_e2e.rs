@@ -5,7 +5,7 @@
 //! - Event processing (ServiceActivated, JobSubmitted, etc.)
 //! - Blueprint spawning and lifecycle management
 //!
-//! Requires `RUN_TNT_E2E=1` and `tnt-core` artifacts.
+//! Requires `RUN_TNT_E2E=1` and the bundled LocalTestnet broadcast/snapshot.
 
 use std::path::Path;
 use std::str::FromStr;

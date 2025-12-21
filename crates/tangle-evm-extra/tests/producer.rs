@@ -1,7 +1,7 @@
 //! Integration test for the TangleEvmProducer backed by the Anvil harness.
 //!
-//! Requires `TNT_CORE_PATH` to point at a local `tnt-core` checkout so the harness
-//! can replay the Foundry broadcast artifacts.
+//! Requires the bundled LocalTestnet broadcast/snapshot so the harness can replay
+//! the Foundry deployment artifacts.
 
 use alloy_primitives::Bytes;
 use alloy_provider::{Provider, ProviderBuilder};

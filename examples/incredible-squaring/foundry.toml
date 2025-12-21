@@ -5,18 +5,18 @@ out = "contracts/out"
 script = "contracts/script"
 cache_path = "contracts/cache"
 broadcast = "contracts/broadcast"
-libs = ["dependencies", "../../../tnt-core/dependencies", "../../../tnt-core/src"]
+libs = ["dependencies"]
 auto_detect_remappings = false
 solc = "0.8.26"
 via_ir = true
 optimizer = true
 optimizer_runs = 200
 
-# Use local tnt-core for v2 development
+# Use soldeer-managed dependencies for v2 development
 remappings = [
-    "@tnt-core/=../../../tnt-core/src/v2/",
-    "@openzeppelin/contracts/=../../../tnt-core/dependencies/@openzeppelin-contracts-5.1.0/",
-    "forge-std/=../../../tnt-core/dependencies/forge-std-1.9.4/src/"
+    "@tnt-core/=dependencies/tnt-core-0.5.0/src/v2/",
+    "@openzeppelin/contracts/=dependencies/@openzeppelin-contracts-5.1.0/",
+    "forge-std/=dependencies/forge-std-1.9.4/src/"
 ]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

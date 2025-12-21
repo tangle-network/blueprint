@@ -3,7 +3,7 @@
 //! Tests the aggregation flow where multiple operators submit results
 //! and the system aggregates them based on configured thresholds.
 //!
-//! These tests require `RUN_TNT_E2E=1` and `tnt-core` artifacts.
+//! These tests require `RUN_TNT_E2E=1` and the bundled LocalTestnet broadcast/snapshot.
 
 use std::path::Path;
 use std::str::FromStr;

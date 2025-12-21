@@ -12,18 +12,15 @@ direct submission, aggregation logic, and full Anvil-backed end-to-end flows.
 ## Requirements
 
 The harness boots Anvil using the snapshot in `crates/chain-setup/anvil/snapshots/localtestnet-state.json` (override via
-`ANVIL_SNAPSHOT_PATH`). Keep a sibling clone of [`tnt-core`](https://github.com/tangle-network/tnt-core) around so the
-helpers can fall back to replaying `LocalTestnet.s.sol` when the snapshot changes, and opt-in to the heavy integration
-tests:
+`ANVIL_SNAPSHOT_PATH`). The `LocalTestnet.s.sol` broadcast is bundled in
+`crates/chain-setup/anvil/snapshots/localtestnet-broadcast.json` and can be overridden with `TNT_BROADCAST_PATH` if you
+need to replay a custom deployment. Opt-in to the heavy integration tests with:
 
 ```bash
-git clone https://github.com/tangle-network/tnt-core ../tnt-core
-export TNT_CORE_PATH="$(pwd)/../tnt-core"
 export RUN_TNT_E2E=1
 ```
 
-`run.sh` detects the sibling checkout automatically, but exporting the env vars mirrors how CI opts into the Anvil suites
-and ensures the fallback replay has the broadcast artifacts it needs.
+`run.sh` mirrors how CI opts into the Anvil suites while keeping everything local to this repo.
 
 ## Build
 
@@ -77,6 +74,6 @@ RUST_LOG=info cargo run -p incredible-squaring-blueprint-bin -- run \
 ```
 
 The CLI flags configure the runner side (`BlueprintEnvironment`) while the env vars feed
-`TangleEvmProtocolSettings`. Point the RPC URLs at your local Anvil/tnt-core deployment, ensure the keystore contains
+`TangleEvmProtocolSettings`. Point the RPC URLs at your local Anvil deployment, ensure the keystore contains
 the operator key you registered on-chain, and the runner will automatically connect via `TangleEvmProducer` /
 `TangleEvmConsumer`.

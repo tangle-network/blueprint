@@ -3,7 +3,7 @@
 //! Tests multiple services from the same blueprint processing jobs independently.
 //! Verifies service isolation and correct job routing.
 //!
-//! Requires `RUN_TNT_E2E=1` and `tnt-core` artifacts.
+//! Requires `RUN_TNT_E2E=1` and the bundled LocalTestnet broadcast/snapshot.
 
 use std::collections::HashMap;
 use std::path::Path;

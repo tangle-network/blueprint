@@ -6,7 +6,7 @@
 //! - Service isolation (jobs don't leak between services)
 //! - Service termination of individual instances
 //!
-//! Requires `RUN_TNT_E2E=1` and `tnt-core` artifacts.
+//! Requires `RUN_TNT_E2E=1` and the bundled LocalTestnet broadcast/snapshot.
 
 use std::collections::HashMap;
 use std::path::Path;

@@ -29,7 +29,7 @@ This document outlines the migration of blueprint-sdk from Tangle Substrate to E
 - Track removal of any dormant Substrate context helpers (`crates/contexts/src/tangle.rs`, legacy macros) if they resurface downstream.
 - Wire the new OAuth/API-key EVM blueprints into CI or operator docs so users have verified EigenLayer + Tangle EVM flows.
 - Continue guarding against `sp-core`, `tangle_subxt`, or `tangle-pair` dependencies via the existing `rg` CI gate.
-- Publish clear instructions for setting `TNT_CORE_PATH` so the Anvil helpers (`blueprint-anvil-testing-utils`) can replay Foundry broadcasts in local/CI runs.
+- Publish clear instructions for using `TNT_BROADCAST_PATH` when overriding the bundled LocalTestnet broadcast.
 
 ### Latest additions
 
@@ -39,9 +39,8 @@ This document outlines the migration of blueprint-sdk from Tangle Substrate to E
 
 ### Known issues
 
-- All Anvil-backed integration tests rely on the snapshot under `crates/chain-setup/anvil/snapshots/`. Keep a sibling
-  `tnt-core` checkout (or set `TNT_CORE_PATH=/path/to/tnt-core`) so the fallback broadcast replay can be regenerated when
-  the snapshot drifts from `LocalTestnet.s.sol`.
+- All Anvil-backed integration tests rely on the snapshot under `crates/chain-setup/anvil/snapshots/`. The bundled
+  `localtestnet-broadcast.json` is used as the fallback deployment artifact when the snapshot drifts.
 - Export `RUN_TNT_E2E=1` before running these suites locally so the harness behavior matches CI (the workflow sets this automatically after cloning `tnt-core`).
 
 ### Snapshots
@@ -51,9 +50,8 @@ This document outlines the migration of blueprint-sdk from Tangle Substrate to E
 - Regenerate snapshots via `scripts/update-anvil-snapshot.sh`. The script spins up Anvil (`--hardfork cancun`,
   `--disable-code-size-limit`), runs `LocalTestnet.s.sol`, and dumps the resulting state. Preserve the printed Forge/Anvil
   logs when debugging (`KEEP_SNAPSHOT_LOGS=1`) so you can tie a snapshot back to the `tnt-core` commit that produced it.
-- Harnesses automatically prefer the snapshot and only fall back to replaying `run-latest.json` when the snapshot is
-  missing or fails validation. Keep `TNT_CORE_PATH` pointed at a sibling checkout so the fallback path has access to the
-  broadcast artifacts.
+- Harnesses automatically prefer the snapshot and only fall back to replaying the bundled broadcast when the snapshot is
+  missing or fails validation. Override the broadcast path with `TNT_BROADCAST_PATH` if needed.
 
 ## Target Architecture
 

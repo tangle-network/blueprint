@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TNT_CORE_PATH="${TNT_CORE_PATH:-$ROOT_DIR/../tnt-core}"
 SNAPSHOT_PATH="${ANVIL_SNAPSHOT_PATH:-$ROOT_DIR/crates/chain-setup/anvil/snapshots/localtestnet-state.json}"
+BROADCAST_PATH="${TNT_BROADCAST_PATH:-$ROOT_DIR/crates/chain-setup/anvil/snapshots/localtestnet-broadcast.json}"
 ANVIL_PORT="${ANVIL_PORT:-9545}"
 ANVIL_URL="http://127.0.0.1:${ANVIL_PORT}"
 KEEP_LOGS="${KEEP_SNAPSHOT_LOGS:-0}"
@@ -76,5 +77,13 @@ wait "$ANVIL_PID" >/dev/null 2>&1 || true
 
 mv "$TMP_STATE" "$SNAPSHOT_PATH"
 echo "Snapshot written to $SNAPSHOT_PATH"
+
+SOURCE_BROADCAST="${TNT_CORE_PATH}/broadcast/LocalTestnet.s.sol/31337/run-latest.json"
+if [[ -f "$SOURCE_BROADCAST" ]]; then
+  cp "$SOURCE_BROADCAST" "$BROADCAST_PATH"
+  echo "Broadcast written to $BROADCAST_PATH"
+else
+  echo "warning: broadcast not found at $SOURCE_BROADCAST" >&2
+fi
 echo "Forge log: $FORGE_LOG"
 echo "Anvil log: $ANVIL_LOG"

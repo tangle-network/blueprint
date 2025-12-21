@@ -2,7 +2,8 @@
 //!
 //! These helpers replay the broadcast artifacts generated from
 //! `tnt-core/script/v2/LocalTestnet.s.sol` so all tests run against the same contract
-//! addresses the SDK expects in production.
+//! addresses the SDK expects in production. The broadcast file is bundled with the SDK
+//! and can be overridden via `TNT_BROADCAST_PATH` if needed.
 
 use alloy_primitives::{Address, TxKind};
 use alloy_provider::{Provider, ProviderBuilder};
@@ -45,13 +46,7 @@ const OPERATOR1_PRIVATE_KEY: &str =
 /// Errors raised while preparing the deterministic harness.
 #[derive(Debug, Error)]
 pub enum HarnessError {
-    #[error(
-        "unable to locate tnt-core repo. Clone it next to blueprint-sdk or set TNT_CORE_PATH (expected at {0})"
-    )]
-    MissingTntCore(PathBuf),
-    #[error(
-        "LocalTestnet broadcast artifact missing at {0}. Run the broadcast script inside tnt-core"
-    )]
+    #[error("LocalTestnet broadcast artifact missing at {0}. Set TNT_BROADCAST_PATH to override.")]
     MissingBroadcast(PathBuf),
 }
 
@@ -62,10 +57,7 @@ pub fn missing_tnt_core_artifacts(err: &anyhow::Error) -> bool {
         cause
             .downcast_ref::<HarnessError>()
             .map_or(false, |harness_err| {
-                matches!(
-                    harness_err,
-                    HarnessError::MissingTntCore(_) | HarnessError::MissingBroadcast(_)
-                )
+                matches!(harness_err, HarnessError::MissingBroadcast(_))
             })
     })
 }
@@ -235,9 +227,6 @@ impl TangleEvmHarnessBuilder {
 }
 
 /// Boot a clean Anvil instance and replay the latest `LocalTestnet.s.sol` broadcast.
-///
-/// The `tnt-core` repository must exist adjacent to `blueprint-sdk` (or the path can be
-/// overridden via `TNT_CORE_PATH`).
 pub async fn start_tangle_evm_testnet(include_logs: bool) -> Result<SeededTangleEvmTestnet> {
     TangleEvmHarness::builder()
         .include_anvil_logs(include_logs)
@@ -491,52 +480,28 @@ fn load_broadcast_file() -> Result<BroadcastFile> {
     Ok(parsed)
 }
 
-fn detect_tnt_core_repo() -> Result<PathBuf> {
-    if let Ok(path) = env::var("TNT_CORE_PATH") {
-        let path = PathBuf::from(path);
-        return if path.exists() {
-            Ok(path)
-        } else {
-            Err(HarnessError::MissingTntCore(path).into())
-        };
-    }
-
-    let mut search_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let mut workspace_root = None;
-    while let Some(parent) = search_path.parent() {
-        if parent.join("Cargo.lock").exists() {
-            workspace_root = Some(parent.to_path_buf());
-            break;
-        }
-        search_path = parent.to_path_buf();
-    }
-    let workspace_root =
-        workspace_root.unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
-
-    let default = workspace_root
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| workspace_root.clone())
-        .join("tnt-core");
-
-    if default.exists() {
-        return Ok(default);
-    }
-
-    Err(HarnessError::MissingTntCore(default).into())
-}
-
 fn broadcast_artifact_path() -> Result<PathBuf> {
-    let repo_root = detect_tnt_core_repo()?;
-    let path = repo_root
-        .join("broadcast")
-        .join("LocalTestnet.s.sol")
-        .join("31337")
-        .join("run-latest.json");
+    if let Some(path) = env_broadcast_path() {
+        return Ok(path);
+    }
+
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../chain-setup/anvil/snapshots/localtestnet-broadcast.json");
     if path.exists() {
         Ok(path)
     } else {
         Err(HarnessError::MissingBroadcast(path).into())
+    }
+}
+
+fn env_broadcast_path() -> Option<PathBuf> {
+    let env_value = env::var_os("TNT_BROADCAST_PATH")?;
+    let path = PathBuf::from(env_value);
+    if path.exists() {
+        Some(path)
+    } else {
+        eprintln!("warning: TNT_BROADCAST_PATH={} does not exist", path.display());
+        None
     }
 }
 

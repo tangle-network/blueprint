@@ -14,7 +14,7 @@ cargo test -p hello-tangle-blueprint --test anvil -- --nocapture
 The test does the following:
 
 1. Boots an Anvil container seeded with the latest `LocalTestnet.s.sol` state.
-2. Seeds a temporary keystore with the default operator key from `tnt-core`.
+2. Seeds a temporary keystore with the default operator key from the LocalTestnet fixture.
 3. Spins up the Blueprint runner with the router exported from `src/lib.rs`.
 4. Submits an ABI-encoded `DocumentRequest` and waits for the on-chain
    `JobResultSubmitted` event, verifying the `DocumentReceipt` contents.

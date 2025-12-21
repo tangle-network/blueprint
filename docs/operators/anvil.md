@@ -7,13 +7,7 @@ commands used in CI, and a minimal client snippet for submitting jobs.
 ## 1. Prerequisites
 
 - Docker with the default socket exposed (`testcontainers` launches Anvil).
-- The `tnt-core` repository checked out next to `blueprint-sdk`.
 - Rust toolchain + Foundry (Install via `foundryup` or `foundry-toolchain`).
-
-```bash
-git clone https://github.com/tangle-network/tnt-core ../tnt-core
-export TNT_CORE_PATH="$(pwd)/../tnt-core"
-```
 
 ## 2. Generate a local operator key
 
@@ -49,9 +43,9 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-> **NOTE:** The harness now loads `crates/chain-setup/anvil/snapshots/localtestnet-state.json` by default so startup is instant. Override the path via `ANVIL_SNAPSHOT_PATH` when you need a custom dump, and set `BLUEPRINT_ANVIL_LOGS=1` if you want Anvil stdout/stderr in your test output. Keep `TNT_CORE_PATH` pointed at a sibling `tnt-core` checkout so the harness can fall back to replaying the broadcast when the snapshot is stale. `RUN_TNT_E2E=1` only gates the long-running integration tests—export it when you want to opt in, but snapshot loading no longer depends on it.
+> **NOTE:** The harness loads `crates/chain-setup/anvil/snapshots/localtestnet-state.json` by default so startup is instant. Override the path via `ANVIL_SNAPSHOT_PATH` when you need a custom dump, and set `BLUEPRINT_ANVIL_LOGS=1` if you want Anvil stdout/stderr in your test output. The fallback broadcast is bundled at `crates/chain-setup/anvil/snapshots/localtestnet-broadcast.json` and can be overridden via `TNT_BROADCAST_PATH`. `RUN_TNT_E2E=1` only gates the long-running integration tests—export it when you want to opt in.
 > ```bash
-> export TNT_CORE_PATH=/full/path/to/tnt-core
+> export TNT_BROADCAST_PATH=/full/path/to/localtestnet-broadcast.json
 > export RUN_TNT_E2E=1
 > ```
 
@@ -72,7 +66,7 @@ Behind the scenes `BlueprintHarness` performs the following:
 
 1. Calls `harness_builder_from_env().spawn()` to spawn Anvil with all contracts.
 2. Seeds a temporary filesystem keystore with the default operator key baked
-   into `tnt-core`.
+   into the LocalTestnet fixture.
 3. Builds a `BlueprintEnvironment` + `Router` pair and launches
    `BlueprintRunner`.
 4. Uses `TangleEvmClient::submit_job` and waits for `JobResultSubmitted`.
@@ -132,15 +126,13 @@ loads this file automatically (or from `ANVIL_SNAPSHOT_PATH` if you override it)
 and only replays the Foundry broadcast when the snapshot is missing or fails
 validation.
 
-Regenerate the snapshot whenever `tnt-core` changes:
+Regenerate the snapshot whenever the protocol deployment changes:
 
-1. Ensure `tnt-core` lives next to `blueprint-sdk`, clean its build artifacts
-   (`(cd ../tnt-core && forge clean)`), and free up the configured Anvil port.
-2. Run `scripts/update-anvil-snapshot.sh`. Pass `KEEP_SNAPSHOT_LOGS=1` when
+1. Run `scripts/update-anvil-snapshot.sh`. Pass `KEEP_SNAPSHOT_LOGS=1` when
    debugging so you can inspect the Forge/Anvil transcripts.
-3. The script prints the generated addresses plus the temp log paths; keep the
+2. The script prints the generated addresses plus the temp log paths; keep the
    log handy with `KEEP_SNAPSHOT_LOGS=1` so you can correlate the snapshot with
-   the exact `tnt-core` commit (`git rev-parse HEAD` inside `tnt-core`).
+   the exact protocol commit used to generate it.
 
 Teams that maintain multiple snapshots can store them anywhere on disk and set
 `ANVIL_SNAPSHOT_PATH=/path/to/custom-state.json` before running tests. The

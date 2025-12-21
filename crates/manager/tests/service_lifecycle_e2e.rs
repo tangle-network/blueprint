@@ -7,7 +7,7 @@
 //! 4. Job submission and result processing
 //! 5. Service termination
 //!
-//! These tests require `RUN_TNT_E2E=1` and `tnt-core` artifacts.
+//! These tests require `RUN_TNT_E2E=1` and the bundled LocalTestnet broadcast/snapshot.
 
 use std::path::Path;
 use std::str::FromStr;

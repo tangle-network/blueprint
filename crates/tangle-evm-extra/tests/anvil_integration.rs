@@ -1,9 +1,9 @@
 //! Integration tests for the Tangle EVM extras backed by the shared Anvil harness.
 //!
 //! Each test boots `TangleEvmHarness` (the same helper used by the rest of the SDK)
-//! and gracefully skips itself when `TNT_CORE_PATH` or the Foundry broadcast
-//! artifacts are missing. This keeps the tests deterministic in CI without forcing
-//! contributors to run setup scripts manually.
+//! and gracefully skips itself when the bundled LocalTestnet broadcast/snapshot
+//! is missing. This keeps the tests deterministic in CI without forcing contributors
+//! to run setup scripts manually.
 
 use alloy_primitives::{Address, Bytes, U256};
 use anyhow::{Context, Result};

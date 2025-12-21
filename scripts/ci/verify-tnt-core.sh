@@ -2,31 +2,28 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-tnt_core_path="${TNT_CORE_PATH:-"${repo_root}/../tnt-core"}"
+snapshot_path="${ANVIL_SNAPSHOT_PATH:-"${repo_root}/crates/chain-setup/anvil/snapshots/localtestnet-state.json"}"
+broadcast_path="${TNT_BROADCAST_PATH:-"${repo_root}/crates/chain-setup/anvil/snapshots/localtestnet-broadcast.json"}"
 
-if [[ ! -d "${tnt_core_path}" ]]; then
-  echo "::error::tnt-core repository not found at ${tnt_core_path}" >&2
+if [[ ! -f "${snapshot_path}" ]]; then
+  echo "::error::Anvil snapshot missing at ${snapshot_path}" >&2
   exit 1
 fi
 
-if [[ ! -d "${tnt_core_path}/.git" ]]; then
-  echo "::error::${tnt_core_path} exists but is not a git checkout" >&2
+if [[ ! -f "${broadcast_path}" ]]; then
+  echo "::error::Anvil broadcast missing at ${broadcast_path}" >&2
   exit 1
 fi
 
-pushd "${tnt_core_path}" >/dev/null
-head_rev="$(git rev-parse HEAD)"
-version_file="bindings/TNT_CORE_VERSION"
-if [[ ! -f "${version_file}" ]]; then
-  echo "::error::${version_file} missing from tnt-core checkout" >&2
-  exit 1
-fi
-recorded_rev="$(< "${version_file}")"
+python3 - <<PY
+import json, sys
+for path in ("${snapshot_path}", "${broadcast_path}"):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            json.load(handle)
+    except Exception as exc:
+        print(f"::error::failed to parse {path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+PY
 
-if [[ "${head_rev}" != "${recorded_rev}" ]]; then
-  echo "::error::tnt-core bindings generated from ${recorded_rev} but checkout is at ${head_rev}. Run 'cargo xtask gen-bindings' inside tnt-core to refresh them." >&2
-  exit 1
-fi
-popd >/dev/null
-
-echo "tnt-core bindings verified at ${recorded_rev}"
+echo "Anvil snapshot/broadcast fixtures verified."
