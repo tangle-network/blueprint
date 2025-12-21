@@ -17,7 +17,7 @@ color-eyre = { workspace = true }
 blueprint-anvil-testing-utils = { workspace = true, features = ["aggregation"] }
 blueprint-client-tangle-evm = { workspace = true }
 alloy-sol-types = { workspace = true }
-alloy-primitives = "1.2.1"
+alloy-primitives = { workspace = true }
 bytes = { workspace = true }
 # Aggregation service for integration tests
 blueprint-tangle-aggregation-svc = { workspace = true }
@@ -25,16 +25,16 @@ blueprint-tangle-evm-extra = { workspace = true, features = ["aggregation"] }
 # Crypto for BLS keys
 blueprint-crypto-bn254 = { workspace = true }
 blueprint-crypto-core = { workspace = true }
-ark-bn254 = "0.5"
-ark-ec = "0.5"
-ark-ff = "0.5"
-ark-serialize = "0.5"
+ark-bn254 = { workspace = true }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
+ark-serialize = { workspace = true }
 # Serialization
 serde_json = { workspace = true }
 # Random for key generation
-rand = "0.8"
+rand = { workspace = true }
 # Hex encoding
-hex = "0.4"
+hex = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 
 [package.metadata.blueprint]
