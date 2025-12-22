@@ -307,7 +307,7 @@ serial_test = { version = "3.2.0", default-features = false }
 # Alloy (EVM)
 alloy = { version = "1.0.35", default-features = false }
 alloy-primitives = { version = "1.2.1", default-features = false }
-alloy-json-abi = { version = "1.2.1", default-features = false }
+alloy-json-abi = { version = "1.5.2", default-features = false }
 alloy-json-rpc = { version = "1.0.35", default-features = false }
 alloy-dyn-abi = { version = "1.2.1", default-features = false }
 alloy-sol-types = { version = "1.2.1", default-features = false }
