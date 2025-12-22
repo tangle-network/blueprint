@@ -14,6 +14,7 @@ use blueprint_manager::sources::BlueprintSourceHandler;
 use blueprint_manager::sources::github::GithubBinaryFetcher;
 use blueprint_manager::sources::remote::RemoteBinaryFetcher;
 use blueprint_manager::sources::types::{BlueprintBinary, GithubFetcher, RemoteFetcher};
+use serial_test::serial;
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
 
@@ -95,6 +96,7 @@ async fn remote_fetcher_rejects_invalid_manifest_url() {
 }
 
 #[tokio::test]
+#[serial(env)]
 async fn remote_fetcher_requires_ipfs_gateway_for_ipfs_urls() {
     // Clear IPFS gateway env
     unsafe { std::env::remove_var("IPFS_GATEWAY_URL") };

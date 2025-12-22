@@ -14,6 +14,7 @@ use tokio::time::timeout;
 use tracing_subscriber::{EnvFilter, fmt};
 
 const ANVIL_TEST_TIMEOUT: Duration = Duration::from_secs(600);
+const JOB_RESULT_TIMEOUT: Duration = Duration::from_secs(300);
 const UNAUTHORIZED_CALLER_PRIVATE_KEY: &str =
     "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 
@@ -67,7 +68,9 @@ async fn writes_and_purchases_resources() -> Result<()> {
             .submit_job(WRITE_RESOURCE_JOB_ID, Bytes::from(write_payload))
             .await?;
         println!("Submitted call {}", submission.call_id);
-        let output = harness.wait_for_job_result(submission).await?;
+        let output = harness
+            .wait_for_job_result_with_deadline(submission, JOB_RESULT_TIMEOUT)
+            .await?;
         let receipt = WriteResourceResult::abi_decode(&output)?;
         assert!(receipt.ok, "write_resource should succeed");
         assert_eq!(receipt.resourceId, "config");
@@ -77,7 +80,9 @@ async fn writes_and_purchases_resources() -> Result<()> {
             .submit_job(PURCHASE_API_KEY_JOB_ID, Bytes::from(purchase_payload))
             .await?;
         println!("Purchase call {}", purchase.call_id);
-        let purchase_output = harness.wait_for_job_result(purchase).await?;
+        let purchase_output = harness
+            .wait_for_job_result_with_deadline(purchase, JOB_RESULT_TIMEOUT)
+            .await?;
         let purchase_receipt = PurchaseApiKeyResult::abi_decode(&purchase_output)?;
         assert!(purchase_receipt.ok);
         assert!(

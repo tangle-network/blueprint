@@ -8,7 +8,6 @@
 //!
 //! Requires `RUN_TNT_E2E=1` and the bundled LocalTestnet broadcast/snapshot.
 
-use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -24,6 +23,7 @@ use anyhow::{Context, Result, ensure};
 use blueprint_anvil_testing_utils::{
     SeededTangleEvmTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
 };
+use blueprint_chain_setup::anvil::keys::ANVIL_PRIVATE_KEYS;
 use blueprint_client_tangle_evm::contracts::ITangle::addPermittedCallerCall;
 use blueprint_client_tangle_evm::{
     ServiceStatus, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
@@ -216,7 +216,7 @@ async fn test_job_routing_isolation() -> Result<()> {
 
         // Submit results for each job
         for (call_id, input) in &job_inputs {
-            let result = input * input;
+            let result = *input * *input;
             let encoded = Bytes::from(result.abi_encode());
             harness.operator1_client
                 .submit_result(SERVICE_ID_0, *call_id, encoded)
@@ -256,23 +256,37 @@ async fn test_concurrent_job_processing() -> Result<()> {
 
         let harness = MultiServiceHarness::new(deployment).await?;
 
-        grant_permitted_caller(
-            harness.deployment.http_endpoint().as_str(),
-            harness.deployment.tangle_contract,
-            harness.operator1_account(),
-        ).await?;
+        let caller_temp = TempDir::new().context("failed to create caller tempdir")?;
+        let mut callers = Vec::new();
+        let num_jobs = 5;
+
+        for (idx, key) in ANVIL_PRIVATE_KEYS.iter().skip(1).take(num_jobs).enumerate() {
+            let keystore_path = caller_temp.path().join(format!("caller_{idx}"));
+            std::fs::create_dir_all(&keystore_path)?;
+            seed_operator_key(&keystore_path, key)?;
+            let client = create_client(&harness.deployment, &keystore_path, Some(SERVICE_ID_0)).await?;
+            grant_permitted_caller(
+                harness.deployment.http_endpoint().as_str(),
+                harness.deployment.tangle_contract,
+                client.account(),
+            )
+            .await?;
+            callers.push(client);
+        }
 
         // Submit jobs concurrently
-        let num_jobs = 5;
         let mut handles = Vec::new();
 
-        for i in 0..num_jobs {
-            let client = Arc::clone(&harness.owner_client);
-            let input: u64 = (i + 1) * 100;
+        for (i, client) in callers.iter().enumerate() {
+            let client = Arc::clone(client);
+            let input: u64 = (i as u64 + 1) * 100;
 
             handles.push(tokio::spawn(async move {
                 let encoded = Bytes::from(input.abi_encode());
-                client.submit_job(SERVICE_ID_0, JOB_INDEX, encoded).await
+                client
+                    .submit_job(SERVICE_ID_0, JOB_INDEX, encoded)
+                    .await
+                    .map(|submission| (submission.call_id, input))
             }));
         }
 
@@ -281,13 +295,12 @@ async fn test_concurrent_job_processing() -> Result<()> {
         for handle in handles {
             let result = handle.await.context("task panicked")?;
             let submission = result.context("job submission failed")?;
-            submissions.push(submission.call_id);
+            submissions.push(submission);
         }
         println!("✓ Submitted {} jobs concurrently", submissions.len());
 
         // Submit results for all
-        for (i, call_id) in submissions.iter().enumerate() {
-            let input: u64 = ((i + 1) * 100) as u64;
+        for (call_id, input) in &submissions {
             let result = input * input;
             let encoded = Bytes::from(result.abi_encode());
             harness.operator1_client
@@ -299,7 +312,7 @@ async fn test_concurrent_job_processing() -> Result<()> {
         // Verify all completed
         tokio::time::sleep(Duration::from_secs(2)).await;
         let mut completed = 0;
-        for call_id in &submissions {
+        for (call_id, _input) in &submissions {
             let job_call = harness.owner_client
                 .get_job_call(SERVICE_ID_0, *call_id)
                 .await

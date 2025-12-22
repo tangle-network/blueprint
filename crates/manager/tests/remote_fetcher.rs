@@ -16,6 +16,7 @@ use blueprint_manager::sources::remote::RemoteBinaryFetcher;
 use blueprint_manager::sources::types::{BlueprintBinary, RemoteFetcher};
 use hex;
 use serde_json::json;
+use serial_test::serial;
 use sha2::{Digest, Sha256};
 use tar::{Builder, Header};
 use tempfile::tempdir;
@@ -23,6 +24,7 @@ use tokio::task::JoinHandle;
 use xz2::write::XzEncoder;
 
 #[tokio::test]
+#[serial(env)]
 async fn remote_fetcher_downloads_and_runs_binary() {
     let _max_guard = EnvGuard::set("MAX_ARCHIVE_BYTES", None);
     let _ipfs_guard = EnvGuard::set("IPFS_GATEWAY_URL", None);
@@ -44,6 +46,7 @@ async fn remote_fetcher_downloads_and_runs_binary() {
 }
 
 #[tokio::test]
+#[serial(env)]
 async fn manifest_missing_binary_is_rejected() {
     let _max_guard = EnvGuard::set("MAX_ARCHIVE_BYTES", None);
     let _ipfs_guard = EnvGuard::set("IPFS_GATEWAY_URL", None);
@@ -61,6 +64,7 @@ async fn manifest_missing_binary_is_rejected() {
 }
 
 #[tokio::test]
+#[serial(env)]
 async fn archive_missing_binary_is_rejected() {
     let _max_guard = EnvGuard::set("MAX_ARCHIVE_BYTES", None);
     let _ipfs_guard = EnvGuard::set("IPFS_GATEWAY_URL", None);
@@ -76,6 +80,7 @@ async fn archive_missing_binary_is_rejected() {
 }
 
 #[tokio::test]
+#[serial(env)]
 async fn checksum_mismatch_is_detected() {
     let _max_guard = EnvGuard::set("MAX_ARCHIVE_BYTES", None);
     let _ipfs_guard = EnvGuard::set("IPFS_GATEWAY_URL", None);
@@ -93,6 +98,7 @@ async fn checksum_mismatch_is_detected() {
 }
 
 #[tokio::test]
+#[serial(env)]
 async fn download_failures_surface_clear_errors() {
     let _max_guard = EnvGuard::set("MAX_ARCHIVE_BYTES", None);
     let _ipfs_guard = EnvGuard::set("IPFS_GATEWAY_URL", None);
@@ -107,6 +113,7 @@ async fn download_failures_surface_clear_errors() {
 }
 
 #[tokio::test]
+#[serial(env)]
 async fn cache_is_reused_between_fetches() {
     let _max_guard = EnvGuard::set("MAX_ARCHIVE_BYTES", None);
     let _ipfs_guard = EnvGuard::set("IPFS_GATEWAY_URL", None);
@@ -125,6 +132,7 @@ async fn cache_is_reused_between_fetches() {
 }
 
 #[tokio::test]
+#[serial(env)]
 async fn corrupted_cache_triggers_redownload() {
     let _max_guard = EnvGuard::set("MAX_ARCHIVE_BYTES", None);
     let _ipfs_guard = EnvGuard::set("IPFS_GATEWAY_URL", None);
@@ -148,6 +156,7 @@ async fn corrupted_cache_triggers_redownload() {
 }
 
 #[tokio::test]
+#[serial(env)]
 async fn archive_size_limits_are_enforced() {
     let _max_guard = EnvGuard::set("MAX_ARCHIVE_BYTES", Some("10"));
     let binary = blueprint_binary("remote-cli", b"0123456789abcdef");
@@ -161,6 +170,7 @@ async fn archive_size_limits_are_enforced() {
 }
 
 #[tokio::test]
+#[serial(env)]
 async fn ipfs_gateway_is_required_when_urls_use_ipfs_scheme() {
     let _ipfs_guard = EnvGuard::set("IPFS_GATEWAY_URL", None);
     let binary = blueprint_binary("remote-cli", b"payload");
@@ -176,6 +186,7 @@ async fn ipfs_gateway_is_required_when_urls_use_ipfs_scheme() {
 }
 
 #[tokio::test]
+#[serial(env)]
 async fn ipfs_gateway_supports_http_translation() {
     let binary = blueprint_binary("remote-cli", b"payload");
     let manifest = manifest_with_binary("remote-cli");

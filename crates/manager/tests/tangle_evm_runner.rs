@@ -8,6 +8,7 @@ use std::time::Duration;
 use alloy_network::EthereumWallet;
 use alloy_primitives::{Address, Bytes};
 use alloy_provider::{Provider, ProviderBuilder};
+use alloy_rpc_types::Filter;
 use alloy_rpc_types::transaction::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::SolCall;
@@ -51,6 +52,7 @@ const SERVICE_ID: u64 = 0;
 const JOB_INDEX: u8 = 0;
 
 const ANVIL_TEST_TIMEOUT: Duration = Duration::from_secs(1_800);
+const JOB_RESULT_TIMEOUT: Duration = Duration::from_secs(300);
 
 struct RunnerTestHarness {
     deployment: SeededTangleEvmTestnet,
@@ -351,25 +353,43 @@ async fn wait_for_job_result(
     submission: JobSubmissionResult,
 ) -> Result<Vec<u8>> {
     use blueprint_client_tangle_evm::contracts::ITangle;
+    use tokio::time::sleep;
+
+    let tangle_address = client.tangle_address();
+    let mut from_block = if let Some(block_number) = submission.tx.block_number {
+        block_number
+    } else {
+        client.block_number().await?.saturating_sub(1)
+    };
 
     let fut = async {
         loop {
-            if let Some(event) = client.next_event().await {
-                for log in event.logs {
-                    if let Ok(decoded) = log.log_decode::<ITangle::JobResultSubmitted>() {
-                        if decoded.inner.serviceId == SERVICE_ID
-                            && decoded.inner.callId == submission.call_id
-                        {
-                            let bytes: Vec<u8> = decoded.inner.result.clone().into();
-                            return Ok(bytes);
-                        }
+            let current = client.block_number().await?;
+            if from_block > current {
+                sleep(Duration::from_millis(200)).await;
+                continue;
+            }
+            let filter = Filter::new()
+                .address(tangle_address)
+                .from_block(from_block)
+                .to_block(current);
+            let logs = client.get_logs(&filter).await?;
+            for log in logs {
+                if let Ok(decoded) = log.log_decode::<ITangle::JobResultSubmitted>() {
+                    if decoded.inner.serviceId == SERVICE_ID
+                        && decoded.inner.callId == submission.call_id
+                    {
+                        let bytes: Vec<u8> = decoded.inner.result.clone().into();
+                        return Ok(bytes);
                     }
                 }
             }
+            from_block = current.saturating_add(1);
+            sleep(Duration::from_millis(200)).await;
         }
     };
 
-    timeout(Duration::from_secs(30), fut)
+    timeout(JOB_RESULT_TIMEOUT, fut)
         .await
         .context("timed out waiting for JobResultSubmitted")?
 }

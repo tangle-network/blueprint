@@ -134,3 +134,4 @@ blueprint-anvil-testing-utils = { workspace = true }
 blueprint-router = { workspace = true }
 blueprint-tangle-evm-extra = { workspace = true }
 xz2 = "0.1"
+serial_test = { workspace = true }

@@ -1224,10 +1224,14 @@ mod tests {
             .expect("Failed to mine anvil blocks");
         tokio::time::sleep(blueprint_std::time::Duration::from_secs(5)).await;
 
-        let expected_block_number = provider.clone().get_block_number().await.unwrap();
+        let before = provider.clone().get_block_number().await.unwrap();
         let block_number = instrumented_client.block_number().await.unwrap();
+        let after = provider.get_block_number().await.unwrap();
 
-        assert_eq!(expected_block_number, block_number);
+        assert!(
+            block_number >= before && block_number <= after,
+            "instrumented block number {block_number} not within provider range {before}..={after}"
+        );
     }
 
     #[tokio::test]

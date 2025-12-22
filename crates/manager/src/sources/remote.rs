@@ -41,7 +41,6 @@ pub struct RemoteBinaryFetcher {
     ipfs_gateway: Option<String>,
     target_binary_name: Option<String>,
     selected_binary: Option<BlueprintBinary>,
-    resolved_binary_path: Option<PathBuf>,
 }
 
 impl RemoteBinaryFetcher {
@@ -63,7 +62,6 @@ impl RemoteBinaryFetcher {
             ipfs_gateway,
             target_binary_name: None,
             selected_binary: None,
-            resolved_binary_path: None,
         }
     }
 
@@ -268,15 +266,25 @@ impl RemoteBinaryFetcher {
     }
 
     fn unpack_archive(&self, archive_path: &Path, cache_dir: &Path) -> Result<PathBuf> {
-        let tar_xz = File::open(&archive_path)?;
-        let tar = XzDecoder::new(tar_xz);
-        let mut archive = Archive::new(tar);
-        archive.unpack(cache_dir)?;
-
         let binary_name = self
             .target_binary_name
             .as_deref()
             .ok_or(Error::NoMatchingBinary)?;
+
+        for entry in walkdir::WalkDir::new(cache_dir) {
+            let entry = entry?;
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            if entry.file_name().to_str() == Some(binary_name) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+
+        let tar_xz = File::open(&archive_path)?;
+        let tar = XzDecoder::new(tar_xz);
+        let mut archive = Archive::new(tar);
+        archive.unpack(cache_dir)?;
 
         let mut binary_path = None;
         for entry in walkdir::WalkDir::new(cache_dir) {
@@ -332,7 +340,6 @@ impl RemoteBinaryFetcher {
                     actual: hex::encode(computed_blake3.as_bytes()),
                 });
             }
-            return Ok(());
         }
 
         let computed_sha: [u8; 32] = sha256_hasher.finalize().into();
@@ -349,13 +356,6 @@ impl RemoteBinaryFetcher {
 
 impl BlueprintSourceHandler for RemoteBinaryFetcher {
     async fn fetch(&mut self, cache_dir: &Path) -> Result<PathBuf> {
-        if let Some(resolved_binary_path) = &self.resolved_binary_path {
-            if resolved_binary_path.exists() {
-                return Ok(resolved_binary_path.clone());
-            }
-            self.resolved_binary_path = None;
-        }
-
         let cache_key = self.cache_key();
         let archive_path = self.get_binary(cache_dir).await?;
         let manifest_path = cache_dir.join(format!("remote-{cache_key}-{MANIFEST_FILE_NAME}"));
@@ -373,7 +373,6 @@ impl BlueprintSourceHandler for RemoteBinaryFetcher {
             }
         };
 
-        self.resolved_binary_path = Some(binary_path.clone());
         Ok(binary_path)
     }
 
