@@ -32,7 +32,7 @@ use crate::contracts::{
 };
 use crate::error::{Error, Result};
 use crate::services::ServiceRequestParams;
-use IMultiAssetDelegation::MultiAssetDelegationInstance;
+use IMultiAssetDelegation::IMultiAssetDelegationInstance;
 use IOperatorStatusRegistry::IOperatorStatusRegistryInstance;
 use ITangle::ITangleInstance;
 
@@ -216,8 +216,8 @@ impl TangleEvmClient {
     }
 
     /// Get the MultiAssetDelegation contract instance
-    pub fn restaking_contract(&self) -> MultiAssetDelegationInstance<Arc<TangleProvider>> {
-        MultiAssetDelegationInstance::new(self.restaking_address, Arc::clone(&self.provider))
+    pub fn restaking_contract(&self) -> IMultiAssetDelegationInstance<Arc<TangleProvider>> {
+        IMultiAssetDelegation::new(self.restaking_address, Arc::clone(&self.provider))
     }
 
     /// Get the operator status registry contract instance
@@ -512,23 +512,14 @@ impl TangleEvmClient {
     ///
     /// Returns the sum of all operator exposureBps values.
     pub async fn get_service_total_exposure(&self, service_id: u64) -> Result<U256> {
-        let contract = self.tangle_contract();
-        match contract.getServiceTotalExposure(service_id).call().await {
-            Ok(total) => Ok(total),
-            Err(err) => {
-                tracing::warn!(
-                    "getServiceTotalExposure revert for service {service_id}: {err}; falling back to summing operator exposures"
-                );
-                let mut total = U256::ZERO;
-                for operator in self.get_service_operators(service_id).await? {
-                    let op_info = self.get_service_operator(service_id, operator).await?;
-                    if op_info.active {
-                        total = total.saturating_add(U256::from(op_info.exposureBps));
-                    }
-                }
-                Ok(total)
+        let mut total = U256::ZERO;
+        for operator in self.get_service_operators(service_id).await? {
+            let op_info = self.get_service_operator(service_id, operator).await?;
+            if op_info.active {
+                total = total.saturating_add(U256::from(op_info.exposureBps));
             }
         }
+        Ok(total)
     }
 
     /// Get operator weights (exposureBps) for all operators in a service
