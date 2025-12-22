@@ -526,9 +526,6 @@ async fn fund_account(provider: &impl Provider, address: Address) -> Result<()> 
         )
         .await
         .context("failed to fund impersonated account")?;
-    if env::var_os("BLUEPRINT_SEED_TRACE").is_some() {
-        println!("Funded account {address:?}");
-    }
     Ok(())
 }
 
