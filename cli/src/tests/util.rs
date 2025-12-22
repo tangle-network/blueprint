@@ -2,13 +2,80 @@ use assert_cmd::Command;
 use blueprint_testing_utils::anvil::{TangleEvmHarness, missing_tnt_core_artifacts};
 use color_eyre::eyre::{Result, eyre};
 use serde_json::Value;
-use std::{borrow::Cow, env, path::Path};
+use std::{
+    borrow::Cow,
+    env,
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 
 use alloy_provider::{Provider, ProviderBuilder};
 use serde_json::json;
 
 /// Environment variable that enables end-to-end CLI tests.
 pub const RUN_TNT_E2E_ENV: &str = "RUN_TNT_E2E";
+
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
+}
+
+pub fn cargo_tangle_bin() -> Result<PathBuf> {
+    static BIN_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+    if let Some(path) = BIN_PATH.get() {
+        return Ok(path.clone());
+    }
+
+    if let Ok(path) = env::var("CARGO_BIN_EXE_cargo-tangle") {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            let _ = BIN_PATH.set(path.clone());
+            return Ok(path);
+        }
+    }
+
+    let target_dir = env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| workspace_root().join("target"));
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    let exe_name = format!("cargo-tangle{}", env::consts::EXE_SUFFIX);
+    let bin_path = target_dir.join(&profile).join(exe_name);
+
+    if !bin_path.is_file() {
+        let mut build = std::process::Command::new("cargo");
+        build
+            .arg("build")
+            .arg("--bin")
+            .arg("cargo-tangle")
+            .arg("--package")
+            .arg("cargo-tangle")
+            .current_dir(workspace_root());
+        if profile == "release" {
+            build.arg("--release");
+        }
+        if let Some(dir) = env::var_os("CARGO_TARGET_DIR") {
+            build.env("CARGO_TARGET_DIR", dir);
+        }
+        let status = build
+            .status()
+            .map_err(|e| eyre!("failed to build cargo-tangle: {e}"))?;
+        if !status.success() {
+            return Err(eyre!("cargo-tangle build failed with status {status}"));
+        }
+    }
+
+    if !bin_path.is_file() {
+        return Err(eyre!("cargo-tangle binary not found at {}", bin_path.display()));
+    }
+
+    let _ = BIN_PATH.set(bin_path.clone());
+    Ok(bin_path)
+}
+
+pub fn cargo_tangle_cmd() -> Result<Command> {
+    let bin = cargo_tangle_bin()?;
+    Ok(Command::new(bin))
+}
 
 /// Returns `true` when end-to-end tests should run.
 pub fn is_e2e_enabled() -> bool {
@@ -41,8 +108,7 @@ pub fn network_cli_args(harness: &TangleEvmHarness, keystore_path: &Path) -> Vec
 
 /// Execute `cargo-tangle` with the provided arguments, capturing stdout/stderr.
 pub fn run_cli_command(args: &[String]) -> Result<CliCommandOutput> {
-    let output = Command::cargo_bin("cargo-tangle")
-        .map_err(|e| eyre!(e))?
+    let output = cargo_tangle_cmd()?
         .env("NO_COLOR", "1")
         .args(args.iter().map(|s| s.as_str()))
         .output()

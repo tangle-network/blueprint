@@ -1,6 +1,5 @@
 use std::fs;
 
-use assert_cmd::Command;
 use blueprint_testing_utils::anvil::{
     TangleEvmHarness, missing_tnt_core_artifacts,
     tangle_evm::{LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID},
@@ -8,7 +7,7 @@ use blueprint_testing_utils::anvil::{
 use color_eyre::eyre::{Result, eyre};
 use tempfile::TempDir;
 
-use crate::tests::util::{RUN_TNT_E2E_ENV, is_e2e_enabled};
+use crate::tests::util::{RUN_TNT_E2E_ENV, cargo_tangle_cmd, is_e2e_enabled};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn deploys_blueprint_to_devnet() -> Result<()> {
@@ -47,8 +46,7 @@ async fn deploys_blueprint_to_devnet() -> Result<()> {
     // Release the harness before running the deploy command so the CLI owns any Devnet stacks.
     drop(harness);
 
-    let output = Command::cargo_bin("cargo-tangle")
-        .map_err(|e| eyre!(e))?
+    let output = cargo_tangle_cmd()?
         .env("NO_COLOR", "1")
         .current_dir(settings_dir.path())
         .args([

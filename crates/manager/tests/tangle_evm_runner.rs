@@ -59,6 +59,7 @@ struct RunnerTestHarness {
     env: BlueprintEnvironment,
     runner_client: Arc<TangleEvmClient>,
     control_client: Arc<TangleEvmClient>,
+    start_block: u64,
     _temp_dir: TempDir,
     bridge_handle: BridgeHandle,
 }
@@ -73,7 +74,7 @@ impl RunnerTestHarness {
     }
 
     fn producer(&self) -> TangleEvmProducer {
-        TangleEvmProducer::new((*self.runner_client).clone(), SERVICE_ID)
+        TangleEvmProducer::from_block((*self.runner_client).clone(), SERVICE_ID, self.start_block)
             .with_poll_interval(Duration::from_millis(100))
     }
 
@@ -142,12 +143,18 @@ async fn setup_runner_test(test_name: &str) -> Result<Option<RunnerTestHarness>>
 
     let runner_client = create_fs_client(&deployment, &keystore_path).await?;
     let control_client = create_fs_client(&deployment, &keystore_path).await?;
+    let start_block = runner_client
+        .block_number()
+        .await
+        .context("failed to read runner start block")?
+        .saturating_sub(1);
 
     Ok(Some(RunnerTestHarness {
         deployment,
         env,
         runner_client,
         control_client,
+        start_block,
         _temp_dir: temp,
         bridge_handle,
     }))
@@ -220,8 +227,9 @@ async fn minimal_runner_processes_jobs_on_tangle_evm() -> Result<()> {
         let control_client = harness.control_client();
 
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let (result_tx, result_rx) = oneshot::channel();
         let minimal_task = tokio::spawn(async move {
-            run_minimal_runner_loop(producer, router, consumer, shutdown_rx).await
+            run_minimal_runner_loop(producer, router, consumer, shutdown_rx, Some(result_tx)).await
         });
 
         let raw_payload = b"tangle-runner".to_vec();
@@ -231,11 +239,15 @@ async fn minimal_runner_processes_jobs_on_tangle_evm() -> Result<()> {
             .await
             .context("failed to submit job")?;
 
-        let output = wait_for_job_result((*control_client).clone(), submission)
+        let output = timeout(JOB_RESULT_TIMEOUT, result_rx)
             .await
-            .context("job result not observed")?;
+            .context("timed out waiting for local job result")?
+            .context("local job result channel closed")?;
         let decoded = Vec::<u8>::abi_decode(&output).context("failed to decode job result")?;
         assert_eq!(decoded, raw_payload);
+        wait_for_job_completion((*control_client).clone(), submission.call_id)
+            .await
+            .context("job completion not observed on-chain")?;
 
         let _ = shutdown_tx.send(());
         minimal_task
@@ -255,6 +267,7 @@ async fn run_minimal_runner_loop(
     mut router: Router,
     mut consumer: TangleEvmConsumer,
     mut shutdown_rx: oneshot::Receiver<()>,
+    mut result_tx: Option<oneshot::Sender<Vec<u8>>>,
 ) -> Result<()> {
     let mut router = router.as_service();
     poll_fn(|ctx| router.poll_ready(ctx)).await.unwrap_or(());
@@ -315,6 +328,11 @@ async fn run_minimal_runner_loop(
                                         "Job result returned error"
                                     );
                                 }
+                            }
+                        }
+                        if let Some(tx) = result_tx.take() {
+                            if let Some(JobResult::Ok { body, .. }) = results.get(0) {
+                                let _ = tx.send(body.to_vec());
                             }
                         }
                         let mut result_stream = stream::iter(results.into_iter().map(Ok));
@@ -384,7 +402,7 @@ async fn wait_for_job_result(
                     }
                 }
             }
-            from_block = current.saturating_add(1);
+            from_block = current;
             sleep(Duration::from_millis(200)).await;
         }
     };
@@ -392,6 +410,25 @@ async fn wait_for_job_result(
     timeout(JOB_RESULT_TIMEOUT, fut)
         .await
         .context("timed out waiting for JobResultSubmitted")?
+}
+
+async fn wait_for_job_completion(
+    client: TangleEvmClient,
+    call_id: u64,
+) -> Result<()> {
+    use tokio::time::sleep;
+
+    timeout(JOB_RESULT_TIMEOUT, async {
+        loop {
+            let call = client.get_job_call(SERVICE_ID, call_id).await?;
+            if call.completed {
+                return Ok(());
+            }
+            sleep(Duration::from_millis(200)).await;
+        }
+    })
+    .await
+    .context("timed out waiting for job completion")?
 }
 
 async fn create_fs_client(

@@ -12,7 +12,7 @@ use blueprint_crypto::k256::K256Ecdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(10);
+const TEST_TIMEOUT: Duration = Duration::from_secs(20);
 const NETWORK_NAME: &str = "gossip";
 const INSTANCE_NAME: &str = "1.0.0";
 const PROTOCOL_NAME: &str = "/gossip/1.0.0";

@@ -21,6 +21,10 @@ pub struct RoundBasedNetworkAdapter<M, K: KeyType> {
     handle: NetworkServiceHandle<K>,
     /// Counter for message IDs
     next_msg_id: Arc<AtomicU64>,
+    /// Party index -> peer ID mapping
+    parties: Arc<HashMap<PartyIndex, PeerId>>,
+    /// Peer ID -> party index mapping
+    peer_to_party: Arc<HashMap<PeerId, PartyIndex>>,
     /// Protocol identifier
     protocol_id: String,
     _phantom: std::marker::PhantomData<M>,
@@ -35,12 +39,21 @@ where
     pub fn new(
         handle: NetworkServiceHandle<K>,
         _party_index: PartyIndex,
-        _parties: &HashMap<PartyIndex, PeerId>,
+        parties: &HashMap<PartyIndex, PeerId>,
         protocol_id: impl Into<String>,
     ) -> Self {
+        let parties = Arc::new(parties.clone());
+        let peer_to_party = Arc::new(
+            parties
+                .iter()
+                .map(|(idx, peer_id)| (*peer_id, *idx))
+                .collect(),
+        );
         Self {
             handle,
             next_msg_id: Arc::new(AtomicU64::new(0)),
+            parties,
+            peer_to_party,
             protocol_id: protocol_id.into(),
             _phantom: std::marker::PhantomData,
         }
@@ -64,6 +77,8 @@ where
         let RoundBasedNetworkAdapter {
             handle,
             next_msg_id,
+            parties,
+            peer_to_party,
             protocol_id,
             ..
         } = self;
@@ -71,11 +86,13 @@ where
         let sender = RoundBasedSender {
             handle: handle.clone(),
             next_msg_id: next_msg_id.clone(),
+            parties: parties.clone(),
+            peer_to_party: peer_to_party.clone(),
             protocol_id: protocol_id.clone(),
             _phantom: std::marker::PhantomData,
         };
 
-        let receiver = RoundBasedReceiver::new(handle);
+        let receiver = RoundBasedReceiver::new(handle, peer_to_party);
 
         (receiver, sender)
     }
@@ -84,6 +101,8 @@ where
 pub struct RoundBasedSender<M, K: KeyType> {
     handle: NetworkServiceHandle<K>,
     next_msg_id: Arc<AtomicU64>,
+    parties: Arc<HashMap<PartyIndex, PeerId>>,
+    peer_to_party: Arc<HashMap<PeerId, PartyIndex>>,
     protocol_id: String,
     _phantom: std::marker::PhantomData<M>,
 }
@@ -105,9 +124,9 @@ where
         let msg_id = this.next_msg_id.fetch_add(1, Ordering::Relaxed);
         let round = outgoing.msg.round();
         let party_index = this
-            .handle
-            .peer_manager
-            .get_whitelist_index_from_peer_id(&this.handle.local_peer_id)
+            .peer_to_party
+            .get(&this.handle.local_peer_id)
+            .copied()
             .unwrap_or_default();
 
         trace!(
@@ -122,10 +141,7 @@ where
         let (recipient, _) = match outgoing.recipient {
             MessageDestination::AllParties => (None, None),
             MessageDestination::OneParty(p) => {
-                let key = this
-                    .handle
-                    .peer_manager
-                    .get_peer_id_from_whitelist_index(p as usize);
+                let key = this.parties.get(&p).copied();
                 (Some(p), key)
             }
         };
@@ -137,9 +153,7 @@ where
                 round_id: round,
                 sender: this.handle.local_peer_id,
                 recipient: recipient.and_then(|p| {
-                    this.handle
-                        .peer_manager
-                        .get_peer_id_from_whitelist_index(p as usize)
+                    this.parties.get(&p).copied()
                 }),
             },
             payload: serde_json::to_vec(&outgoing.msg).map_err(NetworkError::Serialization)?,
@@ -168,13 +182,18 @@ where
 
 pub struct RoundBasedReceiver<M, K: KeyType> {
     handle: NetworkServiceHandle<K>,
+    peer_to_party: Arc<HashMap<PeerId, PartyIndex>>,
     _phantom: std::marker::PhantomData<M>,
 }
 
 impl<M, K: KeyType> RoundBasedReceiver<M, K> {
-    fn new(handle: NetworkServiceHandle<K>) -> Self {
+    fn new(
+        handle: NetworkServiceHandle<K>,
+        peer_to_party: Arc<HashMap<PeerId, PartyIndex>>,
+    ) -> Self {
         Self {
             handle,
+            peer_to_party,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -192,9 +211,9 @@ where
         // Get a mutable reference to self
         let this = self.get_mut();
         let party_index = this
-            .handle
-            .peer_manager
-            .get_whitelist_index_from_peer_id(&this.handle.local_peer_id)
+            .peer_to_party
+            .get(&this.handle.local_peer_id)
+            .copied()
             .unwrap_or_default();
         let next_protocol_message = this.handle.next_protocol_message();
         match next_protocol_message {
@@ -206,10 +225,7 @@ where
                 };
 
                 let sender = protocol_message.routing.sender;
-                let sender_index = this
-                    .handle
-                    .peer_manager
-                    .get_whitelist_index_from_peer_id(&sender);
+                let sender_index = this.peer_to_party.get(&sender).copied();
                 let id = protocol_message.routing.message_id;
 
                 match sender_index {

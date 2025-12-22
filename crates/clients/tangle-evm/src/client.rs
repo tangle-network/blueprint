@@ -742,52 +742,131 @@ impl TangleEvmClient {
             security_requirements,
         } = params;
 
-        let pending_tx = if !security_requirements.is_empty() {
-            contract
-                .requestServiceWithSecurity(
-                    blueprint_id,
-                    operators.clone(),
-                    security_requirements.clone(),
-                    config.clone(),
-                    permitted_callers.clone(),
-                    ttl,
-                    payment_token,
-                    payment_amount,
-                )
-                .send()
-                .await
-        } else if let Some(exposures) = operator_exposures {
-            contract
-                .requestServiceWithExposure(
-                    blueprint_id,
-                    operators.clone(),
-                    exposures,
-                    config.clone(),
-                    permitted_callers.clone(),
-                    ttl,
-                    payment_token,
-                    payment_amount,
-                )
-                .send()
-                .await
+        let is_native_payment =
+            payment_token == Address::ZERO && payment_amount > U256::ZERO;
+        let request_id_hint = if !security_requirements.is_empty() {
+            let mut call = contract.requestServiceWithSecurity(
+                blueprint_id,
+                operators.clone(),
+                security_requirements.clone(),
+                config.clone(),
+                permitted_callers.clone(),
+                ttl,
+                payment_token,
+                payment_amount,
+            );
+            call = call.from(self.account());
+            if is_native_payment {
+                call = call.value(payment_amount);
+            }
+            call.call().await.ok()
+        } else if let Some(ref exposures) = operator_exposures {
+            let mut call = contract.requestServiceWithExposure(
+                blueprint_id,
+                operators.clone(),
+                exposures.clone(),
+                config.clone(),
+                permitted_callers.clone(),
+                ttl,
+                payment_token,
+                payment_amount,
+            );
+            call = call.from(self.account());
+            if is_native_payment {
+                call = call.value(payment_amount);
+            }
+            call.call().await.ok()
         } else {
-            contract
-                .requestService(
-                    blueprint_id,
-                    operators.clone(),
-                    config.clone(),
-                    permitted_callers.clone(),
-                    ttl,
-                    payment_token,
-                    payment_amount,
-                )
-                .send()
-                .await
+            let mut call = contract.requestService(
+                blueprint_id,
+                operators.clone(),
+                config.clone(),
+                permitted_callers.clone(),
+                ttl,
+                payment_token,
+                payment_amount,
+            );
+            call = call.from(self.account());
+            if is_native_payment {
+                call = call.value(payment_amount);
+            }
+            call.call().await.ok()
+        };
+        let pre_count = self.service_request_count().await.ok();
+
+        let pending_tx = if !security_requirements.is_empty() {
+            let mut call = contract.requestServiceWithSecurity(
+                blueprint_id,
+                operators.clone(),
+                security_requirements.clone(),
+                config.clone(),
+                permitted_callers.clone(),
+                ttl,
+                payment_token,
+                payment_amount,
+            );
+            if is_native_payment {
+                call = call.value(payment_amount);
+            }
+            call.send().await
+        } else if let Some(exposures) = operator_exposures {
+            let mut call = contract.requestServiceWithExposure(
+                blueprint_id,
+                operators.clone(),
+                exposures,
+                config.clone(),
+                permitted_callers.clone(),
+                ttl,
+                payment_token,
+                payment_amount,
+            );
+            if is_native_payment {
+                call = call.value(payment_amount);
+            }
+            call.send().await
+        } else {
+            let mut call = contract.requestService(
+                blueprint_id,
+                operators.clone(),
+                config.clone(),
+                permitted_callers.clone(),
+                ttl,
+                payment_token,
+                payment_amount,
+            );
+            if is_native_payment {
+                call = call.value(payment_amount);
+            }
+            call.send().await
         }
         .map_err(|e| Error::Contract(e.to_string()))?;
 
         let receipt = pending_tx.get_receipt().await?;
-        let request_id = self.extract_request_id(&receipt)?;
+        if !receipt.status() {
+            return Err(Error::Contract(
+                "requestService transaction reverted".into(),
+            ));
+        }
+
+        let request_id =
+            match self.extract_request_id(&receipt, blueprint_id).await {
+                Ok(id) => id,
+                Err(err) => {
+                    if let Some(id) = request_id_hint {
+                        return Ok((
+                            transaction_result_from_receipt(&receipt),
+                            id,
+                        ));
+                    }
+                    if let Some(count) = pre_count {
+                        return Ok((
+                            transaction_result_from_receipt(&receipt),
+                            count,
+                        ));
+                    }
+                    return Err(err);
+                }
+            };
 
         Ok((transaction_result_from_receipt(&receipt), request_id))
     }
@@ -1281,20 +1360,28 @@ impl TangleEvmClient {
         })
     }
 
-    fn extract_request_id(&self, receipt: &TransactionReceipt) -> Result<u64> {
-        let requested_sig = keccak256(
-            "ServiceRequested(uint64,uint64,address,address[],bytes,uint64,address,uint256)"
-                .as_bytes(),
-        );
+    async fn extract_request_id(
+        &self,
+        receipt: &TransactionReceipt,
+        blueprint_id: u64,
+    ) -> Result<u64> {
+        if let Some(event) = receipt.decoded_log::<ITangle::ServiceRequested>() {
+            return Ok(event.data.requestId);
+        }
+        if let Some(event) =
+            receipt.decoded_log::<ITangle::ServiceRequestedWithSecurity>()
+        {
+            return Ok(event.data.requestId);
+        }
+
+        let requested_sig =
+            keccak256("ServiceRequested(uint64,uint64,address)".as_bytes());
         let requested_with_security_sig = keccak256(
             "ServiceRequestedWithSecurity(uint64,uint64,address,address[],((uint8,address),uint16,uint16)[])"
                 .as_bytes(),
         );
 
         for log in receipt.logs() {
-            if log.address() != self.tangle_address {
-                continue;
-            }
             let topics = log.topics();
             if topics.is_empty() {
                 continue;
@@ -1313,9 +1400,48 @@ impl TangleEvmClient {
             return Ok(id);
         }
 
-        Err(Error::Contract(
-            "requestService receipt missing ServiceRequested event".into(),
-        ))
+        if let Some(block_number) = receipt.block_number {
+            let filter = Filter::new()
+                .select(block_number)
+                .address(self.tangle_address)
+                .event_signature(vec![
+                    requested_sig,
+                    requested_with_security_sig,
+                ]);
+            if let Ok(logs) = self.get_logs(&filter).await {
+                for log in logs {
+                    let topics = log.topics();
+                    if topics.len() < 2 {
+                        continue;
+                    }
+                    let mut buf = [0u8; 32];
+                    buf.copy_from_slice(topics[1].as_slice());
+                    let id = U256::from_be_bytes(buf).to::<u64>();
+                    return Ok(id);
+                }
+            }
+        }
+
+        let count = self.service_request_count().await?;
+        if count == 0 {
+            return Err(Error::Contract(
+                "requestService receipt missing ServiceRequested event".into(),
+            ));
+        }
+
+        let account = self.account();
+        let start = count.saturating_sub(5);
+        for candidate in (start..count).rev() {
+            if let Ok(request) = self.get_service_request(candidate).await {
+                if request.blueprintId == blueprint_id
+                    && request.requester == account
+                {
+                    return Ok(candidate);
+                }
+            }
+        }
+
+        Ok(count - 1)
     }
 
     fn extract_blueprint_id(&self, receipt: &TransactionReceipt) -> Result<u64> {

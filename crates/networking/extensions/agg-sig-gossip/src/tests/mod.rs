@@ -1,9 +1,8 @@
 #![allow(clippy::too_many_lines)]
-// IMPORTANT: These tests must be run with --test-threads=1 to avoid mDNS
-// cross-contamination between parallel tests. When tests run in parallel,
-// mDNS discovery can find peers from other test instances, causing handshake
-// failures with mismatched whitelists.
-// Run with: cargo test -p blueprint-networking-agg-sig-gossip-extension --lib -- --test-threads=1
+// IMPORTANT: These tests are sensitive to mDNS cross-contamination between
+// parallel runs. We use unique network/instance names per test to reduce
+// collisions; if you still see flakes, run with:
+// cargo test -p blueprint-networking-agg-sig-gossip-extension --lib -- --test-threads=1
 
 use crate::{
     protocol::{ProtocolConfig, SignatureAggregationProtocol},
@@ -16,10 +15,19 @@ use blueprint_networking::{
     test_utils::{create_whitelisted_nodes, wait_for_all_handshakes},
 };
 use blueprint_std::{collections::HashMap, time::Duration};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tracing_subscriber::EnvFilter;
 
 // Constants for tests
-const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+const TEST_TIMEOUT: Duration = Duration::from_secs(60);
+
+fn unique_test_suffix() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("{}-{}", std::process::id(), nanos)
+}
 
 pub fn setup_log() {
     let filter = EnvFilter::new(
@@ -52,8 +60,17 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
         num_nodes, threshold_percentage
     );
 
+    let suffix = unique_test_suffix();
+    let network_name = format!("{}-{}", network_name, suffix);
+    let instance_name = format!("{}-{}", instance_name, suffix);
+
     // Create whitelisted nodes
-    let mut nodes = create_whitelisted_nodes::<S>(num_nodes, network_name, instance_name, false);
+    let mut nodes = create_whitelisted_nodes::<S>(
+        num_nodes,
+        &network_name,
+        &instance_name,
+        false,
+    );
     info!("Created {} nodes successfully", nodes.len());
 
     // Start all nodes
@@ -221,6 +238,7 @@ mod bls_tests {
     use super::*;
     use blueprint_crypto::bls::{bls377::W3fBls377, bls381::W3fBls381};
 
+    #[serial_test::serial]
     #[tokio::test]
     async fn test_bls381_basic_aggregation() {
         run_signature_aggregation_test::<W3fBls381>(
@@ -232,6 +250,7 @@ mod bls_tests {
         .await;
     }
 
+    #[serial_test::serial]
     #[tokio::test]
     async fn test_bls377_basic_aggregation() {
         run_signature_aggregation_test::<W3fBls377>(
@@ -249,6 +268,7 @@ mod bn254_tests {
     use super::*;
     use blueprint_crypto::bn254::ArkBlsBn254;
 
+    #[serial_test::serial]
     #[tokio::test]
     async fn test_bn254_basic_aggregation() {
         run_signature_aggregation_test::<ArkBlsBn254>(
@@ -265,6 +285,7 @@ mod w3f_bls_tests {
     use super::*;
     use blueprint_crypto::bls::{bls377::W3fBls377, bls381::W3fBls381};
 
+    #[serial_test::serial]
     #[tokio::test]
     async fn test_w3f_bls381_basic_aggregation() {
         run_signature_aggregation_test::<W3fBls381>(
@@ -276,6 +297,7 @@ mod w3f_bls_tests {
         .await;
     }
 
+    #[serial_test::serial]
     #[tokio::test]
     async fn test_w3f_bls377_basic_aggregation() {
         run_signature_aggregation_test::<W3fBls377>(

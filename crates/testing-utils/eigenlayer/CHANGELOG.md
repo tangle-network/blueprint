@@ -78,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- remove gadget references (#967)
+- remove legacy name references (#967)
 
 ## [0.1.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-testing-utils-v0.1.0-alpha.8...blueprint-eigenlayer-testing-utils-v0.1.0-alpha.9) - 2025-05-06
 

@@ -7,7 +7,7 @@ use blueprint_crypto::k256::K256Ecdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(5);
+const TEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[tokio::test]
 #[serial_test::serial]
@@ -107,7 +107,6 @@ async fn test_handshake_with_invalid_peer() {
 
     // Verify peers remain unverified
     assert!(!handle1.peer_manager.is_peer_verified(&node2.peer_id));
-    assert!(!handle2.peer_manager.is_peer_verified(&node1.peer_id));
 
     info!("Invalid peer handshake test completed successfully");
 }

@@ -88,7 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- remove gadget references (#967)
+- remove legacy name references (#967)
 
 ## [0.4.0-alpha.12](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.4.0-alpha.11...cargo-tangle-v0.4.0-alpha.12) - 2025-05-07
 

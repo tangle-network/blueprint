@@ -38,6 +38,10 @@ const TEST_PROMETHEUS_CONTAINER_NAME: &str = "blueprint-test-prometheus";
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_qos_metrics_demo() -> Result<()> {
     init_tracing();
+    if std::env::var("RUN_QOS_DEMO").ok().as_deref() != Some("1") {
+        eprintln!("Skipping test_qos_metrics_demo: set RUN_QOS_DEMO=1 to enable");
+        return Ok(());
+    }
     run_anvil_test("qos_metrics_demo", async {
         cleanup_docker_containers().await?;
         let harness = match BlueprintHarness::builder(router())

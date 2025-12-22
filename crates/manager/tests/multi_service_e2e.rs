@@ -5,25 +5,22 @@
 //!
 //! Requires `RUN_TNT_E2E=1` and the bundled LocalTestnet broadcast/snapshot.
 
-use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use alloy_network::EthereumWallet;
-use alloy_primitives::{Address, Bytes, U256};
+use alloy_primitives::{Address, Bytes};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::transaction::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::{SolCall, SolValue};
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use blueprint_anvil_testing_utils::{
     SeededTangleEvmTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
 };
-use blueprint_client_tangle_evm::contracts::ITangle::{
-    addPermittedCallerCall, requestServiceCall,
-};
+use blueprint_client_tangle_evm::contracts::ITangle::addPermittedCallerCall;
 use blueprint_client_tangle_evm::{
     ServiceStatus, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
 };
@@ -34,10 +31,11 @@ use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_router::Router;
 use blueprint_tangle_evm_extra::extract::{TangleEvmArg, TangleEvmResult};
-use blueprint_tangle_evm_extra::{TangleEvmConsumer, TangleEvmLayer, TangleEvmProducer};
+use blueprint_tangle_evm_extra::extract::{CallId, ServiceId};
+use blueprint_tangle_evm_extra::{TangleEvmLayer, TangleEvmProducer};
 use futures_util::future::poll_fn;
 use futures_util::pin_mut;
-use futures_util::{SinkExt, StreamExt, stream};
+use futures_util::StreamExt;
 use hex::FromHex;
 use tempfile::TempDir;
 use tokio::sync::oneshot;
@@ -80,25 +78,36 @@ async fn test_multiple_services_process_jobs_independently() -> Result<()> {
         // Grant permissions
         grant_caller(&deployment, client_0.account()).await?;
 
+        // Run processor for service 0
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let (result_tx, result_rx) = oneshot::channel::<Result<Vec<u8>>>();
+        let producer_0 = TangleEvmProducer::new((*client_0).clone(), service_id_0)
+            .with_poll_interval(Duration::from_millis(50));
+        let router_0 = Router::new().route(JOB_INDEX, multiply_job.layer(TangleEvmLayer));
+
+        let runner_client = Arc::clone(&client_0);
+        let runner = tokio::spawn(async move {
+            run_processor(
+                producer_0,
+                router_0,
+                runner_client,
+                shutdown_rx,
+                Some(result_tx),
+            )
+            .await
+        });
+
         // Submit job to service 0
         let input_0: u64 = 100;
         let submission_0 = client_0
             .submit_job(service_id_0, JOB_INDEX, Bytes::from(input_0.abi_encode()))
             .await?;
 
-        // Run processor for service 0
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
-        let producer_0 = TangleEvmProducer::new((*client_0).clone(), service_id_0)
-            .with_poll_interval(Duration::from_millis(50));
-        let consumer_0 = TangleEvmConsumer::new((*client_0).clone());
-        let router_0 = Router::new().route(JOB_INDEX, multiply_job.layer(TangleEvmLayer));
-
-        let runner = tokio::spawn(async move {
-            run_processor(producer_0, router_0, consumer_0, shutdown_rx).await
-        });
-
         // Wait for result
-        let result_0 = wait_for_result((*client_0).clone(), service_id_0, submission_0.call_id).await?;
+        let result_0 = timeout(Duration::from_secs(60), result_rx)
+            .await
+            .context("timeout waiting for runner result")??;
+        let result_0 = result_0?;
         let decoded_0: u64 = u64::abi_decode(&result_0)?;
         ensure!(decoded_0 == input_0 * 2, "expected {} got {}", input_0 * 2, decoded_0);
 
@@ -256,8 +265,9 @@ async fn multiply_job(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64
 async fn run_processor(
     producer: TangleEvmProducer,
     mut router: Router,
-    mut consumer: TangleEvmConsumer,
+    client: Arc<TangleEvmClient>,
     mut shutdown: oneshot::Receiver<()>,
+    mut result_tx: Option<oneshot::Sender<Result<Vec<u8>>>>,
 ) -> Result<()> {
     let mut svc = router.as_service();
     poll_fn(|cx| svc.poll_ready(cx)).await.ok();
@@ -268,10 +278,40 @@ async fn run_processor(
             _ = &mut shutdown => break,
             job = producer.next() => {
                 let Some(Ok(call)) = job else { continue };
+                let metadata = call.metadata();
+                let (call_id_raw, service_id_raw) = match (
+                    metadata.get(CallId::METADATA_KEY),
+                    metadata.get(ServiceId::METADATA_KEY),
+                ) {
+                    (Some(call_id), Some(service_id)) => (call_id, service_id),
+                    _ => continue,
+                };
+                let call_id: u64 = call_id_raw
+                    .try_into()
+                    .map_err(|_| anyhow!("invalid call_id metadata"))?;
+                let service_id: u64 = service_id_raw
+                    .try_into()
+                    .map_err(|_| anyhow!("invalid service_id metadata"))?;
+
                 if let Ok(Some(results)) = svc.call(call).await {
-                    let mut stream = stream::iter(results.into_iter().map(Ok));
-                    consumer.send_all(&mut stream).await.ok();
-                    consumer.flush().await.ok();
+                    if let Some(tx) = result_tx.take() {
+                        let send_result = match results.get(0) {
+                            Some(blueprint_core::JobResult::Ok { body, .. }) => Ok(body.to_vec()),
+                            Some(blueprint_core::JobResult::Err(err)) => {
+                                Err(anyhow!("job returned error: {err:?}"))
+                            }
+                            None => Err(anyhow!("runner returned no results")),
+                        };
+                        let _ = tx.send(send_result);
+                    }
+
+                    for result in &results {
+                        if let blueprint_core::JobResult::Ok { body, .. } = result {
+                            client
+                                .submit_result(service_id, call_id, Bytes::from(body.to_vec()))
+                                .await?;
+                        }
+                    }
                 }
             }
         }
@@ -325,26 +365,6 @@ async fn grant_caller(d: &SeededTangleEvmTestnet, caller: Address) -> Result<()>
         .input(call.abi_encode().into());
     provider.send_transaction(tx).await?.get_receipt().await?;
     Ok(())
-}
-
-async fn wait_for_result(client: TangleEvmClient, svc_id: u64, call_id: u64) -> Result<Vec<u8>> {
-    use blueprint_client_tangle_evm::contracts::ITangle;
-
-    timeout(Duration::from_secs(30), async {
-        loop {
-            if let Some(event) = client.next_event().await {
-                for log in event.logs {
-                    if let Ok(decoded) = log.log_decode::<ITangle::JobResultSubmitted>() {
-                        if decoded.inner.serviceId == svc_id && decoded.inner.callId == call_id {
-                            return Ok(decoded.inner.result.to_vec());
-                        }
-                    }
-                }
-            }
-        }
-    })
-    .await
-    .context("timeout waiting for result")?
 }
 
 async fn boot_testnet(name: &str) -> Result<Option<SeededTangleEvmTestnet>> {

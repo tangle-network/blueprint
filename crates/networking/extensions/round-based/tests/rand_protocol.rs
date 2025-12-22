@@ -178,18 +178,30 @@ pub struct Blame {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::time::Duration;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use blueprint_core::{debug, info};
-    use blueprint_crypto::k256::K256Ecdsa;
+    use blueprint_crypto::{KeyType, k256::K256Ecdsa};
     use blueprint_networking::service_handle::NetworkServiceHandle;
-    use blueprint_networking::test_utils::{create_whitelisted_nodes, wait_for_all_handshakes};
+    use blueprint_networking::service::AllowedKeys;
+    use blueprint_networking::test_utils::{TestNode, wait_for_all_handshakes};
     use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
+    use libp2p::identity;
+    use libp2p::multiaddr::Protocol;
     use round_based::MpcParty;
     use tracing_subscriber::EnvFilter;
 
     use super::protocol_of_random_generation;
+
+    fn unique_test_suffix() -> String {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        format!("{}-{}", std::process::id(), nanos)
+    }
 
     fn init_tracing() {
         // Force specific logging, ignore RUST_LOG
@@ -239,25 +251,67 @@ mod tests {
         std::println!("Output randomness: {}", hex::encode(randomness));
     }
 
+    #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn p2p_networking() {
         init_tracing();
-        let network_name = "rand-test-network";
-        let instance_id = "rand-test-instance";
-        // Create whitelisted nodes
-        let mut nodes = create_whitelisted_nodes::<K256Ecdsa>(2, network_name, instance_id, false);
-        info!("Created {} nodes successfully", nodes.len());
+        let suffix = unique_test_suffix();
+        let network_name = format!("rand-test-network-{}", suffix);
+        let instance_id = format!("rand-test-instance-{}", suffix);
 
-        let parties = HashMap::from_iter([(0, nodes[0].peer_id), (1, nodes[1].peer_id)]);
+        let key1 = K256Ecdsa::generate_with_seed(None).expect("keypair 1");
+        let key2 = K256Ecdsa::generate_with_seed(None).expect("keypair 2");
+        let mut allowed_keys = HashSet::new();
+        allowed_keys.insert(K256Ecdsa::public_from_secret(&key1));
+        allowed_keys.insert(K256Ecdsa::public_from_secret(&key2));
 
-        // Start all nodes
-        info!("Starting all nodes");
-        let mut handles = Vec::new();
-        for (i, node) in nodes.iter_mut().enumerate() {
-            info!("Starting node {}", i);
-            handles.push(node.start().await.expect("Failed to start node"));
-            info!("Node {} started successfully", i);
+        let local_key1 = identity::Keypair::generate_ed25519();
+        let local_key2 = identity::Keypair::generate_ed25519();
+
+        let mut node1 = TestNode::new_with_keys(
+            &network_name,
+            &instance_id,
+            AllowedKeys::InstancePublicKeys(allowed_keys.clone()),
+            vec![],
+            Some(key1),
+            Some(local_key1),
+            false,
+        );
+
+        info!("Starting node 0");
+        let handle1 = node1.start().await.expect("Failed to start node 0");
+        info!("Node 0 started successfully");
+
+        let mut bootstrap_addr = handle1
+            .get_listen_addr()
+            .expect("node 0 listen addr missing");
+        if !bootstrap_addr
+            .iter()
+            .any(|proto| matches!(proto, Protocol::P2p(_)))
+        {
+            bootstrap_addr.push(Protocol::P2p(handle1.local_peer_id.into()));
         }
+
+        let mut node2 = TestNode::new_with_keys(
+            &network_name,
+            &instance_id,
+            AllowedKeys::InstancePublicKeys(allowed_keys),
+            vec![bootstrap_addr],
+            Some(key2),
+            Some(local_key2),
+            false,
+        );
+
+        info!("Starting node 1");
+        let handle2 = node2.start().await.expect("Failed to start node 1");
+        info!("Node 1 started successfully");
+
+        let parties = HashMap::from_iter([
+            (0, handle1.local_peer_id),
+            (1, handle2.local_peer_id),
+        ]);
+
+        let mut handles = vec![handle1, handle2];
 
         // Convert handles to mutable references for wait_for_all_handshakes
         let handle_refs: Vec<&mut NetworkServiceHandle<K256Ecdsa>> = handles.iter_mut().collect();
@@ -267,13 +321,17 @@ mod tests {
 
         // Wait for all handshakes to complete
         info!("Checking handshake completion...");
-        wait_for_all_handshakes(&handle_refs, Duration::from_secs(30)).await;
+        wait_for_all_handshakes(&handle_refs, Duration::from_secs(60)).await;
         info!("Handshakes completed.");
 
-        let node1_network =
-            RoundBasedNetworkAdapter::new(handle_refs[0].clone(), 0, &parties.clone(), instance_id);
+        let node1_network = RoundBasedNetworkAdapter::new(
+            handle_refs[0].clone(),
+            0,
+            &parties.clone(),
+            &instance_id,
+        );
         let node2_network =
-            RoundBasedNetworkAdapter::new(handle_refs[1].clone(), 1, &parties, instance_id);
+            RoundBasedNetworkAdapter::new(handle_refs[1].clone(), 1, &parties, &instance_id);
 
         let mut tasks = vec![];
         tasks.push(tokio::spawn(async move {

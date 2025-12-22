@@ -45,6 +45,7 @@ pub struct TangleEvmProducer {
 
 struct ProducerState {
     last_block: u64,
+    last_log_index: Option<u64>,
     buffer: VecDeque<JobCall>,
     poll_future:
         Option<Pin<Box<dyn Future<Output = Result<ProducerPollResult, ProducerError>> + Send>>>,
@@ -54,6 +55,7 @@ impl ProducerState {
     fn new(start_block: u64) -> Self {
         Self {
             last_block: start_block,
+            last_log_index: None,
             buffer: VecDeque::new(),
             poll_future: None,
         }
@@ -63,6 +65,7 @@ impl ProducerState {
 struct ProducerPollResult {
     jobs: Vec<JobCall>,
     last_block: u64,
+    last_log_index: Option<u64>,
 }
 
 impl TangleEvmProducer {
@@ -128,6 +131,7 @@ impl Stream for TangleEvmProducer {
                 match fut.as_mut().poll(cx) {
                     Poll::Ready(Ok(result)) => {
                         state.last_block = result.last_block;
+                        state.last_log_index = result.last_log_index;
                         state.buffer.extend(result.jobs);
                         state.poll_future = None;
 
@@ -148,8 +152,11 @@ impl Stream for TangleEvmProducer {
             let client = producer.client.clone();
             let service_id = producer.service_id;
             let last_block = state.last_block;
+            let last_log_index = state.last_log_index;
 
-            let fut = Box::pin(async move { poll_for_jobs(client, service_id, last_block).await });
+            let fut = Box::pin(async move {
+                poll_for_jobs(client, service_id, last_block, last_log_index).await
+            });
             state.poll_future = Some(fut);
         }
     }
@@ -160,6 +167,7 @@ async fn poll_for_jobs(
     client: TangleEvmClient,
     service_id: u64,
     from_block: u64,
+    from_log_index: Option<u64>,
 ) -> Result<ProducerPollResult, ProducerError> {
     let mut block_number_failures = 0u32;
     let mut get_logs_failures = 0u32;
@@ -204,25 +212,24 @@ async fn poll_for_jobs(
             }
         };
 
-        if latest_block <= from_block {
+        if latest_block < from_block {
             sleep(Duration::from_millis(250)).await;
             continue;
         }
 
-        let query_from = from_block.saturating_add(1);
         let filter = Filter::new()
             .address(client.tangle_address())
-            .from_block(query_from)
+            .from_block(from_block)
             .to_block(latest_block);
 
-        let logs = match client.get_logs(&filter).await {
+        let mut logs = match client.get_logs(&filter).await {
             Ok(logs) => {
                 if get_logs_failures > 0 {
                     blueprint_core::info!(
                         target: "tangle-evm-producer",
                         rpc = "eth_getLogs",
                         attempts = get_logs_failures,
-                        from = query_from,
+                        from = from_block,
                         to = latest_block,
                         "RPC recovered after retries"
                     );
@@ -238,7 +245,7 @@ async fn poll_for_jobs(
                         target: "tangle-evm-producer",
                         rpc = "eth_getLogs",
                         attempts = get_logs_failures,
-                        from = query_from,
+                        from = from_block,
                         to = latest_block,
                         delay_ms = delay.as_millis() as u64,
                         "Failed to fetch logs: {err}"
@@ -248,7 +255,7 @@ async fn poll_for_jobs(
                         target: "tangle-evm-producer",
                         rpc = "eth_getLogs",
                         attempts = get_logs_failures,
-                        from = query_from,
+                        from = from_block,
                         to = latest_block,
                         delay_ms = delay.as_millis() as u64,
                         "Failed to fetch logs: {err}; retrying"
@@ -259,10 +266,46 @@ async fn poll_for_jobs(
             }
         };
 
+        logs.sort_by_key(|log| {
+            (
+                log.block_number.unwrap_or_default(),
+                log.log_index.unwrap_or_default(),
+            )
+        });
+
+        let filtered_logs: Vec<Log> = if let Some(last_index) = from_log_index {
+            logs.into_iter()
+                .filter(|log| {
+                    let block_number = log.block_number.unwrap_or_default();
+                    if block_number < from_block {
+                        return false;
+                    }
+                    if block_number > from_block {
+                        return true;
+                    }
+                    let log_index = log.log_index.unwrap_or_default();
+                    log_index > last_index
+                })
+                .collect()
+        } else {
+            logs
+        };
+
+        let (last_block, last_log_index) = if let Some(last) = filtered_logs.last() {
+            (
+                last.block_number.unwrap_or(latest_block),
+                last.log_index,
+            )
+        } else if latest_block == from_block {
+            (from_block, from_log_index)
+        } else {
+            (latest_block, None)
+        };
+
         let mut jobs = Vec::new();
         let mut block_timestamps = BTreeMap::new();
 
-        for log in &logs {
+        for log in &filtered_logs {
             match decode_job_submitted(log) {
                 Ok(job_event) => {
                     if job_event.service_id != service_id {
@@ -369,7 +412,7 @@ async fn poll_for_jobs(
         if jobs.is_empty() {
             blueprint_core::trace!(
                 target: "tangle-evm-producer",
-                from = from_block + 1,
+                from = from_block,
                 to = latest_block,
                 "No jobs discovered during this poll"
             );
@@ -395,7 +438,8 @@ async fn poll_for_jobs(
 
         return Ok(ProducerPollResult {
             jobs,
-            last_block: latest_block,
+            last_block,
+            last_log_index,
         });
     }
 }

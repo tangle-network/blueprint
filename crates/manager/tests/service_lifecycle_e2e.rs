@@ -179,24 +179,24 @@ async fn test_full_service_lifecycle() -> Result<()> {
         let router = Router::new().route(JOB_INDEX, square_job.layer(TangleEvmLayer));
 
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let (result_tx, result_rx) = oneshot::channel();
         let runner_task = tokio::spawn(async move {
-            run_minimal_runner_loop(producer, router, consumer, shutdown_rx).await
+            run_minimal_runner_loop(producer, router, consumer, shutdown_rx, Some(result_tx)).await
         });
 
         // Step 8: Wait for job result
-        let output = wait_for_job_result((*harness.owner_client).clone(), call_id)
+        let output = timeout(Duration::from_secs(60), result_rx)
             .await
-            .context("job result not observed")?;
+            .context("timed out waiting for local job result")?
+            .context("local job result channel closed")?;
         let result: u64 = u64::abi_decode(&output).context("failed to decode job result")?;
         ensure!(result == input_value * input_value, "expected {} but got {}", input_value * input_value, result);
         println!("✓ Received correct job result: {} = {}²", result, input_value);
 
         // Step 9: Verify job result on-chain
-        let job_call = harness.operator_client
-            .get_job_call(SERVICE_ID, call_id)
+        wait_for_job_completion((*harness.operator_client).clone(), call_id)
             .await
-            .context("failed to get job call")?;
-        ensure!(job_call.completed, "job should be marked as completed");
+            .context("job should be marked as completed")?;
         println!("✓ Job {} verified as completed on-chain", call_id);
 
         // Cleanup
@@ -307,6 +307,7 @@ async fn run_minimal_runner_loop(
     mut router: Router,
     mut consumer: TangleEvmConsumer,
     mut shutdown_rx: oneshot::Receiver<()>,
+    mut result_tx: Option<oneshot::Sender<Vec<u8>>>,
 ) -> Result<()> {
     let mut router = router.as_service();
     poll_fn(|ctx| router.poll_ready(ctx)).await.unwrap_or(());
@@ -327,6 +328,11 @@ async fn run_minimal_runner_loop(
 
                 match router.call(job_call).await {
                     Ok(Some(results)) => {
+                        if let Some(tx) = result_tx.take() {
+                            if let Some(blueprint_core::JobResult::Ok { body, .. }) = results.get(0) {
+                                let _ = tx.send(body.to_vec());
+                            }
+                        }
                         let mut result_stream = stream::iter(results.into_iter().map(Ok));
                         consumer.send_all(&mut result_stream).await
                             .map_err(|e| anyhow!("consumer send failed: {e}"))?;
@@ -343,31 +349,26 @@ async fn run_minimal_runner_loop(
     Ok(())
 }
 
-async fn wait_for_job_result(
+async fn wait_for_job_completion(
     client: TangleEvmClient,
     call_id: u64,
-) -> Result<Vec<u8>> {
-    use blueprint_client_tangle_evm::contracts::ITangle;
+) -> Result<()> {
+    use tokio::time::sleep;
 
-    let fut = async {
+    timeout(Duration::from_secs(60), async {
         loop {
-            if let Some(event) = client.next_event().await {
-                for log in event.logs {
-                    if let Ok(decoded) = log.log_decode::<ITangle::JobResultSubmitted>() {
-                        if decoded.inner.serviceId == SERVICE_ID
-                            && decoded.inner.callId == call_id
-                        {
-                            return Ok(decoded.inner.result.clone().into());
-                        }
-                    }
-                }
+            let call = client
+                .get_job_call(SERVICE_ID, call_id)
+                .await
+                .context("failed to get job call")?;
+            if call.completed {
+                return Ok(());
             }
+            sleep(Duration::from_millis(200)).await;
         }
-    };
-
-    timeout(Duration::from_secs(60), fut)
-        .await
-        .context("timed out waiting for JobResultSubmitted")?
+    })
+    .await
+    .context("timed out waiting for job completion")?
 }
 
 async fn create_client(
@@ -408,6 +409,8 @@ async fn grant_permitted_caller(
     tangle_address: Address,
     caller: Address,
 ) -> Result<()> {
+    use tokio::time::sleep;
+
     let signer = PrivateKeySigner::from_str(SERVICE_OWNER_PRIVATE_KEY)
         .context("invalid service owner private key")?;
     let wallet = EthereumWallet::from(signer);
@@ -423,7 +426,23 @@ async fn grant_permitted_caller(
     let tx = TransactionRequest::default()
         .to(tangle_address)
         .input(permit.abi_encode().into());
-    provider.send_transaction(tx).await?.get_receipt().await?;
+    let pending = provider.send_transaction(tx).await?;
+    let tx_hash = *pending.tx_hash();
+    loop {
+        match provider.get_transaction_receipt(tx_hash).await {
+            Ok(Some(_)) => break,
+            Ok(None) => {
+                sleep(Duration::from_millis(200)).await;
+            }
+            Err(err) => {
+                if err.to_string().contains("BlockOutOfRange") {
+                    sleep(Duration::from_millis(200)).await;
+                    continue;
+                }
+                return Err(err.into());
+            }
+        }
+    }
     Ok(())
 }
 

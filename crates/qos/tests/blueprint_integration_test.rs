@@ -102,7 +102,7 @@ async fn test_qos_integration_on_tangle_evm() -> Result<()> {
             .await
             .context("failed to submit job to harness")?;
         let output = harness
-            .wait_for_job_result(submission)
+            .wait_for_job_result_with_deadline(submission, Duration::from_secs(120))
             .await
             .context("failed to read job result")?;
         let squared = u64::abi_decode(&output).context("failed to decode job output")?;

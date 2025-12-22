@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- remove gadget references (#967)
+- remove legacy name references (#967)
 
 ## [0.1.0-alpha.2](https://github.com/tangle-network/blueprint/compare/blueprint-client-core-v0.1.0-alpha.1...blueprint-client-core-v0.1.0-alpha.2) - 2025-05-01
 

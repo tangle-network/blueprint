@@ -3,7 +3,7 @@ use blueprint_crypto::{KeyType, k256::K256Ecdsa};
 use blueprint_pricing_engine_lib::{
     OperatorSigner,
     error::{PricingError, Result},
-    signer::{SignableQuote, verify_quote},
+    signer::{QuoteSigningDomain, SignableQuote, verify_quote},
 };
 use rust_decimal::prelude::FromPrimitive;
 
@@ -18,7 +18,12 @@ async fn test_sign_and_verify_quote() -> Result<()> {
     let secret = K256Ecdsa::generate_with_seed(None)
         .map_err(|e| PricingError::Other(format!("Failed to generate keypair: {e}")))?;
 
-    let mut signer = OperatorSigner::new(&config, secret)?;
+    let domain = QuoteSigningDomain {
+        chain_id: 1,
+        verifying_contract: alloy_primitives::Address::ZERO,
+    };
+
+    let mut signer = OperatorSigner::new(&config, secret, domain)?;
 
     // Create a deterministic QuoteDetails message
     let quote_details = utils::create_test_quote_details();
@@ -36,7 +41,7 @@ async fn test_sign_and_verify_quote() -> Result<()> {
 
     // Verify the signature
     let public_key = signer.verifying_key();
-    let is_valid = verify_quote(&signed_quote, &public_key)?;
+    let is_valid = verify_quote(&signed_quote, &public_key, domain)?;
 
     // Verify that the signature is valid
     assert!(is_valid, "Signature should be valid");
@@ -59,7 +64,7 @@ async fn test_sign_and_verify_quote() -> Result<()> {
     let mut tampered_quote = signed_quote.clone();
     tampered_quote.abi_details.totalCost += U256::from(1u8);
 
-    let is_valid_tampered = verify_quote(&tampered_quote, &public_key)?;
+    let is_valid_tampered = verify_quote(&tampered_quote, &public_key, domain)?;
     assert!(
         !is_valid_tampered,
         "Signature should be invalid for tampered quote"

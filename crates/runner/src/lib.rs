@@ -240,13 +240,13 @@ where
     /// # Examples
     ///
     /// ```rust
-    /// use blueprint_qos::heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatService};
-    /// use blueprint_qos::servers::prometheus::{PrometheusServer, PrometheusServerConfig};
-    /// use blueprint_qos::service_builder::QoSServiceBuilder;
-    /// use blueprint_router::Router;
-    /// use blueprint_runner::BlueprintRunner;
-    /// use blueprint_runner::config::BlueprintEnvironment;
-    /// use std::sync::Arc;
+/// use blueprint_qos::heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatService};
+/// use blueprint_qos::servers::prometheus::{PrometheusServer, PrometheusServerConfig};
+/// use blueprint_qos::service_builder::QoSServiceBuilder;
+/// use blueprint_router::Router;
+/// use blueprint_runner::BlueprintRunner;
+/// use blueprint_runner::config::BlueprintEnvironment;
+/// use std::sync::Arc;
     ///
     /// // Define a custom heartbeat consumer
     /// struct MyHeartbeatConsumer;
@@ -277,11 +277,7 @@ where
     /// // Extract values from environment
     /// let http_rpc_endpoint = env.http_rpc_endpoint.to_string();
     /// let keystore_uri = env.keystore_uri.clone();
-    /// let status_registry_address = env
-    ///     .protocol_settings
-    ///     .tangle_evm()
-    ///     .map(|settings| settings.status_registry_contract)
-    ///     .unwrap_or_default();
+    /// let status_registry_address = Default::default();
     /// // Use constant values for doc tests
     /// let service_id = 0;
     /// let blueprint_id = 0;
@@ -295,7 +291,7 @@ where
     ///     dry_run,
     ///     service_id,
     ///     blueprint_id,
-    /// );
+    /// )?;
     ///
     /// BlueprintRunner::builder((), env)
     ///     .router(router)
@@ -703,13 +699,16 @@ where
 /// omitted.
 ///
 /// ```no_run
+/// use blueprint_core::{JobCall, JobResult};
 /// use blueprint_router::Router;
 /// use blueprint_runner::config::BlueprintEnvironment;
 /// use blueprint_runner::error::RunnerError;
 /// use blueprint_runner::{BackgroundService, BlueprintRunner};
+/// use futures::{sink, stream};
 /// use futures::future;
 /// use tokio::sync::oneshot;
 /// use tokio::sync::oneshot::Receiver;
+/// use tower::BoxError;
 ///
 /// // A dummy background service that immediately returns
 /// #[derive(Clone)]
@@ -736,10 +735,10 @@ where
 ///
 ///     // Create some producer(s)
 ///     let some_producer = /* ... */
-///     # blueprint_sdk::tangle_evm::TangleEvmProducer::new(todo!(), 0);
+///     # stream::empty::<Result<JobCall, BoxError>>();
 ///     // Create some consumer(s)
 ///     let some_consumer = /* ... */
-///     # blueprint_sdk::tangle_evm::TangleEvmConsumer::new(todo!());
+///     # sink::unfold((), |_state, _item: JobResult| future::ready(Ok::<(), BoxError>(())));
 ///
 ///     let result = BlueprintRunner::builder(config, blueprint_env)
 ///         .router(

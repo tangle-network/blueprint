@@ -1,5 +1,5 @@
-use alloy_primitives::{Address, keccak256};
-use alloy_sol_types::SolValue;
+use alloy_primitives::{Address, B256, ChainId, U256, keccak256};
+use alloy_sol_types::{SolType, SolValue};
 use blueprint_client_tangle_evm::contracts::ITangleTypes;
 use blueprint_crypto::KeyType;
 use blueprint_crypto::k256::{K256Ecdsa, K256Signature, K256SigningKey, K256VerifyingKey};
@@ -20,6 +20,12 @@ pub struct SignedQuote {
     pub signature: K256Signature,
     pub operator_id: OperatorId,
     pub proof_of_work: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QuoteSigningDomain {
+    pub chain_id: ChainId,
+    pub verifying_contract: Address,
 }
 
 #[derive(Debug)]
@@ -46,11 +52,16 @@ impl SignableQuote {
 pub struct OperatorSigner {
     keypair: K256SigningKey,
     operator_id: OperatorId,
+    domain: QuoteSigningDomain,
 }
 
 impl OperatorSigner {
     /// Creates a new Operator Signer
-    pub fn new(config: &OperatorConfig, keypair: K256SigningKey) -> Result<Self> {
+    pub fn new(
+        config: &OperatorConfig,
+        keypair: K256SigningKey,
+        domain: QuoteSigningDomain,
+    ) -> Result<Self> {
         let operator_id = keypair.alloy_address().map_err(|e| {
             PricingError::Signing(format!("Failed to derive operator address: {e}"))
         })?;
@@ -60,6 +71,7 @@ impl OperatorSigner {
         Ok(OperatorSigner {
             keypair,
             operator_id,
+            domain,
         })
     }
 
@@ -69,7 +81,7 @@ impl OperatorSigner {
         quote: SignableQuote,
         proof_of_work: Vec<u8>,
     ) -> Result<SignedQuote> {
-        let hash = hash_quote_details(&quote.abi_details)?;
+        let hash = quote_digest_eip712(&quote.abi_details, self.domain)?;
         let signature = K256Ecdsa::sign_with_secret(&mut self.keypair, &hash)
             .map_err(|e| PricingError::Signing(format!("Error signing quote hash: {e}")))?;
 
@@ -87,22 +99,111 @@ impl OperatorSigner {
         self.operator_id
     }
 
+    #[must_use]
+    pub fn domain(&self) -> QuoteSigningDomain {
+        self.domain
+    }
+
     /// Returns the verifying key associated with the signer.
     pub fn verifying_key(&self) -> K256VerifyingKey {
         self.keypair.verifying_key()
     }
 }
 
-/// Creates a hash of the quote details for on-chain verification
-pub fn hash_quote_details(quote_details: &ITangleTypes::QuoteDetails) -> Result<[u8; 32]> {
-    let encoded = <ITangleTypes::QuoteDetails as SolValue>::abi_encode(quote_details);
-    Ok(keccak256(encoded).into())
+/// Compute the full EIP-712 digest for a quote, matching `tnt-core/src/v2/libraries/SignatureLib.sol`.
+pub fn quote_digest_eip712(
+    quote_details: &ITangleTypes::QuoteDetails,
+    domain: QuoteSigningDomain,
+) -> Result<[u8; 32]> {
+    let domain_separator = compute_domain_separator(domain);
+    let quote_hash = hash_quote_details(quote_details);
+
+    let mut payload = Vec::with_capacity(2 + 32 + 32);
+    payload.extend_from_slice(b"\x19\x01");
+    payload.extend_from_slice(domain_separator.as_slice());
+    payload.extend_from_slice(quote_hash.as_slice());
+
+    Ok(keccak256(payload).into())
 }
 
 /// Verify a quote signature by checking the signature against the hash of the quote details.
-pub fn verify_quote(quote: &SignedQuote, public_key: &K256VerifyingKey) -> Result<bool> {
-    let hash = hash_quote_details(&quote.abi_details)?;
+pub fn verify_quote(
+    quote: &SignedQuote,
+    public_key: &K256VerifyingKey,
+    domain: QuoteSigningDomain,
+) -> Result<bool> {
+    let hash = quote_digest_eip712(&quote.abi_details, domain)?;
     Ok(K256Ecdsa::verify(public_key, &hash, &quote.signature))
+}
+
+fn compute_domain_separator(domain: QuoteSigningDomain) -> B256 {
+    const DOMAIN_TYPEHASH_STR: &str =
+        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)";
+
+    // `tnt-core/src/v2/core/Base.sol` hardcodes this domain for quote signing.
+    const NAME: &str = "TangleQuote";
+    const VERSION: &str = "1";
+
+    let domain_typehash = keccak256(DOMAIN_TYPEHASH_STR.as_bytes());
+    let name_hash = keccak256(NAME.as_bytes());
+    let version_hash = keccak256(VERSION.as_bytes());
+
+    let encoded = (
+        domain_typehash,
+        name_hash,
+        version_hash,
+        U256::from(domain.chain_id),
+        domain.verifying_contract,
+    )
+        .abi_encode();
+
+    keccak256(encoded)
+}
+
+fn hash_quote_details(quote_details: &ITangleTypes::QuoteDetails) -> B256 {
+    const ASSET_TYPEHASH_STR: &str = "Asset(uint8 kind,address token)";
+    const COMMITMENT_TYPEHASH_STR: &str =
+        "AssetSecurityCommitment(Asset asset,uint16 exposureBps)Asset(uint8 kind,address token)";
+    const QUOTE_TYPEHASH_STR: &str = "QuoteDetails(uint64 blueprintId,uint64 ttlBlocks,uint256 totalCost,uint64 timestamp,uint64 expiry,AssetSecurityCommitment[] securityCommitments)AssetSecurityCommitment(Asset asset,uint16 exposureBps)Asset(uint8 kind,address token)";
+
+    let quote_typehash = keccak256(QUOTE_TYPEHASH_STR.as_bytes());
+    let commitment_typehash = keccak256(COMMITMENT_TYPEHASH_STR.as_bytes());
+    let asset_typehash = keccak256(ASSET_TYPEHASH_STR.as_bytes());
+
+    let mut commitment_hashes: Vec<u8> =
+        Vec::with_capacity(quote_details.securityCommitments.len() * 32);
+    for commitment in quote_details.securityCommitments.iter() {
+        type AssetEncodeTuple = (
+            alloy_sol_types::sol_data::FixedBytes<32>,
+            alloy_sol_types::sol_data::Uint<8>,
+            alloy_sol_types::sol_data::Address,
+        );
+        let asset_hash = keccak256(<AssetEncodeTuple as SolType>::abi_encode(&(
+            asset_typehash,
+            commitment.asset.kind,
+            commitment.asset.token,
+        )));
+
+        let commitment_hash = keccak256(
+            (commitment_typehash, asset_hash, commitment.exposureBps).abi_encode(),
+        );
+
+        commitment_hashes.extend_from_slice(commitment_hash.as_slice());
+    }
+    let commitments_hash = keccak256(commitment_hashes);
+
+    keccak256(
+        (
+            quote_typehash,
+            quote_details.blueprintId,
+            quote_details.ttlBlocks,
+            quote_details.totalCost,
+            quote_details.timestamp,
+            quote_details.expiry,
+            commitments_hash,
+        )
+            .abi_encode(),
+    )
 }
 
 fn build_abi_quote_details(

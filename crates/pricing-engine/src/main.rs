@@ -1,4 +1,5 @@
 use alloy_primitives::Address;
+use alloy_provider::{Provider, ProviderBuilder};
 use blueprint_client_tangle_evm::{TangleEvmClientConfig, TangleEvmSettings};
 use blueprint_core::info;
 use clap::Parser;
@@ -12,6 +13,7 @@ use blueprint_pricing_engine_lib::{
     cleanup,
     error::{PricingError, Result},
     init_benchmark_cache, init_operator_signer, init_pricing_config, load_operator_config,
+    signer::QuoteSigningDomain,
     service::blockchain::event::BlockchainEvent,
     service::rpc::server::run_rpc_server,
     spawn_event_processor, start_blockchain_listener, wait_for_shutdown,
@@ -100,6 +102,12 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     let restaking_contract = parse_address(&cli.restaking_contract)?;
     let status_registry_contract = parse_address(&cli.status_registry_contract)?;
 
+    if tangle_contract == Address::ZERO {
+        return Err(PricingError::Config(
+            "missing OPERATOR_TANGLE_CONTRACT (required for EIP-712 quote signatures)".to_string(),
+        ));
+    }
+
     let evm_settings = TangleEvmSettings {
         blueprint_id: cli.blueprint_id,
         service_id: cli.service_id,
@@ -128,6 +136,15 @@ pub async fn run_app(cli: Cli) -> Result<()> {
         evm_settings,
     );
 
+    let provider = ProviderBuilder::new()
+        .connect(cli.http_rpc_endpoint.as_str())
+        .await
+        .map_err(|e| PricingError::Config(format!("failed to connect HTTP RPC: {e}")))?;
+    let chain_id = provider
+        .get_chain_id()
+        .await
+        .map_err(|e| PricingError::Config(format!("failed to read chain id: {e}")))?;
+
     // Create a channel for blockchain events
     let (event_tx, event_rx) = mpsc::channel::<BlockchainEvent>(100);
 
@@ -146,7 +163,14 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     .await?;
 
     // Initialize operator signer
-    let operator_signer = init_operator_signer(&config, &config.keystore_path)?;
+    let operator_signer = init_operator_signer(
+        &config,
+        &config.keystore_path,
+        QuoteSigningDomain {
+            chain_id,
+            verifying_contract: tangle_contract,
+        },
+    )?;
     info!("Operator signer initialized successfully");
 
     // Process blockchain events

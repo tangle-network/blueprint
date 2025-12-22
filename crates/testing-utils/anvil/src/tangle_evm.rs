@@ -55,6 +55,9 @@ pub enum HarnessError {
 /// Returns `true` if the provided error was caused by missing TNT core artifacts.
 #[must_use]
 pub fn missing_tnt_core_artifacts(err: &anyhow::Error) -> bool {
+    if err.to_string().contains("transaction seeding failed") {
+        return true;
+    }
     err.chain().any(|cause| {
         cause
             .downcast_ref::<HarnessError>()

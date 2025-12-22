@@ -9,6 +9,7 @@ use crate::{
     LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID, SeededTangleEvmTestnet, start_tangle_evm_testnet,
 };
 use alloy_primitives::{Address, Bytes};
+use alloy_rpc_types::Filter;
 #[cfg(feature = "aggregation")]
 use anyhow::anyhow;
 use anyhow::{Context, Result};
@@ -43,7 +44,7 @@ use tempfile::TempDir;
 use tokio::sync::Notify;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinHandle;
-use tokio::time::{Duration, Instant, sleep, timeout};
+use tokio::time::{Duration, sleep, timeout};
 
 const OPERATOR1_PRIVATE_KEY: &str =
     "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
@@ -644,16 +645,8 @@ impl BlueprintHarness {
 
     /// Wait for a [`JobResult::Ok`] emitted by the harness runner.
     pub async fn wait_for_job_result(&self, submission: JobSubmissionResult) -> Result<Vec<u8>> {
-        if let Some(output) = self.wait_for_local_result(Duration::from_secs(30)).await {
-            return Ok(output);
-        }
-        Self::wait_for_job_result_with_timeout(
-            Arc::clone(&self.event_client),
-            submission,
-            self.service_id,
-            Duration::from_secs(30),
-        )
-        .await
+        self.wait_for_job_result_with_deadline(submission, Duration::from_secs(30))
+            .await
     }
 
     /// Wait for a job result with a custom timeout.
@@ -662,16 +655,22 @@ impl BlueprintHarness {
         submission: JobSubmissionResult,
         timeout_duration: Duration,
     ) -> Result<Vec<u8>> {
-        if let Some(output) = self.wait_for_local_result(timeout_duration).await {
-            return Ok(output);
-        }
-        Self::wait_for_job_result_with_timeout(
+        let local_wait = self.wait_for_local_result_unbounded();
+        let on_chain_wait = Self::wait_for_job_result_on_chain_internal(
             Arc::clone(&self.event_client),
             submission,
             self.service_id,
-            timeout_duration,
-        )
-        .await
+        );
+        let fut = async {
+            tokio::select! {
+                output = local_wait => Ok(output),
+                output = on_chain_wait => output,
+            }
+        };
+
+        timeout(timeout_duration, fut)
+            .await
+            .context("timed out waiting for JobResultSubmitted")?
     }
 
     /// Wait for a job result emitted on-chain, bypassing local result queue.
@@ -680,13 +679,16 @@ impl BlueprintHarness {
         submission: JobSubmissionResult,
         timeout_duration: Duration,
     ) -> Result<Vec<u8>> {
-        Self::wait_for_job_result_with_timeout(
-            Arc::clone(&self.event_client),
-            submission,
-            self.service_id,
+        timeout(
             timeout_duration,
+            Self::wait_for_job_result_on_chain_internal(
+                Arc::clone(&self.event_client),
+                submission,
+                self.service_id,
+            ),
         )
         .await
+        .context("timed out waiting for JobResultSubmitted")?
     }
 
     /// Wait for an on-chain job result using the default timeout.
@@ -698,25 +700,16 @@ impl BlueprintHarness {
             .await
     }
 
-    async fn wait_for_local_result(&self, timeout_duration: Duration) -> Option<Vec<u8>> {
-        if let Some(output) = self.take_local_result() {
-            println!("blueprint-harness: drained local result from queue");
-            return Some(output);
-        }
-        let deadline = Instant::now() + timeout_duration;
+    async fn wait_for_local_result_unbounded(&self) -> Vec<u8> {
         loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                return None;
+            if let Some(output) = self.take_local_result() {
+                println!("blueprint-harness: drained local result from queue");
+                return output;
             }
-            tokio::select! {
-                _ = self.local_notify.notified() => {
-                    if let Some(output) = self.take_local_result() {
-                        println!("blueprint-harness: received local result via notify");
-                        return Some(output);
-                    }
-                }
-                _ = sleep(remaining) => return None,
+            self.local_notify.notified().await;
+            if let Some(output) = self.take_local_result() {
+                println!("blueprint-harness: received local result via notify");
+                return output;
             }
         }
     }
@@ -744,32 +737,41 @@ impl BlueprintHarness {
         })
     }
 
-    async fn wait_for_job_result_with_timeout(
+    async fn wait_for_job_result_on_chain_internal(
         client: Arc<TangleEvmClient>,
         submission: JobSubmissionResult,
         service_id: u64,
-        timeout_duration: Duration,
     ) -> Result<Vec<u8>> {
-        let fut = async move {
-            loop {
-                if let Some(event) = client.next_event().await {
-                    for log in event.logs {
-                        if let Ok(decoded) = log.log_decode::<ITangle::JobResultSubmitted>() {
-                            if decoded.inner.serviceId == service_id
-                                && decoded.inner.callId == submission.call_id
-                            {
-                                let bytes: Vec<u8> = decoded.inner.result.clone().into();
-                                return Ok(bytes);
-                            }
-                        }
+        let tangle_address = client.tangle_address();
+        let mut from_block = if let Some(block_number) = submission.tx.block_number {
+            block_number
+        } else {
+            client.block_number().await?.saturating_sub(1)
+        };
+        loop {
+            let current = client.block_number().await?;
+            if from_block > current {
+                sleep(Duration::from_millis(200)).await;
+                continue;
+            }
+            let filter = Filter::new()
+                .address(tangle_address)
+                .from_block(from_block)
+                .to_block(current);
+            let logs = client.get_logs(&filter).await?;
+            for log in logs {
+                if let Ok(decoded) = log.log_decode::<ITangle::JobResultSubmitted>() {
+                    if decoded.inner.serviceId == service_id
+                        && decoded.inner.callId == submission.call_id
+                    {
+                        let bytes: Vec<u8> = decoded.inner.result.clone().into();
+                        return Ok(bytes);
                     }
                 }
             }
-        };
-
-        timeout(timeout_duration, fut)
-            .await
-            .context("timed out waiting for JobResultSubmitted")?
+            from_block = current;
+            sleep(Duration::from_millis(200)).await;
+        }
     }
 }
 

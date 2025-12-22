@@ -62,6 +62,7 @@ pub async fn init_benchmark_cache(config: &Arc<OperatorConfig>) -> Result<Arc<Be
 pub fn init_operator_signer<P: AsRef<std::path::Path>>(
     config: &OperatorConfig,
     keystore_path: P,
+    domain: crate::signer::QuoteSigningDomain,
 ) -> Result<Arc<Mutex<OperatorSigner>>> {
     info!("Initializing operator signer with ECDSA");
 
@@ -86,7 +87,7 @@ pub fn init_operator_signer<P: AsRef<std::path::Path>>(
         }
     };
     let ecdsa_keypair = keystore.get_secret::<K256Ecdsa>(&ecdsa_public_key)?;
-    let signer = OperatorSigner::new(config, ecdsa_keypair)?;
+    let signer = OperatorSigner::new(config, ecdsa_keypair, domain)?;
 
     Ok(Arc::new(Mutex::new(signer)))
 }

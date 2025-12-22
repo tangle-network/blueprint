@@ -40,7 +40,7 @@ mod evm_listener_tests {
         event::BlockchainEvent,
         evm_listener::{EvmEventClient, EvmEventListener},
     };
-    use blueprint_pricing_engine_lib::signer::{OperatorSigner, verify_quote};
+    use blueprint_pricing_engine_lib::signer::{OperatorSigner, QuoteSigningDomain, verify_quote};
     use blueprint_pricing_engine_lib::{
         BenchmarkCache, DEFAULT_POW_DIFFICULTY, PricingEngineService, SignableQuote, SignedQuote,
         generate_challenge, generate_proof,
@@ -64,6 +64,24 @@ mod evm_listener_tests {
         "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
     const BLUEPRINT_ID: u64 = 0;
     const SERVICE_ID: u64 = 0;
+
+    fn dummy_quote_domain() -> QuoteSigningDomain {
+        QuoteSigningDomain {
+            chain_id: 1,
+            verifying_contract: Address::ZERO,
+        }
+    }
+
+    async fn quote_domain_for(deployment: &SeededTangleEvmTestnet) -> Result<QuoteSigningDomain> {
+        let provider = ProviderBuilder::new()
+            .connect(deployment.testnet.http_endpoint.as_str())
+            .await?;
+        let chain_id = provider.get_chain_id().await?;
+        Ok(QuoteSigningDomain {
+            chain_id,
+            verifying_contract: deployment.tangle_contract,
+        })
+    }
 
     #[tokio::test]
     async fn evm_listener_streams_service_events() -> Result<()> {
@@ -146,9 +164,11 @@ mod evm_listener_tests {
 
         let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
         let signing_key = K256SigningKey::from_bytes(&secret_bytes)?;
+        let domain = dummy_quote_domain();
         let signer = Arc::new(Mutex::new(OperatorSigner::new(
             &operator_config,
             signing_key,
+            domain,
         )?));
 
         let service = PricingEngineService::new(
@@ -217,7 +237,7 @@ mod evm_listener_tests {
             operator_id,
             proof_of_work: response.proof_of_work.clone(),
         };
-        assert!(verify_quote(&signed_quote, &verifier)?);
+        assert!(verify_quote(&signed_quote, &verifier, domain)?);
 
         server.abort();
         let _ = server.await;
@@ -349,9 +369,11 @@ mod evm_listener_tests {
             // Setup operator signer
             let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
             let signing_key = K256SigningKey::from_bytes(&secret_bytes)?;
+            let domain = quote_domain_for(&deployment).await?;
             let signer = Arc::new(Mutex::new(OperatorSigner::new(
                 &operator_config,
                 signing_key.clone(),
+                domain,
             )?));
 
             // Start gRPC server
@@ -434,7 +456,10 @@ mod evm_listener_tests {
                 proof_of_work: response.proof_of_work.clone(),
             };
 
-            assert!(verify_quote(&signed_quote, &verifier)?, "Quote signature must be valid");
+            assert!(
+                verify_quote(&signed_quote, &verifier, domain)?,
+                "Quote signature must be valid"
+            );
             println!("✓ Quote signature verified locally");
 
             // Clean up
@@ -462,7 +487,11 @@ mod evm_listener_tests {
 
         let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
         let signing_key = K256SigningKey::from_bytes(&secret_bytes)?;
-        let signer = Arc::new(Mutex::new(OperatorSigner::new(&operator_config, signing_key)?));
+        let signer = Arc::new(Mutex::new(OperatorSigner::new(
+            &operator_config,
+            signing_key,
+            dummy_quote_domain(),
+        )?));
 
         let service = PricingEngineService::new(
             Arc::clone(&operator_config),
@@ -538,7 +567,11 @@ mod evm_listener_tests {
 
         let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
         let signing_key = K256SigningKey::from_bytes(&secret_bytes)?;
-        let signer = Arc::new(Mutex::new(OperatorSigner::new(&operator_config, signing_key)?));
+        let signer = Arc::new(Mutex::new(OperatorSigner::new(
+            &operator_config,
+            signing_key,
+            dummy_quote_domain(),
+        )?));
 
         let service = PricingEngineService::new(
             Arc::clone(&operator_config),
@@ -613,7 +646,11 @@ mod evm_listener_tests {
 
         let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
         let signing_key = K256SigningKey::from_bytes(&secret_bytes)?;
-        let signer = Arc::new(Mutex::new(OperatorSigner::new(&operator_config, signing_key)?));
+        let signer = Arc::new(Mutex::new(OperatorSigner::new(
+            &operator_config,
+            signing_key,
+            dummy_quote_domain(),
+        )?));
 
         let service = PricingEngineService::new(
             Arc::clone(&operator_config),
@@ -1092,7 +1129,11 @@ mod evm_listener_tests {
 
         let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
         let signing_key = K256SigningKey::from_bytes(&secret_bytes)?;
-        let signer = Arc::new(Mutex::new(OperatorSigner::new(&operator_config, signing_key)?));
+        let signer = Arc::new(Mutex::new(OperatorSigner::new(
+            &operator_config,
+            signing_key,
+            dummy_quote_domain(),
+        )?));
 
         let service = PricingEngineService::new(
             Arc::clone(&operator_config),
@@ -1161,7 +1202,11 @@ mod evm_listener_tests {
 
         let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
         let signing_key = K256SigningKey::from_bytes(&secret_bytes)?;
-        let signer = Arc::new(Mutex::new(OperatorSigner::new(&operator_config, signing_key)?));
+        let signer = Arc::new(Mutex::new(OperatorSigner::new(
+            &operator_config,
+            signing_key,
+            dummy_quote_domain(),
+        )?));
 
         let service = PricingEngineService::new(
             Arc::clone(&operator_config),
@@ -1251,6 +1296,7 @@ mod evm_listener_tests {
         let signer = Arc::new(Mutex::new(OperatorSigner::new(
             &operator_config,
             signing_key,
+            dummy_quote_domain(),
         )?));
 
         let service = PricingEngineService::new(
