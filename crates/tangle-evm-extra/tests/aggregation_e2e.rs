@@ -59,7 +59,6 @@ struct MultiOperatorHarness {
 struct OperatorContext {
     client: Arc<TangleEvmClient>,
     address: Address,
-    private_key: String,
 }
 
 impl MultiOperatorHarness {
@@ -86,7 +85,6 @@ impl MultiOperatorHarness {
             operators.push(OperatorContext {
                 client,
                 address,
-                private_key: operator_keys[i].to_string(),
             });
         }
 

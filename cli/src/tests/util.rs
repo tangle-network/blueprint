@@ -3,14 +3,11 @@ use blueprint_testing_utils::anvil::{TangleEvmHarness, missing_tnt_core_artifact
 use color_eyre::eyre::{Result, eyre};
 use serde_json::Value;
 use std::{
-    borrow::Cow,
     env,
     path::{Path, PathBuf},
     sync::OnceLock,
 };
 
-use alloy_provider::{Provider, ProviderBuilder};
-use serde_json::json;
 
 /// Environment variable that enables end-to-end CLI tests.
 pub const RUN_TNT_E2E_ENV: &str = "RUN_TNT_E2E";
@@ -168,24 +165,4 @@ pub fn parse_json_lines(stdout: &str) -> Result<Vec<Value>> {
 pub struct CliCommandOutput {
     pub stdout: String,
     pub stderr: String,
-}
-
-/// Advance the Anvil chain time by the provided number of seconds and mine a block.
-pub async fn advance_chain_time(harness: &TangleEvmHarness, seconds: u64) -> Result<()> {
-    let provider = ProviderBuilder::new()
-        .connect(harness.http_endpoint().as_str())
-        .await
-        .map_err(|e| eyre!(format!("failed to connect to anvil: {e}")))?;
-
-    provider
-        .raw_request::<_, Value>(Cow::Borrowed("evm_increaseTime"), json!([seconds]))
-        .await
-        .map_err(|e| eyre!(format!("failed to advance time: {e}")))?;
-
-    provider
-        .raw_request::<_, Value>(Cow::Borrowed("anvil_mine"), json!(["0x1"]))
-        .await
-        .map_err(|e| eyre!(format!("failed to mine block: {e}")))?;
-
-    Ok(())
 }

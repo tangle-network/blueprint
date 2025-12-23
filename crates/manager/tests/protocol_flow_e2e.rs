@@ -26,7 +26,8 @@ use blueprint_client_tangle_evm::contracts::ITangle::{
     addPermittedCallerCall, JobSubmitted, JobResultSubmitted,
 };
 use blueprint_client_tangle_evm::{
-    ServiceStatus, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
+    JobSubmissionResult, ServiceStatus, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
+    TransactionResult,
 };
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
@@ -91,14 +92,22 @@ async fn test_job_result_submitted_event_is_emitted() -> Result<()> {
         grant_caller(&deployment, client.account()).await?;
 
         // Submit job
-        let submission = client
-            .submit_job(SERVICE_ID, 0, Bytes::from(123u64.abi_encode()))
-            .await?;
+        let submission = submit_job_with_retry(
+            &client,
+            SERVICE_ID,
+            0,
+            Bytes::from(123u64.abi_encode()),
+        )
+        .await?;
 
         // Submit result
-        let result_tx = client
-            .submit_result(SERVICE_ID, submission.call_id, Bytes::from(246u64.abi_encode()))
-            .await?;
+        let result_tx = submit_result_with_retry(
+            &client,
+            SERVICE_ID,
+            submission.call_id,
+            Bytes::from(246u64.abi_encode()),
+        )
+        .await?;
 
         println!("✓ JobResultSubmitted event emitted in tx {:?}", result_tx.tx_hash);
 
@@ -398,5 +407,51 @@ async fn boot_testnet(name: &str) -> Result<Option<SeededTangleEvmTestnet>> {
             Ok(None)
         }
         Err(e) => Err(e),
+    }
+}
+
+async fn submit_job_with_retry(
+    client: &TangleEvmClient,
+    service_id: u64,
+    job_index: u8,
+    inputs: Bytes,
+) -> Result<JobSubmissionResult> {
+    let mut attempts = 0;
+    loop {
+        match client.submit_job(service_id, job_index, inputs.clone()).await {
+            Ok(submission) => return Ok(submission),
+            Err(err) => {
+                attempts += 1;
+                let message = err.to_string();
+                if attempts < 3 && message.contains("BlockOutOfRangeError") {
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                    continue;
+                }
+                return Err(err.into());
+            }
+        }
+    }
+}
+
+async fn submit_result_with_retry(
+    client: &TangleEvmClient,
+    service_id: u64,
+    call_id: u64,
+    output: Bytes,
+) -> Result<TransactionResult> {
+    let mut attempts = 0;
+    loop {
+        match client.submit_result(service_id, call_id, output.clone()).await {
+            Ok(result) => return Ok(result),
+            Err(err) => {
+                attempts += 1;
+                let message = err.to_string();
+                if attempts < 3 && message.contains("BlockOutOfRangeError") {
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                    continue;
+                }
+                return Err(err.into());
+            }
+        }
     }
 }

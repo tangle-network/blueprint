@@ -39,8 +39,6 @@ use tokio::time::timeout;
 // Well-known Anvil test accounts
 const OPERATOR1_PRIVATE_KEY: &str =
     "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-const OPERATOR2_PRIVATE_KEY: &str =
-    "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
 const SERVICE_OWNER_PRIVATE_KEY: &str =
     "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
@@ -53,7 +51,6 @@ const ANVIL_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 struct MultiServiceHarness {
     deployment: SeededTangleEvmTestnet,
     operator1_client: Arc<TangleEvmClient>,
-    operator2_client: Arc<TangleEvmClient>,
     owner_client: Arc<TangleEvmClient>,
     _temp_dir: TempDir,
 }
@@ -68,12 +65,6 @@ impl MultiServiceHarness {
         seed_operator_key(&op1_keystore_path, OPERATOR1_PRIVATE_KEY)?;
         let operator1_client = create_client(&deployment, &op1_keystore_path, Some(SERVICE_ID_0)).await?;
 
-        // Operator 2 keystore
-        let op2_keystore_path = temp.path().join("operator2_keystore");
-        std::fs::create_dir_all(&op2_keystore_path)?;
-        seed_operator_key(&op2_keystore_path, OPERATOR2_PRIVATE_KEY)?;
-        let operator2_client = create_client(&deployment, &op2_keystore_path, Some(SERVICE_ID_0)).await?;
-
         // Owner keystore
         let owner_keystore_path = temp.path().join("owner_keystore");
         std::fs::create_dir_all(&owner_keystore_path)?;
@@ -83,7 +74,6 @@ impl MultiServiceHarness {
         Ok(Self {
             deployment,
             operator1_client,
-            operator2_client,
             owner_client,
             _temp_dir: temp,
         })
@@ -93,9 +83,6 @@ impl MultiServiceHarness {
         self.operator1_client.account()
     }
 
-    fn operator2_account(&self) -> Address {
-        self.operator2_client.account()
-    }
 }
 
 /// Test: Multiple operators process jobs from the same service
@@ -226,7 +213,7 @@ async fn test_job_routing_isolation() -> Result<()> {
 
         // Verify all jobs completed with correct results
         tokio::time::sleep(Duration::from_secs(1)).await;
-        for (call_id, input) in &job_inputs {
+        for (call_id, _input) in &job_inputs {
             let job_call = harness.owner_client
                 .get_job_call(SERVICE_ID_0, *call_id)
                 .await

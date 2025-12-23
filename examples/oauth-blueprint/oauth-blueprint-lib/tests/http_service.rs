@@ -304,7 +304,6 @@ struct OAuthContext {
 
 fn create_test_app() -> Router {
     use axum::middleware;
-    use std::collections::HashSet;
 
     let state = AppState {
         docs: Arc::new(RwLock::new(HashMap::new())),

@@ -14,7 +14,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use anyhow::{Context, Result};
 use blueprint_manager::error::Error as ManagerError;
 use blueprint_manager::sources::BlueprintSourceHandler;
 use blueprint_manager::sources::container::ContainerSource;

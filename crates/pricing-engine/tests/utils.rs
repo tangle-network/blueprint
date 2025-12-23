@@ -1,12 +1,6 @@
-use blueprint_pricing_engine_lib::CpuBenchmarkResult;
-use blueprint_pricing_engine_lib::pricing::ResourcePricing;
 use blueprint_pricing_engine_lib::pricing_engine;
-use blueprint_pricing_engine_lib::types::ResourceUnit;
-use blueprint_pricing_engine_lib::{BenchmarkProfile, OperatorConfig};
-use rust_decimal::Decimal;
-use std::collections::HashMap;
+use blueprint_pricing_engine_lib::OperatorConfig;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn create_test_config() -> OperatorConfig {
     OperatorConfig {
@@ -45,47 +39,4 @@ pub fn create_test_quote_details() -> pricing_engine::QuoteDetails {
         resources: vec![resource],
         security_commitments: vec![security_commitment],
     }
-}
-
-pub fn sample_benchmark_profile(blueprint_id: u64) -> BenchmarkProfile {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    BenchmarkProfile {
-        job_id: blueprint_id.to_string(),
-        execution_mode: "native".to_string(),
-        duration_secs: 1,
-        timestamp: now,
-        success: true,
-        cpu_details: Some(CpuBenchmarkResult {
-            num_cores_detected: 4,
-            avg_cores_used: 2.0,
-            avg_usage_percent: 50.0,
-            peak_cores_used: 2.0,
-            peak_usage_percent: 75.0,
-            benchmark_duration_ms: 10,
-            primes_found: 128,
-            max_prime: 1024,
-            primes_per_second: 64.0,
-            cpu_model: "anvil-ci".to_string(),
-            cpu_frequency_mhz: 3200.0,
-        }),
-        io_details: None,
-        memory_details: None,
-        network_details: None,
-        gpu_details: None,
-        storage_details: None,
-    }
-}
-
-pub fn sample_pricing_map(blueprint_id: Option<u64>) -> HashMap<Option<u64>, Vec<ResourcePricing>> {
-    let pricing = ResourcePricing {
-        kind: ResourceUnit::CPU,
-        count: 2,
-        price_per_unit_rate: Decimal::new(5, 6),
-    };
-
-    HashMap::from([(blueprint_id, vec![pricing])])
 }

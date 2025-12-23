@@ -51,8 +51,6 @@ use tower::Service;
 // Well-known Anvil test accounts
 const OPERATOR1_PRIVATE_KEY: &str =
     "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-const OPERATOR2_PRIVATE_KEY: &str =
-    "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
 const SERVICE_OWNER_PRIVATE_KEY: &str =
     "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
@@ -97,9 +95,6 @@ impl LifecycleTestHarness {
         self.operator_client.account()
     }
 
-    fn owner_account(&self) -> Address {
-        self.owner_client.account()
-    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -157,17 +152,7 @@ async fn test_full_service_lifecycle() -> Result<()> {
         .context("failed to grant caller permissions")?;
         println!("✓ Granted caller permissions to operator");
 
-        // Step 6: Submit a job
-        let input_value: u64 = 42;
-        let encoded_input = Bytes::from(input_value.abi_encode());
-        let submission = harness.owner_client
-            .submit_job(SERVICE_ID, JOB_INDEX, encoded_input)
-            .await
-            .context("failed to submit job")?;
-        let call_id = submission.call_id;
-        println!("✓ Submitted job with call_id {}", call_id);
-
-        // Step 7: Set up runner to process the job
+        // Step 6: Set up runner to process the job
         let temp = TempDir::new()?;
         let keystore_path = temp.path().join("runner_keystore");
         std::fs::create_dir_all(&keystore_path)?;
@@ -175,7 +160,11 @@ async fn test_full_service_lifecycle() -> Result<()> {
 
         let runner_client = create_client(&harness.deployment, &keystore_path, BLUEPRINT_ID, Some(SERVICE_ID)).await?;
 
-        let start_block = submission.tx.block_number.unwrap_or_default().saturating_sub(1);
+        let start_block = runner_client
+            .block_number()
+            .await
+            .unwrap_or_default()
+            .saturating_sub(1);
         let producer = TangleEvmProducer::from_block((*runner_client).clone(), SERVICE_ID, start_block)
             .with_poll_interval(Duration::from_millis(100));
         let consumer = TangleEvmConsumer::new((*runner_client).clone());
@@ -186,6 +175,16 @@ async fn test_full_service_lifecycle() -> Result<()> {
         let runner_task = tokio::spawn(async move {
             run_minimal_runner_loop(producer, router, consumer, shutdown_rx, Some(result_tx)).await
         });
+
+        // Step 7: Submit a job
+        let input_value: u64 = 42;
+        let encoded_input = Bytes::from(input_value.abi_encode());
+        let submission = harness.owner_client
+            .submit_job(SERVICE_ID, JOB_INDEX, encoded_input)
+            .await
+            .context("failed to submit job")?;
+        let call_id = submission.call_id;
+        println!("✓ Submitted job with call_id {}", call_id);
 
         // Step 8: Wait for job result
         let on_chain_result = wait_for_job_result_on_chain(

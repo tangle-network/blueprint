@@ -90,7 +90,7 @@ async fn test_handshake_with_invalid_peer() {
 
     info!("Starting nodes");
     let handle1 = node1.start().await.expect("Failed to start node1");
-    let handle2 = node2.start().await.expect("Failed to start node2");
+    let _handle2 = node2.start().await.expect("Failed to start node2");
 
     // Wait for ban to be applied automatically
     info!("Waiting for automatic ban");

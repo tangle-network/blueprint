@@ -83,7 +83,7 @@ async fn tangle_producer_streams_real_job_submissions() -> Result<()> {
         let (mut parts, _) = job_call.clone().into_parts();
         let service_id = ServiceId::try_from(&mut parts).expect("service id missing");
         assert_eq!(service_id.0, LOCAL_SERVICE_ID);
-        let call_id = CallId::try_from(&mut parts).expect("call id missing");
+        let _call_id = CallId::try_from(&mut parts).expect("call id missing");
         assert_eq!(u32::from(job_call.job_id()), u32::from(JOB_INDEX));
 
         let TangleEvmArg((doc_id, content, account)) =

@@ -721,11 +721,12 @@ impl BlueprintHarness {
 
     async fn wait_for_local_result_unbounded(&self) -> Vec<u8> {
         loop {
+            let notified = self.local_notify.notified();
             if let Some(output) = self.take_local_result() {
                 println!("blueprint-harness: drained local result from queue");
                 return output;
             }
-            self.local_notify.notified().await;
+            notified.await;
             if let Some(output) = self.take_local_result() {
                 println!("blueprint-harness: received local result via notify");
                 return output;
