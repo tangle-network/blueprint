@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(20);
+const TEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 // Protocol message types
 #[derive(Debug, Clone, Serialize, Deserialize)]

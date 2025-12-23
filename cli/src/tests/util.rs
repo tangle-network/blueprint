@@ -40,8 +40,15 @@ pub fn cargo_tangle_bin() -> Result<PathBuf> {
     let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
     let exe_name = format!("cargo-tangle{}", env::consts::EXE_SUFFIX);
     let bin_path = target_dir.join(&profile).join(exe_name);
+    let force_rebuild = match env::var(RUN_TNT_E2E_ENV) {
+        Ok(value) => {
+            let trimmed = value.trim();
+            !trimmed.is_empty() && trimmed != "0"
+        }
+        Err(_) => false,
+    };
 
-    if !bin_path.is_file() {
+    if force_rebuild || !bin_path.is_file() {
         let mut build = std::process::Command::new("cargo");
         build
             .arg("build")

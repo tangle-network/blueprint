@@ -18,6 +18,7 @@ use color_eyre::eyre::{Result, eyre};
 use std::env;
 use std::fmt;
 use std::path::PathBuf;
+use std::time::Duration;
 use url::Url;
 
 #[derive(Args, Debug, Clone)]
@@ -37,6 +38,9 @@ pub struct TangleDeployArgs {
     /// Preferred runtime for the service.
     #[arg(long, value_enum, default_value_t = SpawnMethod::Vm)]
     pub spawn_method: SpawnMethod,
+    /// Auto-shutdown the devnet run after the specified number of seconds.
+    #[arg(long, value_name = "SECONDS")]
+    pub exit_after_seconds: Option<u64>,
     /// Path to the blueprint definition file (JSON/YAML/TOML) when targeting non-devnet networks.
     #[arg(long, value_name = "FILE")]
     pub definition: Option<PathBuf>,
@@ -204,6 +208,7 @@ pub async fn execute(args: TangleDeployArgs) -> Result<()> {
                 tangle_settings,
                 args.allow_unchecked_attestations,
                 args.spawn_method,
+                args.exit_after_seconds.map(Duration::from_secs),
             ))
         }
         DeploymentNetwork::Testnet | DeploymentNetwork::Mainnet => {
@@ -375,6 +380,7 @@ struct DevnetDeployment {
     settings: TangleEvmProtocolSettings,
     allow_unchecked_attestations: bool,
     spawn_method: SpawnMethod,
+    shutdown_after: Option<Duration>,
 }
 
 impl DevnetDeployment {
@@ -383,12 +389,14 @@ impl DevnetDeployment {
         settings: TangleEvmProtocolSettings,
         allow_unchecked_attestations: bool,
         spawn_method: SpawnMethod,
+        shutdown_after: Option<Duration>,
     ) -> Self {
         Self {
             stack,
             settings,
             allow_unchecked_attestations,
             spawn_method,
+            shutdown_after,
         }
     }
 
@@ -398,6 +406,7 @@ impl DevnetDeployment {
             settings,
             allow_unchecked_attestations,
             spawn_method,
+            shutdown_after,
         } = self;
 
         println!(
@@ -406,12 +415,13 @@ impl DevnetDeployment {
             stack.ws_rpc_url()
         );
 
-        let run_opts = run_opts_from_stack(
+        let mut run_opts = run_opts_from_stack(
             &stack,
             &settings,
             allow_unchecked_attestations,
             spawn_method,
         );
+        run_opts.shutdown_after = shutdown_after;
         let service_id = run_opts.service_id;
         let run_result = run_blueprint(run_opts).await;
 

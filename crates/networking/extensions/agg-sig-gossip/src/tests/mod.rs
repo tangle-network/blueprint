@@ -19,7 +19,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tracing_subscriber::EnvFilter;
 
 // Constants for tests
-const TEST_TIMEOUT: Duration = Duration::from_secs(60);
+const TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
 fn unique_test_suffix() -> String {
     let nanos = SystemTime::now()

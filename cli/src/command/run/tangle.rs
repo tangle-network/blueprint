@@ -30,6 +30,7 @@ pub struct RunOpts {
     pub preferred_source: SourceType,
     pub use_vm: bool,
     pub dry_run: bool,
+    pub shutdown_after: Option<Duration>,
 }
 
 pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
@@ -81,14 +82,36 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         .bold()
     );
 
+    let shutdown_after = opts.shutdown_after;
     let shutdown_signal = async move {
-        let _ = signal::ctrl_c().await;
-        println!(
-            "{}",
-            style("Received shutdown signal, stopping blueprint manager")
-                .yellow()
-                .bold()
-        );
+        if let Some(duration) = shutdown_after {
+            tokio::select! {
+                _ = signal::ctrl_c() => {
+                    println!(
+                        "{}",
+                        style("Received shutdown signal, stopping blueprint manager")
+                            .yellow()
+                            .bold()
+                    );
+                }
+                _ = tokio::time::sleep(duration) => {
+                    println!(
+                        "{}",
+                        style("Auto-shutdown window elapsed, stopping blueprint manager")
+                            .yellow()
+                            .bold()
+                    );
+                }
+            }
+        } else {
+            let _ = signal::ctrl_c().await;
+            println!(
+                "{}",
+                style("Received shutdown signal, stopping blueprint manager")
+                    .yellow()
+                    .bold()
+            );
+        }
     };
 
     println!(

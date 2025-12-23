@@ -686,6 +686,7 @@ async fn main() -> Result<()> {
                             preferred_source: preferred_source_value,
                             use_vm: use_vm_value,
                             dry_run: false,
+                            shutdown_after: None,
                         };
                         run_blueprint(run_opts).await?;
                     }
@@ -790,6 +791,7 @@ async fn main() -> Result<()> {
                     preferred_source: preferred_source_value,
                     use_vm: use_vm_value,
                     dry_run: false,
+                    shutdown_after: None,
                 };
 
                 run_blueprint(run_opts).await?;
@@ -1148,6 +1150,7 @@ async fn main() -> Result<()> {
                         preferred_source: preferred_source_value,
                         use_vm: use_vm_value,
                         dry_run,
+                        shutdown_after: None,
                     };
                     run_blueprint(run_opts).await?;
                 }

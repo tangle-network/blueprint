@@ -111,9 +111,8 @@ async fn test_multiple_services_process_jobs_independently() -> Result<()> {
         let decoded_0: u64 = u64::abi_decode(&result_0)?;
         ensure!(decoded_0 == input_0 * 2, "expected {} got {}", input_0 * 2, decoded_0);
 
-        // Verify on-chain
-        let job = client_0.get_job_call(service_id_0, submission_0.call_id).await?;
-        ensure!(job.completed, "job should be completed");
+        // Verify on-chain completion (retry to avoid transient RPC flakiness)
+        wait_for_job_completion((*client_0).clone(), submission_0.call_id).await?;
 
         let _ = shutdown_tx.send(());
         let _ = runner.await;
@@ -294,23 +293,37 @@ async fn run_processor(
                     .map_err(|_| anyhow!("invalid service_id metadata"))?;
 
                 if let Ok(Some(results)) = svc.call(call).await {
-                    if let Some(tx) = result_tx.take() {
-                        let send_result = match results.get(0) {
-                            Some(blueprint_core::JobResult::Ok { body, .. }) => Ok(body.to_vec()),
-                            Some(blueprint_core::JobResult::Err(err)) => {
-                                Err(anyhow!("job returned error: {err:?}"))
+                    let send_result = match results.get(0) {
+                        Some(blueprint_core::JobResult::Ok { body, .. }) => Ok(body.to_vec()),
+                        Some(blueprint_core::JobResult::Err(err)) => {
+                            Err(anyhow!("job returned error: {err:?}"))
+                        }
+                        None => Err(anyhow!("runner returned no results")),
+                    };
+
+                    if send_result.is_ok() {
+                        for result in &results {
+                            if let blueprint_core::JobResult::Ok { body, .. } = result {
+                                if let Err(err) = submit_result_with_retry(
+                                    &client,
+                                    service_id,
+                                    call_id,
+                                    body,
+                                )
+                                .await
+                                {
+                                    let err_message = format!("{err:#}");
+                                    if let Some(tx) = result_tx.take() {
+                                        let _ = tx.send(Err(anyhow!(err_message.clone())));
+                                    }
+                                    return Err(anyhow!(err_message));
+                                }
                             }
-                            None => Err(anyhow!("runner returned no results")),
-                        };
-                        let _ = tx.send(send_result);
+                        }
                     }
 
-                    for result in &results {
-                        if let blueprint_core::JobResult::Ok { body, .. } = result {
-                            client
-                                .submit_result(service_id, call_id, Bytes::from(body.to_vec()))
-                                .await?;
-                        }
+                    if let Some(tx) = result_tx.take() {
+                        let _ = tx.send(send_result);
                     }
                 }
             }
@@ -376,4 +389,48 @@ async fn boot_testnet(name: &str) -> Result<Option<SeededTangleEvmTestnet>> {
         }
         Err(e) => Err(e),
     }
+}
+
+async fn submit_result_with_retry(
+    client: &TangleEvmClient,
+    service_id: u64,
+    call_id: u64,
+    body: &[u8],
+) -> Result<()> {
+    const MAX_ATTEMPTS: u8 = 3;
+    let mut attempts = 0;
+    loop {
+        attempts += 1;
+        match client
+            .submit_result(service_id, call_id, Bytes::from(body.to_vec()))
+            .await
+        {
+            Ok(tx) if tx.success => return Ok(()),
+            Ok(tx) => {
+                return Err(anyhow!(
+                    "submit_result reverted for service {service_id} call {call_id}: tx={:?}",
+                    tx.tx_hash
+                ));
+            }
+            Err(_err) if attempts < MAX_ATTEMPTS => {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                continue;
+            }
+            Err(err) => return Err(err.into()),
+        }
+    }
+}
+
+async fn wait_for_job_completion(client: TangleEvmClient, call_id: u64) -> Result<()> {
+    timeout(Duration::from_secs(30), async {
+        loop {
+            let call = client.get_job_call(0, call_id).await?;
+            if call.completed {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    })
+    .await
+    .context("timed out waiting for job completion")?
 }

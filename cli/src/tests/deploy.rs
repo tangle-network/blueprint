@@ -55,6 +55,8 @@ async fn deploys_blueprint_to_devnet() -> Result<()> {
             "tangle",
             "--network",
             "devnet",
+            "--exit-after-seconds",
+            "15",
         ])
         .output()
         .map_err(|e| eyre!("failed to execute cargo-tangle: {e}"))?;

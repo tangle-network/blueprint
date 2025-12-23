@@ -351,7 +351,7 @@ impl<const N: usize, const F: usize> OperatorFleet<N, F> {
 }
 
 fn default_operator_specs() -> Vec<OperatorSpec> {
-    vec![OperatorSpec::default()]
+    vec![OperatorSpec::honest("operator-0", OPERATOR1_PRIVATE_KEY)]
 }
 
 type BoxedConsumer = Pin<Box<dyn Sink<JobResult, Error = BoxError> + Send>>;
@@ -395,10 +395,23 @@ impl Sink<JobResult> for MultiOperatorConsumer {
                 .push_back(body.clone().to_vec());
             self.local_notify.notify_waiters();
         }
-        for sender in &self.get_mut().senders {
+        let senders = &mut self.get_mut().senders;
+        let mut remaining = Vec::with_capacity(senders.len());
+        let mut any_success = false;
+        for sender in senders.drain(..) {
             if sender.send(item.clone()).is_err() {
-                return Err(BoxError::from("operator channel closed".to_string()));
+                blueprint_core::warn!(
+                    target: "blueprint-harness",
+                    "operator channel closed while forwarding job result"
+                );
+                continue;
             }
+            any_success = true;
+            remaining.push(sender);
+        }
+        *senders = remaining;
+        if !any_success {
+            return Err(BoxError::from("all operator channels closed".to_string()));
         }
         Ok(())
     }
@@ -516,8 +529,14 @@ impl BlueprintHarness {
         let runner_router = router.clone();
         let runner_client = Arc::clone(&client);
         let runner_service_id = service_id;
-        let producer = TangleEvmProducer::new((*runner_client).clone(), runner_service_id)
-            .with_poll_interval(poll_interval);
+        let start_block = runner_client
+            .block_number()
+            .await
+            .unwrap_or_default()
+            .saturating_sub(1);
+        let producer =
+            TangleEvmProducer::from_block((*runner_client).clone(), runner_service_id, start_block)
+                .with_poll_interval(poll_interval);
 
         let runner_task = tokio::spawn(async move {
             if let Err(err) = BlueprintRunner::builder(HarnessConfig, runner_env)
@@ -943,7 +962,7 @@ async fn operator_sink_task(
                 if let Err(err) = sink.send(result).await {
                     error!("operator {label} failed to submit result: {err}");
                     eprintln!("operator {label} failed to submit result: {err}");
-                    break;
+                    continue;
                 }
             }
             OperatorOutcome::Drop(reason) => {

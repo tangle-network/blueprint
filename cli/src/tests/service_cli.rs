@@ -89,11 +89,6 @@ fn seed_specific_operator_key(path: &Path, hex_key: &str) -> Result<()> {
     Ok(())
 }
 
-fn missing_service_request_event(err: &color_eyre::Report) -> bool {
-    err.to_string()
-        .contains("requestService receipt missing ServiceRequested event")
-}
-
 struct RequestDefaults {
     operators: Vec<String>,
     payment_amount: u128,
@@ -252,19 +247,7 @@ async fn cli_service_request_list_and_show_roundtrip() -> Result<()> {
     }
     request_args.push("--json".into());
 
-    let request_output = match run_cli_command(&request_args) {
-        Ok(output) => output,
-        Err(err) => {
-            if missing_service_request_event(&err) {
-                eprintln!(
-                    "Skipping cli_service_request_list_and_show_roundtrip: \
-                     request events unavailable"
-                );
-                return Ok(());
-            }
-            return Err(err);
-        }
-    };
+    let request_output = run_cli_command(&request_args)?;
     let events = parse_json_lines(&request_output.stdout)?;
     let request_id = events
         .iter()
@@ -367,19 +350,7 @@ async fn cli_service_approve_creates_new_service() -> Result<()> {
     let admin_client = client_args.connect(LOCAL_BLUEPRINT_ID, None).await?;
     let before = admin_client.service_count().await?;
 
-    let request_id = match submit_service_request(&network_args, &defaults).await {
-        Ok(id) => id,
-        Err(err) => {
-            if missing_service_request_event(&err) {
-                eprintln!(
-                    "Skipping cli_service_approve_creates_new_service: \
-                     request events unavailable"
-                );
-                return Ok(());
-            }
-            return Err(err);
-        }
-    };
+    let request_id = submit_service_request(&network_args, &defaults).await?;
     approve_service_request_cli(&network_args, request_id).await?;
 
     sleep(Duration::from_millis(500)).await;
@@ -431,19 +402,7 @@ async fn cli_service_reject_marks_request_rejected() -> Result<()> {
     };
     let admin_client = client_args.connect(LOCAL_BLUEPRINT_ID, None).await?;
 
-    let request_id = match submit_service_request(&network_args, &defaults).await {
-        Ok(id) => id,
-        Err(err) => {
-            if missing_service_request_event(&err) {
-                eprintln!(
-                    "Skipping cli_service_reject_marks_request_rejected: \
-                     request events unavailable"
-                );
-                return Ok(());
-            }
-            return Err(err);
-        }
-    };
+    let request_id = submit_service_request(&network_args, &defaults).await?;
     sleep(Duration::from_millis(500)).await;
 
     let mut reject_args = vec![

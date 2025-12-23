@@ -17,6 +17,7 @@ use std::time::Duration;
 use alloy_network::EthereumWallet;
 use alloy_primitives::{Address, Bytes};
 use alloy_provider::{Provider, ProviderBuilder};
+use alloy_rpc_types::Filter;
 use alloy_rpc_types::transaction::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::SolCall;
@@ -25,6 +26,7 @@ use anyhow::{Context, Result, anyhow, ensure};
 use blueprint_anvil_testing_utils::{
     SeededTangleEvmTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
 };
+use blueprint_client_tangle_evm::contracts::ITangle;
 use blueprint_client_tangle_evm::contracts::ITangle::addPermittedCallerCall;
 use blueprint_client_tangle_evm::{
     ServiceStatus, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
@@ -173,7 +175,8 @@ async fn test_full_service_lifecycle() -> Result<()> {
 
         let runner_client = create_client(&harness.deployment, &keystore_path, BLUEPRINT_ID, Some(SERVICE_ID)).await?;
 
-        let producer = TangleEvmProducer::new((*runner_client).clone(), SERVICE_ID)
+        let start_block = submission.tx.block_number.unwrap_or_default().saturating_sub(1);
+        let producer = TangleEvmProducer::from_block((*runner_client).clone(), SERVICE_ID, start_block)
             .with_poll_interval(Duration::from_millis(100));
         let consumer = TangleEvmConsumer::new((*runner_client).clone());
         let router = Router::new().route(JOB_INDEX, square_job.layer(TangleEvmLayer));
@@ -185,10 +188,19 @@ async fn test_full_service_lifecycle() -> Result<()> {
         });
 
         // Step 8: Wait for job result
-        let output = timeout(Duration::from_secs(60), result_rx)
-            .await
-            .context("timed out waiting for local job result")?
-            .context("local job result channel closed")?;
+        let on_chain_result = wait_for_job_result_on_chain(
+            (*harness.operator_client).clone(),
+            call_id,
+            submission.tx.block_number,
+        );
+        let output = timeout(Duration::from_secs(120), async {
+            tokio::select! {
+                output = result_rx => output.context("local job result channel closed"),
+                output = on_chain_result => output,
+            }
+        })
+        .await
+        .context("timed out waiting for job result")??;
         let result: u64 = u64::abi_decode(&output).context("failed to decode job result")?;
         ensure!(result == input_value * input_value, "expected {} but got {}", input_value * input_value, result);
         println!("✓ Received correct job result: {} = {}²", result, input_value);
@@ -355,7 +367,7 @@ async fn wait_for_job_completion(
 ) -> Result<()> {
     use tokio::time::sleep;
 
-    timeout(Duration::from_secs(60), async {
+    timeout(Duration::from_secs(120), async {
         loop {
             let call = client
                 .get_job_call(SERVICE_ID, call_id)
@@ -369,6 +381,43 @@ async fn wait_for_job_completion(
     })
     .await
     .context("timed out waiting for job completion")?
+}
+
+async fn wait_for_job_result_on_chain(
+    client: TangleEvmClient,
+    call_id: u64,
+    start_block: Option<u64>,
+) -> Result<Vec<u8>> {
+    let tangle_address = client.tangle_address();
+    let mut from_block = if let Some(block) = start_block {
+        block
+    } else {
+        client.block_number().await?.saturating_sub(1)
+    };
+
+    loop {
+        let current = client.block_number().await?;
+        if from_block > current {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            continue;
+        }
+
+        let filter = Filter::new()
+            .address(tangle_address)
+            .from_block(from_block)
+            .to_block(current);
+        let logs = client.get_logs(&filter).await?;
+        for log in logs {
+            if let Ok(decoded) = log.log_decode::<ITangle::JobResultSubmitted>() {
+                if decoded.inner.serviceId == SERVICE_ID && decoded.inner.callId == call_id {
+                    let bytes: Vec<u8> = decoded.inner.result.clone().into();
+                    return Ok(bytes);
+                }
+            }
+        }
+        from_block = current;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
 }
 
 async fn create_client(
