@@ -12,10 +12,16 @@ use blueprint_core::info;
 use blueprint_crypto::{aggregation::AggregatableSignature, hashing::blake3_256};
 use blueprint_networking::{
     service_handle::NetworkServiceHandle,
-    test_utils::{create_whitelisted_nodes, wait_for_all_handshakes},
+    test_utils::{TestNode, wait_for_all_handshakes},
+    AllowedKeys,
 };
 use blueprint_std::{collections::HashMap, time::Duration};
-use std::time::{SystemTime, UNIX_EPOCH};
+use libp2p::{Multiaddr, multiaddr::Protocol};
+use std::{
+    collections::HashSet,
+    net::Ipv4Addr,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tracing_subscriber::EnvFilter;
 
 // Constants for tests
@@ -27,6 +33,19 @@ fn unique_test_suffix() -> String {
         .unwrap_or_default()
         .as_nanos();
     format!("{}-{}", std::process::id(), nanos)
+}
+
+fn dialable_addr(addr: &Multiaddr) -> Multiaddr {
+    let mut out = Multiaddr::empty();
+    for component in addr.iter() {
+        match component {
+            Protocol::Ip4(ip) if ip.is_unspecified() => {
+                out.push(Protocol::Ip4(Ipv4Addr::LOCALHOST));
+            }
+            _ => out.push(component),
+        }
+    }
+    out
 }
 
 pub fn setup_log() {
@@ -64,23 +83,43 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     let network_name = format!("{}-{}", network_name, suffix);
     let instance_name = format!("{}-{}", instance_name, suffix);
 
-    // Create whitelisted nodes
-    let mut nodes = create_whitelisted_nodes::<S>(
-        num_nodes,
-        &network_name,
-        &instance_name,
-        false,
-    );
-    info!("Created {} nodes successfully", nodes.len());
-
-    // Start all nodes
-    info!("Starting all nodes");
-    let mut handles = Vec::new();
-    for (i, node) in nodes.iter_mut().enumerate() {
-        info!("Starting node {}", i);
-        handles.push(node.start().await.expect("Failed to start node"));
-        info!("Node {} started successfully", i);
+    // Create whitelisted nodes with explicit bootstrap peers to avoid mDNS flakes.
+    let mut key_pairs = Vec::with_capacity(num_nodes);
+    let mut allowed_keys = HashSet::with_capacity(num_nodes);
+    for _ in 0..num_nodes {
+        let key_pair = S::generate_with_seed(None).expect("Failed to generate key pair");
+        allowed_keys.insert(S::public_from_secret(&key_pair));
+        key_pairs.push(key_pair);
     }
+
+    let mut nodes = Vec::with_capacity(num_nodes);
+    let mut handles = Vec::with_capacity(num_nodes);
+    let mut bootstrap_peers: Vec<Multiaddr> = Vec::new();
+
+    info!("Starting all nodes");
+    for (i, key_pair) in key_pairs.iter().enumerate() {
+        let mut node = TestNode::new_with_keys(
+            &network_name,
+            &instance_name,
+            AllowedKeys::InstancePublicKeys(allowed_keys.clone()),
+            bootstrap_peers.clone(),
+            Some(key_pair.clone()),
+            None,
+            false,
+        );
+
+        info!("Starting node {}", i);
+        let handle = node.start().await.expect("Failed to start node");
+        info!("Node {} started successfully", i);
+
+        if let Some(addr) = handle.get_listen_addr() {
+            bootstrap_peers.push(dialable_addr(&addr));
+        }
+
+        nodes.push(node);
+        handles.push(handle);
+    }
+    info!("Created {} nodes successfully", nodes.len());
 
     // Convert handles to mutable references for wait_for_all_handshakes
     let handle_refs: Vec<&mut NetworkServiceHandle<S>> = handles.iter_mut().collect();
