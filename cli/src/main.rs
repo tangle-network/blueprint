@@ -10,7 +10,7 @@ use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_manager::config::SourceType;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use blueprint_runner::error::ConfigError;
-use cargo_tangle::command::create::{BlueprintType, new_blueprint};
+use cargo_tangle::command::create::{new_blueprint, BlueprintType, TemplateVariables};
 use cargo_tangle::command::debug::{self, DebugCommands};
 use cargo_tangle::command::deploy::eigenlayer::deploy_eigenlayer;
 use cargo_tangle::command::deploy::tangle as deploy_tangle;
@@ -100,6 +100,13 @@ enum BlueprintCommands {
         source: Option<cargo_tangle::command::create::Source>,
         #[command(flatten)]
         blueprint_type: Option<BlueprintType>,
+
+        #[command(flatten)]
+        template_variables: TemplateVariables,
+
+        /// Define a value for template variables (can be used multiple times)
+        /// Example: --define gh-username=myusername
+        /// Example with spaces: --define "project-description=My Blueprint description"
         #[arg(
             long,
             short = 'd',
@@ -565,6 +572,7 @@ async fn main() -> Result<()> {
                 name,
                 source,
                 blueprint_type,
+                template_variables,
                 define,
                 template_values_file,
                 skip_prompts,
@@ -574,6 +582,7 @@ async fn main() -> Result<()> {
                     source,
                     blueprint_type,
                     define,
+                    template_variables,
                     &template_values_file,
                     skip_prompts,
                 )?;

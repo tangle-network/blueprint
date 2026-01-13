@@ -42,6 +42,8 @@ async fn test_eigenlayer_protocol_manager_initialization() {
 ///
 /// With multi-AVS architecture, blueprints only spawn when there are active registrations.
 /// This test verifies initialization succeeds without registrations.
+/// Need to force this test to run serially because it spawns blueprints,
+/// avoid conflict with other tests
 #[tokio::test]
 async fn test_eigenlayer_protocol_manager_event_flow() {
     let testnet = start_empty_anvil_testnet(false).await;
