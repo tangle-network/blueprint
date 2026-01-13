@@ -73,9 +73,10 @@ pub mod services;
 
 // Re-exports
 pub use client::{
-    AggregationConfig, EcdsaPublicKey, JobSubmissionResult, OperatorMetadata,
-    OperatorStatusSnapshot, RestakingMetadata, RestakingStatus, TangleEvmClient, TangleEvmEvent,
-    ThresholdType, TransactionResult,
+    AggregationConfig, AssetInfo, AssetKind, BlueprintSelectionMode, DelegationInfo,
+    DelegationRecord, DepositInfo, EcdsaPublicKey, JobSubmissionResult, LockInfo, LockMultiplier,
+    OperatorMetadata, OperatorStatusSnapshot, PendingUnstake, PendingWithdrawal, RestakingMetadata,
+    RestakingStatus, TangleEvmClient, TangleEvmEvent, ThresholdType, TransactionResult,
 };
 pub use config::{TangleEvmClientConfig, TangleEvmSettings};
 pub use contracts::{

@@ -4,7 +4,9 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use alloy_primitives::{Address, Bytes, U256};
-use blueprint_client_tangle_evm::{TangleEvmClient, TransactionResult, contracts::ITangleTypes};
+use blueprint_client_tangle_evm::{
+    BlueprintSelectionMode, TangleEvmClient, TransactionResult, contracts::ITangleTypes,
+};
 use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_manager::config::SourceType;
@@ -12,6 +14,7 @@ use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use blueprint_runner::error::ConfigError;
 use cargo_tangle::command::create::{BlueprintType, TemplateVariables, new_blueprint};
 use cargo_tangle::command::debug::{self, DebugCommands};
+use cargo_tangle::command::delegator;
 use cargo_tangle::command::deploy::eigenlayer::deploy_eigenlayer;
 use cargo_tangle::command::deploy::tangle as deploy_tangle;
 use cargo_tangle::command::jobs::{
@@ -79,6 +82,13 @@ enum Commands {
     Key {
         #[command(subcommand)]
         command: KeyCommands,
+    },
+
+    /// Delegator utilities.
+    #[command(visible_alias = "del")]
+    Delegator {
+        #[command(subcommand)]
+        command: DelegatorCommands,
     },
 
     /// Operator utilities.
@@ -466,6 +476,159 @@ enum ServiceCommands {
     },
 }
 
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+enum DelegationSelection {
+    All,
+    Fixed,
+}
+
+#[derive(Subcommand, Debug)]
+enum DelegatorCommands {
+    /// Show deposit, locks, delegations, and pending requests.
+    Positions {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Delegator address (defaults to local account).
+        #[arg(long)]
+        delegator: Option<String>,
+        /// Token address (zero address for native).
+        #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
+        token: String,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List delegations for a delegator.
+    Delegations {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Delegator address (defaults to local account).
+        #[arg(long)]
+        delegator: Option<String>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List pending delegator unstakes.
+    PendingUnstakes {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Delegator address (defaults to local account).
+        #[arg(long)]
+        delegator: Option<String>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List pending delegator withdrawals.
+    PendingWithdrawals {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Delegator address (defaults to local account).
+        #[arg(long)]
+        delegator: Option<String>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Delegate stake to an operator.
+    Delegate {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Operator address to delegate to.
+        #[arg(long)]
+        operator: String,
+        /// Amount to delegate (in wei).
+        #[arg(long)]
+        amount: u128,
+        /// Token address (zero address for native).
+        #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
+        token: String,
+        /// Blueprint selection mode.
+        #[arg(long, value_enum, default_value = "all")]
+        selection: DelegationSelection,
+        /// Blueprint IDs to pin when using fixed selection mode.
+        #[arg(long = "blueprint-id")]
+        blueprint_ids: Vec<u64>,
+        /// Use existing deposits instead of depositing first.
+        #[arg(long)]
+        from_deposit: bool,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Schedule a delegator unstake.
+    Undelegate {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Operator address to undelegate from.
+        #[arg(long)]
+        operator: String,
+        /// Amount to undelegate (in wei).
+        #[arg(long)]
+        amount: u128,
+        /// Token address (zero address for native).
+        #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
+        token: String,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Execute any matured delegator unstakes.
+    ExecuteUnstake {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Execute a specific delegator unstake and withdraw.
+    ExecuteUnstakeWithdraw {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Operator address tied to the unstake request.
+        #[arg(long)]
+        operator: String,
+        /// Token address (zero address for native).
+        #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
+        token: String,
+        /// Shares to execute (from pending unstake).
+        #[arg(long)]
+        shares: u128,
+        /// Requested round from the pending unstake.
+        #[arg(long)]
+        requested_round: u64,
+        /// Receiver address (defaults to delegator).
+        #[arg(long)]
+        receiver: Option<String>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Schedule a withdrawal.
+    ScheduleWithdraw {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Token address (zero address for native).
+        #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
+        token: String,
+        /// Amount to withdraw (in wei).
+        #[arg(long)]
+        amount: u128,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Execute any matured withdrawals.
+    ExecuteWithdraw {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 #[derive(Subcommand, Debug)]
 enum OperatorCommands {
     /// Show operator heartbeat/status details.
@@ -531,6 +694,63 @@ enum OperatorCommands {
         #[arg(long)]
         service_id: u64,
         /// Emit JSON transaction logs.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show restaking status for an operator.
+    Restaking {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Operator address (defaults to local account).
+        #[arg(long = "operator")]
+        operator: Option<String>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List delegators for an operator.
+    Delegators {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Operator address (defaults to local account).
+        #[arg(long = "operator")]
+        operator: Option<String>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Schedule an operator unstake.
+    ScheduleUnstake {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Amount to unstake (in wei).
+        #[arg(long)]
+        amount: u128,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Execute any matured operator unstake.
+    ExecuteUnstake {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Schedule operator leaving.
+    StartLeaving {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Complete operator leaving.
+    CompleteLeaving {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Emit JSON instead of human-readable output.
         #[arg(long)]
         json: bool,
     },
@@ -1242,6 +1462,226 @@ async fn main() -> Result<()> {
                 println!("Mnemonic: {mnemonic}");
             }
         },
+        Commands::Delegator { command } => match command {
+            DelegatorCommands::Positions {
+                network,
+                delegator,
+                token,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let delegator_address = if let Some(value) = delegator {
+                    parse_address(&value, "DELEGATOR")?
+                } else {
+                    client.account()
+                };
+                let token_address = parse_address(&token, "TOKEN")?;
+                let deposit = client
+                    .get_deposit_info(delegator_address, token_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                let locks = client
+                    .get_locks(delegator_address, token_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                let delegations = client
+                    .get_delegations_with_blueprints(delegator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                let unstakes = client
+                    .get_pending_unstakes(delegator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                let withdrawals = client
+                    .get_pending_withdrawals(delegator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                delegator::print_positions(
+                    delegator_address,
+                    token_address,
+                    &deposit,
+                    &locks,
+                    &delegations,
+                    &unstakes,
+                    &withdrawals,
+                    json,
+                );
+            }
+            DelegatorCommands::Delegations {
+                network,
+                delegator,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let delegator_address = if let Some(value) = delegator {
+                    parse_address(&value, "DELEGATOR")?
+                } else {
+                    client.account()
+                };
+                let delegations = client
+                    .get_delegations_with_blueprints(delegator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                delegator::print_delegations(delegator_address, &delegations, json);
+            }
+            DelegatorCommands::PendingUnstakes {
+                network,
+                delegator,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let delegator_address = if let Some(value) = delegator {
+                    parse_address(&value, "DELEGATOR")?
+                } else {
+                    client.account()
+                };
+                let unstakes = client
+                    .get_pending_unstakes(delegator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                delegator::print_pending_unstakes(delegator_address, &unstakes, json);
+            }
+            DelegatorCommands::PendingWithdrawals {
+                network,
+                delegator,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let delegator_address = if let Some(value) = delegator {
+                    parse_address(&value, "DELEGATOR")?
+                } else {
+                    client.account()
+                };
+                let withdrawals = client
+                    .get_pending_withdrawals(delegator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                delegator::print_pending_withdrawals(delegator_address, &withdrawals, json);
+            }
+            DelegatorCommands::Delegate {
+                network,
+                operator,
+                amount,
+                token,
+                selection,
+                blueprint_ids,
+                from_deposit,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let operator_address = parse_address(&operator, "OPERATOR")?;
+                let token_address = parse_address(&token, "TOKEN")?;
+                let selection_mode = match selection {
+                    DelegationSelection::All => BlueprintSelectionMode::All,
+                    DelegationSelection::Fixed => BlueprintSelectionMode::Fixed,
+                };
+                if matches!(selection_mode, BlueprintSelectionMode::Fixed)
+                    && blueprint_ids.is_empty()
+                {
+                    return Err(eyre!(
+                        "Fixed selection requires at least one --blueprint-id"
+                    ));
+                }
+                let tx = if from_deposit {
+                    client
+                        .delegate_with_options(
+                            operator_address,
+                            token_address,
+                            U256::from(amount),
+                            selection_mode,
+                            blueprint_ids,
+                        )
+                        .await
+                } else {
+                    client
+                        .deposit_and_delegate_with_options(
+                            operator_address,
+                            token_address,
+                            U256::from(amount),
+                            selection_mode,
+                            blueprint_ids,
+                        )
+                        .await
+                }
+                .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Delegator delegate", &tx, json);
+            }
+            DelegatorCommands::Undelegate {
+                network,
+                operator,
+                amount,
+                token,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let operator_address = parse_address(&operator, "OPERATOR")?;
+                let token_address = parse_address(&token, "TOKEN")?;
+                let tx = client
+                    .schedule_delegator_unstake(operator_address, token_address, U256::from(amount))
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Delegator undelegate", &tx, json);
+            }
+            DelegatorCommands::ExecuteUnstake { network, json } => {
+                let client = network.connect(0, None).await?;
+                let tx = client
+                    .execute_delegator_unstake()
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Delegator execute-unstake", &tx, json);
+            }
+            DelegatorCommands::ExecuteUnstakeWithdraw {
+                network,
+                operator,
+                token,
+                shares,
+                requested_round,
+                receiver,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let operator_address = parse_address(&operator, "OPERATOR")?;
+                let token_address = parse_address(&token, "TOKEN")?;
+                let receiver = if let Some(value) = receiver {
+                    parse_address(&value, "RECEIVER")?
+                } else {
+                    client.account()
+                };
+                let tx = client
+                    .execute_delegator_unstake_and_withdraw(
+                        operator_address,
+                        token_address,
+                        U256::from(shares),
+                        requested_round,
+                        receiver,
+                    )
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Delegator execute-unstake-withdraw", &tx, json);
+            }
+            DelegatorCommands::ScheduleWithdraw {
+                network,
+                token,
+                amount,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let token_address = parse_address(&token, "TOKEN")?;
+                let tx = client
+                    .schedule_withdraw(token_address, U256::from(amount))
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Delegator schedule-withdraw", &tx, json);
+            }
+            DelegatorCommands::ExecuteWithdraw { network, json } => {
+                let client = network.connect(0, None).await?;
+                let tx = client
+                    .execute_withdraw()
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Delegator execute-withdraw", &tx, json);
+            }
+        },
         Commands::Operator { command } => match command {
             OperatorCommands::Status {
                 network,
@@ -1311,6 +1751,100 @@ async fn main() -> Result<()> {
                     .await
                     .map_err(|e| eyre!(e.to_string()))?;
                 log_tx("Operator leave", &tx, json);
+            }
+            OperatorCommands::Restaking {
+                network,
+                operator,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let operator_address = if let Some(value) = operator {
+                    parse_address(&value, "OPERATOR")?
+                } else {
+                    client.account()
+                };
+                let restaking = client
+                    .get_restaking_metadata(operator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                let self_stake = client
+                    .get_operator_self_stake(operator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                let delegated_stake = client
+                    .get_operator_delegated_stake(operator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                let commission_bps = client
+                    .operator_commission_bps()
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                let current_round = client
+                    .restaking_round()
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                delegator::print_operator_restaking(
+                    operator_address,
+                    &restaking,
+                    self_stake,
+                    delegated_stake,
+                    commission_bps,
+                    current_round,
+                    json,
+                );
+            }
+            OperatorCommands::Delegators {
+                network,
+                operator,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let operator_address = if let Some(value) = operator {
+                    parse_address(&value, "OPERATOR")?
+                } else {
+                    client.account()
+                };
+                let delegators = client
+                    .get_operator_delegators(operator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                delegator::print_operator_delegators(operator_address, &delegators, json);
+            }
+            OperatorCommands::ScheduleUnstake {
+                network,
+                amount,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let tx = client
+                    .schedule_operator_unstake(U256::from(amount))
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator schedule-unstake", &tx, json);
+            }
+            OperatorCommands::ExecuteUnstake { network, json } => {
+                let client = network.connect(0, None).await?;
+                let tx = client
+                    .execute_operator_unstake()
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator execute-unstake", &tx, json);
+            }
+            OperatorCommands::StartLeaving { network, json } => {
+                let client = network.connect(0, None).await?;
+                let tx = client
+                    .start_leaving()
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator start-leaving", &tx, json);
+            }
+            OperatorCommands::CompleteLeaving { network, json } => {
+                let client = network.connect(0, None).await?;
+                let tx = client
+                    .complete_leaving()
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator complete-leaving", &tx, json);
             }
         },
     }
