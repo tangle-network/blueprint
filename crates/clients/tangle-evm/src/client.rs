@@ -38,6 +38,20 @@ use IMultiAssetDelegation::IMultiAssetDelegationInstance;
 use IOperatorStatusRegistry::IOperatorStatusRegistryInstance;
 use ITangle::ITangleInstance;
 
+#[allow(missing_docs)]
+mod erc20 {
+    alloy_sol_types::sol! {
+        #[sol(rpc)]
+        interface IERC20 {
+            function approve(address spender, uint256 amount) external returns (bool);
+            function allowance(address owner, address spender) external view returns (uint256);
+            function balanceOf(address owner) external view returns (uint256);
+        }
+    }
+}
+
+use erc20::IERC20;
+
 /// Type alias for the dynamic provider
 pub type TangleProvider = DynProvider<Ethereum>;
 
@@ -1323,6 +1337,57 @@ impl TangleEvmClient {
             .call()
             .await
             .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Fetch ERC20 allowance for an owner/spender pair.
+    pub async fn erc20_allowance(
+        &self,
+        token: Address,
+        owner: Address,
+        spender: Address,
+    ) -> Result<U256> {
+        let contract = IERC20::new(token, Arc::clone(&self.provider));
+        contract
+            .allowance(owner, spender)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Fetch ERC20 balance for an owner.
+    pub async fn erc20_balance(&self, token: Address, owner: Address) -> Result<U256> {
+        let contract = IERC20::new(token, Arc::clone(&self.provider));
+        contract
+            .balanceOf(owner)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Approve ERC20 spending for the given spender.
+    pub async fn erc20_approve(
+        &self,
+        token: Address,
+        spender: Address,
+        amount: U256,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IERC20::new(token, &provider);
+
+        let receipt = contract
+            .approve(spender, amount)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
     }
 
     /// Fetch delegator deposit info for a token.

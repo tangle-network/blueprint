@@ -410,6 +410,52 @@ pub fn print_operator_delegators(operator: Address, delegators: &[Address], json
     }
 }
 
+pub fn print_erc20_allowance(
+    owner: Address,
+    spender: Address,
+    token: Address,
+    allowance: U256,
+    json_output: bool,
+) {
+    if json_output {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "owner": format!("{:#x}", owner),
+                "spender": format!("{:#x}", spender),
+                "token": format!("{:#x}", token),
+                "allowance": allowance.to_string(),
+            }))
+            .expect("serialize erc20 allowance")
+        );
+        return;
+    }
+
+    println!("{}: {:#x}", style("Owner").green(), owner);
+    println!("{}: {:#x}", style("Spender").green(), spender);
+    println!("{}: {:#x}", style("Token").green(), token);
+    println!("{}: {}", style("Allowance").green(), allowance);
+}
+
+pub fn print_erc20_balance(owner: Address, token: Address, balance: U256, json_output: bool) {
+    if json_output {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "owner": format!("{:#x}", owner),
+                "token": format!("{:#x}", token),
+                "balance": balance.to_string(),
+            }))
+            .expect("serialize erc20 balance")
+        );
+        return;
+    }
+
+    println!("{}: {:#x}", style("Owner").green(), owner);
+    println!("{}: {:#x}", style("Token").green(), token);
+    println!("{}: {}", style("Balance").green(), balance);
+}
+
 fn format_asset_kind(asset: &AssetInfo) -> String {
     match asset.kind {
         AssetKind::Native => "native".to_string(),

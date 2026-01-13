@@ -531,6 +531,54 @@ enum DelegatorCommands {
         #[arg(long)]
         json: bool,
     },
+    /// Show ERC20 allowance for a token.
+    Allowance {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Token address.
+        #[arg(long)]
+        token: String,
+        /// Owner address (defaults to local account).
+        #[arg(long)]
+        owner: Option<String>,
+        /// Spender address (defaults to restaking contract).
+        #[arg(long)]
+        spender: Option<String>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show ERC20 balance for a token.
+    Balance {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Token address.
+        #[arg(long)]
+        token: String,
+        /// Owner address (defaults to local account).
+        #[arg(long)]
+        owner: Option<String>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Approve an ERC20 token for restaking.
+    Approve {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Token address.
+        #[arg(long)]
+        token: String,
+        /// Amount to approve (in wei).
+        #[arg(long)]
+        amount: u128,
+        /// Spender address (defaults to restaking contract).
+        #[arg(long)]
+        spender: Option<String>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
     /// Delegate stake to an operator.
     Delegate {
         #[command(flatten)]
@@ -1557,6 +1605,88 @@ async fn main() -> Result<()> {
                     .await
                     .map_err(|e| eyre!(e.to_string()))?;
                 delegator::print_pending_withdrawals(delegator_address, &withdrawals, json);
+            }
+            DelegatorCommands::Allowance {
+                network,
+                token,
+                owner,
+                spender,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let token_address = parse_address(&token, "TOKEN")?;
+                ensure!(
+                    token_address != Address::ZERO,
+                    "Token address must be non-zero for ERC20 allowance"
+                );
+                let owner_address = if let Some(value) = owner {
+                    parse_address(&value, "OWNER")?
+                } else {
+                    client.account()
+                };
+                let spender_address = if let Some(value) = spender {
+                    parse_address(&value, "SPENDER")?
+                } else {
+                    client.config.settings.restaking_contract
+                };
+                let allowance = client
+                    .erc20_allowance(token_address, owner_address, spender_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                delegator::print_erc20_allowance(
+                    owner_address,
+                    spender_address,
+                    token_address,
+                    allowance,
+                    json,
+                );
+            }
+            DelegatorCommands::Balance {
+                network,
+                token,
+                owner,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let token_address = parse_address(&token, "TOKEN")?;
+                ensure!(
+                    token_address != Address::ZERO,
+                    "Token address must be non-zero for ERC20 balance"
+                );
+                let owner_address = if let Some(value) = owner {
+                    parse_address(&value, "OWNER")?
+                } else {
+                    client.account()
+                };
+                let balance = client
+                    .erc20_balance(token_address, owner_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                delegator::print_erc20_balance(owner_address, token_address, balance, json);
+            }
+            DelegatorCommands::Approve {
+                network,
+                token,
+                amount,
+                spender,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let token_address = parse_address(&token, "TOKEN")?;
+                ensure!(
+                    token_address != Address::ZERO,
+                    "Token address must be non-zero for ERC20 approvals"
+                );
+                let spender_address = if let Some(value) = spender {
+                    parse_address(&value, "SPENDER")?
+                } else {
+                    client.config.settings.restaking_contract
+                };
+                let tx = client
+                    .erc20_approve(token_address, spender_address, U256::from(amount))
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Delegator approve", &tx, json);
             }
             DelegatorCommands::Delegate {
                 network,
